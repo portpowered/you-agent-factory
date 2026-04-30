@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/contractguard"
+	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
 )
 
 const approvedRuntimeLookupFactoryDirOwner = "interfaces/runtime_lookup.go"
@@ -141,7 +141,7 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 			return walkErr
 		}
 		if d.IsDir() {
-			if contractguard.ShouldSkipDir(root, path) {
+			if handwrittensourceguard.ShouldSkipDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", root, path) {
 				return filepath.SkipDir
 			}
 			return nil

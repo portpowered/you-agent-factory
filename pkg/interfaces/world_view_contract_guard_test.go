@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/agent-factory/internal/contractguard"
+	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
 )
 
 var retiredFactoryBoundaryMirrorNames = []string{
@@ -157,7 +158,7 @@ func TestFactoryWorldContractGuard_RetiredCanonicalMirrorNamesStayOutOfPkgGoFile
 			return err
 		}
 		if info.IsDir() {
-			if contractguard.ShouldSkipDir("..", path, "api/generated") {
+			if handwrittensourceguard.ShouldSkipDir("pkg/interfaces/world_view_contract_guard_test.go#canonical", "..", path) {
 				return filepath.SkipDir
 			}
 			return nil

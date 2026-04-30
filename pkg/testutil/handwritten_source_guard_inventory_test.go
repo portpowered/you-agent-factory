@@ -1,6 +1,9 @@
 package testutil
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestHandwrittenSourceGuardInventory_CoversTargetedGuardsAndClassifications(t *testing.T) {
 	t.Parallel()
@@ -69,5 +72,31 @@ func TestHandwrittenSourceGuardInventory_RecordsHiddenAndGeneratedExclusionsForB
 		if entry.GuardFile != "pkg/interfaces/world_view_contract_guard_test.go#boundary" && !hasGenerated && entry.WalkRoot != "pkg/interfaces" {
 			t.Fatalf("%s must record generated-output exclusions when scanning broad handwritten-source roots", entry.GuardFile)
 		}
+	}
+}
+
+func TestShouldSkipHandwrittenSourceDir_UsesInventoryGeneratedAndHiddenRules(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Join("repo", "root")
+	if !ShouldSkipHandwrittenSourceDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, ".claude", "worktrees")) {
+		t.Fatal("repo-root handwritten-source guard must skip hidden metadata directories")
+	}
+	if !ShouldSkipHandwrittenSourceDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, "pkg", "api", "generated")) {
+		t.Fatal("repo-root handwritten-source guard must skip generated API output")
+	}
+	if ShouldSkipHandwrittenSourceDir("pkg/petri/transition_contract_guard_test.go", repoRoot, filepath.Join(repoRoot, "pkg", "petri")) {
+		t.Fatal("repo-root handwritten-source guard must keep handwritten source directories")
+	}
+
+	pkgRoot := filepath.Join("repo", "root", "pkg")
+	if !ShouldSkipHandwrittenSourceDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, "api", "generated")) {
+		t.Fatal("pkg-root handwritten-source guard must skip generated API output")
+	}
+	if !ShouldSkipHandwrittenSourceDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, ".cache")) {
+		t.Fatal("pkg-root handwritten-source guard must skip hidden directories")
+	}
+	if ShouldSkipHandwrittenSourceDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", pkgRoot, filepath.Join(pkgRoot, "interfaces")) {
+		t.Fatal("pkg-root handwritten-source guard must keep handwritten package directories")
 	}
 }
