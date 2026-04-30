@@ -55,6 +55,7 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/workstations/plan/AGENTS.md` | `checked_in` | Checked-in canonical planning workstation prompt. |
 | `factory/workstations/process/AGENTS.md` | `checked_in` | Checked-in canonical execution workstation prompt. |
 | `factory/workstations/review/AGENTS.md` | `checked_in` | Checked-in canonical review workstation prompt. |
+| `factory/meta/asks.md` | `obsolete` | Retired duplicate ask surface; customer backlog ownership stays only at `factory/logs/meta/asks.md`. |
 | `factory/workers/executor/AGENTS.md` | `obsolete` | Legacy story-starter worker path. |
 | `factory/workers/reviewer/AGENTS.md` | `obsolete` | Legacy story-starter worker path. |
 | `factory/workstations/execute-story/AGENTS.md` | `obsolete` | Legacy story-starter workstation path. |

@@ -53,9 +53,9 @@
     - `pkg/service/factory_test.go`
   - `pkg/replay/EmbeddedRuntimeConfig` is the real production implementation
     and should not be folded into test-only helpers
-- a second checked-in ask file also exists at `factory/meta/asks.md`, so the
-  canonical ownership rule must stay explicit until that duplicate surface is
-  demoted or redirected.
+- the former duplicate ask path `factory/meta/asks.md` has been retired from
+  the checked-in artifact contract, so the canonical ownership rule now has one
+  checked-in backlog surface to protect.
 
 ## current blockers
 

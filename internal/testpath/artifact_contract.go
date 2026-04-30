@@ -211,6 +211,11 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Checked-in canonical review workstation prompt.",
 	},
 	{
+		Path:           "factory/meta/asks.md",
+		Classification: ArtifactObsolete,
+		Reason:         "Retired duplicate ask surface; customer backlog ownership stays only at factory/logs/meta/asks.md.",
+	},
+	{
 		Path:           "factory/workers/executor/AGENTS.md",
 		Classification: ArtifactObsolete,
 		Reason:         "Legacy story-starter worker path no longer belongs to the canonical root factory.",
