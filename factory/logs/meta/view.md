@@ -19,9 +19,11 @@
   - `77de019` restored the canonical checked-in starter surface
   - `e5ddd22` added the closeout verification
   - merge commit `5640325` landed that sequence as pull request `#2`
-- the canonical customer backlog is live at `factory/logs/meta/asks.md`:
-  - the tracked backlog currently contains `release plans`, `system deficits`,
-    and `quality` asks
+- the canonical checked-in customer-ask backlog is active and centralized:
+  - the canonical checked-in customer-ask backlog is
+    `factory/logs/meta/asks.md`
+  - the live ask categories currently include `release plans`,
+    `system deficits`, and `quality`
   - no checked-in `plan`, `task`, or `thoughts` work items exist beyond the
     tracked `.gitkeep` sentinels
 - the checked-in backlog is still crowded with already-explored contract-guard
@@ -52,14 +54,20 @@
     - `pkg/service/factory_test.go`
   - `pkg/replay/EmbeddedRuntimeConfig` is the real production implementation
     and should not be folded into test-only helpers
-- the legacy path `factory/meta/asks.md` now exists only as a redirect stub:
-  it points maintainers back to `factory/logs/meta/asks.md` and intentionally
-  carries no independent backlog copy.
+<<<<<<< HEAD
+- the legacy path `factory/meta/asks.md` now exists only as a redirect-only
+  stub:
+  - it points maintainers back to `factory/logs/meta/asks.md`
+  - it is still tracked so compatibility references fail loudly instead of
+    silently reintroducing a second live backlog
+  - `pkg/testutil/artifact_contract_test.go` pins its stub text so the path
+    cannot drift back into a peer backlog surface
 
 ## current blockers
 
-1. the checked-in meta surfaces needed to be realigned from the pre-`#5`
-   snapshot to the actual `main` state.
+1. the checked-in meta surfaces now need ongoing accuracy checks so the
+   canonical ask summary in `factory/logs/meta/view.md` keeps matching
+   `factory/logs/meta/asks.md`.
 2. the repo still lacks one shared test-owned runtime lookup fixture seam, so
    small test changes continue to pay for duplicate `FactoryDir`,
    `RuntimeBaseDir`, `Worker`, and `Workstation` scaffolding.
@@ -98,8 +106,10 @@
   - leave real runtime implementations such as `pkg/config.LoadedFactoryConfig`
     and `pkg/replay.EmbeddedRuntimeConfig` alone
 - the right customer rule now is:
-  - the checked-in backlog is owned canonically by
-    `factory/logs/meta/asks.md`
+  - `factory/logs/meta/asks.md` is the canonical checked-in customer-ask
+    backlog for the meta workflow
+  - the current checked-in asks are backlog inputs, not approved in-flight
+    product work
   - stability and theory-of-mind accuracy are still higher value than
     speculative product work unless an ask is marked urgent
 
@@ -115,8 +125,7 @@
 
 ## customer asks
 
-- `factory/logs/meta/asks.md` is the canonical checked-in customer-ask
-  surface.
-- the current tracked backlog includes `release plans`, `system deficits`, and
-  `quality`.
-- no urgency marker exists in the tracked meta ask surface.
+- `factory/logs/meta/asks.md` currently carries active asks under `release
+  plans`, `system deficits`, and `quality`.
+- no explicit urgency marker or top-ranked ask is recorded in the tracked meta
+  ask surface.
