@@ -14,8 +14,8 @@ run git pull and make the workspace be up to date to remote
 
 ## Step 1 - read
 0. read your own at factory/logs/meta/view.md and factory/logs/meta/progress.tsx and the customer's asks factory/logs/meta/ask.md
-1. read the C:\Users\andre\work\portos\portos-backend\docs\operations\postmortem\agent-factory-quality-defects.md file. 
-2. Read up the code under the libraries/agent-factory/, and read recent prs that are associated with your previous requests. 
+1. read docs/development/development.md and the recent reports under docs/development/cleanup-analyzer-reports/. 
+2. Read up the code in this repository, and read recent PRs that are associated with your previous requests. 
 3. For now, read up the current files the factory/inputs directory to see any previous clean up attempts that have already been done. 
 
 ## Step 2 - based on the above results decide on one of the following: 
@@ -46,4 +46,3 @@ figure out a way to clean the code (in priority order)
 
 ## Step 3 - write a file
 1. after you're done, write a file to {project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md file using the ideation-standards.md 
-

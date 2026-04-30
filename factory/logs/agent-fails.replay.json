@@ -10,7 +10,7 @@
       "payload": {
         "diagnostics": {},
         "factory": {
-          "factoryDir": "c:\\Users\\andre\\work\\portos\\portos-backend\\libraries\\agent-factory\\tests\\adhoc\\factory",
+          "factoryDir": "tests\\adhoc\\factory",
           "metadata": {
             "factory_hash": "sha256:07959407c09011da37c92aba5efe63126ca978ed9f54356cea5ff915fb8cb43f",
             "runtime_config_hash": "sha256:b8c909b605fdeab11adbb2bd9a78b57069de5d11b9eede0ffc205e0f54e5c106",
@@ -24,7 +24,7 @@
               "name": "executor-slot"
             }
           ],
-          "sourceDirectory": "c:\\Users\\andre\\work\\portos\\portos-backend\\libraries\\agent-factory\\tests\\adhoc\\factory",
+          "sourceDirectory": "tests\\adhoc\\factory",
           "workTypes": [
             {
               "name": "thoughts",
@@ -151,7 +151,7 @@
               "worker": "processor"
             },
             {
-              "body": "You are processing work item {{ .WorkID }} of type {{ .WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nYour work for prds in the final ralph file MUST be compliant to the standards outlined in \\docs\\standards\\documentation\\product-requirement-doc-standards.md. \n\nread the file\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding C:\\Users\\andre\\work\\portos\\portos-backend\\tasks/todo/{{ .Name }}.json, as well as corresponding C:\\Users\\andre\\work\\portos\\portos-backend\\tasks/todo/{{ .Name }}.md for the correpsonding prd. \n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"<COMPLETE>\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ .Payload }}",
+              "body": "You are processing work item {{ .WorkID }} of type {{ .WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nYour work for prds in the final ralph file MUST be compliant to the standards outlined in \\docs\\standards\\documentation\\product-requirement-doc-standards.md. \n\nread the file\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding tasks/todo/{{ .Name }}.json, as well as corresponding tasks/todo/{{ .Name }}.md for the correpsonding prd. \n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"<COMPLETE>\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ .Payload }}",
               "id": "",
               "inputs": [
                 {
@@ -179,7 +179,7 @@
                   "workType": "plan"
                 }
               ],
-              "promptTemplate": "You are processing work item {{ .WorkID }} of type {{ .WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nYour work for prds in the final ralph file MUST be compliant to the standards outlined in \\docs\\standards\\documentation\\product-requirement-doc-standards.md. \n\nread the file\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding C:\\Users\\andre\\work\\portos\\portos-backend\\tasks/todo/{{ .Name }}.json, as well as corresponding C:\\Users\\andre\\work\\portos\\portos-backend\\tasks/todo/{{ .Name }}.md for the correpsonding prd. \n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"<COMPLETE>\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ .Payload }}",
+              "promptTemplate": "You are processing work item {{ .WorkID }} of type {{ .WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nYour work for prds in the final ralph file MUST be compliant to the standards outlined in \\docs\\standards\\documentation\\product-requirement-doc-standards.md. \n\nread the file\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding tasks/todo/{{ .Name }}.json, as well as corresponding tasks/todo/{{ .Name }}.md for the correpsonding prd. \n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"<COMPLETE>\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ .Payload }}",
               "resources": [
                 {
                   "capacity": 1,
