@@ -39,9 +39,34 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Canonical checked-in repository starter config.",
 	},
 	{
+		Path:           "factory/scripts/setup-workspace.py",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in workspace setup helper used by the canonical repository workflow.",
+	},
+	{
 		Path:           "factory/inputs",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in starter input directories used by the repository-local workflow.",
+	},
+	{
+		Path:           "factory/inputs/idea/default",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in repository workflow idea inbox.",
+	},
+	{
+		Path:           "factory/inputs/plan/default",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in repository workflow plan inbox.",
+	},
+	{
+		Path:           "factory/inputs/task/default",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in repository workflow task inbox.",
+	},
+	{
+		Path:           "factory/inputs/thoughts/default",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in repository workflow thought inbox.",
 	},
 	{
 		Path:           "factory/logs/agent-fails.json",
@@ -92,6 +117,41 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Path:           "ui/src/components/dashboard/fixtures/runtime-details-events.ts",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in dashboard replay fixture.",
+	},
+	{
+		Path:           "factory/workers/processor/AGENTS.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical processor worker prompt.",
+	},
+	{
+		Path:           "factory/workers/workspace-setup/AGENTS.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical workspace setup worker prompt.",
+	},
+	{
+		Path:           "factory/workstations/cleaner/AGENTS.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical repository cleanup workstation prompt.",
+	},
+	{
+		Path:           "factory/workstations/ideafy/AGENTS.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical ideation workstation prompt.",
+	},
+	{
+		Path:           "factory/workstations/plan/AGENTS.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical planning workstation prompt.",
+	},
+	{
+		Path:           "factory/workstations/process/AGENTS.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical execution workstation prompt.",
+	},
+	{
+		Path:           "factory/workstations/review/AGENTS.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical review workstation prompt.",
 	},
 	{
 		Path:           "factory/workers/executor/AGENTS.md",

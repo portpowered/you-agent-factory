@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,8 @@ import (
 )
 
 const cleanupSmokeProject = "acme-inventory"
+
+var rootFactoryPathPattern = regexp.MustCompile(`factory/[A-Za-z0-9._/-]+`)
 
 func TestProjectAgnosticCleanupSmoke_ReadmeQuickstartAndReleasePathsRemainStandalone(t *testing.T) {
 	readmeBytes, err := os.ReadFile(agentFactoryPath(t, "README.md"))
@@ -133,7 +136,8 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 	}
 
 	for _, rel := range files {
-		data, err := os.ReadFile(agentFactoryPath(t, rel))
+		path := testutil.MustClassifiedArtifactPath(t, rel, testutil.ArtifactCheckedIn)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
@@ -160,7 +164,7 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		"factory/workers/processor/AGENTS.md",
 		"factory/workers/workspace-setup/AGENTS.md",
 	} {
-		data, err := os.ReadFile(agentFactoryPath(t, rel))
+		data, err := os.ReadFile(testutil.MustClassifiedArtifactPath(t, rel, testutil.ArtifactCheckedIn))
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
@@ -169,6 +173,8 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 			t.Fatalf("%s should not contain retired stop_token key:\n%s", rel, content)
 		}
 	}
+
+	assertPromptOnlyReferencesCheckedInFactoryArtifacts(t, "factory/workstations/cleaner/AGENTS.md")
 }
 
 func TestProjectAgnosticCleanupSmoke_PublicDocsDoNotTeachRetiredRootStoryStarterPaths(t *testing.T) {
@@ -608,6 +614,41 @@ func assertTextOmitsRetiredEventNames(t *testing.T, label string, value string) 
 	} {
 		if strings.Contains(value, `"`+retired+`"`) {
 			t.Fatalf("%s contains retired public event name %q", label, retired)
+		}
+	}
+}
+
+func assertPromptOnlyReferencesCheckedInFactoryArtifacts(t *testing.T, rel string) {
+	t.Helper()
+
+	data, err := os.ReadFile(testutil.MustClassifiedArtifactPath(t, rel, testutil.ArtifactCheckedIn))
+	if err != nil {
+		t.Fatalf("read %s: %v", rel, err)
+	}
+
+	content := string(data)
+	references := rootFactoryPathPattern.FindAllString(content, -1)
+	if len(references) == 0 {
+		t.Fatalf("%s should reference at least one checked-in factory path", rel)
+	}
+
+	seen := make(map[string]struct{}, len(references))
+	for _, reference := range references {
+		normalized := filepath.ToSlash(filepath.Clean(reference))
+		if normalized == "." {
+			t.Fatalf("%s contains malformed factory path reference %q", rel, reference)
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+
+		entry := testutil.MustArtifactContractEntry(t, normalized)
+		if entry.Classification != testutil.ArtifactCheckedIn {
+			t.Fatalf("%s references %s classified as %s, want checked_in", rel, normalized, entry.Classification)
+		}
+		if _, err := os.Stat(testutil.MustRepoPath(t, entry.Path)); err != nil {
+			t.Fatalf("%s references missing checked-in path %s: %v", rel, entry.Path, err)
 		}
 	}
 }

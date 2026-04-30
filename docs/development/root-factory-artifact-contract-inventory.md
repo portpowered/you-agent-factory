@@ -20,7 +20,12 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/` | `checked_in` | Canonical checked-in repository starter root. |
 | `factory/README.md` | `checked_in` | Documents the repository-local checked-in workflow. |
 | `factory/factory.json` | `checked_in` | Canonical checked-in repository workflow config. |
+| `factory/scripts/setup-workspace.py` | `checked_in` | Checked-in workspace setup helper used by the canonical repository workflow. |
 | `factory/inputs/` | `checked_in` | Repository-local checked-in input surface for plan/task/idea/thought flows. |
+| `factory/inputs/idea/default/` | `checked_in` | Checked-in repository workflow idea inbox. |
+| `factory/inputs/plan/default/` | `checked_in` | Checked-in repository workflow plan inbox. |
+| `factory/inputs/task/default/` | `checked_in` | Checked-in repository workflow task inbox. |
+| `factory/inputs/thoughts/default/` | `checked_in` | Checked-in repository workflow thought inbox. |
 | `factory/logs/agent-fails.json` | `checked_in` | Event-stream sample for replay artifact conversion coverage. |
 | `factory/logs/agent-fails.replay.json` | `checked_in` | Replay artifact sample paired with `agent-fails.json`. |
 | `tests/adhoc/factory-recording-04-11-02.json` | `checked_in` | Canonical replay fixture used by adhoc and replay package tests. |
@@ -31,6 +36,13 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `ui/src/components/dashboard/fixtures/graph-state-smoke-events.ts` | `checked_in` | Checked-in dashboard replay fixture. |
 | `ui/src/components/dashboard/fixtures/resource-count-events.ts` | `checked_in` | Checked-in dashboard replay fixture. |
 | `ui/src/components/dashboard/fixtures/runtime-details-events.ts` | `checked_in` | Checked-in dashboard replay fixture. |
+| `factory/workers/processor/AGENTS.md` | `checked_in` | Checked-in canonical processor worker prompt. |
+| `factory/workers/workspace-setup/AGENTS.md` | `checked_in` | Checked-in canonical workspace setup worker prompt. |
+| `factory/workstations/cleaner/AGENTS.md` | `checked_in` | Checked-in canonical repository cleanup workstation prompt. |
+| `factory/workstations/ideafy/AGENTS.md` | `checked_in` | Checked-in canonical ideation workstation prompt. |
+| `factory/workstations/plan/AGENTS.md` | `checked_in` | Checked-in canonical planning workstation prompt. |
+| `factory/workstations/process/AGENTS.md` | `checked_in` | Checked-in canonical execution workstation prompt. |
+| `factory/workstations/review/AGENTS.md` | `checked_in` | Checked-in canonical review workstation prompt. |
 | `factory/workers/executor/AGENTS.md` | `obsolete` | Legacy story-starter worker path. |
 | `factory/workers/reviewer/AGENTS.md` | `obsolete` | Legacy story-starter worker path. |
 | `factory/workstations/execute-story/AGENTS.md` | `obsolete` | Legacy story-starter workstation path. |
