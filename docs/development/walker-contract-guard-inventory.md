@@ -57,3 +57,21 @@ follow-on cleanup stories align skip policy and diagnostics.
 - The next alignment pass should compare `pkg/config` and `pkg/interfaces`
   walkers against those module-root baselines without forcing unrelated
   exclusions onto package-local ownership scans.
+
+## Closeout
+
+- Date: `2026-04-30`
+- Targeted guard set matches the checked-in inventory above: the repository
+  walker surface remains limited to `pkg/api/legacy_model_guard_test.go`,
+  `pkg/config/exhaustion_rule_contract_guard_test.go`,
+  `pkg/interfaces/runtime_lookup_contract_guard_test.go`,
+  `pkg/interfaces/world_view_contract_guard_test.go`, and
+  `pkg/petri/transition_contract_guard_test.go`.
+- Verified package slice:
+  `go test ./pkg/api ./pkg/petri ./pkg/interfaces ./pkg/config -count=1 -timeout 300s`
+- Verified repository quality gate:
+  `make lint`
+- Result: the targeted package slice is green, the shared skip-helper inventory
+  still matches the guarded handwritten-source surface, and the closeout proof
+  stays attached to the same checked-in document maintainers use for future
+  walker drift reviews.
