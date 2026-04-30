@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
+	"github.com/portpowered/agent-factory/internal/contractguard"
 )
 
 const approvedRuntimeLookupFactoryDirOwner = "interfaces/runtime_lookup.go"
+const approvedRuntimeLookupFactoryDirOwnerDisplay = "pkg/interfaces/runtime_lookup.go"
 
 type runtimeLookupContractViolation struct {
 	file   string
@@ -36,7 +37,7 @@ func TestRuntimeLookupContractGuard_PackageScanKeepsCanonicalLookupOwnership(t *
 		t.Fatalf(
 			"runtime lookup ownership regression:\n%s\nOnly the canonical runtime lookup family in %s may own path-aware runtime lookup interfaces, and package-local RuntimeConfig declarations stay deleted",
 			strings.Join(details, "\n"),
-			approvedRuntimeLookupFactoryDirOwner,
+			approvedRuntimeLookupFactoryDirOwnerDisplay,
 		)
 	}
 }
@@ -131,17 +132,15 @@ func runtimeBaseDir(v interface{ RuntimeBaseDir() string }) string {
 	)
 }
 
-func TestRuntimeLookupContractGuard_SkipsGeneratedApiOutputButScansHandwrittenPackages(t *testing.T) {
+func TestRuntimeLookupContractGuard_SkipsHiddenAndGeneratedDirectories(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeRuntimeLookupGuardFixture(t, root, "api/generated/runtime_lookup.go", `package generated
+	writeRuntimeLookupGuardFixture(t, root, ".hidden/runtime_lookup.go", `package hidden
 
-type GeneratedLookup interface {
-	RuntimeBaseDir() string
-}
+type RuntimeConfig = any
 `)
-	writeRuntimeLookupGuardFixture(t, root, "workers/runtime_lookup.go", `package workers
+	writeRuntimeLookupGuardFixture(t, root, "api/generated/runtime_lookup.go", `package generated
 
 type RuntimeExecutionLookup interface {
 	RuntimeBaseDir() string
@@ -152,12 +151,9 @@ type RuntimeExecutionLookup interface {
 	if err != nil {
 		t.Fatalf("scan temp runtime lookup ownership: %v", err)
 	}
-
-	assertRuntimeLookupViolationKinds(
-		t,
-		violations,
-		[]string{"workers/runtime_lookup.go:unapproved RuntimeBaseDir interface owner"},
-	)
+	if len(violations) != 0 {
+		t.Fatalf("violations = %v, want no violations from hidden or generated directories", violations)
+	}
 }
 
 func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractViolation, error) {
@@ -170,7 +166,7 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 			return walkErr
 		}
 		if d.IsDir() {
-			if handwrittensourceguard.ShouldSkipDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", root, path) {
+			if contractguard.ShouldSkipDir(root, path, "api/generated") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -251,7 +247,7 @@ func runtimeLookupTypeSpecViolations(rel string, spec *ast.TypeSpec) []runtimeLo
 		violations = append(violations, runtimeLookupContractViolation{
 			file:   rel,
 			kind:   "package-local RuntimeConfig declaration",
-			detail: "type RuntimeConfig shadows the canonical lookup family in pkg/interfaces",
+			detail: "type RuntimeConfig shadows the canonical lookup family in pkg/interfaces/runtime_lookup.go",
 		})
 	}
 
@@ -263,14 +259,14 @@ func runtimeLookupTypeSpecViolations(rel string, spec *ast.TypeSpec) []runtimeLo
 		violations = append(violations, runtimeLookupContractViolation{
 			file:   rel,
 			kind:   "unapproved FactoryDir interface owner",
-			detail: "path-aware runtime lookup interfaces must stay on interfaces.RuntimeConfigLookup",
+			detail: "path-aware runtime lookup interfaces must stay on pkg/interfaces.RuntimeConfigLookup",
 		})
 	}
 	if interfaceDeclaresRuntimeBaseDir(iface) && !isApprovedRuntimeLookupOwner(rel, spec.Name.Name) {
 		violations = append(violations, runtimeLookupContractViolation{
 			file:   rel,
 			kind:   "unapproved RuntimeBaseDir interface owner",
-			detail: "runtime-base execution lookups must stay on interfaces.RuntimeConfigLookup",
+			detail: "runtime-base execution lookups must stay on pkg/interfaces.RuntimeConfigLookup",
 		})
 	}
 	return violations
@@ -282,14 +278,14 @@ func rawRuntimeLookupInterfaceViolations(rel string, iface *ast.InterfaceType) [
 		violations = append(violations, runtimeLookupContractViolation{
 			file:   rel,
 			kind:   "raw FactoryDir escape hatch",
-			detail: "replace anonymous FactoryDir interfaces with interfaces.RuntimeConfigLookup",
+			detail: "replace anonymous FactoryDir interfaces with pkg/interfaces.RuntimeConfigLookup",
 		})
 	}
 	if interfaceDeclaresRuntimeBaseDir(iface) {
 		violations = append(violations, runtimeLookupContractViolation{
 			file:   rel,
 			kind:   "raw RuntimeBaseDir escape hatch",
-			detail: "replace anonymous RuntimeBaseDir interfaces with interfaces.RuntimeConfigLookup",
+			detail: "replace anonymous RuntimeBaseDir interfaces with pkg/interfaces.RuntimeConfigLookup",
 		})
 	}
 	return violations
