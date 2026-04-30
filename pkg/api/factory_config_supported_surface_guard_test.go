@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	"github.com/portpowered/agent-factory/pkg/config"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 )
