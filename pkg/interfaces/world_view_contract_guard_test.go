@@ -1,7 +1,6 @@
 package interfaces
 
 import (
-	"github.com/portpowered/agent-factory/internal/contractguard"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -12,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/internal/contractguard"
 )
 
 var retiredFactoryBoundaryMirrorNames = []string{
@@ -110,7 +111,13 @@ func TestFactoryWorldContractGuard_RetiredBoundaryMirrorNamesStayOutOfInterfaces
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || filepath.Ext(path) != ".go" {
+		if info.IsDir() {
+			if contractguard.ShouldSkipDir(".", path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
 			return nil
 		}
 		rel := filepath.Clean(filepath.Join("interfaces", filepath.Base(path)))

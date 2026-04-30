@@ -1,7 +1,6 @@
 package petri
 
 import (
-	"github.com/portpowered/agent-factory/internal/contractguard"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -10,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/internal/contractguard"
 )
 
 var retiredTransitionRuntimeFields = map[string]struct{}{
