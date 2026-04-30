@@ -5,6 +5,7 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 )
 
 func TestPlaceID(t *testing.T) {
@@ -163,8 +164,8 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 		},
 	}
 
-	NormalizeTransitionTopology(net, stubTransitionTopologyRuntimeConfig{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	NormalizeTransitionTopology(net, runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"repeat": {Name: "repeat", Kind: interfaces.WorkstationKindRepeater},
 		},
 	})
@@ -182,15 +183,4 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 	if transition.FailureArcs[0].PlaceID != "task:failed" {
 		t.Fatalf("failure arc PlaceID = %q, want %q", transition.FailureArcs[0].PlaceID, "task:failed")
 	}
-}
-
-type stubTransitionTopologyRuntimeConfig struct {
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-var _ interfaces.RuntimeWorkstationLookup = stubTransitionTopologyRuntimeConfig{}
-
-func (c stubTransitionTopologyRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	workstation, ok := c.workstations[name]
-	return workstation, ok
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/agent-factory/pkg/workers"
 )
 
@@ -682,21 +683,12 @@ func buildPipelineNet() *state.Net {
 func buildRepeaterPipelineNet() *state.Net {
 	n := buildPipelineNet()
 	n.Transitions["t1"].RejectionArcs = nil
-	state.NormalizeTransitionTopology(n, historyTransitionerRuntimeConfig{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	state.NormalizeTransitionTopology(n, runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"t1": {Name: "t1", Kind: interfaces.WorkstationKindRepeater},
 		},
 	})
 	return n
-}
-
-type historyTransitionerRuntimeConfig struct {
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-func (c historyTransitionerRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	workstation, ok := c.workstations[name]
-	return workstation, ok
 }
 
 func pipelineSnapshot(placeID, transitionID, dispatchID string, color interfaces.TokenColor, createdAt time.Time) interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {

@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory/token_transformer"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 )
 
 func TestCalculateArcs(t *testing.T) {
@@ -307,8 +308,8 @@ func TestResolveWorkResult_RuntimeConfigStopWordsAcceptConfiguredMarker(t *testi
 		Output:       "rendered output DONE",
 	}
 
-	resolved := resolveWorkResult(transition, result, transitionerRuntimeConfigStub{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	resolved := resolveWorkResult(transition, result, runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"runtime-station": {StopWords: []string{"DONE"}},
 		},
 	})
@@ -330,8 +331,8 @@ func TestResolveWorkResult_RuntimeConfigStopWordsFailMissingMarker(t *testing.T)
 		Output:       "rendered output without marker",
 	}
 
-	resolved := resolveWorkResult(transition, result, transitionerRuntimeConfigStub{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	resolved := resolveWorkResult(transition, result, runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"runtime-station": {StopWords: []string{"DONE"}},
 		},
 	})
@@ -370,8 +371,8 @@ func TestResolveWorkResult_RuntimeConfigFallsBackToTransitionID(t *testing.T) {
 		Output:       "rendered output DONE",
 	}
 
-	resolved := resolveWorkResult(transition, result, transitionerRuntimeConfigStub{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	resolved := resolveWorkResult(transition, result, runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"runtime-station-id": {StopWords: []string{"DONE"}},
 		},
 	})
@@ -807,18 +808,6 @@ func workerBatchTestNet() *state.Net {
 			},
 		},
 	}
-}
-
-type transitionerRuntimeConfigStub struct {
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-func (s transitionerRuntimeConfigStub) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	if s.workstations == nil {
-		return nil, false
-	}
-	workstation, ok := s.workstations[name]
-	return workstation, ok
 }
 
 func workerBatchSnapshot(output string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
