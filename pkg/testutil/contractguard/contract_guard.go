@@ -1,14 +1,14 @@
-package testutil
+package contractguard
 
 import (
 	"path/filepath"
 	"strings"
 )
 
-// ShouldSkipContractGuardDir centralizes the shared hidden-directory policy for
-// broad handwritten-source contract guards while keeping package-local
+// ShouldSkipDir centralizes the shared hidden-directory policy for broad
+// handwritten-source contract guards while keeping package-local
 // generated-directory exceptions explicit at the call site.
-func ShouldSkipContractGuardDir(moduleRoot, path string, allowedSkipPaths ...string) bool {
+func ShouldSkipDir(moduleRoot, path string, allowedSkipPaths ...string) bool {
 	rel, err := filepath.Rel(moduleRoot, path)
 	if err != nil {
 		return false

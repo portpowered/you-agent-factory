@@ -1,8 +1,8 @@
-package testutil
+package contractguard
 
 import "testing"
 
-func TestShouldSkipContractGuardDir(t *testing.T) {
+func TestShouldSkipDir(t *testing.T) {
 	t.Parallel()
 
 	moduleRoot := "/repo"
@@ -53,9 +53,9 @@ func TestShouldSkipContractGuardDir(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := ShouldSkipContractGuardDir(moduleRoot, tt.path, allowedSkipPaths...)
+			got := ShouldSkipDir(moduleRoot, tt.path, allowedSkipPaths...)
 			if got != tt.want {
-				t.Fatalf("ShouldSkipContractGuardDir(%q) = %v, want %v", tt.path, got, tt.want)
+				t.Fatalf("ShouldSkipDir(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}
