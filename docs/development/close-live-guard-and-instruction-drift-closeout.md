@@ -6,12 +6,14 @@ Scope: final verification for `prd.json` `US-005` on branch `ralph/close-live-gu
 ## Summary
 
 This closeout proves the narrow repository-stability cleanup landed without
-reintroducing hidden-directory guard drift or stale maintainer-path
-assumptions.
+reintroducing stale maintainer-path assumptions, and that the current branch
+state still passes with the already-landed hidden-directory guard behavior it
+inherits after the rebase onto `main`.
 
-- The broad handwritten-source `pkg/config` contract guard now skips hidden
-  metadata directories while keeping `pkg/api/generated` as an explicit
-  package-local exclusion.
+- The current branch state keeps the broad handwritten-source `pkg/config`
+  contract guard on the shared `internal/contractguard.ShouldSkipDir(...)`
+  helper, with `pkg/api/generated` still passed explicitly at the guard call
+  site.
 - The active workstation prompts point only at checked-in guidance that exists
   in this checkout, including the current idea inbox shape and
   `docs/guides/batch-inputs.md`.
@@ -40,8 +42,8 @@ Results on 2026-04-30:
 
 ## What This Proves
 
-- The focused guard bundle still passes after the `pkg/config` hidden-directory
-  skip hardening.
+- The focused guard bundle still passes with the current shared hidden-directory
+  skip behavior already present on this branch after the rebase onto `main`.
 - The active prompt and maintainer-doc updates did not require any additional
   repository-path translation layer to stay executable from this checkout root.
 - Historical cleanup reports and archival artifacts remained untouched; only
