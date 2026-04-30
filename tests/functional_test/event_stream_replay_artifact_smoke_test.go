@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"testing"
 	"time"
 
@@ -270,45 +269,6 @@ func assertReplayWorldStateMatchesRuntime(
 			streamedView.Runtime.Session.FailedCount,
 		)
 	}
-}
-
-func assertReplayRecordedWorkGraphMatchesArtifact(
-	t *testing.T,
-	streamedEvents []factoryapi.FactoryEvent,
-	recordedEvents []factoryapi.FactoryEvent,
-) {
-	t.Helper()
-
-	streamedTick := maxUnifiedSmokeTick(streamedEvents)
-	streamedState, err := projections.ReconstructFactoryWorldState(streamedEvents, streamedTick)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState streamed events: %v", err)
-	}
-
-	recordedTick := maxUnifiedSmokeTick(recordedEvents)
-	recordedState, err := projections.ReconstructFactoryWorldState(recordedEvents, recordedTick)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState recorded events: %v", err)
-	}
-
-	if !reflect.DeepEqual(streamedState.WorkRequestsByID, recordedState.WorkRequestsByID) {
-		t.Fatalf("replayed work-request graph did not match recorded artifact work requests")
-	}
-	if !reflect.DeepEqual(streamedState.RelationsByWorkID, recordedState.RelationsByWorkID) {
-		t.Fatalf("replayed work-request relations did not match recorded artifact relations")
-	}
-	if !reflect.DeepEqual(sortedFactoryWorldTraceIDs(streamedState), sortedFactoryWorldTraceIDs(recordedState)) {
-		t.Fatalf("replayed trace ID set did not match recorded artifact trace IDs")
-	}
-}
-
-func sortedFactoryWorldTraceIDs(state interfaces.FactoryWorldState) []string {
-	traceIDs := make([]string, 0, len(state.TracesByID))
-	for traceID := range state.TracesByID {
-		traceIDs = append(traceIDs, traceID)
-	}
-	sort.Strings(traceIDs)
-	return traceIDs
 }
 
 func canonicalizeFunctionalFactoryWorldState(state interfaces.FactoryWorldState) (interfaces.FactoryWorldState, error) {

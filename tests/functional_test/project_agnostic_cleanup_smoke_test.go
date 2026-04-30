@@ -171,6 +171,26 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 	}
 }
 
+func TestProjectAgnosticCleanupSmoke_BroadSurfaceArtifactsOmitRetiredEventNames(t *testing.T) {
+	paths := []string{
+		"ui/src/api/generated/openapi.ts",
+		"tests/adhoc/factory-recording-04-11-02.json",
+		"tests/functional_test/testdata/adhoc-recording-batch-event-log.json",
+		"ui/src/components/dashboard/fixtures/failure-analysis-events.ts",
+		"ui/src/components/dashboard/fixtures/graph-state-smoke-events.ts",
+		"ui/src/components/dashboard/fixtures/resource-count-events.ts",
+		"ui/src/components/dashboard/fixtures/runtime-details-events.ts",
+	}
+
+	for _, rel := range paths {
+		data, err := os.ReadFile(agentFactoryPath(t, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		assertTextOmitsRetiredEventNames(t, rel, string(data))
+	}
+}
+
 func TestProjectAgnosticCleanupSmoke_RequestDispatchAndRuntimeContext(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "tags_test"))
 	setWorkingDirectory(t, dir)
@@ -540,6 +560,24 @@ func assertValueDoesNotContainPortOS(t *testing.T, label string, value string) {
 		strings.Contains(normalized, "port os") ||
 		strings.Contains(normalized, "port_os") {
 		t.Fatalf("%s contains Port OS coupling: %q", label, value)
+	}
+}
+
+func assertTextOmitsRetiredEventNames(t *testing.T, label string, value string) {
+	t.Helper()
+
+	for _, retired := range []string{
+		"RUN_STARTED",
+		"INITIAL_STRUCTURE",
+		"RELATIONSHIP_CHANGE",
+		"DISPATCH_CREATED",
+		"DISPATCH_COMPLETED",
+		"FACTORY_STATE_CHANGE",
+		"RUN_FINISHED",
+	} {
+		if strings.Contains(value, `"`+retired+`"`) {
+			t.Fatalf("%s contains retired public event name %q", label, retired)
+		}
 	}
 }
 
