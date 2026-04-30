@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/logging"
 	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/replay"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/agent-factory/pkg/workers"
 )
 
@@ -113,19 +114,8 @@ func submitWorkRequests(ctx context.Context, f factory.Factory, reqs []interface
 	return f.SubmitWorkRequest(ctx, submission.WorkRequestFromSubmitRequests(reqs))
 }
 
-type runtimeProjectionConfig struct {
-	workers map[string]*interfaces.WorkerConfig
-}
-
-type runtimeSchedulerConfig struct{}
-
-func (runtimeSchedulerConfig) Worker(string) (*interfaces.WorkerConfig, bool) {
-	return nil, false
-}
-
-func (runtimeSchedulerConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
-	return nil, false
-}
+type runtimeProjectionConfig = runtimefixtures.RuntimeDefinitionLookupFixture
+type runtimeSchedulerConfig = *runtimefixtures.RuntimeDefinitionLookupFixture
 
 type runtimeAwareScheduler struct {
 	configured interfaces.RuntimeWorkstationLookup
@@ -160,15 +150,6 @@ func (h *generatedBatchHook) OnTick(context.Context, interfaces.SubmissionHookCo
 	return interfaces.SubmissionHookResult{
 		GeneratedBatches: []interfaces.GeneratedSubmissionBatch{h.batch},
 	}, nil
-}
-
-func (c runtimeProjectionConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	def, ok := c.workers[name]
-	return def, ok
-}
-
-func (runtimeProjectionConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
-	return nil, false
 }
 
 func buildSimpleNet() *state.Net {
@@ -238,7 +219,7 @@ func TestNew_RequiresNet(t *testing.T) {
 func TestNew_ConfiguresProvidedRuntimeAwareScheduler(t *testing.T) {
 	net := buildSimpleNet()
 	customScheduler := &runtimeAwareScheduler{}
-	runtimeCfg := runtimeSchedulerConfig{}
+	runtimeCfg := runtimeSchedulerConfig(&runtimefixtures.RuntimeDefinitionLookupFixture{})
 
 	_, err := New(
 		factory.WithNet(net),
@@ -902,7 +883,7 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 		factory.WithInlineDispatch(),
 		factory.WithWorkerExecutor("mock", &passExecutor{}),
 		factory.WithRuntimeConfig(runtimeProjectionConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"mock": {
 					Type:             interfaces.WorkerTypeModel,
 					ExecutorProvider: "codex-cli",

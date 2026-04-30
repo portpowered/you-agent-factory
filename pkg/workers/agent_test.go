@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 )
 
 type agentMockProvider struct {
@@ -18,35 +19,7 @@ type agentMockProvider struct {
 	lastReq   interfaces.ProviderInferenceRequest
 }
 
-type staticRuntimeConfig struct {
-	factoryDir     string
-	runtimeBaseDir string
-	workers        map[string]*interfaces.WorkerConfig
-	workstations   map[string]*interfaces.FactoryWorkstationConfig
-}
-
-var _ interfaces.RuntimeConfigLookup = staticRuntimeConfig{}
-
-func (c staticRuntimeConfig) FactoryDir() string {
-	return c.factoryDir
-}
-
-func (c staticRuntimeConfig) RuntimeBaseDir() string {
-	if c.runtimeBaseDir != "" {
-		return c.runtimeBaseDir
-	}
-	return c.factoryDir
-}
-
-func (c staticRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	def, ok := c.workers[name]
-	return def, ok
-}
-
-func (c staticRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	def, ok := c.workstations[name]
-	return def, ok
-}
+type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture
 
 func (m *agentMockProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
 	m.lastReq = req
@@ -113,7 +86,7 @@ func withAgentWorkingDirectory(workingDirectory string) func(*interfaces.Worksta
 func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514"},
 		},
 	}, provider)
@@ -153,7 +126,7 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
 	}, provider)
@@ -196,7 +169,7 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
 	}, provider)
@@ -225,7 +198,7 @@ func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T
 func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
 				ModelProvider: string(ModelProviderClaude),
@@ -297,7 +270,7 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
 				ModelProvider: string(ModelProviderClaude),
@@ -334,7 +307,7 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
 				ModelProvider: string(ModelProviderClaude),
@@ -368,7 +341,7 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 func TestAgentExecutor_ProviderError_ReturnsFailedResult(t *testing.T) {
 	provider := &agentMockProvider{err: errors.New("connection refused")}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -408,7 +381,7 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "gpt-5-codex", ModelProvider: "codex"},
 		},
 	}, provider)
@@ -446,7 +419,7 @@ func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testi
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -511,7 +484,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 		),
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(ModelProviderCodex)},
 		},
 	}, provider)
@@ -583,7 +556,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -645,7 +618,7 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
 				ModelProvider: string(ModelProviderClaude),
@@ -679,7 +652,7 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 func TestAgentExecutor_OutputSchemaSuccess_KeepsRawOutput(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: `{"work_id":"w-1","tags":{"result":"done"}}`}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -708,7 +681,7 @@ func TestAgentExecutor_OutputSchemaSuccess_KeepsRawOutput(t *testing.T) {
 func TestAgentExecutor_OutputSchemaParseFailure_ReturnsFailedResult(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "not valid json at all"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -739,7 +712,7 @@ func TestAgentExecutor_OutputSchemaParseFailure_ReturnsFailedResult(t *testing.T
 
 func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 	runtimeCfg := staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model", StopToken: "COMPLETE"},
 		},
 	}
@@ -786,7 +759,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 func TestAgentExecutor_StopTokenComesFromRuntimeConfigWithoutDispatchState(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "Work done. COMPLETE"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "test-model", StopToken: "COMPLETE"},
 		},
 	}, provider)
@@ -811,7 +784,7 @@ func TestAgentExecutor_RuntimeStopTokenChangesAffectSubsequentDispatches(t *test
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "Work done. COMPLETE"}}
 	workerDef := &interfaces.WorkerConfig{Model: "test-model", StopToken: "COMPLETE"}
 	runtimeCfg := staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": workerDef,
 		},
 	}
@@ -853,7 +826,7 @@ func TestAgentExecutor_RuntimeStopTokenChangesAffectSubsequentDispatches(t *test
 func TestAgentExecutor_ResolvesWorkerConfigPerDispatch(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"worker-a": {Model: "model-a", ModelProvider: "claude"},
 			"worker-b": {Model: "model-b", ModelProvider: "codex"},
 		},

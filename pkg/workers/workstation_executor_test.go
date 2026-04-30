@@ -72,10 +72,10 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "You are a helpful assistant."},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "Process work {{ (index .Inputs 0).WorkID }}"},
 			},
 		},
@@ -166,11 +166,11 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeConfi
 	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			factoryDir: wantDir,
-			workers: map[string]*interfaces.WorkerConfig{
+			FactoryPath: wantDir,
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Type:             interfaces.WorkstationTypeModel,
 					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
@@ -210,12 +210,12 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeBaseD
 	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			factoryDir:     factoryDir,
-			runtimeBaseDir: wantDir,
-			workers: map[string]*interfaces.WorkerConfig{
+			FactoryPath:     factoryDir,
+			RuntimeBasePath: wantDir,
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Type:             interfaces.WorkstationTypeModel,
 					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
@@ -367,11 +367,11 @@ func writeRuntimeLookupAgentsMD(t *testing.T, dir string, content string) {
 
 func canonicalWorkstationRuntimeConfig(factoryDir string) staticRuntimeConfig {
 	return staticRuntimeConfig{
-		factoryDir: factoryDir,
-		workers: map[string]*interfaces.WorkerConfig{
+		FactoryPath: factoryDir,
+		Workers: map[string]*interfaces.WorkerConfig{
 			"canonical-worker": {Type: interfaces.WorkerTypeModel, Body: "canonical system", Timeout: "1h"},
 		},
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"review": {
 				Type:             interfaces.WorkstationTypeModel,
 				WorkerTypeName:   "canonical-worker",
@@ -411,7 +411,7 @@ func TestWorkstationExecutor_LogicalMove_DoesNotCallExecutor(t *testing.T) {
 	mock := &wsMockExecutor{}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"logical": {Type: interfaces.WorkstationTypeLogical},
 			},
 		},
@@ -434,10 +434,10 @@ func TestWorkstationExecutor_ExecutorError_ReturnsFailedResult(t *testing.T) {
 	mock := &wsMockExecutor{err: errors.New("connection timeout")}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
@@ -466,10 +466,10 @@ func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.
 	mock := &wsMockExecutor{}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"broken": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "{{ .InvalidSyntax"},
 			},
 		},
@@ -501,11 +501,11 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Body: "system-a"},
 				"worker-b": {Body: "system-b"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"review-a": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "Review {{ (index .Inputs 0).WorkID }}"},
 				"review-b": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "Inspect {{ (index .Inputs 0).WorkID }}"},
 			},
@@ -561,10 +561,10 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 	}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {
 					Type:           interfaces.WorkstationTypeModel,
 					PromptTemplate: "do work",
@@ -601,10 +601,10 @@ func TestWorkstationExecutor_WorkstationExecutionLimitSetsTimeout(t *testing.T) 
 	mock := &deadlineCapturingExecutor{}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {
 					Type:           interfaces.WorkstationTypeModel,
 					PromptTemplate: "do work",
@@ -642,10 +642,10 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutPrefersWorkstationLimit(t *testi
 	mock := &deadlineCapturingExecutor{}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "90m"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {
 					Type:           interfaces.WorkstationTypeModel,
 					PromptTemplate: "do work",
@@ -683,10 +683,10 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutFallsBackToWorkerTimeout(t *test
 	mock := &deadlineCapturingExecutor{}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "75ms"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
@@ -720,10 +720,10 @@ func TestWorkstationExecutor_ExplicitPositiveTimeoutOverridesDefaults(t *testing
 	mock := &deadlineCapturingExecutor{}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "1h"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "75ms"}},
 			},
 		},
@@ -757,10 +757,10 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutDefaultsToTwoHours(t *testing.T)
 	mock := &deadlineCapturingExecutor{}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"script-worker": {Type: interfaces.WorkerTypeScript},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
@@ -818,10 +818,10 @@ func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 			mock := &deadlineCapturingExecutor{}
 			we := &WorkstationExecutor{
 				RuntimeConfig: staticRuntimeConfig{
-					workers: map[string]*interfaces.WorkerConfig{
+					Workers: map[string]*interfaces.WorkerConfig{
 						"script-worker": tt.workerDef,
 					},
-					workstations: map[string]*interfaces.FactoryWorkstationConfig{
+					Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 						"timed": tt.workstationConfig,
 					},
 				},
@@ -857,10 +857,10 @@ func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testi
 	mock := &deadlineCapturingExecutor{}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"model-worker": {Type: interfaces.WorkerTypeModel, Timeout: "75ms"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
@@ -893,10 +893,10 @@ func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testi
 func TestWorkstationExecutor_ModelWorkerTimeoutCancelsLongRunningExecutor(t *testing.T) {
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"model-worker": {Type: interfaces.WorkerTypeModel, Timeout: "20ms"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},

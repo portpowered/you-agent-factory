@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/petri"
@@ -109,7 +110,7 @@ func TestProjectInitialStructure_NetOnlyTopology_OrdersMapDerivedOutputDetermini
 func TestProjectInitialStructure_RuntimeConfig_ProjectsLoadedWorkerMetadata(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"builder": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "codex-cli",
@@ -161,7 +162,7 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsLoadedWorkerMetadata(t *t
 func TestProjectInitialStructure_RuntimeConfig_MissingWorkerKeepsWorkstationTopology(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"reviewer": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "claude-cli",
@@ -193,14 +194,14 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 		MaxVisits:    3,
 	}
 	runtimeConfig := projectionRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"builder": {
 				Type:        interfaces.WorkerTypeModel,
 				Concurrency: 2,
 				Timeout:     "30m",
 			},
 		},
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"build": {
 				Name:           "Build",
 				Kind:           interfaces.WorkstationKindCron,
@@ -347,7 +348,7 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 func TestProjectInitialStructure_RuntimeConfig_LimitsConstraintUsesRuntimeConfig(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"build": {
 				Name:   "Build",
 				Limits: interfaces.WorkstationLimits{MaxRetries: 2, MaxExecutionTime: "10m"},
@@ -387,22 +388,7 @@ func assertSingleConstraint(t *testing.T, constraints []interfaces.FactoryConstr
 	}
 }
 
-type projectionRuntimeConfig struct {
-	workers      map[string]*interfaces.WorkerConfig
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-var _ interfaces.RuntimeDefinitionLookup = projectionRuntimeConfig{}
-
-func (c projectionRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	def, ok := c.workers[name]
-	return def, ok
-}
-
-func (c projectionRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	def, ok := c.workstations[name]
-	return def, ok
-}
+type projectionRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 func representativeProjectionNet() *state.Net {
 	story := &state.WorkType{

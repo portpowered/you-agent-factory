@@ -1,4 +1,4 @@
-package testutil
+package runtimefixtures
 
 import (
 	"testing"
@@ -43,15 +43,11 @@ func TestRuntimeDefinitionLookupFixture_ZeroValueMisses(t *testing.T) {
 
 func TestRuntimeConfigLookupFixture_ImplementsLayeredContract(t *testing.T) {
 	fixture := RuntimeConfigLookupFixture{
-		RuntimeDefinitionLookupFixture: RuntimeDefinitionLookupFixture{
-			RuntimeWorkstationLookupFixture: RuntimeWorkstationLookupFixture{
-				Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-					"router": {Name: "Router", Type: interfaces.WorkstationTypeLogical},
-				},
-			},
-			Workers: map[string]*interfaces.WorkerConfig{
-				"writer": {Model: "gpt-5.4"},
-			},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"router": {Name: "Router", Type: interfaces.WorkstationTypeLogical},
+		},
+		Workers: map[string]*interfaces.WorkerConfig{
+			"writer": {Model: "gpt-5.4"},
 		},
 		FactoryPath: "/tmp/factory",
 	}

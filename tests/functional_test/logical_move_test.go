@@ -8,28 +8,9 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/agent-factory/pkg/workers"
 )
-
-type logicalMoveRuntimeConfig struct{}
-
-var _ interfaces.RuntimeConfigLookup = logicalMoveRuntimeConfig{}
-
-func (logicalMoveRuntimeConfig) FactoryDir() string {
-	return ""
-}
-
-func (logicalMoveRuntimeConfig) RuntimeBaseDir() string {
-	return ""
-}
-
-func (logicalMoveRuntimeConfig) Worker(string) (*interfaces.WorkerConfig, bool) {
-	return nil, false
-}
-
-func (logicalMoveRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
-	return &interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeLogical}, true
-}
 
 // TestLogicalMove_Success verifies the success path: a LOGICAL_MOVE workstation
 // passes an input token through to the output place without invoking any LLM.
@@ -40,8 +21,13 @@ func TestLogicalMove_Success(t *testing.T) {
 
 	// Register a real WorkstationExecutor with LOGICAL_MOVE type — no LLM called.
 	h.SetCustomExecutor("logical-router", &workers.WorkstationExecutor{
-		RuntimeConfig: logicalMoveRuntimeConfig{},
-		Renderer:      &workers.DefaultPromptRenderer{},
+		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"logical-router": {Type: interfaces.WorkstationTypeLogical},
+				"router":         {Type: interfaces.WorkstationTypeLogical},
+			},
+		},
+		Renderer: &workers.DefaultPromptRenderer{},
 	})
 
 	h.RunUntilComplete(t, 5*time.Second)
@@ -61,8 +47,13 @@ func TestLogicalMove_PreservesTokenColor(t *testing.T) {
 
 	// Logical move executor — passes token through unchanged.
 	h.SetCustomExecutor("logical-router", &workers.WorkstationExecutor{
-		RuntimeConfig: logicalMoveRuntimeConfig{},
-		Renderer:      &workers.DefaultPromptRenderer{},
+		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"logical-router": {Type: interfaces.WorkstationTypeLogical},
+				"router":         {Type: interfaces.WorkstationTypeLogical},
+			},
+		},
+		Renderer: &workers.DefaultPromptRenderer{},
 	})
 
 	// Model worker captures the dispatch to verify the payload was preserved.

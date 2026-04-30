@@ -2,6 +2,8 @@
 
 This inventory records the current test-owned runtime lookup doubles that mirror the layered production runtime lookup interfaces. It exists to define the narrow shared fixture seam before the helper extraction work starts.
 
+The shared seam now lives in `pkg/testutil/runtimefixtures` instead of the root `pkg/testutil` package so package-internal tests can reuse the fixtures without importing the heavier harness helpers and creating import cycles.
+
 ## Generic Fixture Shapes
 
 The repeated test doubles fall into three generic interface shapes that the shared helper should cover:
