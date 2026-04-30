@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/pkg/internal/contractguard"
 )
 
 const approvedRuntimeLookupFactoryDirOwner = "interfaces/runtime_lookup.go"
@@ -138,7 +140,13 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 		if walkErr != nil {
 			return walkErr
 		}
-		if d.IsDir() || filepath.Ext(path) != ".go" {
+		if d.IsDir() {
+			if contractguard.ShouldSkipDir(root, path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
 			return nil
 		}
 
@@ -168,6 +176,24 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 	})
 
 	return violations, nil
+}
+
+func TestRuntimeLookupContractGuard_SkipsHiddenMetadataDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeRuntimeLookupGuardFixture(t, root, ".claude/runtime_lookup.go", `package claude
+
+type RuntimeConfig = any
+`)
+
+	violations, err := scanRuntimeLookupContractViolations(root)
+	if err != nil {
+		t.Fatalf("scan temp runtime lookup ownership: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("hidden metadata fixtures should be skipped, got violations = %v", violations)
+	}
 }
 
 func scanRuntimeLookupFile(fset *token.FileSet, path string, rel string) ([]runtimeLookupContractViolation, error) {

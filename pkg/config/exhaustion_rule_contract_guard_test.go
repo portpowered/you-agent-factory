@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/pkg/internal/contractguard"
 )
 
 var retiredAuthoredExhaustionIdentifiers = map[string]struct{}{
@@ -84,11 +86,7 @@ func walkProductionPkgFiles(visit func(path, rel string, file *ast.File, fset *t
 			return walkErr
 		}
 		if entry.IsDir() {
-			rel, err := filepath.Rel(pkgRoot, path)
-			if err != nil {
-				return err
-			}
-			if filepath.Clean(rel) == filepath.Clean("api/generated") {
+			if contractguard.ShouldSkipDir(pkgRoot, path, "api/generated") {
 				return filepath.SkipDir
 			}
 			return nil

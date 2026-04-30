@@ -33,3 +33,8 @@
 - `pkg/config` currently has a narrower walker that skips `api/generated`; later consolidation must keep that difference explicit instead of silently inheriting the broader UI-oriented skips.
 - `pkg/interfaces` currently uses package-local scan shapes instead of a shared directory policy owner; later stories should route any broad scan through the same owner rather than leave interfaces as a separate policy island.
 - Keep the shared owner small enough that reviewers can read the default policy directly from one file.
+
+## Implementation Update
+
+- `pkg/config/exhaustion_rule_contract_guard_test.go` now delegates directory skipping to `contractguard.ShouldSkipDir("..", path, "api/generated")`, keeping `api/generated` reviewable as an explicit package-specific exception.
+- `pkg/interfaces/runtime_lookup_contract_guard_test.go` and `pkg/interfaces/world_view_contract_guard_test.go` now use `contractguard.ShouldSkipDir(...)` for their broad filesystem scans, so hidden metadata directory policy no longer drifts separately inside `pkg/interfaces`.
