@@ -12,6 +12,9 @@ internally consistent.
 
 - `factory/logs/meta/asks.md` remains the only checked-in customer-ask backlog
   surface owned by the active maintainer workflow.
+- `factory/logs/meta/view.md` now summarizes that canonical backlog accurately:
+  the live checked-in asks are grouped under `release plans`, `system deficits`,
+  and `quality`, rather than claiming there are no asks.
 - `factory/meta/asks.md` no longer acts as a peer backlog path; it is retired
   from the artifact contract so silent divergence cannot reappear unnoticed.
 - Active checked-in prompts and maintainer docs now agree that follow-up work

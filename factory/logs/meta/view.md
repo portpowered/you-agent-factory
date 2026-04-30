@@ -19,10 +19,11 @@
   - `77de019` restored the canonical checked-in starter surface
   - `e5ddd22` added the closeout verification
   - merge commit `5640325` landed that sequence as pull request `#2`
-- there is still no live customer work:
+- the canonical checked-in customer-ask backlog is active and centralized:
   - the canonical checked-in customer-ask backlog is
     `factory/logs/meta/asks.md`
-  - `factory/logs/meta/asks.md` says there are no customer asks
+  - the live ask categories currently include `release plans`,
+    `system deficits`, and `quality`
   - no checked-in `plan`, `task`, or `thoughts` work items exist beyond the
     tracked `.gitkeep` sentinels
 - the checked-in backlog is still crowded with already-explored contract-guard
@@ -59,8 +60,9 @@
 
 ## current blockers
 
-1. the checked-in meta surfaces needed to be realigned from the pre-`#5`
-   snapshot to the actual `main` state.
+1. the checked-in meta surfaces now need ongoing accuracy checks so the
+   canonical ask summary in `factory/logs/meta/view.md` keeps matching
+   `factory/logs/meta/asks.md`.
 2. the repo still lacks one shared test-owned runtime lookup fixture seam, so
    small test changes continue to pay for duplicate `FactoryDir`,
    `RuntimeBaseDir`, `Worker`, and `Workstation` scaffolding.
@@ -101,7 +103,8 @@
 - the right customer rule now is:
   - `factory/logs/meta/asks.md` is the canonical checked-in customer-ask
     backlog for the meta workflow
-  - there is no ask to handle
+  - the current checked-in asks are backlog inputs, not approved in-flight
+    product work
   - stability and theory-of-mind accuracy are still higher value than
     speculative product work
 
@@ -117,5 +120,7 @@
 
 ## customer asks
 
-- `factory/logs/meta/asks.md` currently says there are no customer asks.
-- no urgency marker exists in the tracked meta ask surface.
+- `factory/logs/meta/asks.md` currently carries active asks under `release
+  plans`, `system deficits`, and `quality`.
+- no explicit urgency marker or top-ranked ask is recorded in the tracked meta
+  ask surface.
