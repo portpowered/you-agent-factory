@@ -16,16 +16,17 @@ follow-on cleanup stories align skip policy and diagnostics.
 
 | Guard file | Walk root | Validation surface | Contract class | Current exclusions | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `pkg/api/legacy_model_guard_test.go` | module root (`../..`) | All handwritten `.go` files under the module while forbidding deleted legacy replay/event types and generated-type aliases. | `handwritten_module_scan` | `pkg/api/generated`, `ui/dist`, `ui/node_modules`, `ui/storybook-static` | This is the hardened baseline for broad handwritten-source scans because the root includes generated API output and built UI artifacts. |
+| `pkg/api/legacy_model_guard_test.go` | module root (`../..`) | All handwritten `.go` files under the module while forbidding deleted legacy replay/event types and generated-type aliases. | `handwritten_module_scan` | hidden metadata directories, `pkg/api/generated`, `ui/dist`, `ui/node_modules`, `ui/storybook-static` | This is the hardened baseline for broad handwritten-source scans because the root includes generated API output, nested worktree metadata, and built UI artifacts. |
 | `pkg/config/exhaustion_rule_contract_guard_test.go` | `pkg/` (`..`) | Production `.go` files under `pkg/` while keeping retired authored exhaustion identifiers deleted and limiting `petri.TransitionExhaustion` ownership. | `handwritten_pkg_scan` | hidden directories, `pkg/api/generated`; excludes all `_test.go` files from the walked surface | Broad package scan of handwritten production code. The package-root scope still skips hidden metadata so nested worktree or editor artifacts cannot become authored-source inputs later. |
 | `pkg/interfaces/runtime_lookup_contract_guard_test.go` | `pkg/` (`..`) in the production guard; temp fixture roots in focused regression tests | All `.go` files under `pkg/` when checking runtime-lookup interface ownership and raw `FactoryDir` / `RuntimeBaseDir` escape hatches. | `pkg_ownership_scan` | hidden directories, `pkg/api/generated` | This remains broader than production-only scans because the contract also forbids test-local escape hatches under `pkg/`, but generated API output and hidden metadata stay outside the ownership surface. |
 | `pkg/interfaces/world_view_contract_guard_test.go` | package root (`.`) for boundary-mirror checks; `pkg/` (`..`) for canonical-mirror checks | Package-local `pkg/interfaces/*.go` files for boundary-only mirror names, plus all `.go` files under `pkg/` for retired canonical mirror names. | `mixed_package_and_pkg_scan` | hidden directories for both walk scopes; `pkg/api/generated` on the broader `pkg/` scan; explicit allowlists for the guard file itself | This file contains two walker scopes: a narrow package-local scan and a broader `pkg/` scan used to keep retired canonical mirrors out of the rest of `pkg/`. |
-| `pkg/petri/transition_contract_guard_test.go` | module root (`../..`) | All handwritten non-test `.go` files under the module while forbidding retired runtime-owned `petri.Transition` literal fields. | `handwritten_module_scan` | `pkg/api/generated`, `ui/dist`, `ui/node_modules`, `ui/storybook-static`; excludes all `_test.go` files from the walked surface | Shares the same broad-root handwritten-source shape as the API legacy-model guard, but with petri-specific ownership rules. |
+| `pkg/petri/transition_contract_guard_test.go` | module root (`../..`) | All handwritten non-test `.go` files under the module while forbidding retired runtime-owned `petri.Transition` literal fields. | `handwritten_module_scan` | hidden metadata directories, `pkg/api/generated`, `ui/dist`, `ui/node_modules`, `ui/storybook-static`; excludes all `_test.go` files from the walked surface | Shares the same broad-root handwritten-source shape as the API legacy-model guard, but with petri-specific ownership rules. |
 
 ## Current Shape
 
 - `handwritten_module_scan` guards walk the full module and therefore must
-  classify generated or built artifact directories explicitly.
+  classify hidden metadata directories alongside generated or built artifact
+  directories explicitly.
 - `handwritten_pkg_scan` and `pkg_ownership_scan` guards start at `pkg/`, so
   they avoid repository-root metadata by construction, but still need explicit
   hidden-directory and generated-output exclusions for the package tree they
@@ -38,7 +39,7 @@ follow-on cleanup stories align skip policy and diagnostics.
 ## Helper Decision
 
 - The repeated directory-exclusion predicates now live in
-  `internal/testpath/contract_guard_walkers.go`.
+  `internal/contractguard/skip.go`.
 - The shared helper stays intentionally small: it only answers whether a walked
   directory is outside the handwritten-source surface for either module-root or
   `pkg/`-root scans.
@@ -71,7 +72,10 @@ follow-on cleanup stories align skip policy and diagnostics.
   `go test ./pkg/api ./pkg/petri ./pkg/interfaces ./pkg/config -count=1 -timeout 300s`
 - Verified repository quality gate:
   `make lint`
+- Verified full short test lane:
+  `make test`
 - Result: the targeted package slice is green, the shared skip-helper inventory
-  still matches the guarded handwritten-source surface, and the closeout proof
-  stays attached to the same checked-in document maintainers use for future
-  walker drift reviews.
+  still matches the guarded handwritten-source surface, the module-root helper
+  rejects hidden metadata directories alongside generated and built artifacts,
+  and the closeout proof stays attached to the same checked-in document
+  maintainers use for future walker drift reviews.
