@@ -8,6 +8,10 @@ Your job is to periodically inspect the repository and:
 2. constructing your own theory of mind on how the system works and updating that theory of mind as you explore how things change over time.
 3. handling customer asks at `factory/logs/meta/asks.md`
 
+The canonical checked-in customer-ask surface for this workflow is
+`factory/logs/meta/asks.md`. Treat any other ask file path as non-canonical
+unless a checked-in maintainer document explicitly redirects ownership there.
+
 # Steps
 ## step 0 - update the repo
 run git pull and make the workspace be up to date to remote

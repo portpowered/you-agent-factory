@@ -20,6 +20,8 @@
   - `e5ddd22` added the closeout verification
   - merge commit `5640325` landed that sequence as pull request `#2`
 - there is still no live customer work:
+  - the canonical checked-in customer-ask backlog is
+    `factory/logs/meta/asks.md`
   - `factory/logs/meta/asks.md` says there are no customer asks
   - no checked-in `plan`, `task`, or `thoughts` work items exist beyond the
     tracked `.gitkeep` sentinels
@@ -51,8 +53,9 @@
     - `pkg/service/factory_test.go`
   - `pkg/replay/EmbeddedRuntimeConfig` is the real production implementation
     and should not be folded into test-only helpers
-- the local workspace also contains one untracked `factory/meta/asks.md` file,
-  which is outside the tracked `factory/logs/meta/` surface.
+- a second checked-in ask file also exists at `factory/meta/asks.md`, so the
+  canonical ownership rule must stay explicit until that duplicate surface is
+  demoted or redirected.
 
 ## current blockers
 
@@ -96,6 +99,8 @@
   - leave real runtime implementations such as `pkg/config.LoadedFactoryConfig`
     and `pkg/replay.EmbeddedRuntimeConfig` alone
 - the right customer rule now is:
+  - `factory/logs/meta/asks.md` is the canonical checked-in customer-ask
+    backlog for the meta workflow
   - there is no ask to handle
   - stability and theory-of-mind accuracy are still higher value than
     speculative product work
