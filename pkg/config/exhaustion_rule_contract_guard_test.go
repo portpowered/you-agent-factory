@@ -77,8 +77,32 @@ func TestExhaustionRuleContractGuard_TransitionExhaustionStaysInApprovedProducti
 	}
 }
 
+func TestExhaustionRuleContractGuard_SkipsHiddenAndGeneratedDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeExhaustionRuleGuardFixture(t, root, ".hidden/reintroduced.go", `package hidden
+
+var ExhaustionRules = struct{}{}
+`)
+	writeExhaustionRuleGuardFixture(t, root, "api/generated/reintroduced.go", `package generated
+
+var ExhaustionRules = struct{}{}
+`)
+
+	if err := walkProductionPkgFilesAtRoot(root, func(path, rel string, file *ast.File, fset *token.FileSet) error {
+		return fmt.Errorf("unexpected scan of %s", rel)
+	}); err != nil {
+		t.Fatalf("walk production pkg files: %v", err)
+	}
+}
+
 func walkProductionPkgFiles(visit func(path, rel string, file *ast.File, fset *token.FileSet) error) error {
-	pkgRoot := filepath.Clean("..")
+	return walkProductionPkgFilesAtRoot(filepath.Clean(".."), visit)
+}
+
+func walkProductionPkgFilesAtRoot(pkgRoot string, visit func(path, rel string, file *ast.File, fset *token.FileSet) error) error {
+	pkgRoot = filepath.Clean(pkgRoot)
 	fset := token.NewFileSet()
 
 	return filepath.WalkDir(pkgRoot, func(path string, entry os.DirEntry, walkErr error) error {
@@ -174,4 +198,16 @@ func transitionImportAliases(file *ast.File) map[string]struct{} {
 		aliases[name] = struct{}{}
 	}
 	return aliases
+}
+
+func writeExhaustionRuleGuardFixture(t *testing.T, root, relativePath, contents string) {
+	t.Helper()
+
+	path := filepath.Join(root, relativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
 }

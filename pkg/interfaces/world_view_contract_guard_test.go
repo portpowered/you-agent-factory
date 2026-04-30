@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/agent-factory/internal/contractguard"
-	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
 )
 
 var retiredFactoryBoundaryMirrorNames = []string{
@@ -87,7 +86,7 @@ func TestFactoryWorldContractGuard_RetiredMirrorTypesStayDeleted(t *testing.T) {
 					continue
 				}
 				if _, approved := approvedBoundaryViews[typeName]; !approved {
-					t.Fatalf("%s introduces unapproved FactoryWorld*View mirror %s; update the cleanup artifact and this allowlist before adding new boundary-only views", path, typeName)
+					t.Fatalf("%s introduces unapproved FactoryWorld*View mirror %s; update docs/development/world-view-contract-cleanup-data-model.md and this allowlist before adding new boundary-only views", path, typeName)
 				}
 			}
 		}
@@ -108,23 +107,7 @@ func TestFactoryWorldContractGuard_RetiredBoundaryMirrorNamesStayOutOfInterfaces
 		filepath.Clean("interfaces/world_view_contract_guard_test.go"): {},
 	}
 
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			if contractguard.ShouldSkipDir(".", path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) != ".go" {
-			return nil
-		}
-		rel := filepath.Clean(filepath.Join("interfaces", filepath.Base(path)))
-		if _, ok := allowed[rel]; ok {
-			return nil
-		}
+	err := walkWorldViewMirrorFiles(".", "interfaces", false, allowed, func(path, rel string) error {
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
@@ -142,34 +125,61 @@ func TestFactoryWorldContractGuard_RetiredBoundaryMirrorNamesStayOutOfInterfaces
 func TestFactoryWorldContractGuard_RetiredCanonicalMirrorNamesStayOutOfPkgGoFiles(t *testing.T) {
 	t.Parallel()
 
-	violations, err := scanWorldViewCanonicalMirrorViolations("..")
+	names := append([]string(nil), retiredFactoryCanonicalMirrorNames...)
+	sort.Strings(names)
+	patterns := make([]string, 0, len(names))
+	for _, name := range names {
+		patterns = append(patterns, regexp.QuoteMeta(name))
+	}
+	matcher := regexp.MustCompile(`\b(?:` + strings.Join(patterns, "|") + `)\b`)
+	allowed := map[string]struct{}{
+		filepath.Clean("interfaces/world_view_contract_guard_test.go"): {},
+	}
+
+	err := walkWorldViewMirrorFiles("..", "", true, allowed, func(path, rel string) error {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if match := matcher.FindString(string(data)); match != "" {
+			t.Fatalf("%s still contains retired mirror name %q; equivalent rg guard is `rg -n %q pkg -g \"*.go\"` from the repository root and should only hit approved guard notes", rel, match, strings.Join(names, "|"))
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatalf("scan pkg go files: %v", err)
 	}
-	if len(violations) != 0 {
-		t.Fatalf("%s still contains retired mirror name %q; equivalent rg guard is `rg -n %q pkg -g \"*.go\"` from the repository root and should only hit approved guard notes", violations[0].file, violations[0].name, strings.Join(retiredFactoryCanonicalMirrorNames, "|"))
-	}
 }
 
-func TestFactoryWorldContractGuard_CanonicalPkgScanSkipsGeneratedApiOutputButScansHandwrittenPackages(t *testing.T) {
+func TestFactoryWorldContractGuard_SkipsHiddenAndGeneratedDirectories(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeWorldViewGuardFixture(t, root, "api/generated/runtime_lookup.go", `package generated
+	writeWorldViewGuardFixture(t, root, ".hidden/hidden.go", `package hidden
 
-type FactoryProviderFailure struct{}
+type Hidden struct{}
+
+var _ = "FactoryProviderFailure"
 `)
-	writeWorldViewGuardFixture(t, root, "workers/runtime_lookup.go", `package workers
+	writeWorldViewGuardFixture(t, root, "api/generated/generated.go", `package generated
 
-type FactoryProviderFailure struct{}
+var _ = "FactoryProviderFailure"
+`)
+	writeWorldViewGuardFixture(t, root, "feature/kept.go", `package feature
+
+var _ = "FactoryProviderFailure"
 `)
 
-	violations, err := scanWorldViewCanonicalMirrorViolations(root)
-	if err != nil {
-		t.Fatalf("scan temp pkg go files: %v", err)
+	allowed := map[string]struct{}{}
+	var visited []string
+	if err := walkWorldViewMirrorFiles(root, "", true, allowed, func(path, rel string) error {
+		visited = append(visited, rel)
+		return nil
+	}); err != nil {
+		t.Fatalf("walk world view mirror files: %v", err)
 	}
-	if len(violations) != 1 || violations[0].file != filepath.Clean("workers/runtime_lookup.go") || violations[0].name != "FactoryProviderFailure" {
-		t.Fatalf("violations = %#v, want only handwritten worker violation", violations)
+	if len(visited) != 1 || visited[0] != filepath.Clean("feature/kept.go") {
+		t.Fatalf("visited = %v, want only handwritten source file %s", visited, filepath.Clean("feature/kept.go"))
 	}
 }
 
@@ -282,30 +292,19 @@ func allRetiredFactoryMirrorNames() []string {
 	return names
 }
 
-type worldViewCanonicalMirrorViolation struct {
-	file string
-	name string
-}
+func walkWorldViewMirrorFiles(root, relPrefix string, includeGenerated bool, allowed map[string]struct{}, visit func(path, rel string) error) error {
+	root = filepath.Clean(root)
 
-func scanWorldViewCanonicalMirrorViolations(root string) ([]worldViewCanonicalMirrorViolation, error) {
-	names := append([]string(nil), retiredFactoryCanonicalMirrorNames...)
-	sort.Strings(names)
-	patterns := make([]string, 0, len(names))
-	for _, name := range names {
-		patterns = append(patterns, regexp.QuoteMeta(name))
-	}
-	matcher := regexp.MustCompile(`\b(?:` + strings.Join(patterns, "|") + `)\b`)
-	allowed := map[string]struct{}{
-		filepath.Clean("interfaces/world_view_contract_guard_test.go"): {},
-	}
-
-	var violations []worldViewCanonicalMirrorViolation
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.IsDir() {
-			if handwrittensourceguard.ShouldSkipDir("pkg/interfaces/world_view_contract_guard_test.go#canonical", root, path) {
+			explicitSkips := []string{}
+			if includeGenerated {
+				explicitSkips = append(explicitSkips, "api/generated")
+			}
+			if contractguard.ShouldSkipDir(root, path, explicitSkips...) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -313,33 +312,20 @@ func scanWorldViewCanonicalMirrorViolations(root string) ([]worldViewCanonicalMi
 		if filepath.Ext(path) != ".go" {
 			return nil
 		}
+
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
 			return relErr
+		}
+		if relPrefix != "" {
+			rel = filepath.Join(relPrefix, rel)
 		}
 		rel = filepath.Clean(rel)
 		if _, ok := allowed[rel]; ok {
 			return nil
 		}
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		if match := matcher.FindString(string(data)); match != "" {
-			violations = append(violations, worldViewCanonicalMirrorViolation{file: rel, name: match})
-		}
-		return nil
+		return visit(path, rel)
 	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(violations, func(i, j int) bool {
-		if violations[i].file == violations[j].file {
-			return violations[i].name < violations[j].name
-		}
-		return violations[i].file < violations[j].file
-	})
-	return violations, nil
 }
 
 func writeWorldViewGuardFixture(t *testing.T, root, relativePath, contents string) {
