@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"github.com/portpowered/agent-factory/internal/contractguard"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -148,7 +149,13 @@ func TestFactoryWorldContractGuard_RetiredCanonicalMirrorNamesStayOutOfPkgGoFile
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || filepath.Ext(path) != ".go" {
+		if info.IsDir() {
+			if contractguard.ShouldSkipDir("..", path, "api/generated") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
 			return nil
 		}
 		rel, relErr := filepath.Rel("..", path)
@@ -164,7 +171,7 @@ func TestFactoryWorldContractGuard_RetiredCanonicalMirrorNamesStayOutOfPkgGoFile
 			return readErr
 		}
 		if match := matcher.FindString(string(data)); match != "" {
-			t.Fatalf("%s still contains retired mirror name %q; equivalent rg guard is `rg -n %q libraries/agent-factory/pkg -g \"*.go\"` and should only hit approved guard notes", rel, match, strings.Join(names, "|"))
+			t.Fatalf("%s still contains retired mirror name %q; equivalent rg guard is `rg -n %q pkg -g \"*.go\"` from the repository root and should only hit approved guard notes", rel, match, strings.Join(names, "|"))
 		}
 		return nil
 	})
