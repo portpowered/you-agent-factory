@@ -165,12 +165,21 @@ var _ = "FactoryProviderFailure"
 
 var _ = "FactoryProviderFailure"
 `)
+	writeWorldViewGuardFixture(t, root, "feature/kept.go", `package feature
+
+var _ = "FactoryProviderFailure"
+`)
 
 	allowed := map[string]struct{}{}
+	var visited []string
 	if err := walkWorldViewMirrorFiles(root, "", true, allowed, func(path, rel string) error {
+		visited = append(visited, rel)
 		return nil
 	}); err != nil {
 		t.Fatalf("walk world view mirror files: %v", err)
+	}
+	if len(visited) != 1 || visited[0] != filepath.Clean("feature/kept.go") {
+		t.Fatalf("visited = %v, want only handwritten source file %s", visited, filepath.Clean("feature/kept.go"))
 	}
 }
 

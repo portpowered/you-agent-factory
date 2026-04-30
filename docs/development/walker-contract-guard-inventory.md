@@ -40,6 +40,10 @@ follow-on cleanup stories align skip policy and diagnostics.
 
 - The repeated directory-exclusion predicates now live in
   `internal/contractguard/skip.go`.
+- `internal/handwrittensourceguard.ShouldSkipDir(...)` remains only as an
+  inventory-aware adapter that derives explicit generated-path exclusions and
+  delegates the actual hidden-directory decision to
+  `internal/contractguard.ShouldSkipDir(...)`.
 - The shared helper stays intentionally small: it only answers whether a walked
   directory is outside the handwritten-source surface for either module-root or
   `pkg/`-root scans.

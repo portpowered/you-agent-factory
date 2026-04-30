@@ -146,14 +146,22 @@ type RuntimeExecutionLookup interface {
 	RuntimeBaseDir() string
 }
 `)
+	writeRuntimeLookupGuardFixture(t, root, "workers/runtime_lookup.go", `package workers
+
+type RuntimeExecutionLookup interface {
+	RuntimeBaseDir() string
+}
+`)
 
 	violations, err := scanRuntimeLookupContractViolations(root)
 	if err != nil {
 		t.Fatalf("scan temp runtime lookup ownership: %v", err)
 	}
-	if len(violations) != 0 {
-		t.Fatalf("violations = %v, want no violations from hidden or generated directories", violations)
-	}
+	assertRuntimeLookupViolationKinds(
+		t,
+		violations,
+		[]string{"workers/runtime_lookup.go:unapproved RuntimeBaseDir interface owner"},
+	)
 }
 
 func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractViolation, error) {
@@ -202,6 +210,7 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 
 	return violations, nil
 }
+
 func TestRuntimeLookupContractGuard_SkipsHiddenMetadataDirectories(t *testing.T) {
 	t.Parallel()
 
@@ -210,15 +219,22 @@ func TestRuntimeLookupContractGuard_SkipsHiddenMetadataDirectories(t *testing.T)
 
 type RuntimeConfig = any
 `)
+	writeRuntimeLookupGuardFixture(t, root, "workers/runtime_config_alias.go", `package workers
+
+type RuntimeConfig = any
+`)
 
 	violations, err := scanRuntimeLookupContractViolations(root)
 	if err != nil {
 		t.Fatalf("scan temp runtime lookup ownership: %v", err)
 	}
-	if len(violations) != 0 {
-		t.Fatalf("hidden metadata fixtures should be skipped, got violations = %v", violations)
-	}
+	assertRuntimeLookupViolationKinds(
+		t,
+		violations,
+		[]string{"workers/runtime_config_alias.go:package-local RuntimeConfig declaration"},
+	)
 }
+
 func scanRuntimeLookupFile(fset *token.FileSet, path string, rel string) ([]runtimeLookupContractViolation, error) {
 	file, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
