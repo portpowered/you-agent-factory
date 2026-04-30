@@ -54,5 +54,5 @@ figure out a way to clean the code (in priority order)
 6. for the agentfactory websites we look to remove unused code, reduce the amount of duplicative components, reduce functionality down to small components, shared styles, such that the overall complexity of teh system is reduced
 
 ## Step 3 - write a file
-1. for one standalone cleanup idea, write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`
-2. if the follow-up needs ordered or mixed-work-type submission instead of one standalone idea file, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`
+1. default to one standalone cleanup idea file. Write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.
+2. only use a batch submission when the follow-up needs dependency ordering or mixed work types. In that case, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`.
