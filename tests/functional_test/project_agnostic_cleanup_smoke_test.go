@@ -171,6 +171,37 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 	}
 }
 
+func TestProjectAgnosticCleanupSmoke_PublicDocsDoNotTeachRetiredRootStoryStarterPaths(t *testing.T) {
+	contentBytes, err := os.ReadFile(agentFactoryPath(t, "docs/authoring-agents-md.md"))
+	if err != nil {
+		t.Fatalf("read authoring guide: %v", err)
+	}
+	content := string(contentBytes)
+
+	for _, want := range []string{
+		"examples/simple-tasks/workstations/review-story/AGENTS.md",
+		"examples/simple-tasks/workers/reviewer/AGENTS.md",
+		"factory/workstations/process/AGENTS.md",
+		"checked-in repository-maintainer workflow",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("authoring guide missing canonical contract reference %q", want)
+		}
+	}
+
+	for _, retired := range []string{
+		"factory/workstations/review-story/AGENTS.md",
+		"factory/workers/reviewer/AGENTS.md",
+		"factory/workstations/execute-story/AGENTS.md",
+		"factory/workers/executor/AGENTS.md",
+		"factory/inputs/story/default/example-story.md",
+	} {
+		if strings.Contains(content, retired) {
+			t.Fatalf("authoring guide should not teach retired root story-starter path %q", retired)
+		}
+	}
+}
+
 func TestProjectAgnosticCleanupSmoke_BroadSurfaceArtifactsOmitRetiredEventNames(t *testing.T) {
 	paths := []string{
 		"ui/src/api/generated/openapi.ts",

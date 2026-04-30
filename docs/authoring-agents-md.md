@@ -341,8 +341,9 @@ workstation directories and the `worker` field maps to the worker directory:
 }
 ```
 
-This maps to `factory/workstations/review-story/AGENTS.md`. The workstation's
-`worker` field maps to `factory/workers/reviewer/AGENTS.md`.
+In a review-loop factory such as `examples/simple-tasks/`, this maps to
+`examples/simple-tasks/workstations/review-story/AGENTS.md`. The workstation's
+`worker` field maps to `examples/simple-tasks/workers/reviewer/AGENTS.md`.
 
 ## Common Patterns
 
@@ -394,13 +395,13 @@ Branch: {{ index (index .Inputs 0).Tags "branch" }}
 
 | File | Type | Description |
 |------|------|-------------|
-| `factory/workers/executor/AGENTS.md` | MODEL_WORKER | Starter worker created by `agent-factory` |
+| `examples/write-code-review/workers/executor/AGENTS.md` | MODEL_WORKER | Review-loop executor worker with structured output requirements |
 | `examples/basic/factory/workers/processor/AGENTS.md` | MODEL_WORKER | Minimal single-step example worker |
-| `factory/workstations/execute-story/AGENTS.md` | MODEL_WORKSTATION | Starter workstation prompt template |
+| `factory/workstations/process/AGENTS.md` | MODEL_WORKSTATION | Checked-in repository-maintainer workstation prompt |
 | `examples/simple-tasks/workstations/execute-story/AGENTS.md` | MODEL_WORKSTATION | Review-loop workstation with rejection feedback |
 
 For complete current examples that include workers and workstations, see:
-- `factory/` — default local scaffold with `factory.json`, `workers/`, and `workstations/`
+- `factory/` — checked-in repository-maintainer workflow with plan, process, and review stages
 - `examples/write-code-review/` — split review loop with canonical camelCase config
 - `tests/functional_test/testdata/service_simple/` — checked-in smoke fixture using the public config contract
 
