@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 
 	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
 	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
@@ -75,18 +76,7 @@ func (s *recordingScheduler) Select(enabled []interfaces.EnabledTransition, _ *i
 	return decisions
 }
 
-type dispatcherRuntimeConfig struct {
-	workers map[string]*interfaces.WorkerConfig
-}
-
-func (c dispatcherRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	def, ok := c.workers[name]
-	return def, ok
-}
-
-func (dispatcherRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
-	return nil, false
-}
+type dispatcherRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 // portos:func-length-exception owner=agent-factory reason=legacy-dispatcher-fixture review=2026-07-18 removal=split-single-transition-fixture-before-next-dispatcher-change
 func TestDispatcher_SingleTransitionFires(t *testing.T) {
@@ -521,7 +511,7 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 		nil,
 		nil,
 		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
 				"worker-b": {ModelProvider: "codex", Model: "gpt-5-codex"},
 			},
@@ -612,7 +602,7 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 		nil,
 		nil,
 		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
 			},
 		}),
@@ -696,7 +686,7 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 		nil,
 		nil,
 		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
 			},
 		}),
@@ -857,7 +847,7 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		nil,
 		nil,
 		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
 			},
 		}),
@@ -954,7 +944,7 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 		nil,
 		nil,
 		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
 				"worker-b": {ModelProvider: "codex", Model: "gpt-5-codex"},
 			},

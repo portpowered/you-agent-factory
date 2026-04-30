@@ -12,7 +12,7 @@ func TestMockWorkerCommandRunner_DefaultAcceptIncludesConfiguredStopToken(t *tes
 	runner := &MockWorkerCommandRunner{
 		Config: factoryconfig.NewEmptyMockWorkersConfig(),
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker": {Type: interfaces.WorkerTypeModel, StopToken: "COMPLETE"},
 			},
 		},

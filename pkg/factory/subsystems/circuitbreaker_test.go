@@ -9,16 +9,8 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory/subsystems"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 )
-
-type circuitBreakerRuntimeConfig struct {
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-func (c circuitBreakerRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	workstation, ok := c.workstations[name]
-	return workstation, ok
-}
 
 // helper to build a minimal net with one work type having states: init, processing, complete, failed.
 func buildTestNet() *state.Net {
@@ -137,8 +129,8 @@ func TestCircuitBreaker_MaxRetries(t *testing.T) {
 		Name: "coding",
 		Type: petri.TransitionNormal,
 	}
-	runtimeConfig := circuitBreakerRuntimeConfig{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	runtimeConfig := runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"coding": {
 				Name:   "coding",
 				Limits: interfaces.WorkstationLimits{MaxRetries: 3},
@@ -174,8 +166,8 @@ func TestCircuitBreaker_MissingRuntimeRetryLimitSkipsPerWorkstationExhaustion(t 
 		Name: "coding",
 		Type: petri.TransitionNormal,
 	}
-	runtimeConfig := circuitBreakerRuntimeConfig{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	runtimeConfig := runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"coding": {
 				Name:   "coding",
 				Limits: interfaces.WorkstationLimits{},
@@ -210,8 +202,8 @@ func TestCircuitBreaker_TokenWithinLimits(t *testing.T) {
 		Name: "coding",
 		Type: petri.TransitionNormal,
 	}
-	runtimeConfig := circuitBreakerRuntimeConfig{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+	runtimeConfig := runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"coding": {
 				Name:   "coding",
 				Limits: interfaces.WorkstationLimits{MaxRetries: 5},

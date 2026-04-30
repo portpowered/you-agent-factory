@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/logging"
 	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/agent-factory/pkg/workers"
 )
 
@@ -50,7 +51,7 @@ func TestFactoryOptions_PreserveSupportedCoreConstructionSurface(t *testing.T) {
 	net := &state.Net{ID: "test-net"}
 	sched := scheduler.NewWorkInQueueScheduler(1)
 	executor := &workers.NoopExecutor{}
-	runtimeCfg := stubRuntimeConfig{}
+	runtimeCfg := stubRuntimeConfig(&runtimefixtures.RuntimeDefinitionLookupFixture{})
 	workflowContext := &factory_context.FactoryContext{ProjectID: "test-project"}
 	clock := fixedClock{now: time.Unix(1, 0)}
 	logger := logging.NoopLogger{}
@@ -178,12 +179,4 @@ func (stubCompletionDeliveryPlanner) DeliveryTickForDispatch(interfaces.WorkDisp
 	return 0, false, nil
 }
 
-type stubRuntimeConfig struct{}
-
-func (stubRuntimeConfig) Worker(string) (*interfaces.WorkerConfig, bool) {
-	return nil, false
-}
-
-func (stubRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
-	return nil, false
-}
+type stubRuntimeConfig = *runtimefixtures.RuntimeDefinitionLookupFixture

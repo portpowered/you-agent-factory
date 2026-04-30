@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/logging"
 	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/replay"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/agent-factory/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -763,20 +764,7 @@ func writeWorkstationAgentsMD(t *testing.T, factoryDir, workstationName string) 
 	}
 }
 
-type serviceTestRuntimeConfig struct {
-	workers      map[string]*interfaces.WorkerConfig
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-func (c serviceTestRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	def, ok := c.workers[name]
-	return def, ok
-}
-
-func (c serviceTestRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	def, ok := c.workstations[name]
-	return def, ok
-}
+type serviceTestRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 func newLoadedFactoryConfigForServiceTest(
 	t *testing.T,
@@ -787,8 +775,8 @@ func newLoadedFactoryConfigForServiceTest(
 ) *config.LoadedFactoryConfig {
 	t.Helper()
 	loaded, err := config.NewLoadedFactoryConfig(factoryDir, factoryCfg, serviceTestRuntimeConfig{
-		workers:      workers,
-		workstations: workstations,
+		Workers:      workers,
+		Workstations: workstations,
 	})
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
