@@ -15,7 +15,7 @@ work inputs.
 | `factory/inputs/idea/default/` | Standalone idea inbox | Checked-in inbox kept present by `.gitkeep`; standalone idea submissions land here as markdown files. |
 | `factory/inputs/BATCH/default/` | Ordered or mixed-work-type request inbox | Canonical placement for `FACTORY_REQUEST_BATCH` JSON when operators need dependency ordering or mixed work types. |
 | `factory/workstations/cleaner/AGENTS.md` | Active cleanup workstation prompt | Should cite only checked-in workflow docs and the live idea or batch inboxes. |
-| `factory/workstations/ideafy/AGENTS.md` | Active ideation workstation prompt | Should separate standalone idea markdown output from batch JSON output and cite the batch guide when ordering matters. |
+| `factory/workstations/ideafy/AGENTS.md` | Active ideation workstation prompt | Should default to one standalone idea markdown output and reserve batch JSON output for dependency-ordered or mixed-work-type follow-up. |
 
 ## Notes for future iterations
 
