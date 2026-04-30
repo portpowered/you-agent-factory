@@ -17,12 +17,13 @@
 
 ## Chosen Ownership Model
 
-- Later stories must introduce one tiny shared test helper as the canonical owner for directory skip policy used by the broad handwritten-source contract-guard scans in:
+- The canonical owner for the shared handwritten-source directory skip default is `pkg/internal/contractguard.ShouldSkipRelativeDir`, with `ShouldSkipDir` as the root/path convenience wrapper for filesystem walks.
+- Later stories must route the targeted broad handwritten-source contract-guard scans through that shared owner in:
   - `pkg/api/legacy_model_guard_test.go`
   - `pkg/petri/transition_contract_guard_test.go`
   - `pkg/interfaces/*contract_guard_test.go`
   - `pkg/config/exhaustion_rule_contract_guard_test.go`
-- The helper should answer only the shared default question: whether a relative directory should be skipped by the broad scan.
+- The helper answers only the shared default question: whether a relative directory should be skipped by the broad scan, including hidden metadata directories.
 - Package-specific differences, especially generated-directory exceptions, must stay explicit at the call site as allowlist data or helper arguments rather than being hidden in package-local helper bodies.
 
 ## Review Constraints For Later Stories
