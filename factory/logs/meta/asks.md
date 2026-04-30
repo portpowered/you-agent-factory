@@ -1,3 +1,7 @@
+> canonical customer-ask surface: edit and prioritize this backlog only in
+> `factory/logs/meta/asks.md`. If another path mentions customer asks, treat
+> this file as the source of truth.
+
 # customer asks (look to prioritize as necessary, do one thing at a time)
 
 we look generally to make the system amenable to consumption via other customers beyond us. 
@@ -74,5 +78,4 @@ namely
 - quality is about conformance to simplicity, and we prefer simplicity of the system over making a small seam change. 
 - we prefer having systems be easily reasoned about, and look to always have as minimal state as possible. We look to make as much of our systems referentially transparent
 - we look to automate quality, because that makes it transparent
-
 

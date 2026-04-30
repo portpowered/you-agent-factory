@@ -19,8 +19,9 @@
   - `77de019` restored the canonical checked-in starter surface
   - `e5ddd22` added the closeout verification
   - merge commit `5640325` landed that sequence as pull request `#2`
-- there is still no live customer work:
-  - `factory/logs/meta/asks.md` says there are no customer asks
+- the canonical customer backlog is live at `factory/logs/meta/asks.md`:
+  - the tracked backlog currently contains `release plans`, `system deficits`,
+    and `quality` asks
   - no checked-in `plan`, `task`, or `thoughts` work items exist beyond the
     tracked `.gitkeep` sentinels
 - the checked-in backlog is still crowded with already-explored contract-guard
@@ -51,8 +52,9 @@
     - `pkg/service/factory_test.go`
   - `pkg/replay/EmbeddedRuntimeConfig` is the real production implementation
     and should not be folded into test-only helpers
-- the local workspace also contains one untracked `factory/meta/asks.md` file,
-  which is outside the tracked `factory/logs/meta/` surface.
+- a second checked-in path still exists at `factory/meta/asks.md`, but the
+  maintainer control plane should treat `factory/logs/meta/asks.md` as the
+  canonical backlog surface.
 
 ## current blockers
 
@@ -96,9 +98,10 @@
   - leave real runtime implementations such as `pkg/config.LoadedFactoryConfig`
     and `pkg/replay.EmbeddedRuntimeConfig` alone
 - the right customer rule now is:
-  - there is no ask to handle
+  - the checked-in backlog is owned canonically by
+    `factory/logs/meta/asks.md`
   - stability and theory-of-mind accuracy are still higher value than
-    speculative product work
+    speculative product work unless an ask is marked urgent
 
 ## next best move
 
@@ -112,5 +115,8 @@
 
 ## customer asks
 
-- `factory/logs/meta/asks.md` currently says there are no customer asks.
+- `factory/logs/meta/asks.md` is the canonical checked-in customer-ask
+  surface.
+- the current tracked backlog includes `release plans`, `system deficits`, and
+  `quality`.
 - no urgency marker exists in the tracked meta ask surface.
