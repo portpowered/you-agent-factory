@@ -262,6 +262,7 @@ The config validator checks workstation scheduling values against a known set of
 - [Internal Architecture](architecture.md)
 - [API Inventory](api-inventory.md)
 - [Dashboard UI Replay Testing](dashboard-ui-replay-testing.md)
+- [Contract Guard Walker Inventory](contract-guard-walker-inventory.md)
 - [Factory Config Schema Inventory And Enum Policy](factory-config-schema-inventory-and-enum-policy.md)
 - [Factory Config Generated-Schema Boundary Inventory](factory-config-generated-schema-boundary-inventory.md)
 - [Safe Diagnostics Contract Consolidation Data Model](safe-diagnostics-contract-consolidation-data-model.md)
