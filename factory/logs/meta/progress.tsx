@@ -1,17 +1,19 @@
 export const metaProgress = {
   updatedAt: "2026-04-30",
   branch: "main",
-  status: "artifact_contract_stable_no_customer_ask_dirty_guard_doc_lane_contains_shared_contractguard_owner_and_is_ready_to_land",
-  priority: "land_the_dirty_guard_doc_lane_with_the_new_shared_contractguard_helper_and_live_path_fixes",
+  status:
+    "main_at_5d75096_no_customer_asks_contract_guard_lane_landed_and_runtime_lookup_test_fixture_cleanup_is_next",
+  priority:
+    "dispatch_a_narrow_pkg_testutil_runtime_lookup_fixture_consolidation_instead_of_reopening_contract_guard_audits",
   summary:
-    "Main is up to date, there is still no customer ask, the dirty workspace now aligns hidden-dir behavior across the broad contract guards, moves the shared skip policy behind pkg/testutil/contractguard, keeps generated-dir exceptions explicit in local wrappers, and keeps the live path guidance fixes together in one lane that is ready to land.",
+    "Main is up to date on 5d75096 after pull request #5 landed the contract-guard hygiene and instruction-path alignment lane, there is still no customer ask, and the next repeated cleanup gap is duplicated runtime-lookup test scaffolding across package tests rather than another contract-guard audit.",
   blockers: [
-    "The cleaner, ideation, development-guide, and contract-guard helper changes are still workspace-only edits rather than landed mainline state",
-    "Historical reports still mention libraries/agent-factory, but those are archival artifacts rather than live path contracts",
-    "The new shared contractguard helper has been verified locally, but it still needs the dirty lane to be reviewed and landed",
+    "The checked-in meta surfaces needed to be realigned from the pre-#5 snapshot to the actual main state",
+    "The repository still lacks one shared test-owned runtime lookup fixture seam, so small test changes continue to duplicate FactoryDir, RuntimeBaseDir, Worker, and Workstation plumbing",
+    "The checked-in cleanup backlog is crowded with overlapping contract-guard ideas, which makes it easier to reopen an old audit than to reduce the next real duplication source",
   ],
   nextAction:
-    "Avoid new cleanup branches, keep the shared contractguard helper shape, and land the current guard/doc lane after normal review.",
+    "Avoid reopening the contract-guard lane and dispatch a narrow pkg/testutil runtime-lookup fixture consolidation for the repeated map-backed test doubles.",
 };
 
 export default function MetaProgress() {
