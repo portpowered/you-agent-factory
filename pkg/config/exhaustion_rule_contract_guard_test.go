@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/internal/contractguard"
+	"github.com/portpowered/agent-factory/internal/contractguard"
 )
 
 var retiredAuthoredExhaustionIdentifiers = map[string]struct{}{

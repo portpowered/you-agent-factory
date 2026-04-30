@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/internal/contractguard"
+	"github.com/portpowered/agent-factory/internal/contractguard"
 )
 
 var retiredTransitionRuntimeFields = map[string]struct{}{
@@ -40,12 +40,7 @@ func TestTransitionContractGuard_ProductionTransitionLiteralsStayTopologyOnly(t 
 			return walkErr
 		}
 		if entry.IsDir() {
-			if contractguard.ShouldSkipDir(moduleRoot, path,
-				"pkg/api/generated",
-				"ui/dist",
-				"ui/node_modules",
-				"ui/storybook-static",
-			) {
+			if contractguard.ShouldSkipDir(moduleRoot, path, "pkg/api/generated", "ui/dist", "ui/node_modules", "ui/storybook-static") {
 				return filepath.SkipDir
 			}
 			return nil

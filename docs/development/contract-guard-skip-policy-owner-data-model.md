@@ -17,7 +17,7 @@
 
 ## Chosen Ownership Model
 
-- The canonical owner for the shared handwritten-source directory skip default is `pkg/internal/contractguard.ShouldSkipRelativeDir`, with `ShouldSkipDir` as the root/path convenience wrapper for filesystem walks.
+- The canonical owner for the shared handwritten-source directory skip default is `internal/contractguard.ShouldSkipDir`.
 - Later stories must route the targeted broad handwritten-source contract-guard scans through that shared owner in:
   - `pkg/api/legacy_model_guard_test.go`
   - `pkg/petri/transition_contract_guard_test.go`

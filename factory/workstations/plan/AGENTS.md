@@ -9,14 +9,14 @@ Note that you are working in autonomous mode, do not ask any questions to the cu
 
 # steps
 ## step 1 
-Your work for prds in the final ralph file MUST be compliant to the standards outlined in \docs\standards\documentation\product-requirement-doc-standards.md. 
+Read `docs/standards/STANDARDS.md`, then follow the most relevant checked-in standard it points you to for PRD and planning work.
 
-read the file
+Read the standard before writing anything.
 
 ## step 2
 read the /prd and /ralph skills. 
 
-Please convert the file into the corresponding project-directory/tasks/todo/{{ (index .Inputs 0).Name }}.json, as well as corresponding project-directory/tasks/todo/{{ (index .Inputs 0).Name }}.md for the correpsonding prd.
+Please convert the file into the corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.json`, as well as corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.md`, relative to the repository root for the corresponding PRD.
 
 Please ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.
 

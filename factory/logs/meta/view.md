@@ -53,6 +53,7 @@
   - this repository is rooted at the current checkout
   - `pkg/`, `tests/functional_test/`, `factory/`, and `docs/` are the live surfaces
   - `libraries/agent-factory` should be treated as stale historical wording, not the current path contract
+  - the checked-in broad-walker inventory in `docs/development/contract-guard-walker-inventory.md` is the live cleanup reference for scan roots, hidden-dir policy, and generated-output exclusions
 - the right cleanup rule now is:
   - do not reopen another broad audit
   - do not reopen the ownership design question unless the landing review finds a concrete issue
