@@ -214,6 +214,8 @@ This repository also ships a richer checked-in starter under [`./factory/`](./fa
 It is not the default `agent-factory init` scaffold. The checked-in tree uses a
 repository-local plan-and-task workflow with workspace setup, execution,
 review, and guarded loop breakers. Seed checked-in repository work under `factory/inputs/plan/default`.
+The canonical checked-in inbox directories are kept in git with `.gitkeep`
+sentinels so the root workflow surface exists in clean checkouts.
 
 See [factory/README.md](./factory/README.md) for the checked-in starter layout.
 

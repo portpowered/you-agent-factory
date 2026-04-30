@@ -43,27 +43,47 @@ var artifactContractEntries = []ArtifactContractEntry{
 	{
 		Path:           "factory/inputs",
 		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in starter input directories used by the repository-local workflow.",
+		Reason:         "Checked-in starter input directories used by the repository-local workflow and backed by tracked sentinels.",
 	},
 	{
 		Path:           "factory/inputs/idea/default",
 		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in repository workflow idea inbox.",
+		Reason:         "Checked-in repository workflow idea inbox backed by a tracked sentinel.",
+	},
+	{
+		Path:           "factory/inputs/idea/default/.gitkeep",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Tracked sentinel that keeps the canonical idea inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/inputs/plan/default",
 		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in repository workflow plan inbox.",
+		Reason:         "Checked-in repository workflow plan inbox backed by a tracked sentinel.",
+	},
+	{
+		Path:           "factory/inputs/plan/default/.gitkeep",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Tracked sentinel that keeps the canonical plan inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/inputs/task/default",
 		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in repository workflow task inbox.",
+		Reason:         "Checked-in repository workflow task inbox backed by a tracked sentinel.",
+	},
+	{
+		Path:           "factory/inputs/task/default/.gitkeep",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Tracked sentinel that keeps the canonical task inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/inputs/thoughts/default",
 		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in repository workflow thought inbox.",
+		Reason:         "Checked-in repository workflow thought inbox backed by a tracked sentinel.",
+	},
+	{
+		Path:           "factory/inputs/thoughts/default/.gitkeep",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Tracked sentinel that keeps the canonical thought inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/logs/agent-fails.json",

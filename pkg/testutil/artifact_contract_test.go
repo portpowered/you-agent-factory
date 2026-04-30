@@ -3,6 +3,7 @@ package testutil
 import (
 	"bufio"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ func TestArtifactContractInventory_ClassifiesTargetedRootArtifacts(t *testing.T)
 			if err != nil {
 				t.Fatalf("%s classified as checked_in but missing: %v", entry.Path, err)
 			}
+			assertCheckedInArtifactTracked(t, repoRoot, entry.Path)
 		case ArtifactGenerated:
 			// Generated artifacts may or may not be present in a given worktree,
 			// but they must stay explicitly classified when tests reference them.
@@ -107,4 +109,35 @@ func normalizeArtifactContractDocPath(path string) string {
 		return ""
 	}
 	return strings.TrimSuffix(normalized, "/")
+}
+
+func assertCheckedInArtifactTracked(t *testing.T, repoRoot string, rel string) {
+	t.Helper()
+
+	normalized := filepath.ToSlash(filepath.Clean(rel))
+	path := filepath.Join(repoRoot, filepath.FromSlash(normalized))
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat tracked artifact %s: %v", normalized, err)
+	}
+
+	args := []string{"ls-files", "--error-unmatch", "--", normalized}
+	if info.IsDir() {
+		args = []string{"ls-files", "--", normalized}
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+
+	if info.IsDir() {
+		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+			if line != "" {
+				return
+			}
+		}
+		t.Fatalf("%s classified as checked_in but has no tracked files in git", normalized)
+	}
 }
