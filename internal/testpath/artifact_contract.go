@@ -46,6 +46,16 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Checked-in starter input directories used by the repository-local workflow and backed by tracked sentinels.",
 	},
 	{
+		Path:           "factory/inputs/BATCH/default",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in canonical inbox for ordered or mixed-work-type FACTORY_REQUEST_BATCH submissions.",
+	},
+	{
+		Path:           "factory/inputs/BATCH/default/.gitkeep",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Tracked sentinel that keeps the canonical batch inbox present in clean checkouts.",
+	},
+	{
 		Path:           "factory/inputs/idea/default",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in repository workflow idea inbox backed by a tracked sentinel.",

@@ -19,6 +19,7 @@ checked in:
 
 Seed checked-in repository work under:
 
+- `inputs/BATCH/default/`
 - `inputs/idea/default/`
 - `inputs/plan/default/`
 - `inputs/task/default/`

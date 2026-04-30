@@ -13,10 +13,11 @@ Your job is to basically run every few minutes or so, and have a role of:
 run git pull and make the workspace be up to date to remote
 
 ## Step 1 - read
-0. read `factory/README.md` and inspect the checked-in workflow inputs under `factory/inputs/`.
+0. read `factory/README.md`, `docs/development/root-factory-artifact-contract-inventory.md`, and inspect the checked-in workflow inputs under `factory/inputs/`.
 1. read `docs/development/development.md` and the recent reports under `docs/development/cleanup-analyzer-reports/`.
 2. read the code in this repository and the recent PRs associated with your previous cleanup requests.
 3. read the current plan, task, thought, and idea files under `factory/inputs/` so you do not duplicate prior cleanup attempts.
+4. read `docs/guides/batch-inputs.md` before writing any ordered multi-item follow-up request.
 
 ## Step 2 - based on the above results decide on one of the following: 
 1. update your repository-stability view using the checked-in workflow docs and inputs
@@ -45,4 +46,5 @@ figure out a way to clean the code (in priority order)
 6. for the agentfactory websites we look to remove unused code, reduce the amount of duplicative components, reduce functionality down to small components, shared styles, such that the overall complexity of teh system is reduced. 
 
 ## Step 3 - write a file
-1. after you're done, write a file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md` using the checked-in idea shape already present under `factory/inputs/idea/default/`
+1. for one standalone cleanup idea, write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.
+2. if the follow-up needs ordered or mixed-work-type submission instead of one standalone idea file, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`
