@@ -96,6 +96,21 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Tracked sentinel that keeps the canonical thought inbox present in clean checkouts.",
 	},
 	{
+		Path:           "factory/logs/meta/asks.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Canonical checked-in customer-ask backlog for the meta and cleaner workflow.",
+	},
+	{
+		Path:           "factory/logs/meta/view.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in meta world-state view consumed by the cleaner workflow.",
+	},
+	{
+		Path:           "factory/logs/meta/progress.tsx",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in meta progress surface consumed by the cleaner workflow.",
+	},
+	{
 		Path:           "factory/logs/agent-fails.json",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in event-stream sample used for replay conversion coverage.",
@@ -194,6 +209,11 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Path:           "factory/workstations/review/AGENTS.md",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in canonical review workstation prompt.",
+	},
+	{
+		Path:           "factory/meta/asks.md",
+		Classification: ArtifactObsolete,
+		Reason:         "Retired duplicate ask surface; customer backlog ownership stays only at factory/logs/meta/asks.md.",
 	},
 	{
 		Path:           "factory/workers/executor/AGENTS.md",

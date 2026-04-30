@@ -8,6 +8,10 @@ Your job is to periodically inspect the repository and:
 2. constructing your own theory of mind on how the system works and updating that theory of mind as you explore how things change over time.
 3. handling customer asks at `factory/logs/meta/asks.md`
 
+The canonical checked-in customer-ask surface for this workflow is
+`factory/logs/meta/asks.md`. Treat any other ask file path as non-canonical
+unless a checked-in maintainer document explicitly redirects ownership there.
+
 # Steps
 ## step 0 - update the repo
 run git pull and make the workspace be up to date to remote
@@ -50,5 +54,5 @@ figure out a way to clean the code (in priority order)
 6. for the agentfactory websites we look to remove unused code, reduce the amount of duplicative components, reduce functionality down to small components, shared styles, such that the overall complexity of teh system is reduced
 
 ## Step 3 - write a file
-1. for one standalone cleanup idea, write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`
-2. if the follow-up needs ordered or mixed-work-type submission instead of one standalone idea file, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`
+1. default to one standalone cleanup idea file. Write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.
+2. only use a batch submission when the follow-up needs dependency ordering or mixed work types. In that case, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`.
