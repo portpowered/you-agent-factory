@@ -17,6 +17,7 @@ run git pull and make the workspace be up to date to remote
 1. read the C:\Users\andre\work\portos\portos-backend\docs\operations\postmortem\agent-factory-quality-defects.md file. 
 2. Read up the code under the ./, and read recent prs that are associated with your previous requests. 
 3. For now, read up the current files the factory/inputs directory to see any previous clean up attempts that have already been done. 
+4. read `factory/README.md`, `docs/development/root-factory-artifact-contract-inventory.md`, and inspect the checked-in workflow inputs under `factory/inputs/`.
 
 ## Step 2 - based on the above results decide on one of the following: 
 1. update your meta view of the world
@@ -50,4 +51,10 @@ figure out a way to clean the code (in priority order)
 5. consolidate duplicative structures or fucntionality across the code base. 
 6. for the agentfactory websites we look to remove unused code, reduce the amount of duplicative components, reduce functionality down to small components, shared styles, such that the overall complexity of teh system is reduced. 
 
+<<<<<<< HEAD
 
+=======
+## Step 3 - write a file
+1. for one standalone cleanup idea, write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.
+2. if the follow-up needs ordered or mixed-work-type submission instead of one standalone idea file, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`
+>>>>>>> 2896cc65792feb0bf419c4942f08e1993935e577

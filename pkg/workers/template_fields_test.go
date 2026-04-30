@@ -331,10 +331,10 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Name:             "standard",
 					Type:             interfaces.WorkstationTypeModel,
@@ -381,10 +381,10 @@ func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
 
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Type:           interfaces.WorkstationTypeModel,
 					PromptTemplate: "do work",
@@ -429,10 +429,10 @@ func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
 
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {Body: "system"},
 			},
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Name:             "standard",
 					Type:             interfaces.WorkstationTypeModel,

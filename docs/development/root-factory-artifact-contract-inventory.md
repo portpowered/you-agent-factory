@@ -22,6 +22,8 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/factory.json` | `checked_in` | Canonical checked-in repository workflow config. |
 | `factory/scripts/setup-workspace.py` | `checked_in` | Checked-in workspace setup helper used by the canonical repository workflow. |
 | `factory/inputs/` | `checked_in` | Repository-local checked-in input surface for plan/task/idea/thought flows, materialized by tracked sentinels in each canonical inbox. |
+| `factory/inputs/BATCH/default/` | `checked_in` | Checked-in canonical inbox for ordered or mixed-work-type `FACTORY_REQUEST_BATCH` submissions. |
+| `factory/inputs/BATCH/default/.gitkeep` | `checked_in` | Tracked sentinel that keeps the canonical batch inbox present in clean checkouts. |
 | `factory/inputs/idea/default/` | `checked_in` | Checked-in repository workflow idea inbox backed by a tracked `.gitkeep` sentinel. |
 | `factory/inputs/idea/default/.gitkeep` | `checked_in` | Tracked sentinel that keeps the canonical idea inbox present in clean checkouts. |
 | `factory/inputs/plan/default/` | `checked_in` | Checked-in repository workflow plan inbox backed by a tracked `.gitkeep` sentinel. |

@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
 )
 
 const approvedRuntimeLookupFactoryDirOwner = "interfaces/runtime_lookup.go"
@@ -129,6 +131,35 @@ func runtimeBaseDir(v interface{ RuntimeBaseDir() string }) string {
 	)
 }
 
+func TestRuntimeLookupContractGuard_SkipsGeneratedApiOutputButScansHandwrittenPackages(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeRuntimeLookupGuardFixture(t, root, "api/generated/runtime_lookup.go", `package generated
+
+type GeneratedLookup interface {
+	RuntimeBaseDir() string
+}
+`)
+	writeRuntimeLookupGuardFixture(t, root, "workers/runtime_lookup.go", `package workers
+
+type RuntimeExecutionLookup interface {
+	RuntimeBaseDir() string
+}
+`)
+
+	violations, err := scanRuntimeLookupContractViolations(root)
+	if err != nil {
+		t.Fatalf("scan temp runtime lookup ownership: %v", err)
+	}
+
+	assertRuntimeLookupViolationKinds(
+		t,
+		violations,
+		[]string{"workers/runtime_lookup.go:unapproved RuntimeBaseDir interface owner"},
+	)
+}
+
 func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractViolation, error) {
 	root = filepath.Clean(root)
 
@@ -138,7 +169,13 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 		if walkErr != nil {
 			return walkErr
 		}
-		if d.IsDir() || filepath.Ext(path) != ".go" {
+		if d.IsDir() {
+			if handwrittensourceguard.ShouldSkipDir("pkg/interfaces/runtime_lookup_contract_guard_test.go", root, path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
 			return nil
 		}
 
@@ -168,6 +205,24 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 	})
 
 	return violations, nil
+}
+
+func TestRuntimeLookupContractGuard_SkipsHiddenMetadataDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeRuntimeLookupGuardFixture(t, root, ".claude/runtime_lookup.go", `package claude
+
+type RuntimeConfig = any
+`)
+
+	violations, err := scanRuntimeLookupContractViolations(root)
+	if err != nil {
+		t.Fatalf("scan temp runtime lookup ownership: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("hidden metadata fixtures should be skipped, got violations = %v", violations)
+	}
 }
 
 func scanRuntimeLookupFile(fset *token.FileSet, path string, rel string) ([]runtimeLookupContractViolation, error) {

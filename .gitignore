@@ -10,6 +10,9 @@ storybook-static/
 
 tasks/todo
 factory/inputs/**
+!factory/inputs/BATCH/
+!factory/inputs/BATCH/default/
+!factory/inputs/BATCH/default/.gitkeep
 !factory/inputs/idea/
 !factory/inputs/idea/default/
 !factory/inputs/idea/default/.gitkeep

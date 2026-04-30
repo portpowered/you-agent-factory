@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"github.com/portpowered/agent-factory/internal/contractguard"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -10,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/internal/contractguard"
 )
 
 var retiredAuthoredExhaustionIdentifiers = map[string]struct{}{

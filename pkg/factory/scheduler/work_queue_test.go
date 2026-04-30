@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 )
 
 var baseTokenTime = time.Date(2026, 4, 17, 9, 0, 0, 0, time.UTC)
@@ -1050,9 +1051,9 @@ func schedulerWorkstationPriorityNet() *state.Net {
 	return net
 }
 
-func schedulerWorkstationPriorityRuntimeConfig() schedulerRuntimeConfig {
-	return schedulerRuntimeConfig{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+func schedulerWorkstationPriorityRuntimeConfig() runtimefixtures.RuntimeWorkstationLookupFixture {
+	return runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"tr-a-cron":                {Name: "tr-a-cron", Kind: interfaces.WorkstationKindCron},
 			"tr-a-cron-processing":     {Name: "tr-a-cron-processing", Kind: interfaces.WorkstationKindCron},
 			"tr-b-cron-initial":        {Name: "tr-b-cron-initial", Kind: interfaces.WorkstationKindCron},
@@ -1064,15 +1065,6 @@ func schedulerWorkstationPriorityRuntimeConfig() schedulerRuntimeConfig {
 			"tr-z-standard-processing": {Name: "tr-z-standard-processing", Kind: interfaces.WorkstationKindStandard},
 		},
 	}
-}
-
-type schedulerRuntimeConfig struct {
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-func (c schedulerRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	workstation, ok := c.workstations[name]
-	return workstation, ok
 }
 
 func priorityEnabledTransition(transitionID, placeID, tokenID string, enteredAt time.Time) interfaces.EnabledTransition {

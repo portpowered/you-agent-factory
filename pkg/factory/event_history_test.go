@@ -8,6 +8,7 @@ import (
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/agent-factory/pkg/workers"
 
 	"github.com/portpowered/agent-factory/pkg/factory/state"
@@ -16,7 +17,7 @@ import (
 
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
-		workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
 			"builder": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "codex-cli",
@@ -58,7 +59,7 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 		eventHistoryProjectionNet(),
 		func() time.Time { return time.Unix(0, 0).UTC() },
 		eventHistoryRuntimeConfig{
-			workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"build": {Name: "Build", Kind: interfaces.WorkstationKindRepeater},
 			},
 		},
@@ -762,20 +763,7 @@ func TestFailureDetailsForResult_FailedWithoutDetailsUsesUnavailableMessage(t *t
 	}
 }
 
-type eventHistoryRuntimeConfig struct {
-	workers      map[string]*interfaces.WorkerConfig
-	workstations map[string]*interfaces.FactoryWorkstationConfig
-}
-
-func (c eventHistoryRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	def, ok := c.workers[name]
-	return def, ok
-}
-
-func (c eventHistoryRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	def, ok := c.workstations[name]
-	return def, ok
-}
+type eventHistoryRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 func eventHistoryProjectionNet() *state.Net {
 	return &state.Net{

@@ -1,14 +1,20 @@
 # Agent Factory Development Guide
 
-This guide is the contributor guide for the Agent Factory repository rooted at this checkout. Read it before changing runtime behavior, dashboard assets, workflow fixtures, or maintainer documentation, then use the local [docs index](../README.md) and [standards index](../standards/STANDARDS.md) for the current shared guidance.
+This guide is the contributor guide for the Agent Factory checkout rooted at this repository root. Read it before changing runtime behavior, dashboard assets, workflow fixtures, or maintainer documentation, then use the local [docs index](../README.md) and [standards index](../standards/STANDARDS.md) for the current shared guidance.
 
 ## Purpose
 
 `agent-factory` is the Coloured Petri Net workflow engine for orchestrating AI agent and script work. It owns runtime scheduling, worker dispatch, failure and retry behavior, replay, the HTTP API, and the embedded dashboard shell.
 
+## Repository Root Contract
+
+This checkout is operated from the repository root that contains `go.mod`, `Makefile`, `api/`, `cmd/`, `docs/`, `factory/`, `pkg/`, `tests/`, and `ui/`. Do not translate the commands in this guide into a legacy `libraries/agent-factory` subdirectory workflow; the maintained execution surface in this repo is the checkout root itself.
+
 ## Local Architecture
 
 - `cmd/factory/` is the CLI binary entrypoint.
+- `api/` contains the authored OpenAPI sources, bundling configuration, and published contract artifact used by generation and smoke checks.
+- `factory/` contains the checked-in operator workflow surfaces, including starter guidance, workstation prompts, and the live idea or batch inbox directories under `factory/inputs/`.
 - `pkg/cli/` owns Cobra routing, command-specific packages (`run`, `config`, `submit`, `default`, and `init`), and the CLI dashboard read models in `dashboard`.
 - `pkg/factory/` owns runtime engine behavior, scheduling, markings, transitions, resources, and engine state snapshots.
 - `pkg/service/` wires the runtime, configuration, API server, replay, logging, and worker construction.
@@ -20,7 +26,7 @@ This guide is the contributor guide for the Agent Factory repository rooted at t
 
 ## Development Commands
 
-Run commands from the repository root.
+Run commands from the repository root shown above.
 
 ```bash
 make build

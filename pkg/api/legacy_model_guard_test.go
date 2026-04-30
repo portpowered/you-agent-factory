@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
 )
 
 func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
@@ -34,7 +36,7 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if shouldSkipLegacyGuardDir(moduleRoot, path) {
+			if handwrittensourceguard.ShouldSkipDir("pkg/api/legacy_model_guard_test.go", moduleRoot, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -68,18 +70,6 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan handwritten API models: %v", err)
 	}
-}
-
-func shouldSkipLegacyGuardDir(moduleRoot, path string) bool {
-	rel, err := filepath.Rel(moduleRoot, path)
-	if err != nil {
-		return false
-	}
-	rel = filepath.ToSlash(rel)
-	return rel == "pkg/api/generated" ||
-		rel == "ui/dist" ||
-		rel == "ui/node_modules" ||
-		rel == "ui/storybook-static"
 }
 
 func generatedAPIAliases(file *ast.File, generatedImportPaths map[string]struct{}) map[string]struct{} {
