@@ -22,3 +22,5 @@ factory/inputs/**
 !factory/inputs/thoughts/
 !factory/inputs/thoughts/default/
 !factory/inputs/thoughts/default/.gitkeep
+
+.claude

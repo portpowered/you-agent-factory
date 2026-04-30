@@ -7,12 +7,12 @@ The customer is asking a bunch of ambiguous things, but they are too large in sc
 
 Your job is to break down these items to standard idea files that are small enough to do within the scope of a day. 
 
-All idea files MUST be conformant to the standard in docs/templates/idea-templates.md
+All idea files MUST follow the checked-in idea shape already present under `factory/inputs/idea/default/`.
 
 # Steps
 ## Step 1 - read
 Read up on the relevant files in the documentation that would lead to the issue. 
-Read the idea-templates.md as well as the docs/standards-ideation-standards.md
+Read the existing files under `factory/inputs/idea/default/` to match the current idea shape.
 
 ## Step 2 - write the files
 
@@ -21,7 +21,7 @@ what we want you to do is come up with a batch request that properly orders the 
 For example, we want to implement interface changes before logical changes, as logical changes will be interrupted by the interface changes. 
 We want changes that are touching the same rough spots of structures to not overlap so as to prevent rework. 
 
-please read docs/guides/batch-inputs.md for instructions on how batching works. 
+please read `docs/guides/batch-inputs.md` for instructions on how batching works.
 
 after you've come up with a rough idea batch JSON, create the temp file in a temp directory, then copy it into factory/inputs/idea/default/
 

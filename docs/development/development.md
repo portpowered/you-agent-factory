@@ -1,6 +1,6 @@
 # Agent Factory Development Guide
 
-This guide is the package-local contributor guide for `libraries/agent-factory`. Read it before changing Agent Factory code, dashboard assets, runtime behavior, or workflow fixtures, then apply the shared [Libraries Development Guide](../../../docs/processes/libraries-development.md) and [Library Standards](../../../docs/standards/systems/library-standards.md).
+This guide is the contributor guide for the Agent Factory repository rooted at this checkout. Read it before changing runtime behavior, dashboard assets, workflow fixtures, or maintainer documentation, then use the local [docs index](../README.md) and [standards index](../standards/STANDARDS.md) for the current shared guidance.
 
 ## Purpose
 
@@ -16,11 +16,11 @@ This guide is the package-local contributor guide for `libraries/agent-factory`.
 - `pkg/workers/` owns worker execution contracts, provider calls, script command execution, and work-scoped metadata.
 - `pkg/replay/` owns record/replay artifact construction, side-effect matching, and deterministic replay behavior.
 - `ui/` is the Vite dashboard source. `ui/dist/` contains committed embedded assets.
-- `tests/functional/` contains workflow fixtures and smoke coverage.
+- `tests/functional_test/` contains workflow fixtures and smoke coverage.
 
 ## Development Commands
 
-Run commands from `libraries/agent-factory`.
+Run commands from the repository root.
 
 ```bash
 make build
@@ -57,10 +57,10 @@ The authored JSON API contract source is `api/openapi-main.yaml` plus referenced
 
 From a clean checkout, use this workflow after editing `api/openapi-main.yaml` or a referenced fragment:
 
-1. Validate the authored source tree from `libraries/agent-factory`:
+1. Validate the authored source tree from the repository root:
 
 ```bash
-cd ../../api && node run-quiet-api-command.js validate:main ../libraries/agent-factory/api/openapi-main.yaml
+cd api && node run-quiet-api-command.js validate:main ../api/openapi-main.yaml
 ```
 
 2. Rebundle the published contract from the authored source tree:
@@ -104,7 +104,7 @@ The canonical export/import sharing boundary is the generated OpenAPI
 `POST /factory`. PNG export and import reuse that exact payload through
 `PortOSFactoryPngEnvelope`, which adds only `schemaVersion`.
 
-Use [Named Factory API Contract Data Model](development/named-factory-api-contract-data-model.md)
+Use [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md)
 as the detailed contract reference. Keep the dashboard on the authored API
 boundary. Do not rebuild sharing payloads from `/events`, runtime-only
 projections, or export-only field aliases.
@@ -181,7 +181,7 @@ behavior explicit inside the test that needs it.
 - Do not run `ui-build` in parallel with Go vet, build, or test commands; Vite rotates hashed files under `ui/dist/assets`.
 - Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/api/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.
 - Apply that same generated-schema boundary to replay and event-carried factory config: when `RUN_REQUEST.payload.factory` is decoded back from JSON, route the nested factory payload through `config.GeneratedFactoryFromOpenAPIJSON(...)` instead of relying on permissive struct unmarshalling.
-- Browser-side PNG export should load the authored payload from `GET /factory/~current` and treat that canonical `NamedFactory` response as the only source of truth for embedded sharing metadata. The detailed boundary and wrapper shape are documented in [Named Factory API Contract Data Model](development/named-factory-api-contract-data-model.md).
+- Browser-side PNG export should load the authored payload from `GET /factory/~current` and treat that canonical `NamedFactory` response as the only source of truth for embedded sharing metadata. The detailed boundary and wrapper shape are documented in [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md).
 - Browser-side sharing roundtrip coverage should exercise `writeFactoryExportPng(...)`, `readFactoryImportPng(...)`, and `useFactoryImportActivation(...)` together so tests prove the same canonical `NamedFactory` reaches `POST /factory` without dashboard-only reshaping.
 - App-level browser sharing smokes should export through the real dashboard dialog, capture the downloaded PNG blob, drop that same file back through the graph viewport import entry, and assert the resulting `POST /factory` body matches the original `GET /factory/~current` `NamedFactory` payload exactly.
 - Dashboard Storybook interaction tooling is package-local to `ui/`. Keep runner config, `storybook-static` serving assumptions, base-path behavior, and API mocks under `ui/` or `ui/.storybook` instead of importing website Storybook setup.
@@ -253,28 +253,28 @@ registry := workers.NewWorkstationTypeRegistry()
 registry.Register(&MyCustomType{})
 ```
 
-The config validator checks workstation scheduling values against a known set of kinds. To make a new kind available in `factory.json`, add the kind constant to `pkg/config/factory.go` and update the validation in `pkg/service/config_validator.go`.
+The config validator checks workstation scheduling values against a known set of kinds. To make a new kind available in `factory.json`, add the kind constant to `pkg/interfaces/factory_config.go` and update the validation in `pkg/config/config_validator.go`.
 
 
 ## Related Docs
 
-- [Agent Factory README](../README.md)
-- [Internal Architecture](development/architecture.md)
-- [API Inventory](development/api-inventory.md)
-- [Dashboard UI Replay Testing](development/dashboard-ui-replay-testing.md)
-- [Factory Config Schema Inventory And Enum Policy](development/factory-config-schema-inventory-and-enum-policy.md)
-- [Factory Config Generated-Schema Boundary Inventory](development/factory-config-generated-schema-boundary-inventory.md)
-- [Safe Diagnostics Contract Consolidation Data Model](development/safe-diagnostics-contract-consolidation-data-model.md)
-- [Simple Dashboard World-View Seam Inventory](development/simple-dashboard-world-view-seam-inventory.md)
-- [Simple Dashboard Render DTO Data Model](development/simple-dashboard-render-dto-data-model.md)
-- [Simple Dashboard World-View Field Inventory](development/simple-dashboard-world-view-field-inventory.md)
-- [World-View Contract Cleanup Data Model](development/world-view-contract-cleanup-data-model.md)
+- [Agent Factory README](../../README.md)
+- [Internal Architecture](architecture.md)
+- [API Inventory](api-inventory.md)
+- [Dashboard UI Replay Testing](dashboard-ui-replay-testing.md)
+- [Factory Config Schema Inventory And Enum Policy](factory-config-schema-inventory-and-enum-policy.md)
+- [Factory Config Generated-Schema Boundary Inventory](factory-config-generated-schema-boundary-inventory.md)
+- [Safe Diagnostics Contract Consolidation Data Model](safe-diagnostics-contract-consolidation-data-model.md)
+- [Simple Dashboard World-View Seam Inventory](simple-dashboard-world-view-seam-inventory.md)
+- [Simple Dashboard Render DTO Data Model](simple-dashboard-render-dto-data-model.md)
+- [Simple Dashboard World-View Field Inventory](simple-dashboard-world-view-field-inventory.md)
+- [World-View Contract Cleanup Data Model](world-view-contract-cleanup-data-model.md)
 - [Live Dashboard](live-dashboard.md)
 - [Record and Replay](record-replay.md)
 - [Provider Error Corpus Audit](provider-error-corpus-audit.md)
 - [Root Factory Artifact Contract Inventory](root-factory-artifact-contract-inventory.md)
 - [Port OS Reference Inventory](portos-reference-inventory.md)
-- [Dashboard UI Workflow Baseline](development/dashboard-ui-workflow-baseline.md)
-- [Dashboard UI Bun Validation](development/dashboard-ui-bun-validation.md)
-- [Agent Factory Intent](../../../docs/intents/agent-factory.md)
-- [Library Standards](../../../docs/standards/systems/library-standards.md)
+- [Dashboard UI Workflow Baseline](dashboard-ui-workflow-baseline.md)
+- [Dashboard UI Bun Validation](dashboard-ui-bun-validation.md)
+- [Agent Factory Intent](../intents/agent-factory.md)
+- [Standards Index](../standards/STANDARDS.md)

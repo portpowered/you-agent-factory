@@ -45,4 +45,4 @@ figure out a way to clean the code (in priority order)
 6. for the agentfactory websites we look to remove unused code, reduce the amount of duplicative components, reduce functionality down to small components, shared styles, such that the overall complexity of teh system is reduced. 
 
 ## Step 3 - write a file
-1. after you're done, write a file to {project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md file using the ideation-standards.md 
+1. after you're done, write a file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md` using the checked-in idea shape already present under `factory/inputs/idea/default/`
