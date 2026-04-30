@@ -208,12 +208,12 @@ Markdown or JSON tasks under `factory/inputs/tasks/default`.
 
 Created by `agent-factory init --type ralph --dir <dir>`. A distinct minimal PRD-to-execution scaffold with `plan-request` and repeatable `execute-story` stages. Submit initial requests under `<dir>/inputs/request/default`.
 
-### 🧭 Checked-in review-loop starter
+### 🧭 Checked-in repository workflow
 
 This repository also ships a richer checked-in starter under [`./factory/`](./factory/README.md).
 It is not the default `agent-factory init` scaffold. The checked-in tree uses a
-neutral story workflow with execution, review, and a guarded loop breaker.
-Submit Markdown stories under `factory/inputs/story/default`.
+repository-local plan-and-task workflow with workspace setup, execution,
+review, and guarded loop breakers. Seed checked-in repository work under `factory/inputs/plan/default`.
 
 See [factory/README.md](./factory/README.md) for the checked-in starter layout.
 

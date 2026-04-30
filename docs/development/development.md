@@ -209,6 +209,7 @@ behavior explicit inside the test that needs it.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
 - Runtime log files are service-owned. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
+- Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
 - Provider-error and lane-isolation smoke tests should use `pkg/testutil` harness helpers instead of open-coded fixture scaffolding and polling loops.
 - Shared Codex, Cursor-family, and Claude provider-failure fixtures live in `pkg/workers/testdata/provider_error_corpus.json`; extend that corpus and load it through `workers.LoadProviderErrorCorpus()` before adding new inline raw provider payloads to worker or functional tests.
 - Shared provider-error smoke scenarios should assert `CompletedDispatch.ProviderFailure` type and family from the corpus entry they use, so normalization and runtime routing stay aligned through the full worker-pool path instead of only through final token placement.
@@ -268,6 +269,7 @@ The config validator checks workstation scheduling values against a known set of
 - [Live Dashboard](live-dashboard.md)
 - [Record and Replay](record-replay.md)
 - [Provider Error Corpus Audit](provider-error-corpus-audit.md)
+- [Root Factory Artifact Contract Inventory](root-factory-artifact-contract-inventory.md)
 - [Port OS Reference Inventory](portos-reference-inventory.md)
 - [Dashboard UI Workflow Baseline](development/dashboard-ui-workflow-baseline.md)
 - [Dashboard UI Bun Validation](development/dashboard-ui-bun-validation.md)

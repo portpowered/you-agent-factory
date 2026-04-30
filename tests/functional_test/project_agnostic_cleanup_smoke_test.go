@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
@@ -33,7 +32,7 @@ func TestProjectAgnosticCleanupSmoke_ReadmeQuickstartAndReleasePathsRemainStanda
 		"factory/inputs/tasks/default/my-request.md",
 		"Created or reused by `agent-factory` or `agent-factory init`.",
 		"This repository also ships a richer checked-in starter under",
-		"Submit Markdown stories under `factory/inputs/story/default`.",
+		"Seed checked-in repository work under `factory/inputs/plan/default`",
 		"./factory/README.md",
 		"./examples/simple-tasks/README.md",
 	} {
@@ -85,10 +84,10 @@ func TestProjectAgnosticCleanupSmoke_ReadmeStarterLinksMatchReferencedScaffolds(
 		"### 🏗️ Default init scaffold",
 		"Created or reused by `agent-factory` or `agent-factory init`.",
 		"factory/inputs/tasks/default",
-		"### 🧭 Checked-in review-loop starter",
+		"### 🧭 Checked-in repository workflow",
 		"[`./factory/`](./factory/README.md)",
 		"not the default `agent-factory init` scaffold",
-		"Submit Markdown stories under `factory/inputs/story/default`.",
+		"Seed checked-in repository work under `factory/inputs/plan/default`.",
 	} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("README missing scaffold-alignment text %q", want)
@@ -99,21 +98,34 @@ func TestProjectAgnosticCleanupSmoke_ReadmeStarterLinksMatchReferencedScaffolds(
 	}
 
 	for _, want := range []string{
+<<<<<<< HEAD
 		"# Checked-In Root Workflow Starter",
 		"It is not the default `agent-factory` or `agent-factory init` scaffold",
 		"`thoughts:init`",
 		"`idea:init`",
 		"`task:init`",
+=======
+		"# Checked-In Repository Workflow",
+		"It is not the default `agent-factory` or `agent-factory init` scaffold",
+		"`inputs/plan/default/`",
+		"`inputs/task/default/`",
+		"`inputs/idea/default/`",
+>>>>>>> 02e28ed (feat: US-001 - Inventory and classify artifact path assumptions)
 	} {
 		if !strings.Contains(starterReadme, want) {
 			t.Fatalf("checked-in starter README missing %q:\n%s", want, starterReadme)
 		}
 	}
+<<<<<<< HEAD
 	if !strings.Contains(factoryJSON, `"name": "task"`) {
 		t.Fatalf("checked-in starter factory.json should include the task workflow described by README:\n%s", factoryJSON)
+=======
+	if !strings.Contains(factoryJSON, `"name": "plan"`) || !strings.Contains(factoryJSON, `"name": "task"`) {
+		t.Fatalf("checked-in starter factory.json should describe the plan-and-task workflow documented by README:\n%s", factoryJSON)
+>>>>>>> 02e28ed (feat: US-001 - Inventory and classify artifact path assumptions)
 	}
-	if strings.Contains(factoryJSON, `"name": "tasks"`) {
-		t.Fatalf("checked-in starter factory.json should not masquerade as the default init scaffold:\n%s", factoryJSON)
+	if strings.Contains(factoryJSON, `"name": "story"`) {
+		t.Fatalf("checked-in starter factory.json should not masquerade as the retired story-only starter:\n%s", factoryJSON)
 	}
 }
 
@@ -123,6 +135,13 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		"factory/factory.json",
 		"factory/workers/processor/AGENTS.md",
 		"factory/workers/workspace-setup/AGENTS.md",
+<<<<<<< HEAD
+=======
+		"factory/workstations/plan/AGENTS.md",
+		"factory/workstations/process/AGENTS.md",
+		"factory/workstations/review/AGENTS.md",
+		"factory/scripts/setup-workspace.py",
+>>>>>>> 02e28ed (feat: US-001 - Inventory and classify artifact path assumptions)
 	}
 
 	for _, rel := range files {
@@ -149,7 +168,14 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		}
 	}
 
+<<<<<<< HEAD
 	for _, rel := range []string{"factory/workers/processor/AGENTS.md"} {
+=======
+	for _, rel := range []string{
+		"factory/workers/processor/AGENTS.md",
+		"factory/workers/workspace-setup/AGENTS.md",
+	} {
+>>>>>>> 02e28ed (feat: US-001 - Inventory and classify artifact path assumptions)
 		data, err := os.ReadFile(agentFactoryPath(t, rel))
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
@@ -158,11 +184,15 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		if strings.Contains(content, "stop_token:") {
 			t.Fatalf("%s should not contain retired stop_token key:\n%s", rel, content)
 		}
+<<<<<<< HEAD
 		if !strings.Contains(content, "stopToken:") {
 			t.Fatalf("%s missing canonical stopToken key:\n%s", rel, content)
 		}
 	}
 
+=======
+	}
+>>>>>>> 02e28ed (feat: US-001 - Inventory and classify artifact path assumptions)
 }
 
 func TestProjectAgnosticCleanupSmoke_RequestDispatchAndRuntimeContext(t *testing.T) {
@@ -539,7 +569,7 @@ func assertValueDoesNotContainPortOS(t *testing.T, label string, value string) {
 
 func agentFactoryPath(t *testing.T, rel string) string {
 	t.Helper()
-	return testpath.MustRepoPathFromCaller(t, 0, filepath.FromSlash(rel))
+	return testutil.MustRepoPath(t, rel)
 }
 
 func clearSeedInputs(t *testing.T, dir string) {

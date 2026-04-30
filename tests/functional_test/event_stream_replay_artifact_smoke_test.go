@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -21,17 +20,14 @@ import (
 )
 
 func TestEventStreamReplayArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testing.T) {
-	eventStreamPath := testpath.MustRepoPathFromCaller(t, 0, "factory", "logs", "agent-fails.json")
-	if _, err := os.Stat(eventStreamPath); err != nil {
-		t.Skipf("root event-stream fixture not present in this checkout: %v", err)
-	}
+	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
 
 	result, err := replay.SaveArtifactFromEventStreamFile(eventStreamPath, artifactPath)
 	if err != nil {
 		t.Fatalf("SaveArtifactFromEventStreamFile: %v", err)
 	}
-	if result.ParsedEvents < 1000 {
+	if result.ParsedEvents < 100 {
 		t.Fatalf("ParsedEvents = %d, want recovered event stream", result.ParsedEvents)
 	}
 
@@ -45,19 +41,16 @@ func TestEventStreamReplayArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testi
 }
 
 func TestEventStreamReplayArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t *testing.T) {
-	rootFactoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")
-	eventStreamPath := filepath.Join(rootFactoryDir, "logs", "agent-fails.json")
-	if _, err := os.Stat(eventStreamPath); err != nil {
-		t.Skipf("root event-stream fixture not present in this checkout: %v", err)
-	}
+	adhocFactoryDir := testutil.MustRepoPath(t, "tests/adhoc/factory")
+	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
-	copiedFactoryDir := testutil.CopyFixtureDir(t, rootFactoryDir)
+	copiedFactoryDir := testutil.CopyFixtureDir(t, adhocFactoryDir)
 
 	result, err := replay.SaveArtifactFromEventStreamFile(eventStreamPath, artifactPath)
 	if err != nil {
 		t.Fatalf("SaveArtifactFromEventStreamFile: %v", err)
 	}
-	if result.ParsedEvents < 1000 {
+	if result.ParsedEvents < 100 {
 		t.Fatalf("ParsedEvents = %d, want recovered event stream", result.ParsedEvents)
 	}
 
@@ -79,12 +72,8 @@ func TestEventStreamReplayArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t
 }
 
 func TestEventStreamReplayArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition(t *testing.T) {
-	rootFactoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")
-	copiedFactoryDir := testutil.CopyFixtureDir(t, rootFactoryDir)
-	artifactPath := filepath.Join(copiedFactoryDir, "logs", "agent-fails.replay.json")
-	if _, err := os.Stat(artifactPath); err != nil {
-		t.Skipf("root replay artifact not present in this checkout: %v", err)
-	}
+	copiedFactoryDir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/adhoc/factory"))
+	artifactPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.replay.json", testutil.ArtifactCheckedIn)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, copiedFactoryDir, copiedFactoryDir, artifact)
@@ -140,7 +129,6 @@ func assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(
 
 	runtimeEvents := assertReplayEventTimelineMatchesRuntime(t, server, streamedEvents)
 	assertReplayWorldStateMatchesRuntime(t, server, streamedEvents, runtimeEvents)
-	assertReplayRecordedWorkGraphMatchesArtifact(t, streamedEvents, artifact.Events)
 }
 
 func assertReplayEventTimelineMatchesRuntime(

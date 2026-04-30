@@ -5,34 +5,33 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/agent-factory/internal/testpath"
 )
 
 func TestFactoryConfigDocsAndExamples_UseCanonicalPublicContractFields(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := existingFiles(append([]string{
-		repoPath(t, "README.md"),
-		repoPath(t, "docs", "authoring-agents-md.md"),
-		repoPath(t, "docs", "authoring-workflows.md"),
-		repoPath(t, "docs", "work.md"),
-		repoPath(t, "docs", "workstations.md"),
-		repoPath(t, "docs", "run-timeline.md"),
-		repoPath(t, "docs", "guides", "parent-aware-fan-in.md"),
-		repoPath(t, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
-		repoPath(t, "factory", "README.md"),
-		repoPath(t, "factory", "workers", "executor", "AGENTS.md"),
-		repoPath(t, "factory", "workers", "reviewer", "AGENTS.md"),
-		repoPath(t, "factory", "old", "workers", "worker-a", "AGENTS.md"),
-		repoPath(t, "pkg", "cli", "init", "init.go"),
-		repoPath(t, "tests", "adhoc", "factory", "README.md"),
-		repoPath(t, "tests", "adhoc", "factory", "factory.json"),
-		repoPath(t, "tests", "adhoc", "factory", "workers", "processor", "AGENTS.md"),
-	}, activeExampleConfigFiles(t)...))
+	repoRoot := mustRepoRoot(t)
+	targetFiles := append([]string{
+		filepath.Join(repoRoot, "README.md"),
+		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "work.md"),
+		filepath.Join(repoRoot, "docs", "workstations.md"),
+		filepath.Join(repoRoot, "docs", "run-timeline.md"),
+		filepath.Join(repoRoot, "docs", "guides", "parent-aware-fan-in.md"),
+		filepath.Join(repoRoot, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+		filepath.Join(repoRoot, "factory", "README.md"),
+		filepath.Join(repoRoot, "factory", "workers", "processor", "AGENTS.md"),
+		filepath.Join(repoRoot, "factory", "workers", "workspace-setup", "AGENTS.md"),
+		filepath.Join(repoRoot, "pkg", "cli", "init", "init.go"),
+		filepath.Join(repoRoot, "tests", "adhoc", "factory", "README.md"),
+		filepath.Join(repoRoot, "tests", "adhoc", "factory", "factory.json"),
+		filepath.Join(repoRoot, "tests", "adhoc", "factory", "workers", "processor", "AGENTS.md"),
+	}, activeExampleConfigFiles(t)...)
 
 	retiredPatterns := map[string]*regexp.Regexp{
 		"work_types":         regexp.MustCompile(`\bwork_types\b`),
@@ -109,12 +108,13 @@ func docsExampleContractOffenses(t *testing.T, relPath string, retiredPatterns m
 func TestFactoryConfigDocsAndExamples_UseExecutionLimitsForWorkstationTimeouts(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := existingFiles([]string{
-		repoPath(t, "docs", "authoring-agents-md.md"),
-		repoPath(t, "docs", "authoring-workflows.md"),
-		repoPath(t, "docs", "workstations.md"),
-		repoPath(t, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
-	})
+	repoRoot := mustRepoRoot(t)
+	targetFiles := []string{
+		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "workstations.md"),
+		filepath.Join(repoRoot, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+	}
 
 	workstationTypePattern := regexp.MustCompile(`(?m)^type:\s*(MODEL_WORKSTATION|LOGICAL_MOVE)\s*$`)
 	workstationTimeoutPattern := regexp.MustCompile(`(?m)^timeout:`)
@@ -145,16 +145,17 @@ func TestFactoryConfigDocsAndExamples_UseExecutionLimitsForWorkstationTimeouts(t
 func TestFactoryConfigDocsAndExamples_UseAlignedRuntimeResourceContract(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := existingFiles(append([]string{
-		repoPath(t, "docs", "authoring-agents-md.md"),
-		repoPath(t, "docs", "authoring-workflows.md"),
-		repoPath(t, "docs", "work.md"),
-		repoPath(t, "docs", "workstations.md"),
-		repoPath(t, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
-		repoPath(t, "README.md"),
-		repoPath(t, "pkg", "cli", "init", "init.go"),
-		repoPath(t, "tests", "adhoc", "factory", "factory.json"),
-	}, activeExampleConfigFiles(t)...))
+	repoRoot := mustRepoRoot(t)
+	targetFiles := append([]string{
+		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "work.md"),
+		filepath.Join(repoRoot, "docs", "workstations.md"),
+		filepath.Join(repoRoot, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+		filepath.Join(repoRoot, "README.md"),
+		filepath.Join(repoRoot, "pkg", "cli", "init", "init.go"),
+		filepath.Join(repoRoot, "tests", "adhoc", "factory", "factory.json"),
+	}, activeExampleConfigFiles(t)...)
 
 	retiredPatterns := map[string]*regexp.Regexp{
 		"resourceUsage":      regexp.MustCompile(`\bresourceUsage\b`),
@@ -187,9 +188,10 @@ func TestFactoryConfigDocsAndExamples_UseAlignedRuntimeResourceContract(t *testi
 func TestFactoryConfigDocsAndExamples_ActiveSplitExamplesShowCanonicalWorkstationRuntimeContract(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := existingFiles([]string{
-		repoPath(t, "examples", "basic", "factory", "workstations", "process", "AGENTS.md"),
-	})
+	repoRoot := mustRepoRoot(t)
+	targetFiles := []string{
+		filepath.Join(repoRoot, "examples", "basic", "factory", "workstations", "process", "AGENTS.md"),
+	}
 
 	requiredPatterns := map[string]*regexp.Regexp{
 		"limits.maxExecutionTime": regexp.MustCompile(`(?m)^limits:\s*\n(?:[^\n]*\n)*?\s+maxExecutionTime:`),
@@ -218,10 +220,11 @@ func TestFactoryConfigDocsAndExamples_ActiveSplitExamplesShowCanonicalWorkstatio
 func TestFactoryConfigDocsAndExamples_StopWordsExamplesDoNotAdvertiseRejectedRouting(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := existingFiles([]string{
-		repoPath(t, "docs", "authoring-agents-md.md"),
-		repoPath(t, "docs", "workstations.md"),
-	})
+	repoRoot := mustRepoRoot(t)
+	targetFiles := []string{
+		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "workstations.md"),
+	}
 
 	var offenses []string
 	for _, relPath := range targetFiles {
@@ -250,9 +253,10 @@ func TestFactoryConfigDocsAndExamples_StopWordsExamplesDoNotAdvertiseRejectedRou
 func activeExampleConfigFiles(t *testing.T) []string {
 	t.Helper()
 
+	repoRoot := mustRepoRoot(t)
 	roots := []string{
-		repoPath(t, "examples"),
-		repoPath(t, "factory"),
+		filepath.Join(repoRoot, "examples"),
+		filepath.Join(repoRoot, "factory"),
 	}
 	var files []string
 	for _, root := range roots {
@@ -285,11 +289,6 @@ func activeExampleConfigFiles(t *testing.T) []string {
 	return existingFiles(files)
 }
 
-func repoPath(t *testing.T, parts ...string) string {
-	t.Helper()
-	return testpath.MustRepoPathFromCaller(t, 0, parts...)
-}
-
 func existingFiles(paths []string) []string {
 	out := make([]string, 0, len(paths))
 	for _, path := range paths {
@@ -298,4 +297,25 @@ func existingFiles(paths []string) []string {
 		}
 	}
 	return out
+}
+
+func mustRepoRoot(t *testing.T) string {
+	t.Helper()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine config test file path")
+	}
+
+	current := filepath.Dir(thisFile)
+	for {
+		if info, err := os.Stat(filepath.Join(current, "go.mod")); err == nil && !info.IsDir() {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			t.Fatalf("could not find repo root from %s", thisFile)
+		}
+		current = parent
+	}
 }

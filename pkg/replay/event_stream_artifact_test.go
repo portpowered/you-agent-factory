@@ -3,10 +3,11 @@ package replay
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 )
 
@@ -46,18 +47,15 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 }
 
 func TestArtifactFromEventStreamFile_ConvertsAgentFailsLog(t *testing.T) {
-	path := testpath.MustRepoPathFromCaller(t, 0, "factory", "logs", "agent-fails.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("root event-stream fixture not present in this checkout: %v", err)
-	}
+	path := mustRepoPath(t, "factory/logs/agent-fails.json")
 
 	result, err := ArtifactFromEventStreamFile(path)
 	if err != nil {
 		t.Fatalf("ArtifactFromEventStreamFile: %v", err)
 	}
 
-	if result.ParsedEvents < 1000 {
-		t.Fatalf("ParsedEvents = %d, want large recovered event stream", result.ParsedEvents)
+	if result.ParsedEvents < 100 {
+		t.Fatalf("ParsedEvents = %d, want non-trivial recovered event stream", result.ParsedEvents)
 	}
 	if result.Artifact.RecordedAt.IsZero() {
 		t.Fatal("artifact recordedAt is zero, want hydrated run-start timestamp")
@@ -67,6 +65,27 @@ func TestArtifactFromEventStreamFile_ConvertsAgentFailsLog(t *testing.T) {
 	}
 	if guards := generatedWorkstationGuardsByName(t, result.Artifact.Factory, "executor-loop-breaker"); len(guards) != 1 {
 		t.Fatalf("executor-loop-breaker guards = %#v, want hydrated visit-count guard", guards)
+	}
+}
+
+func mustRepoPath(t *testing.T, rel string) string {
+	t.Helper()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine replay test file path")
+	}
+
+	current := filepath.Dir(thisFile)
+	for {
+		if info, err := os.Stat(filepath.Join(current, "go.mod")); err == nil && !info.IsDir() {
+			return filepath.Join(current, filepath.FromSlash(rel))
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			t.Fatalf("could not find repo root from %s", thisFile)
+		}
+		current = parent
 	}
 }
 

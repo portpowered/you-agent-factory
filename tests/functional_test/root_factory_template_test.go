@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
@@ -59,7 +58,7 @@ func TestRootFactoryTemplate_CopiedFactoryRendersScriptAndScriptWrapCommandReque
 
 func rootFactoryDir(t *testing.T) string {
 	t.Helper()
-	return testpath.MustRepoPathFromCaller(t, 0, "factory")
+	return testutil.MustRepoPath(t, "factory")
 }
 
 func removeCopiedRootFactoryRuntimeDirs(t *testing.T, dir string) {
