@@ -202,7 +202,6 @@ func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractVi
 
 	return violations, nil
 }
-
 func TestRuntimeLookupContractGuard_SkipsHiddenMetadataDirectories(t *testing.T) {
 	t.Parallel()
 
@@ -220,7 +219,6 @@ type RuntimeConfig = any
 		t.Fatalf("hidden metadata fixtures should be skipped, got violations = %v", violations)
 	}
 }
-
 func scanRuntimeLookupFile(fset *token.FileSet, path string, rel string) ([]runtimeLookupContractViolation, error) {
 	file, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {

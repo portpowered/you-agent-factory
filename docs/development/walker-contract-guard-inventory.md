@@ -35,6 +35,17 @@ follow-on cleanup stories align skip policy and diagnostics.
   distinction between the package-local mirror-name rule and the broader
   `pkg/` canonical-mirror rule.
 
+## Helper Decision
+
+- The repeated directory-exclusion predicates now live in
+  `internal/testpath/contract_guard_walkers.go`.
+- The shared helper stays intentionally small: it only answers whether a walked
+  directory is outside the handwritten-source surface for either module-root or
+  `pkg/`-root scans.
+- Each guard still owns its own walk root, file filtering, allowed-file
+  exceptions, and failure messages at the callsite, so package semantics remain
+  local even though the repeated skip predicates no longer drift independently.
+
 ## Story-Relevant Conclusions
 
 - The targeted walker inventory is limited to `pkg/api`, `pkg/config`,
