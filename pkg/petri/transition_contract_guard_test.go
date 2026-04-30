@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,25 +35,7 @@ func TestTransitionContractGuard_ProductionTransitionLiteralsStayTopologyOnly(t 
 	t.Parallel()
 
 	moduleRoot := filepath.Clean(filepath.Join("..", ".."))
-	fset := token.NewFileSet()
-	err := filepath.WalkDir(moduleRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			if handwrittensourceguard.ShouldSkipDir("pkg/petri/transition_contract_guard_test.go", moduleRoot, path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") || filepath.Base(path) == "transition_contract_guard_test.go" {
-			return nil
-		}
-
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return err
-		}
+	err := walkTransitionGuardProductionFiles(moduleRoot, func(path string, file *ast.File) error {
 		petriAliases := transitionImportAliases(file)
 		ast.Inspect(file, func(node ast.Node) bool {
 			lit, ok := node.(*ast.CompositeLit)
@@ -79,6 +62,75 @@ func TestTransitionContractGuard_ProductionTransitionLiteralsStayTopologyOnly(t 
 	if err != nil {
 		t.Fatalf("scan production transition literals: %v", err)
 	}
+}
+
+func TestTransitionContractGuard_SkipsHiddenMetadataDirs(t *testing.T) {
+	t.Parallel()
+
+	moduleRoot := t.TempDir()
+	for path, contents := range map[string]string{
+		"pkg/feature/kept.go":                "package feature\n",
+		".claude/worktrees/stale/ignored.go": "package stale\n",
+		".git/hooks/ignored.go":              "package hooks\n",
+		".worktrees/nested/ignored.go":       "package nested\n",
+	} {
+		fullPath := filepath.Join(moduleRoot, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatalf("create parent dir for %s: %v", path, err)
+		}
+		if err := os.WriteFile(fullPath, []byte(contents), 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	var visited []string
+	if err := walkTransitionGuardProductionFiles(moduleRoot, func(path string, _ *ast.File) error {
+		rel, err := filepath.Rel(moduleRoot, path)
+		if err != nil {
+			return err
+		}
+		visited = append(visited, filepath.ToSlash(rel))
+		return nil
+	}); err != nil {
+		t.Fatalf("walk transition guard files: %v", err)
+	}
+
+	if !slices.Contains(visited, "pkg/feature/kept.go") {
+		t.Fatalf("expected handwritten source file to be visited, got %v", visited)
+	}
+	for _, skipped := range []string{
+		".claude/worktrees/stale/ignored.go",
+		".git/hooks/ignored.go",
+		".worktrees/nested/ignored.go",
+	} {
+		if slices.Contains(visited, skipped) {
+			t.Fatalf("expected hidden metadata path %s to be skipped, got %v", skipped, visited)
+		}
+	}
+}
+
+func walkTransitionGuardProductionFiles(moduleRoot string, visit func(path string, file *ast.File) error) error {
+	fset := token.NewFileSet()
+	return filepath.WalkDir(moduleRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if handwrittensourceguard.ShouldSkipDir("pkg/petri/transition_contract_guard_test.go", moduleRoot, path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") || filepath.Base(path) == "transition_contract_guard_test.go" {
+			return nil
+		}
+
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return err
+		}
+		return visit(path, file)
+	})
 }
 
 func transitionImportAliases(file *ast.File) map[string]struct{} {
