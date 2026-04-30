@@ -40,14 +40,7 @@ func TestTransitionContractGuard_ProductionTransitionLiteralsStayTopologyOnly(t 
 			return walkErr
 		}
 		if entry.IsDir() {
-			if contractguard.ShouldSkipDir(
-				moduleRoot,
-				path,
-				"pkg/api/generated",
-				"ui/dist",
-				"ui/node_modules",
-				"ui/storybook-static",
-			) {
+			if contractguard.ShouldSkipDir(moduleRoot, path, "pkg/api/generated", "ui/dist", "ui/node_modules", "ui/storybook-static") {
 				return filepath.SkipDir
 			}
 			return nil
