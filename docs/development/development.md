@@ -47,6 +47,8 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make release-surface-smoke` is the standalone-release readiness check for customer-facing cleanup work. It reruns the product-agnostic functional smoke suite against the package README, checked-in starter, shipped examples and sample payloads, verifies generated `agent-factory init` output stays neutral, and finishes with `go run ./cmd/publicsurfacecheck` so release-facing Port OS coupling cannot silently return.
 
+`make artifact-contract-closeout` is the root factory artifact contract closeout for this cleanup lane. Use it after touching the root starter inventory, release-surface smoke coverage, or the targeted `pkg/api`, `pkg/config`, `pkg/replay`, `tests/adhoc`, and `tests/functional_test` contract tests. It first proves the checked-in inventory doc still matches the enforced classifications, then reruns `make release-surface-smoke`, and finally reruns the targeted package bundle that stabilized this repository contract.
+
 Use `make ui-storybook` followed by `make ui-test-storybook` when dashboard Storybook stories, play functions, runtime mocks, or the package-local Storybook runner change. `ui-storybook` builds `ui/storybook-static`; `ui-test-storybook` serves that static build on the dashboard-owned runner port and executes the dashboard Storybook interaction tests through the UI package's `test-storybook` script.
 
 ## API Contract Generation

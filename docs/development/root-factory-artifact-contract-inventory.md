@@ -46,6 +46,13 @@ this inventory:
 - every targeted root artifact dependency must be classified here
 - every `checked_in` path must exist
 - every `obsolete` path must stay absent
+- the inventory doc table and the enforced classifications must stay in sync
 
 That keeps root artifact drift explicit instead of letting missing files or
 legacy starter assumptions re-enter the targeted package tests silently.
+
+`make artifact-contract-closeout` is the integration closeout entrypoint for
+this contract. It runs the inventory guard, reruns `make release-surface-smoke`,
+and then reruns `go test ./pkg/api ./pkg/config ./pkg/replay ./tests/adhoc
+./tests/functional_test` so starter-surface checks and self-contained package
+tests fail together if a hidden legacy path dependency returns.
