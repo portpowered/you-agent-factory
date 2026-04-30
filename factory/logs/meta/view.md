@@ -52,9 +52,9 @@
     - `pkg/service/factory_test.go`
   - `pkg/replay/EmbeddedRuntimeConfig` is the real production implementation
     and should not be folded into test-only helpers
-- a second checked-in path still exists at `factory/meta/asks.md`, but the
-  maintainer control plane should treat `factory/logs/meta/asks.md` as the
-  canonical backlog surface.
+- the legacy path `factory/meta/asks.md` now exists only as a redirect stub:
+  it points maintainers back to `factory/logs/meta/asks.md` and intentionally
+  carries no independent backlog copy.
 
 ## current blockers
 
