@@ -1,6 +1,7 @@
 package petri
 
 import (
+	"github.com/portpowered/agent-factory/internal/contractguard"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -38,7 +39,7 @@ func TestTransitionContractGuard_ProductionTransitionLiteralsStayTopologyOnly(t 
 			return walkErr
 		}
 		if entry.IsDir() {
-			if shouldSkipTransitionGuardDir(moduleRoot, path) {
+			if contractguard.ShouldSkipDir(moduleRoot, path, "pkg/api/generated", "ui/dist", "ui/node_modules", "ui/storybook-static") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -77,18 +78,6 @@ func TestTransitionContractGuard_ProductionTransitionLiteralsStayTopologyOnly(t 
 	if err != nil {
 		t.Fatalf("scan production transition literals: %v", err)
 	}
-}
-
-func shouldSkipTransitionGuardDir(moduleRoot, path string) bool {
-	rel, err := filepath.Rel(moduleRoot, path)
-	if err != nil {
-		return false
-	}
-	rel = filepath.ToSlash(rel)
-	return rel == "pkg/api/generated" ||
-		rel == "ui/dist" ||
-		rel == "ui/node_modules" ||
-		rel == "ui/storybook-static"
 }
 
 func transitionImportAliases(file *ast.File) map[string]struct{} {

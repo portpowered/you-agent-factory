@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"github.com/portpowered/agent-factory/internal/contractguard"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -148,7 +149,13 @@ func TestFactoryWorldContractGuard_RetiredCanonicalMirrorNamesStayOutOfPkgGoFile
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || filepath.Ext(path) != ".go" {
+		if info.IsDir() {
+			if contractguard.ShouldSkipDir("..", path, "api/generated") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
 			return nil
 		}
 		rel, relErr := filepath.Rel("..", path)
