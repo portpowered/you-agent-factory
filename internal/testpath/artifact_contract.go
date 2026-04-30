@@ -106,6 +106,21 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Checked-in replay artifact sample paired with the event-stream conversion smoke.",
 	},
 	{
+		Path:           "factory/logs/meta/asks.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in meta ask surface used by the repository-maintainer cleanup loop.",
+	},
+	{
+		Path:           "factory/logs/meta/progress.tsx",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in meta progress surface used by the repository-maintainer cleanup loop.",
+	},
+	{
+		Path:           "factory/logs/meta/view.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Checked-in meta world-view surface used by the repository-maintainer cleanup loop.",
+	},
+	{
 		Path:           "tests/adhoc/factory-recording-04-11-02.json",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Canonical replay fixture used by targeted adhoc and replay tests.",
