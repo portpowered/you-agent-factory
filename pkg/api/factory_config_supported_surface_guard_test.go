@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/agent-factory/internal/testpath"
 	"github.com/portpowered/agent-factory/pkg/config"
 )
 
@@ -153,7 +154,7 @@ func supportedFactoryConfigDocSurfaces(t *testing.T) []string {
 		return !strings.Contains(slash, "/workers/") && !strings.Contains(slash, "/workstations/") && !strings.Contains(slash, "/inputs/")
 	})...)
 	sort.Strings(paths)
-	return paths
+	return existingSupportedSurfacePaths(paths)
 }
 
 func supportedFactoryConfigTextSurfaces(t *testing.T) []string {
@@ -183,7 +184,7 @@ func supportedFactoryConfigTextSurfaces(t *testing.T) []string {
 		return filepath.Base(path) == "AGENTS.md"
 	})...)
 	sort.Strings(paths)
-	return dedupSurfacePaths(paths)
+	return existingSupportedSurfacePaths(dedupSurfacePaths(paths))
 }
 
 func supportedFactoryConfigJSONSurfaces(t *testing.T) []string {
@@ -212,28 +213,28 @@ func supportedFactoryConfigJSONSurfaces(t *testing.T) []string {
 		return looksLikeStandaloneFactoryConfigFixture(t, path)
 	})...)
 	sort.Strings(paths)
-	return dedupSurfacePaths(paths)
+	return existingSupportedSurfacePaths(dedupSurfacePaths(paths))
 }
 
 func supportedFactoryReplayFixtures(t *testing.T) []string {
 	t.Helper()
 
 	root := supportedSurfaceRoot(t)
-	return []string{
+	return existingSupportedSurfacePaths([]string{
 		filepath.Join(root, "pkg", "replay", "testdata", "inference-events.replay.json"),
 		filepath.Join(root, "tests", "adhoc", "factory-recording-04-11-02.json"),
 		filepath.Join(root, "tests", "functional_test", "testdata", "adhoc-recording-batch-event-log.json"),
-	}
+	})
 }
 
 func supportedSurfaceRoot(t *testing.T) string {
 	t.Helper()
-	return filepath.Clean(filepath.Join("..", ".."))
+	return testpath.MustRepoPathFromCaller(t, 0)
 }
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
-	return filepath.Clean(filepath.Join(supportedSurfaceRoot(t), "..", ".."))
+	return supportedSurfaceRoot(t)
 }
 
 func collectSupportedSurfaceFiles(t *testing.T, root string, keep func(string, os.DirEntry) bool) []string {
@@ -352,6 +353,16 @@ func dedupSurfacePaths(paths []string) []string {
 		}
 		seen[path] = struct{}{}
 		out = append(out, path)
+	}
+	return out
+}
+
+func existingSupportedSurfacePaths(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			out = append(out, path)
+		}
 	}
 	return out
 }

@@ -204,6 +204,50 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t *testing.T) {
+	cfgJSON := []byte(`{
+		"workTypes": [
+			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-assets",
+			"worker":"matcher",
+			"inputs":[{"workType":"asset","state":"ready"}],
+			"outputs":[{"workType":"asset","state":"matched"}],
+			"guards":[{"type":"matches_fields","matchConfig":{"inputKey":".Tags[\"_last_output\"]"}}]
+		}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	workstation := (*generated.Workstations)[0]
+	if workstation.Guards == nil || len(*workstation.Guards) != 1 {
+		t.Fatalf("expected generated matches-fields guard to survive boundary decode, got %#v", workstation.Guards)
+	}
+	guard := (*workstation.Guards)[0]
+	if guard.Type != factoryapi.WorkstationGuardTypeMatchesFields {
+		t.Fatalf("expected generated guard type MATCHES_FIELDS, got %#v", guard.Type)
+	}
+	if guard.MatchConfig == nil || guard.MatchConfig.InputKey != `.Tags["_last_output"]` {
+		t.Fatalf("expected generated guard matchConfig.inputKey, got %#v", guard.MatchConfig)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	runtimeGuard := cfg.Workstations[0].Guards[0]
+	if runtimeGuard.Type != interfaces.GuardTypeMatchesFields {
+		t.Fatalf("expected runtime guard type matches_fields, got %#v", runtimeGuard)
+	}
+	if runtimeGuard.MatchConfig == nil || runtimeGuard.MatchConfig.InputKey != `.Tags["_last_output"]` {
+		t.Fatalf("expected runtime matches-fields guard matchConfig.inputKey, got %#v", runtimeGuard.MatchConfig)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],

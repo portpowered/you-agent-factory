@@ -209,7 +209,7 @@ func CloneWorkstationConfig(def interfaces.FactoryWorkstationConfig) interfaces.
 	def.Inputs = cloneIOConfigs(def.Inputs)
 	def.Outputs = cloneIOConfigs(def.Outputs)
 	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
-	def.Guards = append([]interfaces.GuardConfig(nil), def.Guards...)
+	def.Guards = cloneGuardConfigs(def.Guards)
 	def.StopWords = append([]string(nil), def.StopWords...)
 	def.RuntimeStopWords = append([]string(nil), def.RuntimeStopWords...)
 	if def.Cron != nil {
@@ -302,6 +302,25 @@ func cloneIOConfigPtr(cfg *interfaces.IOConfig) *interfaces.IOConfig {
 }
 
 func cloneInputGuardConfigPtr(cfg *interfaces.InputGuardConfig) *interfaces.InputGuardConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloned := *cfg
+	return &cloned
+}
+
+func cloneGuardConfigs(configs []interfaces.GuardConfig) []interfaces.GuardConfig {
+	if len(configs) == 0 {
+		return nil
+	}
+	out := append([]interfaces.GuardConfig(nil), configs...)
+	for i := range out {
+		out[i].MatchConfig = cloneGuardMatchConfigPtr(configs[i].MatchConfig)
+	}
+	return out
+}
+
+func cloneGuardMatchConfigPtr(cfg *interfaces.GuardMatchConfig) *interfaces.GuardMatchConfig {
 	if cfg == nil {
 		return nil
 	}
@@ -1035,9 +1054,10 @@ type inputGuardFrontmatter struct {
 }
 
 type guardFrontmatter struct {
-	Type        interfaces.GuardType `yaml:"type"`
-	Workstation string               `yaml:"workstation,omitempty"`
-	MaxVisits   int                  `yaml:"maxVisits,omitempty"`
+	Type        interfaces.GuardType         `yaml:"type"`
+	Workstation string                       `yaml:"workstation,omitempty"`
+	MaxVisits   int                          `yaml:"maxVisits,omitempty"`
+	MatchConfig *interfaces.GuardMatchConfig `yaml:"matchConfig,omitempty"`
 }
 
 func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatter {
@@ -1135,6 +1155,7 @@ func guardFrontmatterSlice(configs []interfaces.GuardConfig) []guardFrontmatter 
 			Type:        configs[i].Type,
 			Workstation: configs[i].Workstation,
 			MaxVisits:   configs[i].MaxVisits,
+			MatchConfig: cloneGuardMatchConfigPtr(configs[i].MatchConfig),
 		}
 	}
 	return out

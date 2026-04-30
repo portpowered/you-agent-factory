@@ -21,6 +21,7 @@ const (
 	publicFactoryWorkstationTypeModel              = "MODEL_WORKSTATION"
 	publicFactoryWorkstationTypeLogical            = "LOGICAL_MOVE"
 	publicFactoryWorkstationGuardTypeVisitCount    = "VISIT_COUNT"
+	publicFactoryWorkstationGuardTypeMatchesFields = "MATCHES_FIELDS"
 	publicFactoryInputGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
 	publicFactoryInputGuardTypeAnyChildFailed      = "ANY_CHILD_FAILED"
 	publicFactoryInputGuardTypeSameName            = "SAME_NAME"
@@ -86,8 +87,10 @@ var publicFactoryWorkstationTypeAliases = map[string]string{
 }
 
 var publicFactoryWorkstationGuardTypeAliases = map[string]string{
-	publicFactoryWorkstationGuardTypeVisitCount: publicFactoryWorkstationGuardTypeVisitCount,
-	"visit_count": publicFactoryWorkstationGuardTypeVisitCount,
+	publicFactoryWorkstationGuardTypeVisitCount:    publicFactoryWorkstationGuardTypeVisitCount,
+	publicFactoryWorkstationGuardTypeMatchesFields: publicFactoryWorkstationGuardTypeMatchesFields,
+	"visit_count":    publicFactoryWorkstationGuardTypeVisitCount,
+	"matches_fields": publicFactoryWorkstationGuardTypeMatchesFields,
 }
 
 var publicFactoryInputGuardTypeAliases = map[string]string{
@@ -238,6 +241,8 @@ func internalFactoryWorkstationGuardTypeFromPublic(value factoryapi.WorkstationG
 	switch canonicalPublicFactoryEnumValue(string(value), publicFactoryWorkstationGuardTypeAliases) {
 	case publicFactoryWorkstationGuardTypeVisitCount:
 		return interfaces.GuardTypeVisitCount
+	case publicFactoryWorkstationGuardTypeMatchesFields:
+		return interfaces.GuardTypeMatchesFields
 	default:
 		return interfaces.GuardType(strings.TrimSpace(string(value)))
 	}

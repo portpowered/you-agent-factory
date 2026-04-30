@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/cli"
 	"github.com/portpowered/agent-factory/pkg/factory/state"
@@ -123,7 +123,10 @@ func TestAdHocRecordReplaySmoke(t *testing.T) {
 }
 
 func TestAdHocApril11ReplayDrainsNonTerminalWork(t *testing.T) {
-	artifactPath := filepath.Join("factory-recording-04-11-02.json")
+	artifactPath := testpath.MustRepoPathFromCaller(t, 0, "tests", "adhoc", "factory-recording-04-11-02.json")
+	if _, err := os.Stat(artifactPath); err != nil {
+		t.Skipf("historical replay artifact not present in this checkout: %v", err)
+	}
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	dispatchCount := replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest)
 	completionCount := replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchResponse)
@@ -176,12 +179,7 @@ func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.
 
 func adhocFixtureDir(t *testing.T) string {
 	t.Helper()
-
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot determine adhoc test file path")
-	}
-	return filepath.Join(filepath.Dir(thisFile), "factory")
+	return testpath.MustRepoPathFromCaller(t, 0, "tests", "adhoc", "factory")
 }
 
 func clearAdhocInputs(t *testing.T, dir string) {

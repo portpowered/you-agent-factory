@@ -449,7 +449,7 @@ workstation-level guards.
 
 ## Workstation-Level Guards
 
-Workstation-level guards currently support only `visit_count`. They gate
+Workstation-level guards support `visit_count` and `matches_fields`. They gate
 whether a workstation may fire; they do not create a failure or terminal route.
 Prefer a guarded `LOGICAL_MOVE` workstation for common loop-breaking routes
 because it states the source and target places explicitly.

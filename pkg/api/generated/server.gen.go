@@ -152,7 +152,8 @@ const (
 
 // Defines values for WorkstationGuardType.
 const (
-	WorkstationGuardTypeVisitCount WorkstationGuardType = "VISIT_COUNT"
+	WorkstationGuardTypeMatchesFields WorkstationGuardType = "MATCHES_FIELDS"
+	WorkstationGuardTypeVisitCount    WorkstationGuardType = "VISIT_COUNT"
 )
 
 // Defines values for WorkstationKind.
@@ -1130,6 +1131,8 @@ type WorkstationCron struct {
 
 // WorkstationGuard Guard attached to a workstation as a whole before it is allowed to consume work.
 type WorkstationGuard struct {
+	MatchConfig *WorkstationGuardMatchConfig `json:"matchConfig,omitempty"`
+
 	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
 	MaxVisits *int `json:"maxVisits,omitempty"`
 
@@ -1138,6 +1141,12 @@ type WorkstationGuard struct {
 
 	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
 	Workstation *string `json:"workstation,omitempty"`
+}
+
+// WorkstationGuardMatchConfig defines model for WorkstationGuardMatchConfig.
+type WorkstationGuardMatchConfig struct {
+	// InputKey Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.
+	InputKey string `json:"inputKey"`
 }
 
 // WorkstationGuardType Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.

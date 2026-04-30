@@ -2,10 +2,11 @@ package replay
 
 import (
 	"encoding/json"
-	"path/filepath"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 )
 
@@ -45,7 +46,10 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 }
 
 func TestArtifactFromEventStreamFile_ConvertsAgentFailsLog(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "..", "factory", "logs", "agent-fails.json")
+	path := testpath.MustRepoPathFromCaller(t, 0, "factory", "logs", "agent-fails.json")
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("root event-stream fixture not present in this checkout: %v", err)
+	}
 
 	result, err := ArtifactFromEventStreamFile(path)
 	if err != nil {

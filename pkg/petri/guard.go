@@ -2,6 +2,7 @@ package petri
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -84,6 +85,74 @@ func (g *SameNameGuard) Evaluate(candidates []interfaces.Token, bindings map[str
 			continue
 		}
 		if candidate.Color.Name == bound.Color.Name {
+			matched = append(matched, candidate)
+		}
+	}
+
+	return matched, len(matched) > 0
+}
+
+// AllGuard applies multiple guard predicates to the same candidate set.
+// Each guard filters the candidates produced by the previous guard; all guards
+// must succeed for the overall result to pass.
+type AllGuard struct {
+	Guards []Guard
+}
+
+var _ Guard = (*AllGuard)(nil)
+
+func (g *AllGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) ([]interfaces.Token, bool) {
+	current := candidates
+	for _, guard := range g.Guards {
+		if guard == nil {
+			continue
+		}
+		matched, ok := guard.Evaluate(current, bindings, marking)
+		if !ok {
+			return nil, false
+		}
+		current = matched
+	}
+	return current, len(current) > 0
+}
+
+// MatchesFieldsGuard resolves a configured selector against candidate inputs.
+// When MatchBinding is empty, the guard only requires the selector to resolve on
+// the candidate token. When MatchBinding is set, the selector must resolve on
+// both tokens and the resulting values must match exactly.
+type MatchesFieldsGuard struct {
+	InputKey     string
+	MatchBinding string
+}
+
+var _ Guard = (*MatchesFieldsGuard)(nil)
+
+func (g *MatchesFieldsGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+	selector := strings.TrimSpace(g.InputKey)
+	if selector == "" {
+		return nil, false
+	}
+
+	var boundValue string
+	if g.MatchBinding != "" {
+		bound, exists := bindings[g.MatchBinding]
+		if !exists || bound == nil {
+			return nil, false
+		}
+		resolved, ok := resolveTokenSelector(*bound, selector)
+		if !ok {
+			return nil, false
+		}
+		boundValue = resolved
+	}
+
+	var matched []interfaces.Token
+	for _, candidate := range candidates {
+		resolved, ok := resolveTokenSelector(candidate, selector)
+		if !ok {
+			continue
+		}
+		if g.MatchBinding == "" || resolved == boundValue {
 			matched = append(matched, candidate)
 		}
 	}
@@ -294,4 +363,54 @@ func tokenColorField(color interfaces.TokenColor, field string) string {
 	default:
 		return ""
 	}
+}
+
+func resolveTokenSelector(token interfaces.Token, selector string) (string, bool) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" || selector[0] != '.' {
+		return "", false
+	}
+
+	if tagKey, ok := parseTagSelector(selector); ok {
+		if token.Color.Tags == nil {
+			return "", false
+		}
+		value, exists := token.Color.Tags[tagKey]
+		if !exists {
+			return "", false
+		}
+		return value, true
+	}
+
+	switch selector {
+	case ".Name":
+		return token.Color.Name, true
+	case ".RequestID":
+		return token.Color.RequestID, true
+	case ".WorkID":
+		return token.Color.WorkID, true
+	case ".WorkTypeID":
+		return token.Color.WorkTypeID, true
+	case ".DataType":
+		return string(token.Color.DataType), true
+	case ".TraceID":
+		return token.Color.TraceID, true
+	case ".ParentID":
+		return token.Color.ParentID, true
+	case ".Payload":
+		return string(token.Color.Payload), true
+	default:
+		return "", false
+	}
+}
+
+func parseTagSelector(selector string) (string, bool) {
+	if !strings.HasPrefix(selector, `.Tags["`) || !strings.HasSuffix(selector, `"]`) {
+		return "", false
+	}
+	key := selector[len(`.Tags["`) : len(selector)-len(`"]`)]
+	if key == "" {
+		return "", false
+	}
+	return key, true
 }

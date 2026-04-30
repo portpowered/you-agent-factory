@@ -1,0 +1,66 @@
+{
+  "workTypes": [
+    {
+      "name": "draft",
+      "states": [
+        {
+          "name": "ready",
+          "type": "INITIAL"
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "states": [
+        {
+          "name": "ready",
+          "type": "INITIAL"
+        }
+      ]
+    },
+    {
+      "name": "pair",
+      "states": [
+        {
+          "name": "matched",
+          "type": "TERMINAL"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "matcher"
+    }
+  ],
+  "workstations": [
+    {
+      "name": "match-pair",
+      "worker": "matcher",
+      "guards": [
+        {
+          "type": "MATCHES_FIELDS",
+          "matchConfig": {
+            "inputKey": ".Tags[\"flavor\"]"
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "workType": "draft",
+          "state": "ready"
+        },
+        {
+          "workType": "review",
+          "state": "ready"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "pair",
+          "state": "matched"
+        }
+      ]
+    }
+  ]
+}

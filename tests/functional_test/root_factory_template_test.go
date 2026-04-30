@@ -3,11 +3,11 @@ package functional_test
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/agent-factory/internal/testpath"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
@@ -59,13 +59,7 @@ func TestRootFactoryTemplate_CopiedFactoryRendersScriptAndScriptWrapCommandReque
 
 func rootFactoryDir(t *testing.T) string {
 	t.Helper()
-
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot determine test file path")
-	}
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", ".."))
-	return filepath.Join(repoRoot, "factory")
+	return testpath.MustRepoPathFromCaller(t, 0, "factory")
 }
 
 func removeCopiedRootFactoryRuntimeDirs(t *testing.T, dir string) {

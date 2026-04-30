@@ -1481,10 +1481,13 @@ components:
       description: Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
       x-enum-varnames:
         - WorkstationGuardTypeVisitCount
+        - WorkstationGuardTypeMatchesFields
       enum:
         - VISIT_COUNT
+        - MATCHES_FIELDS
       x-enum-descriptions:
         - Allows or blocks work based on how many times a workstation has already handled it.
+        - Requires all candidate workstation inputs to resolve the same configured field value.
     WorkstationGuard:
       type: object
       description: Guard attached to a workstation as a whole before it is allowed to consume work.
@@ -1502,6 +1505,19 @@ components:
           type: integer
           minimum: 1
           description: For `VISIT_COUNT` guards, the visit threshold.
+        matchConfig:
+          $ref: '#/components/schemas/WorkstationGuardMatchConfig'
+          description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+    WorkstationGuardMatchConfig:
+      type: object
+      additionalProperties: false
+      required:
+        - inputKey
+      properties:
+        inputKey:
+          type: string
+          minLength: 1
+          description: Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.
     WorkstationIO:
       type: object
       description: One authored work-state reference consumed or emitted by a workstation.

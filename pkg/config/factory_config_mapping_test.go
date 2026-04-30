@@ -558,6 +558,59 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesSameNamePerInputGuard(t *t
 	assertMissingKey(t, guardPayload, "spawnedBy")
 }
 
+func TestFactoryConfigMapper_ExpandAndFlattenPreservesMatchesFieldsWorkstationGuard(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"workTypes": [
+			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-assets",
+			"worker":"matcher",
+			"inputs":[{"workType":"asset","state":"ready"}],
+			"outputs":[{"workType":"asset","state":"matched"}],
+			"guards":[{"type":"matches_fields","matchConfig":{"inputKey":".Name"}}]
+		}]
+	}`)
+
+	cfg, err := mapper.Expand(raw)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+
+	if len(cfg.Workstations[0].Guards) != 1 {
+		t.Fatalf("expected matches-fields guard to be preserved, got %#v", cfg.Workstations[0].Guards)
+	}
+	guard := cfg.Workstations[0].Guards[0]
+	if guard.Type != interfaces.GuardTypeMatchesFields {
+		t.Fatalf("expected matches-fields guard type, got %#v", guard)
+	}
+	if guard.MatchConfig == nil || guard.MatchConfig.InputKey != ".Name" {
+		t.Fatalf("expected matches-fields guard matchConfig.inputKey, got %#v", guard.MatchConfig)
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstations := payload["workstations"].([]any)
+	guardPayload := workstations[0].(map[string]any)["guards"].([]any)[0].(map[string]any)
+	if got := guardPayload["type"]; got != "MATCHES_FIELDS" {
+		t.Fatalf("expected matches-fields guard type, got %#v", got)
+	}
+	matchConfig, ok := guardPayload["matchConfig"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected matchConfig object, got %#v", guardPayload["matchConfig"])
+	}
+	if got := matchConfig["inputKey"]; got != ".Name" {
+		t.Fatalf("expected matchConfig.inputKey=.Name, got %#v", got)
+	}
+}
+
 func TestFactoryConfigMapper_FlattenOmitsUnsetWorkerTypeFields(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

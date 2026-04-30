@@ -692,9 +692,19 @@ func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []i
 			Type:        internalFactoryWorkstationGuardTypeFromPublic(guard.Type),
 			Workstation: stringValue(guard.Workstation),
 			MaxVisits:   intValue(guard.MaxVisits),
+			MatchConfig: guardMatchConfigInternalFromAPI(guard.MatchConfig),
 		}
 	}
 	return values
+}
+
+func guardMatchConfigInternalFromAPI(matchConfig *factoryapi.WorkstationGuardMatchConfig) *interfaces.GuardMatchConfig {
+	if matchConfig == nil {
+		return nil
+	}
+	return &interfaces.GuardMatchConfig{
+		InputKey: matchConfig.InputKey,
+	}
 }
 
 func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig) factoryapi.Workstation {
@@ -929,9 +939,19 @@ func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factor
 			Type:        publicFactoryWorkstationGuardTypeFromInternal(guard.Type),
 			Workstation: stringPtrIfNotEmpty(guard.Workstation),
 			MaxVisits:   intPtrIfNonZero(guard.MaxVisits),
+			MatchConfig: guardMatchConfigAPIFromInternal(guard.MatchConfig),
 		}
 	}
 	return &values
+}
+
+func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *factoryapi.WorkstationGuardMatchConfig {
+	if matchConfig == nil {
+		return nil
+	}
+	return &factoryapi.WorkstationGuardMatchConfig{
+		InputKey: matchConfig.InputKey,
+	}
 }
 
 func workerTypePtrIfNotEmpty(value string) *factoryapi.WorkerType {

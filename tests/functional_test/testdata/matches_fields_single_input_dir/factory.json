@@ -1,0 +1,48 @@
+{
+  "workTypes": [
+    {
+      "name": "asset",
+      "states": [
+        {
+          "name": "ready",
+          "type": "INITIAL"
+        },
+        {
+          "name": "matched",
+          "type": "TERMINAL"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "matcher"
+    }
+  ],
+  "workstations": [
+    {
+      "name": "match-asset",
+      "worker": "matcher",
+      "guards": [
+        {
+          "type": "MATCHES_FIELDS",
+          "matchConfig": {
+            "inputKey": ".Name"
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "workType": "asset",
+          "state": "ready"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "asset",
+          "state": "matched"
+        }
+      ]
+    }
+  ]
+}

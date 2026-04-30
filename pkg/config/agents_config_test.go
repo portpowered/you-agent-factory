@@ -430,6 +430,42 @@ Join plan and task items by authored name.
 	}
 }
 
+func TestLoadWorkstationConfig_NormalizesMatchesFieldsWorkstationGuard(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKSTATION
+worker: matcher
+guards:
+  - type: MATCHES_FIELDS
+    matchConfig:
+      inputKey: .Name
+inputs:
+  - workType: asset
+    state: ready
+outputs:
+  - workType: asset
+    state: matched
+---
+
+Match assets by resolved field.
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWorkstationConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Guards) != 1 || cfg.Guards[0].Type != interfaces.GuardTypeMatchesFields {
+		t.Fatalf("expected matches-fields guard to load, got %#v", cfg.Guards)
+	}
+	if cfg.Guards[0].MatchConfig == nil || cfg.Guards[0].MatchConfig.InputKey != ".Name" {
+		t.Fatalf("expected matches-fields matchConfig.inputKey=.Name, got %#v", cfg.Guards[0].MatchConfig)
+	}
+}
+
 func TestLoadWorkstationConfig_WithPromptFile(t *testing.T) {
 	dir := t.TempDir()
 	agentsMD := `---

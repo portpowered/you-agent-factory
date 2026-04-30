@@ -201,16 +201,22 @@ type GuardType string
 
 const (
 	GuardTypeVisitCount          GuardType = "visit_count"
+	GuardTypeMatchesFields       GuardType = "matches_fields"
 	GuardTypeAllChildrenComplete GuardType = "all_children_complete"
 	GuardTypeAnyChildFailed      GuardType = "any_child_failed"
 	GuardTypeSameName            GuardType = "same_name"
 )
 
+type GuardMatchConfig struct {
+	InputKey string `json:"input_key,omitempty" yaml:"inputKey,omitempty"`
+}
+
 // GuardConfig declares a guard on a workstation using customer-facing names.
 type GuardConfig struct {
-	Type        GuardType `json:"type" yaml:"type"`
-	Workstation string    `json:"workstation,omitempty" yaml:"workstation,omitempty"`
-	MaxVisits   int       `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
+	Type        GuardType         `json:"type" yaml:"type"`
+	Workstation string            `json:"workstation,omitempty" yaml:"workstation,omitempty"`
+	MaxVisits   int               `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
+	MatchConfig *GuardMatchConfig `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
 }
 
 type IOConfig struct {

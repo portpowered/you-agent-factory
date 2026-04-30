@@ -20,6 +20,7 @@ workstation, and visit threshold explicit in normal workstation topology.
 |------|-----|
 | Stop a retry or review loop and move work to a failed or terminal state | A guarded `LOGICAL_MOVE` workstation with a `visit_count` guard |
 | Allow a workstation only after another workstation has visited the token enough times | `workstations[].guards[]` with `type: "visit_count"` |
+| Require all grouped workstation inputs to resolve the same field value before dispatch | `workstations[].guards[]` with `type: "matches_fields"` and `matchConfig.inputKey` |
 | Join two normal workstation inputs only when their authored work names match | `workstations[].inputs[].guards[]` with `type: "same_name"` and `matchInput` |
 | Wait for spawned children to complete or fail | `workstations[].inputs[].guards[]` with the parent-aware child guard type |
 | Limit concurrent dispatches | `resources[]` plus `workstations[].resources[]` |
@@ -97,7 +98,7 @@ Important behavior:
   source-to-target route.
 - If the guard is false, the token stays in its current place until another
   workstation can consume it.
-- Workstation-level `guards[]` currently support only `visit_count`.
+- Workstation-level `guards[]` support `visit_count` and `matches_fields`.
 - Parent-aware child guards stay on `workstations[].inputs[].guards[]`, not on
   workstation-level `guards[]`.
 
@@ -130,6 +131,42 @@ This loop breaker fires only when both conditions are true:
 
 `visit_count` passes when the watched workstation's visits are greater than or
 equal to `maxVisits`. The threshold is inclusive.
+
+## Match Inputs By Resolved Field
+
+Use a workstation-level matcher guard when the workstation should consume only
+candidate input sets whose resolved selector values all match.
+
+```json
+{
+  "name": "pair-same-flavor-assets",
+  "worker": "matcher",
+  "inputs": [
+    { "workType": "asset", "state": "ready" },
+    { "workType": "asset", "state": "ready" }
+  ],
+  "outputs": [{ "workType": "asset", "state": "matched" }],
+  "guards": [
+    {
+      "type": "matches_fields",
+      "matchConfig": { "inputKey": ".Name" }
+    }
+  ]
+}
+```
+
+The same matcher contract also supports nested tag selectors:
+
+```json
+{
+  "guards": [
+    {
+      "type": "matches_fields",
+      "matchConfig": { "inputKey": ".Tags[\"_last_output\"]" }
+    }
+  ]
+}
+```
 
 ## Guard Vs Guarded Route
 
@@ -234,11 +271,13 @@ substitute for a visible workflow route to a named failed or terminal state.
 - Keep same-name matching on `workstations[].inputs[].guards[]`, not on
   workstation-level `guards[]`.
 - Every same-name guard names a different peer input with `matchInput`.
-- Use `workstations[].guards[]` only for workstation-level `visit_count`
-  gating.
+- Use `workstations[].guards[]` only for workstation-level `visit_count` or
+  `matches_fields` gating.
 - Keep parent-aware child guards on `workstations[].inputs[].guards[]`.
-- Every workstation guard has `type`, `workstation`, and positive
-  `maxVisits`.
+- Every `visit_count` workstation guard has `type`, `workstation`, and
+  positive `maxVisits`.
+- Every `matches_fields` workstation guard has `type` and non-empty
+  `matchConfig.inputKey`.
 - Every guarded loop breaker has one explicit source input and target output.
 - Loop-breaker source and target states reference real work types and states.
 - The watched `workstation` references an existing workstation.

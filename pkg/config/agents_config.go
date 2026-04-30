@@ -289,8 +289,15 @@ func rejectRetiredGuardFrontmatterAliases(raw any, path string) error {
 		return nil
 	}
 	for index, item := range items {
-		if err := rejectRetiredBoundaryFields(frontmatterMap(item), fmt.Sprintf("%s[%d]", path, index), []retiredBoundaryField{
+		entryPath := fmt.Sprintf("%s[%d]", path, index)
+		entry := frontmatterMap(item)
+		if err := rejectRetiredBoundaryFields(entry, entryPath, []retiredBoundaryField{
 			{key: "max_visits", replacement: "use maxVisits"},
+		}); err != nil {
+			return err
+		}
+		if err := rejectRetiredBoundaryFields(frontmatterMap(entry["matchConfig"]), entryPath+".matchConfig", []retiredBoundaryField{
+			{key: "input_key", replacement: "use inputKey"},
 		}); err != nil {
 			return err
 		}

@@ -68,3 +68,24 @@ func TestCloneFactoryConfig_PreservesGuardedLogicalMoveLoopBreakerWorkstations(t
 		t.Fatalf("expected cloned guard to be independent of source mutations, got %#v", cloned.Workstations[1].Guards[0])
 	}
 }
+
+func TestCloneFactoryConfig_ClonesMatchesFieldsGuardMatchConfig(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "match-assets",
+			Guards: []interfaces.GuardConfig{{
+				Type:        interfaces.GuardTypeMatchesFields,
+				MatchConfig: &interfaces.GuardMatchConfig{InputKey: ".Name"},
+			}},
+		}},
+	}
+
+	cloned, err := CloneFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("CloneFactoryConfig: %v", err)
+	}
+	cfg.Workstations[0].Guards[0].MatchConfig.InputKey = `.Tags["_last_output"]`
+	if cloned.Workstations[0].Guards[0].MatchConfig == nil || cloned.Workstations[0].Guards[0].MatchConfig.InputKey != ".Name" {
+		t.Fatalf("expected cloned matchConfig to be independent of source mutations, got %#v", cloned.Workstations[0].Guards[0].MatchConfig)
+	}
+}

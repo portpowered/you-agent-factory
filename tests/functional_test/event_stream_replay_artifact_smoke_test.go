@@ -3,12 +3,14 @@ package functional_test
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -19,7 +21,10 @@ import (
 )
 
 func TestEventStreamReplayArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testing.T) {
-	eventStreamPath := filepath.Join("..", "..", "..", "..", "factory", "logs", "agent-fails.json")
+	eventStreamPath := testpath.MustRepoPathFromCaller(t, 0, "factory", "logs", "agent-fails.json")
+	if _, err := os.Stat(eventStreamPath); err != nil {
+		t.Skipf("root event-stream fixture not present in this checkout: %v", err)
+	}
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
 
 	result, err := replay.SaveArtifactFromEventStreamFile(eventStreamPath, artifactPath)
@@ -40,8 +45,11 @@ func TestEventStreamReplayArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testi
 }
 
 func TestEventStreamReplayArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t *testing.T) {
-	rootFactoryDir := filepath.Join("..", "..", "..", "..", "factory")
+	rootFactoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")
 	eventStreamPath := filepath.Join(rootFactoryDir, "logs", "agent-fails.json")
+	if _, err := os.Stat(eventStreamPath); err != nil {
+		t.Skipf("root event-stream fixture not present in this checkout: %v", err)
+	}
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
 	copiedFactoryDir := testutil.CopyFixtureDir(t, rootFactoryDir)
 
@@ -71,9 +79,12 @@ func TestEventStreamReplayArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t
 }
 
 func TestEventStreamReplayArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition(t *testing.T) {
-	rootFactoryDir := filepath.Join("..", "..", "..", "..", "factory")
+	rootFactoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")
 	copiedFactoryDir := testutil.CopyFixtureDir(t, rootFactoryDir)
 	artifactPath := filepath.Join(copiedFactoryDir, "logs", "agent-fails.replay.json")
+	if _, err := os.Stat(artifactPath); err != nil {
+		t.Skipf("root replay artifact not present in this checkout: %v", err)
+	}
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, copiedFactoryDir, copiedFactoryDir, artifact)

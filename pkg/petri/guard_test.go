@@ -177,6 +177,102 @@ func TestSameNameGuard_MissingNameFailsClosed(t *testing.T) {
 	}
 }
 
+func TestMatchesFieldsGuard_DirectFieldSelector(t *testing.T) {
+	guard := &MatchesFieldsGuard{
+		InputKey:     ".Name",
+		MatchBinding: "source",
+	}
+	bindings := map[string]*interfaces.Token{
+		"source": {ID: "source-1", Color: interfaces.TokenColor{Name: "alpha"}},
+	}
+	candidates := []interfaces.Token{
+		{ID: "candidate-1", Color: interfaces.TokenColor{Name: "alpha"}},
+		{ID: "candidate-2", Color: interfaces.TokenColor{Name: "beta"}},
+	}
+
+	matched, ok := guard.Evaluate(candidates, bindings, nil)
+	if !ok {
+		t.Fatal("expected matches-fields guard to pass")
+	}
+	if len(matched) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matched))
+	}
+	if matched[0].ID != "candidate-1" {
+		t.Fatalf("expected candidate-1, got %s", matched[0].ID)
+	}
+}
+
+func TestMatchesFieldsGuard_TagSelector(t *testing.T) {
+	guard := &MatchesFieldsGuard{
+		InputKey:     `.Tags["_last_output"]`,
+		MatchBinding: "source",
+	}
+	bindings := map[string]*interfaces.Token{
+		"source": {ID: "source-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}},
+	}
+	candidates := []interfaces.Token{
+		{ID: "candidate-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}},
+		{ID: "candidate-2", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "different"}}},
+	}
+
+	matched, ok := guard.Evaluate(candidates, bindings, nil)
+	if !ok {
+		t.Fatal("expected tag-selector matches-fields guard to pass")
+	}
+	if len(matched) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matched))
+	}
+	if matched[0].ID != "candidate-1" {
+		t.Fatalf("expected candidate-1, got %s", matched[0].ID)
+	}
+}
+
+func TestMatchesFieldsGuard_MissingRequiredValueFailsClosed(t *testing.T) {
+	tests := []struct {
+		name       string
+		guard      *MatchesFieldsGuard
+		bindings   map[string]*interfaces.Token
+		candidates []interfaces.Token
+	}{
+		{
+			name:       "missing bound tag",
+			guard:      &MatchesFieldsGuard{InputKey: `.Tags["_last_output"]`, MatchBinding: "source"},
+			bindings:   map[string]*interfaces.Token{"source": {ID: "source-1", Color: interfaces.TokenColor{}}},
+			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
+		},
+		{
+			name:       "missing candidate tag",
+			guard:      &MatchesFieldsGuard{InputKey: `.Tags["_last_output"]`, MatchBinding: "source"},
+			bindings:   map[string]*interfaces.Token{"source": {ID: "source-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
+			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{}}},
+		},
+		{
+			name:       "invalid selector",
+			guard:      &MatchesFieldsGuard{InputKey: `.Tags[_last_output]`, MatchBinding: "source"},
+			bindings:   map[string]*interfaces.Token{"source": {ID: "source-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
+			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
+		},
+		{
+			name:       "single-input selector must resolve",
+			guard:      &MatchesFieldsGuard{InputKey: `.Tags["_last_output"]`},
+			bindings:   map[string]*interfaces.Token{},
+			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matched, ok := tt.guard.Evaluate(tt.candidates, tt.bindings, nil)
+			if ok {
+				t.Fatal("expected matches-fields guard to fail closed")
+			}
+			if matched != nil {
+				t.Fatalf("expected nil matches, got %#v", matched)
+			}
+		})
+	}
+}
+
 func TestVisitCountGuard_ExceedsThreshold(t *testing.T) {
 	candidates := []interfaces.Token{
 		{

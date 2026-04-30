@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
@@ -99,16 +99,18 @@ func TestProjectAgnosticCleanupSmoke_ReadmeStarterLinksMatchReferencedScaffolds(
 	}
 
 	for _, want := range []string{
-		"# Checked-In Review-Loop Starter",
+		"# Checked-In Root Workflow Starter",
 		"It is not the default `agent-factory` or `agent-factory init` scaffold",
-		"`inputs/story/default/`",
+		"`thoughts:init`",
+		"`idea:init`",
+		"`task:init`",
 	} {
 		if !strings.Contains(starterReadme, want) {
 			t.Fatalf("checked-in starter README missing %q:\n%s", want, starterReadme)
 		}
 	}
-	if !strings.Contains(factoryJSON, `"name": "story"`) {
-		t.Fatalf("checked-in starter factory.json should remain the story workflow described by README:\n%s", factoryJSON)
+	if !strings.Contains(factoryJSON, `"name": "task"`) {
+		t.Fatalf("checked-in starter factory.json should include the task workflow described by README:\n%s", factoryJSON)
 	}
 	if strings.Contains(factoryJSON, `"name": "tasks"`) {
 		t.Fatalf("checked-in starter factory.json should not masquerade as the default init scaffold:\n%s", factoryJSON)
@@ -119,12 +121,8 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 	files := []string{
 		"factory/README.md",
 		"factory/factory.json",
-		"factory/workers/executor/AGENTS.md",
-		"factory/workers/reviewer/AGENTS.md",
-		"factory/workstations/execute-story/AGENTS.md",
-		"factory/workstations/review-story/AGENTS.md",
-		"factory/inputs/story/default/example-story.md",
-		"factory/old/README.md",
+		"factory/workers/processor/AGENTS.md",
+		"factory/workers/workspace-setup/AGENTS.md",
 	}
 
 	for _, rel := range files {
@@ -151,10 +149,7 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		}
 	}
 
-	for _, rel := range []string{
-		"factory/workers/executor/AGENTS.md",
-		"factory/workers/reviewer/AGENTS.md",
-	} {
+	for _, rel := range []string{"factory/workers/processor/AGENTS.md"} {
 		data, err := os.ReadFile(agentFactoryPath(t, rel))
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
@@ -168,14 +163,6 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		}
 	}
 
-	oldReadmeBytes, err := os.ReadFile(agentFactoryPath(t, "factory/old/README.md"))
-	if err != nil {
-		t.Fatalf("read historical starter README: %v", err)
-	}
-	oldReadme := string(oldReadmeBytes)
-	if !strings.Contains(oldReadme, "Historical Starter") || !strings.Contains(oldReadme, "not the default `agent-factory init` scaffold") {
-		t.Fatalf("historical starter README should label the old tree clearly:\n%s", oldReadme)
-	}
 }
 
 func TestProjectAgnosticCleanupSmoke_RequestDispatchAndRuntimeContext(t *testing.T) {
@@ -300,23 +287,6 @@ func TestProjectAgnosticCleanupSmoke_ModifiedExamplesExecuteWithNeutralProjectCo
 					"branch":   "feature/example-cleanup",
 					"worktree": ".worktrees/example-cleanup/write-code-review-cleanup-smoke",
 				},
-			},
-			responses: map[string][]interfaces.InferenceResponse{
-				"executor": {{Content: "executed <result>ACCEPTED</result>"}},
-				"reviewer": {{Content: "reviewed <result>ACCEPTED</result>"}},
-			},
-			wantPlace:  "story:complete",
-			wantWorker: "executor",
-		},
-		{
-			name: "root sample factory",
-			dir:  "factory",
-			request: interfaces.SubmitRequest{
-				WorkTypeID: "story",
-				WorkID:     "root-factory-cleanup-smoke",
-				TraceID:    "trace-root-factory-cleanup-smoke",
-				Name:       "root factory cleanup smoke",
-				Payload:    []byte("root factory cleanup smoke"),
 			},
 			responses: map[string][]interfaces.InferenceResponse{
 				"executor": {{Content: "executed <result>ACCEPTED</result>"}},
@@ -569,12 +539,7 @@ func assertValueDoesNotContainPortOS(t *testing.T, label string, value string) {
 
 func agentFactoryPath(t *testing.T, rel string) string {
 	t.Helper()
-
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot determine test file path")
-	}
-	return filepath.Join(filepath.Dir(thisFile), "..", "..", filepath.FromSlash(rel))
+	return testpath.MustRepoPathFromCaller(t, 0, filepath.FromSlash(rel))
 }
 
 func clearSeedInputs(t *testing.T, dir string) {

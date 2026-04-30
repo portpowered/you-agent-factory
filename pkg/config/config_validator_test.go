@@ -245,6 +245,51 @@ func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
 	assertFindingExists(t, findings, "guard-visit-count-max-visits")
 }
 
+func TestRuleGuards_MatchesFieldsMissingMatchConfig(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:   "ws",
+		Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeMatchesFields}},
+	}}
+
+	findings := ruleGuards(cfg)
+	if len(findings) != 1 || findings[0].Rule != "guard-matches-fields-input-key" {
+		t.Fatalf("expected match_config.input_key finding, got %#v", findings)
+	}
+}
+
+func TestRuleGuards_MatchesFieldsEmptyInputKey(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Guards: []interfaces.GuardConfig{{
+			Type:        interfaces.GuardTypeMatchesFields,
+			MatchConfig: &interfaces.GuardMatchConfig{InputKey: "   "},
+		}},
+	}}
+
+	findings := ruleGuards(cfg)
+	if len(findings) != 1 || findings[0].Rule != "guard-matches-fields-input-key" {
+		t.Fatalf("expected match_config.input_key finding, got %#v", findings)
+	}
+}
+
+func TestRuleGuards_ValidMatchesFieldsGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Guards: []interfaces.GuardConfig{{
+			Type:        interfaces.GuardTypeMatchesFields,
+			MatchConfig: &interfaces.GuardMatchConfig{InputKey: `.Tags["_last_output"]`},
+		}},
+	}}
+
+	findings := ruleGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
 func TestRuleGuards_UnknownType(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{

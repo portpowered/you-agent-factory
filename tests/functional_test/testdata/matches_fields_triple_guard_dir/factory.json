@@ -1,0 +1,79 @@
+{
+  "workTypes": [
+    {
+      "name": "first",
+      "states": [
+        {
+          "name": "ready",
+          "type": "INITIAL"
+        }
+      ]
+    },
+    {
+      "name": "second",
+      "states": [
+        {
+          "name": "ready",
+          "type": "INITIAL"
+        }
+      ]
+    },
+    {
+      "name": "third",
+      "states": [
+        {
+          "name": "ready",
+          "type": "INITIAL"
+        }
+      ]
+    },
+    {
+      "name": "triple",
+      "states": [
+        {
+          "name": "matched",
+          "type": "TERMINAL"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "matcher"
+    }
+  ],
+  "workstations": [
+    {
+      "name": "match-triple",
+      "worker": "matcher",
+      "guards": [
+        {
+          "type": "MATCHES_FIELDS",
+          "matchConfig": {
+            "inputKey": ".Tags[\"_last_output\"]"
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "workType": "first",
+          "state": "ready"
+        },
+        {
+          "workType": "second",
+          "state": "ready"
+        },
+        {
+          "workType": "third",
+          "state": "ready"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "triple",
+          "state": "matched"
+        }
+      ]
+    }
+  ]
+}

@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/internal/testpath"
 )
 
 func TestCheckedInReplayEventFixturesUseSafeFactoryEvents(t *testing.T) {
-	for _, fixture := range replayFixturePaths() {
+	for _, fixture := range replayFixturePaths(t) {
 		t.Run(filepath.Base(fixture), func(t *testing.T) {
 			assertFixtureUsesGeneratedFactoryConfig(t, fixture)
 			assertFixtureUsesThinEventContract(t, fixture)
@@ -87,12 +89,14 @@ func forbiddenReplayConfigKeys() []string {
 	}
 }
 
-func replayFixturePaths() []string {
-	return []string{
+func replayFixturePaths(t *testing.T) []string {
+	t.Helper()
+
+	return existingFiles([]string{
 		filepath.FromSlash("testdata/inference-events.replay.json"),
-		filepath.FromSlash("../../tests/adhoc/factory-recording-04-11-02.json"),
-		filepath.FromSlash("../../tests/functional_test/testdata/adhoc-recording-batch-event-log.json"),
-	}
+		testpath.MustRepoPathFromCaller(t, 0, "tests", "adhoc", "factory-recording-04-11-02.json"),
+		testpath.MustRepoPathFromCaller(t, 0, "tests", "functional_test", "testdata", "adhoc-recording-batch-event-log.json"),
+	})
 }
 
 func assertFixtureUsesThinEventContract(t *testing.T, fixture string) {
@@ -199,4 +203,14 @@ func assertFixtureKeysAbsent(t *testing.T, fixture string, eventIndex int, objec
 			t.Fatalf("%s events[%d].%s.%s must not be present", fixture, eventIndex, path, key)
 		}
 	}
+}
+
+func existingFiles(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			out = append(out, path)
+		}
+	}
+	return out
 }

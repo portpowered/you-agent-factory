@@ -319,10 +319,18 @@ func ruleGuards(cfg *interfaces.FactoryConfig) []Finding {
 						Rule:    "guard-visit-count-max-visits",
 					})
 				}
+			case interfaces.GuardTypeMatchesFields:
+				if g.MatchConfig == nil || strings.TrimSpace(g.MatchConfig.InputKey) == "" {
+					findings = append(findings, Finding{
+						Severity: SeverityError, Path: path,
+						Message: fmt.Sprintf("guard of type %q requires non-empty 'match_config.input_key'", g.Type),
+						Rule:    "guard-matches-fields-input-key",
+					})
+				}
 			default:
 				findings = append(findings, Finding{
 					Severity: SeverityError, Path: path,
-					Message: fmt.Sprintf("unsupported workstation guard type %q (use per-input guards for child fan-in)", g.Type),
+					Message: fmt.Sprintf("unsupported workstation guard type %q (workstation guards support: visit_count, matches_fields; use per-input guards for child fan-in)", g.Type),
 					Rule:    "guard-unknown-type",
 				})
 			}

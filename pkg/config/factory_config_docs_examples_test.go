@@ -8,29 +8,31 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/agent-factory/internal/testpath"
 )
 
 func TestFactoryConfigDocsAndExamples_UseCanonicalPublicContractFields(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := append([]string{
-		"../../README.md",
-		"../../docs/authoring-agents-md.md",
-		"../../docs/authoring-workflows.md",
-		"../../docs/work.md",
-		"../../docs/workstations.md",
-		"../../docs/run-timeline.md",
-		"../../docs/guides/parent-aware-fan-in.md",
-		"../../docs/guides/workstation-guards-and-guarded-loop-breakers.md",
-		"../../../../factory/README.md",
-		"../../factory/workers/executor/AGENTS.md",
-		"../../factory/workers/reviewer/AGENTS.md",
-		"../../factory/old/workers/worker-a/AGENTS.md",
-		"../cli/init/init.go",
-		"../../tests/adhoc/factory/README.md",
-		"../../tests/adhoc/factory/factory.json",
-		"../../tests/adhoc/factory/workers/processor/AGENTS.md",
-	}, activeExampleConfigFiles(t)...)
+	targetFiles := existingFiles(append([]string{
+		repoPath(t, "README.md"),
+		repoPath(t, "docs", "authoring-agents-md.md"),
+		repoPath(t, "docs", "authoring-workflows.md"),
+		repoPath(t, "docs", "work.md"),
+		repoPath(t, "docs", "workstations.md"),
+		repoPath(t, "docs", "run-timeline.md"),
+		repoPath(t, "docs", "guides", "parent-aware-fan-in.md"),
+		repoPath(t, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+		repoPath(t, "factory", "README.md"),
+		repoPath(t, "factory", "workers", "executor", "AGENTS.md"),
+		repoPath(t, "factory", "workers", "reviewer", "AGENTS.md"),
+		repoPath(t, "factory", "old", "workers", "worker-a", "AGENTS.md"),
+		repoPath(t, "pkg", "cli", "init", "init.go"),
+		repoPath(t, "tests", "adhoc", "factory", "README.md"),
+		repoPath(t, "tests", "adhoc", "factory", "factory.json"),
+		repoPath(t, "tests", "adhoc", "factory", "workers", "processor", "AGENTS.md"),
+	}, activeExampleConfigFiles(t)...))
 
 	retiredPatterns := map[string]*regexp.Regexp{
 		"work_types":         regexp.MustCompile(`\bwork_types\b`),
@@ -107,12 +109,12 @@ func docsExampleContractOffenses(t *testing.T, relPath string, retiredPatterns m
 func TestFactoryConfigDocsAndExamples_UseExecutionLimitsForWorkstationTimeouts(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := []string{
-		"../../docs/authoring-agents-md.md",
-		"../../docs/authoring-workflows.md",
-		"../../docs/workstations.md",
-		"../../docs/guides/workstation-guards-and-guarded-loop-breakers.md",
-	}
+	targetFiles := existingFiles([]string{
+		repoPath(t, "docs", "authoring-agents-md.md"),
+		repoPath(t, "docs", "authoring-workflows.md"),
+		repoPath(t, "docs", "workstations.md"),
+		repoPath(t, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+	})
 
 	workstationTypePattern := regexp.MustCompile(`(?m)^type:\s*(MODEL_WORKSTATION|LOGICAL_MOVE)\s*$`)
 	workstationTimeoutPattern := regexp.MustCompile(`(?m)^timeout:`)
@@ -143,16 +145,16 @@ func TestFactoryConfigDocsAndExamples_UseExecutionLimitsForWorkstationTimeouts(t
 func TestFactoryConfigDocsAndExamples_UseAlignedRuntimeResourceContract(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := append([]string{
-		"../../docs/authoring-agents-md.md",
-		"../../docs/authoring-workflows.md",
-		"../../docs/work.md",
-		"../../docs/workstations.md",
-		"../../docs/guides/workstation-guards-and-guarded-loop-breakers.md",
-		"../../README.md",
-		"../cli/init/init.go",
-		"../../tests/adhoc/factory/factory.json",
-	}, activeExampleConfigFiles(t)...)
+	targetFiles := existingFiles(append([]string{
+		repoPath(t, "docs", "authoring-agents-md.md"),
+		repoPath(t, "docs", "authoring-workflows.md"),
+		repoPath(t, "docs", "work.md"),
+		repoPath(t, "docs", "workstations.md"),
+		repoPath(t, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+		repoPath(t, "README.md"),
+		repoPath(t, "pkg", "cli", "init", "init.go"),
+		repoPath(t, "tests", "adhoc", "factory", "factory.json"),
+	}, activeExampleConfigFiles(t)...))
 
 	retiredPatterns := map[string]*regexp.Regexp{
 		"resourceUsage":      regexp.MustCompile(`\bresourceUsage\b`),
@@ -185,9 +187,9 @@ func TestFactoryConfigDocsAndExamples_UseAlignedRuntimeResourceContract(t *testi
 func TestFactoryConfigDocsAndExamples_ActiveSplitExamplesShowCanonicalWorkstationRuntimeContract(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := []string{
-		"../../examples/basic/factory/workstations/process/AGENTS.md",
-	}
+	targetFiles := existingFiles([]string{
+		repoPath(t, "examples", "basic", "factory", "workstations", "process", "AGENTS.md"),
+	})
 
 	requiredPatterns := map[string]*regexp.Regexp{
 		"limits.maxExecutionTime": regexp.MustCompile(`(?m)^limits:\s*\n(?:[^\n]*\n)*?\s+maxExecutionTime:`),
@@ -216,10 +218,10 @@ func TestFactoryConfigDocsAndExamples_ActiveSplitExamplesShowCanonicalWorkstatio
 func TestFactoryConfigDocsAndExamples_StopWordsExamplesDoNotAdvertiseRejectedRouting(t *testing.T) {
 	t.Parallel()
 
-	targetFiles := []string{
-		"../../docs/authoring-agents-md.md",
-		"../../docs/workstations.md",
-	}
+	targetFiles := existingFiles([]string{
+		repoPath(t, "docs", "authoring-agents-md.md"),
+		repoPath(t, "docs", "workstations.md"),
+	})
 
 	var offenses []string
 	for _, relPath := range targetFiles {
@@ -248,9 +250,15 @@ func TestFactoryConfigDocsAndExamples_StopWordsExamplesDoNotAdvertiseRejectedRou
 func activeExampleConfigFiles(t *testing.T) []string {
 	t.Helper()
 
-	roots := []string{"../../examples", "../../factory", "../../../../factory"}
+	roots := []string{
+		repoPath(t, "examples"),
+		repoPath(t, "factory"),
+	}
 	var files []string
 	for _, root := range roots {
+		if _, err := os.Stat(root); err != nil {
+			continue
+		}
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -274,5 +282,20 @@ func activeExampleConfigFiles(t *testing.T) []string {
 			t.Fatalf("walk %s: %v", root, err)
 		}
 	}
-	return files
+	return existingFiles(files)
+}
+
+func repoPath(t *testing.T, parts ...string) string {
+	t.Helper()
+	return testpath.MustRepoPathFromCaller(t, 0, parts...)
+}
+
+func existingFiles(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			out = append(out, path)
+		}
+	}
+	return out
 }

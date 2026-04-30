@@ -146,16 +146,7 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 			})
 		}
 
-		// Apply guards to input arcs.
-		for _, g := range ws.Guards {
-			if len(t.InputArcs) == 0 {
-				continue
-			}
-			guard := cm.resolveGuard(g)
-			if guard != nil {
-				t.InputArcs[0].Guard = guard
-			}
-		}
+		cm.applyWorkstationGuards(ws, t)
 
 		// Handle per-input guards: generate observation arcs with parent-match guards scoped to the specific input.
 		cm.applyInputGuards(ws, t, places, fanoutGroups)
@@ -189,6 +180,33 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 		}
 	}
 	return transitions
+}
+
+func (cm *ConfigMapper) applyWorkstationGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition) {
+	if len(t.InputArcs) == 0 || len(ws.Guards) == 0 {
+		return
+	}
+
+	sourceBinding := inputArcBindingName(t.InputArcs[0])
+	for _, g := range ws.Guards {
+		switch g.Type {
+		case interfaces.GuardTypeMatchesFields:
+			for i := range t.InputArcs {
+				matcher := &petri.MatchesFieldsGuard{
+					InputKey: g.MatchConfig.InputKey,
+				}
+				if i > 0 {
+					matcher.MatchBinding = sourceBinding
+				}
+				t.InputArcs[i].Guard = combineArcGuards(t.InputArcs[i].Guard, matcher)
+			}
+		default:
+			guard := cm.resolveGuard(g)
+			if guard != nil {
+				t.InputArcs[0].Guard = combineArcGuards(t.InputArcs[0].Guard, guard)
+			}
+		}
+	}
 }
 
 // applyInputGuards processes per-input guard declarations on workstation inputs.
@@ -431,6 +449,35 @@ func (cm *ConfigMapper) resolveGuard(g interfaces.GuardConfig) petri.Guard {
 	default:
 		return nil
 	}
+}
+
+func combineArcGuards(existing, next petri.Guard) petri.Guard {
+	if next == nil {
+		return existing
+	}
+	if existing == nil {
+		return next
+	}
+
+	var guards []petri.Guard
+	if chained, ok := existing.(*petri.AllGuard); ok {
+		guards = append(guards, chained.Guards...)
+	} else {
+		guards = append(guards, existing)
+	}
+	if chained, ok := next.(*petri.AllGuard); ok {
+		guards = append(guards, chained.Guards...)
+	} else {
+		guards = append(guards, next)
+	}
+	return &petri.AllGuard{Guards: guards}
+}
+
+func inputArcBindingName(arc petri.Arc) string {
+	if arc.Name != "" {
+		return arc.Name
+	}
+	return arc.ID
 }
 
 func mapToID(io interfaces.IOConfig) string {
