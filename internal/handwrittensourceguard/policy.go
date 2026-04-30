@@ -26,133 +26,77 @@ type InventoryEntry struct {
 }
 
 func Inventory() []InventoryEntry {
+	return handwrittenSourceInventory()
+}
+
+func handwrittenSourceInventory() []InventoryEntry {
 	return []InventoryEntry{
-		{
-			GuardFile: "pkg/api/legacy_model_guard_test.go",
-			WalkRoot:  "repo-root",
-			Rules: []PathRule{
-				{
-					Path:  "repo-root/**/*.go",
-					Class: PathClassScanHandwritten,
-					Why:   "scan checked-in handwritten Go source across the repository",
-				},
-				{
-					Path:  "pkg/api/generated",
-					Class: PathClassExcludeGenerated,
-					Why:   "generated API output is not handwritten contract source",
-				},
-				{
-					Path:  "ui/dist",
-					Class: PathClassExcludeGenerated,
-					Why:   "compiled dashboard assets are generated artifacts",
-				},
-				{
-					Path:  "ui/node_modules",
-					Class: PathClassExcludeGenerated,
-					Why:   "dependency install output is not handwritten source",
-				},
-				{
-					Path:  "ui/storybook-static",
-					Class: PathClassExcludeGenerated,
-					Why:   "storybook build output is generated",
-				},
-				{
-					Path:  ".*/",
-					Class: PathClassExcludeHiddenRoot,
-					Why:   "hidden repository metadata such as .git, .claude, and nested worktree state must not count as handwritten source",
-				},
-			},
-		},
-		{
-			GuardFile: "pkg/petri/transition_contract_guard_test.go",
-			WalkRoot:  "repo-root",
-			Rules: []PathRule{
-				{
-					Path:  "repo-root/**/*.go",
-					Class: PathClassScanHandwritten,
-					Why:   "scan checked-in handwritten Go source across the repository",
-				},
-				{
-					Path:  "pkg/api/generated",
-					Class: PathClassExcludeGenerated,
-					Why:   "generated API output is not handwritten contract source",
-				},
-				{
-					Path:  "ui/dist",
-					Class: PathClassExcludeGenerated,
-					Why:   "compiled dashboard assets are generated artifacts",
-				},
-				{
-					Path:  "ui/node_modules",
-					Class: PathClassExcludeGenerated,
-					Why:   "dependency install output is not handwritten source",
-				},
-				{
-					Path:  "ui/storybook-static",
-					Class: PathClassExcludeGenerated,
-					Why:   "storybook build output is generated",
-				},
-				{
-					Path:  ".*/",
-					Class: PathClassExcludeHiddenRoot,
-					Why:   "hidden repository metadata such as .git, .claude, and nested worktree state must not count as handwritten source",
-				},
-			},
-		},
-		{
-			GuardFile: "pkg/interfaces/world_view_contract_guard_test.go#boundary",
-			WalkRoot:  "pkg/interfaces",
-			Rules: []PathRule{
-				{
-					Path:  "pkg/interfaces/*.go",
-					Class: PathClassScanHandwritten,
-					Why:   "boundary mirror names are only guarded inside the handwritten interfaces package",
-				},
-			},
-		},
-		{
-			GuardFile: "pkg/interfaces/world_view_contract_guard_test.go#canonical",
-			WalkRoot:  "pkg",
-			Rules: []PathRule{
-				{
-					Path:  "pkg/**/*.go",
-					Class: PathClassScanHandwritten,
-					Why:   "scan checked-in handwritten package Go source under pkg",
-				},
-				{
-					Path:  "pkg/api/generated",
-					Class: PathClassExcludeGenerated,
-					Why:   "generated API output is not handwritten pkg source",
-				},
-				{
-					Path:  ".*/",
-					Class: PathClassExcludeHiddenRoot,
-					Why:   "hidden package metadata and nested worker state must not count as handwritten pkg source",
-				},
-			},
-		},
-		{
-			GuardFile: "pkg/interfaces/runtime_lookup_contract_guard_test.go",
-			WalkRoot:  "pkg",
-			Rules: []PathRule{
-				{
-					Path:  "pkg/**/*.go",
-					Class: PathClassScanHandwritten,
-					Why:   "scan checked-in handwritten package Go source under pkg",
-				},
-				{
-					Path:  "pkg/api/generated",
-					Class: PathClassExcludeGenerated,
-					Why:   "generated API output is not handwritten pkg source",
-				},
-				{
-					Path:  ".*/",
-					Class: PathClassExcludeHiddenRoot,
-					Why:   "hidden package metadata and nested worker state must not count as handwritten pkg source",
-				},
-			},
+		repoRootInventoryEntry("pkg/api/legacy_model_guard_test.go"),
+		repoRootInventoryEntry("pkg/petri/transition_contract_guard_test.go"),
+		boundaryWorldViewInventoryEntry(),
+		pkgRootInventoryEntry("pkg/interfaces/world_view_contract_guard_test.go#canonical"),
+		pkgRootInventoryEntry("pkg/interfaces/runtime_lookup_contract_guard_test.go"),
+	}
+}
+
+func repoRootInventoryEntry(guardFile string) InventoryEntry {
+	return InventoryEntry{
+		GuardFile: guardFile,
+		WalkRoot:  "repo-root",
+		Rules:     repoRootRules(),
+	}
+}
+
+func boundaryWorldViewInventoryEntry() InventoryEntry {
+	return InventoryEntry{
+		GuardFile: "pkg/interfaces/world_view_contract_guard_test.go#boundary",
+		WalkRoot:  "pkg/interfaces",
+		Rules: []PathRule{
+			handwrittenScanRule(
+				"pkg/interfaces/*.go",
+				"boundary mirror names are only guarded inside the handwritten interfaces package",
+			),
 		},
 	}
+}
+
+func pkgRootInventoryEntry(guardFile string) InventoryEntry {
+	return InventoryEntry{
+		GuardFile: guardFile,
+		WalkRoot:  "pkg",
+		Rules:     pkgRootRules(),
+	}
+}
+
+func repoRootRules() []PathRule {
+	return []PathRule{
+		handwrittenScanRule("repo-root/**/*.go", "scan checked-in handwritten Go source across the repository"),
+		generatedRule("pkg/api/generated", "generated API output is not handwritten contract source"),
+		generatedRule("ui/dist", "compiled dashboard assets are generated artifacts"),
+		generatedRule("ui/node_modules", "dependency install output is not handwritten source"),
+		generatedRule("ui/storybook-static", "storybook build output is generated"),
+		hiddenRule("hidden repository metadata such as .git, .claude, and nested worktree state must not count as handwritten source"),
+	}
+}
+
+func pkgRootRules() []PathRule {
+	return []PathRule{
+		handwrittenScanRule("pkg/**/*.go", "scan checked-in handwritten package Go source under pkg"),
+		generatedRule("pkg/api/generated", "generated API output is not handwritten pkg source"),
+		hiddenRule("hidden package metadata and nested worker state must not count as handwritten pkg source"),
+	}
+}
+
+func handwrittenScanRule(path string, why string) PathRule {
+	return PathRule{Path: path, Class: PathClassScanHandwritten, Why: why}
+}
+
+func generatedRule(path string, why string) PathRule {
+	return PathRule{Path: path, Class: PathClassExcludeGenerated, Why: why}
+}
+
+func hiddenRule(why string) PathRule {
+	return PathRule{Path: ".*/", Class: PathClassExcludeHiddenRoot, Why: why}
 }
 
 func ShouldSkipDir(guardFile, walkRoot, path string) bool {
