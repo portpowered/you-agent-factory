@@ -6,17 +6,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 )
 
 const cleanupSmokeProject = "acme-inventory"
+
+var rootFactoryPathPattern = regexp.MustCompile(`factory/[A-Za-z0-9._/-]+`)
 
 func TestProjectAgnosticCleanupSmoke_ReadmeQuickstartAndReleasePathsRemainStandalone(t *testing.T) {
 	readmeBytes, err := os.ReadFile(agentFactoryPath(t, "README.md"))
@@ -33,7 +35,7 @@ func TestProjectAgnosticCleanupSmoke_ReadmeQuickstartAndReleasePathsRemainStanda
 		"factory/inputs/tasks/default/my-request.md",
 		"Created or reused by `agent-factory` or `agent-factory init`.",
 		"This repository also ships a richer checked-in starter under",
-		"Submit Markdown stories under `factory/inputs/story/default`.",
+		"Seed checked-in repository work under `factory/inputs/plan/default`",
 		"./factory/README.md",
 		"./examples/simple-tasks/README.md",
 	} {
@@ -85,10 +87,10 @@ func TestProjectAgnosticCleanupSmoke_ReadmeStarterLinksMatchReferencedScaffolds(
 		"### 🏗️ Default init scaffold",
 		"Created or reused by `agent-factory` or `agent-factory init`.",
 		"factory/inputs/tasks/default",
-		"### 🧭 Checked-in review-loop starter",
+		"### 🧭 Checked-in repository workflow",
 		"[`./factory/`](./factory/README.md)",
 		"not the default `agent-factory init` scaffold",
-		"Submit Markdown stories under `factory/inputs/story/default`.",
+		"Seed checked-in repository work under `factory/inputs/plan/default`.",
 	} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("README missing scaffold-alignment text %q", want)
@@ -99,21 +101,21 @@ func TestProjectAgnosticCleanupSmoke_ReadmeStarterLinksMatchReferencedScaffolds(
 	}
 
 	for _, want := range []string{
-		"# Checked-In Root Workflow Starter",
+		"# Checked-In Repository Workflow",
 		"It is not the default `agent-factory` or `agent-factory init` scaffold",
-		"`thoughts:init`",
-		"`idea:init`",
-		"`task:init`",
+		"`inputs/plan/default/`",
+		"`inputs/task/default/`",
+		"`inputs/idea/default/`",
 	} {
 		if !strings.Contains(starterReadme, want) {
 			t.Fatalf("checked-in starter README missing %q:\n%s", want, starterReadme)
 		}
 	}
-	if !strings.Contains(factoryJSON, `"name": "task"`) {
-		t.Fatalf("checked-in starter factory.json should include the task workflow described by README:\n%s", factoryJSON)
+	if !strings.Contains(factoryJSON, `"name": "plan"`) || !strings.Contains(factoryJSON, `"name": "task"`) {
+		t.Fatalf("checked-in starter factory.json should describe the plan-and-task workflow documented by README:\n%s", factoryJSON)
 	}
-	if strings.Contains(factoryJSON, `"name": "tasks"`) {
-		t.Fatalf("checked-in starter factory.json should not masquerade as the default init scaffold:\n%s", factoryJSON)
+	if strings.Contains(factoryJSON, `"name": "story"`) {
+		t.Fatalf("checked-in starter factory.json should not masquerade as the retired story-only starter:\n%s", factoryJSON)
 	}
 }
 
@@ -121,12 +123,21 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 	files := []string{
 		"factory/README.md",
 		"factory/factory.json",
+		"factory/logs/agent-fails.json",
+		"factory/logs/agent-fails.replay.json",
 		"factory/workers/processor/AGENTS.md",
 		"factory/workers/workspace-setup/AGENTS.md",
+		"factory/workstations/cleaner/AGENTS.md",
+		"factory/workstations/ideafy/AGENTS.md",
+		"factory/workstations/plan/AGENTS.md",
+		"factory/workstations/process/AGENTS.md",
+		"factory/workstations/review/AGENTS.md",
+		"factory/scripts/setup-workspace.py",
 	}
 
 	for _, rel := range files {
-		data, err := os.ReadFile(agentFactoryPath(t, rel))
+		path := testutil.MustClassifiedArtifactPath(t, rel, testutil.ArtifactCheckedIn)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
@@ -149,8 +160,11 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		}
 	}
 
-	for _, rel := range []string{"factory/workers/processor/AGENTS.md"} {
-		data, err := os.ReadFile(agentFactoryPath(t, rel))
+	for _, rel := range []string{
+		"factory/workers/processor/AGENTS.md",
+		"factory/workers/workspace-setup/AGENTS.md",
+	} {
+		data, err := os.ReadFile(testutil.MustClassifiedArtifactPath(t, rel, testutil.ArtifactCheckedIn))
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
@@ -158,11 +172,60 @@ func TestProjectAgnosticCleanupSmoke_CheckedInStarterScaffoldFilesRemainNeutralA
 		if strings.Contains(content, "stop_token:") {
 			t.Fatalf("%s should not contain retired stop_token key:\n%s", rel, content)
 		}
-		if !strings.Contains(content, "stopToken:") {
-			t.Fatalf("%s missing canonical stopToken key:\n%s", rel, content)
+	}
+
+	assertPromptOnlyReferencesCheckedInFactoryArtifacts(t, "factory/workstations/cleaner/AGENTS.md")
+}
+
+func TestProjectAgnosticCleanupSmoke_PublicDocsDoNotTeachRetiredRootStoryStarterPaths(t *testing.T) {
+	contentBytes, err := os.ReadFile(agentFactoryPath(t, "docs/authoring-agents-md.md"))
+	if err != nil {
+		t.Fatalf("read authoring guide: %v", err)
+	}
+	content := string(contentBytes)
+
+	for _, want := range []string{
+		"examples/simple-tasks/workstations/review-story/AGENTS.md",
+		"examples/simple-tasks/workers/reviewer/AGENTS.md",
+		"factory/workstations/process/AGENTS.md",
+		"checked-in repository-maintainer workflow",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("authoring guide missing canonical contract reference %q", want)
 		}
 	}
 
+	for _, retired := range []string{
+		"factory/workstations/review-story/AGENTS.md",
+		"factory/workers/reviewer/AGENTS.md",
+		"factory/workstations/execute-story/AGENTS.md",
+		"factory/workers/executor/AGENTS.md",
+		"factory/inputs/story/default/example-story.md",
+	} {
+		if strings.Contains(content, retired) {
+			t.Fatalf("authoring guide should not teach retired root story-starter path %q", retired)
+		}
+	}
+}
+
+func TestProjectAgnosticCleanupSmoke_BroadSurfaceArtifactsOmitRetiredEventNames(t *testing.T) {
+	paths := []string{
+		"ui/src/api/generated/openapi.ts",
+		"tests/adhoc/factory-recording-04-11-02.json",
+		"tests/functional_test/testdata/adhoc-recording-batch-event-log.json",
+		"ui/src/components/dashboard/fixtures/failure-analysis-events.ts",
+		"ui/src/components/dashboard/fixtures/graph-state-smoke-events.ts",
+		"ui/src/components/dashboard/fixtures/resource-count-events.ts",
+		"ui/src/components/dashboard/fixtures/runtime-details-events.ts",
+	}
+
+	for _, rel := range paths {
+		data, err := os.ReadFile(agentFactoryPath(t, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		assertTextOmitsRetiredEventNames(t, rel, string(data))
+	}
 }
 
 func TestProjectAgnosticCleanupSmoke_RequestDispatchAndRuntimeContext(t *testing.T) {
@@ -537,9 +600,62 @@ func assertValueDoesNotContainPortOS(t *testing.T, label string, value string) {
 	}
 }
 
+func assertTextOmitsRetiredEventNames(t *testing.T, label string, value string) {
+	t.Helper()
+
+	for _, retired := range []string{
+		"RUN_STARTED",
+		"INITIAL_STRUCTURE",
+		"RELATIONSHIP_CHANGE",
+		"DISPATCH_CREATED",
+		"DISPATCH_COMPLETED",
+		"FACTORY_STATE_CHANGE",
+		"RUN_FINISHED",
+	} {
+		if strings.Contains(value, `"`+retired+`"`) {
+			t.Fatalf("%s contains retired public event name %q", label, retired)
+		}
+	}
+}
+
+func assertPromptOnlyReferencesCheckedInFactoryArtifacts(t *testing.T, rel string) {
+	t.Helper()
+
+	data, err := os.ReadFile(testutil.MustClassifiedArtifactPath(t, rel, testutil.ArtifactCheckedIn))
+	if err != nil {
+		t.Fatalf("read %s: %v", rel, err)
+	}
+
+	content := string(data)
+	references := rootFactoryPathPattern.FindAllString(content, -1)
+	if len(references) == 0 {
+		t.Fatalf("%s should reference at least one checked-in factory path", rel)
+	}
+
+	seen := make(map[string]struct{}, len(references))
+	for _, reference := range references {
+		normalized := filepath.ToSlash(filepath.Clean(reference))
+		if normalized == "." {
+			t.Fatalf("%s contains malformed factory path reference %q", rel, reference)
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+
+		entry := testutil.MustArtifactContractEntry(t, normalized)
+		if entry.Classification != testutil.ArtifactCheckedIn {
+			t.Fatalf("%s references %s classified as %s, want checked_in", rel, normalized, entry.Classification)
+		}
+		if _, err := os.Stat(testutil.MustRepoPath(t, entry.Path)); err != nil {
+			t.Fatalf("%s references missing checked-in path %s: %v", rel, entry.Path, err)
+		}
+	}
+}
+
 func agentFactoryPath(t *testing.T, rel string) string {
 	t.Helper()
-	return testpath.MustRepoPathFromCaller(t, 0, filepath.FromSlash(rel))
+	return testutil.MustRepoPath(t, rel)
 }
 
 func clearSeedInputs(t *testing.T, dir string) {

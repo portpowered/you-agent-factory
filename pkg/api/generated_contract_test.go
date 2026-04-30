@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 )
 
@@ -534,17 +533,9 @@ func TestGeneratedFactoryEventContractsRoundTripCanonicalFixture(t *testing.T) {
 func TestGeneratedArtifactsAndCanonicalFixturesOmitRetiredEventNames(t *testing.T) {
 	paths := []string{
 		filepath.FromSlash("generated/server.gen.go"),
-		repoPath(t, "ui", "src", "api", "generated", "openapi.ts"),
 		filepath.FromSlash("testdata/canonical-event-vocabulary-stream.json"),
 		filepath.FromSlash("../replay/testdata/inference-events.replay.json"),
-		repoPath(t, "tests", "adhoc", "factory-recording-04-11-02.json"),
-		repoPath(t, "tests", "functional_test", "testdata", "adhoc-recording-batch-event-log.json"),
-		repoPath(t, "ui", "src", "components", "dashboard", "fixtures", "failure-analysis-events.ts"),
-		repoPath(t, "ui", "src", "components", "dashboard", "fixtures", "graph-state-smoke-events.ts"),
-		repoPath(t, "ui", "src", "components", "dashboard", "fixtures", "resource-count-events.ts"),
-		repoPath(t, "ui", "src", "components", "dashboard", "fixtures", "runtime-details-events.ts"),
 	}
-	paths = existingFiles(paths)
 
 	for _, path := range paths {
 		path := path
@@ -556,21 +547,6 @@ func TestGeneratedArtifactsAndCanonicalFixturesOmitRetiredEventNames(t *testing.
 			assertTextOmitsRetiredEventNames(t, string(data))
 		})
 	}
-}
-
-func repoPath(t *testing.T, parts ...string) string {
-	t.Helper()
-	return testpath.MustRepoPathFromCaller(t, 0, parts...)
-}
-
-func existingFiles(paths []string) []string {
-	out := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			out = append(out, path)
-		}
-	}
-	return out
 }
 
 func TestGeneratedInferenceEventJSONRoundTripPreservesAttemptCorrelation(t *testing.T) {

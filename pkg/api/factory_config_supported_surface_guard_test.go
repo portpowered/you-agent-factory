@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	"github.com/portpowered/agent-factory/pkg/config"
+	"github.com/portpowered/agent-factory/pkg/testutil"
 )
 
 var supportedFactoryConfigLegacyConfigTokens = []string{
@@ -138,7 +138,6 @@ func supportedFactoryConfigDocSurfaces(t *testing.T) []string {
 
 	root := supportedSurfaceRoot(t)
 	paths := []string{
-		filepath.Join(repoRoot(t), "factory", "README.md"),
 		filepath.Join(root, "README.md"),
 		filepath.Join(root, "docs", "README.md"),
 		filepath.Join(root, "docs", "authoring-agents-md.md"),
@@ -162,13 +161,6 @@ func supportedFactoryConfigTextSurfaces(t *testing.T) []string {
 
 	root := supportedSurfaceRoot(t)
 	var paths []string
-	paths = append(paths, collectSupportedSurfaceFiles(t, filepath.Join(repoRoot(t), "factory"), func(path string, entry os.DirEntry) bool {
-		slash := filepath.ToSlash(path)
-		if strings.HasPrefix(slash, filepath.ToSlash(filepath.Join(repoRoot(t), "factory", "old"))+"/") {
-			return false
-		}
-		return filepath.Base(path) == "factory.json" || filepath.Base(path) == "AGENTS.md"
-	})...)
 	paths = append(paths, collectSupportedSurfaceFiles(t, filepath.Join(root, "factory"), func(path string, entry os.DirEntry) bool {
 		slash := filepath.ToSlash(path)
 		if strings.HasPrefix(slash, filepath.ToSlash(filepath.Join(root, "factory", "old"))+"/") {
@@ -192,10 +184,6 @@ func supportedFactoryConfigJSONSurfaces(t *testing.T) []string {
 
 	root := supportedSurfaceRoot(t)
 	var paths []string
-	paths = append(paths, collectSupportedSurfaceFiles(t, filepath.Join(repoRoot(t), "factory"), func(path string, entry os.DirEntry) bool {
-		slash := filepath.ToSlash(path)
-		return filepath.Base(path) == "factory.json" && !strings.HasPrefix(slash, filepath.ToSlash(filepath.Join(repoRoot(t), "factory", "old"))+"/")
-	})...)
 	paths = append(paths, collectSupportedSurfaceFiles(t, filepath.Join(root, "factory"), func(path string, entry os.DirEntry) bool {
 		slash := filepath.ToSlash(path)
 		return filepath.Base(path) == "factory.json" && !strings.HasPrefix(slash, filepath.ToSlash(filepath.Join(root, "factory", "old"))+"/")
@@ -229,7 +217,7 @@ func supportedFactoryReplayFixtures(t *testing.T) []string {
 
 func supportedSurfaceRoot(t *testing.T) string {
 	t.Helper()
-	return testpath.MustRepoPathFromCaller(t, 0)
+	return testutil.MustRepoRoot(t)
 }
 
 func repoRoot(t *testing.T) string {

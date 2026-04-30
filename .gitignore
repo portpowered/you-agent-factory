@@ -9,4 +9,16 @@ storybook-static/
 *.exe
 
 tasks/todo
-factory/inputs
+factory/inputs/**
+!factory/inputs/idea/
+!factory/inputs/idea/default/
+!factory/inputs/idea/default/.gitkeep
+!factory/inputs/plan/
+!factory/inputs/plan/default/
+!factory/inputs/plan/default/.gitkeep
+!factory/inputs/task/
+!factory/inputs/task/default/
+!factory/inputs/task/default/.gitkeep
+!factory/inputs/thoughts/
+!factory/inputs/thoughts/default/
+!factory/inputs/thoughts/default/.gitkeep

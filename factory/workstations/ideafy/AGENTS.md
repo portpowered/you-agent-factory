@@ -21,9 +21,9 @@ what we want you to do is come up with a batch request that properly orders the 
 For example, we want to implement interface changes before logical changes, as logical changes will be interrupted by the interface changes. 
 We want changes that are touching the same rough spots of structures to not overlap so as to prevent rework. 
 
-please read the C:\Users\andre\work\portos\portos-backend\libraries\agent-factory\docs\guides\batch-inputs.md for instructions on how batching works. 
+please read docs/guides/batch-inputs.md for instructions on how batching works. 
 
-after you've come up with a rough idea batch JSON, create the temp file in a temp directory, then copy it over to portos-backend/factory/inputs/idea/default/
+after you've come up with a rough idea batch JSON, create the temp file in a temp directory, then copy it into factory/inputs/idea/default/
 
 please come up with useful names for the work such that it is easily identifiable when enumerating the active set of work. 
 

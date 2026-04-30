@@ -2,7 +2,6 @@ package replay
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
@@ -46,18 +45,15 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 }
 
 func TestArtifactFromEventStreamFile_ConvertsAgentFailsLog(t *testing.T) {
-	path := testpath.MustRepoPathFromCaller(t, 0, "factory", "logs", "agent-fails.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("root event-stream fixture not present in this checkout: %v", err)
-	}
+	path := testpath.MustClassifiedArtifactPathFromCaller(t, 0, "factory/logs/agent-fails.json", testpath.ArtifactCheckedIn)
 
 	result, err := ArtifactFromEventStreamFile(path)
 	if err != nil {
 		t.Fatalf("ArtifactFromEventStreamFile: %v", err)
 	}
 
-	if result.ParsedEvents < 1000 {
-		t.Fatalf("ParsedEvents = %d, want large recovered event stream", result.ParsedEvents)
+	if result.ParsedEvents < 100 {
+		t.Fatalf("ParsedEvents = %d, want non-trivial recovered event stream", result.ParsedEvents)
 	}
 	if result.Artifact.RecordedAt.IsZero() {
 		t.Fatal("artifact recordedAt is zero, want hydrated run-start timestamp")

@@ -47,6 +47,8 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make release-surface-smoke` is the standalone-release readiness check for customer-facing cleanup work. It reruns the product-agnostic functional smoke suite against the package README, checked-in starter, shipped examples and sample payloads, verifies generated `agent-factory init` output stays neutral, and finishes with `go run ./cmd/publicsurfacecheck` so release-facing Port OS coupling cannot silently return.
 
+`make artifact-contract-closeout` is the root factory artifact contract closeout for this cleanup lane. Use it after touching the root starter inventory, release-surface smoke coverage, or the targeted `pkg/api`, `pkg/config`, `pkg/replay`, `tests/adhoc`, and `tests/functional_test` contract tests. It first proves the checked-in inventory doc still matches the enforced classifications, then reruns `make release-surface-smoke`, and finally reruns the targeted package bundle that stabilized this repository contract.
+
 Use `make ui-storybook` followed by `make ui-test-storybook` when dashboard Storybook stories, play functions, runtime mocks, or the package-local Storybook runner change. `ui-storybook` builds `ui/storybook-static`; `ui-test-storybook` serves that static build on the dashboard-owned runner port and executes the dashboard Storybook interaction tests through the UI package's `test-storybook` script.
 
 ## API Contract Generation
@@ -209,6 +211,8 @@ behavior explicit inside the test that needs it.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
 - Runtime log files are service-owned. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
+- Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
+- Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/api`, `pkg/config`, or `pkg/replay` behavior tests.
 - Provider-error and lane-isolation smoke tests should use `pkg/testutil` harness helpers instead of open-coded fixture scaffolding and polling loops.
 - Shared Codex, Cursor-family, and Claude provider-failure fixtures live in `pkg/workers/testdata/provider_error_corpus.json`; extend that corpus and load it through `workers.LoadProviderErrorCorpus()` before adding new inline raw provider payloads to worker or functional tests.
 - Shared provider-error smoke scenarios should assert `CompletedDispatch.ProviderFailure` type and family from the corpus entry they use, so normalization and runtime routing stay aligned through the full worker-pool path instead of only through final token placement.
@@ -268,6 +272,7 @@ The config validator checks workstation scheduling values against a known set of
 - [Live Dashboard](live-dashboard.md)
 - [Record and Replay](record-replay.md)
 - [Provider Error Corpus Audit](provider-error-corpus-audit.md)
+- [Root Factory Artifact Contract Inventory](root-factory-artifact-contract-inventory.md)
 - [Port OS Reference Inventory](portos-reference-inventory.md)
 - [Dashboard UI Workflow Baseline](development/dashboard-ui-workflow-baseline.md)
 - [Dashboard UI Bun Validation](development/dashboard-ui-bun-validation.md)
