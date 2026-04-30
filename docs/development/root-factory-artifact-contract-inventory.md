@@ -34,6 +34,9 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/inputs/thoughts/default/.gitkeep` | `checked_in` | Tracked sentinel that keeps the canonical thought inbox present in clean checkouts. |
 | `factory/logs/agent-fails.json` | `checked_in` | Event-stream sample for replay artifact conversion coverage. |
 | `factory/logs/agent-fails.replay.json` | `checked_in` | Replay artifact sample paired with `agent-fails.json`. |
+| `factory/logs/meta/asks.md` | `checked_in` | Checked-in meta ask surface for the repository-maintainer cleanup loop. |
+| `factory/logs/meta/progress.tsx` | `checked_in` | Checked-in meta progress surface used by the repository-maintainer cleanup loop. |
+| `factory/logs/meta/view.md` | `checked_in` | Checked-in meta world-view surface used by the repository-maintainer cleanup loop. |
 | `tests/adhoc/factory-recording-04-11-02.json` | `checked_in` | Canonical replay fixture used by adhoc and replay package tests. |
 | `tests/adhoc/factory/README.md` | `checked_in` | Checked-in adhoc fixture doc. |
 | `tests/adhoc/factory/factory.json` | `checked_in` | Checked-in adhoc fixture config. |
