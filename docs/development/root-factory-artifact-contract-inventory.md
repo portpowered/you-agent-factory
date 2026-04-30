@@ -35,6 +35,7 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/logs/agent-fails.json` | `checked_in` | Event-stream sample for replay artifact conversion coverage. |
 | `factory/logs/agent-fails.replay.json` | `checked_in` | Replay artifact sample paired with `agent-fails.json`. |
 | `factory/logs/meta/asks.md` | `checked_in` | Checked-in meta ask surface for the repository-maintainer cleanup loop. |
+| `factory/meta/asks.md` | `checked_in` | Redirect-only legacy stub that points maintainers back to `factory/logs/meta/asks.md` so a second live ask backlog cannot drift. |
 | `factory/logs/meta/progress.tsx` | `checked_in` | Checked-in meta progress surface used by the repository-maintainer cleanup loop. |
 | `factory/logs/meta/view.md` | `checked_in` | Checked-in meta world-view surface used by the repository-maintainer cleanup loop. |
 | `tests/adhoc/factory-recording-04-11-02.json` | `checked_in` | Canonical replay fixture used by adhoc and replay package tests. |

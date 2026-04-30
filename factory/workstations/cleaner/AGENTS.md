@@ -8,6 +8,10 @@ Your job is to periodically inspect the repository and:
 2. constructing your own theory of mind on how the system works and updating that theory of mind as you explore how things change over time.
 3. handling customer asks at `factory/logs/meta/asks.md`
 
+`factory/logs/meta/asks.md` is the only live checked-in customer-ask backlog.
+If you encounter `factory/meta/asks.md`, treat it as a redirect-only legacy
+stub and do not read or edit it as a second backlog surface.
+
 # Steps
 ## step 0 - update the repo
 run git pull and make the workspace be up to date to remote

@@ -111,6 +111,11 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Checked-in meta ask surface used by the repository-maintainer cleanup loop.",
 	},
 	{
+		Path:           "factory/meta/asks.md",
+		Classification: ArtifactCheckedIn,
+		Reason:         "Redirect-only legacy stub that points maintainers back to the canonical checked-in meta ask surface.",
+	},
+	{
 		Path:           "factory/logs/meta/progress.tsx",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in meta progress surface used by the repository-maintainer cleanup loop.",
