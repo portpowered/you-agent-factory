@@ -2,12 +2,10 @@ package replay
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 )
 
@@ -47,7 +45,7 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 }
 
 func TestArtifactFromEventStreamFile_ConvertsAgentFailsLog(t *testing.T) {
-	path := mustRepoPath(t, "factory/logs/agent-fails.json")
+	path := testpath.MustClassifiedArtifactPathFromCaller(t, 0, "factory/logs/agent-fails.json", testpath.ArtifactCheckedIn)
 
 	result, err := ArtifactFromEventStreamFile(path)
 	if err != nil {
@@ -65,27 +63,6 @@ func TestArtifactFromEventStreamFile_ConvertsAgentFailsLog(t *testing.T) {
 	}
 	if guards := generatedWorkstationGuardsByName(t, result.Artifact.Factory, "executor-loop-breaker"); len(guards) != 1 {
 		t.Fatalf("executor-loop-breaker guards = %#v, want hydrated visit-count guard", guards)
-	}
-}
-
-func mustRepoPath(t *testing.T, rel string) string {
-	t.Helper()
-
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot determine replay test file path")
-	}
-
-	current := filepath.Dir(thisFile)
-	for {
-		if info, err := os.Stat(filepath.Join(current, "go.mod")); err == nil && !info.IsDir() {
-			return filepath.Join(current, filepath.FromSlash(rel))
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			t.Fatalf("could not find repo root from %s", thisFile)
-		}
-		current = parent
 	}
 }
 
