@@ -26,3 +26,18 @@ func TestShouldSkipRelativeDir_KeepsVisibleDirectoriesUnlessExplicitlySkipped(t 
 		t.Fatal("pkg/api/generated should be skipped when the caller opts in")
 	}
 }
+
+func TestShouldSkipDir_AppliesSharedPolicyFromWalkPaths(t *testing.T) {
+	t.Parallel()
+
+	root := `C:\repo`
+	if !ShouldSkipDir(root, `C:\repo\.claude`) {
+		t.Fatal(`expected hidden metadata directory ".claude" to be skipped`)
+	}
+	if !ShouldSkipDir(root, `C:\repo\pkg\api\generated`, "pkg/api/generated") {
+		t.Fatal(`expected explicit generated directory exception to be skipped`)
+	}
+	if ShouldSkipDir(root, `C:\repo\pkg\api`) {
+		t.Fatal(`expected visible package directory to remain scannable`)
+	}
+}
