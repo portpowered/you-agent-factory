@@ -317,13 +317,14 @@ Create the planning artifacts in the current working directory:
 3. "progress.txt" — initialize it with a "## Codebase Patterns" section for future iterations.
 
 Requirements for "prd.json":
+- include "branchName" with a deterministic, branch-safe name for the planned work
 - capture the project description, requested changes, and customer intent from the request
 - include prioritized user stories with stable IDs, clear titles, acceptance criteria, notes, and "passes: false" until completed
 - keep the structure aligned with "prd.md" so the execution loop can trust either artifact
 - keep names and wording product-neutral unless the request explicitly names a product
 
 Requirements for "prd.md":
-- describe the same scope, priorities, and acceptance criteria as "prd.json"
+- describe the same branch, scope, priorities, and acceptance criteria as "prd.json"
 - explain the work in customer-facing language
 - do not introduce reviewer, ideation, or cron stages that are outside this scaffold
 

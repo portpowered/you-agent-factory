@@ -36,22 +36,29 @@ type ralphInitSmokeRunner struct {
 	executorCalls        int
 	executorStoryWorkID  string
 	executorSawArtifacts bool
+	executorPRDHistory   []ralphInitSmokePRD
+	executorResponses    []string
 	workstationSequence  []string
 	internalErrors       []string
 }
 
 type ralphInitSmokePRD struct {
-	Project     string                    `json:"project"`
-	Description string                    `json:"description"`
-	UserStories []ralphInitSmokeUserStory `json:"userStories"`
+	Project          string                    `json:"project"`
+	BranchName       string                    `json:"branchName"`
+	Description      string                    `json:"description"`
+	RequestedChanges []string                  `json:"requestedChanges"`
+	CustomerIntent   string                    `json:"customerIntent"`
+	UserStories      []ralphInitSmokeUserStory `json:"userStories"`
 }
 
 type ralphInitSmokeUserStory struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Priority    int    `json:"priority"`
-	Passes      bool   `json:"passes"`
-	Description string `json:"description"`
+	ID                 string   `json:"id"`
+	Title              string   `json:"title"`
+	Priority           int      `json:"priority"`
+	Passes             bool     `json:"passes"`
+	Description        string   `json:"description"`
+	AcceptanceCriteria []string `json:"acceptanceCriteria"`
+	Notes              []string `json:"notes"`
 }
 
 func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing.T) {
@@ -86,11 +93,49 @@ func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing
 	if got := runner.ExecutorCalls(); got != 2 {
 		t.Fatalf("executor calls = %d, want 2", got)
 	}
+	history := runner.ExecutorPRDHistory()
+	if len(history) != 2 {
+		t.Fatalf("executor PRD history length = %d, want 2", len(history))
+	}
+	if got := highestPriorityIncompleteStoryID(history[0]); got != "US-001" {
+		t.Fatalf("first execute call highest-priority incomplete story = %q, want %q", got, "US-001")
+	}
+	if got := highestPriorityIncompleteStoryID(history[1]); got != "US-002" {
+		t.Fatalf("second execute call highest-priority incomplete story = %q, want %q", got, "US-002")
+	}
+	if history[0].UserStories[0].Passes || history[0].UserStories[1].Passes {
+		t.Fatalf("first execute call should start with both stories incomplete: %#v", history[0].UserStories)
+	}
+	if !history[1].UserStories[0].Passes || history[1].UserStories[1].Passes {
+		t.Fatalf("second execute call should see only the first story completed: %#v", history[1].UserStories)
+	}
+	responses := runner.ExecutorResponses()
+	if len(responses) != 2 {
+		t.Fatalf("executor response count = %d, want 2", len(responses))
+	}
+	if responses[0] != "completed top priority story\n<CONTINUE>" {
+		t.Fatalf("first execute response = %q, want continue after one story", responses[0])
+	}
+	if responses[1] != "all stories complete\n<COMPLETE>" {
+		t.Fatalf("second execute response = %q, want complete after final story", responses[1])
+	}
 
 	prd := loadRalphInitSmokePRD(t, dir)
+	if prd.BranchName != "ralph/document-processing-service" {
+		t.Fatalf("branchName = %q, want %q", prd.BranchName, "ralph/document-processing-service")
+	}
+	if len(prd.RequestedChanges) == 0 {
+		t.Fatal("requestedChanges should not be empty")
+	}
+	if prd.CustomerIntent == "" {
+		t.Fatal("customerIntent should not be empty")
+	}
 	for _, story := range prd.UserStories {
 		if !story.Passes {
 			t.Fatalf("story %s remains incomplete in final prd.json: %#v", story.ID, prd.UserStories)
+		}
+		if len(story.AcceptanceCriteria) == 0 {
+			t.Fatalf("story %s missing acceptance criteria: %#v", story.ID, story)
 		}
 	}
 }
@@ -197,7 +242,10 @@ func (r *ralphInitSmokeRunner) Run(_ context.Context, req workers.CommandRequest
 		} else {
 			r.executorSawArtifacts = true
 		}
-		return r.executeResult(workDir, prd), nil
+		r.executorPRDHistory = append(r.executorPRDHistory, cloneRalphInitSmokePRD(prd))
+		result := r.executeResult(workDir, prd)
+		r.executorResponses = append(r.executorResponses, string(result.Stdout))
+		return result, nil
 	default:
 		r.recordError("unexpected workstation %q", req.WorkstationName)
 		return workers.CommandResult{Stdout: []byte("<COMPLETE>")}, nil
@@ -317,10 +365,32 @@ func (r *ralphInitSmokeRunner) WorkstationSequence() []string {
 	return sequence
 }
 
+func (r *ralphInitSmokeRunner) ExecutorPRDHistory() []ralphInitSmokePRD {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	history := make([]ralphInitSmokePRD, len(r.executorPRDHistory))
+	for i, prd := range r.executorPRDHistory {
+		history[i] = cloneRalphInitSmokePRD(prd)
+	}
+	return history
+}
+
+func (r *ralphInitSmokeRunner) ExecutorResponses() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	responses := make([]string, len(r.executorResponses))
+	copy(responses, r.executorResponses)
+	return responses
+}
+
 func plannedRalphInitSmokePRD() ralphInitSmokePRD {
 	return ralphInitSmokePRD{
-		Project:     "Document Processing Service",
-		Description: "Minimal PRD-to-execution loop smoke fixture.",
+		Project:          "Document Processing Service",
+		BranchName:       "ralph/document-processing-service",
+		Description:      "Minimal PRD-to-execution loop smoke fixture.",
+		RequestedChanges: []string{"Turn incoming requests into planning artifacts.", "Iterate one story at a time until the plan is complete."},
+		CustomerIntent:   "Create a minimal, product-neutral release-planning loop that converts a request into aligned execution artifacts.",
 		UserStories: []ralphInitSmokeUserStory{
 			{
 				ID:          "US-001",
@@ -328,6 +398,13 @@ func plannedRalphInitSmokePRD() ralphInitSmokePRD {
 				Priority:    1,
 				Passes:      false,
 				Description: "Turn incoming requests into planning artifacts.",
+				AcceptanceCriteria: []string{
+					"plan-request writes prd.md, prd.json, and progress.txt in the working directory.",
+					"prd.json includes branchName, requestedChanges, customerIntent, and the initial incomplete story list.",
+				},
+				Notes: []string{
+					"Keep the generated plan product-neutral unless the request names a specific product.",
+				},
 			},
 			{
 				ID:          "US-002",
@@ -335,6 +412,13 @@ func plannedRalphInitSmokePRD() ralphInitSmokePRD {
 				Priority:    2,
 				Passes:      false,
 				Description: "Iterate the executor until the PRD completes.",
+				AcceptanceCriteria: []string{
+					"execute-story completes only the highest-priority incomplete story in each iteration.",
+					"The executor returns <COMPLETE> only after every story in prd.json passes.",
+				},
+				Notes: []string{
+					"Keep prd.md, prd.json, and progress.txt aligned with completed work.",
+				},
 			},
 		},
 	}
@@ -347,9 +431,13 @@ func writeRalphInitSmokeArtifacts(rootDir string, prd ralphInitSmokePRD) error {
 	}
 
 	prdMD := fmt.Sprintf(
-		"# %s\n\n%s\n\n## User Stories\n- [%s] %s\n- [%s] %s\n",
+		"# %s\n\nBranch: `%s`\n\n%s\n\n## Requested Changes\n- %s\n- %s\n\n## Customer Intent\n%s\n\n## User Stories\n- [%s] %s\n- [%s] %s\n",
 		prd.Project,
+		prd.BranchName,
 		prd.Description,
+		prd.RequestedChanges[0],
+		prd.RequestedChanges[1],
+		prd.CustomerIntent,
 		passMarker(prd.UserStories[0].Passes),
 		prd.UserStories[0].Title,
 		passMarker(prd.UserStories[1].Passes),
@@ -390,6 +478,44 @@ func loadRalphInitSmokePRDFromPath(path string) (ralphInitSmokePRD, error) {
 		return ralphInitSmokePRD{}, fmt.Errorf("unmarshal %s: %w", path, err)
 	}
 	return prd, nil
+}
+
+func cloneRalphInitSmokePRD(prd ralphInitSmokePRD) ralphInitSmokePRD {
+	cloned := ralphInitSmokePRD{
+		Project:          prd.Project,
+		BranchName:       prd.BranchName,
+		Description:      prd.Description,
+		RequestedChanges: append([]string(nil), prd.RequestedChanges...),
+		CustomerIntent:   prd.CustomerIntent,
+		UserStories:      make([]ralphInitSmokeUserStory, len(prd.UserStories)),
+	}
+	for i, story := range prd.UserStories {
+		cloned.UserStories[i] = ralphInitSmokeUserStory{
+			ID:                 story.ID,
+			Title:              story.Title,
+			Priority:           story.Priority,
+			Passes:             story.Passes,
+			Description:        story.Description,
+			AcceptanceCriteria: append([]string(nil), story.AcceptanceCriteria...),
+			Notes:              append([]string(nil), story.Notes...),
+		}
+	}
+	return cloned
+}
+
+func highestPriorityIncompleteStoryID(prd ralphInitSmokePRD) string {
+	bestPriority := int(^uint(0) >> 1)
+	bestID := ""
+	for _, story := range prd.UserStories {
+		if story.Passes {
+			continue
+		}
+		if story.Priority < bestPriority {
+			bestPriority = story.Priority
+			bestID = story.ID
+		}
+	}
+	return bestID
 }
 
 func passMarker(passes bool) string {
