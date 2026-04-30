@@ -131,6 +131,35 @@ func runtimeBaseDir(v interface{ RuntimeBaseDir() string }) string {
 	)
 }
 
+func TestRuntimeLookupContractGuard_SkipsGeneratedApiOutputButScansHandwrittenPackages(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeRuntimeLookupGuardFixture(t, root, "api/generated/runtime_lookup.go", `package generated
+
+type GeneratedLookup interface {
+	RuntimeBaseDir() string
+}
+`)
+	writeRuntimeLookupGuardFixture(t, root, "workers/runtime_lookup.go", `package workers
+
+type RuntimeExecutionLookup interface {
+	RuntimeBaseDir() string
+}
+`)
+
+	violations, err := scanRuntimeLookupContractViolations(root)
+	if err != nil {
+		t.Fatalf("scan temp runtime lookup ownership: %v", err)
+	}
+
+	assertRuntimeLookupViolationKinds(
+		t,
+		violations,
+		[]string{"workers/runtime_lookup.go:unapproved RuntimeBaseDir interface owner"},
+	)
+}
+
 func scanRuntimeLookupContractViolations(root string) ([]runtimeLookupContractViolation, error) {
 	root = filepath.Clean(root)
 
