@@ -34,3 +34,16 @@ hardening targets explicit before changing skip policy.
   targets generated output.
 - The repository-root `pkg/petri` walker preserves its existing UI build-output
   skips while adding the same hidden-directory policy used by the `pkg/` scans.
+
+## Operator Contract
+
+- Treat repository-root paths as canonical for this checkout. Run guard
+  commands from the repository root and scope broad handwritten-source sweeps to
+  live surfaces such as `pkg/`, `docs/`, `factory/`, and
+  `tests/functional_test/`.
+- Use this inventory as the checked-in cleanup reference for active broad
+  walker scope, hidden-directory policy, and generated-output exclusions before
+  changing any `pkg/*_contract_guard_test.go` scan roots.
+- References to `libraries/agent-factory` in archival reports, replay
+  artifacts, or historical notes are preserved evidence from older layouts, not
+  the live operator contract for this repository.

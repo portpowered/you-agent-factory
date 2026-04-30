@@ -171,7 +171,7 @@ func TestFactoryWorldContractGuard_RetiredCanonicalMirrorNamesStayOutOfPkgGoFile
 			return readErr
 		}
 		if match := matcher.FindString(string(data)); match != "" {
-			t.Fatalf("%s still contains retired mirror name %q; equivalent rg guard is `rg -n %q libraries/agent-factory/pkg -g \"*.go\"` and should only hit approved guard notes", rel, match, strings.Join(names, "|"))
+			t.Fatalf("%s still contains retired mirror name %q; equivalent rg guard is `rg -n %q pkg -g \"*.go\"` from the repository root and should only hit approved guard notes", rel, match, strings.Join(names, "|"))
 		}
 		return nil
 	})
