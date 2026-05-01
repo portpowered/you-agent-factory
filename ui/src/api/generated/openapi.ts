@@ -1060,7 +1060,7 @@ export interface components {
          * @description Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
          * @enum {string}
          */
-        WorkstationGuardType: "VISIT_COUNT";
+        WorkstationGuardType: "VISIT_COUNT" | "MATCHES_FIELDS";
         /** @description Guard attached to a workstation as a whole before it is allowed to consume work. */
         WorkstationGuard: {
             /** @description Guard condition to evaluate before this workstation is allowed to run. */
@@ -1069,6 +1069,12 @@ export interface components {
             workstation?: string;
             /** @description For `VISIT_COUNT` guards, the visit threshold. */
             maxVisits?: number;
+            /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
+            matchConfig?: components["schemas"]["WorkstationGuardMatchConfig"];
+        };
+        WorkstationGuardMatchConfig: {
+            /** @description Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`. */
+            inputKey: string;
         };
         /** @description One authored work-state reference consumed or emitted by a workstation. */
         WorkstationIO: {
