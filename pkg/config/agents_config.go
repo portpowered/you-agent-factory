@@ -135,8 +135,8 @@ func normalizeWorkstationPublicEnums(cfg *interfaces.FactoryWorkstationConfig) {
 		return
 	}
 	if cfg.Kind != "" {
-		kind := factoryapi.WorkstationKind(cfg.Kind)
-		cfg.Kind = internalFactoryWorkstationKindFromPublic(&kind)
+		behavior := factoryapi.WorkstationKind(cfg.Kind)
+		cfg.Kind = internalFactoryWorkstationKindFromPublic(&behavior)
 	}
 	for i := range cfg.Guards {
 		cfg.Guards[i].Type = internalFactoryWorkstationGuardTypeFromPublic(factoryapi.WorkstationGuardType(cfg.Guards[i].Type))
@@ -210,6 +210,7 @@ func rejectRetiredWorkerFrontmatterAliases(frontmatter map[string]any) error {
 
 func rejectRetiredWorkstationFrontmatterAliases(frontmatter map[string]any) error {
 	if err := rejectRetiredBoundaryFields(frontmatter, "frontmatter", []retiredBoundaryField{
+		{key: "kind", replacement: "use behavior"},
 		{key: "runtimeType", replacement: "use type"},
 		{key: "runtime_type", replacement: "use type"},
 		{key: "prompt_file", replacement: "use promptFile"},

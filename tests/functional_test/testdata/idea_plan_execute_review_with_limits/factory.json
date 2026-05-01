@@ -186,7 +186,7 @@
           "workType": "task"
         }
       ],
-      "kind": "repeater",
+      "behavior": "repeater",
       "name": "process",
       "onFailure": {
         "state": "failed",

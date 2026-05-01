@@ -316,7 +316,7 @@ func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFact
 		"workstations": []map[string]any{{
 			"id":        "execute-story-id",
 			"name":      "execute-story",
-			"kind":      string(interfaces.WorkstationKindStandard),
+			"behavior":  string(interfaces.WorkstationKindStandard),
 			"worker":    "executor",
 			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
@@ -439,7 +439,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t 
 		"workstations": []map[string]any{{
 			"id":      "retry-story-id",
 			"name":    "retry-story",
-			"kind":    "repeater",
+			"behavior": "repeater",
 			"worker":  "executor",
 			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
@@ -470,8 +470,8 @@ Retry the work.
 	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
 		t.Fatalf("generated workstations = %#v, want one", generated.Workstations)
 	}
-	if (*generated.Workstations)[0].Kind == nil || *(*generated.Workstations)[0].Kind != factoryapi.WorkstationKindRepeater {
-		t.Fatalf("generated workstation kind = %#v, want REPEATER", (*generated.Workstations)[0].Kind)
+	if (*generated.Workstations)[0].Behavior == nil || *(*generated.Workstations)[0].Behavior != factoryapi.WorkstationKindRepeater {
+		t.Fatalf("generated workstation behavior = %#v, want REPEATER", (*generated.Workstations)[0].Behavior)
 	}
 
 	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)

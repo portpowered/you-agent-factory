@@ -136,7 +136,7 @@
           "workType": "story"
         }
       ],
-      "kind": "repeater",
+      "behavior": "repeater",
       "name": "execute-story",
       "onFailure": {
         "state": "failed",

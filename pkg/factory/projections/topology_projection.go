@@ -159,7 +159,7 @@ func workstationConfig(transition *petri.Transition, runtimeConfig interfaces.Ru
 	configValues := make(map[string]string)
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil {
 		addStringValue(configValues, "configured_worker", workstation.WorkerTypeName)
-		addStringValue(configValues, "kind", string(workstation.Kind))
+		addStringValue(configValues, "behavior", string(workstation.Kind))
 		addStringValue(configValues, "worktree", workstation.Worktree)
 		addStringValue(configValues, "working_directory", workstation.WorkingDirectory)
 		addStringValue(configValues, "type", workstation.Type)

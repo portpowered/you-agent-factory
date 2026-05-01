@@ -41,7 +41,7 @@ func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 				"workstations": []map[string]any{
 					{
 						"name":   "scheduled-story",
-						"kind":   "cron",
+						"behavior": "cron",
 						"worker": "executor",
 						"cron": map[string]any{
 							"schedule":         "*/5 * * * *",

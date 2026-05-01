@@ -80,12 +80,12 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	workstationKind := factoryapi.WorkstationKindCron
 	workstationRuntimeType := factoryapi.WorkstationTypeModelWorkstation
 	workstation := factoryapi.Workstation{
-		Name:    "daily-refresh",
-		Kind:    &workstationKind,
-		Type:    &workstationRuntimeType,
-		Worker:  "agent",
-		Inputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-		Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+		Name:     "daily-refresh",
+		Behavior: &workstationKind,
+		Type:     &workstationRuntimeType,
+		Worker:   "agent",
+		Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
+		Outputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 	workRequest := factoryapi.WorkRequest{
 		RequestId:              requestID,
@@ -105,7 +105,7 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 		Schedule:       "*/5 * * * *",
 		TriggerAtStart: &triggerAtStart,
 	}
-	if submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Kind == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
 	if submitRequest.CurrentChainingTraceId == nil || *submitRequest.CurrentChainingTraceId != "chain-submit-1" {

@@ -216,7 +216,7 @@ The executor keeps those artifacts aligned and returns ` + "`<COMPLETE>`" + ` on
     },
     {
       "name": "execute-story",
-      "kind": "repeater",
+      "behavior": "repeater",
       "worker": "executor",
       "workingDirectory": ".",
       "inputs": [{ "workType": "story", "state": "init" }],

@@ -235,7 +235,7 @@
                   "workType": "task"
                 }
               ],
-              "kind": "REPEATER",
+              "behavior": "REPEATER",
               "name": "process",
               "onContinue": {
                 "state": "init",
@@ -2832,4 +2832,3 @@
   "recordedAt": "2026-04-11T18:07:31.1189093Z",
   "schemaVersion": "agent-factory.replay.v1"
 }
-

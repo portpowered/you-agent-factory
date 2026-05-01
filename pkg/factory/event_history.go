@@ -535,7 +535,7 @@ func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places 
 			OnFailure:   generatedWorkstationIOPtr(workstation.FailurePlaceIDs, placesByID),
 		}
 		if workstation.Kind != "" {
-			converted.Kind = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
+			converted.Behavior = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
 		}
 		out = append(out, converted)
 	}

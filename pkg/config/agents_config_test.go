@@ -354,7 +354,7 @@ Aggregation point. Collects completed work items.
 func TestLoadWorkstationConfig_NormalizesCanonicalPublicEnums(t *testing.T) {
 	dir := t.TempDir()
 	agentsMD := `---
-kind: CRON
+behavior: CRON
 type: MODEL_WORKSTATION
 worker: swe
 guards:

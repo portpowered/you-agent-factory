@@ -329,7 +329,7 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 
 	wantConfig := map[string]string{
 		"configured_worker": "builder",
-		"kind":              string(interfaces.WorkstationKindCron),
+		"behavior":          string(interfaces.WorkstationKindCron),
 		"output_schema":     "schema.json",
 		"prompt_file":       "prompt.md",
 		"type":              interfaces.WorkstationTypeModel,

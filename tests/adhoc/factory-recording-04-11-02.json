@@ -225,7 +225,7 @@
                   "workType": "task"
                 }
               ],
-              "kind": "repeater",
+              "behavior": "repeater",
               "limits": {},
               "name": "process",
               "onFailure": {

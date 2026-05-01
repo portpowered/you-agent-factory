@@ -236,7 +236,7 @@
                   "workType": "task"
                 }
               ],
-              "kind": "REPEATER",
+              "behavior": "REPEATER",
               "name": "process",
               "onContinue": {
                 "state": "init",

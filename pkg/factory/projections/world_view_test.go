@@ -1237,7 +1237,7 @@ func systemTimeInitialStructureEvent(eventTime time.Time) factoryapi.FactoryEven
 				{
 					Id:      stringPtrForProjectionTest("daily-refresh"),
 					Name:    "Daily refresh",
-					Kind:    workstationKindPtrForWorldViewTest(factoryapi.WorkstationKindCron),
+					Behavior: workstationKindPtrForWorldViewTest(factoryapi.WorkstationKindCron),
 					Worker:  "refresh-worker",
 					Inputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}, {WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
 					Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "done"}},

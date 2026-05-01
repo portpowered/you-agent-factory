@@ -1519,7 +1519,7 @@ components:
             model: claude-sonnet-4-20250514
         workstations:
           - name: review-story
-            kind: REPEATER
+            behavior: REPEATER
             type: MODEL_WORKSTATION
             worker: reviewer
             inputs:
@@ -1845,7 +1845,7 @@ components:
         name:
           type: string
           description: Customer-authored workstation name used by guards, diagnostics, and authored references.
-        kind:
+        behavior:
           $ref: '#/components/schemas/WorkstationKind'
           description: Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
         type:
@@ -1871,7 +1871,7 @@ components:
           description: Inline Go template rendered into the prompt for model-oriented workstation execution.
         cron:
           $ref: '#/components/schemas/WorkstationCron'
-          description: Cron trigger configuration for workstations whose kind is cron.
+          description: Cron trigger configuration for workstations whose behavior is CRON.
         inputs:
           type: array
           description: Work states this workstation can consume before it dispatches.

@@ -77,7 +77,7 @@
     },
     {
       "name": "process",
-      "kind": "repeater",
+      "behavior": "repeater",
       "worker": "processor",
       "inputs":  [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "in-review" }],

@@ -377,7 +377,7 @@ function workstationRejectionIO(
 }
 
 function workstationSchedulingKind(workstation: FactoryWorkstation): string | undefined {
-  return workstation.kind ?? workstation.type;
+  return workstation.behavior ?? workstation.type;
 }
 
 function workerModelProvider(worker: FactoryWorker | undefined): string | undefined {

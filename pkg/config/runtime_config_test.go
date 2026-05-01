@@ -36,7 +36,7 @@ func TestLoadRuntimeConfig_LoadsEffectiveRuntimeConfig(t *testing.T) {
 			{
 				"id":      "execute-story",
 				"name":    "execute-story",
-				"kind":    "repeater",
+				"behavior": "repeater",
 				"worker":  "executor",
 				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
@@ -536,7 +536,7 @@ func TestLoadRuntimeConfig_LoadsCronWorkstationConfig(t *testing.T) {
 			{
 				"id":     "daily-refresh",
 				"name":   "daily-refresh",
-				"kind":   "cron",
+				"behavior": "cron",
 				"worker": "cron-worker",
 				"cron": map[string]any{
 					"schedule":       "*/5 * * * *",
@@ -604,7 +604,7 @@ func TestLoadRuntimeConfig_DecodesOmittedTriggerAtStartAsFalse(t *testing.T) {
 		"workstations": []map[string]any{
 			{
 				"name":    "daily-refresh",
-				"kind":    "cron",
+				"behavior": "cron",
 				"worker":  "cron-worker",
 				"cron":    map[string]string{"schedule": "0 * * * *"},
 				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
@@ -651,7 +651,7 @@ func TestLoadRuntimeConfig_RejectsRetiredLegacyAliasesAtGeneratedBoundary(t *tes
 		"workstations": []map[string]any{
 			{
 				"name":   "scheduled-story",
-				"kind":   "cron",
+				"behavior": "cron",
 				"worker": "executor",
 				"cron": map[string]any{
 					"schedule":         "*/5 * * * *",
@@ -816,7 +816,7 @@ func TestLoadRuntimeConfig_RejectsRetiredCronIntervalAtGeneratedBoundary(t *test
 		"workstations": []map[string]any{
 			{
 				"name":    "daily-refresh",
-				"kind":    "cron",
+				"behavior": "cron",
 				"worker":  "executor",
 				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
 				"cron":    map[string]any{"interval": "5m"},
@@ -979,7 +979,7 @@ func TestLoadRuntimeConfig_NormalizesInlineWorkstationRuntimeFieldsIntoCanonical
 			{
 				"id":               "execute-story-id",
 				"name":             "execute-story",
-				"kind":             "standard",
+				"behavior":         "standard",
 				"worker":           "executor",
 				"inputs":           []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs":          []map[string]string{{"workType": "story", "state": "complete"}},
@@ -1191,7 +1191,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 			{
 				"id":     "execute-story-id",
 				"name":   "execute-story",
-				"kind":   "cron",
+				"behavior": "cron",
 				"worker": "executor",
 				"cron":   map[string]any{"schedule": "*/5 * * * *", "triggerAtStart": true, "jitter": "5s", "expiryWindow": "45s"},
 				"inputs": []map[string]any{

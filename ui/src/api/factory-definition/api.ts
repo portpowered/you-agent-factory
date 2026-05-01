@@ -42,7 +42,10 @@ const WORKER_MODEL_PROVIDER_ALIASES: Record<
 const WORKER_PROVIDER_ALIASES: Record<string, NonNullable<FactoryWorker["executorProvider"]>> = {
   SCRIPT_WRAP: "SCRIPT_WRAP",
 };
-const WORKSTATION_KIND_ALIASES: Record<string, NonNullable<FactoryWorkstation["kind"]>> = {
+const WORKSTATION_BEHAVIOR_ALIASES: Record<
+  string,
+  NonNullable<FactoryWorkstation["behavior"]>
+> = {
   CRON: "CRON",
   REPEATER: "REPEATER",
   STANDARD: "STANDARD",
@@ -89,7 +92,7 @@ const WORKSTATION_KEYS = new Set([
   "guards",
   "id",
   "inputs",
-  "kind",
+  "behavior",
   "limits",
   "name",
   "onFailure",
@@ -134,7 +137,9 @@ const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelPro
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
   "SCRIPT_WRAP",
 ]);
-const WORKSTATION_KIND_VALUES = new Set<NonNullable<FactoryWorkstation["kind"]>>([
+const WORKSTATION_BEHAVIOR_VALUES = new Set<
+  NonNullable<FactoryWorkstation["behavior"]>
+>([
   "CRON",
   "REPEATER",
   "STANDARD",
@@ -240,7 +245,7 @@ function canonicalizeWorkstation(workstation: unknown): Record<string, unknown> 
     working_directory: "workingDirectory",
   });
   normalizeLegacyWorkstationTypeFields(normalizedWorkstation);
-  canonicalizeEnumValue(normalizedWorkstation, "kind", WORKSTATION_KIND_ALIASES);
+  canonicalizeEnumValue(normalizedWorkstation, "behavior", WORKSTATION_BEHAVIOR_ALIASES);
   normalizeWorkstationRuntimeTypeField(normalizedWorkstation);
   normalizeLegacyWorkstationStopAliases(normalizedWorkstation);
   normalizeLegacyWorkstationTimeoutAlias(normalizedWorkstation);
@@ -389,16 +394,16 @@ function mergeDefinitionFields(container: Record<string, unknown>): Record<strin
 }
 
 function normalizeLegacyWorkstationTypeFields(workstation: Record<string, unknown>): void {
-  if (workstation.kind !== undefined || typeof workstation.type !== "string") {
+  if (workstation.behavior !== undefined || typeof workstation.type !== "string") {
     return;
   }
 
-  const workstationKind = WORKSTATION_KIND_ALIASES[workstation.type];
-  if (workstationKind === undefined) {
+  const workstationBehavior = WORKSTATION_BEHAVIOR_ALIASES[workstation.type];
+  if (workstationBehavior === undefined) {
     return;
   }
 
-  workstation.kind = workstationKind;
+  workstation.behavior = workstationBehavior;
   delete workstation.type;
 }
 
@@ -672,7 +677,7 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
     worker: readRequiredString(record, "worker", path),
   };
   const id = readOptionalString(record, "id", path);
-  const kind = readOptionalEnum(record, "kind", path, WORKSTATION_KIND_VALUES);
+  const behavior = readOptionalEnum(record, "behavior", path, WORKSTATION_BEHAVIOR_VALUES);
   const type = readOptionalEnum(record, "type", path, WORKSTATION_TYPE_VALUES);
   const promptFile = readOptionalString(record, "promptFile", path);
   const outputSchema = readOptionalString(record, "outputSchema", path);
@@ -693,8 +698,8 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   if (id !== undefined) {
     workstation.id = id;
   }
-  if (kind !== undefined) {
-    workstation.kind = kind;
+  if (behavior !== undefined) {
+    workstation.behavior = behavior;
   }
   if (type !== undefined) {
     workstation.type = type;

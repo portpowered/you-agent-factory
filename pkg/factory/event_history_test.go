@@ -79,16 +79,16 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 		t.Fatalf("workstations = %#v, want one generated workstation", payload.Factory.Workstations)
 	}
 	workstation := (*payload.Factory.Workstations)[0]
-	if workstation.Kind == nil || *workstation.Kind != factoryapi.WorkstationKindRepeater {
-		t.Fatalf("workstation kind = %#v, want REPEATER", workstation.Kind)
+	if workstation.Behavior == nil || *workstation.Behavior != factoryapi.WorkstationKindRepeater {
+		t.Fatalf("workstation behavior = %#v, want REPEATER", workstation.Behavior)
 	}
 
 	data, err := json.Marshal(events[0])
 	if err != nil {
 		t.Fatalf("marshal initial structure event: %v", err)
 	}
-	if !strings.Contains(string(data), `"kind":"REPEATER"`) {
-		t.Fatalf("initial structure event JSON = %s, want canonical uppercase workstation kind", data)
+	if !strings.Contains(string(data), `"behavior":"REPEATER"`) {
+		t.Fatalf("initial structure event JSON = %s, want canonical uppercase workstation behavior", data)
 	}
 }
 

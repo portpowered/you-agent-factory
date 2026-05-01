@@ -341,7 +341,7 @@ func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 		"workstations": [{
 			"id":"execute-story-id",
 			"name":"execute-story",
-			"kind":"REPEATER",
+			"behavior":"REPEATER",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
 			"promptTemplate":"Finish {{ .WorkID }}.",
@@ -442,7 +442,7 @@ func TestLoad_RunStartedFactoryBoundaryRejectsRetiredCronIntervalField(t *testin
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"cron",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}

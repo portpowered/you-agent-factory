@@ -104,7 +104,7 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 		"workstations": [{
 			"id":"execute-story-id",
 			"name":"execute-story",
-			"kind":"CRON",
+			"behavior":"CRON",
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}],
@@ -176,7 +176,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredExhaustionRulesWithMigrationGui
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"execute-story",
-			"kind":"repeater",
+			"behavior":"repeater",
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"init"}]
@@ -265,7 +265,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 		"workstations": [{
 			"id":"execute-story-id",
 			"name":"execute-story",
-			"kind":"CRON",
+			"behavior":"CRON",
 			"type":"MODEL_WORKSTATION",
 			"worker":"executor",
 			"promptFile":"prompt.md",
@@ -389,7 +389,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredNestedWorkstationCronAliases(t 
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"cron",
 			"worker":"executor",
 			"definition":{
 				"cron":{"trigger_at_start":true}
@@ -535,7 +535,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredCronIntervalField(t *testing.T)
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"cron",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}
@@ -992,7 +992,7 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"cron",
 			"type":"MODEL_WORKSTATION",
 			"worker":"executor",
 			"inputs":[{"workType":"task","state":"ready"}],

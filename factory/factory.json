@@ -95,7 +95,7 @@
     },
     {
       "name": "process",
-      "kind": "REPEATER",
+      "behavior": "REPEATER",
       "worker": "processor",
       "inputs":  [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "in-review" }],
@@ -119,7 +119,7 @@
     },
     {
       "name": "cleaner",
-      "kind": "CRON",
+      "behavior": "CRON",
       "worker": "processor",
       "resources": [{ "name": "executor-slot", "capacity": 1 }],
       "outputs": [{ "workType": "cron-triggers", "state": "complete" }],

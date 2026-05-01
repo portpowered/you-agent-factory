@@ -38,7 +38,7 @@
           "workType": "story"
         }
       ],
-      "kind": "repeater",
+      "behavior": "repeater",
       "name": "executor",
       "onFailure": {
         "state": "failed",

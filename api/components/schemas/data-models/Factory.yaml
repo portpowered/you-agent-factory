@@ -63,7 +63,7 @@ example:
       model: claude-sonnet-4-20250514
   workstations:
     - name: review-story
-      kind: REPEATER
+      behavior: REPEATER
       type: MODEL_WORKSTATION
       worker: reviewer
       inputs:

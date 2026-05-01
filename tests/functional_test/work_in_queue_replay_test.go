@@ -275,7 +275,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 			},
 			{
 				"name":      "zzz-cron-initial",
-				"kind":      "cron",
+				"behavior":  "cron",
 				"worker":    "cron-worker",
 				"cron":      map[string]string{"schedule": "0 * * * *", "expiryWindow": "2h"},
 				"inputs":    []map[string]string{{"workType": "scheduled", "state": "init"}},

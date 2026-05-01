@@ -89,14 +89,14 @@ func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBound
 			value:     `unsupported value "Claude"`,
 		},
 		{
-			name: "rejects undocumented workstation kind",
+			name: "rejects undocumented workstation behavior",
 			payload: strings.Replace(
 				factoryConfigSmokeCanonicalJSON(),
-				`"kind":"CRON"`,
-				`"kind":"SCHEDULED"`,
+				`"behavior":"CRON"`,
+				`"behavior":"SCHEDULED"`,
 				1,
 			),
-			fieldPath: "workstations[0].kind",
+			fieldPath: "workstations[0].behavior",
 			value:     `unsupported value "SCHEDULED"`,
 		},
 	}
@@ -352,6 +352,7 @@ func assertFactoryConfigJSONUsesCanonicalPublicKeys(t *testing.T, data []byte) {
 		`"resource-usage"`,
 		`"runtimeStopWords"`,
 		`"stop_words"`,
+		`"kind"`,
 		`"max_execution_time"`,
 		`"working_directory"`,
 		`"trigger_at_start"`,
@@ -378,6 +379,7 @@ func assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys(t *testing.T, 
 		`"work_types"`,
 		`"work_type"`,
 		`"on_failure"`,
+		`"kind"`,
 		`"stop_token"`,
 		`"prompt_template"`,
 		`"runtime_type"`,
@@ -473,7 +475,7 @@ func assertFactoryConfigSmokeDescriptions(t *testing.T, factory *openapi3.Schema
 	}
 
 	assertOpenAPI3Description(t, "Workstation", workstation.Description)
-	for _, propertyName := range []string{"kind", "type", "worker", "limits", "inputs", "guards", "resources", "stopWords", "cron"} {
+	for _, propertyName := range []string{"behavior", "type", "worker", "limits", "inputs", "guards", "resources", "stopWords", "cron"} {
 		assertOpenAPI3PropertyDescription(t, workstation, "Workstation", propertyName)
 	}
 	workstationIO := assertOpenAPI3ArrayPropertyDescription(t, workstation, "Workstation", "inputs")
@@ -513,7 +515,7 @@ func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 	assertSchemaPropertyRef(t, schemas, "Worker", "type", "#/components/schemas/WorkerType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "executorProvider", "#/components/schemas/WorkerProvider")
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelProvider", "#/components/schemas/WorkerModelProvider")
-	assertSchemaPropertyRef(t, schemas, "Workstation", "kind", "#/components/schemas/WorkstationKind")
+	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
 	assertSchemaPropertyRef(t, schemas, "WorkstationGuard", "type", "#/components/schemas/WorkstationGuardType")
 	assertSchemaPropertyRef(t, schemas, "InputGuard", "type", "#/components/schemas/InputGuardType")
@@ -536,8 +538,8 @@ func assertFactoryConfigSmokeGeneratedBoundary(t *testing.T, factory factoryapi.
 		t.Fatalf("generated boundary workstations = %#v, want at least one workstation", factory.Workstations)
 	}
 	firstWorkstation := (*factory.Workstations)[0]
-	if firstWorkstation.Kind == nil || *firstWorkstation.Kind != factoryapi.WorkstationKindCron {
-		t.Fatalf("generated boundary workstation kind = %#v, want CRON", firstWorkstation.Kind)
+	if firstWorkstation.Behavior == nil || *firstWorkstation.Behavior != factoryapi.WorkstationKindCron {
+		t.Fatalf("generated boundary workstation behavior = %#v, want CRON", firstWorkstation.Behavior)
 	}
 	if firstWorkstation.Type == nil || *firstWorkstation.Type != factoryapi.WorkstationTypeModelWorkstation {
 		t.Fatalf("generated boundary workstation type = %#v, want MODEL_WORKSTATION", firstWorkstation.Type)
@@ -601,7 +603,7 @@ func factoryConfigSmokeCanonicalJSON() string {
   "workstations": [{
     "id":"execute-story-id",
     "name":"execute-story",
-    "kind":"CRON",
+    "behavior":"CRON",
     "type":"MODEL_WORKSTATION",
     "worker":"executor",
     "promptFile":"prompt.md",

@@ -222,7 +222,7 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 			continue
 		}
 		mergeInlineDefinitionFields(workstation)
-		if err := normalizeFactoryEnumObjectField(workstation, "kind", fmt.Sprintf("workstations[%d].kind", i), publicFactoryWorkstationKindAliases); err != nil {
+		if err := normalizeFactoryEnumObjectField(workstation, "behavior", fmt.Sprintf("workstations[%d].behavior", i), publicFactoryWorkstationKindAliases); err != nil {
 			return err
 		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {

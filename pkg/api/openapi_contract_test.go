@@ -317,7 +317,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.Workstation.properties is missing")
 	}
-	assertPropertyRef(t, workstationProperties, "kind", "#/components/schemas/WorkstationKind")
+	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
 	if _, ok := workstationProperties["timeout"]; ok {
 		t.Fatalf("components.schemas.Workstation.properties.timeout must not be advertised")
@@ -463,7 +463,7 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 	}
 
 	assertOpenAPI3Description(t, "Workstation", workstation.Description)
-	for _, propertyName := range []string{"name", "kind", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
+	for _, propertyName := range []string{"name", "behavior", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstation, "Workstation", propertyName)
 	}
 	workstationLimits := assertOpenAPI3RefPropertyDescription(t, workstation, "Workstation", "limits")
@@ -1506,7 +1506,7 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 			"workstations": []any{map[string]any{
 				"name":           "execute",
 				"worker":         "executor",
-				"kind":           "STANDARD",
+				"behavior":       "STANDARD",
 				"type":           "MODEL_WORKSTATION",
 				"promptFile":     "prompt.md",
 				"promptTemplate": "Finish {{ .WorkID }}",

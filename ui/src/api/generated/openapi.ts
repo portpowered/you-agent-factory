@@ -737,7 +737,7 @@ export interface components {
          *       "workstations": [
          *         {
          *           "name": "review-story",
-         *           "kind": "REPEATER",
+         *           "behavior": "REPEATER",
          *           "type": "MODEL_WORKSTATION",
          *           "worker": "reviewer",
          *           "inputs": [
@@ -936,7 +936,7 @@ export interface components {
             /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
             name: string;
             /** @description Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution. */
-            kind?: components["schemas"]["WorkstationKind"];
+            behavior?: components["schemas"]["WorkstationKind"];
             /** @description Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type. */
             type?: components["schemas"]["WorkstationType"];
             /** @description Name of a worker declared in the workers list. */
@@ -951,7 +951,7 @@ export interface components {
             body?: string;
             /** @description Inline Go template rendered into the prompt for model-oriented workstation execution. */
             promptTemplate?: string;
-            /** @description Cron trigger configuration for workstations whose kind is cron. */
+            /** @description Cron trigger configuration for workstations whose behavior is CRON. */
             cron?: components["schemas"]["WorkstationCron"];
             /** @description Work states this workstation can consume before it dispatches. */
             inputs: components["schemas"]["WorkstationIO"][];

@@ -48,7 +48,7 @@
           "workType": "story"
         }
       ],
-      "kind": "repeater",
+      "behavior": "repeater",
       "name": "execute-story",
       "onFailure": {
         "state": "failed",
@@ -81,7 +81,7 @@
           "workType": "story"
         }
       ],
-      "kind": "standard",
+      "behavior": "standard",
       "name": "review-story",
       "onFailure": {
         "state": "failed",

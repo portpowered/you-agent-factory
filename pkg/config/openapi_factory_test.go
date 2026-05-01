@@ -21,7 +21,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 		"workstations": [{
 			"id":"finish-chapter-id",
 			"name":"finish-chapter",
-			"kind":"STANDARD",
+			"behavior":"STANDARD",
 			"worker":"executor",
 			"type":"LOGICAL_MOVE",
 			"promptTemplate":"Finish {{ .WorkID }}.",
@@ -82,7 +82,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 		"workstations": [{
 			"id":"finish-chapter-id",
 			"name":"finish-chapter",
-			"kind":"REPEATER",
+			"behavior":"REPEATER",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
 			"promptTemplate":"Finish {{ .WorkID }}.",
@@ -310,7 +310,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredCronIntervalFieldAtBounda
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"cron",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}
@@ -415,7 +415,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 		}],
 		"workstations": [{
 			"name":"execute-story",
-			"kind":"STANDARD",
+			"behavior":"STANDARD",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
 			"inputs":[{"workType":"story","state":"init"}],
@@ -549,7 +549,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 				"workers": [{"name":"executor"}],
 				"workstations": [{
 					"name":"scheduled-story",
-					"kind":"CRON",
+					"behavior":"CRON",
 					"worker":"executor",
 					"outputs":[{"workType":"story","state":"complete"}],
 					"cron":{"schedule":"*/5 * * * *","trigger_at_start":true}
@@ -565,7 +565,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 				"workers": [{"name":"executor"}],
 				"workstations": [{
 					"name":"scheduled-story",
-					"kind":"STANDARD",
+					"behavior":"STANDARD",
 					"worker":"executor",
 					"inputs":[{"workType":"story","state":"ready"}],
 					"outputs":[{"workType":"story","state":"complete"}],

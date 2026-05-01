@@ -53,6 +53,7 @@ var retiredWorkerBoundaryFields = []retiredBoundaryField{
 }
 
 var retiredWorkstationBoundaryFields = []retiredBoundaryField{
+	{key: "kind", replacement: "use behavior"},
 	{key: "runtimeType", replacement: "use type"},
 	{key: "runtime_type", replacement: "use type"},
 	{key: "resourceUsage", replacement: "use resources"},
@@ -595,8 +596,8 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if workstation.Type != nil {
 		cfg.Type = internalFactoryWorkstationTypeFromPublic(workstation.Type)
 	}
-	if workstation.Kind != nil {
-		cfg.Kind = internalFactoryWorkstationKindFromPublic(workstation.Kind)
+	if workstation.Behavior != nil {
+		cfg.Kind = internalFactoryWorkstationKindFromPublic(workstation.Behavior)
 	}
 	return cfg, nil
 }
@@ -748,8 +749,8 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		apiWorkstation.Id = stringPtr(normalized.ID)
 	}
 	if normalized.Kind != "" {
-		kind := publicFactoryWorkstationKindFromInternal(normalized.Kind)
-		apiWorkstation.Kind = &kind
+		behavior := publicFactoryWorkstationKindFromInternal(normalized.Kind)
+		apiWorkstation.Behavior = &behavior
 	}
 	if normalized.WorkingDirectory != "" {
 		apiWorkstation.WorkingDirectory = stringPtr(normalized.WorkingDirectory)

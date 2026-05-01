@@ -1055,6 +1055,9 @@ type WorkerType string
 
 // Workstation A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
 type Workstation struct {
+	// Behavior Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+	Behavior *WorkstationKind `json:"behavior,omitempty"`
+
 	// Body Inline workstation instructions or script body when authored directly in factory config.
 	Body *string `json:"body,omitempty"`
 
@@ -1073,9 +1076,6 @@ type Workstation struct {
 
 	// Inputs Work states this workstation can consume before it dispatches.
 	Inputs []WorkstationIO `json:"inputs"`
-
-	// Kind Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
-	Kind *WorkstationKind `json:"kind,omitempty"`
 
 	// Limits Retry and execution ceilings applied to one workstation definition.
 	Limits *WorkstationLimits `json:"limits,omitempty"`

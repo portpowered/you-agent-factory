@@ -1010,7 +1010,7 @@ type workerFrontmatter struct {
 type workstationFrontmatter struct {
 	ID               string                       `yaml:"id,omitempty"`
 	Name             string                       `yaml:"name,omitempty"`
-	Kind             interfaces.WorkstationKind   `yaml:"kind,omitempty"`
+	Kind             interfaces.WorkstationKind   `yaml:"behavior,omitempty"`
 	Type             string                       `yaml:"type,omitempty"`
 	Worker           string                       `yaml:"worker,omitempty"`
 	PromptFile       string                       `yaml:"promptFile,omitempty"`

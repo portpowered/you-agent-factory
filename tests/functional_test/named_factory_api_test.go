@@ -163,7 +163,7 @@ func functionalNamedFactoryPayloadJSON(project, workType string) string {
 		}],
 		"workstations":[{
 			"name":"plan-task",
-			"kind":"STANDARD",
+			"behavior":"STANDARD",
 			"type":"MODEL_WORKSTATION",
 			"worker":"planner",
 			"inputs":[{"workType":"` + workType + `","state":"init"}],
