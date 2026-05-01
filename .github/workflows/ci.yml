@@ -40,3 +40,38 @@ jobs:
       - name: Run dashboard typecheck
         working-directory: ui
         run: bun run tsc
+
+  verify-build-contracts:
+    name: Build, Lint, and API
+    runs-on: ubuntu-latest
+    needs: typecheck
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dashboard dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
+
+      - name: Build backend binary
+        run: make build
+
+      - name: Build embedded dashboard assets
+        run: make ui-build
+
+      - name: Run repository lint surface
+        run: make lint
+
+      - name: Run API contract smoke checks
+        run: make api-smoke
