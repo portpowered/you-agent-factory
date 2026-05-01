@@ -16,6 +16,7 @@ This inventory records the checked-in files and directories that the maintainer 
 | `docs/development/openapi-schema-standardization-inventory.md` | OpenAPI cleanup inventory | Records the authored fragment layout, remaining inline schemas, and the canonical bundle and generation verification surfaces for schema-standardization work. |
 | `docs/development/root-factory-artifact-contract-inventory.md` | Root artifact contract inventory doc | The checked-in root artifact table must stay in lockstep with the enforced entries in `internal/testpath/artifact_contract.go`. |
 | `docs/development/development.md` | Active maintainer guide | Must describe the real repository-root layout used in this checkout and avoid stale `libraries/agent-factory` instructions. |
+| `docs/guides/cli-release-policy.md` | Maintainer CLI release policy | Documents the tag-on-`main` release model, semver tag trigger policy, and the operator release flow that future release automation must implement. |
 | `.github/workflows/ci.yml` | Repository CI contract | Contributor docs should name this workflow and mirror its root-level validation commands and stated non-deployment scope. |
 | `internal/testpath/artifact_contract.go` | Enforced root artifact contract | Root-level factory artifact additions, removals, and redirect stubs are test-enforced here and must stay synchronized with the inventory doc. |
 | `factory/` | Maintainer workflow surface | Contains checked-in operator guidance and active inbox directories that the development guide may reference for workflow-related tasks. |
@@ -41,6 +42,7 @@ This inventory records the checked-in files and directories that the maintainer 
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
 - When contributor docs mention the repository CI workflow, mirror the exact root-level command sequence and its stated scope from `.github/workflows/ci.yml` so local reproduction and review expectations do not drift.
+- When the repository adds or changes release automation, keep the workflow trigger model and maintainer commands aligned with `docs/guides/cli-release-policy.md` so tags, documentation, and GitHub Actions do not describe conflicting release paths.
 - When UI assets are committed for Go embedding, keep the build pipeline responsible for normalizing output filenames and refreshing any cache-busting stamp files instead of hand-editing `ui/dist/`.
 - When browser-backed UI replay tests and replay coverage reports share the same scenarios, keep that metadata in one repository-owned catalog so the tests, scripts, and docs cannot silently drift.
 - When GitHub Actions uses `actions/setup-go` against a module that declares a newer `toolchain` than its base `go` version, prefer uncached setup unless you have verified that cache restore does not collide with the auto-downloaded toolchain files in later jobs.

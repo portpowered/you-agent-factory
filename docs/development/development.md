@@ -51,6 +51,8 @@ make ui-test-storybook
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
 
+The maintainer-owned CLI release policy lives in [CLI release policy](../guides/cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
+
 The workflow currently executes these repository-owned commands in order:
 
 1. `cd ui && bun install --frozen-lockfile`
@@ -278,6 +280,7 @@ The config validator checks workstation scheduling values against a known set of
 
 ## Related Docs
 
+- [CLI release policy](../guides/cli-release-policy.md)
 - [Agent Factory README](../../README.md)
 - [Internal Architecture](architecture.md)
 - [API Inventory](api-inventory.md)
