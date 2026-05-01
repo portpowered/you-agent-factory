@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -1209,6 +1210,9 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	name, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if fs.runtimeCfg != nil && sameFactoryDir(fs.runtimeCfg.FactoryDir(), rootDir) {
+				return fs.serializeCurrentNamedFactory(apisurface.DefaultCurrentFactoryName, fs.runtimeCfg)
+			}
 			return factoryapi.NamedFactory{}, ErrCurrentNamedFactoryNotFound
 		}
 		return factoryapi.NamedFactory{}, fmt.Errorf("read current factory pointer: %w", err)
@@ -1226,6 +1230,13 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 		return factoryapi.NamedFactory{}, fmt.Errorf("load current named factory %q: %w", name, err)
 	}
 
+	return fs.serializeCurrentNamedFactory(factoryapi.FactoryName(name), current)
+}
+
+func (fs *FactoryService) serializeCurrentNamedFactory(
+	name factoryapi.FactoryName,
+	current *factoryconfig.LoadedFactoryConfig,
+) (factoryapi.NamedFactory, error) {
 	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
 		current.FactoryDir(),
 		current.FactoryConfig(),
@@ -1237,9 +1248,16 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 		return factoryapi.NamedFactory{}, fmt.Errorf("serialize current named factory: %w", err)
 	}
 	return factoryapi.NamedFactory{
-		Name:    factoryapi.FactoryName(name),
+		Name:    name,
 		Factory: generatedFactory,
 	}, nil
+}
+
+func sameFactoryDir(left, right string) bool {
+	if strings.TrimSpace(left) == "" || strings.TrimSpace(right) == "" {
+		return false
+	}
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 // Pause pauses the current runtime instance.

@@ -37,3 +37,8 @@ var ErrInvalidNamedFactory = errors.New("invalid named factory")
 // ErrCurrentNamedFactoryNotFound reports that no durable current-factory
 // pointer could be resolved for named-factory readback.
 var ErrCurrentNamedFactoryNotFound = errors.New("current named factory not found")
+
+// DefaultCurrentFactoryName is the reserved current-factory identifier used
+// when the active runtime is the root factory and no named-factory pointer
+// exists.
+const DefaultCurrentFactoryName factoryapi.FactoryName = "UNDEFINED"

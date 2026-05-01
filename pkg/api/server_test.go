@@ -365,6 +365,37 @@ func TestGetCurrentFactory_ReturnsNamedFactoryShape(t *testing.T) {
 	}
 }
 
+func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
+	mf := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.NamedFactory{
+			Name: apisurface.DefaultCurrentFactoryName,
+			Factory: factoryapi.Factory{
+				Project: stringPointerForAPITest("root-runtime"),
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var current factoryapi.NamedFactory
+	if err := json.NewDecoder(rec.Body).Decode(&current); err != nil {
+		t.Fatalf("decode current factory response: %v", err)
+	}
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if current.Factory.Project == nil || *current.Factory.Project != "root-runtime" {
+		t.Fatalf("current factory project = %#v, want root-runtime", current.Factory.Project)
+	}
+}
+
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CreateNamedFactoryErr: factoryconfig.ErrNamedFactoryAlreadyExists,
