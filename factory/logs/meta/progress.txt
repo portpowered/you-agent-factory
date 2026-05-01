@@ -29,6 +29,10 @@
   inference/recording event payload assembly paths; small boundary-event helper
   duplication can span those sibling files even when the behavior is already
   test-covered.
+- When a package-local cleanup candidate looks safe, verify the exact live PR
+  file sets again after any sidecar exploration; open lanes can advance during
+  the same maintainer pass and make an initially valid idea stale before it is
+  queued.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -657,3 +661,38 @@
   `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
   as the next narrow lane instead of re-queuing the already-open dashboard or
   `syncDispatch` cleanups.
+
+## 2026-05-01 15:03 -07:00 - meta refresh after main advanced to replay and runtime-support lanes
+
+- Ran `git pull --ff-only` and verified the workspace synced on `main` at
+  `7aa73c7`, with `origin/main` at the same commit before this meta update.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, local
+  ignored workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described upstream `HEAD` as `8c84704`
+  - it still treated PRs `#35` and `#36` as open even though both are now
+    merged
+  - it did not include newly open PRs `#37`, `#38`, `#39`, and `#40`
+  - it still treated the worker exit-code dedupe as the next lane even though
+    PR `#40` is now open for that exact seam
+- Used sidecar repository-inspection agents plus direct file-set validation to
+  avoid re-queuing stale work and identify one new narrow cleanup candidate
+  outside the active PR surfaces:
+  - `pkg/replay/event_artifact.go` owns both `mergeGeneratedWorkers` and
+    `mergeGeneratedWorkstations`
+  - both helpers repeat the same copy-index-sort-merge structure for generated
+    replay factory slices
+  - the seam stays internal to replay assembly and does not require public
+    contract changes
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/dedupe-replay-factory-merge-helpers.md` as the
+  next narrow lane instead of colliding with open PRs `#40`, `#39`, `#38`,
+  `#37`, `#33`, and `#30`.
+- Updated `factory/logs/meta/view.md` to reflect the new upstream baseline, the
+  current merged/open PR state, the narrowed blocker set, and the revised
+  next-lane recommendation.

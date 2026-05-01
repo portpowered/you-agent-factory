@@ -2,8 +2,8 @@
 
 ## world state
 
-- repository `HEAD` is `8c84704` on `main` on May 1, 2026, and
-  `origin/main` is the same commit after `git pull`
+- after `git pull --ff-only`, repository `main` and `origin/main` were both at
+  `7aa73c7` on May 1, 2026 before this meta refresh commit
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -18,6 +18,7 @@
   not checked-in workflow truth:
   - `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
   - `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+  - `factory/inputs/idea/default/dedupe-replay-factory-merge-helpers.md`
   - `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
   - `factory/inputs/idea/default/derive-throttle-windows-from-completed-dispatch-history.md`
   - `factory/inputs/idea/default/derive-throttle-windows-from-event-history.md`
@@ -28,10 +29,14 @@
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
   - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
 - the current GitHub lane state on May 1, 2026 is:
-  - open PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
-  - open PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
+  - open PR `#40` `dedupe-worker-event-exit-code-extraction`
+  - open PR `#39` `chaining-trace-ids`
+  - open PR `#38` `prd-current-factory-default-runtime-support`
+  - open PR `#37` `prd-cli-consumer-installation`
   - open PR `#33` `prd-api-model-contract-cleanup`
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
+  - merged PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
   - merged PR `#34` `dedupe-list-work-legacy-pagination-fallback`
   - merged PR `#32` `shadcn-components-for-website`
   - merged PR `#31` `derive-throttle-windows-from-completed-dispatch-history`
@@ -58,50 +63,50 @@
     runtime pause map and still gates scheduling by dispatcher-owned state
   - the ask for config-authored `factory.guards` with
     `INFERENCE_THROTTLE_GUARD` is still not implemented on `main`
-- the release-pipeline lane is fully landed on `main`, and the small `/work`
-  pagination cleanup lane is now landed too:
-  - PR `#29` added `.goreleaser.yml`, release workflows, release smoke
-    commands, and release smoke fixtures
-  - PR `#34` removed the duplicate tolerant `maxResults` fallback from
-    `pkg/api/handlers.go` while preserving the handwritten `/work`
-    compatibility wrapper in `pkg/api/server.go`
-- the public/model cleanup and website quality asks are now actively in flight
-  through open/just-landed lanes:
-  - PR `#33` is the current broad API model contract lane and already reaches
-    `api/`, `pkg/config/`, `pkg/interfaces/`, `pkg/api/`, docs, examples,
-    replay fixtures, and generated artifacts
-  - PR `#32` just landed the current website component/system lane and reaches
-    shared UI primitives, feature components, stories, tests, styles, and
-    built assets
-- the last queued narrow cleanup seams are no longer just candidates:
-  - PR `#35` now owns the dashboard-only fallback-collector simplification in
-    `pkg/cli/dashboard/dashboard.go`
-  - PR `#36` now owns the `pkg/factory/runtime/dispatch_result_hook.go`
-    `syncDispatch` cache retirement
+- the public/model and runtime-support asks are now consuming most shared
+  boundary surfaces:
+  - PR `#33` reaches `api/`, `pkg/config/`, `pkg/interfaces/`, docs,
+    examples, replay fixtures, and generated artifacts
+  - PR `#38` widens the active lane into named-factory API, generated client,
+    service, and functional-test surfaces
+  - PR `#37` is broad enough to occupy release, CLI, config, factory,
+    projection, and many contract-test file sets at once
+- the previously queued narrow cleanup seams have advanced again:
+  - PR `#35` is merged, so the dashboard-only fallback-collector
+    simplification is complete on `main`
+  - PR `#36` is merged, so the `pkg/factory/runtime/dispatch_result_hook.go`
+    `syncDispatch` cache retirement is complete on `main`
+  - PR `#40` is now open for the worker event `ExitCode` extraction cleanup,
+    so that lane is no longer available for re-queueing
 - one newer narrow cleanup seam is queueable outside the active PR file sets:
-  - `pkg/workers/script.go` and `pkg/workers/recording_provider.go` each own a
-    small helper that derives emitted event `ExitCode` values from command
-    diagnostics
-  - `scriptResponseExitCode` and `providerErrorExitCode` are package-local,
-    single-caller helpers for the same boundary-event concern
-  - nearby focused worker tests already assert exit-code behavior, so this seam
-    is low-risk and does not need public contract changes
+  - `pkg/replay/event_artifact.go` owns both `mergeGeneratedWorkers` and
+    `mergeGeneratedWorkstations`
+  - both helpers perform the same copy-index-sort-merge flow over generated
+    replay factory slices, varying only by concrete type and conversion helper
+  - this duplication is internal replay assembly logic, so it is a behavior-safe
+    simplification candidate that does not require public contract changes
 
 ## current blockers
 
 1. the broad `INFERENCE_THROTTLE_GUARD` customer ask still spans config shape,
    guard lowering, scheduler ownership, and observability, so it is too large
    for a safe single lane
-2. open PRs `#33`, `#30`, `#35`, and `#36` now occupy most of the active
-   public-contract, functional-test, dashboard, and dispatch-hook file sets
-3. the previous checked-in world model was stale in three important ways:
-   - it still described `HEAD` as `24a6463`
-   - it still omitted newly open PRs `#35` and `#36`
-   - it still recommended the dashboard fallback cleanup as the next lane even
+2. open PRs `#40`, `#39`, `#38`, `#37`, `#33`, and `#30` now occupy most of
+   the active worker-event, replay-trace, runtime-support, release/CLI/config,
+   public-contract, and functional-test file sets
+3. the previous checked-in world model was stale in four important ways:
+   - it still described upstream `HEAD` as `8c84704`
+   - it did not include newly merged PRs `#35` and `#36`
+   - it did not include newly open PRs `#37`, `#38`, `#39`, and `#40`
+   - it still recommended the worker exit-code cleanup as the next lane even
      though that lane is already in review
-4. the broad public/model ask is active in PR `#33`, so the next cleanup lane
-   should avoid `pkg/api/`, `pkg/config/`, `pkg/interfaces/`, and nearby
-   public-contract surfaces until that lane settles
+4. the broad public/model ask is active in PR `#33`, and the broad
+   runtime-support lane is active in PR `#38`, so the next cleanup lane should
+   avoid `pkg/api/`, `pkg/config/`, `pkg/interfaces/`, `pkg/service/`, and
+   nearby public-contract surfaces until those lanes settle
+5. PR `#37` is unusually wide for a nominally focused lane, so any new cleanup
+   candidate must be validated against exact changed-file ownership rather than
+   package intuition alone
 
 ## theory of mind
 
@@ -112,35 +117,35 @@
 - the highest-value live customer problem is still global throttling, but the
   remaining gap is now clearly on the public/config/lowering side rather than
   on throttle timing reconstruction
-- because PR `#33` is a wide public-model lane and PR `#30` is a wide
-  functional-test restructuring lane, new follow-up work should avoid those
+- because PRs `#33`, `#38`, and especially `#37` are wide lanes, new
+  follow-up work should avoid public boundaries and shared runtime/config
   surfaces rather than trying to parallelize into them
 - the website-quality lane advanced materially with merged PR `#32`, so the
   next cleanup task no longer needs to spend the one available sidecar slot on
   shared-component cleanup
-- because PRs `#35` and `#36` now occupy the last two narrow local cleanup
-  seams already identified, the next sidecar task should move to another
-  package-local duplication site instead of piling onto those live branches
-- the best available cleanup work right now is a narrow `pkg/workers` event
-  emission dedupe that consolidates exit-code extraction ownership without
-  changing public contracts or runtime scheduling behavior
-- a sidecar candidate that looks package-local can still collide with an open
-  umbrella PR, so file-set checks must include all active PRs before queuing
-  new work
+- because PR `#40` already picked up the worker event-emission dedupe seam, the
+  next sidecar task must move again instead of re-queueing stale local residue
+- the best available cleanup work right now is a narrow replay-internal dedupe
+  in `pkg/replay/event_artifact.go` that consolidates duplicate generated
+  factory merge helper ownership without changing public contracts or replay
+  payload shape
+- a sidecar candidate that looked valid at the start of the pass can become
+  stale during the same pass, so the exact open PR file sets should be
+  revalidated after sidecar exploration and before queuing new work
 
 ## next best move
 
 - update the checked-in meta world model and progress log now
 - leave `factory/logs/meta/asks.md` unchanged; the priority order is still
   correct
-- queue one new ignored cleanup idea for worker event emission:
-  preserve current emitted script/inference response payloads, but consolidate
-  duplicate `ExitCode` extraction ownership across `pkg/workers/script.go` and
-  `pkg/workers/recording_provider.go`
-- keep the already-open dashboard and `syncDispatch` lanes as active local
-  context rather than re-queueing them
+- queue one new ignored cleanup idea for replay artifact assembly:
+  preserve current replay factory payload behavior, but consolidate duplicate
+  merge-helper ownership across `mergeGeneratedWorkers` and
+  `mergeGeneratedWorkstations` in `pkg/replay/event_artifact.go`
+- keep the already-open worker exit-code, chaining-trace, runtime-support, and
+  public-model lanes as active local context rather than re-queueing them
 - avoid re-queuing already-landed lanes and avoid colliding with open PRs
-  `#33`, `#30`, `#35`, and `#36`
+  `#40`, `#39`, `#38`, `#37`, `#33`, and `#30`
 
 ## customer asks
 
@@ -152,4 +157,4 @@
   and freshly merged lanes, but they remain broader than the current narrow
   cleanup queue
 - the next throttle follow-up should stay decomposed and should not overlap the
-  already-open public-model contract lane
+  already-open public-model, runtime-support, or release/CLI umbrella lanes
