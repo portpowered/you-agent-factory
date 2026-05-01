@@ -39,6 +39,19 @@ No approved archival surface was required because the solved request markdown is
 already absent from the live inboxes, and both canonical sentinels remain
 present and unchanged.
 
+## Scope Guard
+
+The review diff for this branch remains limited to:
+
+- this verification note, which records the landed-state proof and the
+  no-archival outcome for the cited inbox files
+- `docs/processes/factory-workstation-relevant-files.md`, which captures the
+  reusable inbox contract discovered during verification
+
+No product code, workflow execution logic, backlog content, or new cleanup
+lanes were added. The branch therefore stays within the stated inbox-hygiene
+scope and does not mix this cleanup lane with unrelated repository work.
+
 ## Validation
 
 Commands used during verification:
@@ -50,4 +63,5 @@ gh pr view 11 --json number,title,state,mergedAt,files,url
 gh pr view 4 --json number,title,state,headRefName,commits,files,url
 git log --oneline ralph/standardize-contract-guard-skip-policy..main
 Get-ChildItem factory/inputs/idea/default,factory/inputs/task/default -Force
+git diff --stat origin/main...HEAD
 ```
