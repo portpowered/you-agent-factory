@@ -104,6 +104,33 @@ func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testin
 	}
 }
 
+func TestNormalizeWorkRequest_LegacyTraceIDPropagatesStableCurrentChainingTrace(t *testing.T) {
+	request := interfaces.WorkRequest{
+		RequestID: "request-legacy-trace",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "first", WorkTypeID: "task", TraceID: "trace-legacy"},
+			{Name: "second", WorkTypeID: "task"},
+		},
+	}
+
+	normalized, err := NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	if len(normalized) != 2 {
+		t.Fatalf("normalized count = %d, want 2", len(normalized))
+	}
+	if normalized[0].TraceID != "trace-legacy" || normalized[0].CurrentChainingTraceID != "trace-legacy" {
+		t.Fatalf("first normalized trace fields = %#v, want legacy trace fallback", normalized[0])
+	}
+	if normalized[1].TraceID != "trace-legacy" || normalized[1].CurrentChainingTraceID != "trace-legacy" {
+		t.Fatalf("second normalized trace fields = %#v, want propagated legacy trace fallback", normalized[1])
+	}
+}
+
 func TestNormalizeWorkRequest_DependsOnRelationTargetsRequiredState(t *testing.T) {
 	request := interfaces.WorkRequest{
 		RequestID: "request-1",
@@ -644,6 +671,33 @@ func TestParseCanonicalWorkRequestJSON_RejectsConflictingCurrentChainingTraceID(
 	}`))
 	if err == nil || !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
 		t.Fatalf("expected conflicting chaining trace rejection, got %v", err)
+	}
+}
+
+func TestParseCanonicalWorkRequestJSON_AcceptsMatchingCurrentChainingTraceIDAliases(t *testing.T) {
+	request, err := ParseCanonicalWorkRequestJSON([]byte(`{
+		"requestId": "request-json-match",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{
+				"name": "draft",
+				"workTypeName": "task",
+				"currentChainingTraceId": "chain-a",
+				"traceId": "chain-a"
+			}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseCanonicalWorkRequestJSON: %v", err)
+	}
+	if len(request.Works) != 1 {
+		t.Fatalf("works = %d, want 1", len(request.Works))
+	}
+	if request.Works[0].CurrentChainingTraceID != "chain-a" {
+		t.Fatalf("current chaining trace ID = %q, want chain-a", request.Works[0].CurrentChainingTraceID)
+	}
+	if request.Works[0].TraceID != "chain-a" {
+		t.Fatalf("trace ID = %q, want chain-a", request.Works[0].TraceID)
 	}
 }
 

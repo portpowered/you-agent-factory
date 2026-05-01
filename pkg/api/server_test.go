@@ -170,6 +170,43 @@ func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T)
 	}
 }
 
+func TestSubmitWork_MatchingTraceAliasesNormalizeAtBoundary(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "traceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
+		t.Fatalf("work requests = %#v, want one submitted work request", mf.WorkRequests)
+	}
+	if mf.WorkRequests[0].CurrentChainingTraceID != "chain-submit-1" {
+		t.Fatalf("work request current chaining trace ID = %q, want chain-submit-1", mf.WorkRequests[0].CurrentChainingTraceID)
+	}
+	if mf.WorkRequests[0].Works[0].CurrentChainingTraceID != "chain-submit-1" {
+		t.Fatalf("work current chaining trace ID = %q, want chain-submit-1", mf.WorkRequests[0].Works[0].CurrentChainingTraceID)
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("normalized submissions = %d, want 1", len(mf.Submitted))
+	}
+	if mf.Submitted[0].CurrentChainingTraceID != "chain-submit-1" {
+		t.Fatalf("normalized current chaining trace ID = %q, want chain-submit-1", mf.Submitted[0].CurrentChainingTraceID)
+	}
+	if mf.Submitted[0].TraceID != "chain-submit-1" {
+		t.Fatalf("normalized trace_id = %q, want chain-submit-1", mf.Submitted[0].TraceID)
+	}
+}
+
 func TestSubmitWork_ConflictingCurrentChainingTraceIDReturnsBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
