@@ -1210,8 +1210,9 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	name, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			if fs.runtimeCfg != nil && sameFactoryDir(fs.runtimeCfg.FactoryDir(), rootDir) {
-				return fs.serializeCurrentNamedFactory(apisurface.DefaultCurrentFactoryName, fs.runtimeCfg)
+			currentRuntime := fs.currentRuntimeConfig()
+			if currentRuntime != nil && sameFactoryDir(currentRuntime.FactoryDir(), rootDir) {
+				return fs.serializeCurrentNamedFactory(apisurface.DefaultCurrentFactoryName, currentRuntime)
 			}
 			return factoryapi.NamedFactory{}, ErrCurrentNamedFactoryNotFound
 		}

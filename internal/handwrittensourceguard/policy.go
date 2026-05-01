@@ -73,7 +73,6 @@ func repoRootRules() []PathRule {
 	return []PathRule{
 		handwrittenScanRule("repo-root/**/*.go", "scan checked-in handwritten Go source across the repository"),
 		generatedRule("pkg/api/generated", "generated API output is not handwritten contract source"),
-		generatedRule("pkg/generatedclient", "generated API client output is not handwritten contract source"),
 		generatedRule("ui/dist", "compiled dashboard assets are generated artifacts"),
 		generatedRule("ui/node_modules", "dependency install output is not handwritten source"),
 		generatedRule("ui/storybook-static", "storybook build output is generated"),
@@ -85,7 +84,6 @@ func pkgRootRules() []PathRule {
 	return []PathRule{
 		handwrittenScanRule("pkg/**/*.go", "scan checked-in handwritten package Go source under pkg"),
 		generatedRule("pkg/api/generated", "generated API output is not handwritten pkg source"),
-		generatedRule("pkg/generatedclient", "generated API client output is not handwritten pkg source"),
 		hiddenRule("hidden package metadata and nested worker state must not count as handwritten pkg source"),
 	}
 }
