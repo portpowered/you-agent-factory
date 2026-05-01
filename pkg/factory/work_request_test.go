@@ -2,11 +2,64 @@ package factory
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 )
+
+func TestResolveWorkRequestCurrentChainingTraceID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		current string
+		legacy  string
+		want    string
+	}{
+		{name: "prefers current", current: "chain-current", legacy: "trace-legacy", want: "chain-current"},
+		{name: "falls back to legacy", legacy: "trace-legacy", want: "trace-legacy"},
+		{name: "empty when neither present", want: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ResolveWorkRequestCurrentChainingTraceID(tc.current, tc.legacy); got != tc.want {
+				t.Fatalf("ResolveWorkRequestCurrentChainingTraceID(%q, %q) = %q, want %q", tc.current, tc.legacy, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateWorkRequestTraceFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		current string
+		legacy  string
+		wantErr error
+	}{
+		{name: "matching aliases", current: "chain-1", legacy: "chain-1"},
+		{name: "current only", current: "chain-1"},
+		{name: "legacy only", legacy: "trace-1"},
+		{name: "conflicting aliases", current: "chain-1", legacy: "trace-1", wantErr: errConflictingWorkRequestTraceFields},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidateWorkRequestTraceFields(tc.current, tc.legacy)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("ValidateWorkRequestTraceFields(%q, %q) error = %v, want %v", tc.current, tc.legacy, err, tc.wantErr)
+			}
+		})
+	}
+}
 
 func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testing.T) {
 	request := interfaces.WorkRequest{
@@ -48,6 +101,33 @@ func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testin
 	}
 	if string(normalized[0].Payload) != `{"title":"first"}` {
 		t.Fatalf("payload = %s", normalized[0].Payload)
+	}
+}
+
+func TestNormalizeWorkRequest_LegacyTraceIDPropagatesStableCurrentChainingTrace(t *testing.T) {
+	request := interfaces.WorkRequest{
+		RequestID: "request-legacy-trace",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "first", WorkTypeID: "task", TraceID: "trace-legacy"},
+			{Name: "second", WorkTypeID: "task"},
+		},
+	}
+
+	normalized, err := NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	if len(normalized) != 2 {
+		t.Fatalf("normalized count = %d, want 2", len(normalized))
+	}
+	if normalized[0].TraceID != "trace-legacy" || normalized[0].CurrentChainingTraceID != "trace-legacy" {
+		t.Fatalf("first normalized trace fields = %#v, want legacy trace fallback", normalized[0])
+	}
+	if normalized[1].TraceID != "trace-legacy" || normalized[1].CurrentChainingTraceID != "trace-legacy" {
+		t.Fatalf("second normalized trace fields = %#v, want propagated legacy trace fallback", normalized[1])
 	}
 }
 
@@ -503,6 +583,29 @@ func TestNormalizeWorkRequest_AcceptsStringPayloadAsRawText(t *testing.T) {
 	}
 }
 
+func TestWorkRequestRecordFromSubmitRequests_UsesSharedTraceFallback(t *testing.T) {
+	record := WorkRequestRecordFromSubmitRequests("request-record", "api", []interfaces.SubmitRequest{{
+		WorkID:      "work-1",
+		WorkTypeID:  "task",
+		Name:        "draft",
+		TraceID:     "trace-legacy",
+		TargetState: "queued",
+	}})
+
+	if record.TraceID != "trace-legacy" {
+		t.Fatalf("record trace ID = %q, want trace-legacy", record.TraceID)
+	}
+	if len(record.WorkItems) != 1 {
+		t.Fatalf("work item count = %d, want 1", len(record.WorkItems))
+	}
+	if record.WorkItems[0].CurrentChainingTraceID != "trace-legacy" {
+		t.Fatalf("record current chaining trace ID = %q, want trace-legacy", record.WorkItems[0].CurrentChainingTraceID)
+	}
+	if record.WorkItems[0].TraceID != "trace-legacy" {
+		t.Fatalf("record work item trace ID = %q, want trace-legacy", record.WorkItems[0].TraceID)
+	}
+}
+
 func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 	var request interfaces.WorkRequest
 	if err := json.Unmarshal([]byte(`{
@@ -568,6 +671,33 @@ func TestParseCanonicalWorkRequestJSON_RejectsConflictingCurrentChainingTraceID(
 	}`))
 	if err == nil || !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
 		t.Fatalf("expected conflicting chaining trace rejection, got %v", err)
+	}
+}
+
+func TestParseCanonicalWorkRequestJSON_AcceptsMatchingCurrentChainingTraceIDAliases(t *testing.T) {
+	request, err := ParseCanonicalWorkRequestJSON([]byte(`{
+		"requestId": "request-json-match",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{
+				"name": "draft",
+				"workTypeName": "task",
+				"currentChainingTraceId": "chain-a",
+				"traceId": "chain-a"
+			}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseCanonicalWorkRequestJSON: %v", err)
+	}
+	if len(request.Works) != 1 {
+		t.Fatalf("works = %d, want 1", len(request.Works))
+	}
+	if request.Works[0].CurrentChainingTraceID != "chain-a" {
+		t.Fatalf("current chaining trace ID = %q, want chain-a", request.Works[0].CurrentChainingTraceID)
+	}
+	if request.Works[0].TraceID != "chain-a" {
+		t.Fatalf("trace ID = %q, want chain-a", request.Works[0].TraceID)
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/apisurface"
 	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
+	factorypkg "github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/internal/submission"
@@ -63,7 +64,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		Name:                   stringValue(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                resolvedCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
@@ -731,28 +732,13 @@ func rejectPublicBatchWorkAliases(fields map[string]json.RawMessage, prefix stri
 }
 
 func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, prefix string) error {
-	currentRaw, hasCurrent := fields[currentChainingTraceIDField]
-	legacyRaw, hasLegacy := fields[traceIDField]
-	if !hasCurrent {
-		currentRaw, hasCurrent = fields[legacyCurrentChainingTraceIDField]
-	}
-	if !hasLegacy {
-		legacyRaw, hasLegacy = fields[legacyTraceIDField]
-	}
-	if !hasCurrent || !hasLegacy {
-		return nil
-	}
-
-	var current string
-	if err := json.Unmarshal(currentRaw, &current); err != nil {
-		return err
-	}
-	var legacy string
-	if err := json.Unmarshal(legacyRaw, &legacy); err != nil {
-		return err
-	}
-	if current != "" && legacy != "" && current != legacy {
-		return requestFieldValidationError{message: fmt.Sprintf("%scurrentChainingTraceId and traceId must match when both are provided", prefix)}
+	if err := factorypkg.ValidateWorkRequestTraceFieldAliases(
+		fields[currentChainingTraceIDField],
+		fields[legacyCurrentChainingTraceIDField],
+		fields[traceIDField],
+		fields[legacyTraceIDField],
+	); err != nil {
+		return requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
 	}
 	return nil
 }
@@ -795,13 +781,6 @@ func applyStableTraceToWorkRequest(req *interfaces.WorkRequest) {
 			req.Works[i].TraceID = req.Works[i].CurrentChainingTraceID
 		}
 	}
-}
-
-func resolvedCurrentChainingTraceID(current string, legacy string) string {
-	if current != "" {
-		return current
-	}
-	return legacy
 }
 
 func generatedPayloadToRawMessage(payload any) (json.RawMessage, error) {

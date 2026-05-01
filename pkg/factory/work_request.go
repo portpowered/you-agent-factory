@@ -46,9 +46,9 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			return nil, fmt.Errorf("work_request: works[%d] (%q) has invalid payload: %w", i, work.Name, err)
 		}
 
-		itemCurrentChainingTraceID := resolvedCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
+		itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
 		if itemCurrentChainingTraceID == "" {
-			itemCurrentChainingTraceID = resolvedCurrentChainingTraceID(req.CurrentChainingTraceID, traceID)
+			itemCurrentChainingTraceID = ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, traceID)
 		}
 		itemTraceID := work.TraceID
 		if itemTraceID == "" {
@@ -170,7 +170,7 @@ func WorkRequestRecordFromSubmitRequests(requestID string, source string, reques
 			WorkTypeID:               req.WorkTypeID,
 			State:                    req.TargetState,
 			DisplayName:              name,
-			CurrentChainingTraceID:   resolvedCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID),
+			CurrentChainingTraceID:   ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID),
 			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
 			Tags:                     maps.Clone(req.Tags),
@@ -447,13 +447,6 @@ func batchTraceID(req interfaces.WorkRequest) string {
 		}
 	}
 	return newTraceID()
-}
-
-func resolvedCurrentChainingTraceID(current string, legacy string) string {
-	if current != "" {
-		return current
-	}
-	return legacy
 }
 
 func rawWorkPayload(payload any) ([]byte, error) {
