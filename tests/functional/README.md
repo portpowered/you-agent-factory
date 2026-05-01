@@ -48,6 +48,11 @@ coverage that should not join the default command.
   test belongs in the slow lane, gate it behind the `functionallong` tag so
   `make test-functional` stays package-discovery-only and does not need manual
   excludes.
+- Keep long-lane tests in the behavior package they validate. For example, the
+  broad provider normalization sweep lives in
+  `tests/functional/providers/cli_provider_error_long_test.go` behind the
+  `functionallong` tag instead of widening `make test-functional` or reviving
+  the legacy mixed bucket.
 
 ## Migration Compatibility
 
