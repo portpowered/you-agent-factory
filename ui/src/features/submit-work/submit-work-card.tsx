@@ -1,10 +1,10 @@
-import { DashboardButton } from "../../components/dashboard/button";
 import { cx } from "../../components/dashboard/classnames";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard/typography";
+import { Button, Input, Select, Textarea } from "../../components/ui";
 import {
   WIDGET_SUBTITLE_CLASS,
   DashboardWidgetFrame,
@@ -42,11 +42,6 @@ export interface SubmitWorkCardProps {
 const FORM_CLASS = "grid h-full min-h-0 gap-4";
 const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const FIELD_CONTROL_CLASS = cx(
-  "min-h-11 w-full rounded-lg border border-af-accent/35 bg-af-canvas/82 px-[0.65rem] py-[0.55rem] text-af-ink outline-none transition-colors placeholder:text-af-ink/42 focus:border-af-accent focus-visible:ring-2 focus-visible:ring-af-accent/25 disabled:cursor-not-allowed disabled:border-af-overlay/14 disabled:bg-af-overlay/6 disabled:text-af-ink/48",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
-const TEXTAREA_CLASS = cx(FIELD_CONTROL_CLASS, "min-h-28 resize-y");
 const ACTION_ROW_CLASS =
   "mt-auto flex flex-wrap items-start justify-between gap-3 max-[720px]:grid";
 const HELP_TEXT_CLASS = cx("max-w-[32rem] leading-relaxed text-af-ink/66", DASHBOARD_SUPPORTING_TEXT_CLASS);
@@ -97,11 +92,11 @@ export function SubmitWorkCard({
 
         <label className={FIELD_GROUP_CLASS}>
           <span className={FIELD_LABEL_CLASS}>Work type</span>
-          <select
+          <Select
             aria-label="Work type"
             aria-describedby={validationErrors?.workTypeName ? workTypeErrorID : undefined}
             aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
-            className={FIELD_CONTROL_CLASS}
+            className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             onChange={(event) => onWorkTypeNameChange(event.target.value)}
             value={draft.workTypeName}
@@ -112,7 +107,7 @@ export function SubmitWorkCard({
                 {workTypeName}
               </option>
             ))}
-          </select>
+          </Select>
           {validationErrors?.workTypeName ? (
             <p className={VALIDATION_TEXT_CLASS} id={workTypeErrorID}>
               {validationErrors.workTypeName}
@@ -122,9 +117,9 @@ export function SubmitWorkCard({
 
         <label className={FIELD_GROUP_CLASS}>
           <span className={FIELD_LABEL_CLASS}>Request name</span>
-          <input
+          <Input
             aria-label="Request name"
-            className={FIELD_CONTROL_CLASS}
+            className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             onChange={(event) => onRequestNameChange(event.target.value)}
             placeholder="Add an optional label for this request."
@@ -135,11 +130,11 @@ export function SubmitWorkCard({
 
         <label className={FIELD_GROUP_CLASS}>
           <span className={FIELD_LABEL_CLASS}>Request</span>
-          <textarea
+          <Textarea
             aria-label="Request text"
             aria-describedby={validationErrors?.requestText ? requestTextErrorID : undefined}
             aria-invalid={validationErrors?.requestText ? "true" : undefined}
-            className={TEXTAREA_CLASS}
+            className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             onChange={(event) => onRequestTextChange(event.target.value)}
             placeholder="Describe what you want this request to accomplish."
@@ -160,9 +155,14 @@ export function SubmitWorkCard({
           >
             {status.message}
           </p>
-          <DashboardButton busy={isSubmitting} className="shrink-0" disabled={!canSubmit} type="submit">
+          <Button
+            aria-busy={isSubmitting ? "true" : undefined}
+            className="shrink-0"
+            disabled={!canSubmit}
+            type="submit"
+          >
             {isSubmitting ? "Submitting..." : "Submit work"}
-          </DashboardButton>
+          </Button>
         </div>
       </form>
     </DashboardWidgetFrame>
