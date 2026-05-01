@@ -235,19 +235,19 @@ func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[strin
 	if len(runtimeWorkers) == 0 {
 		return nil
 	}
-	workers := generatedWorkerSlice(factory.Workers)
-	byName := generatedWorkerIndexes(workers)
-	for _, name := range sortedWorkerNames(runtimeWorkers) {
-		generated, err := generatedWorkerFromReplayConfig(name, runtimeWorkers[name])
-		if err != nil {
-			return err
-		}
-		if index, ok := byName[generated.Name]; ok {
-			workers[index] = generated
-			continue
-		}
-		byName[generated.Name] = len(workers)
-		workers = append(workers, generated)
+	workers, err := mergeGeneratedEntries(
+		generatedWorkerSlice(factory.Workers),
+		generatedWorkerIndexes,
+		sortedWorkerNames(runtimeWorkers),
+		func(name string) (factoryapi.Worker, error) {
+			return generatedWorkerFromReplayConfig(name, runtimeWorkers[name])
+		},
+		func(worker factoryapi.Worker) string {
+			return worker.Name
+		},
+	)
+	if err != nil {
+		return err
 	}
 	factory.Workers = slicePtr(workers)
 	return nil
@@ -265,22 +265,39 @@ func mergeGeneratedWorkstations(factory *factoryapi.Factory, workstationsByName 
 	if len(workstationsByName) == 0 {
 		return nil
 	}
-	workstations := generatedWorkstationSlice(factory.Workstations)
-	byName := generatedWorkstationIndexes(workstations)
-	for _, name := range sortedWorkstationNames(workstationsByName) {
-		generated, err := generatedWorkstationFromReplayConfig(name, workstationsByName[name])
-		if err != nil {
-			return err
-		}
-		if index, ok := byName[generated.Name]; ok {
-			workstations[index] = generated
-			continue
-		}
-		byName[generated.Name] = len(workstations)
-		workstations = append(workstations, generated)
+	workstations, err := mergeGeneratedEntries(
+		generatedWorkstationSlice(factory.Workstations),
+		generatedWorkstationIndexes,
+		sortedWorkstationNames(workstationsByName),
+		func(name string) (factoryapi.Workstation, error) {
+			return generatedWorkstationFromReplayConfig(name, workstationsByName[name])
+		},
+		func(workstation factoryapi.Workstation) string {
+			return workstation.Name
+		},
+	)
+	if err != nil {
+		return err
 	}
 	factory.Workstations = slicePtr(workstations)
 	return nil
+}
+
+func mergeGeneratedEntries[T any](generated []T, indexes func([]T) map[string]int, sortedNames []string, build func(string) (T, error), name func(T) string) ([]T, error) {
+	byName := indexes(generated)
+	for _, entryName := range sortedNames {
+		entry, err := build(entryName)
+		if err != nil {
+			return nil, err
+		}
+		if index, ok := byName[name(entry)]; ok {
+			generated[index] = entry
+			continue
+		}
+		byName[name(entry)] = len(generated)
+		generated = append(generated, entry)
+	}
+	return generated, nil
 }
 
 func generatedWorkstationFromReplayConfig(name string, cfg interfaces.FactoryWorkstationConfig) (factoryapi.Workstation, error) {
