@@ -3,7 +3,6 @@ package runtime_api
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -45,8 +44,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 
 	t.Run("ProviderOverrideIsAppliedBeforeServiceBuildForHTTPRuntime", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-		writeAgentConfig(t, dir, "worker-a", buildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
-		writeAgentConfig(t, dir, "worker-b", buildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+		writeAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+		writeAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
 
 		runner := testutil.NewProviderCommandRunner(
 			workers.CommandResult{Stdout: []byte("first runtime step complete. COMPLETE")},
@@ -151,17 +150,6 @@ func waitForFunctionalServerIdleTerminal(
 	}
 	t.Fatalf("factory did not reach running idle terminal state within %s", timeout)
 	return nil
-}
-
-func buildModelWorkerConfig(provider workers.ModelProvider, model string) string {
-	return fmt.Sprintf(`---
-type: MODEL_WORKER
-model: %s
-modelProvider: %s
-stopToken: COMPLETE
----
-Process the input task.
-`, model, provider)
 }
 
 func categorizeFunctionalState(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) functionalStateCategories {
