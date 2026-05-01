@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP(t *testing.T) {
@@ -103,10 +104,10 @@ type batchBoundaryRelation struct {
 func runBoundaryBatchSmokeThroughWatchedFile(t *testing.T, batchJSON []byte, requestID string) batchBoundarySummary {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	testutil.WriteSeedFile(t, dir, "task", batchJSON)
 
-	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 	waitForGeneratedWorkIDsComplete(t, server.URL(), []string{
 		"work-boundary-parent",
 		"work-boundary-prerequisite",
@@ -119,8 +120,8 @@ func runBoundaryBatchSmokeThroughWatchedFile(t *testing.T, batchJSON []byte, req
 func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID string) batchBoundarySummary {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
-	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	req, err := http.NewRequest(http.MethodPut, server.URL()+"/work-requests/"+requestID, bytes.NewReader(batchJSON))
 	if err != nil {
@@ -159,7 +160,7 @@ func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID 
 	return loadBatchBoundarySummary(t, server, requestID)
 }
 
-func loadBatchBoundarySummary(t *testing.T, server *FunctionalServer, requestID string) batchBoundarySummary {
+func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, requestID string) batchBoundarySummary {
 	t.Helper()
 
 	events, err := server.service.GetFactoryEvents(context.Background())
@@ -168,7 +169,7 @@ func loadBatchBoundarySummary(t *testing.T, server *FunctionalServer, requestID 
 	}
 
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeWorkRequest || eventString(event.Context.RequestId) != requestID {
+		if event.Type != factoryapi.FactoryEventTypeWorkRequest || support.StringPointerValue(event.Context.RequestId) != requestID {
 			continue
 		}
 		payload, err := event.Payload.AsWorkRequestEventPayload()
@@ -178,23 +179,23 @@ func loadBatchBoundarySummary(t *testing.T, server *FunctionalServer, requestID 
 
 		summary := batchBoundarySummary{
 			RequestID: requestID,
-			Source:    eventString(payload.Source),
+			Source:    support.StringPointerValue(payload.Source),
 		}
-		for _, work := range eventWorks(payload.Works) {
+		for _, work := range factoryWorksValue(payload.Works) {
 			summary.Works = append(summary.Works, batchBoundaryWork{
 				Name:         work.Name,
-				WorkID:       eventString(work.WorkId),
-				WorkTypeName: eventString(work.WorkTypeName),
-				State:        eventString(work.State),
-				TraceID:      eventString(work.TraceId),
+				WorkID:       support.StringPointerValue(work.WorkId),
+				WorkTypeName: support.StringPointerValue(work.WorkTypeName),
+				State:        support.StringPointerValue(work.State),
+				TraceID:      support.StringPointerValue(work.TraceId),
 			})
 		}
-		for _, relation := range eventRelations(payload.Relations) {
+		for _, relation := range factoryRelationsValue(payload.Relations) {
 			summary.Relations = append(summary.Relations, batchBoundaryRelation{
 				Type:           string(relation.Type),
 				SourceWorkName: relation.SourceWorkName,
 				TargetWorkName: relation.TargetWorkName,
-				RequiredState:  eventString(relation.RequiredState),
+				RequiredState:  support.StringPointerValue(relation.RequiredState),
 			})
 		}
 
@@ -218,4 +219,18 @@ func loadBatchBoundarySummary(t *testing.T, server *FunctionalServer, requestID 
 
 	t.Fatalf("missing WORK_REQUEST event for %q", requestID)
 	return batchBoundarySummary{}
+}
+
+func factoryWorksValue(works *[]factoryapi.Work) []factoryapi.Work {
+	if works == nil {
+		return nil
+	}
+	return *works
+}
+
+func factoryRelationsValue(relations *[]factoryapi.Relation) []factoryapi.Relation {
+	if relations == nil {
+		return nil
+	}
+	return *relations
 }

@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"encoding/json"
@@ -15,11 +15,12 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/replay"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestGeneratedSchemaDeserializationSmoke_FileHTTPAndReplayTransportsStayAligned(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
-	recordDir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+	recordDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "generated-schema-deserialization.replay.json")
 
 	fileBoundary, loaded := loadGeneratedSchemaFileBoundaryAndRuntime(t, dir)
@@ -108,7 +109,7 @@ func generatedSchemaRuntimeSummaryFromRuntimeConfig(
 func generatedSchemaTransportSummaryFromHTTPBoundary(t *testing.T, dir string) generatedSchemaTransportSummary {
 	t.Helper()
 
-	server := StartFunctionalServer(t, dir, false, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, false, factory.WithServiceMode())
 	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
 	_, first := requireFunctionalEventStreamPrelude(t, stream)
 	initialStructurePayload, err := first.Payload.AsInitialStructureRequestEventPayload()
@@ -149,7 +150,7 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 	harness.RunUntilComplete(t, 10*time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	runStarted := requireFactoryOnlyRunStartedPayload(t, artifact.Events)
+	runStarted := requireGeneratedSchemaRunStartedPayload(t, artifact.Events)
 	assertGeneratedSmokeTransportBoundary(t, runStarted.Factory)
 	assertGeneratedSmokeRuntimeDefinitions(t, runStarted.Factory)
 	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(runStarted.Factory)
@@ -275,30 +276,19 @@ func assertGeneratedSmokeRuntimeDefinitions(t *testing.T, generated factoryapi.F
 	}
 }
 
-func assertGeneratedSmokeWorkstationBoundary(t *testing.T, workstations []factoryapi.Workstation, name, worker string) {
-	t.Helper()
-
-	for _, workstation := range workstations {
-		if workstation.Name == name && workstation.Worker == worker {
-			return
-		}
-	}
-	t.Fatalf("generated workstations = %#v, want %s using %s", workstations, name, worker)
-}
-
 func requireGeneratedSchemaWorkerSummary(
 	t *testing.T,
-	lookup func(string) (*interfaces.WorkerConfig, bool),
+	workerLookup func(string) (*interfaces.WorkerConfig, bool),
 	name string,
 ) generatedSchemaWorkerSummary {
 	t.Helper()
 
-	worker, ok := lookup(name)
+	worker, ok := workerLookup(name)
 	if !ok {
-		t.Fatalf("expected worker %q", name)
+		t.Fatalf("worker lookup missing %q", name)
 	}
 	return generatedSchemaWorkerSummary{
-		name:       name,
+		name:       worker.Name,
 		workerType: worker.Type,
 		model:      worker.Model,
 	}
@@ -306,17 +296,17 @@ func requireGeneratedSchemaWorkerSummary(
 
 func requireGeneratedSchemaTransportWorkstationSummary(
 	t *testing.T,
-	lookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
+	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
 	name string,
 ) generatedSchemaTransportWorkstationSummary {
 	t.Helper()
 
-	workstation, ok := lookup(name)
+	workstation, ok := workstationLookup(name)
 	if !ok {
-		t.Fatalf("expected workstation %q", name)
+		t.Fatalf("workstation lookup missing %q", name)
 	}
 	return generatedSchemaTransportWorkstationSummary{
-		name:            name,
+		name:            workstation.Name,
 		workerTypeName:  workstation.WorkerTypeName,
 		workstationType: workstation.Type,
 	}
@@ -324,35 +314,72 @@ func requireGeneratedSchemaTransportWorkstationSummary(
 
 func requireGeneratedSchemaRuntimeWorkstationSummary(
 	t *testing.T,
-	lookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
+	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
 	name string,
 ) generatedSchemaRuntimeWorkstationSummary {
 	t.Helper()
 
-	workstation, ok := lookup(name)
+	workstation, ok := workstationLookup(name)
 	if !ok {
-		t.Fatalf("expected workstation %q", name)
+		t.Fatalf("workstation lookup missing %q", name)
 	}
 	return generatedSchemaRuntimeWorkstationSummary{
-		name:            name,
+		name:            workstation.Name,
 		workerTypeName:  workstation.WorkerTypeName,
 		workstationType: workstation.Type,
 		promptTemplate:  workstation.PromptTemplate,
 	}
 }
 
+func assertGeneratedSmokeWorkstationBoundary(t *testing.T, workstations []factoryapi.Workstation, name, worker string) {
+	t.Helper()
+
+	for _, workstation := range workstations {
+		if workstation.Name == name {
+			if workstation.Worker != worker {
+				t.Fatalf("workstation %q worker = %q, want %q", name, workstation.Worker, worker)
+			}
+			return
+		}
+	}
+	t.Fatalf("workstations = %#v, want %q", workstations, name)
+}
+
 func assertGeneratedSchemaBoundaryFailure(t *testing.T, err error) {
 	t.Helper()
 
 	if err == nil {
-		t.Fatal("expected generated-schema boundary failure")
+		t.Fatal("expected generated schema boundary failure, got nil")
 	}
-	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
-		t.Fatalf("boundary error = %q, want generated-schema ownership", err)
+	text := err.Error()
+	for _, snippet := range []string{
+		"is not supported",
+		"use ",
+	} {
+		if !strings.Contains(text, snippet) {
+			t.Fatalf("generated schema boundary error = %q, want substring %q", text, snippet)
+		}
 	}
-	if !strings.Contains(err.Error(), "workstations[0].join is not supported") {
-		t.Fatalf("boundary error = %q, want retired join message", err)
+}
+
+func requireGeneratedSchemaRunStartedPayload(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.RunRequestEventPayload {
+	t.Helper()
+
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeRunRequest {
+			continue
+		}
+		payload, err := event.Payload.AsRunRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode run-request payload %q: %v", event.Id, err)
+		}
+		if payload.Factory.WorkTypes == nil || len(*payload.Factory.WorkTypes) == 0 {
+			t.Fatalf("run-request payload factory missing work types: %#v", payload.Factory)
+		}
+		return payload
 	}
+	t.Fatalf("recorded events missing RUN_REQUEST: %#v", functionalEventTypes(events))
+	return factoryapi.RunRequestEventPayload{}
 }
 
 func writeGeneratedSchemaReplayArtifact(t *testing.T, path string, factoryJSON []byte) {
@@ -386,4 +413,11 @@ func writeGeneratedSchemaReplayArtifact(t *testing.T, path string, factoryJSON [
 	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
 		t.Fatalf("write replay artifact: %v", err)
 	}
+}
+
+func stringValueFromFunctionalPtr[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }

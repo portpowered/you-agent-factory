@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"encoding/json"
@@ -13,12 +13,13 @@ import (
 	"github.com/portpowered/agent-factory/pkg/replay"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
-	writeAgentConfig(t, dir, "worker-a", workerPublicContractSmokeWorkerConfig())
-	writeAgentConfig(t, dir, "worker-b", workerPublicContractSmokeWorkerConfig())
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+	support.WriteAgentConfig(t, dir, "worker-a", workerPublicContractSmokeWorkerConfig())
+	support.WriteAgentConfig(t, dir, "worker-b", workerPublicContractSmokeWorkerConfig())
 
 	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
@@ -147,7 +148,7 @@ func assertWorkerPublicContractProviderRequest(t *testing.T, runner *testutil.Pr
 			t.Fatalf("provider args should not include runtime-owned resume flag: %#v", req.Args)
 		}
 	}
-	assertArgsContainSequence(t, req.Args, []string{"--model", "claude-sonnet-4-20250514"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"--model", "claude-sonnet-4-20250514"})
 	if !strings.Contains(strings.Join(req.Args, " "), "claude-sonnet-4-20250514") {
 		t.Fatalf("provider args = %#v, want canonical model selection", req.Args)
 	}
