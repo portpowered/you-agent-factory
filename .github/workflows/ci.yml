@@ -26,17 +26,11 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Set up Node for API contract commands
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
 
       - name: Install dashboard dependencies
         working-directory: ui
@@ -58,12 +52,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Set up Node for API contract commands
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
 
       - name: Install dashboard dependencies
         working-directory: ui
@@ -93,7 +91,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2

@@ -27,4 +27,5 @@ This inventory records the checked-in files and directories that the maintainer 
 - When contributor docs mention the repository CI workflow, mirror the exact root-level command sequence and its stated scope from `.github/workflows/ci.yml` so local reproduction and review expectations do not drift.
 - When UI assets are committed for Go embedding, keep the build pipeline responsible for normalizing output filenames and refreshing any cache-busting stamp files instead of hand-editing `ui/dist/`.
 - When browser-backed UI replay tests and replay coverage reports share the same scenarios, keep that metadata in one repository-owned catalog so the tests, scripts, and docs cannot silently drift.
+- When GitHub Actions uses `actions/setup-go` against a module that declares a newer `toolchain` than its base `go` version, prefer uncached setup unless you have verified that cache restore does not collide with the auto-downloaded toolchain files in later jobs.
 - When a cleanup lane closes with path or contract-alignment work, record the exact root-level verification commands in a `docs/development/*-closeout.md` artifact so the proof survives beyond `progress.txt`.

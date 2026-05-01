@@ -1,6 +1,13 @@
 import type { components } from "./generated/openapi";
 
 export type FactoryEvent = components["schemas"]["FactoryEvent"];
+export type FactoryEventContext = components["schemas"]["FactoryEventContext"];
+export type DispatchRequestEventPayload = components["schemas"]["DispatchRequestEventPayload"];
+export type DispatchResponseEventPayload = components["schemas"]["DispatchResponseEventPayload"];
+export type FactoryStateResponseEventPayload = components["schemas"]["FactoryStateResponseEventPayload"];
+export type InitialStructureRequestEventPayload = components["schemas"]["InitialStructureRequestEventPayload"];
+export type RunRequestEventPayload = components["schemas"]["RunRequestEventPayload"];
+export type WorkRequestEventPayload = components["schemas"]["WorkRequestEventPayload"];
 
 export const FACTORY_EVENT_TYPES = {
   dispatchRequest: "DISPATCH_REQUEST",

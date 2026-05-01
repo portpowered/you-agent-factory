@@ -13,6 +13,10 @@
     "target": "ES2022"
   },
   "include": [
-    "src/api/**/*.ts"
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/vite-env.d.ts",
+    "src/api/**/*.ts",
+    "src/testing/**/*.ts"
   ]
 }

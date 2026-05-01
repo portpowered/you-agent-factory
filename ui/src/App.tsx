@@ -1,6 +1,16 @@
 import { startTransition, useEffect, useState } from "react";
 
-import { FACTORY_EVENT_TYPES, type FactoryEvent } from "./api/events";
+import {
+  FACTORY_EVENT_TYPES,
+  type DispatchRequestEventPayload,
+  type DispatchResponseEventPayload,
+  type FactoryEvent,
+  type FactoryEventContext,
+  type FactoryStateResponseEventPayload,
+  type InitialStructureRequestEventPayload,
+  type RunRequestEventPayload,
+  type WorkRequestEventPayload,
+} from "./api/events";
 
 interface Workstation {
   id: string;
@@ -48,12 +58,12 @@ function readString(value: unknown): string | null {
 }
 
 function readTick(event: FactoryEvent): number {
-  if (!isRecord(event.context)) {
-    return 0;
-  }
-
   const tick = event.context.tick;
   return typeof tick === "number" ? tick : 0;
+}
+
+function readContext(event: FactoryEvent): FactoryEventContext {
+  return event.context;
 }
 
 function extractWorkstations(factory: unknown): Workstation[] {
@@ -126,7 +136,7 @@ function extractDispatchRecord(event: FactoryEvent, payload: unknown): DispatchR
     return null;
   }
 
-  const context = isRecord(event.context) ? event.context : {};
+  const context = readContext(event);
   const dispatchId = readString(payload.dispatchId) ?? readString(context.dispatchId);
   const transitionId = readString(payload.transitionId);
   if (!dispatchId || !transitionId) {
@@ -164,16 +174,61 @@ function extractDispatchRecord(event: FactoryEvent, payload: unknown): DispatchR
   };
 }
 
+function readStructurePayload(
+  event: FactoryEvent,
+): InitialStructureRequestEventPayload | RunRequestEventPayload | null {
+  switch (event.type) {
+    case FACTORY_EVENT_TYPES.initialStructureRequest:
+      return event.payload as InitialStructureRequestEventPayload;
+    case FACTORY_EVENT_TYPES.runRequest:
+      return event.payload as RunRequestEventPayload;
+    default:
+      return null;
+  }
+}
+
+function readFactoryStatePayload(event: FactoryEvent): FactoryStateResponseEventPayload | null {
+  if (event.type !== FACTORY_EVENT_TYPES.factoryStateResponse) {
+    return null;
+  }
+
+  return event.payload as FactoryStateResponseEventPayload;
+}
+
+function readWorkRequestPayload(event: FactoryEvent): WorkRequestEventPayload | null {
+  if (event.type !== FACTORY_EVENT_TYPES.workRequest) {
+    return null;
+  }
+
+  return event.payload as WorkRequestEventPayload;
+}
+
+function readDispatchRequestPayload(event: FactoryEvent): DispatchRequestEventPayload | null {
+  if (event.type !== FACTORY_EVENT_TYPES.dispatchRequest) {
+    return null;
+  }
+
+  return event.payload as DispatchRequestEventPayload;
+}
+
+function readDispatchResponsePayload(event: FactoryEvent): DispatchResponseEventPayload | null {
+  if (event.type !== FACTORY_EVENT_TYPES.dispatchResponse) {
+    return null;
+  }
+
+  return event.payload as DispatchResponseEventPayload;
+}
+
 function reduceSnapshot(snapshot: DashboardSnapshot, event: FactoryEvent): DashboardSnapshot {
-  const payload = isRecord(event.payload) ? event.payload : {};
   let nextSnapshot: DashboardSnapshot = {
     ...snapshot,
     connectionState: "open",
     latestTick: Math.max(snapshot.latestTick, readTick(event)),
   };
 
-  if (event.type === FACTORY_EVENT_TYPES.runRequest || event.type === FACTORY_EVENT_TYPES.initialStructureRequest) {
-    const workstations = extractWorkstations(payload.factory);
+  const structurePayload = readStructurePayload(event);
+  if (structurePayload) {
+    const workstations = extractWorkstations(structurePayload.factory);
     if (workstations.length > 0) {
       nextSnapshot = {
         ...nextSnapshot,
@@ -182,8 +237,9 @@ function reduceSnapshot(snapshot: DashboardSnapshot, event: FactoryEvent): Dashb
     }
   }
 
-  if (event.type === FACTORY_EVENT_TYPES.factoryStateResponse) {
-    const factoryState = readString(payload.state);
+  const factoryStatePayload = readFactoryStatePayload(event);
+  if (factoryStatePayload) {
+    const factoryState = readString(factoryStatePayload.state);
     if (factoryState) {
       nextSnapshot = {
         ...nextSnapshot,
@@ -192,12 +248,14 @@ function reduceSnapshot(snapshot: DashboardSnapshot, event: FactoryEvent): Dashb
     }
   }
 
-  if (event.type === FACTORY_EVENT_TYPES.workRequest) {
-    nextSnapshot = mergeWorkItems(nextSnapshot, payload.works);
+  const workRequestPayload = readWorkRequestPayload(event);
+  if (workRequestPayload) {
+    nextSnapshot = mergeWorkItems(nextSnapshot, workRequestPayload.works);
   }
 
-  if (event.type === FACTORY_EVENT_TYPES.dispatchRequest) {
-    const dispatch = extractDispatchRecord(event, payload);
+  const dispatchRequestPayload = readDispatchRequestPayload(event);
+  if (dispatchRequestPayload) {
+    const dispatch = extractDispatchRecord(event, dispatchRequestPayload);
     if (dispatch) {
       nextSnapshot = {
         ...nextSnapshot,
@@ -209,8 +267,9 @@ function reduceSnapshot(snapshot: DashboardSnapshot, event: FactoryEvent): Dashb
     }
   }
 
-  if (event.type === FACTORY_EVENT_TYPES.dispatchResponse) {
-    nextSnapshot = mergeWorkItems(nextSnapshot, payload.outputWork);
+  const dispatchResponsePayload = readDispatchResponsePayload(event);
+  if (dispatchResponsePayload) {
+    nextSnapshot = mergeWorkItems(nextSnapshot, dispatchResponsePayload.outputWork);
   }
 
   return nextSnapshot;
