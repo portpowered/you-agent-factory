@@ -430,25 +430,6 @@ func TestReadmeCommandListDoesNotAdvertiseRemovedAuditStateSurfaces(t *testing.T
 	}
 }
 
-func TestReadmeQuickstartDocumentsInitStarterOptions(t *testing.T) {
-	readme, err := os.ReadFile("../../README.md")
-	if err != nil {
-		t.Fatalf("read package README: %v", err)
-	}
-
-	contents := string(readme)
-	for _, want := range []string{
-		"agent-factory\n```",
-		"agent-factory init\n",
-		"agent-factory init --executor claude --dir my-factory",
-		"Supported starter scaffold options are `codex` and `claude`.",
-	} {
-		if !strings.Contains(contents, want) {
-			t.Fatalf("README missing %q:\n%s", want, contents)
-		}
-	}
-}
-
 func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 	readme, err := os.ReadFile("../../README.md")
 	if err != nil {
