@@ -49,7 +49,7 @@ import type {
 } from "./api/dashboard";
 import { FACTORY_EVENT_TYPES } from "./api/events";
 import type { FactoryEvent } from "./api/events";
-import type { FactoryValue, NamedFactoryValue } from "./api/named-factory";
+import type { FactoryValue } from "./api/named-factory";
 import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
 import { buildFactoryTimelineSnapshot, useFactoryTimelineStore } from "./state/factoryTimelineStore";
@@ -1066,11 +1066,6 @@ const currentNamedFactoryExportResponse = {
     },
   ],
 } satisfies FactoryValue;
-const currentNamedFactoryExportEnvelope = {
-  factory: currentNamedFactoryExportResponse,
-  name: currentNamedFactoryExportResponse.name,
-} satisfies NamedFactoryValue;
-
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
 
@@ -1330,13 +1325,10 @@ function renderTraceDrilldownHarness({
 function createFactoryImportValue(): FactoryPngImportValue {
   return {
     envelope: {
-      factory: {
-        name: "Dropped Factory",
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      },
       name: "Dropped Factory",
+      workTypes: [],
+      workers: [],
+      workstations: [],
       schemaVersion: "portos.agent-factory.png.v1",
     },
     factory: {
@@ -1346,15 +1338,6 @@ function createFactoryImportValue(): FactoryPngImportValue {
       workstations: [],
     },
     factoryName: "Dropped Factory",
-    namedFactory: {
-      factory: {
-        name: "Dropped Factory",
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      },
-      name: "Dropped Factory",
-    },
     previewImageSrc: "blob:factory-preview",
     revokePreviewImageSrc: vi.fn(),
   };
@@ -1517,8 +1500,8 @@ describe("App", () => {
   it("smoke tests authored export and dropped import as one dashboard-shell roundtrip", async () => {
     const exportProbe = installExportDownloadProbe();
     const mockedExportResult = await factoryPngExportModule.writeFactoryExportPng({
+      factory: currentNamedFactoryExportResponse,
       image: exportImageFile(),
-      namedFactory: currentNamedFactoryExportEnvelope,
       rasterizeImageToPngBytes: async () => fromBase64(ONE_PIXEL_PNG_BASE64),
     });
     if (!mockedExportResult.ok) {
@@ -1811,11 +1794,8 @@ describe("App", () => {
 
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
+          factory: refreshedCurrentFactoryExportResponse,
           image: expect.any(File),
-          namedFactory: {
-            factory: refreshedCurrentFactoryExportResponse,
-            name: refreshedCurrentFactoryExportResponse.name,
-          },
         });
       });
       await waitFor(() => {
@@ -1993,11 +1973,11 @@ describe("App", () => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledTimes(1);
       });
       expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-        image: expect.any(File),
-        namedFactory: {
-          factory: currentNamedFactoryExportResponse,
+        factory: {
+          ...currentNamedFactoryExportResponse,
           name: "Factory Poster",
         },
+        image: expect.any(File),
       });
       expect(exportProbe.getDownloadedFilename()).toBe("factory-poster.png");
     } finally {

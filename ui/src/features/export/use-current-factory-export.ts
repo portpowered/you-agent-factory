@@ -5,7 +5,6 @@ import {
   getCurrentFactory,
   type FactoryValue,
   NamedFactoryAPIError,
-  type NamedFactoryValue,
 } from "../../api/named-factory";
 
 const CURRENT_FACTORY_EXPORT_QUERY_KEY = ["agent-factory-current-export"] as const;
@@ -16,7 +15,6 @@ const CURRENT_FACTORY_LOAD_FAILED_MESSAGE =
 
 export interface CurrentFactoryExportSuccess {
   factory: FactoryValue;
-  namedFactory: NamedFactoryValue;
   ok: true;
 }
 
@@ -52,10 +50,6 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
       return {
         currentFactoryExport: {
           factory: query.data,
-          namedFactory: {
-            factory: query.data,
-            name: query.data.name,
-          },
           ok: true,
         },
         isPreparing: false,

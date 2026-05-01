@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { NamedFactoryValue } from "../../api/named-factory";
+import type { FactoryValue } from "../../api/named-factory";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -44,7 +44,7 @@ const DIALOG_EXPORT_BUTTON_CLASS =
   "rounded-lg bg-af-accent px-4 py-2 text-sm font-semibold text-af-accent-contrast outline-af-accent transition hover:bg-af-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-af-overlay/18 disabled:text-af-ink/48";
 
 export interface ExportFactoryDialogProps {
-  namedFactory: NamedFactoryValue | null;
+  factory: FactoryValue | null;
   initialFactoryName: string;
   isPreparing?: boolean;
   isOpen: boolean;
@@ -58,7 +58,7 @@ type ExportDialogState =
   | { status: "exporting" };
 
 export function ExportFactoryDialog({
-  namedFactory,
+  factory,
   initialFactoryName,
   isPreparing = false,
   isOpen,
@@ -124,7 +124,7 @@ export function ExportFactoryDialog({
       ? "Choose a cover image before exporting."
       : null;
   const isExporting = dialogState.status === "exporting";
-  const exportDisabled = isExporting || isPreparing || namedFactory === null;
+  const exportDisabled = isExporting || isPreparing || factory === null;
 
   const handleImageSelection = (files: FileList | null) => {
     setImageTouched(true);
@@ -150,7 +150,7 @@ export function ExportFactoryDialog({
     setNameTouched(true);
     setImageTouched(true);
 
-    if (!namedFactory) {
+    if (!factory) {
       setDialogState({
         message:
           preparationFailure?.message ??
@@ -169,11 +169,11 @@ export function ExportFactoryDialog({
     setDialogState({ status: "exporting" });
 
     const result = await writeFactoryExportPng({
-      image: selectedImage,
-      namedFactory: {
-        ...namedFactory,
+      factory: {
+        ...factory,
         name: trimmedExportName,
       },
+      image: selectedImage,
     });
 
     if (exportAttemptRef.current !== exportAttempt) {
@@ -313,7 +313,7 @@ export function ExportFactoryDialog({
             </div>
           ) : null}
 
-          {preparationFailure && namedFactory === null && !isPreparing ? (
+          {preparationFailure && factory === null && !isPreparing ? (
             <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
               {preparationFailure.message}
             </div>

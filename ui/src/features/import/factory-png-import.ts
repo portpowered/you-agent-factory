@@ -1,6 +1,5 @@
 import { normalizeFactoryDefinition } from "../../api/factory-definition";
 import type { CanonicalFactoryDefinition } from "../../api/factory-definition";
-import type { NamedFactoryValue } from "../../api/named-factory";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_TEXT_CHUNK = "tEXt";
@@ -11,7 +10,7 @@ const PORT_OS_FACTORY_PNG_ITXT_UNCOMPRESSED_FLAG = 0;
 export const PORT_OS_FACTORY_PNG_METADATA_KEYWORD = "portos.agent-factory";
 export const PORT_OS_FACTORY_PNG_SCHEMA_VERSION = "portos.agent-factory.png.v1";
 
-export interface PortOSFactoryPngEnvelope extends NamedFactoryValue {
+export interface PortOSFactoryPngEnvelope extends CanonicalFactoryDefinition {
   schemaVersion: typeof PORT_OS_FACTORY_PNG_SCHEMA_VERSION;
 }
 
@@ -46,7 +45,6 @@ export interface FactoryPngImportValue {
   envelope: PortOSFactoryPngEnvelope;
   factory: CanonicalFactoryDefinition;
   factoryName: string;
-  namedFactory: NamedFactoryValue;
   previewImageSrc: string;
   revokePreviewImageSrc: () => void;
 }
@@ -119,12 +117,8 @@ export async function readFactoryImportPng({
     ok: true,
     value: {
       envelope: envelope.value,
-      factory: envelope.value.factory,
+      factory: stripEnvelopeSchemaVersion(envelope.value),
       factoryName: envelope.value.name,
-      namedFactory: {
-        factory: envelope.value.factory,
-        name: envelope.value.name,
-      },
       previewImageSrc,
       revokePreviewImageSrc: () => {
         revokePreviewImageSrc(previewImageSrc);
@@ -289,8 +283,7 @@ function normalizeFactoryEnvelope(
   return {
     ok: true,
     value: {
-      factory: normalizedFactory,
-      name: normalizedFactoryName.value,
+      ...normalizedFactory,
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     },
   };
@@ -299,12 +292,8 @@ function normalizeFactoryEnvelope(
 function normalizeFactoryPayload(
   parsedEnvelope: Record<string, unknown>,
 ): CanonicalFactoryDefinition {
-  const canonicalPayload = parsedEnvelope.factory;
-  if (canonicalPayload === undefined) {
-    throw new Error("PNG metadata is missing the canonical factory payload.");
-  }
-
-  return normalizeFactoryDefinition(canonicalPayload);
+  const { schemaVersion: _schemaVersion, ...factoryPayload } = parsedEnvelope;
+  return normalizeFactoryDefinition(factoryPayload);
 }
 
 function readFactoryEnvelopeName(parsedEnvelope: Record<string, unknown>): ImportStepResult<string> {
@@ -491,6 +480,11 @@ function readCanonicalPortOSFactoryPngEnvelopeName(value: Record<string, unknown
   }
 
   return value.name.trim();
+}
+
+function stripEnvelopeSchemaVersion(envelope: PortOSFactoryPngEnvelope): CanonicalFactoryDefinition {
+  const { schemaVersion: _schemaVersion, ...factory } = envelope;
+  return factory;
 }
 
 function isStringMap(value: unknown): value is Record<string, string> | undefined {

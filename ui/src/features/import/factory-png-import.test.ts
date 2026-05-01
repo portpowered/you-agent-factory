@@ -50,8 +50,10 @@ describe("readFactoryImportPng", () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => previewUrl,
       file: createFactoryPngFile({
-        factory: canonicalFactory,
-        name: "Factory Import",
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
         schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
       }),
       revokePreviewImageSrc,
@@ -64,12 +66,12 @@ describe("readFactoryImportPng", () => {
     }
 
     expect(result.value.envelope).toEqual({
-      factory: canonicalFactory,
+      ...canonicalFactory,
       name: "Factory Import",
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     });
-    expect(result.value.namedFactory).toEqual({
-      factory: canonicalFactory,
+    expect(result.value.factory).toEqual({
+      ...canonicalFactory,
       name: "Factory Import",
     });
     expect(result.value.previewImageSrc).toBe(previewUrl);
@@ -81,18 +83,20 @@ describe("readFactoryImportPng", () => {
   it("rejects the retired factoryName envelope fallback", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => "blob:legacy-preview",
-      file: createLegacyFactoryPngFile({
-        factory: canonicalFactory,
-        factoryName: "Legacy Factory Import",
-        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
-      }),
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify({
+          ...canonicalFactory,
+          factoryName: "Legacy Factory Import",
+          schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+        }),
+      ),
       validatePreviewImage: async () => {},
     });
 
     expect(result).toEqual({
       error: {
-        code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata is missing the factory name.",
+        code: "FACTORY_PAYLOAD_INVALID",
+        message: "The Port OS factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -105,11 +109,9 @@ describe("readFactoryImportPng", () => {
       },
       file: createFactoryPngFileWithMetadataText(
         JSON.stringify({
-          factory: {
-            exhaustion_rules: [],
-            project: "legacy-factory",
-            name: "legacy-factory",
-          },
+          exhaustion_rules: [],
+          project: "legacy-factory",
+          name: "legacy-factory",
           name: "Invalid Factory Import",
           schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
         }),
@@ -133,7 +135,7 @@ describe("readFactoryImportPng", () => {
       },
       file: createFactoryPngFileWithMetadataText(
         JSON.stringify({
-          name: "Legacy Factory Import",
+          id: "legacy-factory",
           schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
           workTypes: canonicalFactory.workTypes,
           workers: canonicalFactory.workers,
@@ -196,8 +198,10 @@ describe("readFactoryImportPng", () => {
         throw new Error("should not create preview");
       },
       file: createFactoryPngFile({
-        factory: canonicalFactory,
-        name: "Factory Import",
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
         schemaVersion: "portos.agent-factory.png.v2",
       }),
       validatePreviewImage: async () => {},
@@ -221,8 +225,10 @@ describe("readFactoryImportPng", () => {
         throw new Error("should not create preview");
       },
       file: createFactoryPngFile({
-        factory: canonicalFactory,
-        name: "Factory Import",
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
         schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
       }),
       validatePreviewImage: async () => {
@@ -262,35 +268,14 @@ describe("readFactoryImportPng", () => {
 
 function createFactoryPngFile({
   factory,
-  name,
   schemaVersion,
 }: {
   factory: FactorySchemas["Factory"];
-  name: string;
   schemaVersion: string;
 }): File {
   return createFactoryPngFileWithMetadataText(
     JSON.stringify({
-      factory,
-      name,
-      schemaVersion,
-    }),
-  );
-}
-
-function createLegacyFactoryPngFile({
-  factory,
-  factoryName,
-  schemaVersion,
-}: {
-  factory: FactorySchemas["Factory"];
-  factoryName: string;
-  schemaVersion: string;
-}): File {
-  return createFactoryPngFileWithMetadataText(
-    JSON.stringify({
-      factory,
-      factoryName,
+      ...factory,
       schemaVersion,
     }),
   );

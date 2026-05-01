@@ -148,13 +148,10 @@ function renderWithQueryClient(view: ReactElement) {
 function createFactoryImportValue(): FactoryPngImportValue {
   return {
     envelope: {
-      factory: {
-        name: "Dropped Factory",
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      },
       name: "Dropped Factory",
+      workTypes: [],
+      workers: [],
+      workstations: [],
       schemaVersion: "portos.agent-factory.png.v1",
     },
     factory: {
@@ -164,15 +161,6 @@ function createFactoryImportValue(): FactoryPngImportValue {
       workstations: [],
     },
     factoryName: "Dropped Factory",
-    namedFactory: {
-      factory: {
-        name: "Dropped Factory",
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      },
-      name: "Dropped Factory",
-    },
     previewImageSrc: "blob:factory-preview",
     revokePreviewImageSrc: vi.fn(),
   };

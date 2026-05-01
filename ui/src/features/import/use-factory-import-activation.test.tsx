@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import type { FactoryValue, NamedFactoryValue } from "../../api/named-factory";
+import type { FactoryValue } from "../../api/named-factory";
 import { writeFactoryExportPng } from "../export/factory-png-export";
 import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION, readFactoryImportPng } from "./factory-png-import";
 import { useFactoryImportActivation } from "./use-factory-import-activation";
@@ -10,39 +10,36 @@ import { useFactoryImportActivation } from "./use-factory-import-activation";
 const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
 
-const canonicalNamedFactory: NamedFactoryValue = {
-  factory: {
-    id: "agent-factory",
-    name: "agent-factory",
-    workTypes: [
-      {
-        name: "story",
-        states: [
-          { name: "new", type: "INITIAL" },
-          { name: "done", type: "TERMINAL" },
-        ],
-      },
-    ],
-    workers: [
-      {
-        executorProvider: "SCRIPT_WRAP",
-        model: "codex-mini",
-        modelProvider: "CODEX",
-        name: "writer",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workstations: [
-      {
-        inputs: [{ state: "new", workType: "story" }],
-        name: "draft",
-        onFailure: { state: "done", workType: "story" },
-        outputs: [{ state: "done", workType: "story" }],
-        worker: "writer",
-      },
-    ],
-  },
+const canonicalFactory: FactoryValue = {
+  id: "agent-factory",
   name: "Factory Roundtrip",
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        { name: "new", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+  ],
+  workers: [
+    {
+      executorProvider: "SCRIPT_WRAP",
+      model: "codex-mini",
+      modelProvider: "CODEX",
+      name: "writer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    {
+      inputs: [{ state: "new", workType: "story" }],
+      name: "draft",
+      onFailure: { state: "done", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
+      worker: "writer",
+    },
+  ],
 };
 
 describe("useFactoryImportActivation", () => {
@@ -52,8 +49,8 @@ describe("useFactoryImportActivation", () => {
     const onActivated = vi.fn<(value: FactoryValue) => void>();
     const pngBytes = fromBase64(ONE_PIXEL_PNG_BASE64);
     const exportResult = await writeFactoryExportPng({
+      factory: canonicalFactory,
       image: new Blob([toArrayBuffer(pngBytes)], { type: "image/png" }),
-      namedFactory: canonicalNamedFactory,
       rasterizeImageToPngBytes: async () => pngBytes,
     });
 
@@ -63,7 +60,7 @@ describe("useFactoryImportActivation", () => {
     }
 
     expect(exportResult.envelope).toEqual({
-      ...canonicalNamedFactory,
+      ...canonicalFactory,
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     });
 
@@ -88,12 +85,12 @@ describe("useFactoryImportActivation", () => {
     });
 
     await waitFor(() => {
-      expect(activateFactory).toHaveBeenCalledWith(canonicalNamedFactory.factory);
+      expect(activateFactory).toHaveBeenCalledWith(canonicalFactory);
     });
     expect(activateFactory).toHaveBeenCalledTimes(1);
-    expect(onActivated).toHaveBeenCalledWith(canonicalNamedFactory.factory);
-    expect(importResult.value.namedFactory).toEqual(canonicalNamedFactory);
-    expect(importResult.value.factoryName).toBe(canonicalNamedFactory.name);
+    expect(onActivated).toHaveBeenCalledWith(canonicalFactory);
+    expect(importResult.value.factory).toEqual(canonicalFactory);
+    expect(importResult.value.factoryName).toBe(canonicalFactory.name);
     expect(result.current.activationState).toEqual({ status: "idle" });
   });
 });
