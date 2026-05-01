@@ -66,6 +66,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		TraceID:                resolvedCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
+		Relations:              generatedSubmitRelations(req.Relations),
 	}
 	workRequest := submission.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
 
@@ -558,6 +559,21 @@ func generatedStringMap(values *factoryapi.StringMap) map[string]string {
 	return map[string]string(*values)
 }
 
+func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []interfaces.Relation {
+	if values == nil || len(*values) == 0 {
+		return nil
+	}
+	relations := make([]interfaces.Relation, 0, len(*values))
+	for _, relation := range *values {
+		relations = append(relations, interfaces.Relation{
+			Type:          interfaces.RelationType(relation.Type),
+			TargetWorkID:  relation.TargetWorkId,
+			RequiredState: stringValue(relation.RequiredState),
+		})
+	}
+	return relations
+}
+
 func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkRequest {
 	workRequest := interfaces.WorkRequest{
 		RequestID:              req.RequestId,
@@ -625,9 +641,6 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
-	}
-	if _, ok := fields["relations"]; ok {
-		return factoryapi.SubmitWorkJSONRequestBody{}, requestFieldValidationError{message: "relations are only supported on PUT /work-requests/{request_id}"}
 	}
 	if err := rejectPublicBatchWorkAliases(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err

@@ -40,6 +40,12 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	var submitRequest factoryapi.SubmitWorkRequest
 	submitRequest.WorkTypeName = "task"
 	submitRequest.CurrentChainingTraceId = stringPtr("chain-submit-1")
+	submitRelationState := "complete"
+	submitRequest.Relations = &[]factoryapi.SubmitRelation{{
+		Type:          factoryapi.RelationTypeDependsOn,
+		TargetWorkId:  "work-1",
+		RequiredState: &submitRelationState,
+	}}
 
 	workID := "work-1"
 	requestID := "request-1"
@@ -109,8 +115,8 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	if strings.Contains(string(submitRequestJSON), `"relations"`) {
-		t.Fatalf("generated submit request JSON must not advertise batch-only relations: %s", submitRequestJSON)
+	if !strings.Contains(string(submitRequestJSON), `"relations"`) || !strings.Contains(string(submitRequestJSON), `"targetWorkId":"work-1"`) {
+		t.Fatalf("generated submit request JSON must preserve token-level relations: %s", submitRequestJSON)
 	}
 	if workRequest.Relations == nil || len(*workRequest.Relations) != 2 || (*workRequest.Relations)[1].Type != factoryapi.RelationTypeParentChild {
 		t.Fatal("generated work request relations should advertise parent-child support")

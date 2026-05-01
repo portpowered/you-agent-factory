@@ -18,4 +18,10 @@ properties:
     description: Opaque work payload forwarded as raw JSON.
   tags:
     $ref: '..\shared\StringMap.yaml'
+  relations:
+    type: array
+    description: Optional token-level runtime relations preserved on the submitted work item.
+    items:
+      $ref: '.\SubmitRelation.yaml'
+
 

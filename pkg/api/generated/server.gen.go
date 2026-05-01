@@ -830,6 +830,18 @@ type StatusResponse struct {
 // StringMap defines model for StringMap.
 type StringMap map[string]string
 
+// SubmitRelation defines model for SubmitRelation.
+type SubmitRelation struct {
+	// RequiredState Required target state before the dependency can proceed.
+	RequiredState *string `json:"requiredState,omitempty"`
+
+	// TargetWorkId Target runtime work identifier for the relation.
+	TargetWorkId string `json:"targetWorkId"`
+
+	// Type Relationship category between two pieces of work.
+	Type RelationType `json:"type"`
+}
+
 // SubmitWorkRequest defines model for SubmitWorkRequest.
 type SubmitWorkRequest struct {
 	// CurrentChainingTraceId Explicit chaining-trace identifier for the submitted work.
@@ -838,7 +850,10 @@ type SubmitWorkRequest struct {
 
 	// Payload Opaque work payload forwarded as raw JSON.
 	Payload interface{} `json:"payload,omitempty"`
-	Tags    *StringMap  `json:"tags,omitempty"`
+
+	// Relations Optional token-level runtime relations preserved on the submitted work item.
+	Relations *[]SubmitRelation `json:"relations,omitempty"`
+	Tags      *StringMap        `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`

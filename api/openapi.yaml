@@ -310,6 +310,26 @@ components:
           description: Opaque work payload forwarded as raw JSON.
         tags:
           $ref: '#/components/schemas/StringMap'
+        relations:
+          type: array
+          description: Optional token-level runtime relations preserved on the submitted work item.
+          items:
+            $ref: '#/components/schemas/SubmitRelation'
+    SubmitRelation:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - targetWorkId
+      properties:
+        type:
+          $ref: '#/components/schemas/RelationType'
+        targetWorkId:
+          type: string
+          description: Target runtime work identifier for the relation.
+        requiredState:
+          type: string
+          description: Required target state before the dependency can proceed.
     SubmitWorkResponse:
       type: object
       additionalProperties: false

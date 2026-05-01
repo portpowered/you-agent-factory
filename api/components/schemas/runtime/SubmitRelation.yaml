@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - type
+  - targetWorkId
+properties:
+  type:
+    $ref: './RelationType.yaml'
+  targetWorkId:
+    type: string
+    description: Target runtime work identifier for the relation.
+  requiredState:
+    type: string
+    description: Required target state before the dependency can proceed.

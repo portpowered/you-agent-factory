@@ -163,6 +163,15 @@ export interface components {
             /** @description Opaque work payload forwarded as raw JSON. */
             payload?: unknown;
             tags?: components["schemas"]["StringMap"];
+            /** @description Optional token-level runtime relations preserved on the submitted work item. */
+            relations?: components["schemas"]["SubmitRelation"][];
+        };
+        SubmitRelation: {
+            type: components["schemas"]["RelationType"];
+            /** @description Target runtime work identifier for the relation. */
+            targetWorkId: string;
+            /** @description Required target state before the dependency can proceed. */
+            requiredState?: string;
         };
         SubmitWorkResponse: {
             traceId: string;

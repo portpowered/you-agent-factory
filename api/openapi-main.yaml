@@ -291,6 +291,8 @@ components:
   schemas:
     SubmitWorkRequest:
       $ref: './components/schemas/runtime/SubmitWorkRequest.yaml'
+    SubmitRelation:
+      $ref: './components/schemas/runtime/SubmitRelation.yaml'
     SubmitWorkResponse:
       $ref: './components/schemas/runtime/SubmitWorkResponse.yaml'
     UpsertWorkRequestResponse:

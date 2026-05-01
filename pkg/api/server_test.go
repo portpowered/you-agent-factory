@@ -210,7 +210,7 @@ func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	}
 }
 
-func TestSubmitWork_RelationsReturnBadRequest(t *testing.T) {
+func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
 			Tokens: make(map[string]*interfaces.Token),
@@ -218,15 +218,24 @@ func TestSubmitWork_RelationsReturnBadRequest(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","sourceWorkName":"draft","targetWorkName":"review"}]}`
+	body := `{"workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "relations are only supported on PUT /work-requests/{request_id}")
-	if len(mf.Submitted) != 0 {
-		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if len(mf.Submitted[0].Relations) != 1 {
+		t.Fatalf("submitted relations = %d, want 1", len(mf.Submitted[0].Relations))
+	}
+	relation := mf.Submitted[0].Relations[0]
+	if relation.Type != interfaces.RelationDependsOn || relation.TargetWorkID != "review-work" || relation.RequiredState != "complete" {
+		t.Fatalf("submitted relation = %#v, want dependency on review-work at complete", relation)
 	}
 }
 
