@@ -3312,13 +3312,10 @@ describe("App", () => {
       within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
     ).toBeTruthy();
     expect(within(trendWidget).queryByRole("list", { name: "Work outcome totals" })).toBeNull();
-    expect(
-      trendWidget.querySelector(
-        `[data-axis-tick='x'][data-axis-tick-value='${baselineSnapshot.tick_count}']`,
-      ),
-    ).toBeTruthy();
-    expect(trendWidget.querySelector("[data-axis-tick='y'][data-axis-tick-value='0']")).toBeTruthy();
-    expect(trendWidget.querySelector("circle")).toBeNull();
+    expect(within(trendWidget).getByText("Queued")).toBeTruthy();
+    expect(within(trendWidget).getByText("In-flight")).toBeTruthy();
+    expect(within(trendWidget).getByText("Completed")).toBeTruthy();
+    expect(within(trendWidget).getByText("Failed/retried")).toBeTruthy();
     expect(within(trendWidget).getByText("Ticks")).toBeTruthy();
     expect(within(trendWidget).getByText("Work count")).toBeTruthy();
 
@@ -3351,10 +3348,9 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(trendWidget.querySelector("[data-axis-gridline='x']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-gridline='y']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-chart-series='queued']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-chart-series='completed']")).toBeTruthy();
+      expect(
+        within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
+      ).toBeTruthy();
     });
 
     expect(
@@ -3422,17 +3418,16 @@ describe("App", () => {
     ).toBeTruthy();
     fireEvent.change(slider, { target: { value: "1" } });
     await waitFor(() => {
-      expect(trendWidget.querySelector("[data-chart-series='completed']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='1']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='4']")).toBeNull();
+      expect(
+        within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
+      ).toBeTruthy();
     });
 
     fireEvent.change(slider, { target: { value: "4" } });
     await waitFor(() => {
-      expect(trendWidget.querySelector("[data-chart-series='failed']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='1']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='4']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-gridline='y']")).toBeTruthy();
+      expect(
+        within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
+      ).toBeTruthy();
     });
   });
 

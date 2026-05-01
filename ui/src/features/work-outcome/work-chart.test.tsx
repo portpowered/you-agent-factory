@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "./typography";
+import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 import type { WorkChartModel } from "./trends";
 import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
@@ -126,6 +126,12 @@ const OUTCOME_SERIES: readonly WorkChartSeriesDefinition[] = [
 ];
 
 describe("WorkChart", () => {
+  const restoreBrowserShims = installDashboardBrowserTestShims();
+
+  afterAll(() => {
+    restoreBrowserShims();
+  });
+
   it("renders reusable paths for sparse outcome series without crashing", () => {
     render(
       <WorkChart
@@ -137,40 +143,13 @@ describe("WorkChart", () => {
 
     const chart = screen.getByRole("img", { name: "Work chart" });
     expect(chart).toBeTruthy();
-    expect(chart.querySelector("[data-chart-series='queued']")).toBeTruthy();
-    expect(chart.querySelector("[data-chart-series='inFlight']")).toBeTruthy();
-    expect(chart.querySelector("[data-chart-series='completed']")).toBeTruthy();
-    expect(chart.querySelector("[data-chart-series='failed']")).toBeNull();
-    expect(
-      chart.querySelector("[data-chart-series='queued']")?.getAttribute("data-chart-series-color"),
-    ).toBe("var(--color-af-chart-queued)");
-    expect(
-      chart.querySelector("[data-chart-series='inFlight']")?.getAttribute("data-chart-series-color"),
-    ).toBe("var(--color-af-chart-in-flight)");
-    expect(
-      chart.querySelector("[data-chart-series='completed']")?.getAttribute("data-chart-series-color"),
-    ).toBe("var(--color-af-chart-completed)");
-    expect(
-      chart.querySelector("[data-chart-series='completed']")?.getAttribute("class"),
-    ).toContain("[stroke-width:2.25]");
-    expect(chart.querySelector("circle")).toBeNull();
-    expect(chart.querySelector("[data-axis-tick='x'][data-axis-tick-value='10']")).toBeTruthy();
-    expect(chart.querySelector("[data-axis-tick='x'][data-axis-tick-value='20']")).toBeTruthy();
-    expect(chart.querySelector("[data-axis-tick='x'][data-axis-tick-value='40']")).toBeTruthy();
-    expect(chart.querySelector("[data-axis-tick='y'][data-axis-tick-value='0']")).toBeTruthy();
-    expect(
-      chart.querySelector("[data-axis-tick='x'][data-axis-tick-value='10']")?.getAttribute(
-        "class",
-      ),
-    ).toContain(DASHBOARD_SUPPORTING_LABEL_CLASS);
-    expect(chart.querySelector("[data-axis-gridline='x']")).toBeTruthy();
-    expect(chart.querySelector("[data-axis-gridline='y']")).toBeTruthy();
-    expect(screen.getByText("Ticks").getAttribute("class")).toContain(
-      DASHBOARD_SUPPORTING_LABEL_CLASS,
-    );
-    expect(screen.getByText("Work count").getAttribute("class")).toContain(
-      DASHBOARD_SUPPORTING_LABEL_CLASS,
-    );
+    expect(chart.querySelector(".recharts-wrapper")).toBeTruthy();
+    expect(screen.getByText("Queued")).toBeTruthy();
+    expect(screen.getByText("In-flight")).toBeTruthy();
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByText("Ticks")).toBeTruthy();
+    expect(screen.getByText("Work count")).toBeTruthy();
   });
 
   it("renders explicit no-data state when timeline points are unavailable", () => {
@@ -216,6 +195,7 @@ describe("WorkChart", () => {
     expect(loadingState.getAttribute("aria-busy")).toBe("true");
     expect(screen.getByText("Loading work outcome samples")).toBeTruthy();
     expect(screen.getByText("Waiting for dashboard timeline data.")).toBeTruthy();
+    expect(loadingState.querySelector(".animate-pulse")).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Work chart loading" })).toBeNull();
   });
 

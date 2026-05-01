@@ -1,29 +1,31 @@
 import { useMemo } from "react";
-
-import { line, scaleLinear } from "d3";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import {
-  DASHBOARD_CHART_AXIS_CLASS,
   DASHBOARD_CHART_AXIS_LABEL_CLASS,
-  DASHBOARD_CHART_GRID_CLASS,
-  DASHBOARD_CHART_LINE_CLASS,
-  DASHBOARD_CHART_SURFACE_CLASS,
 } from "./chart-contract";
-import { cx } from "../../components/dashboard/classnames";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "../../components/ui/chart";
+import { Skeleton } from "../../components/ui/skeleton";
+import { cn } from "../../lib/cn";
 import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
 } from "../../components/dashboard/widget-board";
 import type { WorkChartModel, WorkChartSeriesKey } from "./trends";
 
-export const WORK_CHART_WIDTH = 320;
-export const WORK_CHART_HEIGHT = 120;
-export const WORK_CHART_PADDING = { bottom: 28, left: 36, right: 10, top: 12 } as const;
-export const WORK_CHART_AXIS_CLASS = DASHBOARD_CHART_AXIS_CLASS;
-export const WORK_CHART_GRID_CLASS = DASHBOARD_CHART_GRID_CLASS;
-export const WORK_CHART_CLASS = DASHBOARD_CHART_SURFACE_CLASS;
 export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
-export const WORK_CHART_LINE_CLASS = DASHBOARD_CHART_LINE_CLASS;
 export const WORK_CHART_EMPTY_TITLE = "No work outcome samples";
 export const WORK_CHART_EMPTY_MESSAGE =
   "Work outcome data appears after the event stream receives work history.";
@@ -50,7 +52,6 @@ export type WorkChartState =
 export interface WorkChartProps {
   ariaLabel: string;
   className?: string;
-  descriptionID?: string;
   emptyMessage?: string;
   emptyTitle?: string;
   model?: WorkChartModel;
@@ -65,7 +66,6 @@ const READY_WORK_CHART_STATE: WorkChartState = { status: "ready" };
 export function WorkChart({
   ariaLabel,
   className = "",
-  descriptionID,
   emptyMessage = WORK_CHART_EMPTY_MESSAGE,
   emptyTitle = WORK_CHART_EMPTY_TITLE,
   model,
@@ -79,19 +79,14 @@ export function WorkChart({
       return { status: state.status };
     }
 
-    return buildWorkChartData(
-      model,
-      series,
-      WORK_CHART_WIDTH,
-      WORK_CHART_HEIGHT,
-      WORK_CHART_PADDING,
-    );
+    return buildWorkChartData(model, series);
   }, [model, series, state.status]);
 
   if (state.status === "loading") {
     return (
       <WorkChartStatusPanel
         ariaBusy={true}
+        loading={true}
         message={state.message ?? WORK_CHART_LOADING_MESSAGE}
         role="status"
         title={state.title ?? WORK_CHART_LOADING_TITLE}
@@ -138,110 +133,79 @@ export function WorkChart({
   }
 
   return (
-    <svg
-      aria-describedby={descriptionID}
-      aria-label={ariaLabel}
-      className={cx(WORK_CHART_CLASS, className)}
-      role="img"
-      viewBox={`0 0 ${WORK_CHART_WIDTH} ${WORK_CHART_HEIGHT}`}
-    >
-      {chartData.data.yTicks.map((tick, index) => (
-        <g key={`y-${tick.label}-${index}`}>
-          <line
-            className={WORK_CHART_GRID_CLASS}
-            data-axis-gridline="y"
-            x1={WORK_CHART_PADDING.left}
-            x2={WORK_CHART_WIDTH - WORK_CHART_PADDING.right}
-            y1={tick.y}
-            y2={tick.y}
-          />
-          <text
-            className={WORK_CHART_AXIS_LABEL_CLASS}
-            data-axis-tick="y"
-            data-axis-tick-value={tick.label}
-            textAnchor="end"
-            x={WORK_CHART_PADDING.left - 5}
-            y={tick.y + 3}
-          >
-            {tick.label}
-          </text>
-        </g>
-      ))}
-      {chartData.data.xTicks.map((tick, index) => (
-        <g key={`x-${tick.label}-${index}`}>
-          <line
-            className={WORK_CHART_GRID_CLASS}
-            data-axis-gridline="x"
-            x1={tick.x}
-            x2={tick.x}
-            y1={WORK_CHART_PADDING.top}
-            y2={WORK_CHART_HEIGHT - WORK_CHART_PADDING.bottom}
-          />
-          <text
-            className={WORK_CHART_AXIS_LABEL_CLASS}
-            data-axis-tick="x"
-            data-axis-tick-value={tick.label}
-            textAnchor="middle"
-            x={tick.x}
-            y={WORK_CHART_HEIGHT - WORK_CHART_PADDING.bottom + 12}
-          >
-            {tick.label}
-          </text>
-        </g>
-      ))}
-      <line
-        className={WORK_CHART_AXIS_CLASS}
-        x1={WORK_CHART_PADDING.left}
-        x2={WORK_CHART_WIDTH - WORK_CHART_PADDING.right}
-        y1={WORK_CHART_HEIGHT - WORK_CHART_PADDING.bottom}
-        y2={WORK_CHART_HEIGHT - WORK_CHART_PADDING.bottom}
-      />
-      <line
-        className={WORK_CHART_AXIS_CLASS}
-        x1={WORK_CHART_PADDING.left}
-        x2={WORK_CHART_PADDING.left}
-        y1={WORK_CHART_PADDING.top}
-        y2={WORK_CHART_HEIGHT - WORK_CHART_PADDING.bottom}
-      />
-      <text
-        className={WORK_CHART_AXIS_LABEL_CLASS}
-        x={WORK_CHART_WIDTH / 2}
-        y={WORK_CHART_HEIGHT - 3}
-        textAnchor="middle"
+    <div className={cn("grid h-full min-h-0 gap-2", className)}>
+      <div className="flex items-center justify-between gap-3">
+        <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>{yAxisLabel}</p>
+        <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>{xAxisLabel}</p>
+      </div>
+      <ChartContainer
+        className="h-[16rem] min-h-[14rem] p-3 sm:h-[18rem] sm:p-4"
+        config={chartData.data.config}
+        title={ariaLabel}
       >
-        {xAxisLabel}
-      </text>
-      <text
-        className={WORK_CHART_AXIS_LABEL_CLASS}
-        textAnchor="start"
-        x={WORK_CHART_PADDING.left}
-        y={8}
-      >
-        {yAxisLabel}
-      </text>
-      {chartData.data.series.map((seriesData) => {
-        if (!seriesData.hasData || !seriesData.path) {
-          return null;
-        }
-
-        return (
-          <g key={seriesData.key}>
-            <path
-              className={cx(WORK_CHART_LINE_CLASS, seriesData.lineClassName)}
-              d={seriesData.path}
+        <LineChart
+          accessibilityLayer
+          data={chartData.data.rows}
+          margin={{ bottom: 8, left: 8, right: 8, top: 8 }}
+        >
+          <CartesianGrid vertical={false} />
+          <XAxis
+            axisLine={false}
+            dataKey="tick"
+            minTickGap={24}
+            tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
+            tickFormatter={formatAxisNumber}
+            tickLine={false}
+          />
+          <YAxis
+            allowDecimals={false}
+            axisLine={false}
+            tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
+            tickCount={5}
+            tickFormatter={formatAxisNumber}
+            tickLine={false}
+            width={30}
+          />
+          <ChartTooltip
+            content={(props) => {
+              const label = props.payload?.[0]?.payload?.label ?? props.label;
+              return <ChartTooltipContent {...props} label={label} />;
+            }}
+            cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}
+          />
+          <ChartLegend content={<ChartLegendContent />} />
+          {chartData.data.series.map((seriesData) => (
+            <Line
+              key={seriesData.key}
+              activeDot={{
+                className: seriesData.pointClassName,
+                fill: seriesData.lineColor,
+                r: seriesData.pointRadius,
+                stroke: "rgb(from var(--color-af-canvas) r g b / 0.88)",
+                strokeWidth: 1.5,
+              }}
+              className={seriesData.lineClassName}
               data-chart-series={seriesData.key}
               data-chart-series-color={seriesData.lineColor}
-              style={{ stroke: seriesData.lineColor }}
+              dataKey={seriesData.key}
+              dot={false}
+              isAnimationActive={false}
+              name={seriesData.label}
+              stroke={seriesData.lineColor}
+              strokeDasharray={seriesData.strokeDasharray}
+              strokeWidth={2.25}
+              type="linear"
             />
-          </g>
-        );
-      })}
-    </svg>
+          ))}
+        </LineChart>
+      </ChartContainer>
+    </div>
   );
 }
 
 interface WorkChartStatusPanelProps {
   ariaBusy?: boolean;
+  loading?: boolean;
   message: string;
   role: "alert" | "status";
   title: string;
@@ -249,6 +213,7 @@ interface WorkChartStatusPanelProps {
 
 function WorkChartStatusPanel({
   ariaBusy = false,
+  loading = false,
   message,
   role,
   title,
@@ -257,9 +222,15 @@ function WorkChartStatusPanel({
     <div
       aria-busy={ariaBusy || undefined}
       aria-live={role === "alert" ? "assertive" : "polite"}
-      className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}
+      className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}
       role={role}
     >
+      {loading ? (
+        <div aria-hidden="true" className="grid w-full gap-3">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-28 w-full" />
+        </div>
+      ) : null}
       <h3>{title}</h3>
       <p>{message}</p>
     </div>
@@ -272,33 +243,20 @@ interface WorkChartBuiltSeries {
   lineColor: string;
   lineClassName: string;
   pointClassName?: string;
-  hasData: boolean;
-  path: string;
-  points: WorkChartBuiltPoint[];
-}
-
-interface WorkChartBuiltPoint {
-  label: string;
-  value: number;
-  x: number;
-  y: number;
+  pointRadius?: number;
+  strokeDasharray?: string;
 }
 
 interface WorkChartData {
-  maxValue: number;
+  config: Record<string, { color: string; label: string }>;
+  rows: WorkChartRow[];
   series: WorkChartBuiltSeries[];
-  xTicks: WorkChartXAxisTick[];
-  yTicks: WorkChartYAxisTick[];
 }
 
-interface WorkChartXAxisTick {
+interface WorkChartRow {
   label: string;
-  x: number;
-}
-
-interface WorkChartYAxisTick {
-  label: string;
-  y: number;
+  tick: number;
+  [seriesKey: string]: number | string;
 }
 
 type WorkChartDataResult =
@@ -309,9 +267,6 @@ type WorkChartDataResult =
 function buildWorkChartData(
   model: WorkChartModel | undefined,
   series: readonly WorkChartSeriesDefinition[],
-  width: number,
-  height: number,
-  padding: typeof WORK_CHART_PADDING,
 ): WorkChartDataResult {
   if (!isWorkChartModel(model) || !isWorkChartSeriesDefinitionArray(series)) {
     return { status: "invalid" };
@@ -321,98 +276,50 @@ function buildWorkChartData(
     return { status: "empty" };
   }
 
-  const tickValues = model.points.map((point) => point.tick);
-  const minTick = Math.min(...tickValues);
-  const maxTick = Math.max(...tickValues);
-  const xScale = scaleLinear()
-    .domain([minTick, maxTick === minTick ? minTick + 1 : maxTick])
-    .range([padding.left, width - padding.right]);
-
-  const seriesByKey = new Map<
-    string,
-    { label: string; observedAt: number; order: number; value: number }[]
-  >(
+  const seriesByKey = new Map(
     model.series.map((definition) => [definition.key, definition.points]),
   );
-
-  const plottedPoints = model.points.map((point, index) => ({
-    label: point.label,
-    x: model.points.length === 1 ? width / 2 : xScale(point.tick),
-  }));
-  const builtSeries = series.map((definition) => {
-    const seriesPoints = seriesByKey.get(definition.key) ?? [];
-    const hasData = seriesPoints.length > 0;
-    const values = plottedPoints.map((point, index) => {
-      const value = seriesPoints.find((seriesPoint) => seriesPoint.order === index)?.value ?? 0;
-      return { ...point, value };
-    });
-
-    return {
-      ...definition,
-      hasData,
-      points: values,
+  const rows = model.points.map((point, index) => {
+    const row: WorkChartRow = {
+      label: point.label,
+      tick: point.tick,
     };
+
+    for (const definition of series) {
+      const value = seriesByKey
+        .get(definition.key)
+        ?.find((seriesPoint) => seriesPoint.order === index)?.value;
+      row[definition.key] = value ?? 0;
+    }
+
+    return row;
   });
 
-  const maxValue = Math.max(
-    1,
-    ...builtSeries.flatMap((lineSeries) => lineSeries.points.map((point) => point.value)),
-  );
-  const yScale = scaleLinear()
-    .domain([0, maxValue])
-    .nice(4)
-    .range([height - padding.bottom, padding.top]);
-  const niceMaxValue = yScale.domain()[1] ?? maxValue;
-
-  const scaledSeries = builtSeries.map((seriesEntry) => {
-    const values = seriesEntry.points.map((point) => ({ ...point, y: yScale(point.value) }));
-    const path = line<(typeof values)[number]>()
-      .x((point) => point.x)
-      .y((point) => point.y)(values) ?? "";
-
-    return {
-      ...seriesEntry,
-      points: values,
-      path,
-    };
-  });
-
-  const hasRenderableSeries = scaledSeries.some(
-    (entry) => entry.hasData && entry.path !== "",
-  );
-  if (!hasRenderableSeries) {
-    return { status: "empty" };
-  }
+  const builtSeries = series
+    .filter((definition) => rows.some((row) => typeof row[definition.key] === "number"))
+    .map((definition) => ({
+      key: definition.key,
+      label: definition.label,
+      lineClassName: definition.lineClassName,
+      lineColor: definition.lineColor,
+      pointClassName: definition.pointClassName,
+      pointRadius: definition.pointRadius,
+      strokeDasharray: extractStrokeDasharray(definition.lineClassName),
+    }));
 
   return {
     data: {
-      maxValue: niceMaxValue,
-      series: scaledSeries,
-      xTicks: buildXAxisTicks(model.points, xScale),
-      yTicks: yScale.ticks(4).map((value) => ({
-        label: formatAxisNumber(value),
-        y: yScale(value),
-      })),
+      config: Object.fromEntries(
+        builtSeries.map((seriesEntry) => [
+          seriesEntry.key,
+          { color: seriesEntry.lineColor, label: seriesEntry.label },
+        ]),
+      ),
+      rows,
+      series: builtSeries,
     },
     status: "ready",
   };
-}
-
-function buildXAxisTicks(
-  points: WorkChartModel["points"],
-  xScale: ReturnType<typeof scaleLinear>,
-): WorkChartXAxisTick[] {
-  const lastIndex = points.length - 1;
-  const selectedIndexes =
-    points.length <= 5
-      ? points.map((_, index) => index)
-      : [0, Math.round(lastIndex * 0.25), Math.round(lastIndex * 0.5), Math.round(lastIndex * 0.75), lastIndex];
-  const uniqueIndexes = [...new Set(selectedIndexes)];
-
-  return uniqueIndexes.map((index) => ({
-    label: formatAxisNumber(points[index]?.tick ?? index + 1),
-    x: points.length === 1 ? WORK_CHART_WIDTH / 2 : Number(xScale(points[index]?.tick ?? index)),
-  }));
 }
 
 function formatAxisNumber(value: number): string {
@@ -420,6 +327,11 @@ function formatAxisNumber(value: number): string {
     return String(value);
   }
   return value.toFixed(1);
+}
+
+function extractStrokeDasharray(className: string): string | undefined {
+  const dashArrayMatch = className.match(/\[stroke-dasharray:([^\]]+)\]/);
+  return dashArrayMatch?.[1]?.replaceAll("_", " ");
 }
 
 function isWorkChartSeriesDefinitionArray(

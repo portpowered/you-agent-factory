@@ -56,7 +56,9 @@ export function ChartContainer({
           ) as CSSProperties
         }
       >
-        <ResponsiveContainer>{children}</ResponsiveContainer>
+        <ResponsiveContainer height="100%" minHeight={0} minWidth={0} width="100%">
+          {children}
+        </ResponsiveContainer>
       </div>
     </ChartContext.Provider>
   );
