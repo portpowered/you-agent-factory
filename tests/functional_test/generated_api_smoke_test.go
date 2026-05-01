@@ -75,8 +75,6 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	}
 
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
-	assertGeneratedDashboardRoutesRemoved(t, server.URL(), token.Id)
-
 }
 
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
@@ -194,27 +192,6 @@ func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string
 		factoryapi.FactoryEventTypeRunRequest,
 		factoryapi.FactoryEventTypeInitialStructureRequest,
 	)
-}
-
-func assertGeneratedDashboardRoutesRemoved(t *testing.T, baseURL, workID string) {
-	t.Helper()
-	for _, path := range []string{
-		"/dashboard",
-		"/dashboard/stream",
-		"/state",
-		"/work/" + url.PathEscape(workID) + "/trace",
-		"/workflows",
-	} {
-		resp, err := http.Get(baseURL + path)
-		if err != nil {
-			t.Fatalf("GET %s: %v", path, err)
-		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
-			t.Fatalf("GET %s status = %d, want route removed", path, resp.StatusCode)
-		}
-	}
 }
 
 func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {

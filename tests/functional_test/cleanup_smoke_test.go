@@ -5,19 +5,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	agentcli "github.com/portpowered/agent-factory/pkg/cli"
 	"github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 )
 
-func TestCleanupSmoke_BackendDashboardAndCLIExposeOnlyCleanedFactorySurfaces(t *testing.T) {
+func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
 	dir := scaffoldFactory(t, simplePipelineConfig())
 	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
 
@@ -43,9 +41,7 @@ func TestCleanupSmoke_BackendDashboardAndCLIExposeOnlyCleanedFactorySurfaces(t *
 	}
 	assertCleanupSmokeCanonicalFactoryEvents(t, server, completed.WorkId)
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
-	assertCleanupSmokeRemovedHTTPRoutes(t, server.URL(), traceID, completed.Id)
 	assertCleanupSmokeDashboardShell(t, server.URL())
-	assertCleanupSmokeCLI(t)
 }
 
 func assertCleanupSmokeCanonicalFactoryEvents(t *testing.T, server *FunctionalServer, workID string) {
@@ -105,30 +101,6 @@ func cleanupSmokePlaceContainsWork(items []interfaces.FactoryWorldWorkItemRef, w
 	return false
 }
 
-func assertCleanupSmokeRemovedHTTPRoutes(t *testing.T, baseURL, traceID, tokenID string) {
-	t.Helper()
-
-	for _, path := range []string{
-		"/dashboard",
-		"/dashboard/stream",
-		"/state",
-		"/traces/" + url.PathEscape(traceID),
-		"/work/" + url.PathEscape(tokenID) + "/trace",
-		"/workflows",
-		"/workflows/default",
-	} {
-		resp, err := http.Get(baseURL + path)
-		if err != nil {
-			t.Fatalf("GET %s: %v", path, err)
-		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
-			t.Fatalf("GET %s status = %d, want route removed", path, resp.StatusCode)
-		}
-	}
-}
-
 func assertCleanupSmokeDashboardShell(t *testing.T, baseURL string) {
 	t.Helper()
 
@@ -145,14 +117,11 @@ func assertCleanupSmokeDashboardShell(t *testing.T, baseURL string) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /dashboard/ui status = %d, want 200: %s", resp.StatusCode, shell)
 	}
-	for _, want := range []string{
-		"<title>Agent Factory Dashboard</title>",
-		"<div id=\"root\"></div>",
-		"/dashboard/ui/assets/",
-	} {
-		if !strings.Contains(shell, want) {
-			t.Fatalf("dashboard shell missing %q", want)
-		}
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+		t.Fatalf("GET /dashboard/ui content type = %q, want html shell", resp.Header.Get("Content-Type"))
+	}
+	if strings.TrimSpace(shell) == "" {
+		t.Fatal("GET /dashboard/ui returned an empty shell")
 	}
 
 	routeResp, err := http.Get(baseURL + "/dashboard/ui/work/" + url.PathEscape("work-from-cleanup-smoke"))
@@ -169,101 +138,5 @@ func assertCleanupSmokeDashboardShell(t *testing.T, baseURL string) {
 	}
 	if string(routeBody) != shell {
 		t.Fatal("dashboard client route should fall back to the embedded app shell")
-	}
-
-	assertCleanupSmokeDashboardBundleUsesCleanedAPI(t, baseURL, shell)
-}
-
-func assertCleanupSmokeDashboardBundleUsesCleanedAPI(t *testing.T, baseURL, shell string) {
-	t.Helper()
-
-	matches := regexp.MustCompile(`(?:src|href)="(/dashboard/ui/assets/[^"]+)"`).FindAllStringSubmatch(shell, -1)
-	if len(matches) == 0 {
-		t.Fatalf("dashboard shell did not reference embedded assets: %s", shell)
-	}
-
-	foundEventsEndpoint := false
-	workTracePattern := regexp.MustCompile(`["'` + "`" + `]/work/[^"'` + "`" + `]+/trace(?:["'` + "`" + `/?]|$)`)
-	removedEndpointPatterns := map[string]*regexp.Regexp{
-		"/state":            regexp.MustCompile(`["'` + "`" + `]/state(?:["'` + "`" + `/?]|$)`),
-		"/traces/":          regexp.MustCompile(`["'` + "`" + `]/traces/`),
-		"/workflows":        regexp.MustCompile(`["'` + "`" + `]/workflows(?:["'` + "`" + `/?]|$)`),
-		"/dashboard/stream": regexp.MustCompile(`["'` + "`" + `]/dashboard/stream(?:["'` + "`" + `/?]|$)`),
-	}
-	for _, match := range matches {
-		assetPath := match[1]
-		if !strings.HasSuffix(assetPath, ".js") {
-			continue
-		}
-
-		resp, err := http.Get(baseURL + assetPath)
-		if err != nil {
-			t.Fatalf("GET %s: %v", assetPath, err)
-		}
-		body, readErr := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if readErr != nil {
-			t.Fatalf("read %s: %v", assetPath, readErr)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s status = %d, want 200", assetPath, resp.StatusCode)
-		}
-
-		bundle := string(body)
-		foundEventsEndpoint = foundEventsEndpoint || strings.Contains(bundle, "/events")
-		for removed, pattern := range removedEndpointPatterns {
-			if pattern.MatchString(bundle) {
-				t.Fatalf("dashboard bundle %s still references removed endpoint %q", assetPath, removed)
-			}
-		}
-		if workTracePattern.MatchString(bundle) {
-			t.Fatalf("dashboard bundle %s still references removed work trace endpoint", assetPath)
-		}
-	}
-	if !foundEventsEndpoint {
-		t.Fatal("dashboard bundle did not reference canonical /events stream endpoint")
-	}
-}
-
-func assertCleanupSmokeCLI(t *testing.T) {
-	t.Helper()
-
-	root := agentcli.NewRootCommand()
-	expectedCommands := map[string]bool{
-		"config": false,
-		"init":   false,
-		"run":    false,
-		"submit": false,
-	}
-	for _, subcommand := range root.Commands() {
-		if _, ok := expectedCommands[subcommand.Name()]; ok {
-			expectedCommands[subcommand.Name()] = true
-		}
-		if subcommand.Name() == "audit" {
-			t.Fatal("removed audit command should not be registered")
-		}
-		if subcommand.Name() == "status" {
-			t.Fatal("removed status command should not be registered")
-		}
-	}
-	for command, found := range expectedCommands {
-		if !found {
-			t.Fatalf("expected CLI command %q to be registered", command)
-		}
-	}
-
-	for _, args := range [][]string{
-		{"audit", "state-surfaces"},
-		{"formattraceexplorer"},
-		{"status"},
-		{"trace"},
-	} {
-		cmd := agentcli.NewRootCommand()
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
-		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
-			t.Fatalf("expected removed CLI command %q to fail", strings.Join(args, " "))
-		}
 	}
 }

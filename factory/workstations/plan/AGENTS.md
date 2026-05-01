@@ -13,6 +13,13 @@ Read `docs/standards/STANDARDS.md`, then follow the most relevant checked-in sta
 
 Read the standard before writing anything.
 
+When the work will require tests or acceptance criteria, prohibit meta-test planning.
+Do not ask implementers to scan source files, validate docs link topology, assert
+asset-bundle internals, or enforce command, route, or registration inventories
+unless that structure is itself the product behavior under test. Prefer
+behavioral requirements that describe observable runtime, API, CLI, UI, or
+emitted-event outcomes from a user or maintainer perspective.
+
 ## step 2
 read the /prd and /ralph skills. 
 

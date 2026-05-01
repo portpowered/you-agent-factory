@@ -31,14 +31,6 @@ func setFactoryProject(t *testing.T, dir string, project string) {
 	})
 }
 
-func clearFactoryProject(t *testing.T, dir string) {
-	t.Helper()
-
-	updateFactoryProject(t, dir, func(config map[string]any) {
-		delete(config, "project")
-	})
-}
-
 func updateFactoryProject(t *testing.T, dir string, update func(map[string]any)) {
 	t.Helper()
 

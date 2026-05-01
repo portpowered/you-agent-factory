@@ -18,15 +18,6 @@ const (
 
 type ArtifactContractEntry = testpath.ArtifactContractEntry
 
-func ArtifactContract() []ArtifactContractEntry {
-	return testpath.ArtifactContract()
-}
-
-func MustArtifactContractEntry(t testing.TB, path string) ArtifactContractEntry {
-	t.Helper()
-	return testpath.MustArtifactContractEntry(t, path)
-}
-
 func MustRepoRoot(t testing.TB) string {
 	t.Helper()
 

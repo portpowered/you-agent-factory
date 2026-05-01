@@ -447,7 +447,6 @@ func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
 
 	postWorkViaAPI(t, srv)
 	assertListWorkResponse(t, srv)
-	assertRemovedStateRoute(t, srv)
 }
 
 func postWorkViaAPI(t *testing.T, srv *api.Server) {
@@ -498,17 +497,5 @@ func assertListWorkResponse(t *testing.T, srv *api.Server) {
 	}
 	if token.PlaceId != "task:complete" {
 		t.Errorf("GET /work: expected place_id 'task:complete', got %q", token.PlaceId)
-	}
-}
-
-func assertRemovedStateRoute(t *testing.T, srv *api.Server) {
-	t.Helper()
-
-	req := httptest.NewRequest("GET", "/state", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("GET /state: expected status 404 after route removal, got %d", rec.Code)
 	}
 }

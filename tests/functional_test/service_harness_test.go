@@ -351,11 +351,27 @@ func setWorkingDirectory(t *testing.T, dir string) {
 	})
 }
 
-func withWorkingDirectory(t *testing.T, dir string, run func()) {
+func withWorkingDirectory(t *testing.T, dir string, fn func()) {
 	t.Helper()
 
-	setWorkingDirectory(t, dir)
-	run()
+	workingDirectoryMu.Lock()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		workingDirectoryMu.Unlock()
+		t.Fatalf("Getwd(): %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		workingDirectoryMu.Unlock()
+		t.Fatalf("Chdir(%q): %v", dir, err)
+	}
+	defer func() {
+		if err := os.Chdir(originalDir); err != nil {
+			t.Fatalf("restore working directory: %v", err)
+		}
+		workingDirectoryMu.Unlock()
+	}()
+
+	fn()
 }
 
 // TestServiceHarness_HappyPath validates that the ServiceTestHarness can

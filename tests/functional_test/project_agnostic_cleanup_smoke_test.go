@@ -1,11 +1,13 @@
 package functional_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -15,6 +17,58 @@ import (
 const cleanupSmokeProject = "acme-inventory"
 
 var rootFactoryPathPattern = regexp.MustCompile(`factory/[A-Za-z0-9._/-]+`)
+
+func TestProjectAgnosticCleanupSmoke_RuntimeContextAndEventsStayProductFacing(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "tags_test"))
+	setFactoryProject(t, dir, cleanupSmokeProject)
+	setWorkingDirectory(t, dir)
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+		"checker": {{Content: "cleanup verified COMPLETE"}},
+	})
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithProvider(provider),
+		testutil.WithFullWorkerPoolAndScriptWrap(),
+	)
+	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+		RequestID: "request-project-cleanup-smoke",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "cleanup-smoke",
+			WorkID:     "work-project-cleanup-smoke",
+			WorkTypeID: "task",
+			TraceID:    "trace-project-cleanup-smoke",
+			Payload:    "cleanup smoke payload",
+			Tags: map[string]string{
+				"branch":  "feature/acme-cleanup",
+				"project": cleanupSmokeProject,
+			},
+		}},
+	})
+
+	h.RunUntilComplete(t, 10*time.Second)
+	assertSmokeTokenInPlace(t, h, "task:complete")
+
+	calls := provider.Calls("checker")
+	if len(calls) != 1 {
+		t.Fatalf("checker provider calls = %d, want 1", len(calls))
+	}
+	assertCleanupSmokeRuntimeContext(t, dir, calls[0])
+	assertInferenceRequestsDoNotContainPortOS(t, calls)
+
+	events, err := h.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	assertCleanupSmokeEvents(t, events)
+	assertFactoryEventsDoNotContainPortOS(t, events)
+
+	eventsJSON, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("marshal factory events: %v", err)
+	}
+	assertTextOmitsRetiredEventNames(t, "factory events", string(eventsJSON))
+}
 
 func assertSmokeTokenInPlace(t *testing.T, h *testutil.ServiceTestHarness, placeID string) {
 	t.Helper()
@@ -50,6 +104,9 @@ func assertCleanupSmokeRuntimeContext(t *testing.T, dir string, call interfaces.
 	if call.EnvVars["CONTEXT_PROJECT"] != cleanupSmokeProject {
 		t.Fatalf("CONTEXT_PROJECT env = %q, want %s", call.EnvVars["CONTEXT_PROJECT"], cleanupSmokeProject)
 	}
+	if call.EnvVars["TOKEN_PROJECT"] != cleanupSmokeProject {
+		t.Fatalf("TOKEN_PROJECT env = %q, want %s", call.EnvVars["TOKEN_PROJECT"], cleanupSmokeProject)
+	}
 	if call.EnvVars["BRANCH"] != "feature/acme-cleanup" {
 		t.Fatalf("BRANCH env = %q, want feature/acme-cleanup", call.EnvVars["BRANCH"])
 	}
@@ -78,7 +135,7 @@ func assertCleanupSmokeEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 				t.Fatalf("cleanup smoke request works = %d, want 1", len(*payload.Works))
 			}
 			sawWorkInput = true
-			assertCleanupSmokeTags(t, "WORK_REQUEST item", generatedTags((*payload.Works)[0].Tags))
+			assertCleanupSmokeTags(t, "WORK_REQUEST item", cleanupSmokeTags((*payload.Works)[0].Tags))
 		case factoryapi.FactoryEventTypeDispatchRequest:
 			payload, err := event.Payload.AsDispatchRequestEventPayload()
 			if err != nil || payload.TransitionId != "process" {
@@ -89,7 +146,7 @@ func assertCleanupSmokeEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 					continue
 				}
 				sawDispatch = true
-				assertCleanupSmokeTags(t, "DISPATCH_CREATED input", generatedTags(input.Tags))
+				assertCleanupSmokeTags(t, "DISPATCH_REQUEST input", cleanupSmokeTags(input.Tags))
 			}
 		case factoryapi.FactoryEventTypeDispatchResponse:
 			payload, err := event.Payload.AsDispatchResponseEventPayload()
@@ -101,7 +158,7 @@ func assertCleanupSmokeEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 					continue
 				}
 				sawTerminalOutput = true
-				assertCleanupSmokeTags(t, "DISPATCH_COMPLETED output work", generatedTags(output.Tags))
+				assertCleanupSmokeTags(t, "DISPATCH_RESPONSE output work", cleanupSmokeTags(output.Tags))
 			}
 		}
 	}
@@ -116,7 +173,7 @@ func assertCleanupSmokeEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 	}
 }
 
-func generatedTags(tags *factoryapi.StringMap) map[string]string {
+func cleanupSmokeTags(tags *factoryapi.StringMap) map[string]string {
 	if tags == nil {
 		return nil
 	}
@@ -177,7 +234,7 @@ func assertMapDoesNotContainPortOS(t *testing.T, label string, values map[string
 func assertValueDoesNotContainPortOS(t *testing.T, label string, value string) {
 	t.Helper()
 
-	normalized := strings.ToLower(value)
+	normalized := strings.ToLower(rootFactoryPathPattern.ReplaceAllString(value, "factory/runtime"))
 	if strings.Contains(normalized, "portos") ||
 		strings.Contains(normalized, "port os") ||
 		strings.Contains(normalized, "port_os") {

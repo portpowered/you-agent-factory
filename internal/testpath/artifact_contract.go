@@ -232,10 +232,6 @@ var artifactContractEntries = []ArtifactContractEntry{
 	},
 }
 
-func ArtifactContract() []ArtifactContractEntry {
-	return append([]ArtifactContractEntry(nil), artifactContractEntries...)
-}
-
 func ArtifactContractEntryByPath(path string) (ArtifactContractEntry, bool) {
 	normalized := filepath.ToSlash(filepath.Clean(path))
 	for _, entry := range artifactContractEntries {
