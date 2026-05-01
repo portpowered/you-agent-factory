@@ -275,7 +275,7 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 		WithSkipPermissions(true),
 	)
 
-	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderClaude),
 		Model:         "claude-sonnet-4-5-20250514",
 		SessionID:     "claude-session-123",
@@ -285,7 +285,8 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 		EnvVars: map[string]string{
 			"AGENT_FACTORY_CLAUDE_ENV": "enabled",
 		},
-	})
+	}
+	resp, err := provider.Infer(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Infer returned error: %v", err)
 	}
@@ -305,19 +306,10 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 		t.Fatalf("provider session id = %q, want %q", resp.ProviderSession.ID, "claude-session-123")
 	}
 
-	if fakeExec.request.Command != string(ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", ModelProviderClaude, fakeExec.request.Command)
-	}
-	expectedArgs := []string{
-		"-p",
-		"--dangerously-skip-permissions",
-		"--worktree", "C:\\repo\\worktree",
-		"--system-prompt", "system prompt",
-		"--model", "claude-sonnet-4-5-20250514",
-		"--resume", "claude-session-123",
-		"user prompt",
-	}
-	assertStringSlicesEqual(t, expectedArgs, fakeExec.request.Args)
+	behavior := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{})
+	expectedArgs := behavior.BuildArgs(req, true)
+	expectedRequest := behavior.BuildCommandRequest(req, expectedArgs)
+	assertCommandRequestAssemblyMatchesProviderBehavior(t, expectedRequest, fakeExec.request)
 	if len(fakeExec.request.Stdin) != 0 {
 		t.Fatalf("expected claude request not to send stdin, got %q", string(fakeExec.request.Stdin))
 	}
@@ -420,7 +412,7 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 		WithProviderLogger(logging.NoopLogger{}),
 	)
 
-	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider:    string(ModelProviderCodex),
 		Model:            "gpt-5-codex",
 		WorkingDirectory: "C:\\repo",
@@ -428,7 +420,8 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 		EnvVars: map[string]string{
 			"AGENT_FACTORY_CODEX_ENV": "present",
 		},
-	})
+	}
+	resp, err := provider.Infer(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Infer returned error: %v", err)
 	}
@@ -448,17 +441,10 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 		t.Fatalf("provider session id = %q, want %q", resp.ProviderSession.ID, "sess_codex_123")
 	}
 
-	if fakeExec.request.Command != string(ModelProviderCodex) {
-		t.Fatalf("expected command %q, got %q", ModelProviderCodex, fakeExec.request.Command)
-	}
-	expectedArgs := []string{
-		"exec",
-		"--dangerously-bypass-approvals-and-sandbox",
-		// "--cd", "C:\\repo",
-		"--model", "gpt-5-codex",
-		"-",
-	}
-	assertStringSlicesEqual(t, expectedArgs, fakeExec.request.Args)
+	behavior := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{})
+	expectedArgs := behavior.BuildArgs(req, true)
+	expectedRequest := behavior.BuildCommandRequest(req, expectedArgs)
+	assertCommandRequestAssemblyMatchesProviderBehavior(t, expectedRequest, fakeExec.request)
 	if string(fakeExec.request.Stdin) != "line 1\nline 2" {
 		t.Fatalf("expected codex stdin to carry the prompt, got %q", string(fakeExec.request.Stdin))
 	}
@@ -1685,6 +1671,20 @@ func assertStringSlicesEqual(t *testing.T, want, got []string) {
 		if want[i] != got[i] {
 			t.Fatalf("expected arg %d to be %q, got %q; full args: %v", i, want[i], got[i], got)
 		}
+	}
+}
+
+func assertCommandRequestAssemblyMatchesProviderBehavior(t *testing.T, want, got CommandRequest) {
+	t.Helper()
+	if got.Command != want.Command {
+		t.Fatalf("expected command %q, got %q", want.Command, got.Command)
+	}
+	assertStringSlicesEqual(t, want.Args, got.Args)
+	if string(got.Stdin) != string(want.Stdin) {
+		t.Fatalf("expected stdin %q, got %q", string(want.Stdin), string(got.Stdin))
+	}
+	if got.WorkDir != want.WorkDir {
+		t.Fatalf("expected workdir %q, got %q", want.WorkDir, got.WorkDir)
 	}
 }
 
