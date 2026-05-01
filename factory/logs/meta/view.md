@@ -54,7 +54,6 @@
     - `pkg/service/factory_test.go`
   - `pkg/replay/EmbeddedRuntimeConfig` is the real production implementation
     and should not be folded into test-only helpers
-<<<<<<< HEAD
 - the legacy path `factory/meta/asks.md` now exists only as a redirect-only
   stub:
   - it points maintainers back to `factory/logs/meta/asks.md`
