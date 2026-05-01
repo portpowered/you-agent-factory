@@ -74,13 +74,15 @@ func TestDispatchTiming_InFlightStartTime(t *testing.T) {
 		testutil.WithRunAsync(),
 	)
 	h.SetCustomExecutor("step-worker", &channelExecutor{releaseCh: releaseCh})
+	beforeSubmit := time.Now()
+
+	// Seed work before starting the async run loop so the engine cannot
+	// terminate on an empty queue before this test submits work.
+	h.SubmitWork("task", []byte(`{"item": "starttime-test"}`))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
-
-	beforeSubmit := time.Now()
-	h.SubmitWork("task", []byte(`{"item": "starttime-test"}`))
 
 	// Wait for the executor to be invoked.
 	time.Sleep(200 * time.Millisecond)

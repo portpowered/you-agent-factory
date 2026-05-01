@@ -143,11 +143,14 @@ func TestRuntimeState_MidExecutionConsistency(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
 	h.SetCustomExecutor("step-worker", blockExec)
 
+	// Seed work before starting the async run loop so the engine cannot
+	// terminate on an empty queue before this test submits work.
+	h.SubmitWork("task", []byte(`{"item": "mid-exec"}`))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	h.SubmitWork("task", []byte(`{"item": "mid-exec"}`))
 	assertMidExecutionSnapshot(t, waitForMidExecutionSnapshot(t, h, 2*time.Second))
 	close(releaseCh)
 	waitForMidExecutionHarnessCompletion(t, h, errCh, cancel, ctx)
