@@ -839,11 +839,12 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryEventType"), "FactoryEventType", bundledFactoryEventTypeValues)
 
 	contextProperties := schemaProperties(t, schemaObject(t, schemas, "FactoryEventContext"), "FactoryEventContext")
-	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId"} {
+	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId", "currentChainingTraceId"} {
 		if _, ok := contextProperties[field]; !ok {
 			t.Fatalf("FactoryEventContext.properties.%s is missing", field)
 		}
 	}
+	assertStringArrayProperty(t, contextProperties, "previousChainingTraceIds")
 
 	inferenceResponseProperties := schemaProperties(t, schemaObject(t, schemas, "InferenceResponseEventPayload"), "InferenceResponseEventPayload")
 	assertPropertyRef(t, inferenceResponseProperties, "outcome", "#/components/schemas/InferenceOutcome")
@@ -1139,11 +1140,12 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	context := schemaObject(t, schemas, "FactoryEventContext")
 	assertRequiredFields(t, context, "sequence", "tick", "eventTime")
 	contextProperties := schemaProperties(t, context, "FactoryEventContext")
-	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId"} {
+	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId", "currentChainingTraceId"} {
 		if _, ok := contextProperties[field]; !ok {
 			t.Fatalf("FactoryEventContext.properties.%s is missing", field)
 		}
 	}
+	assertStringArrayProperty(t, contextProperties, "previousChainingTraceIds")
 	for _, snakeCaseField := range []string{"event_time", "request_id", "trace_ids", "work_ids", "dispatch_id"} {
 		if _, ok := contextProperties[snakeCaseField]; ok {
 			t.Fatalf("FactoryEventContext.properties.%s must use camelCase", snakeCaseField)
@@ -1201,8 +1203,12 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	dispatchRequest := schemaObject(t, schemas, "DispatchRequestEventPayload")
 	dispatchRequestProperties := schemaProperties(t, dispatchRequest, "DispatchRequestEventPayload")
 	for _, field := range []string{"currentChainingTraceId", "previousChainingTraceIds"} {
-		if _, ok := dispatchRequestProperties[field]; !ok {
+		property, ok := dispatchRequestProperties[field].(map[string]any)
+		if !ok {
 			t.Fatalf("DispatchRequestEventPayload.properties.%s is missing", field)
+		}
+		if got, ok := property["deprecated"].(bool); !ok || !got {
+			t.Fatalf("DispatchRequestEventPayload.properties.%s must be marked deprecated", field)
 		}
 	}
 	assertArrayItemRef(t, dispatchRequestProperties, "inputs", "#/components/schemas/DispatchConsumedWorkRef")
@@ -1281,8 +1287,12 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	dispatchResponse := schemaObject(t, schemas, "DispatchResponseEventPayload")
 	dispatchResponseProperties := schemaProperties(t, dispatchResponse, "DispatchResponseEventPayload")
 	for _, field := range []string{"currentChainingTraceId", "previousChainingTraceIds"} {
-		if _, ok := dispatchResponseProperties[field]; !ok {
+		property, ok := dispatchResponseProperties[field].(map[string]any)
+		if !ok {
 			t.Fatalf("DispatchResponseEventPayload.properties.%s is missing", field)
+		}
+		if got, ok := property["deprecated"].(bool); !ok || !got {
+			t.Fatalf("DispatchResponseEventPayload.properties.%s must be marked deprecated", field)
 		}
 	}
 	assertArrayItemRef(t, dispatchResponseProperties, "outputWork", "#/components/schemas/Work")
@@ -1427,7 +1437,7 @@ func assertCanonicalFactoryEventFixtureOwnership(
 	switch eventType {
 	case "DISPATCH_REQUEST":
 		assertJSONKeysAbsent(t, payloadMap, "canonical dispatch request payload", "dispatchId", "workstation", "worker")
-		assertJSONKeysPresent(t, contextMap, "canonical dispatch request context", "dispatchId", "requestId")
+		assertJSONKeysPresent(t, contextMap, "canonical dispatch request context", "dispatchId", "requestId", "currentChainingTraceId", "previousChainingTraceIds")
 		if metadata, ok := payloadMap["metadata"].(map[string]any); ok {
 			assertJSONKeysAbsent(t, metadata, "canonical dispatch request metadata", "requestId")
 		}
@@ -1439,7 +1449,7 @@ func assertCanonicalFactoryEventFixtureOwnership(
 		assertJSONKeysPresent(t, contextMap, "canonical inference response context", "dispatchId")
 	case "DISPATCH_RESPONSE":
 		assertJSONKeysAbsent(t, payloadMap, "canonical dispatch response payload", "dispatchId", "workstation", "worker")
-		assertJSONKeysPresent(t, contextMap, "canonical dispatch response context", "dispatchId")
+		assertJSONKeysPresent(t, contextMap, "canonical dispatch response context", "dispatchId", "currentChainingTraceId", "previousChainingTraceIds")
 	}
 }
 

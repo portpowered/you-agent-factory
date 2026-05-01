@@ -431,6 +431,9 @@ func assertDispatchSmokeEventContext(
 	if got := event.Context.WorkIds; got == nil || len(*got) != 1 || (*got)[0] != want.workID {
 		t.Fatalf("%s context workIds = %#v, want [%s]", event.Type, got, want.workID)
 	}
+	if event.Type == factoryapi.FactoryEventTypeDispatchRequest || event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+		assertDispatchSmokeChaining(t, event.Context.CurrentChainingTraceId, event.Context.PreviousChainingTraceIds, want, string(event.Type)+" context")
+	}
 }
 
 func assertDispatchSmokeChaining(

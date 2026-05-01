@@ -1667,6 +1667,172 @@ describe("factory timeline reconstruction", () => {
     );
   });
 
+  it("prefers context dispatch chaining lineage over deprecated payload copies", () => {
+    const chainingWorkRequest = event(
+      "event-context-chaining-work-request",
+      2,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        source: "api",
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            current_chaining_trace_id: "chain-a",
+            name: "Fan In A",
+            trace_id: "chain-a",
+            work_id: "work-chain-a",
+            work_type_id: "story",
+          },
+          {
+            current_chaining_trace_id: "chain-b",
+            name: "Fan In B",
+            trace_id: "chain-b",
+            work_id: "work-chain-b",
+            work_type_id: "story",
+          },
+        ],
+      },
+    );
+    chainingWorkRequest.context.requestId = "request-chain";
+    chainingWorkRequest.context.traceIds = ["chain-a", "chain-b"];
+    chainingWorkRequest.context.workIds = ["work-chain-a", "work-chain-b"];
+
+    const chainingDispatchRequest = event(
+      "event-context-chaining-dispatch-request",
+      3,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        current_chaining_trace_id: "payload-chain-stale",
+        dispatchId: "dispatch-chain",
+        inputs: [
+          {
+            current_chaining_trace_id: "chain-a",
+            name: "Fan In A",
+            trace_id: "chain-a",
+            work_id: "work-chain-a",
+            work_type_id: "story",
+          },
+          {
+            current_chaining_trace_id: "chain-b",
+            name: "Fan In B",
+            trace_id: "chain-b",
+            work_id: "work-chain-b",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["payload-chain-z", "payload-chain-y"],
+        transitionId: "complete",
+        workstation: {
+          id: "complete",
+          inputs: [{ state: "review", work_type: "story" }],
+          name: "Complete",
+          outputs: [{ state: "done", work_type: "story" }],
+          worker: "completer",
+        },
+      },
+    );
+    chainingDispatchRequest.context.currentChainingTraceId = "chain-a";
+    chainingDispatchRequest.context.previousChainingTraceIds = [
+      "chain-a",
+      "chain-b",
+    ];
+    chainingDispatchRequest.context.dispatchId = "dispatch-chain";
+    chainingDispatchRequest.context.traceIds = ["chain-a", "chain-b"];
+    chainingDispatchRequest.context.workIds = ["work-chain-a", "work-chain-b"];
+
+    const chainingDispatchResponse = event(
+      "event-context-chaining-dispatch-response",
+      4,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        current_chaining_trace_id: "payload-chain-stale",
+        dispatchId: "dispatch-chain",
+        durationMillis: 980,
+        outcome: "ACCEPTED",
+        outputWork: [
+          {
+            current_chaining_trace_id: "chain-a",
+            name: "Fan In Result",
+            previous_chaining_trace_ids: ["chain-a", "chain-b"],
+            trace_id: "chain-a",
+            work_id: "work-chain-result",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["payload-chain-z", "payload-chain-y"],
+        transitionId: "complete",
+        workstation: {
+          id: "complete",
+          inputs: [{ state: "review", work_type: "story" }],
+          name: "Complete",
+          outputs: [{ state: "done", work_type: "story" }],
+          worker: "completer",
+        },
+      },
+    );
+    chainingDispatchResponse.context.currentChainingTraceId = "chain-a";
+    chainingDispatchResponse.context.previousChainingTraceIds = [
+      "chain-a",
+      "chain-b",
+    ];
+    chainingDispatchResponse.context.dispatchId = "dispatch-chain";
+    chainingDispatchResponse.context.traceIds = ["chain-a", "chain-b"];
+    chainingDispatchResponse.context.workIds = ["work-chain-a", "work-chain-b"];
+
+    const tickThree = buildFactoryTimelineSnapshot(
+      [initialStructureRequest, chainingWorkRequest, chainingDispatchRequest],
+      3,
+    );
+    const tickFour = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        chainingWorkRequest,
+        chainingDispatchRequest,
+        chainingDispatchResponse,
+      ],
+      4,
+    );
+
+    expect(
+      tickThree.workstationRequestsByDispatchID["dispatch-chain"]?.request_view
+        ?.current_chaining_trace_id,
+    ).toBe("chain-a");
+    expect(
+      tickThree.workstationRequestsByDispatchID["dispatch-chain"]?.request_view
+        ?.previous_chaining_trace_ids,
+    ).toEqual(["chain-a", "chain-b"]);
+    expect(
+      tickFour.dashboard.runtime.workstation_requests_by_dispatch_id?.[
+        "dispatch-chain"
+      ]?.request?.current_chaining_trace_id,
+    ).toBe("chain-a");
+    expect(
+      tickFour.dashboard.runtime.workstation_requests_by_dispatch_id?.[
+        "dispatch-chain"
+      ]?.request?.previous_chaining_trace_ids,
+    ).toEqual(["chain-a", "chain-b"]);
+    expect(
+      tickFour.dashboard.runtime.workstation_requests_by_dispatch_id?.[
+        "dispatch-chain"
+      ]?.response?.output_work_items,
+    ).toEqual([
+      {
+        current_chaining_trace_id: "chain-a",
+        display_name: "Fan In Result",
+        previous_chaining_trace_ids: ["chain-a", "chain-b"],
+        trace_id: "chain-a",
+        work_id: "work-chain-result",
+        work_type_id: "story",
+      },
+    ]);
+    expect(
+      tickFour.tracesByWorkID["work-chain-result"].dispatches[0],
+    ).toMatchObject({
+      current_chaining_trace_id: "chain-a",
+      previous_chaining_trace_ids: ["chain-a", "chain-b"],
+    });
+  });
+
   it("retains failed completion details in fixed timeline reconstruction", () => {
     const events = [
       initialStructureRequest,
