@@ -244,7 +244,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./scripts/release/smoke-artifact.sh \
+          sh ./scripts/release/smoke-artifact.sh \
             "${{ steps.extract-unix.outputs.binary_path }}" \
             "tests/release/testdata/cli_smoke_factory" \
             > "smoke-output/${{ matrix.asset_id }}-result.json" \
