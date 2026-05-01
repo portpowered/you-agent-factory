@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"context"
@@ -17,9 +17,12 @@ import (
 
 func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
 	dir := scaffoldFactory(t, simplePipelineConfig())
-	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
-	traceID := server.SubmitWork(t, "task", []byte(`{"title":"cleanup smoke"}`))
+	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "cleanup smoke"},
+	})
 	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
 	if len(work.Results) != 1 {
 		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
@@ -44,7 +47,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 	assertCleanupSmokeDashboardShell(t, server.URL())
 }
 
-func assertCleanupSmokeCanonicalFactoryEvents(t *testing.T, server *FunctionalServer, workID string) {
+func assertCleanupSmokeCanonicalFactoryEvents(t *testing.T, server *functionalAPIServer, workID string) {
 	t.Helper()
 
 	events, err := server.service.GetFactoryEvents(context.Background())

@@ -209,17 +209,6 @@ func assertFunctionalEventsUseCanonicalVocabulary(t *testing.T, events []factory
 	}
 }
 
-func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string) {
-	t.Helper()
-
-	stream := openFactoryEventHTTPStream(t, baseURL+"/events")
-	runRequest, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
-	assertFunctionalEventsUseCanonicalVocabulary(t, []factoryapi.FactoryEvent{runRequest, initialStructure},
-		factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
-	)
-}
-
 var retiredFunctionalFactoryEventTypes = []string{
 	"RUN_STARTED",
 	"INITIAL_STRUCTURE",
