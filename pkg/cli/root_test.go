@@ -85,9 +85,9 @@ func TestRootCommand_HelpDocumentsSupportedDocsTopics(t *testing.T) {
 	help := out.String()
 	for _, want := range append(
 		[]string{
-			"Packaged reference topics are also available through agent-factory docs <topic>.",
+			"Packaged reference topics are also available through infinite-you docs <topic>.",
 			"Supported docs topics:",
-			"agent-factory docs workstation",
+			"infinite-you docs workstation",
 		},
 		docscli.SupportedTopics()...,
 	) {
@@ -425,7 +425,7 @@ func TestReadmeCommandListDoesNotAdvertiseRemovedAuditStateSurfaces(t *testing.T
 		t.Fatalf("read package README: %v", err)
 	}
 
-	if strings.Contains(string(readme), "agent-factory audit state-surfaces") {
+	if strings.Contains(string(readme), "infinite-you audit state-surfaces") {
 		t.Fatal("README should not advertise removed audit state-surfaces command")
 	}
 }
@@ -438,8 +438,8 @@ func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 
 	contents := string(readme)
 	for _, want := range []string{
-		"agent-factory docs",
-		"agent-factory docs workstation",
+		"infinite-you docs",
+		"infinite-you docs workstation",
 		"Supported docs topics are `config`, `workstation`, `workers`, `resources`,",
 		"`batch-work`, and `templates`.",
 	} {
@@ -457,7 +457,7 @@ func TestDocsIndexDocumentsDocsCommandTopics(t *testing.T) {
 
 	contents := string(docsReadme)
 	for _, want := range []string{
-		"agent-factory docs",
+		"infinite-you docs",
 		"`config`",
 		"`workstation`",
 		"`workers`",
@@ -719,13 +719,13 @@ func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"Running agent-factory with no arguments starts the out-of-the-box flow",
+		"Running infinite-you with no arguments starts the out-of-the-box flow",
 		"factory/inputs/tasks/default",
 		"http://localhost:7437/dashboard/ui",
 		"printf \"Fix the lint issues\\n\" > factory/inputs/tasks/default/fix-lint.md",
 		"docs",
 		"Print packaged markdown reference topics",
-		"agent-factory docs workstation",
+		"infinite-you docs workstation",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("root help missing %q:\n%s", want, help)
@@ -777,7 +777,7 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 	if runCmd.Long == "" {
 		t.Fatal("expected run command long help text")
 	}
-	if !strings.Contains(runCmd.Long, "run agent-factory with no arguments") {
+	if !strings.Contains(runCmd.Long, "run infinite-you with no arguments") {
 		t.Fatal("expected run command long help text to point users to no-arg default flow")
 	}
 	if !strings.Contains(runCmd.Long, "factory/inputs/tasks/default") {

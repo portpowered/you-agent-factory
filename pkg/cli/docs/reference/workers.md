@@ -66,6 +66,6 @@ changes scoped to the current work item.
 
 ## Related
 
-- `agent-factory docs config`
-- `agent-factory docs workstation`
-- `agent-factory docs templates`
+- `infinite-you docs config`
+- `infinite-you docs workstation`
+- `infinite-you docs templates`

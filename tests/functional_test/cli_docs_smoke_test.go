@@ -18,7 +18,7 @@ type docsSmokeTopic struct {
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
-	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "agent-factory docs workstation"}},
+	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "infinite-you docs workstation"}},
 	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE"}},
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot"}},
@@ -45,11 +45,11 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 		t.Run(topic.name, func(t *testing.T) {
 			output := executeDocsSmokeCommand(t, workingDir, "docs", topic.name)
 			if !strings.Contains(output, topic.heading) {
-				t.Fatalf("agent-factory docs %s missing heading %q", topic.name, topic.heading)
+				t.Fatalf("infinite-you docs %s missing heading %q", topic.name, topic.heading)
 			}
 			for _, marker := range topic.markers {
 				if !strings.Contains(output, marker) {
-					t.Fatalf("agent-factory docs %s missing marker %q", topic.name, marker)
+					t.Fatalf("infinite-you docs %s missing marker %q", topic.name, marker)
 				}
 			}
 		})

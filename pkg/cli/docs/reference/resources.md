@@ -56,6 +56,6 @@ workstations while a dispatch is active.
 
 ## Related
 
-- `agent-factory docs config`
-- `agent-factory docs workstation`
-- `agent-factory docs workers`
+- `infinite-you docs config`
+- `infinite-you docs workstation`
+- `infinite-you docs workers`

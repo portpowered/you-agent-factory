@@ -541,7 +541,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		sidecars.Wait()
 	}()
 	if fs.recording != nil {
-		fs.recording.Start(ctx)
+		fs.recording.Start(runCtx)
 		if err := fs.recording.Flush(); err != nil {
 			return err
 		}

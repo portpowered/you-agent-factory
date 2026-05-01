@@ -1,4 +1,4 @@
-BINARY_NAME := agent-factory
+BINARY_NAME := infinite-you
 CMD_PATH    := ./cmd/factory/
 BIN_DIR     := bin
 BUN         ?= bun
@@ -15,7 +15,7 @@ CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT ?= 1
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
 
 ifeq ($(OS),Windows_NT)
-	BINARY_NAME := agent-factory.exe
+	BINARY_NAME := infinite-you.exe
 endif
 
 # Detect git worktree environment

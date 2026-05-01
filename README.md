@@ -78,6 +78,9 @@ infinite-you docs batch-work
 etc
 ```
 
+Supported docs topics are `config`, `workstation`, `workers`, `resources`,
+`batch-work`, and `templates`.
+
 ## How It Works
 
 The factory ingests files or API submissions as work items, then moves that

@@ -79,8 +79,8 @@ limits, and executor settings.
 
 ## Related
 
-- `agent-factory docs workstation`
-- `agent-factory docs workers`
-- `agent-factory docs resources`
-- `agent-factory docs batch-work`
-- `agent-factory docs templates`
+- `infinite-you docs workstation`
+- `infinite-you docs workers`
+- `infinite-you docs resources`
+- `infinite-you docs batch-work`
+- `infinite-you docs templates`
