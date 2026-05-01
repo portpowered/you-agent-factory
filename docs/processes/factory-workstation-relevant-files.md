@@ -17,6 +17,9 @@ work inputs.
 | `factory/inputs/BATCH/default/` | Ordered or mixed-work-type request inbox | Canonical placement for `FACTORY_REQUEST_BATCH` JSON when operators need dependency ordering or mixed work types. |
 | `factory/workstations/cleaner/AGENTS.md` | Active cleanup workstation prompt | Should cite only checked-in workflow docs and the live idea or batch inboxes. |
 | `factory/workstations/ideafy/AGENTS.md` | Active ideation workstation prompt | Should default to one standalone idea markdown output and reserve batch JSON output for dependency-ordered or mixed-work-type follow-up. |
+| `factory/workstations/plan/AGENTS.md` | Active planning workstation prompt | PRD and story authoring should require behavioral acceptance criteria and avoid planning meta tests that only assert implementation structure. |
+| `factory/workstations/process/AGENTS.md` | Active execution workstation prompt | Implementation guidance should prefer observable runtime, API, CLI, UI, or emitted-event tests over source, docs, bundle, command, or route inventory assertions. |
+| `factory/workstations/review/AGENTS.md` | Active review workstation prompt | Review guidance should treat meta tests as a blocking quality issue when they do not verify real product behavior. |
 
 ## Notes for future iterations
 
@@ -32,3 +35,4 @@ work inputs.
 - When a workstation prompt can emit either ideas or batch requests, state the default as one standalone idea file and name the exact condition that permits `FACTORY_REQUEST_BATCH` output.
 - When maintainer prompts need the customer backlog, point them to `factory/logs/meta/asks.md` explicitly and keep any legacy duplicate path as a redirect-only stub rather than a peer control-plane surface.
 - Treat slash-rooted workstation `working_directory` values as portable runtime paths only when they are repo-authored logical locations such as `/repo/...` or `/worktrees/...`; preserve real existing Unix absolute paths as host-absolute instead of rebasing them under the runtime base.
+- Keep workstation testing guidance behavioral. Prompt instructions should reject source scans, docs-topology checks, asset-bundle string inspections, and command or route inventory assertions unless those surfaces are the product behavior being validated.

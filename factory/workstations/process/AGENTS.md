@@ -52,6 +52,11 @@ we should not create new tasks for:
 - Commit frequently
 - Keep CI green
 - Read the Codebase Patterns section in progress.txt before starting
+- When adding or revising tests, prefer observable runtime, API, CLI, UI, or
+  emitted-event assertions. Do not add meta tests that scan source files,
+  validate docs link topology, inspect asset bundle internals, or enforce
+  command or route inventories unless those surfaces are the actual user-visible
+  contract under test.
 
 ## Progress Report Format
 
@@ -81,4 +86,3 @@ If you discover a **reusable pattern** that future iterations should know, add i
 ```
 
 Only add patterns that are **general and reusable**, not story-specific details.
-

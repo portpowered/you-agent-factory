@@ -60,6 +60,10 @@ figure out a way to clean the code (in priority order)
 4. simplify logic (we want to have as few edge case handlings as possible and defer to the primary abstractions like the petri-nets and the event history stream as much possible)
 5. consolidate duplicative structures or fucntionality across the code base
 6. for the agentfactory websites we look to remove unused code, reduce the amount of duplicative components, reduce functionality down to small components, shared styles, such that the overall complexity of teh system is reduced
+7. if your cleanup idea touches tests, prefer deleting or rewriting meta tests
+that only inspect source layout, docs topology, asset bundle internals, or
+command or route inventories. Ask for behavioral assertions through observable
+runtime, API, CLI, UI, or emitted-event outcomes instead.
 
 ## Step 3 - write a file
 1. default to one standalone cleanup idea file. Write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.

@@ -32,6 +32,12 @@ If ANY project-level acceptance criterion fails, call it out clearly in the PR c
 **Behavioral assertion check:**
 For each story marked `passes:true`, verify that the acceptance criteria include at least one **behavioral assertion** — a criterion describing an observable outcome, not just compilation or structural presence. If a story only has structural/compile-time criteria (e.g., "interface defined", "typecheck passes"), flag it as a **BLOCKING** issue. Structural criteria like "typecheck passes" and "tests pass" are necessary quality gates but are NOT sufficient on their own — they do not prove the system actually functions.
 
+Treat meta tests as a quality issue. If the change adds or keeps tests that only
+scan source files, validate docs topology, inspect asset bundle internals, or
+enforce command, route, or registration inventories without proving observable
+runtime, API, CLI, UI, or emitted-event behavior, raise that as a BLOCKING
+standards violation and ask for behavioral coverage instead.
+
 ### Step 4 — Apply STD-015 regulations in order
 
 Read docs/standards/code/code-review-standards.md, check the code against the standard and confirm its as expected. 
