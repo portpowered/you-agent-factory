@@ -2,7 +2,7 @@
 
 ## world state
 
-- repository `HEAD` is `24a6463` on `main` on May 1, 2026, and
+- repository `HEAD` is `8c84704` on `main` on May 1, 2026, and
   `origin/main` is the same commit after `git pull`
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
@@ -16,19 +16,22 @@
 - the workspace-local `factory/inputs/**` surface still has ignored residue
   beyond the tracked sentinels, so those files remain local context only and
   not checked-in workflow truth:
+  - `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
   - `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+  - `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
   - `factory/inputs/idea/default/derive-throttle-windows-from-completed-dispatch-history.md`
   - `factory/inputs/idea/default/derive-throttle-windows-from-event-history.md`
   - `factory/inputs/idea/default/prd-api-model-contract-cleanup.md`
+  - `factory/inputs/idea/default/prd-cli-consumer-installation.md`
+  - `factory/inputs/idea/default/prd-current-factory-default-runtime-support.md`
   - `factory/inputs/idea/default/prd-functional-test-suite-decomposition.md`
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
-  - `factory/inputs/idea/default/retire-dispatch-result-hook-syncdispatch-cache.md`
+  - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
 - the current GitHub lane state on May 1, 2026 is:
+  - open PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
+  - open PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
   - open PR `#33` `prd-api-model-contract-cleanup`
   - open PR `#30` `prd-functional-test-suite-decomposition`
-  - open PR `#20` `test-cleanup`
-  - open PR `#16` `dedupe-root-factory-artifact-contract-entries`
-  - open PR `#4` `standardize-contract-guard-skip-policy`
   - merged PR `#34` `dedupe-list-work-legacy-pagination-fallback`
   - merged PR `#32` `shadcn-components-for-website`
   - merged PR `#31` `derive-throttle-windows-from-completed-dispatch-history`
@@ -70,30 +73,32 @@
   - PR `#32` just landed the current website component/system lane and reaches
     shared UI primitives, feature components, stories, tests, styles, and
     built assets
-- one narrower cleanup seam is queueable outside the active PR file sets:
-  - `pkg/cli/dashboard/dashboard.go` still computes completed and failed
-    session work-item fallbacks through two very similar single-caller helpers:
-    `worldViewFallbackCompletedWorkItems` and
-    `worldViewFallbackFailedWorkItems`
-  - both helpers only derive dashboard-facing work refs from
-    `session.DispatchHistory`
-  - the broader `pkg/factory/runtime/dispatch_result_hook.go` `syncDispatch`
-    cleanup seam is still valid, but it touches live runtime dispatch behavior
-    and is no longer the best next lane compared with the dashboard-only
-    simplification
+- the last queued narrow cleanup seams are no longer just candidates:
+  - PR `#35` now owns the dashboard-only fallback-collector simplification in
+    `pkg/cli/dashboard/dashboard.go`
+  - PR `#36` now owns the `pkg/factory/runtime/dispatch_result_hook.go`
+    `syncDispatch` cache retirement
+- one newer narrow cleanup seam is queueable outside the active PR file sets:
+  - `pkg/workers/script.go` and `pkg/workers/recording_provider.go` each own a
+    small helper that derives emitted event `ExitCode` values from command
+    diagnostics
+  - `scriptResponseExitCode` and `providerErrorExitCode` are package-local,
+    single-caller helpers for the same boundary-event concern
+  - nearby focused worker tests already assert exit-code behavior, so this seam
+    is low-risk and does not need public contract changes
 
 ## current blockers
 
 1. the broad `INFERENCE_THROTTLE_GUARD` customer ask still spans config shape,
    guard lowering, scheduler ownership, and observability, so it is too large
    for a safe single lane
-2. open PRs `#33`, `#30`, `#20`, `#16`, and `#4` now occupy most of the
-   public contract, functional-test, artifact-contract, and guard-policy file
-   sets
+2. open PRs `#33`, `#30`, `#35`, and `#36` now occupy most of the active
+   public-contract, functional-test, dashboard, and dispatch-hook file sets
 3. the previous checked-in world model was stale in three important ways:
-   - it still described `HEAD` as `25580f5`
-   - it still treated PR `#32` as open even though it is merged
-   - it still described the worktree as dirty even though it is clean now
+   - it still described `HEAD` as `24a6463`
+   - it still omitted newly open PRs `#35` and `#36`
+   - it still recommended the dashboard fallback cleanup as the next lane even
+     though that lane is already in review
 4. the broad public/model ask is active in PR `#33`, so the next cleanup lane
    should avoid `pkg/api/`, `pkg/config/`, `pkg/interfaces/`, and nearby
    public-contract surfaces until that lane settles
@@ -107,15 +112,18 @@
 - the highest-value live customer problem is still global throttling, but the
   remaining gap is now clearly on the public/config/lowering side rather than
   on throttle timing reconstruction
-- because PR `#33` is a wide public-model lane and the functional/artifact
-  lanes are also active, new follow-up work should avoid those surfaces rather
-  than trying to parallelize into them
+- because PR `#33` is a wide public-model lane and PR `#30` is a wide
+  functional-test restructuring lane, new follow-up work should avoid those
+  surfaces rather than trying to parallelize into them
 - the website-quality lane advanced materially with merged PR `#32`, so the
   next cleanup task no longer needs to spend the one available sidecar slot on
   shared-component cleanup
-- the best available cleanup work right now is a narrow dashboard-only
-  simplification that reduces duplicate fallback collection logic without
-  changing public contracts or scheduler/runtime behavior
+- because PRs `#35` and `#36` now occupy the last two narrow local cleanup
+  seams already identified, the next sidecar task should move to another
+  package-local duplication site instead of piling onto those live branches
+- the best available cleanup work right now is a narrow `pkg/workers` event
+  emission dedupe that consolidates exit-code extraction ownership without
+  changing public contracts or runtime scheduling behavior
 - a sidecar candidate that looks package-local can still collide with an open
   umbrella PR, so file-set checks must include all active PRs before queuing
   new work
@@ -125,13 +133,14 @@
 - update the checked-in meta world model and progress log now
 - leave `factory/logs/meta/asks.md` unchanged; the priority order is still
   correct
-- queue one new ignored cleanup idea for `pkg/cli/dashboard/dashboard.go`:
-  preserve current dashboard session output, but consolidate the duplicate
-  `DispatchHistory` fallback collectors for completed and failed work items
-- keep the older ignored `syncDispatch` runtime idea as historical local
-  context rather than the next recommended lane
+- queue one new ignored cleanup idea for worker event emission:
+  preserve current emitted script/inference response payloads, but consolidate
+  duplicate `ExitCode` extraction ownership across `pkg/workers/script.go` and
+  `pkg/workers/recording_provider.go`
+- keep the already-open dashboard and `syncDispatch` lanes as active local
+  context rather than re-queueing them
 - avoid re-queuing already-landed lanes and avoid colliding with open PRs
-  `#33`, `#30`, `#20`, `#16`, and `#4`
+  `#33`, `#30`, `#35`, and `#36`
 
 ## customer asks
 

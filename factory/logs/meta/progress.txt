@@ -25,6 +25,10 @@
 - A package-local cleanup candidate can still collide with a broad open PR, so
   candidate validation must compare exact touched files against every active
   lane, not just against the candidate's apparent subsystem boundary.
+- When a cleanup candidate lives in `pkg/workers`, inspect both script and
+  inference/recording event payload assembly paths; small boundary-event helper
+  duplication can span those sibling files even when the behavior is already
+  test-covered.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -614,3 +618,42 @@
     both derive fallback work refs from `session.DispatchHistory`
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, clean
   worktree, merged/open PR state, and revised next-lane recommendation.
+
+## 2026-05-01 14:04 -07:00 - meta refresh after dashboard and syncDispatch lanes opened
+
+- Ran `git pull` and verified the workspace is synced on `main` at `8c84704`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, workspace-local
+  `factory/inputs/**` residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `24a6463`
+  - it did not include newly open PRs `#35` and `#36`
+  - it still treated the dashboard fallback cleanup as the next lane even
+    though that lane is already open in PR `#35`
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#36`, `#35`, `#33`, and `#30`
+  - merged PRs `#34`, `#32`, `#31`, `#29`, and `#28`
+- Reconfirmed through direct code inspection that the broad throttle ask is
+  still architectural rather than cleanup-ready:
+  - `pkg/factory/internal/throttle/windows.go` owns pure active-window
+    derivation
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` still owns mutable pause
+    state and scheduling enforcement
+  - the remaining gap is still factory-level config/lowering/guard ownership
+- Used a sidecar repository-inspection agent plus direct local validation to
+  identify one new narrow cleanup candidate outside open PRs `#33`, `#30`,
+  `#35`, and `#36`:
+  - `pkg/workers/script.go` and `pkg/workers/recording_provider.go` each own a
+    small single-caller helper for emitted event `ExitCode` extraction from
+    command diagnostics
+  - nearby worker tests already cover the observable exit-code payload shape
+  - the seam is package-local and does not require public contract changes
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
+  as the next narrow lane instead of re-queuing the already-open dashboard or
+  `syncDispatch` cleanups.
