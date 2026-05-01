@@ -42,21 +42,3 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 		t.Fatalf("artifact factory workers = %#v, want hydrated factory config", got)
 	}
 }
-
-func generatedWorkstationGuardsByName(t *testing.T, factory factoryapi.Factory, name string) []factoryapi.WorkstationGuard {
-	t.Helper()
-	if factory.Workstations == nil {
-		t.Fatal("generated factory workstations = nil")
-	}
-	for _, workstation := range *factory.Workstations {
-		if workstation.Name != name {
-			continue
-		}
-		if workstation.Guards == nil {
-			return nil
-		}
-		return append([]factoryapi.WorkstationGuard(nil), (*workstation.Guards)...)
-	}
-	t.Fatalf("generated factory missing workstation %q", name)
-	return nil
-}
