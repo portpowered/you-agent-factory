@@ -331,7 +331,7 @@ components:
         workstation-request projections keyed by dispatch ID without
         reintroducing removed `/dashboard` endpoints.
       properties:
-        workstation_requests_by_dispatch_id:
+        workstationRequestsByDispatchId:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/FactoryWorldWorkstationRequestView'
@@ -339,9 +339,9 @@ components:
       type: object
       additionalProperties: false
       properties:
-        system_prompt_hash:
+        systemPromptHash:
           type: string
-        user_message_hash:
+        userMessageHash:
           type: string
         variables:
           $ref: '#/components/schemas/StringMap'
@@ -353,15 +353,15 @@ components:
           type: string
         model:
           type: string
-        request_metadata:
+        requestMetadata:
           $ref: '#/components/schemas/StringMap'
-        response_metadata:
+        responseMetadata:
           $ref: '#/components/schemas/StringMap'
     FactoryWorldWorkDiagnostics:
       type: object
       additionalProperties: false
       properties:
-        rendered_prompt:
+        renderedPrompt:
           $ref: '#/components/schemas/FactoryWorldRenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/FactoryWorldProviderDiagnostic'
@@ -369,46 +369,46 @@ components:
       type: object
       additionalProperties: false
       required:
-        - work_id
+        - workId
       properties:
-        work_id:
+        workId:
           type: string
-        work_type_id:
+        workTypeId:
           type: string
-        display_name:
+        displayName:
           type: string
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
-        previous_chaining_trace_ids:
+        previousChainingTraceIds:
           type: array
           items:
             type: string
-        trace_id:
+        traceId:
           type: string
     FactoryWorldTokenView:
       type: object
       additionalProperties: false
       required:
-        - token_id
-        - place_id
+        - tokenId
+        - placeId
       properties:
-        token_id:
+        tokenId:
           type: string
-        place_id:
+        placeId:
           type: string
         name:
           type: string
-        work_id:
+        workId:
           type: string
-        work_type_id:
+        workTypeId:
           type: string
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
-        previous_chaining_trace_ids:
+        previousChainingTraceIds:
           type: array
           items:
             type: string
-        trace_id:
+        traceId:
           type: string
         tags:
           $ref: '#/components/schemas/StringMap'
@@ -417,15 +417,15 @@ components:
       additionalProperties: false
       required:
         - type
-        - token_id
+        - tokenId
       properties:
         type:
           type: string
-        token_id:
+        tokenId:
           type: string
-        from_place:
+        fromPlace:
           type: string
-        to_place:
+        toPlace:
           type: string
         reason:
           type: string
@@ -435,7 +435,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        script_request_id:
+        scriptRequestId:
           type: string
         attempt:
           type: integer
@@ -450,7 +450,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        script_request_id:
+        scriptRequestId:
           type: string
         attempt:
           type: integer
@@ -461,64 +461,64 @@ components:
           type: string
         stderr:
           type: string
-        duration_millis:
+        durationMillis:
           type: integer
           format: int64
           minimum: 0
-        exit_code:
+        exitCode:
           type: integer
-        failure_type:
+        failureType:
           type: string
     FactoryWorldWorkstationRequestCountView:
       type: object
       additionalProperties: false
       required:
-        - dispatched_count
-        - responded_count
-        - errored_count
+        - dispatchedCount
+        - respondedCount
+        - erroredCount
       properties:
-        dispatched_count:
+        dispatchedCount:
           type: integer
           minimum: 0
-        responded_count:
+        respondedCount:
           type: integer
           minimum: 0
-        errored_count:
+        erroredCount:
           type: integer
           minimum: 0
     FactoryWorldWorkstationRequestRequestView:
       type: object
       additionalProperties: false
       properties:
-        started_at:
+        startedAt:
           type: string
-        request_time:
+        requestTime:
           type: string
-        input_work_items:
+        inputWorkItems:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldWorkItemRef'
-        input_work_type_ids:
+        inputWorkTypeIds:
           type: array
           items:
             type: string
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
-        previous_chaining_trace_ids:
+        previousChainingTraceIds:
           type: array
           items:
             type: string
-        trace_ids:
+        traceIds:
           type: array
           items:
             type: string
-        consumed_tokens:
+        consumedTokens:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldTokenView'
         prompt:
           type: string
-        working_directory:
+        workingDirectory:
           type: string
         worktree:
           type: string
@@ -526,9 +526,9 @@ components:
           type: string
         model:
           type: string
-        request_metadata:
+        requestMetadata:
           $ref: '#/components/schemas/StringMap'
-        script_request:
+        scriptRequest:
           $ref: '#/components/schemas/FactoryWorldScriptRequestView'
     FactoryWorldWorkstationRequestResponseView:
       type: object
@@ -538,33 +538,33 @@ components:
           type: string
         feedback:
           type: string
-        failure_reason:
+        failureReason:
           type: string
-        failure_message:
+        failureMessage:
           type: string
-        response_text:
+        responseText:
           type: string
-        error_class:
+        errorClass:
           type: string
-        provider_session:
+        providerSession:
           $ref: '#/components/schemas/ProviderSessionMetadata'
         diagnostics:
           $ref: '#/components/schemas/FactoryWorldWorkDiagnostics'
-        response_metadata:
+        responseMetadata:
           $ref: '#/components/schemas/StringMap'
-        script_response:
+        scriptResponse:
           $ref: '#/components/schemas/FactoryWorldScriptResponseView'
-        end_time:
+        endTime:
           type: string
-        duration_millis:
+        durationMillis:
           type: integer
           format: int64
           minimum: 0
-        output_work_items:
+        outputWorkItems:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldWorkItemRef'
-        output_mutations:
+        outputMutations:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldMutationView'
@@ -572,16 +572,16 @@ components:
       type: object
       additionalProperties: false
       required:
-        - dispatch_id
-        - transition_id
+        - dispatchId
+        - transitionId
         - counts
         - request
       properties:
-        dispatch_id:
+        dispatchId:
           type: string
-        transition_id:
+        transitionId:
           type: string
-        workstation_name:
+        workstationName:
           type: string
         counts:
           $ref: '#/components/schemas/FactoryWorldWorkstationRequestCountView'

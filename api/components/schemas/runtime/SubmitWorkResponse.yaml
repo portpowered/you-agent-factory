@@ -1,7 +1,7 @@
 type: object
 additionalProperties: false
 required:
-  - trace_id
+  - traceId
 properties:
-  trace_id:
+  traceId:
     type: string

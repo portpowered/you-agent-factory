@@ -2,17 +2,17 @@ type: object
 additionalProperties: false
 required:
   - type
-  - source_work_name
-  - target_work_name
+  - sourceWorkName
+  - targetWorkName
 properties:
   type:
     $ref: './RelationType.yaml'
-  target_work_id:
+  targetWorkId:
     type: string
-  target_work_name:
+  targetWorkName:
     type: string
-  source_work_name:
+  sourceWorkName:
     type: string
-  required_state:
+  requiredState:
     type: string
 

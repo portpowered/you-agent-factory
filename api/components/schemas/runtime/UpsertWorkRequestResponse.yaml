@@ -1,11 +1,11 @@
 type: object
 additionalProperties: false
 required:
-  - request_id
-  - trace_id
+  - requestId
+  - traceId
 properties:
-  request_id:
+  requestId:
     type: string
-  trace_id:
+  traceId:
     type: string
 

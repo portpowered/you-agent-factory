@@ -8,29 +8,29 @@ properties:
   name:
     type: string
     description: A human readable name for the work, not unique
-  work_id:
+  workId:
     type: string
     description: Unique identifier for the work
-  request_id:
+  requestId:
     type: string
     description: Identifier for the original request that created this work, if applicable
-  work_type_name:
+  workTypeName:
     type: string
     description: Configured work type name from factory.json for this submitted work item.
   state:
     type: string
     description: Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
-  current_chaining_trace_id:
+  currentChainingTraceId:
     type: string
     description: Explicit chaining-trace identifier for this submitted work item.
-  previous_chaining_trace_ids:
+  previousChainingTraceIds:
     type: array
     description: Explicit predecessor chaining traces that directly caused this work item.
     items:
       type: string
-  trace_id:
+  traceId:
     type: string
-    description: Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id.
+    description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
   payload:
     description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. 
   tags:

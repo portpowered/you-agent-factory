@@ -1,13 +1,13 @@
 type: object
 additionalProperties: false
 required:
-  - request_id
+  - requestId
   - type
 properties:
-  request_id:
+  requestId:
     type: string
     description: Stable client-provided request identifier used for idempotent batch submission.
-  current_chaining_trace_id:
+  currentChainingTraceId:
     type: string
     description: Optional default chaining-trace identifier applied to submitted work items that omit it.
   type: 

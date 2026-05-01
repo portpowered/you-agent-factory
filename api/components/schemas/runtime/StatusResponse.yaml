@@ -2,17 +2,17 @@ type: object
 additionalProperties: false
 required:
   - categories
-  - factory_state
-  - runtime_status
-  - total_tokens
+  - factoryState
+  - runtimeStatus
+  - totalTokens
 properties:
   categories:
     $ref: './StatusCategories.yaml'
-  factory_state:
+  factoryState:
     type: string
-  runtime_status:
+  runtimeStatus:
     type: string
-  total_tokens:
+  totalTokens:
     type: integer
   resources:
     type: array

@@ -2,31 +2,31 @@ type: object
 additionalProperties: false
 required:
   - id
-  - place_id
-  - work_id
-  - work_type
-  - trace_id
-  - created_at
-  - entered_at
+  - placeId
+  - workId
+  - workType
+  - traceId
+  - createdAt
+  - enteredAt
 properties:
   id:
     type: string
-  place_id:
+  placeId:
     type: string
   name:
     type: string
-  work_id:
+  workId:
     type: string
-  work_type:
+  workType:
     type: string
-  trace_id:
+  traceId:
     type: string
   tags:
     $ref: '..\shared\StringMap.yaml'
-  created_at:
+  createdAt:
     type: string
     format: date-time
-  entered_at:
+  enteredAt:
     type: string
     format: date-time
   history:
