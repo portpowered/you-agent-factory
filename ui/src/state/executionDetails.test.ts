@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import type {
   DashboardActiveExecution,
   DashboardProviderSessionAttempt,
@@ -288,7 +289,7 @@ describe("selectWorkItemExecutionDetails", () => {
           },
           response: {
             diagnostics: completedAttempt.diagnostics,
-            duration_millis: 875,
+            durationMillis: 875,
             end_time: "2026-04-18T12:00:04Z",
             error_class: "rate_limited",
             failure_message: "Provider rate limit exceeded.",
@@ -313,7 +314,7 @@ describe("selectWorkItemExecutionDetails", () => {
       value: "session-runtime",
     });
     expect(details.workstationRequest?.response).toMatchObject({
-      duration_millis: 875,
+      durationMillis: 875,
       error_class: "rate_limited",
       failure_message: "Provider rate limit exceeded.",
       failure_reason: "rate_limited",

@@ -5,6 +5,7 @@ import type {
   DashboardFailedWorkDetail,
   DashboardInferenceAttempt,
   DashboardPlaceKind,
+  DashboardProviderDiagnostic,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardScriptRequest,
@@ -205,6 +206,8 @@ interface LegacyDispatchResponsePayloadCompat {
 interface LegacyFactoryWorkCompat {
   current_chaining_trace_id?: string;
   previous_chaining_trace_ids?: string[];
+  trace_id?: string;
+  work_id?: string;
   work_type_id?: string;
 }
 
@@ -451,13 +454,19 @@ function workRef(item: FactoryWorkItem): DashboardWorkItemRef {
 }
 
 function toDashboardRelation(relation: FactoryRelation): DashboardWorkRelation {
+  const legacyRelation = relation as FactoryRelation & {
+    required_state?: string;
+    source_work_name?: string;
+    target_work_id?: string;
+    target_work_name?: string;
+  };
   return {
     request_id: relation.request_id,
-    required_state: relation.required_state,
+    required_state: relation.requiredState ?? legacyRelation.required_state,
     source_work_id: relation.source_work_id,
-    source_work_name: relation.source_work_name,
-    target_work_id: relation.target_work_id ?? "",
-    target_work_name: relation.target_work_name,
+    source_work_name: relation.sourceWorkName ?? legacyRelation.source_work_name,
+    target_work_id: relation.targetWorkId ?? legacyRelation.target_work_id ?? "",
+    target_work_name: relation.targetWorkName ?? legacyRelation.target_work_name,
     trace_id: relation.trace_id,
     type: relation.type,
   };
@@ -516,7 +525,10 @@ function addTraceRelation(
 }
 
 function addRelation(state: WorldState, relation: FactoryRelation): void {
-  if (!relation.source_work_id || !relation.target_work_id) {
+  const targetWorkID =
+    relation.targetWorkId ??
+    (relation as FactoryRelation & { target_work_id?: string }).target_work_id;
+  if (!relation.source_work_id || !targetWorkID) {
     return;
   }
   const relations = state.relationsByWorkID[relation.source_work_id] ?? [];
@@ -538,7 +550,7 @@ function addRelation(state: WorldState, relation: FactoryRelation): void {
   );
   addTraceRelation(
     state,
-    state.workItemsByID[relation.target_work_id]?.trace_id,
+    state.workItemsByID[targetWorkID]?.trace_id,
     relation,
   );
 }
@@ -994,13 +1006,18 @@ function factoryWorkToItem(
 ): FactoryWorkItem {
   const legacyWork = work as (FactoryWork | { workId: string }) & LegacyFactoryWorkCompat;
   const workID =
-    ("work_id" in work ? work.work_id : undefined) ??
-    ("workId" in work ? work.workId : undefined) ??
-    ("name" in work ? work.name : undefined) ??
+    ("workId" in work && typeof work.workId === "string" ? work.workId : undefined) ??
+    legacyWork.work_id ??
+    ("name" in work && typeof work.name === "string" ? work.name : undefined) ??
     "";
   const existing = state.workItemsByID[workID];
   const workTypeID =
-    ("work_type_name" in work ? work.work_type_name : undefined) ??
+    ("workTypeName" in work && typeof work.workTypeName === "string"
+      ? work.workTypeName
+      : undefined) ??
+    ("work_type_name" in work && typeof work.work_type_name === "string"
+      ? work.work_type_name
+      : undefined) ??
     legacyWork.work_type_id ??
     existing?.work_type_id;
   const placeIDValue =
@@ -1013,20 +1030,27 @@ function factoryWorkToItem(
     current_chaining_trace_id:
       legacyWork.current_chaining_trace_id ?? existing?.current_chaining_trace_id,
     display_name:
-      ("name" in work ? work.name : undefined) || existing?.display_name,
+      ("name" in work && typeof work.name === "string" ? work.name : undefined) ||
+      existing?.display_name,
     id: workID,
     place_id: placeIDValue,
     previous_chaining_trace_ids:
       legacyWork.previous_chaining_trace_ids ?? existing?.previous_chaining_trace_ids,
     tags: ("tags" in work ? work.tags : undefined) ?? existing?.tags,
     trace_id:
-      ("trace_id" in work ? work.trace_id : undefined) ?? existing?.trace_id,
+      ("traceId" in work && typeof work.traceId === "string" ? work.traceId : undefined) ??
+      ("trace_id" in work && typeof work.trace_id === "string" ? work.trace_id : undefined) ??
+      existing?.trace_id,
     work_type_id: workTypeID ?? existing?.work_type_id ?? "",
   };
 }
 
 function eventWorkTypeID(work: FactoryWork): string | undefined {
-  return work.work_type_name ?? (work as FactoryWork & LegacyFactoryWorkCompat).work_type_id;
+  return (
+    work.workTypeName ??
+    (work as FactoryWork & { work_type_name?: string }).work_type_name ??
+    (work as FactoryWork & LegacyFactoryWorkCompat).work_type_id
+  );
 }
 
 function legacyDispatchRequestPayload(
@@ -1154,7 +1178,7 @@ function placeCategory(
 }
 
 function firstRequestID(works: FactoryWork[] | undefined): string | undefined {
-  return works?.find((work) => work.request_id)?.request_id;
+  return works?.find((work) => work.requestId)?.requestId;
 }
 
 function applyWorkRequest(state: WorldState, event: WorkRequestEvent): void {
@@ -1191,13 +1215,16 @@ function applyRelationshipChange(
   event: RelationshipChangeRequestEvent,
 ): void {
   const relation = event.payload.relation as FactoryRelation;
+  const targetWorkID =
+    relation.targetWorkId ??
+    (relation as FactoryRelation & { target_work_id?: string }).target_work_id;
   addRelation(state, {
     ...relation,
     request_id: relation.request_id ?? event.context.requestId,
     source_work_id:
       relation.source_work_id ??
       event.context.workIds?.find(
-        (workID) => workID !== relation.target_work_id,
+        (workID) => workID !== targetWorkID,
       ),
     trace_id: relation.trace_id ?? event.context.traceIds?.[0],
   });
@@ -1984,18 +2011,18 @@ function cloneRuntimeWorkstationRequestRequest(
 
   return {
     ...request,
-    consumed_tokens: request.consumed_tokens?.map((token) => ({
+    consumedTokens: request.consumedTokens?.map((token) => ({
       ...token,
       tags: token.tags ? { ...token.tags } : undefined,
     })),
-    input_work_items: request.input_work_items?.map(cloneWorkItemRef),
-    input_work_type_ids: request.input_work_type_ids
-      ? [...request.input_work_type_ids]
+    inputWorkItems: request.inputWorkItems?.map(cloneWorkItemRef),
+    inputWorkTypeIds: request.inputWorkTypeIds
+      ? [...request.inputWorkTypeIds]
       : undefined,
-    request_metadata: request.request_metadata
-      ? { ...request.request_metadata }
+    requestMetadata: request.requestMetadata
+      ? { ...request.requestMetadata }
       : undefined,
-    trace_ids: request.trace_ids ? [...request.trace_ids] : undefined,
+    traceIds: request.traceIds ? [...request.traceIds] : undefined,
   };
 }
 
@@ -2006,49 +2033,63 @@ function cloneRuntimeWorkstationRequestResponse(
     return undefined;
   }
 
+  const diagnostics = response.diagnostics as
+    | (DashboardWorkDiagnostics & {
+        provider?: DashboardWorkDiagnostics["provider"] & {
+          requestMetadata?: Record<string, string>;
+          responseMetadata?: Record<string, string>;
+        };
+        renderedPrompt?: {
+          systemPromptHash?: string;
+          userMessageHash?: string;
+          variables?: Record<string, string>;
+        };
+      })
+    | undefined;
+
   return {
     ...response,
-    diagnostics: response.diagnostics
+    diagnostics: diagnostics
       ? {
-          ...response.diagnostics,
-          provider: response.diagnostics.provider
+          ...diagnostics,
+          provider: diagnostics.provider
             ? {
-                ...response.diagnostics.provider,
-                request_metadata: response.diagnostics.provider.request_metadata
-                  ? { ...response.diagnostics.provider.request_metadata }
+                ...diagnostics.provider,
+                requestMetadata: diagnostics.provider.requestMetadata
+                  ? { ...diagnostics.provider.requestMetadata }
                   : undefined,
-                response_metadata: response.diagnostics.provider.response_metadata
-                  ? { ...response.diagnostics.provider.response_metadata }
+                responseMetadata: diagnostics.provider.responseMetadata
+                  ? { ...diagnostics.provider.responseMetadata }
                   : undefined,
               }
             : undefined,
-          rendered_prompt: response.diagnostics.rendered_prompt
+          renderedPrompt: diagnostics.renderedPrompt
             ? {
-                ...response.diagnostics.rendered_prompt,
-                variables: response.diagnostics.rendered_prompt.variables
-                  ? { ...response.diagnostics.rendered_prompt.variables }
+                ...diagnostics.renderedPrompt,
+                variables: diagnostics.renderedPrompt.variables
+                  ? { ...diagnostics.renderedPrompt.variables }
                   : undefined,
               }
             : undefined,
         }
       : undefined,
-    output_mutations: response.output_mutations?.map((mutation) => ({
+    outputMutations: response.outputMutations?.map((mutation) => ({
       ...mutation,
-      token: mutation.token
+      resulting_token: mutation.resulting_token
         ? {
-            ...mutation.token,
-            tags: mutation.token.tags
-              ? { ...mutation.token.tags }
+            ...mutation.resulting_token,
+            tags: mutation.resulting_token.tags
+              ? { ...mutation.resulting_token.tags }
               : undefined,
           }
         : undefined,
     })),
-    output_work_items: response.output_work_items?.map(cloneWorkItemRef),
-    provider_session: response.provider_session
-      ? { ...response.provider_session }
+    outputWorkItems: response.outputWorkItems?.map(cloneWorkItemRef),
+    providerSession: response.providerSession
+      ? { ...response.providerSession }
       : undefined,
-    response_metadata: response.response_metadata
-      ? { ...response.response_metadata }
+    responseMetadata: response.responseMetadata
+      ? { ...response.responseMetadata }
       : undefined,
   };
 }
@@ -2481,10 +2522,16 @@ function workstationRequestFromActiveDispatch(
   const latestAttempt = latestWorkstationAttempt(attempts);
   return {
     counts: workstationRequestCounts(undefined, undefined, undefined),
+    dispatchId: dispatch.dispatchID,
     dispatch_id: dispatch.dispatchID,
     request: {
+      consumedTokens: dispatch.consumedTokens,
       consumed_tokens: dispatch.consumedTokens,
+      inputWorkItems: inputWorkItems,
       input_work_items: inputWorkItems,
+      inputWorkTypeIds: uniqueSorted(
+        inputWorkItems.map((item) => item.work_type_id ?? ""),
+      ),
       input_work_type_ids: uniqueSorted(
         inputWorkItems.map((item) => item.work_type_id ?? ""),
       ),
@@ -2495,15 +2542,23 @@ function workstationRequestFromActiveDispatch(
         undefined,
         dispatch,
       ),
+      requestMetadata: workstationRequestMetadata(undefined),
       request_metadata: workstationRequestMetadata(undefined),
+      requestTime: latestAttempt?.request_time,
       request_time: latestAttempt?.request_time,
+      scriptRequest: dashboardScriptRequest(latestScriptRequest),
       script_request: dashboardScriptRequest(latestScriptRequest),
+      startedAt: dispatch.startedAt,
       started_at: dispatch.startedAt,
+      traceIds: uniqueSorted(dispatch.traceIDs),
       trace_ids: uniqueSorted(dispatch.traceIDs),
+      workingDirectory: resolveWorkingDirectory(latestAttempt, undefined),
       working_directory: resolveWorkingDirectory(latestAttempt, undefined),
       worktree: resolveWorktree(latestAttempt, undefined),
     },
+    transitionId: dispatch.transitionID,
     transition_id: dispatch.transitionID,
+    workstationName: dispatch.workstationName,
     workstation_name: dispatch.workstationName,
   };
 }
@@ -2521,10 +2576,16 @@ function workstationRequestFromCompletion(
   const latestAttempt = latestWorkstationAttempt(attempts);
   return {
     counts: workstationRequestCounts(undefined, undefined, undefined),
+    dispatchId: completion.dispatchID,
     dispatch_id: completion.dispatchID,
     request: {
+      consumedTokens: completion.consumedTokens,
       consumed_tokens: completion.consumedTokens,
+      inputWorkItems: inputWorkItems,
       input_work_items: inputWorkItems,
+      inputWorkTypeIds: uniqueSorted(
+        inputWorkItems.map((item) => item.work_type_id ?? ""),
+      ),
       input_work_type_ids: uniqueSorted(
         inputWorkItems.map((item) => item.work_type_id ?? ""),
       ),
@@ -2534,11 +2595,20 @@ function workstationRequestFromCompletion(
         completion.diagnostics,
         completion.providerSession,
       ),
+      requestMetadata: workstationRequestMetadata(completion.diagnostics),
       request_metadata: workstationRequestMetadata(completion.diagnostics),
+      requestTime: latestAttempt?.request_time,
       request_time: latestAttempt?.request_time,
+      scriptRequest: dashboardScriptRequest(latestScriptRequest),
       script_request: dashboardScriptRequest(latestScriptRequest),
+      startedAt: completion.startedAt,
       started_at: completion.startedAt,
+      traceIds: uniqueSorted(completion.traceIDs),
       trace_ids: uniqueSorted(completion.traceIDs),
+      workingDirectory: resolveWorkingDirectory(
+        latestAttempt,
+        completion.diagnostics,
+      ),
       working_directory: resolveWorkingDirectory(
         latestAttempt,
         completion.diagnostics,
@@ -2547,23 +2617,38 @@ function workstationRequestFromCompletion(
     },
     response: {
       diagnostics: completion.diagnostics,
+      durationMillis: completion.durationMillis,
       duration_millis: completion.durationMillis,
+      endTime: completion.endTime,
       end_time: completion.endTime,
+      errorClass: latestAttempt?.error_class,
       error_class: latestAttempt?.error_class,
       feedback: completion.feedback,
+      failureMessage: completion.failureMessage,
       failure_message: completion.failureMessage,
+      failureReason: completion.failureReason,
       failure_reason: completion.failureReason,
       outcome: completion.outcome,
+      outputMutations: completion.outputMutations,
       output_mutations: completion.outputMutations,
+      outputWorkItems: outputWorkItemsFromCompletion(completion),
       output_work_items: outputWorkItemsFromCompletion(completion),
+      providerSession: completion.providerSession,
       provider_session: completion.providerSession,
+      responseMetadata: workstationResponseMetadata(completion.diagnostics),
       response_metadata: workstationResponseMetadata(completion.diagnostics),
+      responseText:
+        latestAttempt?.response ??
+        (latestScriptResponse ? undefined : completion.responseText),
       response_text:
         latestAttempt?.response ??
         (latestScriptResponse ? undefined : completion.responseText),
+      scriptResponse: dashboardScriptResponse(latestScriptResponse),
       script_response: dashboardScriptResponse(latestScriptResponse),
     },
+    transitionId: completion.transitionID,
     transition_id: completion.transitionID,
+    workstationName: completion.workstationName,
     workstation_name: completion.workstationName,
   };
 }
@@ -2574,24 +2659,31 @@ function workstationRequestCounts(
   scriptResponses: Record<string, WorldScriptResponse> | undefined,
 ): DashboardRuntimeWorkstationRequest["counts"] {
   const counts = {
+    dispatchedCount: 0,
+    erroredCount: 0,
+    respondedCount: 0,
     dispatched_count: 0,
     errored_count: 0,
     responded_count: 0,
   };
   for (const attempt of Object.values(attempts ?? {})) {
     if (attempt.inference_request_id) {
+      counts.dispatchedCount += 1;
       counts.dispatched_count += 1;
     }
     if (attemptHasError(attempt)) {
+      counts.erroredCount += 1;
       counts.errored_count += 1;
       continue;
     }
     if (attemptHasResponse(attempt)) {
+      counts.respondedCount += 1;
       counts.responded_count += 1;
     }
   }
   for (const request of Object.values(scriptRequests ?? {})) {
     if (request.script_request_id) {
+      counts.dispatchedCount += 1;
       counts.dispatched_count += 1;
     }
   }
@@ -2600,9 +2692,11 @@ function workstationRequestCounts(
       continue;
     }
     if (scriptResponseErrored(response)) {
+      counts.erroredCount += 1;
       counts.errored_count += 1;
       continue;
     }
+    counts.respondedCount += 1;
     counts.responded_count += 1;
   }
   return counts;
@@ -2984,19 +3078,25 @@ function projectWorkstationDispatchRequest(
   );
   const requestView = runtimeRequest?.request;
   const responseView = runtimeRequest?.response;
-  const diagnostics =
+  const diagnostics = (
     responseView?.diagnostics?.provider ??
     latestAttempt?.diagnostics?.provider ??
-    completion?.diagnostics?.provider;
+    completion?.diagnostics?.provider
+  ) as
+    | (DashboardProviderDiagnostic & {
+        requestMetadata?: Record<string, string>;
+        responseMetadata?: Record<string, string>;
+      })
+    | undefined;
   const counts = runtimeRequest?.counts ?? projectedCounts;
 
   return {
     counts,
     dispatch_id: dispatch.dispatchID,
-    dispatched_request_count: counts.dispatched_count,
-    errored_request_count: counts.errored_count,
-    failure_message: responseView?.failure_message ?? completion?.failureMessage,
-    failure_reason: responseView?.failure_reason ?? completion?.failureReason,
+    dispatched_request_count: counts.dispatchedCount ?? counts.dispatched_count ?? 0,
+    errored_request_count: counts.erroredCount ?? counts.errored_count ?? 0,
+    failure_message: responseView?.failureMessage ?? completion?.failureMessage,
+    failure_reason: responseView?.failureReason ?? completion?.failureReason,
     inference_attempts: inferenceAttempts,
     model: requestView?.model ?? diagnostics?.model ?? completion?.model ?? dispatch.model,
     outcome: responseView?.outcome ?? completion?.outcome,
@@ -3008,27 +3108,26 @@ function projectWorkstationDispatchRequest(
       completion?.providerSession?.provider ??
       dispatch.provider,
     provider_session:
-      responseView?.provider_session ??
-      latestAttempt?.provider_session ??
+      responseView?.providerSession ??
       completion?.providerSession,
     request_view: requestView,
     request_id: requestIDs[0],
-    request_metadata: requestView?.request_metadata ?? diagnostics?.request_metadata,
-    responded_request_count: counts.responded_count,
+    request_metadata: requestView?.requestMetadata ?? diagnostics?.requestMetadata,
+    responded_request_count: counts.respondedCount ?? counts.responded_count ?? 0,
     response:
-      responseView?.response_text ??
+      responseView?.responseText ??
       latestAttempt?.response ??
       (latestScriptResponse ? undefined : completion?.responseText),
-    response_metadata: responseView?.response_metadata ?? diagnostics?.response_metadata,
+    response_metadata: responseView?.responseMetadata ?? diagnostics?.responseMetadata,
     response_view: responseView,
     script_request: dashboardScriptRequest(latestScriptRequest),
     script_response: dashboardScriptResponse(latestScriptResponse),
-    started_at: requestView?.started_at ?? dispatch.startedAt,
-    total_duration_millis: responseView?.duration_millis ?? completion?.durationMillis,
-    trace_ids: requestView?.trace_ids ?? completion?.traceIDs ?? dispatch.traceIDs,
+    started_at: requestView?.startedAt ?? dispatch.startedAt,
+    total_duration_millis: responseView?.durationMillis ?? completion?.durationMillis,
+    trace_ids: requestView?.traceIds ?? completion?.traceIDs ?? dispatch.traceIDs,
     transition_id: dispatch.transitionID,
     work_items: completion?.workItems ?? dispatch.workItems,
-    working_directory: requestView?.working_directory ?? latestAttempt?.working_directory,
+    working_directory: requestView?.workingDirectory ?? latestAttempt?.working_directory,
     workstation_name: completion?.workstationName ?? dispatch.workstationName,
     workstation_node_id: dispatch.transitionID,
     worktree: requestView?.worktree ?? latestAttempt?.worktree,

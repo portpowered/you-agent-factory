@@ -150,23 +150,106 @@ export interface DashboardInferenceAttempt {
   worktree?: string;
 }
 
-export type DashboardScriptRequest =
-  FactorySchemas["FactoryWorldScriptRequestView"];
+export interface DashboardScriptRequest {
+  scriptRequestId?: string;
+  script_request_id?: string;
+  attempt?: number;
+  command?: string;
+  args?: string[];
+}
 
-export type DashboardScriptResponse =
-  FactorySchemas["FactoryWorldScriptResponseView"];
+export interface DashboardScriptResponse {
+  scriptRequestId?: string;
+  script_request_id?: string;
+  attempt?: number;
+  outcome?: string;
+  stdout?: string;
+  stderr?: string;
+  durationMillis?: number;
+  duration_millis?: number;
+  exitCode?: number;
+  exit_code?: number;
+  failureType?: string;
+  failure_type?: string;
+}
 
-export type DashboardRuntimeWorkstationRequestCounts =
-  FactorySchemas["FactoryWorldWorkstationRequestCountView"];
+export interface DashboardRuntimeWorkstationRequestCounts {
+  dispatchedCount?: number;
+  respondedCount?: number;
+  erroredCount?: number;
+  dispatched_count?: number;
+  responded_count?: number;
+  errored_count?: number;
+}
 
-export type DashboardRuntimeWorkstationRequestRequest =
-  FactorySchemas["FactoryWorldWorkstationRequestRequestView"];
+export interface DashboardRuntimeWorkstationRequestRequest {
+  startedAt?: string;
+  started_at?: string;
+  requestTime?: string;
+  request_time?: string;
+  inputWorkItems?: DashboardWorkItemRef[];
+  input_work_items?: DashboardWorkItemRef[];
+  inputWorkTypeIds?: string[];
+  input_work_type_ids?: string[];
+  currentChainingTraceId?: string;
+  current_chaining_trace_id?: string;
+  previousChainingTraceIds?: string[];
+  previous_chaining_trace_ids?: string[];
+  traceIds?: string[];
+  trace_ids?: string[];
+  consumedTokens?: DashboardTraceToken[];
+  consumed_tokens?: DashboardTraceToken[];
+  prompt?: string;
+  workingDirectory?: string;
+  working_directory?: string;
+  worktree?: string;
+  provider?: string;
+  model?: string;
+  requestMetadata?: Record<string, string>;
+  request_metadata?: Record<string, string>;
+  scriptRequest?: DashboardScriptRequest;
+  script_request?: DashboardScriptRequest;
+}
 
-export type DashboardRuntimeWorkstationRequestResponse =
-  FactorySchemas["FactoryWorldWorkstationRequestResponseView"];
+export interface DashboardRuntimeWorkstationRequestResponse {
+  outcome?: string;
+  feedback?: string;
+  failureReason?: string;
+  failure_reason?: string;
+  failureMessage?: string;
+  failure_message?: string;
+  responseText?: string;
+  response_text?: string;
+  errorClass?: string;
+  error_class?: string;
+  providerSession?: DashboardProviderSession;
+  provider_session?: DashboardProviderSession;
+  diagnostics?: DashboardWorkDiagnostics | FactorySchemas["FactoryWorldWorkDiagnostics"];
+  responseMetadata?: Record<string, string>;
+  response_metadata?: Record<string, string>;
+  scriptResponse?: DashboardScriptResponse;
+  script_response?: DashboardScriptResponse;
+  endTime?: string;
+  end_time?: string;
+  durationMillis?: number;
+  duration_millis?: number;
+  outputWorkItems?: DashboardWorkItemRef[];
+  output_work_items?: DashboardWorkItemRef[];
+  outputMutations?: DashboardTraceMutation[];
+  output_mutations?: DashboardTraceMutation[];
+}
 
-export type DashboardRuntimeWorkstationRequest =
-  FactorySchemas["FactoryWorldWorkstationRequestView"];
+export interface DashboardRuntimeWorkstationRequest {
+  dispatchId?: string;
+  dispatch_id?: string;
+  transitionId?: string;
+  transition_id?: string;
+  workstationName?: string;
+  workstation_name?: string;
+  counts: DashboardRuntimeWorkstationRequestCounts;
+  request: DashboardRuntimeWorkstationRequestRequest;
+  response?: DashboardRuntimeWorkstationRequestResponse;
+}
 
 export interface DashboardWorkstationRequest {
   counts?: DashboardRuntimeWorkstationRequestCounts;

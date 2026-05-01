@@ -218,25 +218,52 @@ function WorkstationRequestProjectionSection({
     <section aria-label="Workstation request" className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Workstation request</h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-        <InferenceAttemptDetail label="dispatchedCount" value={counts.dispatched_count} />
-        <InferenceAttemptDetail label="respondedCount" value={counts.responded_count} />
-        <InferenceAttemptDetail label="erroredCount" value={counts.errored_count} />
-        <InferenceAttemptDetail code label="requestTime" value={request.request_time} />
-        <InferenceAttemptDetail code label="startedAt" value={request.started_at} />
-        <InferenceAttemptDetail code label="workingDirectory" value={request.working_directory} />
+        <InferenceAttemptDetail
+          label="dispatchedCount"
+          value={counts.dispatchedCount ?? counts.dispatched_count}
+        />
+        <InferenceAttemptDetail
+          label="respondedCount"
+          value={counts.respondedCount ?? counts.responded_count}
+        />
+        <InferenceAttemptDetail
+          label="erroredCount"
+          value={counts.erroredCount ?? counts.errored_count}
+        />
+        <InferenceAttemptDetail
+          code
+          label="requestTime"
+          value={request.requestTime ?? request.request_time}
+        />
+        <InferenceAttemptDetail code label="startedAt" value={request.startedAt ?? request.started_at} />
+        <InferenceAttemptDetail
+          code
+          label="workingDirectory"
+          value={request.workingDirectory ?? request.working_directory}
+        />
         <InferenceAttemptDetail code label="worktree" value={request.worktree} />
         <InferenceAttemptDetail code label="outcome" value={response?.outcome} />
         <InferenceAttemptDetail
           label="duration"
           value={
-            response?.duration_millis !== undefined
-              ? formatDurationMillis(response.duration_millis)
+            (response?.durationMillis ?? response?.duration_millis) !== undefined
+              ? formatDurationMillis(
+                  response?.durationMillis ?? response?.duration_millis ?? 0,
+                )
               : undefined
           }
         />
-        <InferenceAttemptDetail code label="errorClass" value={response?.error_class} />
-        <InferenceAttemptDetail code label="failureReason" value={response?.failure_reason} />
-        <InferenceAttemptDetail code label="failureMessage" value={response?.failure_message} />
+        <InferenceAttemptDetail code label="errorClass" value={response?.errorClass ?? response?.error_class} />
+        <InferenceAttemptDetail
+          code
+          label="failureReason"
+          value={response?.failureReason ?? response?.failure_reason}
+        />
+        <InferenceAttemptDetail
+          code
+          label="failureMessage"
+          value={response?.failureMessage ?? response?.failure_message}
+        />
       </dl>
       {request.prompt ? (
         <div className="grid gap-[0.3rem]">
@@ -246,12 +273,14 @@ function WorkstationRequestProjectionSection({
           <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>{request.prompt}</pre>
         </div>
       ) : null}
-      {response?.response_text ? (
+      {response?.responseText ?? response?.response_text ? (
         <div className="grid gap-[0.3rem]">
           <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
             {WORKSTATION_RESPONSE_TEXT_LABEL}
           </span>
-          <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>{response.response_text}</pre>
+          <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>
+            {response?.responseText ?? response?.response_text}
+          </pre>
         </div>
       ) : response ? (
         <p className={DETAIL_COPY_CLASS}>

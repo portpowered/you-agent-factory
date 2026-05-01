@@ -1,8 +1,10 @@
 import type {
   DashboardActiveExecution,
   DashboardInferenceAttempt,
+  DashboardProviderDiagnostic,
   DashboardProviderSession,
   DashboardProviderSessionAttempt,
+  DashboardRenderedPromptDiagnostic,
   DashboardRuntimeWorkstationRequest,
   DashboardTrace,
   DashboardTraceDispatch,
@@ -108,7 +110,7 @@ export function selectWorkItemExecutionDetails({
     matchingTraceDispatch,
   );
   const resolvedDispatchID =
-    workstationRequest?.dispatch_id ??
+    workstationRequest?.dispatchId ??
     selectedDispatchID ??
     matchingAttempt?.dispatch_id ??
     matchingTraceDispatch?.dispatch_id;
@@ -116,7 +118,7 @@ export function selectWorkItemExecutionDetails({
   return {
     dispatchID: resolvedDispatchID,
     elapsedStartTimestamp:
-      workstationRequest?.request.started_at ??
+      workstationRequest?.request.startedAt ??
       activeExecution?.started_at ??
       matchingTraceDispatch?.start_time,
     inferenceAttempts: selectInferenceAttempts(
@@ -150,6 +152,7 @@ export function selectWorkItemExecutionDetails({
       hasActiveRun,
     ),
     providerSessionData:
+      workstationRequest?.response?.providerSession ??
       workstationRequest?.response?.provider_session ??
       matchingAttempt?.provider_session ??
       matchingTraceDispatch?.provider_session,
@@ -162,7 +165,7 @@ export function selectWorkItemExecutionDetails({
     ),
     workstationRequest,
     workstationName:
-      workstationRequest?.workstation_name ??
+      workstationRequest?.workstationName ??
       activeExecution?.workstation_name ??
       selectedNode?.workstation_name ??
       matchingAttempt?.workstation_name ??
@@ -248,7 +251,7 @@ function selectDiagnosticsSource(
 ): RuntimeDiagnosticsSource | undefined {
   if (workstationRequest?.response?.diagnostics) {
     return {
-      diagnostics: workstationRequest.response.diagnostics,
+      diagnostics: normalizeRuntimeDiagnostics(workstationRequest.response.diagnostics),
       source: "workstation-request",
     };
   }
@@ -352,7 +355,10 @@ function selectProviderSessionValue(
   hasActiveRun: boolean,
 ): ExecutionDetailValue {
   const projectedProviderSessionID =
-    workstationRequest?.response?.provider_session?.id?.trim();
+    (
+      workstationRequest?.response?.providerSession?.id ??
+      workstationRequest?.response?.provider_session?.id
+    )?.trim();
   if (projectedProviderSessionID) {
     return {
       source: "workstation-request",
@@ -378,7 +384,9 @@ function selectPromptDetails(
   hasActiveRun: boolean,
 ): PromptDiagnosticDetails {
   const promptSource =
+    workstationRequest?.request.requestMetadata?.prompt_source?.trim() ??
     workstationRequest?.request.request_metadata?.prompt_source?.trim() ??
+    workstationRequest?.request.requestMetadata?.source?.trim() ??
     workstationRequest?.request.request_metadata?.source?.trim() ??
     diagnostics?.rendered_prompt?.variables?.prompt_source?.trim() ??
     diagnostics?.provider?.request_metadata?.prompt_source?.trim() ??
@@ -406,7 +414,7 @@ function selectTraceIDs(
   matchingTraceDispatch: DashboardTraceDispatch | undefined,
 ): string[] {
   return uniqueSorted([
-    ...(workstationRequest?.request.trace_ids ?? []),
+    ...(workstationRequest?.request.traceIds ?? []),
     ...(activeExecution?.trace_ids ?? []),
     workItem.trace_id ?? "",
     trace?.trace_id ?? "",
@@ -416,4 +424,63 @@ function selectTraceIDs(
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
+}
+
+function normalizeRuntimeDiagnostics(
+  diagnostics: NonNullable<
+    NonNullable<DashboardRuntimeWorkstationRequest["response"]>["diagnostics"]
+  >,
+): DashboardWorkDiagnostics {
+  const runtimeDiagnostics = diagnostics as {
+    provider?: {
+      model?: string;
+      provider?: string;
+      requestMetadata?: Record<string, string>;
+      responseMetadata?: Record<string, string>;
+      request_metadata?: Record<string, string>;
+      response_metadata?: Record<string, string>;
+    };
+    renderedPrompt?: {
+      systemPromptHash?: string;
+      userMessageHash?: string;
+      variables?: Record<string, string>;
+    };
+    rendered_prompt?: {
+      system_prompt_hash?: string;
+      user_message_hash?: string;
+      variables?: Record<string, string>;
+    };
+  };
+
+  const provider: DashboardProviderDiagnostic | undefined = runtimeDiagnostics.provider
+    ? {
+        model: runtimeDiagnostics.provider.model,
+        provider: runtimeDiagnostics.provider.provider,
+        request_metadata:
+          runtimeDiagnostics.provider.requestMetadata ??
+          runtimeDiagnostics.provider.request_metadata,
+        response_metadata:
+          runtimeDiagnostics.provider.responseMetadata ??
+          runtimeDiagnostics.provider.response_metadata,
+      }
+    : undefined;
+  const renderedPrompt: DashboardRenderedPromptDiagnostic | undefined =
+    runtimeDiagnostics.renderedPrompt || runtimeDiagnostics.rendered_prompt
+      ? {
+          system_prompt_hash:
+            runtimeDiagnostics.renderedPrompt?.systemPromptHash ??
+            runtimeDiagnostics.rendered_prompt?.system_prompt_hash,
+          user_message_hash:
+            runtimeDiagnostics.renderedPrompt?.userMessageHash ??
+            runtimeDiagnostics.rendered_prompt?.user_message_hash,
+          variables:
+            runtimeDiagnostics.renderedPrompt?.variables ??
+            runtimeDiagnostics.rendered_prompt?.variables,
+        }
+      : undefined;
+
+  return {
+    provider,
+    rendered_prompt: renderedPrompt,
+  };
 }

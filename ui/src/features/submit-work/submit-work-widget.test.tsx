@@ -103,7 +103,7 @@ describe("SubmitWorkWidget", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       name: "Driver incident review",
       payload: "Review the queue and summarize the failure.",
-      work_type_name: "story",
+      workTypeName: "story",
     });
 
     if (!pendingResponse.resolve) {
@@ -151,7 +151,7 @@ describe("SubmitWorkWidget", () => {
     await screen.findByText("Your request was submitted. Trace ID: trace-submit-story.");
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       payload: "Review the queue and summarize the failure.",
-      work_type_name: "story",
+      workTypeName: "story",
     });
   });
 

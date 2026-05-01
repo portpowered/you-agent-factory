@@ -9,7 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 
-import { App } from "./src/App";
+import { App } from "./App";
 import * as factoryPngExportModule from "./features/export/factory-png-export";
 import * as factoryPngImportModule from "./features/import/factory-png-import";
 import {
@@ -3700,7 +3700,7 @@ describe("App", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       name: "Dashboard smoke request",
       payload: "Review the failed dashboard submission smoke.",
-      work_type_name: "story",
+      workTypeName: "story",
     });
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
@@ -3722,7 +3722,7 @@ describe("App", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
       name: "Retry dashboard request",
       payload: "Retry the broken submission from the dashboard shell.",
-      work_type_name: "story",
+      workTypeName: "story",
     });
     expect(workType.value).toBe("story");
     expect(requestName.value).toBe("Retry dashboard request");
@@ -3774,7 +3774,7 @@ describe("App", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       name: "Dashboard smoke request",
       payload: "Review the failed dashboard submission smoke.",
-      work_type_name: "story",
+      workTypeName: "story",
     });
     expect(requestName.value).toBe("");
   });

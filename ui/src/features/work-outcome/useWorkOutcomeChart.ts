@@ -9,7 +9,7 @@ import type {
   FactoryWork,
   InitialStructureRequestPayload,
   RunRequestPayload,
-} from "../../api/events";
+} from "../../api/events/index";
 import { FACTORY_EVENT_TYPES } from "../../api/events";
 import {
   buildWorkChartModel,
@@ -28,6 +28,12 @@ interface TimelineWorkItem {
   placeID?: string;
   traceID?: string;
   workTypeID: string;
+}
+
+interface LegacyTimelineWorkCompat {
+  trace_id?: string;
+  work_id?: string;
+  work_type_name?: string;
 }
 
 interface ActiveDispatch {
@@ -193,7 +199,11 @@ function applyFactoryDefinition(
   if (!factory) {
     return;
   }
-  for (const workType of factory.workTypes ?? []) {
+  const workTypes =
+    factory.workTypes ??
+    ((factory as FactoryDefinition & { work_types?: FactoryDefinition["workTypes"] }).work_types ??
+      []);
+  for (const workType of workTypes) {
     if (workType.name === SYSTEM_TIME_WORK_TYPE_ID) {
       continue;
     }
@@ -212,16 +222,17 @@ function applyWorkRequest(
   const payload = event.payload as { works?: FactoryWork[] };
   for (const work of payload.works ?? []) {
     const workTypeID = workTypeIDFromWork(work);
-    if (!workTypeID || workTypeID === SYSTEM_TIME_WORK_TYPE_ID || !work.work_id) {
+    const workID = timelineWorkID(work);
+    if (!workTypeID || workTypeID === SYSTEM_TIME_WORK_TYPE_ID || !workID) {
       continue;
     }
     const workItem: TimelineWorkItem = {
       displayName: work.name,
-      id: work.work_id,
+      id: workID,
       placeID: state.initialPlaceIDs.has(placeID(workTypeID, "init"))
         ? placeID(workTypeID, "init")
         : firstMatchingInitialPlaceID(state.initialPlaceIDs, workTypeID),
-      traceID: work.trace_id,
+      traceID: timelineWorkTraceID(work),
       workTypeID,
     };
     state.workItemsByID[workItem.id] = workItem;
@@ -241,7 +252,7 @@ function applyDispatchRequest(
   }
 
   const inputWorkIDs = (payload.inputs ?? [])
-    .map((input) => input.workId)
+    .map((input) => input.workId ?? (input as { work_id?: string }).work_id)
     .filter((workID): workID is string => typeof workID === "string" && workID.length > 0);
 
   for (const workID of inputWorkIDs) {
@@ -352,7 +363,8 @@ function timelineWorkItemFromOutputWork(
   work: FactoryWork,
 ): TimelineWorkItem | undefined {
   const workTypeID = workTypeIDFromWork(work);
-  if (!workTypeID || !work.work_id) {
+  const workID = timelineWorkID(work);
+  if (!workTypeID || !workID) {
     return undefined;
   }
   const placeIDValue =
@@ -362,15 +374,26 @@ function timelineWorkItemFromOutputWork(
 
   return {
     displayName: work.name,
-    id: work.work_id,
+    id: workID,
     placeID: placeIDValue,
-    traceID: work.trace_id,
+    traceID: timelineWorkTraceID(work),
     workTypeID,
   };
 }
 
 function workTypeIDFromWork(work: FactoryWork): string | undefined {
-  return work.work_type_name;
+  const legacyWork = work as FactoryWork & LegacyTimelineWorkCompat;
+  return work.workTypeName ?? legacyWork.work_type_name;
+}
+
+function timelineWorkID(work: FactoryWork): string | undefined {
+  const legacyWork = work as FactoryWork & LegacyTimelineWorkCompat;
+  return work.workId ?? legacyWork.work_id;
+}
+
+function timelineWorkTraceID(work: FactoryWork): string | undefined {
+  const legacyWork = work as FactoryWork & LegacyTimelineWorkCompat;
+  return work.traceId ?? legacyWork.trace_id;
 }
 
 function placeID(workTypeID: string, workState: string): string {

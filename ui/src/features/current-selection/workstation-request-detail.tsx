@@ -42,6 +42,10 @@ export function WorkstationRequestDetailCard({
   const outcome = request.outcome ?? request.script_response?.outcome;
   const totalDurationMillis =
     request.total_duration_millis ?? request.script_response?.duration_millis;
+  const requestMetadata = request.request_metadata;
+  const scriptRequest = request.script_request;
+  const scriptResponse = request.script_response;
+  const traceIDs = request.trace_ids;
   const responseUnavailableCopy = hasErroredRequest
     ? "Response text is unavailable because this workstation request ended with an error."
     : "Response text is not available for this workstation request yet.";
@@ -150,21 +154,21 @@ export function WorkstationRequestDetailCard({
             <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
               {normalizedPrompt ? (
                 <RequestAuthoredText value={normalizedPrompt} />
-              ) : request.script_request ? (
+              ) : scriptRequest ? (
                 "Prompt details are not applicable to this script-backed workstation request."
               ) : (
                 "Prompt details are not available for this workstation request yet."
               )}
             </dd>
           </div>
-          {request.script_request ? (
+          {scriptRequest ? (
             <>
               <div>
                 <dt>Script request ID</dt>
                 <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                  {request.script_request.script_request_id ? (
+                  {scriptRequest.script_request_id ? (
                     <code className={RUNTIME_DETAIL_CODE_CLASS}>
-                      {request.script_request.script_request_id}
+                      {scriptRequest.script_request_id}
                     </code>
                   ) : (
                     "Script request details are not available for this workstation request."
@@ -174,15 +178,15 @@ export function WorkstationRequestDetailCard({
               <div>
                 <dt>Script attempt</dt>
                 <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                  {request.script_request.attempt ?? "Script attempt is not available yet."}
+                  {scriptRequest.attempt ?? "Script attempt is not available yet."}
                 </dd>
               </div>
               <div>
                 <dt>Command</dt>
                 <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                  {request.script_request.command ? (
+                  {scriptRequest.command ? (
                     <code className={RUNTIME_DETAIL_CODE_CLASS}>
-                      {request.script_request.command}
+                      {scriptRequest.command}
                     </code>
                   ) : (
                     "Script command details are not available for this workstation request."
@@ -192,8 +196,8 @@ export function WorkstationRequestDetailCard({
               <div>
                 <dt>Resolved args</dt>
                 <dd className="grid gap-[0.25rem]">
-                  {request.script_request.args && request.script_request.args.length > 0 ? (
-                    request.script_request.args.map((arg) => (
+                  {scriptRequest.args && scriptRequest.args.length > 0 ? (
+                    scriptRequest.args.map((arg: string) => (
                       <code className={RUNTIME_DETAIL_CODE_CLASS} key={arg}>
                         {arg}
                       </code>
@@ -211,7 +215,7 @@ export function WorkstationRequestDetailCard({
       </section>
       <MetadataSection
         emptyMessage="Request metadata is not available for this workstation request."
-        metadata={request.request_metadata}
+        metadata={requestMetadata}
         title="Request metadata"
       />
       <section aria-label="Response details" className={RUNTIME_DETAILS_SECTION_CLASS}>
@@ -222,8 +226,8 @@ export function WorkstationRequestDetailCard({
               <div>
                 <dt>Trace IDs</dt>
                 <dd className="grid gap-[0.25rem]">
-                  {request.trace_ids && request.trace_ids.length > 0 ? (
-                    request.trace_ids.map((traceId) => (
+                  {traceIDs && traceIDs.length > 0 ? (
+                    traceIDs.map((traceId: string) => (
                       <code className={RUNTIME_DETAIL_CODE_CLASS} key={traceId}>
                         {traceId}
                       </code>
@@ -235,14 +239,14 @@ export function WorkstationRequestDetailCard({
                   )}
                 </dd>
               </div>
-              {request.script_response ? (
+              {scriptResponse ? (
                 <>
                   <div>
                     <dt>Script request ID</dt>
                     <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                      {request.script_response.script_request_id ? (
+                      {scriptResponse.script_request_id ? (
                         <code className={RUNTIME_DETAIL_CODE_CLASS}>
-                          {request.script_response.script_request_id}
+                          {scriptResponse.script_request_id}
                         </code>
                       ) : (
                         "Script response details are not available for this workstation request."
@@ -252,33 +256,36 @@ export function WorkstationRequestDetailCard({
                   <div>
                     <dt>Script attempt</dt>
                     <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                      {request.script_response.attempt ?? "Script attempt is not available yet."}
+                      {scriptResponse.attempt ?? "Script attempt is not available yet."}
                     </dd>
                   </div>
                   <div>
                     <dt>Outcome</dt>
                     <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                      {request.script_response.outcome ?? "Outcome details are not available yet."}
+                      {scriptResponse.outcome ?? "Outcome details are not available yet."}
                     </dd>
                   </div>
                   <div>
                     <dt>Duration</dt>
                     <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                      {request.script_response.duration_millis !== undefined
-                        ? formatDurationMillis(request.script_response.duration_millis)
+                      {scriptResponse.duration_millis !== undefined
+                        ? formatDurationMillis(
+                            scriptResponse.duration_millis,
+                          )
                         : "Duration details are not available for this script response yet."}
                     </dd>
                   </div>
                   <div>
                     <dt>Exit code</dt>
                     <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                      {request.script_response.exit_code ?? "Exit code is not available for this script response."}
+                      {scriptResponse.exit_code ??
+                        "Exit code is not available for this script response."}
                     </dd>
                   </div>
                   <div>
                     <dt>Failure type</dt>
                     <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                      {request.script_response.failure_type ??
+                      {scriptResponse.failure_type ??
                         "Failure type is not available for this script response."}
                     </dd>
                   </div>

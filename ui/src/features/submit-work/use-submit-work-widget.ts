@@ -77,7 +77,7 @@ export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) 
       mutation.mutate({
         ...(draft.requestName.trim().length > 0 ? { name: draft.requestName } : {}),
         payload: draft.requestText,
-        work_type_name: draft.workTypeName,
+        workTypeName: draft.workTypeName,
       });
     },
     onWorkTypeNameChange: (value: string) => {
@@ -94,7 +94,9 @@ export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) 
       error: mutation.error,
       isSubmitting: mutation.isPending,
       isSuccess: mutation.isSuccess,
-      resultTraceID: mutation.data?.trace_id,
+      resultTraceID:
+        mutation.data?.traceId ??
+        (mutation.data as { trace_id?: string } | undefined)?.trace_id,
       showValidation,
       submitWorkTypeNames,
     }),

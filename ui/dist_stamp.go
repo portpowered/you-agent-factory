@@ -1,4 +1,4 @@
 package ui
 
 // distBuildStamp keeps Go's build cache aligned with embedded dist asset changes.
-const distBuildStamp = "85986a0dedda604c02fe9ab2337b8ee577df123aa0b7b44350b2f4cadce5f84c"
+const distBuildStamp = "01ab212790c1767a984b709dd16567e0271e122fda99505ae8b864b5102f2749"

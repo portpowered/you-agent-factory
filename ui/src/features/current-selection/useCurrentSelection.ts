@@ -520,7 +520,7 @@ function buildSelectedWorkDispatchAttempts({
   }
 
   const orderedDispatchIDs = [
-    ...requests.map((request) => request.dispatch_id),
+    ...requests.map((request) => requestDispatchID(request)),
     ...matchingAttempts.map((attempt) => attempt.dispatch_id),
   ];
 
@@ -537,7 +537,7 @@ function sortDispatchRequests(
       return requestStartedAt(right).localeCompare(requestStartedAt(left));
     }
 
-    return left.dispatch_id.localeCompare(right.dispatch_id);
+    return requestDispatchID(left).localeCompare(requestDispatchID(right));
   });
 }
 
@@ -546,13 +546,13 @@ function dispatchAttemptFromRequest(
 ): DashboardProviderSessionAttempt {
   return {
     diagnostics: requestDiagnostics(request),
-    dispatch_id: request.dispatch_id,
+    dispatch_id: requestDispatchID(request),
     failure_message: requestFailureMessage(request),
     failure_reason: requestFailureReason(request),
     outcome: requestOutcome(request),
     provider_session: requestProviderSession(request),
-    transition_id: request.transition_id,
-    workstation_name: request.workstation_name,
+    transition_id: requestTransitionID(request),
+    workstation_name: requestWorkstationName(request),
     work_items: requestWorkItems(request),
   };
 }
@@ -709,7 +709,7 @@ export function sortWorkstationRequests<TRequest extends WorkstationRequestLike>
     if (leftStartedAt !== rightStartedAt) {
       return rightStartedAt.localeCompare(leftStartedAt);
     }
-    return left.dispatch_id.localeCompare(right.dispatch_id);
+    return requestDispatchID(left).localeCompare(requestDispatchID(right));
   });
 }
 
@@ -898,13 +898,41 @@ function requestWorkItems(
 function requestWorkstationNodeID(
   request: DispatchWorkstationRequest,
 ): string {
-  return isProjectedWorkstationRequest(request) ? request.workstation_node_id : request.transition_id;
+  return isProjectedWorkstationRequest(request)
+    ? request.workstation_node_id
+    : request.transitionId ?? request.transition_id ?? "";
 }
 
 function requestStartedAt(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
 ): string {
-  return isProjectedWorkstationRequest(request) ? request.started_at ?? "" : request.request.started_at ?? "";
+  return isProjectedWorkstationRequest(request)
+    ? request.started_at ?? ""
+    : request.request.startedAt ?? request.request.started_at ?? "";
+}
+
+function requestDispatchID(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string {
+  return isProjectedWorkstationRequest(request)
+    ? request.dispatch_id
+    : request.dispatchId ?? request.dispatch_id ?? "";
+}
+
+function requestTransitionID(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string {
+  return isProjectedWorkstationRequest(request)
+    ? request.transition_id
+    : request.transitionId ?? request.transition_id ?? "";
+}
+
+function requestWorkstationName(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string | undefined {
+  return isProjectedWorkstationRequest(request)
+    ? request.workstation_name
+    : request.workstationName ?? request.workstation_name;
 }
 
 function requestReferencesWorkItem(
@@ -939,7 +967,7 @@ function requestInputWorkItems(
 ): DashboardWorkItemRef[] {
   return isProjectedWorkstationRequest(request)
     ? request.request_view?.input_work_items ?? []
-    : request.request.input_work_items ?? [];
+    : request.request.inputWorkItems ?? request.request.input_work_items ?? [];
 }
 
 function requestOutputWorkItems(
@@ -947,7 +975,7 @@ function requestOutputWorkItems(
 ): DashboardWorkItemRef[] {
   return isProjectedWorkstationRequest(request)
     ? request.response_view?.output_work_items ?? []
-    : request.response?.output_work_items ?? [];
+    : request.response?.outputWorkItems ?? request.response?.output_work_items ?? [];
 }
 
 function selectLatestProviderSessionAttemptsByDispatch(
@@ -968,7 +996,7 @@ function selectLatestProviderSessionAttemptsByDispatch(
   }
 
   return requests.flatMap((request) => {
-    const matchingAttempt = latestAttemptsByDispatchID.get(request.dispatch_id);
+    const matchingAttempt = latestAttemptsByDispatchID.get(requestDispatchID(request));
     return matchingAttempt ? [matchingAttempt] : [];
   });
 }
@@ -988,7 +1016,7 @@ function workstationRequestSelection(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
 ): DashboardSelection {
   return {
-    dispatchId: request.dispatch_id,
+    dispatchId: requestDispatchID(request),
     kind: "workstation-request",
     nodeId: requestWorkstationNodeID(request),
     request: toDashboardWorkstationRequest(request),
@@ -1003,7 +1031,9 @@ function isScriptBackedWorkstationRequest(
   }
 
   return (
+    request.request.scriptRequest !== undefined ||
     request.request.script_request !== undefined ||
+    request.response?.scriptResponse !== undefined ||
     request.response?.script_response !== undefined
   );
 }
@@ -1016,31 +1046,35 @@ function toDashboardWorkstationRequest(
   }
 
   return {
-    dispatch_id: request.dispatch_id,
-    dispatched_request_count: request.counts.dispatched_count,
-    errored_request_count: request.counts.errored_count,
-    failure_message: request.response?.failure_message,
-    failure_reason: request.response?.failure_reason,
+    dispatch_id: request.dispatchId ?? request.dispatch_id ?? "",
+    dispatched_request_count:
+      request.counts.dispatchedCount ?? request.counts.dispatched_count ?? 0,
+    errored_request_count:
+      request.counts.erroredCount ?? request.counts.errored_count ?? 0,
+    failure_message: request.response?.failureMessage ?? request.response?.failure_message,
+    failure_reason: request.response?.failureReason ?? request.response?.failure_reason,
     inference_attempts: [],
     model: request.request.model,
     outcome: request.response?.outcome,
     prompt: request.request.prompt,
     provider: request.request.provider,
-    provider_session: request.response?.provider_session,
-    request_metadata: request.request.request_metadata,
-    responded_request_count: request.counts.responded_count,
-    response: request.response?.response_text,
-    response_metadata: request.response?.response_metadata,
-    script_request: request.request.script_request,
-    script_response: request.response?.script_response,
-    started_at: request.request.started_at,
-    total_duration_millis: request.response?.duration_millis,
-    trace_ids: request.request.trace_ids,
-    transition_id: request.transition_id,
+    provider_session: request.response?.providerSession ?? request.response?.provider_session,
+    request_metadata: request.request.requestMetadata ?? request.request.request_metadata,
+    responded_request_count:
+      request.counts.respondedCount ?? request.counts.responded_count ?? 0,
+    response: request.response?.responseText ?? request.response?.response_text,
+    response_metadata: request.response?.responseMetadata ?? request.response?.response_metadata,
+    script_request: request.request.scriptRequest ?? request.request.script_request,
+    script_response: request.response?.scriptResponse ?? request.response?.script_response,
+    started_at: request.request.startedAt ?? request.request.started_at,
+    total_duration_millis:
+      request.response?.durationMillis ?? request.response?.duration_millis,
+    trace_ids: request.request.traceIds ?? request.request.trace_ids,
+    transition_id: request.transitionId ?? request.transition_id ?? "",
     work_items: requestWorkItems(request),
-    working_directory: request.request.working_directory,
-    workstation_name: request.workstation_name,
-    workstation_node_id: request.transition_id,
+    working_directory: request.request.workingDirectory ?? request.request.working_directory,
+    workstation_name: request.workstationName ?? request.workstation_name,
+    workstation_node_id: request.transitionId ?? request.transition_id ?? "",
     worktree: request.request.worktree,
   };
 }
@@ -1048,7 +1082,9 @@ function toDashboardWorkstationRequest(
 function requestProviderSession(
   request: DispatchWorkstationRequest,
 ) {
-  return "request" in request ? request.response?.provider_session : request.provider_session;
+  return "request" in request
+    ? request.response?.providerSession ?? request.response?.provider_session
+    : request.provider_session;
 }
 
 function requestOutcome(request: DispatchWorkstationRequest): string {
@@ -1056,11 +1092,15 @@ function requestOutcome(request: DispatchWorkstationRequest): string {
 }
 
 function requestFailureReason(request: DispatchWorkstationRequest): string | undefined {
-  return "request" in request ? request.response?.failure_reason : request.failure_reason;
+  return "request" in request
+    ? request.response?.failureReason ?? request.response?.failure_reason
+    : request.failure_reason;
 }
 
 function requestFailureMessage(request: DispatchWorkstationRequest): string | undefined {
-  return "request" in request ? request.response?.failure_message : request.failure_message;
+  return "request" in request
+    ? request.response?.failureMessage ?? request.response?.failure_message
+    : request.failure_message;
 }
 
 function requestDiagnostics(

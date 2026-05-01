@@ -157,9 +157,18 @@ function DispatchHistoryCard({
         <InferenceAttemptDetail label="Transition ID" code value={request.transition_id} />
         <InferenceAttemptDetail label="Provider" code value={requestProvider(request)} />
         <InferenceAttemptDetail label="Model" code value={requestModel(request)} />
-        <InferenceAttemptDetail label="dispatchedCount" value={counts.dispatchedCount} />
-        <InferenceAttemptDetail label="respondedCount" value={counts.respondedCount} />
-        <InferenceAttemptDetail label="erroredCount" value={counts.erroredCount} />
+        <InferenceAttemptDetail
+          label="dispatchedCount"
+          value={counts.dispatchedCount}
+        />
+        <InferenceAttemptDetail
+          label="respondedCount"
+          value={counts.respondedCount}
+        />
+        <InferenceAttemptDetail
+          label="erroredCount"
+          value={counts.erroredCount}
+        />
         <InferenceAttemptDetail label="Started at" value={requestStartedAt(request)} />
         <InferenceAttemptDetail
           label="Duration"
