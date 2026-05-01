@@ -6,6 +6,8 @@ This inventory records the checked-in files and directories that the maintainer 
 | --- | --- | --- |
 | `go.mod` | Repository-root marker | Maintainer commands and worktree-aware tests should treat the directory containing `go.mod` as the canonical repository root. |
 | `Makefile` | Root command surface | The development guide should describe quality and generation commands as root-level invocations instead of teaching a nested package workflow. |
+| `cmd/releaseprep/` | Release-preparation entrypoint | The maintainer `make release VERSION=vX.Y.Z` flow shells through this command so git guardrails and readiness sequencing stay cross-platform and testable instead of being duplicated in shell-only Makefile logic. |
+| `internal/releaseprep/` | Release-preparation policy logic | Branch, clean-tree, semver-tag, local/remote tag, and readiness-target enforcement lives here and should stay aligned with the maintainer release policy guide. |
 | `.goreleaser.yml` | Release packaging contract | The tag-driven CLI artifact matrix, archive formats, checksum naming, and snapshot-capable packaging flow should stay centralized here instead of being duplicated inline in release workflow YAML. |
 | `api/` | Authored API contract workspace | OpenAPI validation and bundling start from the repository root, then shell into `api/` only where the documented workflow requires it. |
 | `api/components/schemas/shared/` | Shared OpenAPI fragment family | Cross-surface helper schemas such as maps, diagnostics helpers, and resource helper types live here and referenced fragments must use file-relative `$ref`s. |
@@ -44,6 +46,7 @@ This inventory records the checked-in files and directories that the maintainer 
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
 - When contributor docs mention the repository CI workflow, mirror the exact root-level command sequence and its stated scope from `.github/workflows/ci.yml` so local reproduction and review expectations do not drift.
 - When the repository adds or changes release automation, keep the workflow trigger model and maintainer commands aligned with `docs/guides/cli-release-policy.md` so tags, documentation, and GitHub Actions do not describe conflicting release paths.
+- Keep maintainer release-preparation git checks in `internal/releaseprep/` and call them through `cmd/releaseprep/` from `Makefile` rather than rebuilding the same branch, clean-tree, or tag-existence logic inline in shell recipes.
 - Keep the CLI release target matrix, archive naming, and checksum contract in `.goreleaser.yml`; release workflow YAML should call that shared packaging file rather than re-declaring per-platform artifact details inline.
 - When UI assets are committed for Go embedding, keep the build pipeline responsible for normalizing output filenames and refreshing any cache-busting stamp files instead of hand-editing `ui/dist/`.
 - When browser-backed UI replay tests and replay coverage reports share the same scenarios, keep that metadata in one repository-owned catalog so the tests, scripts, and docs cannot silently drift.

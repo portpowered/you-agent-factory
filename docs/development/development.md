@@ -34,12 +34,14 @@ make generate-api
 make api-smoke
 make test
 make test-full
+make typecheck
 make release-surface-smoke
 make lint
 make script-timeout-companion-smoke-100
 make current-factory-watcher-switch-smoke
 make fmt
 make dashboard-verify
+make release VERSION=v1.2.3
 make ui-deps
 make ui-build
 make ui-test
@@ -69,7 +71,11 @@ Use the same root-level commands locally when reproducing a GitHub Actions failu
 
 Use `make dashboard-verify` for dashboard review readiness after UI source changes that affect embedded assets. It runs `ui-build`, `lint`, and the short Go test suite sequentially so Vite asset rotation does not race with Go embed scanning.
 
+`make typecheck` is the root-level dashboard typecheck command and should stay aligned with the CI `bun run tsc` step.
+
 `make lint` runs `go vet ./...` and the pinned deadcode analyzer. The deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/development/deadcode-baseline.txt`. Review any drift before updating the baseline.
+
+`make release VERSION=v1.2.3` is the maintainer-owned release-preparation path. It must run from a clean `main` checkout, reruns the repository readiness targets, creates the semver tag locally, and pushes only the tag so GitHub Actions owns publication.
 
 
 Use `make ui-storybook` followed by `make ui-test-storybook` when dashboard Storybook stories, play functions, runtime mocks, or the package-local Storybook runner change. `ui-storybook` builds `ui/storybook-static`; `ui-test-storybook` serves that static build on the dashboard-owned runner port and executes the dashboard Storybook interaction tests through the UI package's `test-storybook` script.
