@@ -78,11 +78,11 @@ func TestNewScriptWrapProvider_WithOptions(t *testing.T) {
 // --- buildArgs ---
 
 func TestBuildClaudeArgs_Basic(t *testing.T) {
-	p := &ScriptWrapProvider{}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderClaude),
 		UserMessage:   "hello",
-	})
+	}
+	args := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{}).BuildArgs(req, false)
 	if args[0] != "-p" {
 		t.Errorf("expected first arg '-p', got %q", args[0])
 	}
@@ -98,11 +98,11 @@ func TestBuildClaudeArgs_Basic(t *testing.T) {
 }
 
 func TestBuildClaudeArgs_WithSkipPermissions(t *testing.T) {
-	p := &ScriptWrapProvider{SkipPermissions: true, Logger: logging.NoopLogger{}}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderClaude),
 		UserMessage:   "hello",
-	})
+	}
+	args := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{}).BuildArgs(req, true)
 	found := false
 	for _, a := range args {
 		if a == "--dangerously-skip-permissions" {
@@ -116,13 +116,13 @@ func TestBuildClaudeArgs_WithSkipPermissions(t *testing.T) {
 }
 
 func TestBuildClaudeArgs_WithSystemPromptAndModel(t *testing.T) {
-	p := NewScriptWrapProvider()
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderClaude),
 		UserMessage:   "do stuff",
 		SystemPrompt:  "You are helpful",
 		Model:         "claude-sonnet-4-5-20250514",
-	})
+	}
+	args := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{}).BuildArgs(req, false)
 	hasSystem := false
 	hasModel := false
 	for i, a := range args {
@@ -142,12 +142,12 @@ func TestBuildClaudeArgs_WithSystemPromptAndModel(t *testing.T) {
 }
 
 func TestBuildClaudeArgs_WithResumeSessionID(t *testing.T) {
-	p := NewScriptWrapProvider()
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderClaude),
 		UserMessage:   "do stuff",
 		SessionID:     "claude-session-123",
-	})
+	}
+	args := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{}).BuildArgs(req, false)
 
 	hasResume := false
 	for i, a := range args {
@@ -161,11 +161,11 @@ func TestBuildClaudeArgs_WithResumeSessionID(t *testing.T) {
 }
 
 func TestBuildCodexArgs_Basic(t *testing.T) {
-	p := &ScriptWrapProvider{}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderCodex),
 		UserMessage:   "fix the bug",
-	})
+	}
+	args := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{}).BuildArgs(req, false)
 	if args[0] != "exec" {
 		t.Errorf("expected first arg 'exec', got %q", args[0])
 	}
@@ -175,11 +175,11 @@ func TestBuildCodexArgs_Basic(t *testing.T) {
 }
 
 func TestBuildCodexArgs_WithFullAuto(t *testing.T) {
-	p := &ScriptWrapProvider{SkipPermissions: true}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderCodex),
 		UserMessage:   "hello",
-	})
+	}
+	args := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{}).BuildArgs(req, true)
 	found := false
 	for _, a := range args {
 		if a == "--dangerously-bypass-approvals-and-sandbox" {
@@ -193,12 +193,12 @@ func TestBuildCodexArgs_WithFullAuto(t *testing.T) {
 }
 
 func TestBuildCodexArgs_WithWorkingDirectory_UsesStdinPlaceholder(t *testing.T) {
-	p := &ScriptWrapProvider{}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider:    string(ModelProviderCodex),
 		WorkingDirectory: "C:\\worktree",
 		UserMessage:      "line 1\nline 2",
-	})
+	}
+	args := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{}).BuildArgs(req, false)
 
 	// foundCD := false
 	// for i, a := range args {
