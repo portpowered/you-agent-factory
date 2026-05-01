@@ -2,9 +2,11 @@ package workers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/config"
@@ -190,17 +192,30 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 }
 
 func resolveRuntimePath(baseDir, value string) string {
-	if value == "" || filepath.IsAbs(value) {
+	if value == "" {
 		return value
 	}
+	normalized := filepath.FromSlash(value)
+	if filepath.IsAbs(normalized) && (!portableRuntimeRootedPath(value) || pathExists(normalized)) {
+		return filepath.Clean(normalized)
+	}
 	if baseDir != "" {
-		return filepath.Clean(filepath.Join(baseDir, value))
+		return filepath.Clean(filepath.Join(baseDir, normalized))
 	}
 	workingDirectory, err := os.Getwd()
 	if err != nil || workingDirectory == "" {
-		return value
+		return filepath.Clean(normalized)
 	}
-	return filepath.Clean(filepath.Join(workingDirectory, value))
+	return filepath.Clean(filepath.Join(workingDirectory, normalized))
+}
+
+func portableRuntimeRootedPath(value string) bool {
+	return filepath.VolumeName(value) == "" && strings.HasPrefix(value, "/")
+}
+
+func pathExists(value string) bool {
+	_, err := os.Stat(value)
+	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 
 func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {

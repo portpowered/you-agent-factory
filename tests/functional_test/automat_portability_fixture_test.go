@@ -461,6 +461,7 @@ func activateAutomatRequiredToolsOnPath(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeAutomatPathTool(t, filepath.Join(binDir, automatExternalMangaka), "")
+	writeAutomatPathTool(t, filepath.Join(binDir, automatExternalMagick), "")
 	writeAutomatPathTool(t, filepath.Join(binDir, "magick.cmd"), "@echo off\r\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

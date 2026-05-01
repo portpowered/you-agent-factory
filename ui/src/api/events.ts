@@ -1,30 +1,31 @@
+import type { components } from "./generated/openapi";
+
+export type FactoryEventContext = components["schemas"]["FactoryEventContext"];
+export type DispatchRequestEventPayload = components["schemas"]["DispatchRequestEventPayload"];
+export type DispatchResponseEventPayload = components["schemas"]["DispatchResponseEventPayload"];
+export type FactoryStateResponseEventPayload = components["schemas"]["FactoryStateResponseEventPayload"];
+export type InitialStructureRequestEventPayload = components["schemas"]["InitialStructureRequestEventPayload"];
+export type RunRequestEventPayload = components["schemas"]["RunRequestEventPayload"];
+export type WorkRequestEventPayload = components["schemas"]["WorkRequestEventPayload"];
+export type FactoryEventType = components["schemas"]["FactoryEventType"];
+
 export const FACTORY_EVENT_TYPES = {
-  runRequest: "RUN_REQUEST",
-  initialStructureRequest: "INITIAL_STRUCTURE_REQUEST",
-  workRequest: "WORK_REQUEST",
-  relationshipChangeRequest: "RELATIONSHIP_CHANGE_REQUEST",
   dispatchRequest: "DISPATCH_REQUEST",
-  inferenceRequest: "INFERENCE_REQUEST",
-  inferenceResponse: "INFERENCE_RESPONSE",
-  scriptRequest: "SCRIPT_REQUEST",
-  scriptResponse: "SCRIPT_RESPONSE",
   dispatchResponse: "DISPATCH_RESPONSE",
   factoryStateResponse: "FACTORY_STATE_RESPONSE",
+  inferenceRequest: "INFERENCE_REQUEST",
+  inferenceResponse: "INFERENCE_RESPONSE",
+  initialStructureRequest: "INITIAL_STRUCTURE_REQUEST",
+  relationshipChangeRequest: "RELATIONSHIP_CHANGE_REQUEST",
+  runRequest: "RUN_REQUEST",
   runResponse: "RUN_RESPONSE",
-} as const;
-
-export type FactoryEventType = (typeof FACTORY_EVENT_TYPES)[keyof typeof FACTORY_EVENT_TYPES];
+  scriptRequest: "SCRIPT_REQUEST",
+  scriptResponse: "SCRIPT_RESPONSE",
+  workRequest: "WORK_REQUEST",
+} as const satisfies Record<string, FactoryEventType>;
 
 export type FactoryEvent = {
-  context: {
-    dispatchId?: string;
-    eventTime: string;
-    requestId?: string;
-    sequence: number;
-    tick: number;
-    traceIds?: string[];
-    workIds?: string[];
-  };
+  context: FactoryEventContext;
   id: string;
   payload: Record<string, unknown>;
   type: FactoryEventType;

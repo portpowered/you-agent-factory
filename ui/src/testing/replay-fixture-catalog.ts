@@ -1,0 +1,216 @@
+export const replayCoverageSurfaceCatalog = [
+  {
+    description: "Dashboard-shell rendering from a live `/events` replay stream.",
+    id: "dashboard-shell",
+  },
+  {
+    description: "Current work-item selection and summary cards.",
+    id: "selected-work",
+  },
+  {
+    description: "Trace drill-down rendering after selecting replayed work.",
+    id: "trace-drilldown",
+  },
+  {
+    description: "Workspace setup and runtime-config derived projections from replay data.",
+    id: "workspace-setup",
+  },
+] as const;
+
+export type ReplayCoverageSurfaceID = (typeof replayCoverageSurfaceCatalog)[number]["id"];
+
+export interface BrowserIntegrationReplayMetadata {
+  finalTick: number;
+  headingName: string;
+  name: string;
+  requiresWorkItemSelection: boolean;
+  selectedWorkText?: string;
+  workstationName: RegExp;
+}
+
+export interface ReplayFixtureScenarioDefinition {
+  browserIntegration?: BrowserIntegrationReplayMetadata;
+  description: string;
+  fileName: string;
+  id: string;
+  surfaces: readonly ReplayCoverageSurfaceID[];
+  verificationLayers: readonly string[];
+}
+
+export const replayFixtureCatalog = {
+  baseline: {
+    browserIntegration: {
+      finalTick: 2,
+      headingName: "Agent Factory",
+      name: "baseline replay",
+      requiresWorkItemSelection: true,
+      selectedWorkText: "work-1",
+      workstationName: /^Select plan workstation$/i,
+    },
+    description: "Baseline dashboard event-stream replay smoke fixture.",
+    fileName: "event-stream-replay.jsonl",
+    id: "baseline",
+    surfaces: ["dashboard-shell", "selected-work", "trace-drilldown"],
+    verificationLayers: ["browser-integration"],
+  },
+  runtimeConfigInterfaceConsolidation: {
+    browserIntegration: {
+      finalTick: 8,
+      headingName: "Agent Factory",
+      name: "captured replay 2",
+      requiresWorkItemSelection: false,
+      workstationName: /^Select process workstation$/i,
+    },
+    description: "Captured runtime-config replay fixture with setup-workspace projections.",
+    fileName: "event-stream-replay-2.jsonl",
+    id: "runtimeConfigInterfaceConsolidation",
+    surfaces: ["selected-work", "trace-drilldown", "workspace-setup"],
+    verificationLayers: ["browser-integration"],
+  },
+} as const satisfies Record<string, ReplayFixtureScenarioDefinition>;
+
+export type ReplayFixtureCatalog = typeof replayFixtureCatalog;
+export type ReplayFixtureID = keyof ReplayFixtureCatalog;
+export type ReplayFixtureDefinition = ReplayFixtureCatalog[ReplayFixtureID];
+
+export type BrowserIntegrationReplayScenario = ReplayFixtureDefinition & {
+  browserIntegration: BrowserIntegrationReplayMetadata;
+};
+
+export interface ReplayCoverageSurfaceReport {
+  description: string;
+  id: ReplayCoverageSurfaceID;
+  scenarios: ReplayFixtureID[];
+  status: "covered" | "gap";
+}
+
+export interface ReplayCoverageScenarioReport {
+  description: string;
+  fileName: string;
+  id: ReplayFixtureID;
+  surfaces: readonly ReplayCoverageSurfaceID[];
+  verificationLayers: readonly string[];
+}
+
+export interface ReplayCoverageReport {
+  coveredSurfaceCount: number;
+  gapSurfaceCount: number;
+  scenarioCount: number;
+  scenarios: ReplayCoverageScenarioReport[];
+  surfaces: ReplayCoverageSurfaceReport[];
+  totalTrackedSurfaceCount: number;
+}
+
+function hasBrowserIntegration(
+  scenario: ReplayFixtureDefinition,
+): scenario is BrowserIntegrationReplayScenario {
+  return "browserIntegration" in scenario;
+}
+
+export function listBrowserIntegrationReplayScenarios(): BrowserIntegrationReplayScenario[] {
+  return Object.values(replayFixtureCatalog).filter(hasBrowserIntegration);
+}
+
+export function buildReplayCoverageReport(): ReplayCoverageReport {
+  const scenarios: ReplayCoverageScenarioReport[] = Object.values(replayFixtureCatalog).map(
+    (scenario) => ({
+      description: scenario.description,
+      fileName: scenario.fileName,
+      id: scenario.id,
+      surfaces: [...scenario.surfaces],
+      verificationLayers: [...scenario.verificationLayers],
+    }),
+  );
+
+  const surfaces = replayCoverageSurfaceCatalog.map((surface) => {
+    const coveringScenarios = scenarios
+      .filter((scenario) => scenario.surfaces.includes(surface.id))
+      .map((scenario) => scenario.id);
+
+    return {
+      description: surface.description,
+      id: surface.id,
+      scenarios: coveringScenarios,
+      status: coveringScenarios.length > 0 ? "covered" : "gap",
+    } satisfies ReplayCoverageSurfaceReport;
+  });
+
+  const coveredSurfaceCount = surfaces.filter((surface) => surface.status === "covered").length;
+
+  return {
+    coveredSurfaceCount,
+    gapSurfaceCount: surfaces.length - coveredSurfaceCount,
+    scenarioCount: scenarios.length,
+    scenarios,
+    surfaces,
+    totalTrackedSurfaceCount: surfaces.length,
+  };
+}
+
+export function formatReplayCoverageReportMarkdown(report: ReplayCoverageReport): string {
+  const lines = [
+    "# Agent Factory UI Replay Coverage",
+    "",
+    "This artifact is generated from `src/testing/replay-fixture-catalog.ts`.",
+    "",
+    "## Baseline",
+    `- Tracked replay scenarios: ${report.scenarioCount}`,
+    `- Covered tracked surfaces: ${report.coveredSurfaceCount} / ${report.totalTrackedSurfaceCount}`,
+    `- Remaining tracked gaps: ${report.gapSurfaceCount}`,
+    "",
+    "## Scenarios",
+    "| Scenario | Fixture | Verification layers | Covered surfaces |",
+    "| --- | --- | --- | --- |",
+    ...report.scenarios.map(
+      (scenario) =>
+        `| \`${scenario.id}\` | \`${scenario.fileName}\` | ${scenario.verificationLayers.join(", ")} | ${scenario.surfaces.join(", ")} |`,
+    ),
+    "",
+    "## Surface Matrix",
+    "| Surface | Status | Covered by | Notes |",
+    "| --- | --- | --- | --- |",
+    ...report.surfaces.map((surface) => {
+      const coveredBy = surface.scenarios.length > 0
+        ? surface.scenarios.map((scenario) => `\`${scenario}\``).join(", ")
+        : "none yet";
+      return `| \`${surface.id}\` | ${surface.status} | ${coveredBy} | ${surface.description} |`;
+    }),
+    "",
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function validateReplayCoverageReport(report: ReplayCoverageReport): string[] {
+  const issues: string[] = [];
+  const scenarioIDs = new Set(report.scenarios.map((scenario) => scenario.id));
+  const surfaceIDs = new Set(replayCoverageSurfaceCatalog.map((surface) => surface.id));
+
+  for (const scenario of report.scenarios) {
+    if (scenario.verificationLayers.length === 0) {
+      issues.push(`Scenario '${scenario.id}' is missing verification layers.`);
+    }
+    if (scenario.surfaces.length === 0) {
+      issues.push(`Scenario '${scenario.id}' is missing covered surfaces.`);
+    }
+    for (const surfaceID of scenario.surfaces) {
+      if (!surfaceIDs.has(surfaceID)) {
+        issues.push(`Scenario '${scenario.id}' references unknown surface '${surfaceID}'.`);
+      }
+    }
+  }
+
+  for (const surface of report.surfaces) {
+    const expectedStatus = surface.scenarios.length > 0 ? "covered" : "gap";
+    if (surface.status !== expectedStatus) {
+      issues.push(`Surface '${surface.id}' has status '${surface.status}' but should be '${expectedStatus}'.`);
+    }
+    for (const scenarioID of surface.scenarios) {
+      if (!scenarioIDs.has(scenarioID)) {
+        issues.push(`Surface '${surface.id}' references unknown scenario '${scenarioID}'.`);
+      }
+    }
+  }
+
+  return issues;
+}

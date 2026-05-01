@@ -16,6 +16,7 @@ This inventory records the checked-in files and directories that the maintainer 
 | `docs/development/openapi-schema-standardization-inventory.md` | OpenAPI cleanup inventory | Records the authored fragment layout, remaining inline schemas, and the canonical bundle and generation verification surfaces for schema-standardization work. |
 | `docs/development/root-factory-artifact-contract-inventory.md` | Root artifact contract inventory doc | The checked-in root artifact table must stay in lockstep with the enforced entries in `internal/testpath/artifact_contract.go`. |
 | `docs/development/development.md` | Active maintainer guide | Must describe the real repository-root layout used in this checkout and avoid stale `libraries/agent-factory` instructions. |
+| `.github/workflows/ci.yml` | Repository CI contract | Contributor docs should name this workflow and mirror its root-level validation commands and stated non-deployment scope. |
 | `internal/testpath/artifact_contract.go` | Enforced root artifact contract | Root-level factory artifact additions, removals, and redirect stubs are test-enforced here and must stay synchronized with the inventory doc. |
 | `factory/` | Maintainer workflow surface | Contains checked-in operator guidance and active inbox directories that the development guide may reference for workflow-related tasks. |
 | `pkg/api/handlers.go` | Handwritten API decode and validation boundary | Unsupported or legacy public request fields for `POST /work` still need explicit raw-JSON rejection here because generated request structs do not reject unknown keys by themselves. |
@@ -25,12 +26,21 @@ This inventory records the checked-in files and directories that the maintainer 
 | `pkg/` | Go implementation surface | Package-specific test commands in the guide should reference the real package paths under this root. |
 | `tests/` | Smoke and fixture surface | Functional and release-facing checks run from the repository root against these checked-in fixtures. |
 | `ui/` | Embedded dashboard workspace | UI build, test, and Storybook commands remain part of the same repository-root workflow. |
+| `ui/src/testing/replay-fixture-catalog.ts` | Replay integration test contract | Browser-backed dashboard smoke coverage should register scenario metadata here so coverage reporting and integration assertions stay on one source of truth. |
+| `ui/scripts/write-replay-coverage-report.ts` | Replay coverage reporter | Package scripts should use this repository-owned reporter to validate replay metadata instead of embedding ad hoc fixture maps in tests or CI. |
+| `ui/scripts/normalize-dist-output.mjs` | Embedded asset normalizer | The documented UI build path ends by normalizing Vite output names and refreshing `ui/dist_stamp.go` so committed embed assets stay stable for Go builds and CI diffs. |
 
 ## Reusable Rules
 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
+- When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
+- When contributor docs mention the repository CI workflow, mirror the exact root-level command sequence and its stated scope from `.github/workflows/ci.yml` so local reproduction and review expectations do not drift.
+- When UI assets are committed for Go embedding, keep the build pipeline responsible for normalizing output filenames and refreshing any cache-busting stamp files instead of hand-editing `ui/dist/`.
+- When browser-backed UI replay tests and replay coverage reports share the same scenarios, keep that metadata in one repository-owned catalog so the tests, scripts, and docs cannot silently drift.
+- When GitHub Actions uses `actions/setup-go` against a module that declares a newer `toolchain` than its base `go` version, prefer uncached setup unless you have verified that cache restore does not collide with the auto-downloaded toolchain files in later jobs.
 - When a cleanup lane closes with path or contract-alignment work, record the exact root-level verification commands in a `docs/development/*-closeout.md` artifact so the proof survives beyond `progress.txt`.
+- When functional tests need `os.Chdir`, route the directory swap through the shared helper and serialize it with a package-level lock; process working directory is global state and will race any `t.Parallel()` coverage otherwise.
 - Use `pkg/api/openapi_contract_test.go` for narrow OpenAPI contract guards when the work is about authored schema structure or bundled route/schema alignment rather than handler runtime behavior.
 - Keep `docs/development/root-factory-artifact-contract-inventory.md` and `internal/testpath/artifact_contract.go` synchronized; the doc is not descriptive-only, it is a checked-in contract surface with order-sensitive tests.
 - When public OpenAPI field names change, update `pkg/api/testdata/canonical-event-vocabulary-stream.json` together with the contract guards so fixture validation keeps exercising the current bundled vocabulary.

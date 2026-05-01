@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -312,6 +313,8 @@ var fixtureLoadSmokeCases = []fixtureLoadSmokeCase{
 	},
 }
 
+var workingDirectoryMu sync.Mutex
+
 // fixtureDir returns the absolute path to a directory-based test fixture.
 func fixtureDir(t *testing.T, name string) string {
 	t.Helper()
@@ -330,18 +333,29 @@ func resolvedRuntimePath(factoryDir, configuredPath string) string {
 func setWorkingDirectory(t *testing.T, dir string) {
 	t.Helper()
 
+	workingDirectoryMu.Lock()
 	originalDir, err := os.Getwd()
 	if err != nil {
+		workingDirectoryMu.Unlock()
 		t.Fatalf("Getwd(): %v", err)
 	}
 	if err := os.Chdir(dir); err != nil {
+		workingDirectoryMu.Unlock()
 		t.Fatalf("Chdir(%q): %v", dir, err)
 	}
 	t.Cleanup(func() {
 		if err := os.Chdir(originalDir); err != nil {
 			t.Fatalf("restore working directory: %v", err)
 		}
+		workingDirectoryMu.Unlock()
 	})
+}
+
+func withWorkingDirectory(t *testing.T, dir string, run func()) {
+	t.Helper()
+
+	setWorkingDirectory(t, dir)
+	run()
 }
 
 // TestServiceHarness_HappyPath validates that the ServiceTestHarness can
