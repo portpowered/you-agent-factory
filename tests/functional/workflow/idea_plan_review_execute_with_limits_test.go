@@ -1,4 +1,4 @@
-package functional_test
+package workflow
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // The logic of the flow goes (take an input idea, convert it to a plan, run a script, convert it to a task, execute teht ask, review the task):
@@ -13,7 +14,7 @@ import (
 
 // Here we create an idea, we expect it to fail and have 5 resources in place of the resource positions.
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "idea_plan_execute_review_with_limits"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -47,7 +48,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution(t *testing.T) {
 
 // Here we create an idea, we expect it to fail and have 5 resources in place of the resource positions.
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnIdeation(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "idea_plan_execute_review_with_limits"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -81,7 +82,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnIdeation(t *testing.T) {
 
 // Here we create an idea, we expect it to fail and have 5 resources in place of the resource positions.
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "idea_plan_execute_review_with_limits"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -118,7 +119,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch(t *
 }
 
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "idea_plan_execute_review_with_limits"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -160,7 +161,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass(t *testing.T) {
 // single seed trace survives the full worker-pool/file-watcher path and can be
 // reconstructed from the resulting terminal tokens alone.
 func TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "idea_plan_execute_review_with_limits"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	originTraceID := "trace-idea-plan-review-limits-001"
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

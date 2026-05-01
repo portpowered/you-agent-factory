@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/pkg/workers"
 )
 
 func newAdhocProcessReviewHarness(
@@ -144,4 +145,18 @@ func firstInputToken(rawTokens any) interfaces.Token {
 	default:
 		return interfaces.Token{}
 	}
+}
+
+type fakeCommandRunner struct {
+	stdout   string
+	stderr   string
+	exitCode int
+}
+
+func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
+}
+
+func successRunner(stdout string) workers.CommandRunner {
+	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
 }

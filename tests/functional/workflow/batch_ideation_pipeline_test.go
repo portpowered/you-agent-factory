@@ -1,4 +1,4 @@
-package functional_test
+package workflow
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // seedBatchIdeas writes idea seed files into the fixture directory for multiple
@@ -43,7 +44,7 @@ func seedBatchIdeas(t *testing.T, dir string, count int) []string {
 // TraceID lineage in detail without resource interference.
 func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 	t.Skip("Flaky test skipped pending framework fix for resource token color assignment issue (see tasks/ideas-to-review/resource-token-color-corruption.md)")
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "batch_ideation_pipeline"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 
 	// Every response contains ALL stop tokens (COMPLETE + ACCEPTED) since
 	// execution order is non-deterministic across concurrent pipelines.
@@ -117,7 +118,7 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 // Same topology as TestBatchIdeationPipeline_ConcurrencyLimit2 but capacity=1.
 // Total: 3 ideas × 3 provider calls = 9.
 func TestSerialIdeationPipeline_ConcurrencyLimit1(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "serial_ideation_pipeline"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "serial_ideation_pipeline"))
 
 	// Every response contains ALL stop tokens since execution order is
 	// non-deterministic across serialized pipelines.
