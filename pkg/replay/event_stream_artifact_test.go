@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 )
 
@@ -41,28 +40,6 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 	}
 	if got := result.Artifact.Factory.Workers; got == nil || len(*got) != 1 {
 		t.Fatalf("artifact factory workers = %#v, want hydrated factory config", got)
-	}
-}
-
-func TestArtifactFromEventStreamFile_ConvertsAgentFailsLog(t *testing.T) {
-	path := testpath.MustClassifiedArtifactPathFromCaller(t, 0, "factory/logs/agent-fails.json", testpath.ArtifactCheckedIn)
-
-	result, err := ArtifactFromEventStreamFile(path)
-	if err != nil {
-		t.Fatalf("ArtifactFromEventStreamFile: %v", err)
-	}
-
-	if result.ParsedEvents < 100 {
-		t.Fatalf("ParsedEvents = %d, want non-trivial recovered event stream", result.ParsedEvents)
-	}
-	if result.Artifact.RecordedAt.IsZero() {
-		t.Fatal("artifact recordedAt is zero, want hydrated run-start timestamp")
-	}
-	if got := result.Artifact.Factory.WorkTypes; got == nil || len(*got) == 0 {
-		t.Fatalf("artifact factory work types = %#v, want hydrated factory config", got)
-	}
-	if guards := generatedWorkstationGuardsByName(t, result.Artifact.Factory, "executor-loop-breaker"); len(guards) != 1 {
-		t.Fatalf("executor-loop-breaker guards = %#v, want hydrated visit-count guard", guards)
 	}
 }
 

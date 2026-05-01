@@ -20,19 +20,21 @@ run git pull and make the workspace be up to date to remote
 
 ## Step 1 - read
 0. read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`, `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`, and `factory/logs/agent-fails.replay.json` to understand the current repository-maintainer workflow state before proposing cleanup work
-1. read `docs/standards/STANDARDS.md`, `factory/README.md`, `docs/development/root-factory-artifact-contract-inventory.md`, `docs/processes/factory-workstation-relevant-files.md`, and `docs/guides/batch-inputs.md` so your cleanup ideas stay aligned with the repository's public workflow contract
+1. read `docs/standards/STANDARDS.md`, `factory/README.md`,  `docs/guides/batch-inputs.md` so your cleanup ideas stay aligned with the repository's public workflow contract
 2. read the code under `./`, read recent PRs associated with your previous requests, and inspect the current checked-in workflow inputs under `factory/inputs/` to see any previous cleanup attempts that have already been made
 
 ## Step 2 - based on the above results decide on one of the following:
 1. update your meta view of the world
-2. create a task to dispatch to make a achange to your world
-3. handle a customer ask
-
-you are responsible for deciding what is the best thing to do at any given time, if the code is not in a state where changes are progressing well, then you should not handle the customer ask yet.
-you should work on stability and cleanliness. That is, unless the customer asks the request as urgent, then that gets prioritized.
+2. handle a customer ask
+3. create a task to dispatch to make a change to the world
 
 Most important of all though is that your meta view of the world has to be right and updated.
 You should always have a view of the world that is consistent with the world, that is to say, what does the world look like, what is the problems in the world, what is the best way to fix things overall.
+
+Next is to handle customer asks. 
+
+Final is keeping the world clean. This means such things as ensuring that we have a well defined structure for how things look. 
+For example, ensuring that the systems are structured so that we don't have duplicate structures in place, we don't have duplicate code and we have shrunk the the shape of the constructs to be as simple as possible, while maintaining the general interfaces that we provide to our customesr.
 
 ## step 3 - merge your changes
 
@@ -62,3 +64,7 @@ figure out a way to clean the code (in priority order)
 ## Step 3 - write a file
 1. default to one standalone cleanup idea file. Write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.
 2. only use a batch submission when the follow-up needs dependency ordering or mixed work types. In that case, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`.
+
+## general notes
+
+we don't want files that are submitted under factory/inputs to be considered as part of git commits, as they are generally there to handle logic. 
