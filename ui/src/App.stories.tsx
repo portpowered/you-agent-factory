@@ -1,6 +1,6 @@
 import { expect, fireEvent, userEvent, within } from "storybook/test";
 
-import { App } from "./src/App";
+import { App } from "./App";
 import type {
   DashboardSnapshot,
   DashboardTrace,
