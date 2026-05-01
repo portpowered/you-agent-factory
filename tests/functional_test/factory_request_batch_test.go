@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	factoryboundary "github.com/portpowered/agent-factory/pkg/api"
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
@@ -423,7 +424,8 @@ func TestFactoryRequestBatch_ChainingTraceFanIn_EndToEndSmoke(t *testing.T) {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
 	dispatchID, currentChainingTraceID := assertChainingTraceFanInEvents(t, events)
-	assertChainingTraceFanInWorldState(t, events, dispatchID, currentChainingTraceID)
+	worldState := assertChainingTraceFanInWorldState(t, events, dispatchID, currentChainingTraceID)
+	assertChainingTraceFanInWorkstationRequestProjection(t, worldState, dispatchID, currentChainingTraceID)
 }
 
 func newChainingTraceFanInHarness(t *testing.T) (*testutil.ServiceTestHarness, *testutil.MockWorkerMapProvider) {
@@ -951,11 +953,14 @@ func assertGeneratedWorkRequestPayload(t *testing.T, payload factoryapi.WorkRequ
 func assertChainingTraceFanInEvents(t *testing.T, events []factoryapi.FactoryEvent) (string, string) {
 	t.Helper()
 
+	var requestEvent *factoryapi.FactoryEvent
+	var responseEvent *factoryapi.FactoryEvent
 	var requestPayload *factoryapi.DispatchRequestEventPayload
 	var responsePayload *factoryapi.DispatchResponseEventPayload
 	dispatchID := ""
 
-	for _, event := range events {
+	for i := range events {
+		event := events[i]
 		switch event.Type {
 		case factoryapi.FactoryEventTypeDispatchRequest:
 			payload, err := event.Payload.AsDispatchRequestEventPayload()
@@ -963,16 +968,24 @@ func assertChainingTraceFanInEvents(t *testing.T, events []factoryapi.FactoryEve
 				continue
 			}
 			dispatchID = eventString(event.Context.DispatchId)
+			requestEvent = &events[i]
 			requestPayload = &payload
 		case factoryapi.FactoryEventTypeDispatchResponse:
 			payload, err := event.Payload.AsDispatchResponseEventPayload()
 			if err != nil || payload.TransitionId != "merge" {
 				continue
 			}
+			responseEvent = &events[i]
 			responsePayload = &payload
 		}
 	}
 
+	if requestEvent == nil {
+		t.Fatal("missing merge dispatch request event")
+	}
+	if responseEvent == nil {
+		t.Fatal("missing merge dispatch response event")
+	}
 	if requestPayload == nil {
 		t.Fatal("missing merge dispatch request event")
 	}
@@ -988,11 +1001,19 @@ func assertChainingTraceFanInEvents(t *testing.T, events []factoryapi.FactoryEve
 		t.Fatalf("dispatch request current chaining trace ID = %q, want chain-z", currentChainingTraceID)
 	}
 	assertStringSliceEqual(t, "dispatch request previous chaining trace IDs", eventStringSlice(requestPayload.PreviousChainingTraceIds), []string{"chain-a", "chain-z"})
+	if got := eventString(requestEvent.Context.CurrentChainingTraceId); got != currentChainingTraceID {
+		t.Fatalf("dispatch request context current chaining trace ID = %q, want %q", got, currentChainingTraceID)
+	}
+	assertStringSliceEqual(t, "dispatch request context previous chaining trace IDs", eventStringSlice(requestEvent.Context.PreviousChainingTraceIds), []string{"chain-a", "chain-z"})
 
 	if eventString(responsePayload.CurrentChainingTraceId) != currentChainingTraceID {
 		t.Fatalf("dispatch response current chaining trace ID = %q, want %q", eventString(responsePayload.CurrentChainingTraceId), currentChainingTraceID)
 	}
 	assertStringSliceEqual(t, "dispatch response previous chaining trace IDs", eventStringSlice(responsePayload.PreviousChainingTraceIds), []string{"chain-a", "chain-z"})
+	if got := eventString(responseEvent.Context.CurrentChainingTraceId); got != currentChainingTraceID {
+		t.Fatalf("dispatch response context current chaining trace ID = %q, want %q", got, currentChainingTraceID)
+	}
+	assertStringSliceEqual(t, "dispatch response context previous chaining trace IDs", eventStringSlice(responseEvent.Context.PreviousChainingTraceIds), []string{"chain-a", "chain-z"})
 	if responsePayload.OutputWork == nil || len(*responsePayload.OutputWork) != 1 {
 		t.Fatalf("dispatch response output work = %#v, want one merged output work item", responsePayload.OutputWork)
 	}
@@ -1005,7 +1026,7 @@ func assertChainingTraceFanInEvents(t *testing.T, events []factoryapi.FactoryEve
 	return dispatchID, currentChainingTraceID
 }
 
-func assertChainingTraceFanInWorldState(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string, currentChainingTraceID string) {
+func assertChainingTraceFanInWorldState(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string, currentChainingTraceID string) interfaces.FactoryWorldState {
 	t.Helper()
 
 	worldState, err := projections.ReconstructFactoryWorldState(events, lastFactoryEventTick(events))
@@ -1039,6 +1060,37 @@ func assertChainingTraceFanInWorldState(t *testing.T, events []factoryapi.Factor
 	assertStringSliceEqual(t, "world state output previous chaining trace IDs", output.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
 	projected := worldState.WorkItemsByID[output.ID]
 	assertStringSliceEqual(t, "world state projected output previous chaining trace IDs", projected.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
+	return worldState
+}
+
+func assertChainingTraceFanInWorkstationRequestProjection(
+	t *testing.T,
+	worldState interfaces.FactoryWorldState,
+	dispatchID string,
+	currentChainingTraceID string,
+) {
+	t.Helper()
+
+	slice := factoryboundary.BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
+	if slice.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("workstation request slice missing projection map")
+	}
+	view, ok := (*slice.WorkstationRequestsByDispatchId)[dispatchID]
+	if !ok {
+		t.Fatalf("workstation request slice = %#v, want dispatch %q", slice.WorkstationRequestsByDispatchId, dispatchID)
+	}
+	if got := eventString(view.Request.CurrentChainingTraceId); got != currentChainingTraceID {
+		t.Fatalf("workstation request current chaining trace ID = %q, want %q", got, currentChainingTraceID)
+	}
+	assertStringSliceEqual(t, "workstation request previous chaining trace IDs", eventStringSlice(view.Request.PreviousChainingTraceIds), []string{"chain-a", "chain-z"})
+	if view.Response == nil || view.Response.OutputWorkItems == nil || len(*view.Response.OutputWorkItems) != 1 {
+		t.Fatalf("workstation request response output work items = %#v, want one merged output", view.Response)
+	}
+	output := (*view.Response.OutputWorkItems)[0]
+	if got := eventString(output.CurrentChainingTraceId); got != currentChainingTraceID {
+		t.Fatalf("workstation request output current chaining trace ID = %q, want %q", got, currentChainingTraceID)
+	}
+	assertStringSliceEqual(t, "workstation request output previous chaining trace IDs", eventStringSlice(output.PreviousChainingTraceIds), []string{"chain-a", "chain-z"})
 }
 
 func assertStringSliceEqual(t *testing.T, label string, got, want []string) {
