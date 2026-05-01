@@ -294,3 +294,33 @@
   for that dead-code/duplicate-helper seam.
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
   PR state, and the revised next cleanup lane.
+
+## 2026-05-01 04:03 -07:00 - meta refresh after worker build-args cleanup landed
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `161da97`.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  recent open/merged PR history, and the tracked `factory/inputs/**` surface
+  before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that the canonical meta control-plane files are unchanged.
+- Confirmed the previous meta world view had drifted again:
+  - it still described `HEAD` as `05fb827`
+  - it still treated the worker build-args shim retirement as the next lane
+    even though PR `#25` is now merged
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#20`, `#16`, and `#4`
+  - merged PRs `#25`, `#24`, `#23`, `#22`, `#21`, `#19`, `#18`, and `#17`
+- Used a sidecar repository-inspection agent plus direct code inspection to
+  identify the next narrow cleanup candidate outside the open PR set:
+  - `pkg/config/factory_config_mapping.go` repeats the same retired worker
+    alias rejection table for both `workers[i]` and `workers[i].definition`
+  - the same file repeats the retired workstation alias rejection table for
+    both `workstations[i]` and `workstations[i].definition`
+  - the duplicated tables sit in legacy boundary validation code, so they are
+    good simplification targets without reopening active product lanes
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/dedupe-retired-boundary-alias-rejection-tables.md`
+  for that legacy-boundary dedupe seam.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged PR
+  state, and the revised next cleanup lane.
