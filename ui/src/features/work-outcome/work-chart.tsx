@@ -256,7 +256,7 @@ interface WorkChartData {
 interface WorkChartRow {
   label: string;
   tick: number;
-  [seriesKey: string]: number | string;
+  [seriesKey: string]: number | string | undefined;
 }
 
 type WorkChartDataResult =
@@ -289,14 +289,16 @@ function buildWorkChartData(
       const value = seriesByKey
         .get(definition.key)
         ?.find((seriesPoint) => seriesPoint.order === index)?.value;
-      row[definition.key] = value ?? 0;
+      if (value !== undefined) {
+        row[definition.key] = value;
+      }
     }
 
     return row;
   });
 
   const builtSeries = series
-    .filter((definition) => rows.some((row) => typeof row[definition.key] === "number"))
+    .filter((definition) => rows.some((row) => hasSeriesValue(row, definition.key)))
     .map((definition) => ({
       key: definition.key,
       label: definition.label,
@@ -320,6 +322,10 @@ function buildWorkChartData(
     },
     status: "ready",
   };
+}
+
+function hasSeriesValue(row: WorkChartRow, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(row, key) && typeof row[key] === "number";
 }
 
 function formatAxisNumber(value: number): string {

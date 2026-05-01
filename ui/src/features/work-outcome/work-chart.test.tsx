@@ -102,6 +102,18 @@ const emptyWorkChartModel: WorkChartModel = {
   series: [],
 };
 
+const zeroValuedFailedSeriesModel: WorkChartModel = {
+  ...sparseWorkChartModel,
+  series: sparseWorkChartModel.series.map((seriesEntry) =>
+    seriesEntry.key === "failed"
+      ? {
+          ...seriesEntry,
+          points: [{ label: "Failed: 0", observedAt: 2000, order: 1, value: 0 }],
+        }
+      : seriesEntry,
+  ),
+};
+
 const OUTCOME_SERIES: readonly WorkChartSeriesDefinition[] = [
   {
     key: "queued",
@@ -147,9 +159,33 @@ describe("WorkChart", () => {
     expect(screen.getByText("Queued")).toBeTruthy();
     expect(screen.getByText("In-flight")).toBeTruthy();
     expect(screen.getByText("Completed")).toBeTruthy();
-    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.queryByText("Failed")).toBeNull();
     expect(screen.getByText("Ticks")).toBeTruthy();
     expect(screen.getByText("Work count")).toBeTruthy();
+  });
+
+  it("keeps missing series points absent instead of fabricating zero-valued rows", () => {
+    render(
+      <WorkChart
+        ariaLabel="Sparse work chart"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    expect(screen.queryByText("Failed")).toBeNull();
+  });
+
+  it("still renders a series when the retained sample value is explicitly zero", () => {
+    render(
+      <WorkChart
+        ariaLabel="Zero work chart"
+        model={zeroValuedFailedSeriesModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    expect(screen.getByText("Failed")).toBeTruthy();
   });
 
   it("renders explicit no-data state when timeline points are unavailable", () => {
