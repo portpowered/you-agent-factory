@@ -130,7 +130,10 @@ Review any generated diff together with the authored OpenAPI change. Do not hand
 
 The canonical export/import sharing boundary is the generated OpenAPI
 `NamedFactory` payload returned by `GET /factory/~current` and accepted by
-`POST /factory`. PNG export and import reuse that exact payload through
+`POST /factory`. When the active runtime is still the default root factory and
+no durable current pointer exists yet, `GET /factory/~current` returns that
+same payload with `name: "UNDEFINED"` as the reserved identifier. PNG export
+and import reuse that exact payload through
 
 Use [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md)
 as the detailed contract reference. Keep the dashboard on the authored API

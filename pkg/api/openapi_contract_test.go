@@ -519,6 +519,17 @@ func TestOpenAPIContract_NamedFactorySchemaReusesCanonicalFactoryShape(t *testin
 	if err := namedFactory.VisitJSON(namedFactory.Example); err != nil {
 		t.Fatalf("NamedFactory.example should validate: %v", err)
 	}
+
+	factoryName := requireOpenAPI3ComponentSchema(t, doc, "FactoryName")
+	if err := factoryName.VisitJSON("customer-support-triage"); err != nil {
+		t.Fatalf("FactoryName should accept canonical customer-facing names: %v", err)
+	}
+	if err := factoryName.VisitJSON("UNDEFINED"); err != nil {
+		t.Fatalf("FactoryName should accept the reserved default-current identifier: %v", err)
+	}
+	if err := factoryName.VisitJSON("Customer-Support-Triage"); err == nil {
+		t.Fatal("FactoryName should reject non-canonical mixed-case names")
+	}
 }
 
 func TestOpenAPIContract_NamedFactoryOperationsPublishMachineReadableErrors(t *testing.T) {
@@ -545,6 +556,11 @@ func TestOpenAPIContract_NamedFactoryOperationsPublishMachineReadableErrors(t *t
 	currentFactory := pathOperation(t, paths, "/factory/~current", "get")
 	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/NamedFactory")
 	assertResponseRef(t, currentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+	description, _ := currentFactory["description"].(string)
+	if !strings.Contains(description, "UNDEFINED") {
+		t.Fatalf("/factory/~current description = %q, want mention of %q", description, "UNDEFINED")
+	}
+	assertCurrentFactoryDefaultRuntimeExample(t, currentFactory)
 
 	components, ok := doc["components"].(map[string]any)
 	if !ok {
@@ -566,6 +582,38 @@ func TestOpenAPIContract_NamedFactoryOperationsPublishMachineReadableErrors(t *t
 	assertResponseExampleCodeFamilies(t, responses, "CurrentFactoryNotFound", map[string]string{
 		"NOT_FOUND": "NOT_FOUND",
 	})
+}
+
+func assertCurrentFactoryDefaultRuntimeExample(t *testing.T, currentFactory map[string]any) {
+	t.Helper()
+
+	response200, ok := currentFactory["responses"].(map[string]any)["200"].(map[string]any)
+	if !ok {
+		t.Fatalf("/factory/~current 200 response is missing")
+	}
+	content, ok := response200["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("/factory/~current 200 response content is missing")
+	}
+	jsonContent, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatalf("/factory/~current 200 application/json content is missing")
+	}
+	examples, ok := jsonContent["examples"].(map[string]any)
+	if !ok {
+		t.Fatalf("/factory/~current 200 examples are missing")
+	}
+	defaultRuntime, ok := examples["defaultRootRuntime"].(map[string]any)
+	if !ok {
+		t.Fatalf("/factory/~current defaultRootRuntime example is missing")
+	}
+	value, ok := defaultRuntime["value"].(map[string]any)
+	if !ok {
+		t.Fatalf("/factory/~current defaultRootRuntime example value is missing")
+	}
+	if got, _ := value["name"].(string); got != "UNDEFINED" {
+		t.Fatalf("/factory/~current defaultRootRuntime example name = %q, want %q", got, "UNDEFINED")
+	}
 }
 
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {

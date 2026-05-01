@@ -137,6 +137,7 @@ func TestGeneratedNamedFactoryContractsCompileAndRoundTrip(t *testing.T) {
 
 	assertGeneratedNamedFactoryContracts(t, namedFactory)
 	assertGeneratedNamedFactoryJSONRoundTrip(t, namedFactory)
+	assertGeneratedReservedCurrentFactoryJSONRoundTrip(t, namedFactory)
 	assertGeneratedCurrentFactoryNotFoundJSON(t)
 }
 
@@ -227,6 +228,27 @@ func assertGeneratedNamedFactoryJSONRoundTrip(t *testing.T, namedFactory factory
 	}
 	if roundTripped.Factory.Workstations == nil || len(*roundTripped.Factory.Workstations) != 1 || (*roundTripped.Factory.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Factory.Workstations)
+	}
+}
+
+func assertGeneratedReservedCurrentFactoryJSONRoundTrip(t *testing.T, namedFactory factoryapi.NamedFactory) {
+	t.Helper()
+
+	namedFactory.Name = "UNDEFINED"
+	encoded, err := json.Marshal(namedFactory)
+	if err != nil {
+		t.Fatalf("marshal generated current NamedFactory: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"name":"UNDEFINED"`) {
+		t.Fatalf("generated current NamedFactory JSON missing reserved current-factory name: %s", encoded)
+	}
+
+	var roundTripped factoryapi.NamedFactory
+	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatalf("unmarshal generated current NamedFactory: %v", err)
+	}
+	if roundTripped.Name != "UNDEFINED" {
+		t.Fatalf("round-tripped current named factory name = %q, want %q", roundTripped.Name, "UNDEFINED")
 	}
 }
 

@@ -1,5 +1,5 @@
 type: string
 minLength: 1
-pattern: '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$'
-description: Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
+pattern: '^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$'
+description: Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 example: customer-support-triage
