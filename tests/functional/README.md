@@ -23,6 +23,16 @@ coverage that should not join the default command.
 | `replay_contracts` | Replay, event-history, and artifact reconstruction behavior that must stay stable across recording and playback surfaces. |
 | `bootstrap_portability` | Init, bootstrap, portability, current-factory activation, and checked-in factory portability flows. |
 
+## Shared Support
+
+- Cross-package functional helpers belong in `tests/functional/internal/support`.
+- Keep package-local helpers next to the tests until a second behavior package
+  needs them, then promote them into the support package instead of importing
+  or copying another package's `*_test.go` helpers.
+- During the migration, behavior packages may temporarily reuse legacy fixture
+  data from `tests/functional_test/testdata`, but the fixture lookup and other
+  shared wiring should flow through `internal/support`.
+
 ## Placement Rules
 
 - Behavior decides package ownership. Put a test in the package that best

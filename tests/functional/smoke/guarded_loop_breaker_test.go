@@ -1,4 +1,4 @@
-package functional_test
+package smoke
 
 import (
 	"context"
@@ -12,11 +12,12 @@ import (
 	"github.com/portpowered/agent-factory/pkg/config"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, agentFactoryPath(t, "examples/simple-tasks"))
-	clearSeedInputs(t, dir)
+	dir := testutil.CopyFixtureDir(t, support.AgentFactoryPath(t, "examples/simple-tasks"))
+	support.ClearSeedInputs(t, dir)
 	assertFactoryHasNoTopLevelExhaustionRules(t, dir)
 
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
@@ -66,8 +67,8 @@ func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t
 }
 
 func TestIntegrationSmoke_GuardedLoopBreakerExampleRejectsRetiredExhaustionRulesAtBoundary(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, agentFactoryPath(t, "examples/simple-tasks"))
-	clearSeedInputs(t, dir)
+	dir := testutil.CopyFixtureDir(t, support.AgentFactoryPath(t, "examples/simple-tasks"))
+	support.ClearSeedInputs(t, dir)
 	writeFactoryTopLevelExhaustionRules(t, dir, []map[string]any{{
 		"name":              "review-loop-breaker",
 		"watch_workstation": "review-story",
@@ -174,33 +175,6 @@ func assertDispatchHistoryContainsWorkstation(
 		workstationName,
 		terminalPlace,
 		workID,
-		history,
-	)
-}
-
-func assertDispatchHistoryContainsWorkstationRoute(
-	t *testing.T,
-	history []interfaces.CompletedDispatch,
-	workstationName string,
-	terminalPlace string,
-) {
-	t.Helper()
-
-	for _, dispatch := range history {
-		if dispatch.WorkstationName != workstationName {
-			continue
-		}
-		for _, mutation := range dispatch.OutputMutations {
-			if mutation.ToPlace == terminalPlace {
-				return
-			}
-		}
-	}
-
-	t.Fatalf(
-		"dispatch history missing %q route to %q: %#v",
-		workstationName,
-		terminalPlace,
 		history,
 	)
 }
