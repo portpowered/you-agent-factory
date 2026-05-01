@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { NamedFactoryValue } from "../../api/named-factory";
 import {
@@ -62,6 +62,7 @@ export function ExportFactoryDialog({
   onClose,
   preparationFailure = null,
 }: ExportFactoryDialogProps) {
+  const validationIdBase = useId();
   const [exportName, setExportName] = useState(initialFactoryName);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageSelectionError, setImageSelectionError] = useState<string | null>(null);
@@ -103,6 +104,8 @@ export function ExportFactoryDialog({
     : imageTouched && !selectedImage
       ? "Choose a cover image before exporting."
       : null;
+  const nameValidationId = `${validationIdBase}-name-validation`;
+  const imageValidationId = `${validationIdBase}-image-validation`;
   const isExporting = dialogState.status === "exporting";
   const exportDisabled = isExporting || isPreparing || namedFactory === null;
   const handleOpenChange = (open: boolean) => {
@@ -206,6 +209,8 @@ export function ExportFactoryDialog({
               Factory name
             </label>
             <Input
+              aria-describedby={nameValidationMessage ? nameValidationId : undefined}
+              aria-invalid={nameValidationMessage ? "true" : undefined}
               className={DASHBOARD_BODY_TEXT_CLASS}
               disabled={isExporting}
               id="export-factory-name"
@@ -228,7 +233,9 @@ export function ExportFactoryDialog({
               downloaded filename.
             </p>
             {nameValidationMessage ? (
-              <p className={DIALOG_VALIDATION_CLASS}>{nameValidationMessage}</p>
+              <p className={DIALOG_VALIDATION_CLASS} id={nameValidationId}>
+                {nameValidationMessage}
+              </p>
             ) : null}
           </div>
 
@@ -238,6 +245,8 @@ export function ExportFactoryDialog({
             </label>
             <input
               accept="image/*"
+              aria-describedby={imageValidationMessage ? imageValidationId : undefined}
+              aria-invalid={imageValidationMessage ? "true" : undefined}
               className={DIALOG_FILE_INPUT_CLASS}
               disabled={isExporting}
               id="export-factory-image"
@@ -257,7 +266,9 @@ export function ExportFactoryDialog({
               <p className={DIALOG_HINT_CLASS}>Selected image: {selectedImage.name}</p>
             ) : null}
             {imageValidationMessage ? (
-              <p className={DIALOG_VALIDATION_CLASS}>{imageValidationMessage}</p>
+              <p className={DIALOG_VALIDATION_CLASS} id={imageValidationId}>
+                {imageValidationMessage}
+              </p>
             ) : null}
           </div>
 

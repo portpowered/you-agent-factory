@@ -38,8 +38,17 @@ describe("ExportFactoryDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
 
-    expect(await screen.findByText("Enter a factory name before exporting.")).toBeTruthy();
-    expect(screen.getByText("Choose a cover image before exporting.")).toBeTruthy();
+    const nameValidation = await screen.findByText("Enter a factory name before exporting.");
+    const imageValidation = screen.getByText("Choose a cover image before exporting.");
+    const nameInput = screen.getByLabelText("Factory name");
+    const imageInput = screen.getByLabelText("Cover image");
+
+    expect(nameValidation.id).not.toBe("");
+    expect(imageValidation.id).not.toBe("");
+    expect(nameInput.getAttribute("aria-invalid")).toBe("true");
+    expect(nameInput.getAttribute("aria-describedby")).toBe(nameValidation.id);
+    expect(imageInput.getAttribute("aria-invalid")).toBe("true");
+    expect(imageInput.getAttribute("aria-describedby")).toBe(imageValidation.id);
     expect(writeFactoryExportPng).not.toHaveBeenCalled();
   });
 
