@@ -31,4 +31,4 @@ work inputs.
 - Keep workstation prompts repository-local and public-surface neutral: cite checked-in docs or `factory/` paths in this repo, never absolute paths to a different checkout or merge-conflict marker text.
 - When a workstation prompt can emit either ideas or batch requests, state the default as one standalone idea file and name the exact condition that permits `FACTORY_REQUEST_BATCH` output.
 - When maintainer prompts need the customer backlog, point them to `factory/logs/meta/asks.md` explicitly and keep any legacy duplicate path as a redirect-only stub rather than a peer control-plane surface.
-- Treat workstation `working_directory` values that begin with `/` as canonical portable runtime paths rooted under the active runtime base or factory directory, not as Unix host-absolute paths.
+- Treat slash-rooted workstation `working_directory` values as portable runtime paths only when they are repo-authored logical locations such as `/repo/...` or `/worktrees/...`; preserve real existing Unix absolute paths as host-absolute instead of rebasing them under the runtime base.

@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Keep this pinned version aligned with ui/package.json's packageManager value.
   BUN_VERSION: 1.3.12
 
 jobs:

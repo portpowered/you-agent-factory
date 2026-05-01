@@ -246,8 +246,11 @@ To reproduce the CI lanes locally from the repository root, run the same command
 4. `make ui-build`
 5. `make lint`
 6. `make api-smoke`
-7. `make ui-test`
-8. `make test`
+7. `cd ui && bunx playwright install --with-deps chromium`
+8. `make ui-test`
+9. `make test`
+
+The workflow pins Bun to `1.3.12` in [`.github/workflows/ci.yml`](./.github/workflows/ci.yml); keep that value aligned with `ui/package.json`'s `packageManager` field when the dashboard toolchain changes.
 
 For dashboard review readiness after UI source changes that affect embedded assets, run the serialized verification target:
 

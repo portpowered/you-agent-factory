@@ -2,6 +2,7 @@ package workers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -195,7 +196,7 @@ func resolveRuntimePath(baseDir, value string) string {
 		return value
 	}
 	normalized := filepath.FromSlash(value)
-	if !portableRuntimeRootedPath(value) && filepath.IsAbs(normalized) {
+	if filepath.IsAbs(normalized) && (!portableRuntimeRootedPath(value) || pathExists(normalized)) {
 		return filepath.Clean(normalized)
 	}
 	if baseDir != "" {
@@ -210,6 +211,11 @@ func resolveRuntimePath(baseDir, value string) string {
 
 func portableRuntimeRootedPath(value string) bool {
 	return filepath.VolumeName(value) == "" && strings.HasPrefix(value, "/")
+}
+
+func pathExists(value string) bool {
+	_, err := os.Stat(value)
+	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 
 func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {

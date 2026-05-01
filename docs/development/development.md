@@ -59,11 +59,11 @@ The workflow currently executes these repository-owned commands in order:
 4. `make ui-build`
 5. `make lint`
 6. `make api-smoke`
-7. `cd ui && bunx playwright install chromium`
+7. `cd ui && bunx playwright install --with-deps chromium`
 8. `make ui-test`
 9. `make test`
 
-Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and Bun from the pinned `packageManager` contract in `ui/package.json`, so local reproduction should start from the repository root with the same checked-in toolchain expectations.
+Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
 Use `make dashboard-verify` for dashboard review readiness after UI source changes that affect embedded assets. It runs `ui-build`, `lint`, and the short Go test suite sequentially so Vite asset rotation does not race with Go embed scanning.
 
