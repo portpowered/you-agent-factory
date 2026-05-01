@@ -32,6 +32,10 @@ coverage that should not join the default command.
 - During the migration, behavior packages may temporarily reuse legacy fixture
   data from `tests/functional_test/testdata`, but the fixture lookup and other
   shared wiring should flow through `internal/support`.
+- Do not add new cross-package helper or compatibility files under
+  `tests/functional_test`. That legacy bucket may keep only narrow temporary
+  shims for still-unmigrated tests; new shared helpers must land in
+  `tests/functional/internal/support`.
 
 ## Placement Rules
 
@@ -48,6 +52,9 @@ coverage that should not join the default command.
   test belongs in the slow lane, gate it behind the `functionallong` tag so
   `make test-functional` stays package-discovery-only and does not need manual
   excludes.
+- When a slow test is gated behind `functionallong`, name the file
+  `*_long_test.go` so review-time scanning and guardrails can spot the lane
+  boundary immediately.
 - When a legacy fixture-directory smoke loop mixes unrelated behaviors, replace
   it with package-owned tests that assert the user-visible outcome for each
   behavior instead of keeping one umbrella "loads every fixture" check in the
@@ -64,3 +71,16 @@ The existing `tests/functional_test/` suite can coexist temporarily while
 stories migrate coverage into `tests/functional/`. New decomposition work
 should target the behavior-first package tree rather than adding more unrelated
 coverage to the legacy mixed bucket.
+
+Compatibility rules during coexistence:
+
+- `tests/functional_test/` stays open only for unmigrated behavior coverage and
+  the small allowlisted helper-only shims needed to keep those remaining files
+  compiling.
+- New behavior coverage belongs in `tests/functional/<behavior-package>/`.
+- New shared harnesses, assertions, and fixture seams belong in
+  `tests/functional/internal/support`.
+- The repository-owned guard in `internal/contractguard/functional_layout_test.go`
+  fails when a `_long_test.go` file misses the `functionallong` tag, when a
+  `functionallong` file sits outside `tests/functional/`, or when a new helper
+  shim appears in `tests/functional_test`.
