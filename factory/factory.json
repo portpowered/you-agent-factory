@@ -12,7 +12,8 @@
       "name": "task",
       "states": [
         { "name": "init", "type": "INITIAL" },
-        { "name": "in-review", "type": "IN_REVIEW" },
+        { "name": "in-review", "type": "PROCESSING" },
+        { "name": "to-complete", "type": "PROCESSING" },
         { "name": "complete", "type": "TERMINAL" },
         { "name": "failed", "type": "FAILED" }
       ]
@@ -29,6 +30,7 @@
       "name": "plan",
       "states": [
         { "name": "init", "type": "INITIAL" },
+        { "name": "to-complete", "type": "PROCESSING" },
         { "name": "complete", "type": "TERMINAL" },
         { "name": "failed", "type": "FAILED" }
       ]
@@ -68,11 +70,27 @@
       "onFailure": { "workType": "idea", "state": "failed" }
     },
     {
+      "name": "consume",
+      "type": "LOGICAL_MOVE",
+      "inputs":  [
+        { 
+          "workType": "plan", 
+          "state": "to-complete", 
+          "guards": [{
+            "type": "SAME_NAME",
+            "matchInput": "task"
+            }]
+        }, 
+        { "workType": "task", "state": "to-complete" }
+      ],
+      "outputs": [{ "workType": "plan", "state": "complete" }, { "workType": "task", "state": "complete" }]
+    },
+    {
       "name": "setup-workspace",
       "type": "MODEL_WORKSTATION",
       "worker": "workspace-setup",
       "inputs":  [{ "workType": "plan", "state": "init" }],
-      "outputs": [{ "workType": "plan", "state": "complete" }, { "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "plan", "state": "to-complete" }, { "workType": "task", "state": "init" }],
       "onFailure": { "workType": "plan", "state": "failed" }
     },
     {
@@ -91,7 +109,7 @@
       "name": "review",
       "worker": "processor",
       "inputs":  [{ "workType": "task", "state": "in-review" }],
-      "outputs": [{ "workType": "task", "state": "complete" }],
+      "outputs": [{ "workType": "task", "state": "to-complete" }],
       "onRejection": { "workType": "task", "state": "init" },
       "onFailure": { "workType": "task", "state": "failed" },
       "resources": [{ "name": "executor-slot", "capacity": 1 }],
