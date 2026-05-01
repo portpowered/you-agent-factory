@@ -43,7 +43,7 @@ const canonicalFactory: FactorySchemas["Factory"] = {
 };
 
 describe("writeFactoryExportPng", () => {
-  it("writes the Port OS metadata envelope without changing the source PNG image data", async () => {
+  it("writes the Port OS factory metadata without changing the source PNG image data", async () => {
     const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
     const result = await writeFactoryExportPng({
       factory: {
@@ -125,6 +125,14 @@ function fromBase64(value: string): Uint8Array {
 }
 
 async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
+  if (typeof blob.arrayBuffer === "function") {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  if (typeof FileReader === "undefined") {
+    throw new Error("Blob readers are unavailable.");
+  }
+
   return await new Promise<Uint8Array>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

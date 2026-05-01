@@ -43,7 +43,7 @@ const canonicalFactory: FactoryValue = {
 };
 
 describe("useFactoryImportActivation", () => {
-  it("activates the direct factory payload while preserving the PNG named-factory envelope", async () => {
+  it("activates the direct factory payload while preserving the PNG factory metadata", async () => {
     const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockImplementation(async (value) => value);
     const onActivated = vi.fn<(value: FactoryValue) => void>();
@@ -59,7 +59,7 @@ describe("useFactoryImportActivation", () => {
       throw new Error("expected export to succeed");
     }
 
-    expect(exportResult.envelope).toEqual({
+    expect(exportResult.metadata).toEqual({
       ...canonicalFactory,
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     });
@@ -90,7 +90,7 @@ describe("useFactoryImportActivation", () => {
     expect(activateFactory).toHaveBeenCalledTimes(1);
     expect(onActivated).toHaveBeenCalledWith(canonicalFactory);
     expect(importResult.value.factory).toEqual(canonicalFactory);
-    expect(importResult.value.factoryName).toBe(canonicalFactory.name);
+    expect(importResult.value.schemaVersion).toBe(PORT_OS_FACTORY_PNG_SCHEMA_VERSION);
     expect(result.current.activationState).toEqual({ status: "idle" });
   });
 });

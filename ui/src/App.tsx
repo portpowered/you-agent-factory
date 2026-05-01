@@ -267,10 +267,10 @@ export function App() {
       />
 
       <ExportFactoryDialog
-        factory={currentFactoryExport.ok ? currentFactoryExport.factory : null}
+        factory={currentFactoryExport.ok ? currentFactoryExport.factoryDefinition : null}
         isPreparing={isPreparingCurrentFactoryExport}
         initialFactoryName={
-          currentFactoryExport.ok ? currentFactoryExport.factory.name : "agent-factory"
+          currentFactoryExport.ok ? currentFactoryExport.factoryDefinition.name : "agent-factory"
         }
         isOpen={isExportDialogOpen}
         onClose={() => {

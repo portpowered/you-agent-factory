@@ -8,7 +8,7 @@ export const PORT_OS_FACTORY_PNG_METADATA_KEYWORD = "portos.agent-factory";
 export const PORT_OS_FACTORY_PNG_SCHEMA_VERSION = "portos.agent-factory.png.v1";
 
 export type CanonicalFactoryDefinition = FactoryValue;
-export interface PortOSFactoryPngEnvelope extends FactoryValue {
+export interface FactoryPngMetadata extends FactoryValue {
   schemaVersion: typeof PORT_OS_FACTORY_PNG_SCHEMA_VERSION;
 }
 
@@ -20,7 +20,7 @@ export interface WriteFactoryExportPngOptions {
 
 export interface WriteFactoryExportPngSuccess {
   blob: Blob;
-  envelope: PortOSFactoryPngEnvelope;
+  metadata: FactoryPngMetadata;
   ok: true;
 }
 
@@ -44,7 +44,7 @@ export async function writeFactoryExportPng({
   image,
   rasterizeImageToPngBytes = rasterizeImageToPngBytesInBrowser,
 }: WriteFactoryExportPngOptions): Promise<WriteFactoryExportPngResult> {
-  const envelope: PortOSFactoryPngEnvelope = {
+  const metadata: FactoryPngMetadata = {
     ...factory,
     schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
   };
@@ -66,13 +66,13 @@ export async function writeFactoryExportPng({
   try {
     const metadataChunk = buildInternationalTextChunk(
       PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
-      JSON.stringify(envelope),
+      JSON.stringify(metadata),
     );
     const pngWithMetadata = injectMetadataChunk(pngBytes, metadataChunk);
 
     return {
       blob: new Blob([toArrayBuffer(pngWithMetadata)], { type: "image/png" }),
-      envelope,
+      metadata,
       ok: true,
     };
   } catch (error) {

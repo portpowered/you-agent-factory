@@ -80,22 +80,15 @@ describe("useFactoryPngDrop", () => {
 
 function createFactoryImportValue(previewImageSrc = "blob:factory-preview"): FactoryPngImportValue {
   return {
-    envelope: {
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-      schemaVersion: "portos.agent-factory.png.v1",
-    },
     factory: {
       name: "Dropped Factory",
       workTypes: [],
       workers: [],
       workstations: [],
     },
-    factoryName: "Dropped Factory",
     previewImageSrc,
     revokePreviewImageSrc: vi.fn(),
+    schemaVersion: "portos.agent-factory.png.v1",
   };
 }
 

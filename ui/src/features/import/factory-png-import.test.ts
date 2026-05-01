@@ -65,16 +65,12 @@ describe("readFactoryImportPng", () => {
       throw new Error("expected successful PNG import");
     }
 
-    expect(result.value.envelope).toEqual({
-      ...canonicalFactory,
-      name: "Factory Import",
-      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
-    });
     expect(result.value.factory).toEqual({
       ...canonicalFactory,
       name: "Factory Import",
     });
     expect(result.value.previewImageSrc).toBe(previewUrl);
+    expect(result.value.schemaVersion).toBe(PORT_OS_FACTORY_PNG_SCHEMA_VERSION);
 
     result.value.revokePreviewImageSrc();
     expect(revokePreviewImageSrc).toHaveBeenCalledWith(previewUrl);

@@ -3,13 +3,6 @@ import { factoryAPIURL } from "../baseUrl";
 
 export type FactoryValue = components["schemas"]["Factory"];
 
-export interface NamedFactoryValue {
-  factory: FactoryValue;
-  name: FactoryValue["name"];
-}
-
-export type NamedFactoryDefinition = NamedFactoryValue;
-
 export type NamedFactoryAPIErrorCode =
   | "BAD_REQUEST"
   | "FACTORY_ALREADY_EXISTS"

@@ -1324,22 +1324,15 @@ function renderTraceDrilldownHarness({
 
 function createFactoryImportValue(): FactoryPngImportValue {
   return {
-    envelope: {
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-      schemaVersion: "portos.agent-factory.png.v1",
-    },
     factory: {
       name: "Dropped Factory",
       workTypes: [],
       workers: [],
       workstations: [],
     },
-    factoryName: "Dropped Factory",
     previewImageSrc: "blob:factory-preview",
     revokePreviewImageSrc: vi.fn(),
+    schemaVersion: "portos.agent-factory.png.v1",
   };
 }
 
@@ -1702,9 +1695,8 @@ describe("App", () => {
         blob: new Blob([toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))], {
           type: "image/png",
         }),
-        envelope: {
-          factory: refreshedCurrentFactoryExportResponse,
-          name: refreshedCurrentFactoryExportResponse.name,
+        metadata: {
+          ...refreshedCurrentFactoryExportResponse,
           schemaVersion: "portos.agent-factory.png.v1",
         },
         ok: true,
@@ -1855,8 +1847,8 @@ describe("App", () => {
           blob: new Blob([toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))], {
             type: "image/png",
           }),
-          envelope: {
-            factory: currentNamedFactoryExportResponse,
+          metadata: {
+            ...currentNamedFactoryExportResponse,
             name: "Factory Poster",
             schemaVersion: "portos.agent-factory.png.v1",
           },
@@ -1938,8 +1930,8 @@ describe("App", () => {
         blob: new Blob([toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))], {
           type: "image/png",
         }),
-        envelope: {
-          factory: currentNamedFactoryExportResponse,
+        metadata: {
+          ...currentNamedFactoryExportResponse,
           name: "Factory Poster",
           schemaVersion: "portos.agent-factory.png.v1",
         },

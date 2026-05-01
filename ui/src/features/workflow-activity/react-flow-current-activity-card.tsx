@@ -452,7 +452,7 @@ function FactoryImportPreviewDialog({
         <>
           Review the dropped factory before activation. Confirming this import in the next
           step will switch the current factory to{" "}
-          <span className="font-semibold text-af-ink">{previewState.value.factoryName}</span>.
+          <span className="font-semibold text-af-ink">{previewState.value.factory.name}</span>.
         </>
       }
       footer={
@@ -478,7 +478,7 @@ function FactoryImportPreviewDialog({
       media={
         <div className="overflow-hidden rounded-[1.25rem] border border-af-overlay/10 bg-af-overlay/4 p-3">
           <img
-            alt={`${previewState.value.factoryName} preview image`}
+            alt={`${previewState.value.factory.name} preview image`}
             className="block h-full max-h-[24rem] w-full rounded-[1rem] object-contain"
             src={previewState.value.previewImageSrc}
           />
@@ -488,7 +488,7 @@ function FactoryImportPreviewDialog({
       overlayClassName="absolute inset-0 z-20 bg-af-ink/16 backdrop-blur-[6px]"
       title={GRAPH_IMPORT_PREVIEW_TITLE}
     >
-      <p className="m-0 text-base font-semibold text-af-ink">{previewState.value.factoryName}</p>
+      <p className="m-0 text-base font-semibold text-af-ink">{previewState.value.factory.name}</p>
 
       <dl className="grid gap-3 rounded-[1.1rem] border border-af-overlay/10 bg-af-overlay/4 p-4 text-sm text-af-ink/80">
         <div className="grid gap-1">
@@ -501,7 +501,7 @@ function FactoryImportPreviewDialog({
           <dt className="text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent">
             Embedded factory
           </dt>
-          <dd className="m-0 font-semibold text-af-ink">{previewState.value.factoryName}</dd>
+          <dd className="m-0 font-semibold text-af-ink">{previewState.value.factory.name}</dd>
         </div>
       </dl>
 

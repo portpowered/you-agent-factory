@@ -163,22 +163,15 @@ function snapshotWithLongStateLabels(): DashboardSnapshot {
 
 function createFactoryImportValue(): FactoryPngImportValue {
   return {
-    envelope: {
-      name: "Dropped Factory",
-      workTypes: [],
-      workers: [],
-      workstations: [],
-      schemaVersion: "portos.agent-factory.png.v1",
-    },
     factory: {
       name: "Dropped Factory",
       workTypes: [],
       workers: [],
       workstations: [],
     },
-    factoryName: "Dropped Factory",
     previewImageSrc: "blob:factory-preview",
     revokePreviewImageSrc: () => {},
+    schemaVersion: "portos.agent-factory.png.v1",
   };
 }
 
@@ -358,7 +351,7 @@ function CurrentActivityImportStory({ snapshot }: CurrentActivityStoryProps) {
           activateFactory={async (value: FactoryValue) => value}
           now={Date.parse("2026-04-08T12:00:04Z")}
           onFactoryActivated={() => {
-            setActivationStatus(`Activated factory: ${importValue.factoryName}`);
+            setActivationStatus(`Activated factory: ${importValue.factory.name}`);
           }}
           onSelectWorkItem={(
             dispatchId: string,
