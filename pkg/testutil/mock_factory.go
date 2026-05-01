@@ -28,9 +28,9 @@ type MockFactory struct {
 	FactoryEventStream       *interfaces.FactoryEventStream
 	FactoryEventStreamCtx    context.Context
 	EngineStateSnapshotCalls int
-	CreatedFactories         []factoryapi.NamedFactory
+	CreatedFactories         []factoryapi.Factory
 	CreateNamedFactoryErr    error
-	CurrentNamedFactory      *factoryapi.NamedFactory
+	CurrentNamedFactory      *factoryapi.Factory
 	CurrentNamedFactoryErr   error
 }
 
@@ -119,9 +119,9 @@ func (m *MockFactory) GetFactoryEvents(_ context.Context) ([]factoryapi.FactoryE
 	return events, nil
 }
 
-func (m *MockFactory) CreateNamedFactory(_ context.Context, namedFactory factoryapi.NamedFactory) (factoryapi.NamedFactory, error) {
+func (m *MockFactory) CreateNamedFactory(_ context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error) {
 	if m.CreateNamedFactoryErr != nil {
-		return factoryapi.NamedFactory{}, m.CreateNamedFactoryErr
+		return factoryapi.Factory{}, m.CreateNamedFactoryErr
 	}
 	m.CreatedFactories = append(m.CreatedFactories, namedFactory)
 	copied := namedFactory
@@ -129,12 +129,12 @@ func (m *MockFactory) CreateNamedFactory(_ context.Context, namedFactory factory
 	return namedFactory, nil
 }
 
-func (m *MockFactory) GetCurrentNamedFactory(_ context.Context) (factoryapi.NamedFactory, error) {
+func (m *MockFactory) GetCurrentNamedFactory(_ context.Context) (factoryapi.Factory, error) {
 	if m.CurrentNamedFactoryErr != nil {
-		return factoryapi.NamedFactory{}, m.CurrentNamedFactoryErr
+		return factoryapi.Factory{}, m.CurrentNamedFactoryErr
 	}
 	if m.CurrentNamedFactory == nil {
-		return factoryapi.NamedFactory{}, errors.New("current named factory not found")
+		return factoryapi.Factory{}, errors.New("current named factory not found")
 	}
 	return *m.CurrentNamedFactory, nil
 }

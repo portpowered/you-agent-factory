@@ -295,6 +295,9 @@ type Factory struct {
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 	Metadata   *StringMap   `json:"metadata,omitempty"`
 
+	// Name Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
+	Name FactoryName `json:"name"`
+
 	// Project Project identifier used as the factory-level template context fallback.
 	Project *string `json:"project,omitempty"`
 
@@ -617,15 +620,6 @@ type IntegerMap map[string]int
 type ListWorkResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
 	Results           []TokenResponse    `json:"results"`
-}
-
-// NamedFactory Canonical named-factory contract used for factory activation requests and current-factory readback.
-type NamedFactory struct {
-	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	Factory Factory `json:"factory"`
-
-	// Name Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
-	Name FactoryName `json:"name"`
 }
 
 // PaginationContext defines model for PaginationContext.
@@ -1234,7 +1228,7 @@ type ListWorkParams struct {
 }
 
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
-type CreateFactoryJSONRequestBody = NamedFactory
+type CreateFactoryJSONRequestBody = Factory
 
 // SubmitWorkJSONRequestBody defines body for SubmitWork for application/json ContentType.
 type SubmitWorkJSONRequestBody = SubmitWorkRequest
@@ -1569,10 +1563,10 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
-	// Create named factory
+	// Create factory
 	// (POST /factory)
 	CreateFactory(w http.ResponseWriter, r *http.Request)
-	// Get current named factory
+	// Get current factory
 	// (GET /factory/~current)
 	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
 	// Get runtime status

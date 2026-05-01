@@ -539,7 +539,9 @@ function decodeFactoryDefinition(
 ): CanonicalFactoryDefinition {
   rejectUnknownKeys(value, FACTORY_KEYS, path);
 
-  const factory: CanonicalFactoryDefinition = {};
+  const factory: CanonicalFactoryDefinition = {
+    name: readRequiredString(value, "name", path),
+  };
   const project = readOptionalString(value, "project", path);
   const factoryDir = readOptionalString(value, "factoryDir", path);
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);

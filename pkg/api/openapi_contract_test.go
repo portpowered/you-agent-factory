@@ -192,7 +192,6 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		"ErrorFamily",
 		"ErrorResponse",
 		"FactoryName",
-		"NamedFactory",
 		"StatusCategories",
 		"StatusResponse",
 	}
@@ -498,7 +497,7 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 	}
 }
 
-func TestOpenAPIContract_NamedFactorySchemaReusesCanonicalFactoryShape(t *testing.T) {
+func TestOpenAPIContract_FactorySchemaPublishesCanonicalNameField(t *testing.T) {
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromFile("../../api/openapi.yaml")
 	if err != nil {
@@ -508,20 +507,19 @@ func TestOpenAPIContract_NamedFactorySchemaReusesCanonicalFactoryShape(t *testin
 		t.Fatalf("validate openapi contract: %v", err)
 	}
 
-	namedFactory := requireOpenAPI3ComponentSchema(t, doc, "NamedFactory")
-	assertOpenAPI3Description(t, "NamedFactory", namedFactory.Description)
-	assertRequiredStringValues(t, namedFactory.Required, "name", "factory")
-	assertOpenAPI3PropertyRef(t, namedFactory, "NamedFactory", "name", "#/components/schemas/FactoryName")
-	assertOpenAPI3PropertyRef(t, namedFactory, "NamedFactory", "factory", "#/components/schemas/Factory")
-	if namedFactory.Example == nil {
-		t.Fatal("NamedFactory.example is missing")
+	factorySchema := requireOpenAPI3ComponentSchema(t, doc, "Factory")
+	assertOpenAPI3Description(t, "Factory", factorySchema.Description)
+	assertRequiredStringValues(t, factorySchema.Required, "name")
+	assertOpenAPI3PropertyRef(t, factorySchema, "Factory", "name", "#/components/schemas/FactoryName")
+	if factorySchema.Example == nil {
+		t.Fatal("Factory.example is missing")
 	}
-	if err := namedFactory.VisitJSON(namedFactory.Example); err != nil {
-		t.Fatalf("NamedFactory.example should validate: %v", err)
+	if err := factorySchema.VisitJSON(factorySchema.Example); err != nil {
+		t.Fatalf("Factory.example should validate: %v", err)
 	}
 }
 
-func TestOpenAPIContract_NamedFactoryOperationsPublishMachineReadableErrors(t *testing.T) {
+func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read openapi contract: %v", err)
@@ -538,12 +536,12 @@ func TestOpenAPIContract_NamedFactoryOperationsPublishMachineReadableErrors(t *t
 	}
 
 	createFactory := pathOperation(t, paths, "/factory", "post")
-	assertResponseSchemaRef(t, createFactory, "201", "#/components/schemas/NamedFactory")
+	assertResponseSchemaRef(t, createFactory, "201", "#/components/schemas/Factory")
 	assertResponseRef(t, createFactory, "400", "#/components/responses/CreateFactoryBadRequest")
 	assertResponseRef(t, createFactory, "409", "#/components/responses/CreateFactoryConflict")
 
 	currentFactory := pathOperation(t, paths, "/factory/~current", "get")
-	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/NamedFactory")
+	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, currentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
 
 	components, ok := doc["components"].(map[string]any)
@@ -1021,7 +1019,6 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
 		"FactoryName":                 "./components/schemas/data-models/FactoryName.yaml",
-		"NamedFactory":                "./components/schemas/data-models/NamedFactory.yaml",
 		"Factory":                     "./components/schemas/data-models/Factory.yaml",
 		"ResourceManifest":            "./components/schemas/data-models/ResourceManifest.yaml",
 		"RequiredTool":                "./components/schemas/data-models/RequiredTool.yaml",
@@ -1479,6 +1476,7 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 	validPayload := map[string]any{
 		"recordedAt": "2026-04-10T12:00:00Z",
 		"factory": map[string]any{
+			"name":            "runtime-factory",
 			"factoryDir":      "/tmp/runtime-factory",
 			"sourceDirectory": "/tmp/customer-factory",
 			"workflowId":      "workflow-123",

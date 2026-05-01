@@ -118,8 +118,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create named factory
-         * @description Stores one named factory definition and activates it as the current factory when the runtime is idle.
+         * Create factory
+         * @description Stores one factory definition and activates it as the current factory when the runtime is idle.
          */
         post: operations["createFactory"];
         delete?: never;
@@ -136,8 +136,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get current named factory
-         * @description Returns the active named factory from the durable current-factory pointer and canonical flattened factory payload.
+         * Get current factory
+         * @description Returns the active factory from the durable current-factory pointer and canonical flattened factory payload.
          */
         get: operations["getCurrentFactory"];
         put?: never;
@@ -255,62 +255,6 @@ export interface components {
          * @example customer-support-triage
          */
         FactoryName: string;
-        /**
-         * @description Canonical named-factory contract used for factory activation requests and current-factory readback.
-         * @example {
-         *       "name": "customer-support-triage",
-         *       "factory": {
-         *         "workTypes": [
-         *           {
-         *             "name": "task",
-         *             "states": [
-         *               {
-         *                 "name": "init",
-         *                 "type": "INITIAL"
-         *               },
-         *               {
-         *                 "name": "done",
-         *                 "type": "TERMINAL"
-         *               }
-         *             ]
-         *           }
-         *         ],
-         *         "workers": [
-         *           {
-         *             "name": "planner",
-         *             "type": "MODEL_WORKER",
-         *             "modelProvider": "claude",
-         *             "executorProvider": "script_wrap",
-         *             "model": "claude-sonnet-4-20250514"
-         *           }
-         *         ],
-         *         "workstations": [
-         *           {
-         *             "name": "plan-task",
-         *             "kind": "STANDARD",
-         *             "type": "MODEL_WORKSTATION",
-         *             "worker": "planner",
-         *             "inputs": [
-         *               {
-         *                 "workType": "task",
-         *                 "state": "init"
-         *               }
-         *             ],
-         *             "outputs": [
-         *               {
-         *                 "workType": "task",
-         *                 "state": "done"
-         *               }
-         *             ]
-         *           }
-         *         ]
-         *       }
-         *     }
-         */
-        NamedFactory: {
-            name: components["schemas"]["FactoryName"];
-            factory: components["schemas"]["Factory"];
-        };
         /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
         FactoryWorldWorkstationRequestProjectionSlice: {
             workstationRequestsByDispatchId?: {
@@ -706,6 +650,7 @@ export interface components {
         /**
          * @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
          * @example {
+         *       "name": "customer-support-triage",
          *       "inputTypes": [
          *         {
          *           "name": "brief",
@@ -844,6 +789,7 @@ export interface components {
          *     }
          */
         Factory: {
+            name: components["schemas"]["FactoryName"];
             /** @description Project identifier used as the factory-level template context fallback. */
             project?: string;
             /** @description Directory that contained the factory.json used for this serialized runtime config. */
@@ -1396,17 +1342,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedFactory"];
+                "application/json": components["schemas"]["Factory"];
             };
         };
         responses: {
-            /** @description Named factory was stored and activated. */
+            /** @description Factory was stored and activated. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NamedFactory"];
+                    "application/json": components["schemas"]["Factory"];
                 };
             };
             400: components["responses"]["CreateFactoryBadRequest"];
@@ -1423,13 +1369,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current active named factory. */
+            /** @description Current active factory. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NamedFactory"];
+                    "application/json": components["schemas"]["Factory"];
                 };
             };
             404: components["responses"]["CurrentFactoryNotFound"];

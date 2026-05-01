@@ -140,10 +140,7 @@ func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := s.runtime.CreateNamedFactory(r.Context(), factoryapi.NamedFactory{
-		Name:    req.Name,
-		Factory: req.Factory,
-	})
+	created, err := s.runtime.CreateNamedFactory(r.Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):

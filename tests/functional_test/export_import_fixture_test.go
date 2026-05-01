@@ -105,11 +105,10 @@ func buildExportImportFixtureExpectations(
 	}
 }
 
-func (fixture exportImportFixture) namedFactory(name string) factoryapi.NamedFactory {
-	return factoryapi.NamedFactory{
-		Name:    factoryapi.FactoryName(name),
-		Factory: fixture.GeneratedExportFactor,
-	}
+func (fixture exportImportFixture) namedFactory(name string) factoryapi.Factory {
+	factory := fixture.GeneratedExportFactor
+	factory.Name = factoryapi.FactoryName(name)
+	return factory
 }
 
 func (fixture exportImportFixture) persistAs(t *testing.T, rootDir, name string) string {
@@ -152,17 +151,17 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 	}
 
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(current.Factory),
-		comparableExportImportFactory(fixture.GeneratedExportFactor),
+		comparableExportImportFactory(current),
+		comparableExportImportFactory(fixture.namedFactory(wantName)),
 	) {
 		t.Fatalf(
 			"current named factory readback diverged from fixture export contract\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(current.Factory),
-			comparableExportImportFactory(fixture.GeneratedExportFactor),
+			comparableExportImportFactory(current),
+			comparableExportImportFactory(fixture.namedFactory(wantName)),
 		)
 	}
 
-	workstations := valueOrEmpty(current.Factory.Workstations)
+	workstations := valueOrEmpty(current.Workstations)
 	gotWorkstationNames := make([]string, 0, len(workstations))
 	for _, workstation := range workstations {
 		gotWorkstationNames = append(gotWorkstationNames, workstation.Name)
@@ -189,7 +188,7 @@ func valueOrEmpty[T any](value *[]T) []T {
 }
 
 type namedFactoryReadback interface {
-	GetCurrentNamedFactory(context.Context) (factoryapi.NamedFactory, error)
+	GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error)
 }
 
 func buildExportImportFixtureService(t *testing.T, rootDir string) namedFactoryReadback {
@@ -241,13 +240,13 @@ func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthored
 		t.Fatalf("import contract name = %q, want imported-service-simple", importContract.Name)
 	}
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(importContract.Factory),
-		comparableExportImportFactory(fixture.GeneratedExportFactor),
+		comparableExportImportFactory(importContract),
+		comparableExportImportFactory(fixture.namedFactory("imported-service-simple")),
 	) {
 		t.Fatalf(
 			"import contract factory diverged from generated export factory\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(importContract.Factory),
-			comparableExportImportFactory(fixture.GeneratedExportFactor),
+			comparableExportImportFactory(importContract),
+			comparableExportImportFactory(fixture.namedFactory("imported-service-simple")),
 		)
 	}
 }

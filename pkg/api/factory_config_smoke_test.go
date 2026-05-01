@@ -581,6 +581,7 @@ func rewriteSmokeFixtureFile(t *testing.T, path string, replacer *strings.Replac
 
 func factoryConfigSmokeCanonicalJSON() string {
 	return `{
+  "name": "analytics-platform",
   "project": "analytics-platform",
   "inputTypes": [{"name":"batch","type":"DEFAULT"}],
   "workTypes": [
@@ -640,6 +641,7 @@ func factoryConfigSmokeCanonicalJSON() string {
 
 func factoryConfigSmokeLegacyJSON() string {
 	return `{
+  "name": "analytics-platform",
   "project": "analytics-platform",
   "input_types": [{"name":"batch","type":"default"}],
   "work_types": [

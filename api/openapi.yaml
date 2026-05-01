@@ -154,21 +154,21 @@ paths:
       tags:
         - Factory
       operationId: createFactory
-      summary: Create named factory
-      description: Stores one named factory definition and activates it as the current factory when the runtime is idle.
+      summary: Create factory
+      description: Stores one factory definition and activates it as the current factory when the runtime is idle.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NamedFactory'
+              $ref: '#/components/schemas/Factory'
       responses:
         '201':
-          description: Named factory was stored and activated.
+          description: Factory was stored and activated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NamedFactory'
+                $ref: '#/components/schemas/Factory'
         '400':
           $ref: '#/components/responses/CreateFactoryBadRequest'
         '409':
@@ -180,15 +180,15 @@ paths:
       tags:
         - Factory
       operationId: getCurrentFactory
-      summary: Get current named factory
-      description: Returns the active named factory from the durable current-factory pointer and canonical flattened factory payload.
+      summary: Get current factory
+      description: Returns the active factory from the durable current-factory pointer and canonical flattened factory payload.
       responses:
         '200':
-          description: Current active named factory.
+          description: Current active factory.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NamedFactory'
+                $ref: '#/components/schemas/Factory'
         '404':
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
@@ -544,45 +544,6 @@ components:
       pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
       description: Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
       example: customer-support-triage
-    NamedFactory:
-      type: object
-      additionalProperties: false
-      description: Canonical named-factory contract used for factory activation requests and current-factory readback.
-      required:
-        - name
-        - factory
-      example:
-        name: customer-support-triage
-        factory:
-          workTypes:
-            - name: task
-              states:
-                - name: init
-                  type: INITIAL
-                - name: done
-                  type: TERMINAL
-          workers:
-            - name: planner
-              type: MODEL_WORKER
-              modelProvider: claude
-              executorProvider: script_wrap
-              model: claude-sonnet-4-20250514
-          workstations:
-            - name: plan-task
-              kind: STANDARD
-              type: MODEL_WORKSTATION
-              worker: planner
-              inputs:
-                - workType: task
-                  state: init
-              outputs:
-                - workType: task
-                  state: done
-      properties:
-        name:
-          $ref: '#/components/schemas/FactoryName'
-        factory:
-          $ref: '#/components/schemas/Factory'
     FactoryWorldWorkstationRequestProjectionSlice:
       type: object
       additionalProperties: false
@@ -1502,7 +1463,10 @@ components:
       type: object
       description: Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
       additionalProperties: false
+      required:
+        - name
       example:
+        name: customer-support-triage
         inputTypes:
           - name: brief
             type: DEFAULT
@@ -1584,6 +1548,8 @@ components:
               - workType: story
                 state: failed
       properties:
+        name:
+          $ref: '#/components/schemas/FactoryName'
         project:
           type: string
           description: Project identifier used as the factory-level template context fallback.

@@ -14,7 +14,7 @@ const CURRENT_FACTORY_LOAD_FAILED_MESSAGE =
   "The current factory definition could not be loaded from the current-factory API.";
 
 export interface CurrentFactoryExportSuccess {
-  factory: NamedFactoryValue["factory"];
+  factory: NamedFactoryValue;
   namedFactory: NamedFactoryValue;
   ok: true;
 }
@@ -50,7 +50,7 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
     if (query.data && !isRefreshingCurrentFactory) {
       return {
         currentFactoryExport: {
-          factory: query.data.factory,
+          factory: query.data,
           namedFactory: query.data,
           ok: true,
         },

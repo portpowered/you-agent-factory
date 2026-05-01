@@ -119,12 +119,9 @@ export async function readFactoryImportPng({
     ok: true,
     value: {
       envelope: envelope.value,
-      factory: envelope.value.factory,
+      factory: envelope.value,
       factoryName: envelope.value.name,
-      namedFactory: {
-        factory: envelope.value.factory,
-        name: envelope.value.name,
-      },
+      namedFactory: envelope.value,
       previewImageSrc,
       revokePreviewImageSrc: () => {
         revokePreviewImageSrc(previewImageSrc);
@@ -270,7 +267,9 @@ function normalizeFactoryEnvelope(
 ): ImportStepResult<PortOSFactoryPngEnvelope> {
   let normalizedFactory: CanonicalFactoryDefinition;
   try {
-    normalizedFactory = normalizeFactoryDefinition(parsedEnvelope.factory);
+    const factoryPayload = { ...parsedEnvelope };
+    delete factoryPayload.schemaVersion;
+    normalizedFactory = normalizeFactoryDefinition(factoryPayload);
   } catch {
     return {
       error: {
@@ -289,7 +288,7 @@ function normalizeFactoryEnvelope(
   return {
     ok: true,
     value: {
-      factory: normalizedFactory,
+      ...normalizedFactory,
       name: normalizedFactoryName.value,
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     },

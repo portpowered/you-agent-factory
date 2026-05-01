@@ -65,7 +65,7 @@ func startNamedFactoryTestServer(t *testing.T, rootDir string) *FunctionalServer
 	})
 }
 
-func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.NamedFactory {
+func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.Factory {
 	t.Helper()
 
 	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewBufferString(functionalNamedFactoryBody(name, workType)))
@@ -77,12 +77,12 @@ func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) 
 		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
 	}
 
-	var created factoryapi.NamedFactory
+	var created factoryapi.Factory
 	decodeNamedFactoryJSONResponse(t, resp, &created, "decode create factory response")
 	return created
 }
 
-func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFactory {
+func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
 
 	resp, err := http.Get(serverURL + "/factory/~current")
@@ -94,7 +94,7 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFact
 		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
 	}
 
-	var current factoryapi.NamedFactory
+	var current factoryapi.Factory
 	decodeNamedFactoryJSONResponse(t, resp, &current, "decode current factory response")
 	return current
 }
@@ -140,7 +140,7 @@ func functionalNamedFactoryPayloadWithWorkType(t *testing.T, project, workType s
 }
 
 func functionalNamedFactoryBody(name, workType string) string {
-	return `{"name":"` + name + `","factory":` + functionalNamedFactoryPayloadJSON(name, workType) + `}`
+	return `{"name":"` + name + `",` + functionalNamedFactoryPayloadJSON(name, workType)[1:]
 }
 
 func functionalNamedFactoryPayloadJSON(project, workType string) string {

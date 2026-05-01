@@ -287,7 +287,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		return factoryapi.Factory{}
 	}
 
-	apiCfg := factoryapi.Factory{}
+	apiCfg := factoryapi.Factory{Name: factoryReferenceName(cfg)}
 	if cfg.Project != "" {
 		apiCfg.Project = stringPtr(cfg.Project)
 	}
@@ -346,6 +346,13 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		apiCfg.Workstations = &workstations
 	}
 	return apiCfg
+}
+
+func factoryReferenceName(cfg *interfaces.FactoryConfig) factoryapi.FactoryName {
+	if cfg != nil && strings.TrimSpace(cfg.Project) != "" {
+		return factoryapi.FactoryName(cfg.Project)
+	}
+	return factoryapi.FactoryName("factory")
 }
 
 // FactoryConfigToOpenAPI converts the internal factory config into the generated

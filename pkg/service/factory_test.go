@@ -100,12 +100,12 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 	return payload
 }
 
-func serviceNamedFactoryContract(t *testing.T, name string) factoryapi.NamedFactory {
+func serviceNamedFactoryContract(t *testing.T, name string) factoryapi.Factory {
 	t.Helper()
 	return serviceNamedFactoryContractWithWorkType(t, name, "task")
 }
 
-func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string) factoryapi.NamedFactory {
+func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string) factoryapi.Factory {
 	t.Helper()
 
 	generated, err := config.GeneratedFactoryFromOpenAPIJSON([]byte(`{
@@ -122,10 +122,8 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(%s): %v", name, err)
 	}
 
-	return factoryapi.NamedFactory{
-		Name:    factoryapi.FactoryName(name),
-		Factory: generated,
-	}
+	generated.Name = factoryapi.FactoryName(name)
+	return generated
 }
 
 func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []interfaces.SubmitRequest) error {
@@ -437,8 +435,8 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	if current.Name != factoryapi.FactoryName("alpha") {
 		t.Fatalf("current factory name = %q, want alpha", current.Name)
 	}
-	if current.Factory.Project == nil || *current.Factory.Project != "alpha" {
-		t.Fatalf("current factory project = %#v, want alpha", current.Factory.Project)
+	if current.Project == nil || *current.Project != "alpha" {
+		t.Fatalf("current factory project = %#v, want alpha", current.Project)
 	}
 	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryConfig().Project != "beta" {
 		t.Fatalf("service runtime project = %q, want unchanged beta runtime", svc.runtimeCfg.FactoryConfig().Project)

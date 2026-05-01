@@ -1134,36 +1134,36 @@ func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context) (*interfac
 
 // CreateNamedFactory persists one named-factory payload under the canonical
 // layout and activates it through the idle-only runtime swap path.
-func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory factoryapi.NamedFactory) (factoryapi.NamedFactory, error) {
+func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error) {
 	if fs == nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("factory service is required")
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
 	}
 	rootDir := fs.factoryRootDir
 	if rootDir == "" && fs.cfg != nil {
 		rootDir = fs.cfg.Dir
 	}
 	if err := factoryconfig.ValidateNamedFactoryName(string(namedFactory.Name)); err != nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactoryName, err)
+		return factoryapi.Factory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactoryName, err)
 	}
 
-	payload, err := json.Marshal(namedFactory.Factory)
+	payload, err := json.Marshal(namedFactory)
 	if err != nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("marshal factory payload: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("marshal factory payload: %w", err)
 	}
 
 	if _, err := factoryconfig.PersistNamedFactory(rootDir, string(namedFactory.Name), payload); err != nil {
 		switch {
 		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
-			return factoryapi.NamedFactory{}, factoryconfig.ErrNamedFactoryAlreadyExists
+			return factoryapi.Factory{}, factoryconfig.ErrNamedFactoryAlreadyExists
 		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
-			return factoryapi.NamedFactory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+			return factoryapi.Factory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
 		default:
-			return factoryapi.NamedFactory{}, err
+			return factoryapi.Factory{}, err
 		}
 	}
 
 	if err := fs.ActivateNamedFactory(ctx, string(namedFactory.Name)); err != nil {
-		return factoryapi.NamedFactory{}, err
+		return factoryapi.Factory{}, err
 	}
 	return fs.GetCurrentNamedFactory(ctx)
 }
@@ -1197,9 +1197,9 @@ func (fs *FactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfac
 
 // GetCurrentNamedFactory returns the durable current named-factory read model
 // resolved entirely from the persisted pointer and canonical on-disk layout.
-func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.NamedFactory, error) {
+func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.Factory, error) {
 	if fs == nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("factory service is required")
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
 	}
 
 	rootDir := fs.factoryRootDir
@@ -1209,13 +1209,13 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	name, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return factoryapi.NamedFactory{}, ErrCurrentNamedFactoryNotFound
+			return factoryapi.Factory{}, ErrCurrentNamedFactoryNotFound
 		}
-		return factoryapi.NamedFactory{}, fmt.Errorf("read current factory pointer: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("read current factory pointer: %w", err)
 	}
 	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(rootDir, name)
 	if err != nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("resolve current named factory %q: %w", name, err)
+		return factoryapi.Factory{}, fmt.Errorf("resolve current named factory %q: %w", name, err)
 	}
 	var workstationLoader factoryconfig.WorkstationLoader
 	if fs.cfg != nil {
@@ -1223,7 +1223,7 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	}
 	current, err := factoryconfig.LoadRuntimeConfig(factoryDir, workstationLoader)
 	if err != nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("load current named factory %q: %w", name, err)
+		return factoryapi.Factory{}, fmt.Errorf("load current named factory %q: %w", name, err)
 	}
 
 	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
@@ -1234,12 +1234,10 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 		replay.WithGeneratedFactoryWorkflowID(fs.workflowID()),
 	)
 	if err != nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("serialize current named factory: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("serialize current named factory: %w", err)
 	}
-	return factoryapi.NamedFactory{
-		Name:    factoryapi.FactoryName(name),
-		Factory: generatedFactory,
-	}, nil
+	generatedFactory.Name = factoryapi.FactoryName(name)
+	return generatedFactory, nil
 }
 
 // Pause pauses the current runtime instance.

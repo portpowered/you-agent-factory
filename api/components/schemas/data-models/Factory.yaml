@@ -7,7 +7,10 @@ description: >-
   workstations using VISIT_COUNT guards instead of a top-level
   exhaustion-rules field.
 additionalProperties: false
+required:
+  - name
 example:
+  name: customer-support-triage
   inputTypes:
     - name: brief
       type: DEFAULT
@@ -89,6 +92,8 @@ example:
         - workType: story
           state: failed
 properties:
+  name:
+    $ref: './FactoryName.yaml'
   project:
     type: string
     description: Project identifier used as the factory-level template context fallback.

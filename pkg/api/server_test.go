@@ -276,7 +276,7 @@ func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 	}
 }
 
-func TestCreateFactory_ReturnsCreatedNamedFactoryShape(t *testing.T) {
+func TestCreateFactory_ReturnsCreatedFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)
 
@@ -292,31 +292,29 @@ func TestCreateFactory_ReturnsCreatedNamedFactoryShape(t *testing.T) {
 		t.Fatalf("created factories = %d, want 1", len(mf.CreatedFactories))
 	}
 
-	var created factoryapi.NamedFactory
+	var created factoryapi.Factory
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create factory response: %v", err)
 	}
 	if created.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
-	if created.Factory.WorkTypes == nil || len(*created.Factory.WorkTypes) != 1 || (*created.Factory.WorkTypes)[0].Name != "beta-task" {
-		t.Fatalf("created factory work types = %#v, want beta-task", created.Factory.WorkTypes)
+	if created.WorkTypes == nil || len(*created.WorkTypes) != 1 || (*created.WorkTypes)[0].Name != "beta-task" {
+		t.Fatalf("created factory work types = %#v, want beta-task", created.WorkTypes)
 	}
 }
 
-func TestGetCurrentFactory_ReturnsNamedFactoryShape(t *testing.T) {
+func TestGetCurrentFactory_ReturnsFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.NamedFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
 			Name: factoryapi.FactoryName("beta"),
-			Factory: factoryapi.Factory{
-				WorkTypes: &[]factoryapi.WorkType{{
-					Name: "beta-task",
-					States: []factoryapi.WorkState{
-						{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
-						{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
-					},
-				}},
-			},
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "beta-task",
+				States: []factoryapi.WorkState{
+					{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+				},
+			}},
 		},
 	}
 	srv := newTestServer(mf)
@@ -329,15 +327,15 @@ func TestGetCurrentFactory_ReturnsNamedFactoryShape(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var current factoryapi.NamedFactory
+	var current factoryapi.Factory
 	if err := json.NewDecoder(rec.Body).Decode(&current); err != nil {
 		t.Fatalf("decode current factory response: %v", err)
 	}
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
-	if current.Factory.WorkTypes == nil || len(*current.Factory.WorkTypes) != 1 || (*current.Factory.WorkTypes)[0].Name != "beta-task" {
-		t.Fatalf("current factory work types = %#v, want beta-task", current.Factory.WorkTypes)
+	if current.WorkTypes == nil || len(*current.WorkTypes) != 1 || (*current.WorkTypes)[0].Name != "beta-task" {
+		t.Fatalf("current factory work types = %#v, want beta-task", current.WorkTypes)
 	}
 }
 
@@ -370,7 +368,7 @@ func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {
 		CreateNamedFactoryErr: apisurface.ErrInvalidNamedFactory,
 	})
 
-	body := `{"name":"beta","factory":{"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"claude","executorProvider":"script_wrap","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","kind":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}}`
+	body := `{"name":"beta","workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"claude","executorProvider":"script_wrap","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","kind":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}`
 	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1432,7 +1430,7 @@ func TestGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 			Tick:      0,
 			EventTime: eventTime,
 		},
-			factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{}}),
+			factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
 		testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/request-1", factoryapi.FactoryEventContext{
 			Tick:      1,
 			EventTime: time.Date(2026, 4, 8, 12, 0, 1, 0, time.UTC),
@@ -1521,7 +1519,7 @@ func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 			History: []factoryapi.FactoryEvent{
 				testFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0",
 					factoryapi.FactoryEventContext{Tick: 0, EventTime: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)},
-					factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{}}),
+					factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
 			},
 			Events: liveEvents,
 		},
@@ -1743,7 +1741,7 @@ func engineStateWithRuntimeStatus(status interfaces.RuntimeStatus) *interfaces.E
 }
 
 func validNamedFactoryBody(name, workType string) string {
-	return fmt.Sprintf(`{"name":%q,"factory":%s}`, name, namedFactoryPayloadJSON(name, workType))
+	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
 }
 
 func namedFactoryPayloadJSON(project, workType string) string {
