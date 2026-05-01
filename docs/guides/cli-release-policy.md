@@ -48,6 +48,21 @@ Use this sequence for every CLI release:
 6. Confirm the GitHub release contains the expected archives and checksums for
    Windows, Linux, and macOS.
 
+## Supported `go install` Path
+
+The release process must preserve `cmd/factory` as the stable installable Go
+entrypoint.
+
+For Go users, the supported command is:
+
+```bash
+go install github.com/portpowered/agent-factory/cmd/factory@latest
+```
+
+This install path is for environments that already have a working Go toolchain.
+General consumers should prefer the packaged release surfaces instead of
+building from source through `go install`.
+
 `make release` is the maintainer-owned release-preparation command. It fails
 fast when:
 
@@ -76,3 +91,6 @@ After the push:
 - The release workflow should ignore non-semver branch pushes for publication.
 - Maintainers should monitor the workflow until the release assets and checksums
   are available on the GitHub release page.
+- Release verification should keep one repo-owned `go install ./cmd/factory`
+  smoke step so the stable CLI entrypoint remains buildable into a clean
+  `GOBIN` before maintainers rely on the documented public command.

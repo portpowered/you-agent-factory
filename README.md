@@ -13,12 +13,42 @@ That way, you can run 10-100+ agents at once, and have even more leverage to do 
 
 1. Install the local Codex provider used by your environment and authenticate it.
 
-2. Build and install the binary:
+2. Use the install path that matches your environment.
+
+For Go toolchain users, the supported source install path is:
+
+```bash
+go install github.com/portpowered/agent-factory/cmd/factory@latest
+```
+
+This path is meant for developers who already use Go. It installs the current
+`cmd/factory` entrypoint from source. Because `go install` names the binary from
+the leaf package directory, this command installs `factory` into your `GOBIN`.
+
+If you are working from a local checkout instead, build and install the binary:
+
 ```bash
 git clone https://github.com/portpowered/infinite-you.git
 cd infinite-you
 make install     # installs to $GOBIN
 ```
+
+The packaged release archives and docs examples continue to use the
+`agent-factory` command surface:
+
+```bash
+agent-factory
+```
+
+```bash
+agent-factory init
+agent-factory init --executor claude --dir my-factory
+agent-factory docs
+agent-factory docs workstation
+```
+
+Supported docs topics are `config`, `workstation`, `workers`, `resources`,
+`batch-work`, and `templates`.
 
 
 ## Example

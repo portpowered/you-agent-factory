@@ -3,6 +3,7 @@ package release_test
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -98,19 +99,76 @@ func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructur
 	}
 }
 
+func TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := testutil.MustRepoRoot(t)
+	tempRoot := t.TempDir()
+	installDir := filepath.Join(tempRoot, "bin")
+	goCacheDir := filepath.Join(tempRoot, "gocache")
+	for _, dir := range []string{installDir, goCacheDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create temp dir %q: %v", dir, err)
+		}
+	}
+
+	install := exec.Command("go", "install", "./cmd/factory")
+	install.Dir = repoRoot
+	install.Env = append(os.Environ(),
+		"GOBIN="+installDir,
+		"GOCACHE="+goCacheDir,
+	)
+	if output, err := install.CombinedOutput(); err != nil {
+		t.Fatalf("go install ./cmd/factory: %v\n%s", err, string(output))
+	}
+
+	binaryPath := filepath.Join(installDir, goInstallBinaryName())
+	if _, err := os.Stat(binaryPath); err != nil {
+		t.Fatalf("installed binary missing at %q: %v", binaryPath, err)
+	}
+
+	smoke := exec.Command(binaryPath, "docs", "config")
+	smoke.Dir = filepath.Join(tempRoot, "outside-repo")
+	if err := os.MkdirAll(smoke.Dir, 0o755); err != nil {
+		t.Fatalf("create smoke working dir %q: %v", smoke.Dir, err)
+	}
+	output, err := smoke.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run installed binary docs smoke: %v\n%s", err, string(output))
+	}
+
+	rendered := string(output)
+	for _, want := range []string{"# Config", "factory.json", "workTypes"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("installed docs output missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
 func buildReleaseSmokeBinary(t *testing.T) string {
 	t.Helper()
 
-	binaryName := "agent-factory"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	binaryPath := filepath.Join(t.TempDir(), releaseSmokeBinaryName())
 	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
 	build.Dir = testutil.MustRepoRoot(t)
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build release smoke binary: %v\n%s", err, string(output))
 	}
 	return binaryPath
+}
+
+func releaseSmokeBinaryName() string {
+	binaryName := "agent-factory"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	return binaryName
+}
+
+func goInstallBinaryName() string {
+	binaryName := "factory"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	return binaryName
 }
