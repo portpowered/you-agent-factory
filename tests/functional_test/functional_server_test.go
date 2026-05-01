@@ -35,7 +35,7 @@ import (
 //  1. Scaffold a factory dir:  dir := scaffoldFactory(t, simplePipelineConfig())
 //  2. Start the server:        fs := StartFunctionalServer(t, dir, true /* use mock workers */)
 //  3. Submit work:             traceID := fs.SubmitWork(t, "task", json.RawMessage(`{...}`))
-//  4. Wait for completion:     state := fs.WaitForCompleted(t, 10*time.Second)
+//  4. Poll runtime state:      state := fs.GetState(t)
 //  5. Assert results:          check state.Categories.Terminal, state.TotalTokens, etc.
 //
 // The server shuts down automatically via t.Cleanup — no manual teardown needed.
@@ -934,22 +934,6 @@ func lastIndexByte(value string, c byte) int {
 		}
 	}
 	return -1
-}
-
-// WaitForCompleted polls GET /state until factory_state is "COMPLETED" or the timeout expires.
-func (fs *FunctionalServer) WaitForCompleted(t *testing.T, timeout time.Duration) StateResponse {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		state := fs.GetState(t)
-		if state.FactoryState == "COMPLETED" {
-			return state
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	last := fs.GetState(t)
-	t.Fatalf("factory did not reach COMPLETED within %s; last state: %s (tokens: %d)", timeout, last.FactoryState, last.TotalTokens)
-	return StateResponse{}
 }
 
 // StartFunctionalServerWithConfig builds a FactoryService and exposes it as an
