@@ -1,0 +1,49 @@
+package release_test
+
+import (
+	"context"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/portpowered/agent-factory/internal/releasesmoke"
+	"github.com/portpowered/agent-factory/pkg/testutil"
+)
+
+func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T) {
+	t.Parallel()
+
+	binaryName := "agent-factory"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
+	build.Dir = testutil.MustRepoRoot(t)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build release smoke binary: %v\n%s", err, string(output))
+	}
+
+	fixturePath := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	result, err := releasesmoke.Run(context.Background(), releasesmoke.Config{
+		BinaryPath:  binaryPath,
+		FixturePath: fixturePath,
+		Timeout:     20 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("run release smoke harness: %v", err)
+	}
+
+	if result.CompletedWorkCount < 1 {
+		t.Fatalf("completed work count = %d, want at least 1", result.CompletedWorkCount)
+	}
+	if len(result.ObservedEventTypes) < 3 {
+		t.Fatalf("observed event types = %#v, want run/init/work prelude", result.ObservedEventTypes)
+	}
+	if result.BaseURL == "" || result.DashboardURL == "" {
+		t.Fatalf("result URLs = %#v, want non-empty base and dashboard URLs", result)
+	}
+}
