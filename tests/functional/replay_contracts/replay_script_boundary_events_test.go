@@ -1,10 +1,9 @@
-package functional_test
+package replay_contracts
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 const scriptEventsSecretEnv = "SCRIPT_EVENTS_API_TOKEN"
@@ -27,8 +27,22 @@ func (r processErrorCommandRunner) Run(_ context.Context, _ workers.CommandReque
 	return workers.CommandResult{Stderr: []byte(r.stderr)}, errors.New("exec: file not found")
 }
 
-func TestScriptEvents_ScriptWorkersEmitRequestBoundaryEventInCanonicalHistory(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+type fakeCommandRunner struct {
+	stdout   string
+	stderr   string
+	exitCode int
+}
+
+func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
+}
+
+func successRunner(stdout string) workers.CommandRunner {
+	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
+}
+
+func TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundary(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	writeScriptWorkerArgsFixture(t, dir)
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -50,8 +64,8 @@ func TestScriptEvents_ScriptWorkersEmitRequestBoundaryEventInCanonicalHistory(t 
 	assertFunctionalScriptRequestBoundaryEvent(t, events, indices, "work-script-request-event")
 }
 
-func TestScriptEvents_ScriptWorkersEmitResponseBoundaryEventInCanonicalHistory(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+func TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResponseBoundary(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	recordPath := filepath.Join(t.TempDir(), "script-events-success.replay.json")
 	t.Setenv(scriptEventsSecretEnv, scriptEventsSecretValue)
 
@@ -74,7 +88,7 @@ func TestScriptEvents_ScriptWorkersEmitResponseBoundaryEventInCanonicalHistory(t
 	assertFunctionalScriptResponseBoundaryEvent(t, events, indices, expectedFunctionalScriptResponse{
 		workID:     "work-script-response-event",
 		outcome:    factoryapi.ScriptExecutionOutcomeSucceeded,
-		exitCode:   intPtrFunctionalTest(0),
+		exitCode:   intPtrReplayContractTest(0),
 		stdout:     "script-output-ok",
 		stderr:     "",
 		forbidden:  []string{`"stdin"`, `"env"`, `"SCRIPT_API_TOKEN"`, scriptEventsSecretValue},
@@ -86,8 +100,8 @@ func TestScriptEvents_ScriptWorkersEmitResponseBoundaryEventInCanonicalHistory(t
 	assertReplayArtifactDoesNotContainRawValue(t, recordPath, scriptEventsSecretValue)
 }
 
-func TestScriptEvents_ScriptWorkersEmitProcessFailureBoundaryEventInCanonicalHistoryAndArtifact(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+func TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHistoryAndArtifact(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	recordPath := filepath.Join(t.TempDir(), "script-events-process-error.replay.json")
 	t.Setenv(scriptEventsSecretEnv, scriptEventsSecretValue)
 
@@ -155,10 +169,7 @@ func writeScriptWorkerArgsFixture(t *testing.T, dir string) {
 		"---",
 		"",
 	}, "\n")
-	agentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
-	if err := os.WriteFile(agentsPath, []byte(agentsMD), 0o644); err != nil {
-		t.Fatalf("write AGENTS.md: %v", err)
-	}
+	support.WriteAgentConfig(t, dir, "script-worker", agentsMD)
 }
 
 func runHarnessAndLoadEvents(t *testing.T, h *testutil.ServiceTestHarness) []factoryapi.FactoryEvent {
@@ -177,12 +188,12 @@ func requireScriptRequestEventIndices(t *testing.T, events []factoryapi.FactoryE
 	t.Helper()
 
 	indices := scriptBoundaryEventIndices{
-		dispatch:  indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0),
-		request:   indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeScriptRequest, 0),
-		completed: indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse, 0),
+		dispatch:  indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0),
+		request:   indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeScriptRequest, 0),
+		completed: indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeDispatchResponse, 0),
 	}
 	if indices.dispatch < 0 || indices.request < 0 || indices.completed < 0 {
-		t.Fatalf("event order = %v, want dispatch-request, script-request, dispatch-response", functionalEventTypes(events))
+		t.Fatalf("event order = %v, want dispatch-request, script-request, dispatch-response", replayContractEventTypes(events))
 	}
 	return indices
 }
@@ -191,13 +202,13 @@ func requireScriptResponseEventIndices(t *testing.T, events []factoryapi.Factory
 	t.Helper()
 
 	indices := scriptBoundaryEventIndices{
-		dispatch:  indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0),
-		request:   indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeScriptRequest, 0),
-		response:  indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeScriptResponse, 0),
-		completed: indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse, 0),
+		dispatch:  indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0),
+		request:   indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeScriptRequest, 0),
+		response:  indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeScriptResponse, 0),
+		completed: indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeDispatchResponse, 0),
 	}
 	if indices.dispatch < 0 || indices.request < 0 || indices.response < 0 || indices.completed < 0 {
-		t.Fatalf("event order = %v, want dispatch-request, script-request, script-response, dispatch-response", functionalEventTypes(events))
+		t.Fatalf("event order = %v, want dispatch-request, script-request, script-response, dispatch-response", replayContractEventTypes(events))
 	}
 	return indices
 }
@@ -214,8 +225,8 @@ func assertFunctionalScriptRequestBoundaryEvent(t *testing.T, events []factoryap
 		t.Fatalf("decode script request payload: %v", err)
 	}
 
-	dispatchID := stringValueForFunctionalTest(events[indices.dispatch].Context.DispatchId)
-	completedDispatchID := stringValueForFunctionalTest(events[indices.completed].Context.DispatchId)
+	dispatchID := support.StringPointerValue(events[indices.dispatch].Context.DispatchId)
+	completedDispatchID := support.StringPointerValue(events[indices.completed].Context.DispatchId)
 	if request.DispatchId != dispatchID || completedDispatchID != dispatchID {
 		t.Fatalf("dispatch correlation mismatch: dispatch=%s request=%s completed=%s", dispatchID, request.DispatchId, completedDispatchID)
 	}
@@ -234,8 +245,8 @@ func assertFunctionalScriptRequestBoundaryEvent(t *testing.T, events []factoryap
 	if strings.Join(request.Args, " ") != "--work "+workID+" --priority high" {
 		t.Fatalf("args = %#v, want resolved work-id and tag args", request.Args)
 	}
-	if stringValueForFunctionalTest(events[indices.request].Context.DispatchId) != dispatchID {
-		t.Fatalf("event context dispatchId = %q, want %q", stringValueForFunctionalTest(events[indices.request].Context.DispatchId), dispatchID)
+	if support.StringPointerValue(events[indices.request].Context.DispatchId) != dispatchID {
+		t.Fatalf("event context dispatchId = %q, want %q", support.StringPointerValue(events[indices.request].Context.DispatchId), dispatchID)
 	}
 	if got := events[indices.request].Context.WorkIds; got == nil || len(*got) != 1 || (*got)[0] != workID {
 		t.Fatalf("event context workIds = %#v, want seeded work ID", got)
@@ -256,7 +267,7 @@ func assertFunctionalScriptResponseBoundaryEvent(t *testing.T, events []factorya
 		t.Fatalf("decode script response payload: %v", err)
 	}
 
-	completedDispatchID := stringValueForFunctionalTest(events[indices.completed].Context.DispatchId)
+	completedDispatchID := support.StringPointerValue(events[indices.completed].Context.DispatchId)
 	if response.ScriptRequestId != request.ScriptRequestId {
 		t.Fatalf("script request correlation mismatch: request=%s response=%s", request.ScriptRequestId, response.ScriptRequestId)
 	}
@@ -272,13 +283,13 @@ func assertFunctionalScriptResponseBoundaryEvent(t *testing.T, events []factorya
 	if response.Outcome != want.outcome {
 		t.Fatalf("response outcome = %s, want %s", response.Outcome, want.outcome)
 	}
-	if !equalOptionalIntFunctionalTest(response.ExitCode, want.exitCode) {
+	if !equalOptionalIntReplayContractTest(response.ExitCode, want.exitCode) {
 		t.Fatalf("response exit code = %#v, want %#v", response.ExitCode, want.exitCode)
 	}
-	if !equalOptionalScriptFailureTypeFunctionalTest(response.FailureType, want.failure) {
+	if !equalOptionalScriptFailureTypeReplayContractTest(response.FailureType, want.failure) {
 		t.Fatalf("response failure type = %#v, want %#v", response.FailureType, want.failure)
 	}
-	if actualStdout := normalizeFunctionalStdout(response.Stdout, want.trimStdout); actualStdout != want.stdout {
+	if actualStdout := normalizeReplayContractStdout(response.Stdout, want.trimStdout); actualStdout != want.stdout {
 		t.Fatalf("response stdout = %q, want %q", actualStdout, want.stdout)
 	}
 	if response.Stderr != want.stderr {
@@ -287,8 +298,8 @@ func assertFunctionalScriptResponseBoundaryEvent(t *testing.T, events []factorya
 	if response.DurationMillis < 0 {
 		t.Fatalf("response duration millis = %d, want non-negative", response.DurationMillis)
 	}
-	if stringValueForFunctionalTest(events[indices.response].Context.DispatchId) != request.DispatchId {
-		t.Fatalf("response context dispatchId = %q, want %q", stringValueForFunctionalTest(events[indices.response].Context.DispatchId), request.DispatchId)
+	if support.StringPointerValue(events[indices.response].Context.DispatchId) != request.DispatchId {
+		t.Fatalf("response context dispatchId = %q, want %q", support.StringPointerValue(events[indices.response].Context.DispatchId), request.DispatchId)
 	}
 	if got := events[indices.response].Context.WorkIds; got == nil || len(*got) != 1 || (*got)[0] != want.workID {
 		t.Fatalf("response context workIds = %#v, want seeded work ID", got)
@@ -312,7 +323,7 @@ func assertScriptEventsRecordedInArtifact(t *testing.T, liveEvents []factoryapi.
 
 		recorded, ok := recordedByID[live.Id]
 		if !ok {
-			t.Fatalf("recorded artifact missing script event %s from live history; artifact events=%v", live.Id, functionalEventTypes(recordedEvents))
+			t.Fatalf("recorded artifact missing script event %s from live history; artifact events=%v", live.Id, replayContractEventTypes(recordedEvents))
 		}
 		if recorded.Type != live.Type {
 			t.Fatalf("recorded script event %s = type %s, live type %s", live.Id, recorded.Type, live.Type)
@@ -347,27 +358,47 @@ func assertFunctionalScriptEventDoesNotLeak(t *testing.T, event factoryapi.Facto
 	}
 }
 
-func normalizeFunctionalStdout(stdout string, trim bool) string {
+func indexOfReplayContractEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType, start int) int {
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(events); i++ {
+		if events[i].Type == eventType {
+			return i
+		}
+	}
+	return -1
+}
+
+func replayContractEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
+	types := make([]factoryapi.FactoryEventType, len(events))
+	for i, event := range events {
+		types[i] = event.Type
+	}
+	return types
+}
+
+func normalizeReplayContractStdout(stdout string, trim bool) string {
 	if trim {
 		return strings.TrimSpace(stdout)
 	}
 	return stdout
 }
 
-func equalOptionalIntFunctionalTest(left, right *int) bool {
+func equalOptionalIntReplayContractTest(left, right *int) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
 	return *left == *right
 }
 
-func equalOptionalScriptFailureTypeFunctionalTest(left, right *factoryapi.ScriptFailureType) bool {
+func equalOptionalScriptFailureTypeReplayContractTest(left, right *factoryapi.ScriptFailureType) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
 	return *left == *right
 }
 
-func intPtrFunctionalTest(value int) *int {
+func intPtrReplayContractTest(value int) *int {
 	return &value
 }
