@@ -128,7 +128,7 @@ type harnessSession struct {
 	stderrBuf     *lockedBuffer
 	cmd           *exec.Cmd
 	stopProcess   context.CancelFunc
-	waitCh        chan error
+	waiter        *processWaiter
 }
 
 func newHarnessSession(binaryPath string, fixturePath string, workspacePath string) (*harnessSession, error) {
@@ -154,7 +154,7 @@ func newHarnessSession(binaryPath string, fixturePath string, workspacePath stri
 		client:        &http.Client{Timeout: 2 * time.Second},
 		stdoutBuf:     newLockedBuffer(),
 		stderrBuf:     newLockedBuffer(),
-		waitCh:        make(chan error, 1),
+		waiter:        newProcessWaiter(),
 	}, nil
 }
 
@@ -178,14 +178,12 @@ func (s *harnessSession) Start(ctx context.Context) error {
 	if err := s.cmd.Start(); err != nil {
 		return s.failure(nil, "start_binary", err)
 	}
-	go func() {
-		s.waitCh <- s.cmd.Wait()
-	}()
+	s.waiter.Start(s.cmd)
 	return nil
 }
 
 func (s *harnessSession) RunChecks(ctx context.Context, cfg Config) (Result, error) {
-	if err := waitForStatus(ctx, s.client, s.baseURL, s.waitCh); err != nil {
+	if err := waitForStatus(ctx, s.client, s.baseURL, s.waiter); err != nil {
 		return Result{}, s.failure(nil, "wait_for_status", err)
 	}
 
@@ -195,7 +193,7 @@ func (s *harnessSession) RunChecks(ctx context.Context, cfg Config) (Result, err
 	}
 	defer stream.Close()
 
-	observedEvents, err := waitForEventPreludeAndWork(ctx, stream, s.waitCh)
+	observedEvents, err := waitForEventPreludeAndWork(ctx, stream, s.waiter)
 	if err != nil {
 		return Result{}, s.failure(observedEvents, "verify_events", err)
 	}
@@ -205,7 +203,7 @@ func (s *harnessSession) RunChecks(ctx context.Context, cfg Config) (Result, err
 		return Result{}, err
 	}
 
-	workCount, err := waitForCompletedWork(ctx, s.client, s.baseURL+"/work", s.waitCh)
+	workCount, err := waitForCompletedWork(ctx, s.client, s.baseURL+"/work", s.waiter)
 	if err != nil {
 		return Result{}, s.failure(observedEvents, "verify_completed_work", err)
 	}
@@ -249,7 +247,7 @@ func (s *harnessSession) failure(observed []string, phase string, err error) err
 
 func (s *harnessSession) Close() {
 	if s.cmd != nil && s.stopProcess != nil {
-		stopCommand(s.cmd, s.stopProcess, s.waitCh)
+		stopCommand(s.cmd, s.stopProcess, s.waiter)
 	}
 	if s.workspacePath != "" {
 		_ = os.RemoveAll(s.workspacePath)
@@ -338,7 +336,7 @@ func reservePort() (int, error) {
 	return addr.Port, nil
 }
 
-func waitForStatus(ctx context.Context, client *http.Client, baseURL string, waitCh <-chan error) error {
+func waitForStatus(ctx context.Context, client *http.Client, baseURL string, waiter *processWaiter) error {
 	for {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/status", nil)
 		if err != nil {
@@ -353,7 +351,7 @@ func waitForStatus(ctx context.Context, client *http.Client, baseURL string, wai
 			}
 		}
 
-		if err := processExit(waitCh); err != nil {
+		if err := waiter.ObserveExit(); err != nil {
 			return err
 		}
 		if err := sleepOrDone(ctx, 100*time.Millisecond); err != nil {
@@ -462,7 +460,7 @@ func sortedUniqueStrings(values []string) []string {
 	return result
 }
 
-func waitForCompletedWork(ctx context.Context, client *http.Client, endpoint string, waitCh <-chan error) (int, error) {
+func waitForCompletedWork(ctx context.Context, client *http.Client, endpoint string, waiter *processWaiter) (int, error) {
 	type workResponse struct {
 		Results []json.RawMessage `json:"results"`
 	}
@@ -483,7 +481,7 @@ func waitForCompletedWork(ctx context.Context, client *http.Client, endpoint str
 			}
 		}
 
-		if err := processExit(waitCh); err != nil {
+		if err := waiter.ObserveExit(); err != nil {
 			return 0, err
 		}
 		if err := sleepOrDone(ctx, 100*time.Millisecond); err != nil {
@@ -492,7 +490,7 @@ func waitForCompletedWork(ctx context.Context, client *http.Client, endpoint str
 	}
 }
 
-func waitForEventPreludeAndWork(ctx context.Context, stream *eventStream, waitCh <-chan error) ([]string, error) {
+func waitForEventPreludeAndWork(ctx context.Context, stream *eventStream, waiter *processWaiter) ([]string, error) {
 	seen := make(map[factoryapi.FactoryEventType]struct{})
 	observed := make([]string, 0, 4)
 
@@ -513,21 +511,9 @@ func waitForEventPreludeAndWork(ctx context.Context, stream *eventStream, waitCh
 			return observed, nil
 		}
 
-		if err := processExit(waitCh); err != nil {
+		if err := waiter.ObserveExit(); err != nil {
 			return observed, err
 		}
-	}
-}
-
-func processExit(waitCh <-chan error) error {
-	select {
-	case err := <-waitCh:
-		if err == nil {
-			return errors.New("agent-factory process exited before smoke verification completed")
-		}
-		return fmt.Errorf("agent-factory process exited: %w", err)
-	default:
-		return nil
 	}
 }
 
@@ -543,21 +529,77 @@ func sleepOrDone(ctx context.Context, delay time.Duration) error {
 	}
 }
 
-func stopCommand(cmd *exec.Cmd, stopProcess context.CancelFunc, waitCh <-chan error) {
+func stopCommand(cmd *exec.Cmd, stopProcess context.CancelFunc, waiter *processWaiter) {
 	stopProcess()
 
 	timer := time.NewTimer(processStopTimeout)
 	defer timer.Stop()
 
 	select {
-	case <-waitCh:
+	case <-waiter.Done():
 		return
 	case <-timer.C:
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-		<-waitCh
+		<-waiter.Done()
 	}
+}
+
+type processWaiter struct {
+	doneCh   chan struct{}
+	mu       sync.Mutex
+	observed bool
+	err      error
+}
+
+func newProcessWaiter() *processWaiter {
+	return &processWaiter{
+		doneCh: make(chan struct{}),
+	}
+}
+
+func (w *processWaiter) Start(cmd *exec.Cmd) {
+	go func() {
+		w.store(cmd.Wait())
+	}()
+}
+
+func (w *processWaiter) Done() <-chan struct{} {
+	return w.doneCh
+}
+
+func (w *processWaiter) ObserveExit() error {
+	select {
+	case <-w.doneCh:
+	default:
+	}
+	return w.exitError()
+}
+
+func (w *processWaiter) store(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.observed {
+		return
+	}
+	w.observed = true
+	w.err = err
+	close(w.doneCh)
+}
+
+func (w *processWaiter) exitError() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if !w.observed {
+		return nil
+	}
+	if w.err == nil {
+		return errors.New("agent-factory process exited before smoke verification completed")
+	}
+	return fmt.Errorf("agent-factory process exited: %w", w.err)
 }
 
 func failureFor(

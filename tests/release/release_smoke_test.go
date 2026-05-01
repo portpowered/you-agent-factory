@@ -2,9 +2,11 @@ package release_test
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,18 +17,7 @@ import (
 func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T) {
 	t.Parallel()
 
-	binaryName := "agent-factory"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build release smoke binary: %v\n%s", err, string(output))
-	}
-
+	binaryPath := buildReleaseSmokeBinary(t)
 	fixturePath := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
 	var renderedDashboardURL string
 	result, err := releasesmoke.Run(context.Background(), releasesmoke.Config{
@@ -65,4 +56,61 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	if len(result.DashboardRenderEvidence.AssetRequestPaths) == 0 || len(result.DashboardRenderEvidence.LiveRequestPaths) == 0 {
 		t.Fatalf("dashboard render evidence = %#v, want asset and live request paths", result.DashboardRenderEvidence)
 	}
+}
+
+func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructuredFailure(t *testing.T) {
+	t.Parallel()
+
+	binaryPath := buildReleaseSmokeBinary(t)
+	fixturePath := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	renderErr := errors.New("forced rendered dashboard failure")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := releasesmoke.Run(ctx, releasesmoke.Config{
+		BinaryPath:  binaryPath,
+		FixturePath: fixturePath,
+		Timeout:     20 * time.Second,
+		RenderedDashboardVerify: func(context.Context, string) (releasesmoke.DashboardRenderEvidence, error) {
+			return releasesmoke.DashboardRenderEvidence{}, renderErr
+		},
+	})
+	if err == nil {
+		t.Fatal("run release smoke harness: expected verify_dashboard_render failure")
+	}
+
+	var failure *releasesmoke.Failure
+	if !errors.As(err, &failure) {
+		t.Fatalf("run release smoke harness: error type = %T, want *releasesmoke.Failure", err)
+	}
+	if failure.Phase != "verify_dashboard_render" {
+		t.Fatalf("failure phase = %q, want verify_dashboard_render", failure.Phase)
+	}
+	if !strings.Contains(failure.Message, renderErr.Error()) {
+		t.Fatalf("failure message = %q, want substring %q", failure.Message, renderErr.Error())
+	}
+	if failure.BaseURL == "" || failure.DashboardURL == "" || failure.WorkspacePath == "" {
+		t.Fatalf("failure = %#v, want populated urls and workspace", failure)
+	}
+	if len(failure.ObservedEventTypes) < 3 {
+		t.Fatalf("observed event types = %#v, want run/init/work prelude", failure.ObservedEventTypes)
+	}
+}
+
+func buildReleaseSmokeBinary(t *testing.T) string {
+	t.Helper()
+
+	binaryName := "agent-factory"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
+	build.Dir = testutil.MustRepoRoot(t)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build release smoke binary: %v\n%s", err, string(output))
+	}
+	return binaryPath
 }
