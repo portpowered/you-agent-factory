@@ -24,6 +24,9 @@ type laneKey struct {
 
 // DeriveActiveThrottlePauses reduces normalized failure history into the set
 // of currently active provider/model throttle windows for an explicit clock.
+// Dispatcher code still owns the live pause-state map in this lane; this
+// helper is the pure internal primitive that later event-history-backed guard
+// work can reuse without depending on dispatcher mutation paths.
 func DeriveActiveThrottlePauses(history []FailureRecord, pauseDuration time.Duration, now time.Time) []interfaces.ActiveThrottlePause {
 	if len(history) == 0 || pauseDuration <= 0 {
 		return nil
