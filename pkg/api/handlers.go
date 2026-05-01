@@ -202,12 +202,10 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	}
 	sort.Slice(tokens, func(i, j int) bool { return tokens[i].ID < tokens[j].ID })
 
-	// Parse pagination parameters.
+	// Consume canonical parsed params; the handwritten /work route owns tolerant query parsing.
 	maxResults := defaultMaxResults
 	if params.MaxResults != nil && *params.MaxResults > 0 {
 		maxResults = *params.MaxResults
-	} else if v := r.URL.Query().Get("maxResults"); v != "" {
-		maxResults = positiveAtoiOrDefault(v, defaultMaxResults)
 	}
 
 	startIdx := 0
