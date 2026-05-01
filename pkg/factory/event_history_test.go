@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -51,6 +52,40 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 		stringValueForEventHistoryTest(worker.Type) != string(factoryapi.WorkerTypeModelWorker) ||
 		stringValueForEventHistoryTest(worker.Model) != "gpt-5.4" {
 		t.Fatalf("worker metadata = %#v, want runtime-config provider/model metadata", worker)
+	}
+}
+
+func TestFactoryEventHistory_SubscribeCancelClosesStreamWithoutPanickingAppenders(t *testing.T) {
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := history.Subscribe(ctx)
+
+	history.RecordInitialStructure()
+
+	select {
+	case <-stream.Events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial live event")
+	}
+
+	cancel()
+
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case _, ok := <-stream.Events:
+			if !ok {
+				goto closed
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for stream closure after cancellation")
+		}
+	}
+
+closed:
+	for i := 0; i < 32; i++ {
+		history.RecordFactoryStateChange(i, interfaces.FactoryStateIdle, interfaces.FactoryStateRunning, "post-cancel", time.Unix(int64(i+1), 0).UTC())
 	}
 }
 

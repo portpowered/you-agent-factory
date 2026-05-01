@@ -31,7 +31,14 @@ const (
 	failureReasonWorkerError       = "worker_error"
 	failureReasonUnknown           = "workstation_failed"
 	failureMessageUnavailable      = "Workstation failed without a reported error message."
+	eventHistoryStreamBufferSize   = 64
 )
+
+type eventHistorySubscription struct {
+	events chan factoryapi.FactoryEvent
+	inbox  chan factoryapi.FactoryEvent
+	done   <-chan struct{}
+}
 
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
@@ -43,7 +50,7 @@ type FactoryEventHistory struct {
 	events         []factoryapi.FactoryEvent
 	recorders      []func(factoryapi.FactoryEvent)
 	nextID         int
-	streams        map[int]chan factoryapi.FactoryEvent
+	streams        map[int]*eventHistorySubscription
 	runRecordedAt  time.Time
 	hasRunRequest  bool
 	hasRunResponse bool
@@ -59,7 +66,7 @@ func NewFactoryEventHistory(net *state.Net, now func() time.Time, runtimeConfigs
 		net:           net,
 		runtimeConfig: interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...),
 		now:           now,
-		streams:       make(map[int]chan factoryapi.FactoryEvent),
+		streams:       make(map[int]*eventHistorySubscription),
 	}
 }
 
@@ -89,22 +96,37 @@ func (h *FactoryEventHistory) Subscribe(ctx context.Context) interfaces.FactoryE
 	copy(events, h.events)
 	id := h.nextID
 	h.nextID++
-	ch := make(chan factoryapi.FactoryEvent, 64)
-	h.streams[id] = ch
+	subscription := &eventHistorySubscription{
+		events: make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		inbox:  make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		done:   ctx.Done(),
+	}
+	h.streams[id] = subscription
 	h.mu.Unlock()
 
 	go func() {
-		<-ctx.Done()
-		h.mu.Lock()
-		stream, ok := h.streams[id]
-		if ok {
-			delete(h.streams, id)
-			close(stream)
+		defer close(subscription.events)
+		for {
+			select {
+			case <-subscription.done:
+				h.mu.Lock()
+				delete(h.streams, id)
+				h.mu.Unlock()
+				return
+			case event := <-subscription.inbox:
+				select {
+				case <-subscription.done:
+					h.mu.Lock()
+					delete(h.streams, id)
+					h.mu.Unlock()
+					return
+				case subscription.events <- event:
+				}
+			}
 		}
-		h.mu.Unlock()
 	}()
 
-	return interfaces.FactoryEventStream{History: events, Events: ch}
+	return interfaces.FactoryEventStream{History: events, Events: subscription.events}
 }
 
 // AddGeneratedRecorder registers a callback invoked for every future generated
@@ -379,7 +401,7 @@ func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
 	event.SchemaVersion = factoryapi.AgentFactoryEventV1
 	event.Context.Sequence = len(h.events)
 	h.events = append(h.events, event)
-	streams := make([]chan factoryapi.FactoryEvent, 0, len(h.streams))
+	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
 		streams = append(streams, stream)
 	}
@@ -391,7 +413,12 @@ func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
 	}
 	for _, stream := range streams {
 		select {
-		case stream <- event:
+		case <-stream.done:
+			continue
+		default:
+		}
+		select {
+		case stream.inbox <- event:
 		default:
 		}
 	}
