@@ -27,6 +27,7 @@ run `agent-factory docs <topic>` for one of `config`, `workstation`, `workers`,
 - [Author AGENTS.md](authoring-agents-md.md) explains how to configure workers and workstations.
 - [Factory JSON and work configuration](work.md) explains `factory.json`, work types, workers, resources, and routes.
 - [Batch inputs](guides/batch-inputs.md) explains `FACTORY_REQUEST_BATCH` files, fields, and dependency relations.
+- [CLI release policy](guides/cli-release-policy.md) explains the maintainer semver tag workflow for CLI releases and why publication is tag-driven from `main`.
 - [Parent-aware fan-in](guides/parent-aware-fan-in.md) explains how parent work waits for spawned children to complete or fail.
 - [Workstation guards and guarded loop breakers](guides/workstation-guards-and-guarded-loop-breakers.md) explains when to use `guards`, guarded `LOGICAL_MOVE` loop breakers, resources, and runtime limits.
 - [Workstations and workers](workstations.md) explains workstation kinds, runtime fields, prompts, cron, and worker definitions.

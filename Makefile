@@ -37,7 +37,7 @@ endif
 
 GO_TEST_TIMEOUT ?= 300s
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode  test-race fmt vet deps deps-tidy dashboard-verify ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -108,6 +108,12 @@ dashboard-verify:
 	$(MAKE) ui-build
 	$(MAKE) lint
 	$(MAKE) test
+
+typecheck:
+	cd ui && $(BUN) run tsc
+
+release:
+	$(GO) run ./cmd/releaseprep -version $(VERSION)
 
 ui-deps:
 	cd ui && $(BUN) install --frozen-lockfile
