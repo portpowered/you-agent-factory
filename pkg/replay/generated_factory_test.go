@@ -18,7 +18,8 @@ import (
 func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
-		"id": "customer-project",
+		"name": "customer-project",
+		"id":   "customer-project",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -101,6 +102,7 @@ Fallback body.
 func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOnlyMaps(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{

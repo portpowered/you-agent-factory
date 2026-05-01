@@ -176,11 +176,12 @@ func setupRuntimeConfigAlignmentFactory(t *testing.T) string {
 
 func runtimeConfigAlignmentFactoryJSONConfig() map[string]any {
 	return map[string]any{
-		"workTypes":        runtimeConfigAlignmentWorkTypes(),
-		"resources":        runtimeConfigAlignmentResources(),
+		"name":            "factory",
+		"workTypes":       runtimeConfigAlignmentWorkTypes(),
+		"resources":       runtimeConfigAlignmentResources(),
 		"supportingFiles": runtimeConfigAlignmentResourceManifest(),
-		"workers":          runtimeConfigAlignmentWorkers(),
-		"workstations":     runtimeConfigAlignmentWorkstations(),
+		"workers":         runtimeConfigAlignmentWorkers(),
+		"workstations":    runtimeConfigAlignmentWorkstations(),
 	}
 }
 

@@ -268,6 +268,7 @@ func assertDashboardLabelNotRawSystemTime(t *testing.T, label string, value stri
 
 func cronSmokeFactoryConfig(schedule string) map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "signal",
@@ -289,9 +290,9 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":   "startup-refresh",
+				"name":     "startup-refresh",
 				"behavior": "CRON",
-				"worker": "cron-worker",
+				"worker":   "cron-worker",
 				"cron": map[string]any{
 					"schedule":       schedule,
 					"triggerAtStart": true,
@@ -300,19 +301,19 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
 			},
 			{
-				"name":    "poll-for-work",
+				"name":     "poll-for-work",
 				"behavior": "CRON",
-				"worker":  "cron-worker",
-				"cron":    map[string]any{"schedule": schedule, "expiryWindow": "10s"},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "expiryWindow": "10s"},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 			{
-				"name":    "poll-with-input",
+				"name":     "poll-with-input",
 				"behavior": "CRON",
-				"worker":  "cron-worker",
-				"cron":    map[string]any{"schedule": schedule, "expiryWindow": "10s"},
-				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "expiryWindow": "10s"},
+				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 		},
 	}
@@ -320,6 +321,7 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 
 func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "signal",
@@ -341,12 +343,12 @@ func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":    "poll-terminal-output",
+				"name":     "poll-terminal-output",
 				"behavior": "CRON",
-				"worker":  "cron-worker",
-				"cron":    map[string]any{"schedule": schedule, "triggerAtStart": true},
-				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},
-				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "triggerAtStart": true},
+				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
 			},
 		},
 	}

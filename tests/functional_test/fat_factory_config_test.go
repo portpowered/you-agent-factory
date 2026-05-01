@@ -20,6 +20,7 @@ import (
 func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *testing.T) {
 	dir := t.TempDir()
 	original := []byte(`{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -133,6 +134,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 func TestFactoryConfigPortability_FlattenSplitLayoutExecutesStandalone(t *testing.T) {
 	splitDir := t.TempDir()
 	writeFatFactoryJSON(t, splitDir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -218,6 +220,7 @@ Complete {{ (index .Inputs 0).WorkID }} from split config.`)
 func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *testing.T) {
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -281,6 +284,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
 func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -366,6 +370,7 @@ func writeInlineScriptBackedFactoryFixture(t *testing.T) string {
 
 	authoredDir := t.TempDir()
 	writeFatFactoryJSON(t, authoredDir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -548,7 +553,6 @@ func canonicalFactoryPayload(t *testing.T, data []byte) any {
 	if err := json.Unmarshal(data, &authored); err != nil {
 		t.Fatalf("unmarshal authored canonical factory payload: %v\n%s", err, string(data))
 	}
-	ensureFactoryNameMap(authored, "factory")
 	normalized, err := json.Marshal(authored)
 	if err != nil {
 		t.Fatalf("marshal normalized canonical factory payload: %v", err)
@@ -587,7 +591,6 @@ func writeFatFactoryJSON(t *testing.T, dir, content string) {
 	if err := json.Unmarshal([]byte(content), &cfg); err != nil {
 		t.Fatalf("parse fat factory.json fixture: %v", err)
 	}
-	ensureFactoryNameMap(cfg, "factory")
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal fat factory.json fixture: %v", err)

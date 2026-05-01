@@ -150,6 +150,7 @@ Fallback body.
 func TestRuntimeConfigFromGeneratedFactory_RebuildsWithoutOriginalFiles(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -230,7 +231,8 @@ Move the token.
 func TestRuntimeConfigFromGeneratedFactory_KeepsCanonicalRelativeExecutionPath(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
-		"id": "agent-factory",
+		"name": "agent-factory",
+		"id":   "agent-factory",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -311,6 +313,7 @@ Work from {{ .Context.WorkDir }}
 func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFactory(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -436,6 +439,7 @@ Fallback body.
 func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -445,12 +449,12 @@ func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t 
 		}},
 		"workers": []map[string]any{{"name": "executor"}},
 		"workstations": []map[string]any{{
-			"id":      "retry-story-id",
-			"name":    "retry-story",
+			"id":       "retry-story-id",
+			"name":     "retry-story",
 			"behavior": "REPEATER",
-			"worker":  "executor",
-			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
-			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			"worker":   "executor",
+			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "story", "state": "complete"}},
 		}},
 	})
 	writeAgentsMD(t, filepath.Join(factoryDir, "workers", "executor"), `---
@@ -572,6 +576,7 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesGuardedLoopBreakerRoundTrip(
 func writeGuardedLoopBreakerFactoryJSON(t *testing.T, factoryDir string) {
 	t.Helper()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -853,6 +858,7 @@ func assertCanonicalRuntimeDefinitionLookupByName(
 func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 	t.Helper()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "chapter",
@@ -924,7 +930,6 @@ func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 
 func writeFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	t.Helper()
-	ensureFactoryName(cfg, filepath.Base(factoryDir))
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("MarshalIndent: %v", err)
@@ -932,24 +937,6 @@ func writeFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)
 	}
-}
-
-func ensureFactoryName(cfg map[string]any, fallback string) {
-	if cfg == nil {
-		return
-	}
-	if name, ok := cfg["name"].(string); ok && strings.TrimSpace(name) != "" {
-		return
-	}
-	if id, ok := cfg["id"].(string); ok && strings.TrimSpace(id) != "" {
-		cfg["name"] = id
-		return
-	}
-	if strings.TrimSpace(fallback) != "" {
-		cfg["name"] = fallback
-		return
-	}
-	cfg["name"] = "factory"
 }
 
 func writeAgentsMD(t *testing.T, dir, content string) {

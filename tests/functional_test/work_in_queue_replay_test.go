@@ -241,6 +241,7 @@ func schedulerPrioritySmokeFixture(t *testing.T) string {
 
 func schedulerPrioritySmokeConfig() map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{"name": "task", "states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},

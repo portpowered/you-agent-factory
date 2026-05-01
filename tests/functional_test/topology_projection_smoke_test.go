@@ -16,6 +16,7 @@ import (
 // portos:func-length-exception owner=agent-factory reason=topology-projection-functional-smoke review=2026-07-18 removal=split-live-stream-replay-config-and-projection-assertions-before-next-topology-projection-change
 func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testing.T) {
 	dir := scaffoldFactory(t, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{

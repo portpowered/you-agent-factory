@@ -36,6 +36,7 @@ import (
 // minimalFactoryConfig returns a minimal factory.json config for testing.
 func minimalFactoryConfig() map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -71,7 +72,7 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 
 	payload, err := json.Marshal(map[string]any{
 		"name": project,
-		"id": project,
+		"id":   project,
 		"workTypes": []map[string]any{{
 			"name": workType,
 			"states": []map[string]string{
@@ -170,7 +171,6 @@ func assertWatcherDidNotDetectWorkType(t *testing.T, logs *observer.ObservedLogs
 // writeFactoryJSON writes a factory.json into the given directory.
 func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 	t.Helper()
-	ensureFactoryNameForServiceTest(cfg, filepath.Base(dir))
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal factory config: %v", err)
@@ -178,24 +178,6 @@ func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)
 	}
-}
-
-func ensureFactoryNameForServiceTest(cfg map[string]any, fallback string) {
-	if cfg == nil {
-		return
-	}
-	if name, ok := cfg["name"].(string); ok && strings.TrimSpace(name) != "" {
-		return
-	}
-	if id, ok := cfg["id"].(string); ok && strings.TrimSpace(id) != "" {
-		cfg["name"] = id
-		return
-	}
-	if strings.TrimSpace(fallback) != "" {
-		cfg["name"] = fallback
-		return
-	}
-	cfg["name"] = "factory"
 }
 
 func TestBuildFactoryService_LoadsFromFactoryJSON(t *testing.T) {
@@ -808,6 +790,7 @@ func TestBuildFactoryService_LoadsWorkersFromConfig(t *testing.T) {
 
 	// Config with a "worker-a" worker entry.
 	cfg := map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -854,6 +837,7 @@ func TestBuildFactoryService_WorkerWithoutAgentsMD_SkippedSilently(t *testing.T)
 
 	// Config with a "worker-a" worker entry, but no AGENTS.md on disk.
 	cfg := map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -983,6 +967,7 @@ func TestBuildFactoryService_RuntimeModePassedThrough(t *testing.T) {
 
 func cronFactoryConfig(schedule string) map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -996,11 +981,11 @@ func cronFactoryConfig(schedule string) map[string]any {
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":    "poll-for-work",
+				"name":     "poll-for-work",
 				"behavior": "CRON",
-				"worker":  "cron-worker",
-				"cron":    map[string]string{"schedule": schedule, "expiryWindow": "500ms"},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"worker":   "cron-worker",
+				"cron":     map[string]string{"schedule": schedule, "expiryWindow": "500ms"},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 		},
 	}
@@ -1065,6 +1050,7 @@ func requiredInputCronFactoryConfigWithExpiry(schedule, expiryWindow string) map
 		cron["expiryWindow"] = expiryWindow
 	}
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "signal",
@@ -1086,12 +1072,12 @@ func requiredInputCronFactoryConfigWithExpiry(schedule, expiryWindow string) map
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":    "poll-with-input",
+				"name":     "poll-with-input",
 				"behavior": "CRON",
-				"worker":  "cron-worker",
-				"cron":    cron,
-				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"worker":   "cron-worker",
+				"cron":     cron,
+				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 		},
 	}
