@@ -72,8 +72,9 @@ At runtime:
 1. A submitted `task` work item starts in `task:init`.
 2. `process-task` is enabled when a token is present in that place.
 3. Accepted work routes through `outputs`.
-4. Rejected work routes through `onRejection` when configured.
-5. Failed or timed-out work routes through `onFailure`.
+4. Ordinary partial-progress work routes through `onContinue` when configured.
+5. Rejected work routes through `onRejection` when configured.
+6. Failed or timed-out work routes through `onFailure`.
 
 ## Build Your First Workflow
 
@@ -110,6 +111,7 @@ camelCase config fields.
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
+      "onContinue": { "workType": "story", "state": "init" },
       "onFailure": { "workType": "story", "state": "failed" },
       "resources": [{ "name": "agent-slot", "capacity": 1 }]
     },
@@ -242,6 +244,10 @@ Implement the story.
 
 Story payload:
 {{ (index .Inputs 0).Payload }}
+
+Return CONTINUE when the story made ordinary partial progress but needs another
+execution pass.
+Return COMPLETE only when the story is ready to advance into review.
 ```
 
 `workstations/review-story/AGENTS.md`:
@@ -305,8 +311,9 @@ already running.
 ## Failure Routing And Provider Behavior
 
 Use `onFailure` on workstations for terminal worker failures and timeouts.
-Accepted work routes through `outputs`. Explicit reviewer feedback routes
-through `onRejection`.
+Accepted work routes through `outputs`. Ordinary executor iteration routes
+through `onContinue` when configured. Explicit reviewer feedback routes through
+`onRejection`.
 
 For model-backed workers, normalized provider behavior applies before the token
 reaches its final route:

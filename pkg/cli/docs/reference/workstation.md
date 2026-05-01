@@ -8,7 +8,7 @@ doc-id: agent-factory/reference/workstation
 
 Workstations are the dispatch steps in `factory.json`. A workstation consumes
 input places, optionally dispatches to a worker, and routes the result to its
-configured output, rejection, or failure place.
+configured output, continue, rejection, or failure place.
 
 ## Minimal Workstation
 
@@ -32,6 +32,7 @@ configured output, rejection, or failure place.
 | `worker` | Worker name to dispatch when the workstation executes. |
 | `inputs` | Places that must be present before the workstation can fire. |
 | `outputs` | Places produced on accepted completion. |
+| `onContinue` | Place produced on ordinary partial-progress completion. |
 | `onRejection` | Place produced on rejected completion. |
 | `onFailure` | Place produced on failure or timeout. |
 | `resources` | Resource capacity held while the dispatch is in flight. |
@@ -58,8 +59,9 @@ These can live inline in `factory.json` or in
 ## Scheduling Kinds
 
 - `standard` fires once when its inputs are ready.
-- `repeater` fires again after rejected results and is the normal fit for
-  iterative agent loops.
+- `repeater` fires again after continue results and is the normal fit for
+  iterative agent loops that keep rejection reserved for true send-back or
+  negative outcomes.
 - `cron` submits internal time work on a schedule while the runtime stays in
   service mode.
 

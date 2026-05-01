@@ -362,6 +362,7 @@ Execution loop rules:
 4. Run the relevant validation before marking the story complete.
 5. Mark the finished story "passes: true" in "prd.json".
 6. Respond with "<COMPLETE>" only when every story in "prd.json" is complete. Otherwise respond with "<CONTINUE>" after finishing the current iteration.
+7. Treat "<CONTINUE>" as ordinary partial progress for another execution pass. Reserve rejection semantics for a separate review step that sends work back.
 
 Keep the workflow product-neutral and do not invent reviewer, ideation, or cron steps that are outside this scaffold.
 
