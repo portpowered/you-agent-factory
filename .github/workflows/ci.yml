@@ -33,6 +33,11 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Set up Node for API contract commands
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
       - name: Install dashboard dependencies
         working-directory: ui
         run: bun install --frozen-lockfile
