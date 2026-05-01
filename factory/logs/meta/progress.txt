@@ -401,3 +401,46 @@
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the `#27`
   merge, the live throttle posture, and the fact that no fresh behavior-safe
   narrow cleanup lane is confirmed yet.
+
+## 2026-05-01 09:04 -07:00 - meta throttle decomposition refresh
+
+- Ran `git pull` and verified the workspace is synced on `main` at `21884a0`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  open/merged PR state, and the tracked `factory/inputs/**` surface before
+  choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Verified that the workspace-local `factory/inputs/**` surface has shifted to
+  ignored PRD-oriented residue rather than the older cleanup-idea residue:
+  - `factory/inputs/idea/default/prd-api-model-contract-cleanup.md`
+  - `factory/inputs/idea/default/prd-functional-test-suite-decomposition.md`
+  - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `ca942db`
+  - it still claimed no fresh behavior-safe narrow lane was confirmed
+- Reconfirmed through direct code inspection plus a sidecar repository explorer
+  that the throttling ask is still implemented as dispatcher-owned runtime
+  pause state:
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` owns the mutable
+    provider/model pause map and pause-duration policy
+  - `pkg/interfaces/provider_failure.go` and
+    `pkg/workers/provider_errors.go` still classify which failures trigger
+    throttle pauses
+  - engine snapshots and dashboard/world-view projections still mirror that
+    dispatcher-owned state through runtime snapshot and projection helpers
+- Confirmed the current public guard surface is still narrower than the ask:
+  - workstation guards remain `visit_count` and `matches_fields`
+  - per-input guards remain `all_children_complete`, `any_child_failed`, and
+    `same_name`
+  - there is still no factory-level guard owner for
+    `INFERENCE_THROTTLE_GUARD`
+- Queued one new ignored decomposition idea at
+  `factory/inputs/idea/default/derive-throttle-windows-from-event-history.md`
+  as the next narrow lane for the throttling ask:
+  - derive active provider/model throttle windows from normalized failure
+    history and an injected clock time
+  - do not yet change scheduler gating, public config, or observability
+    contracts
