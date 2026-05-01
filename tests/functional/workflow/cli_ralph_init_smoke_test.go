@@ -1,4 +1,4 @@
-package functional_test
+package workflow
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 const ralphInitSmokeRequest = `Create a minimal release-planning loop for a document processing service.
@@ -63,7 +64,7 @@ type ralphInitSmokeUserStory struct {
 
 func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing.T) {
 	dir := initRalphSmokeScaffold(t)
-	setWorkingDirectory(t, dir)
+	support.SetWorkingDirectory(t, dir)
 	writeRalphSmokeRequest(t, dir, "release-planning-loop.md")
 
 	runner := newRalphInitSmokeRunner(dir, ralphInitSmokeModeComplete)
@@ -142,7 +143,7 @@ func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing
 
 func TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop(t *testing.T) {
 	dir := initRalphSmokeScaffold(t)
-	setWorkingDirectory(t, dir)
+	support.SetWorkingDirectory(t, dir)
 	writeRalphSmokeRequest(t, dir, "never-converges.md")
 
 	runner := newRalphInitSmokeRunner(dir, ralphInitSmokeModeExhaust)
@@ -175,13 +176,7 @@ func TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop(t *testing.
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
-	assertDispatchHistoryContainsWorkstation(
-		t,
-		snapshot.DispatchHistory,
-		"execute-story-loop-breaker",
-		"story:failed",
-		runner.ExecutorStoryWorkID(),
-	)
+	assertDispatchHistoryContainsWorkstation(t, snapshot.DispatchHistory, "execute-story-loop-breaker", "story:failed", runner.ExecutorStoryWorkID())
 
 	prd := loadRalphInitSmokePRD(t, dir)
 	if len(prd.UserStories) == 0 || prd.UserStories[0].Passes {

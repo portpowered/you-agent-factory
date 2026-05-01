@@ -126,6 +126,38 @@ func assertDispatchHistoryContainsWorkstationRoute(
 	)
 }
 
+func assertDispatchHistoryContainsWorkstation(
+	t *testing.T,
+	history []interfaces.CompletedDispatch,
+	workstationName string,
+	terminalPlace string,
+	workID string,
+) {
+	t.Helper()
+
+	for _, dispatch := range history {
+		if dispatch.WorkstationName != workstationName {
+			continue
+		}
+		for _, mutation := range dispatch.OutputMutations {
+			if mutation.ToPlace != terminalPlace || mutation.Token == nil {
+				continue
+			}
+			if mutation.Token.Color.WorkID == workID {
+				return
+			}
+		}
+	}
+
+	t.Fatalf(
+		"dispatch history missing %q route to %q for work %q: %#v",
+		workstationName,
+		terminalPlace,
+		workID,
+		history,
+	)
+}
+
 func firstInputToken(rawTokens any) interfaces.Token {
 	switch tokens := rawTokens.(type) {
 	case []any:
