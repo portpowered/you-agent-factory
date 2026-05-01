@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestEventStreamReplayArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testing.T) {
+func TestReplayEventStreamArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testing.T) {
 	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
 
@@ -38,7 +38,7 @@ func TestEventStreamReplayArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testi
 	}
 }
 
-func TestEventStreamReplayArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t *testing.T) {
+func TestReplayEventStreamArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t *testing.T) {
 	adhocFactoryDir := testutil.MustRepoPath(t, "tests/adhoc/factory")
 	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
@@ -69,7 +69,7 @@ func TestEventStreamReplayArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t
 	}
 }
 
-func TestEventStreamReplayArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition(t *testing.T) {
+func TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition(t *testing.T) {
 	copiedFactoryDir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/adhoc/factory"))
 	artifactPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.replay.json", testutil.ArtifactCheckedIn)
 
@@ -103,7 +103,7 @@ func assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(
 		t.Fatalf("Save replay artifact for SSE mirror: %v", err)
 	}
 
-	server := StartFunctionalServerWithConfig(t, factoryDir, false, func(cfg *service.FactoryServiceConfig) {
+	server := startReplayFunctionalServerWithConfig(t, factoryDir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.ReplayPath = artifactPath
 		cfg.ExecutionBaseDir = executionBaseDir
 		cfg.Logger = zap.NewNop()
@@ -131,7 +131,7 @@ func assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(
 
 func assertReplayEventTimelineMatchesRuntime(
 	t *testing.T,
-	server *FunctionalServer,
+	server *replayFunctionalServer,
 	streamedEvents []factoryapi.FactoryEvent,
 ) []factoryapi.FactoryEvent {
 	t.Helper()
@@ -193,7 +193,7 @@ func assertReplayEventTimelineMatchesRuntime(
 
 func assertReplayWorldStateMatchesRuntime(
 	t *testing.T,
-	server *FunctionalServer,
+	server *replayFunctionalServer,
 	streamedEvents []factoryapi.FactoryEvent,
 	runtimeEvents []factoryapi.FactoryEvent,
 ) {
@@ -211,11 +211,11 @@ func assertReplayWorldStateMatchesRuntime(
 		t.Fatalf("ReconstructFactoryWorldState runtime events: %v", err)
 	}
 
-	streamedCanonical, err := canonicalizeFunctionalFactoryWorldState(streamedState)
+	streamedCanonical, err := canonicalizeReplayFactoryWorldState(streamedState)
 	if err != nil {
 		t.Fatalf("canonicalize streamed world state: %v", err)
 	}
-	runtimeCanonical, err := canonicalizeFunctionalFactoryWorldState(runtimeState)
+	runtimeCanonical, err := canonicalizeReplayFactoryWorldState(runtimeState)
 	if err != nil {
 		t.Fatalf("canonicalize runtime world state: %v", err)
 	}
@@ -270,7 +270,7 @@ func assertReplayWorldStateMatchesRuntime(
 	}
 }
 
-func canonicalizeFunctionalFactoryWorldState(state interfaces.FactoryWorldState) (interfaces.FactoryWorldState, error) {
+func canonicalizeReplayFactoryWorldState(state interfaces.FactoryWorldState) (interfaces.FactoryWorldState, error) {
 	data, err := json.Marshal(state)
 	if err != nil {
 		return interfaces.FactoryWorldState{}, err
@@ -280,4 +280,11 @@ func canonicalizeFunctionalFactoryWorldState(state interfaces.FactoryWorldState)
 		return interfaces.FactoryWorldState{}, err
 	}
 	return canonical, nil
+}
+
+func sliceValue[T any](values *[]T) []T {
+	if values == nil {
+		return nil
+	}
+	return *values
 }
