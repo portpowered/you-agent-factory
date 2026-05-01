@@ -64,7 +64,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		Name:                   stringValue(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		TraceID:                resolvedCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
@@ -781,10 +781,6 @@ func applyStableTraceToWorkRequest(req *interfaces.WorkRequest) {
 			req.Works[i].TraceID = req.Works[i].CurrentChainingTraceID
 		}
 	}
-}
-
-func resolvedCurrentChainingTraceID(current string, legacy string) string {
-	return factorypkg.ResolveWorkRequestCurrentChainingTraceID(current, legacy)
 }
 
 func generatedPayloadToRawMessage(payload any) (json.RawMessage, error) {

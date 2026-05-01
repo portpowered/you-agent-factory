@@ -556,6 +556,29 @@ func TestNormalizeWorkRequest_AcceptsStringPayloadAsRawText(t *testing.T) {
 	}
 }
 
+func TestWorkRequestRecordFromSubmitRequests_UsesSharedTraceFallback(t *testing.T) {
+	record := WorkRequestRecordFromSubmitRequests("request-record", "api", []interfaces.SubmitRequest{{
+		WorkID:      "work-1",
+		WorkTypeID:  "task",
+		Name:        "draft",
+		TraceID:     "trace-legacy",
+		TargetState: "queued",
+	}})
+
+	if record.TraceID != "trace-legacy" {
+		t.Fatalf("record trace ID = %q, want trace-legacy", record.TraceID)
+	}
+	if len(record.WorkItems) != 1 {
+		t.Fatalf("work item count = %d, want 1", len(record.WorkItems))
+	}
+	if record.WorkItems[0].CurrentChainingTraceID != "trace-legacy" {
+		t.Fatalf("record current chaining trace ID = %q, want trace-legacy", record.WorkItems[0].CurrentChainingTraceID)
+	}
+	if record.WorkItems[0].TraceID != "trace-legacy" {
+		t.Fatalf("record work item trace ID = %q, want trace-legacy", record.WorkItems[0].TraceID)
+	}
+}
+
 func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 	var request interfaces.WorkRequest
 	if err := json.Unmarshal([]byte(`{

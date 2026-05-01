@@ -37,3 +37,4 @@ work inputs.
 - Treat slash-rooted workstation `working_directory` values as portable runtime paths only when they are repo-authored logical locations such as `/repo/...` or `/worktrees/...`; preserve real existing Unix absolute paths as host-absolute instead of rebasing them under the runtime base.
 - Keep workstation testing guidance behavioral. Prompt instructions should reject source scans, docs-topology checks, asset-bundle string inspections, and command or route inventory assertions unless those surfaces are the product behavior being validated.
 - When public and factory ingestion paths share compatibility semantics, keep the normalization and validation helpers in `pkg/factory` and have API boundaries only translate those shared errors into boundary-specific messages.
+- When an API path already depends on a shared `pkg/factory` compatibility seam, call that seam directly instead of adding API-local wrapper helpers that only forward the same arguments.
