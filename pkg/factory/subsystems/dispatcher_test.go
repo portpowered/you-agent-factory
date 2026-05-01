@@ -78,6 +78,114 @@ func (s *recordingScheduler) Select(enabled []interfaces.EnabledTransition, _ *i
 
 type dispatcherRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
+func TestDispatcher_ThrottleFailureHistoryFromCompletedDispatches_UsesCompletionTimesAndStableLaneOrdering(t *testing.T) {
+	n := &state.Net{
+		Transitions: map[string]*petri.Transition{
+			"t-a": {ID: "t-a", WorkerType: "worker-a"},
+			"t-b": {ID: "t-b", WorkerType: "worker-b"},
+		},
+	}
+	dispatcher := NewDispatcher(
+		n,
+		&mockScheduler{},
+		nil,
+		nil,
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
+				"worker-b": {ModelProvider: "openai", Model: "gpt-5.4"},
+			},
+		}),
+	)
+	earlier := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
+	later := earlier.Add(3 * time.Minute)
+
+	history := dispatcher.throttleFailureHistoryFromCompletedDispatches([]interfaces.CompletedDispatch{
+		{
+			DispatchID:   "dispatch-b",
+			TransitionID: "t-b",
+			ProviderFailure: &interfaces.ProviderFailureMetadata{
+				Family: interfaces.ProviderErrorFamilyThrottle,
+				Type:   interfaces.ProviderErrorTypeThrottled,
+			},
+			EndTime: later,
+		},
+		{
+			DispatchID:   "dispatch-a",
+			TransitionID: "t-a",
+			ProviderFailure: &interfaces.ProviderFailureMetadata{
+				Family: interfaces.ProviderErrorFamilyThrottle,
+				Type:   interfaces.ProviderErrorTypeThrottled,
+			},
+			EndTime: earlier,
+		},
+	})
+
+	if len(history) != 2 {
+		t.Fatalf("history count = %d, want 2", len(history))
+	}
+	if history[0].Provider != "claude" || history[0].Model != "claude-sonnet" {
+		t.Fatalf("history[0] lane = %s/%s, want claude/claude-sonnet", history[0].Provider, history[0].Model)
+	}
+	if !history[0].OccurredAt.Equal(earlier) {
+		t.Fatalf("history[0].OccurredAt = %s, want %s", history[0].OccurredAt, earlier)
+	}
+	if history[0].ProviderFailure == nil || history[0].ProviderFailure.Family != interfaces.ProviderErrorFamilyThrottle || history[0].ProviderFailure.Type != interfaces.ProviderErrorTypeThrottled {
+		t.Fatalf("history[0].ProviderFailure = %#v, want preserved throttle metadata", history[0].ProviderFailure)
+	}
+	if history[1].Provider != "openai" || history[1].Model != "gpt-5.4" {
+		t.Fatalf("history[1] lane = %s/%s, want openai/gpt-5.4", history[1].Provider, history[1].Model)
+	}
+	if !history[1].OccurredAt.Equal(later) {
+		t.Fatalf("history[1].OccurredAt = %s, want %s", history[1].OccurredAt, later)
+	}
+}
+
+func TestDispatcher_ThrottleFailureHistoryFromCompletedDispatches_IgnoresNonThrottleAndUnresolvedDispatches(t *testing.T) {
+	n := &state.Net{
+		Transitions: map[string]*petri.Transition{
+			"t-a": {ID: "t-a", WorkerType: "worker-a"},
+		},
+	}
+	dispatcher := NewDispatcher(
+		n,
+		&mockScheduler{},
+		nil,
+		nil,
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
+			},
+		}),
+	)
+	endTime := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
+
+	history := dispatcher.throttleFailureHistoryFromCompletedDispatches([]interfaces.CompletedDispatch{
+		{
+			DispatchID:   "retryable",
+			TransitionID: "t-a",
+			ProviderFailure: &interfaces.ProviderFailureMetadata{
+				Family: interfaces.ProviderErrorFamilyRetryable,
+				Type:   interfaces.ProviderErrorTypeInternalServerError,
+			},
+			EndTime: endTime,
+		},
+		{
+			DispatchID:   "unknown-transition",
+			TransitionID: "t-missing",
+			ProviderFailure: &interfaces.ProviderFailureMetadata{
+				Family: interfaces.ProviderErrorFamilyThrottle,
+				Type:   interfaces.ProviderErrorTypeThrottled,
+			},
+			EndTime: endTime.Add(time.Minute),
+		},
+	})
+
+	if len(history) != 0 {
+		t.Fatalf("history = %#v, want empty after filtering non-throttle and unresolved dispatches", history)
+	}
+}
+
 // portos:func-length-exception owner=agent-factory reason=legacy-dispatcher-fixture review=2026-07-18 removal=split-single-transition-fixture-before-next-dispatcher-change
 func TestDispatcher_SingleTransitionFires(t *testing.T) {
 	n := &state.Net{
@@ -520,16 +628,8 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 			"tok-a": {ID: "tok-a", PlaceID: "p-init-a"},
 			"tok-b": {ID: "tok-b", PlaceID: "p-init-b"},
 		}),
-		Results: []interfaces.WorkResult{
-			{
-				DispatchID:   "d-throttle",
-				TransitionID: "t-a",
-				Outcome:      interfaces.OutcomeFailed,
-				ProviderFailure: &interfaces.ProviderFailureMetadata{
-					Family: interfaces.ProviderErrorFamilyThrottle,
-					Type:   interfaces.ProviderErrorTypeThrottled,
-				},
-			},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", now),
 		},
 	}
 
@@ -604,16 +704,8 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
-		Results: []interfaces.WorkResult{
-			{
-				DispatchID:   "d-throttle",
-				TransitionID: "t-a",
-				Outcome:      interfaces.OutcomeFailed,
-				ProviderFailure: &interfaces.ProviderFailureMetadata{
-					Family: interfaces.ProviderErrorFamilyThrottle,
-					Type:   interfaces.ProviderErrorTypeThrottled,
-				},
-			},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", currentTime),
 		},
 	}
 
@@ -691,15 +783,9 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
-		Results: []interfaces.WorkResult{{
-			DispatchID:   "d-throttle-1",
-			TransitionID: "t-a",
-			Outcome:      interfaces.OutcomeFailed,
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyThrottle,
-				Type:   interfaces.ProviderErrorTypeThrottled,
-			},
-		}},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle-1", "t-a", currentTime),
+		},
 	}
 
 	result, err := dispatcher.Execute(context.Background(), &firstFailure)
@@ -714,15 +800,9 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
-		Results: []interfaces.WorkResult{{
-			DispatchID:   "d-throttle-2",
-			TransitionID: "t-a",
-			Outcome:      interfaces.OutcomeFailed,
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyThrottle,
-				Type:   interfaces.ProviderErrorTypeThrottled,
-			},
-		}},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle-2", "t-a", currentTime),
+		},
 	}
 
 	result, err = dispatcher.Execute(context.Background(), &secondFailure)
@@ -768,16 +848,8 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
-		Results: []interfaces.WorkResult{
-			{
-				DispatchID:   "d-throttle",
-				TransitionID: "t-cron",
-				Outcome:      interfaces.OutcomeFailed,
-				ProviderFailure: &interfaces.ProviderFailureMetadata{
-					Family: interfaces.ProviderErrorFamilyThrottle,
-					Type:   interfaces.ProviderErrorTypeThrottled,
-				},
-			},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-cron", now),
 		},
 	}
 
@@ -923,16 +995,8 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
-		Results: []interfaces.WorkResult{
-			{
-				DispatchID:   "d-throttle",
-				TransitionID: "t-a",
-				Outcome:      interfaces.OutcomeFailed,
-				ProviderFailure: &interfaces.ProviderFailureMetadata{
-					Family: interfaces.ProviderErrorFamilyThrottle,
-					Type:   interfaces.ProviderErrorTypeThrottled,
-				},
-			},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", currentTime),
 		},
 	}
 	result, err := dispatcher.Execute(context.Background(), &pausedSnapshot)
@@ -1021,16 +1085,8 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 			"tok-b":  {ID: "tok-b", PlaceID: "p-init-b"},
 			"slot-1": {ID: "slot-1", PlaceID: "slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
 		}),
-		Results: []interfaces.WorkResult{
-			{
-				DispatchID:   "d-throttle",
-				TransitionID: "t-a",
-				Outcome:      interfaces.OutcomeFailed,
-				ProviderFailure: &interfaces.ProviderFailureMetadata{
-					Family: interfaces.ProviderErrorFamilyThrottle,
-					Type:   interfaces.ProviderErrorTypeThrottled,
-				},
-			},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", now),
 		},
 	}
 
@@ -1200,6 +1256,19 @@ func TestDispatcher_UsesDispatcherClockForCronTimeWindowGuard(t *testing.T) {
 	}
 	if result.Dispatches[0].Dispatch.TransitionID != "cron-refresh" {
 		t.Fatalf("transition id = %q, want cron-refresh", result.Dispatches[0].Dispatch.TransitionID)
+	}
+}
+
+func throttledCompletedDispatch(dispatchID string, transitionID string, endTime time.Time) interfaces.CompletedDispatch {
+	return interfaces.CompletedDispatch{
+		DispatchID:   dispatchID,
+		TransitionID: transitionID,
+		Outcome:      interfaces.OutcomeFailed,
+		ProviderFailure: &interfaces.ProviderFailureMetadata{
+			Family: interfaces.ProviderErrorFamilyThrottle,
+			Type:   interfaces.ProviderErrorTypeThrottled,
+		},
+		EndTime: endTime,
 	}
 }
 

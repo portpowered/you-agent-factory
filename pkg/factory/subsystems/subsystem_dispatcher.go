@@ -276,10 +276,10 @@ func (d *DispatcherSubsystem) reconcileThrottlePauses(snapshot *interfaces.Engin
 			observed = true
 		}
 	}
-	if snapshot == nil || len(snapshot.Results) == 0 {
+	if snapshot == nil || len(snapshot.DispatchHistory) == 0 {
 		return observed
 	}
-	for _, pause := range factory_throttle.DeriveActiveThrottlePauses(d.throttleFailureHistory(snapshot, now), d.throttlePauseDuration, now) {
+	for _, pause := range factory_throttle.DeriveActiveThrottlePauses(d.throttleFailureHistoryFromCompletedDispatches(snapshot.DispatchHistory), d.throttlePauseDuration, now) {
 		key := providerModelKey{provider: pause.Provider, model: pause.Model}
 		candidateUntil := pause.PausedUntil
 		if existing, exists := d.throttlePauses[key]; exists && existing.pausedUntil.After(candidateUntil) {
@@ -325,28 +325,40 @@ func (d *DispatcherSubsystem) filterPausedEnabledTransitions(enabled []interface
 	return filtered
 }
 
-func (d *DispatcherSubsystem) throttleFailureHistory(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], observedAt time.Time) []factory_throttle.FailureRecord {
-	if snapshot == nil || len(snapshot.Results) == 0 {
+func (d *DispatcherSubsystem) throttleFailureHistoryFromCompletedDispatches(history []interfaces.CompletedDispatch) []factory_throttle.FailureRecord {
+	if len(history) == 0 {
 		return nil
 	}
-	history := make([]factory_throttle.FailureRecord, 0, len(snapshot.Results))
-	for i := range snapshot.Results {
-		key, ok := d.throttlePauseKeyForResult(snapshot.Results[i])
+	records := make([]factory_throttle.FailureRecord, 0, len(history))
+	for i := range history {
+		if !workers.ProviderFailureDecisionFromMetadata(history[i].ProviderFailure).TriggersThrottlePause {
+			continue
+		}
+		key, ok := d.throttlePauseKeyForCompletedDispatch(history[i])
 		if !ok {
 			continue
 		}
-		history = append(history, factory_throttle.FailureRecord{
+		records = append(records, factory_throttle.FailureRecord{
 			Provider:        key.provider,
 			Model:           key.model,
-			OccurredAt:      observedAt,
-			ProviderFailure: snapshot.Results[i].ProviderFailure,
+			OccurredAt:      history[i].EndTime,
+			ProviderFailure: history[i].ProviderFailure,
 		})
 	}
-	return history
+	sort.SliceStable(records, func(i, j int) bool {
+		if !records[i].OccurredAt.Equal(records[j].OccurredAt) {
+			return records[i].OccurredAt.Before(records[j].OccurredAt)
+		}
+		if records[i].Provider != records[j].Provider {
+			return records[i].Provider < records[j].Provider
+		}
+		return records[i].Model < records[j].Model
+	})
+	return records
 }
 
-func (d *DispatcherSubsystem) throttlePauseKeyForResult(result interfaces.WorkResult) (providerModelKey, bool) {
-	transition, ok := d.state.Transitions[result.TransitionID]
+func (d *DispatcherSubsystem) throttlePauseKeyForCompletedDispatch(dispatch interfaces.CompletedDispatch) (providerModelKey, bool) {
+	transition, ok := d.state.Transitions[dispatch.TransitionID]
 	if !ok {
 		return providerModelKey{}, false
 	}
