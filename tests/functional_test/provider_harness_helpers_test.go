@@ -9,10 +9,6 @@ func acceptedProviderResponse() interfaces.InferenceResponse {
 	return interfaces.InferenceResponse{Content: "COMPLETE"}
 }
 
-func rejectedProviderResponse(content string) interfaces.InferenceResponse {
-	return interfaces.InferenceResponse{Content: content}
-}
-
 func providerCallsForWorker(provider *testutil.MockProvider, workerType string) []interfaces.ProviderInferenceRequest {
 	var calls []interfaces.ProviderInferenceRequest
 	for _, call := range provider.Calls() {

@@ -1,4 +1,4 @@
-package functional_test
+package workflow
 
 import (
 	"testing"
@@ -6,23 +6,21 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// TestRalphLoop_ConvergesOnReviewerAccept verifies the happy path: executor
-// produces work, reviewer accepts on first review, token reaches complete.
 func TestRalphLoop_ConvergesOnReviewerAccept(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "ralph_loop"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
 
 	testutil.WriteSeedFile(t, dir, "story", []byte(`{"title": "implement feature"}`))
 
-	work := make(map[string][]interfaces.InferenceResponse)
-
-	work["executor-worker"] = []interfaces.InferenceResponse{
-		{Content: "code with missing error handling <COMPLETE>"},
-	}
-
-	work["reviewer-worker"] = []interfaces.InferenceResponse{
-		{Content: "code with missing error handling <COMPLETE>"},
+	work := map[string][]interfaces.InferenceResponse{
+		"executor-worker": {
+			{Content: "code with missing error handling <COMPLETE>"},
+		},
+		"reviewer-worker": {
+			{Content: "code with missing error handling <COMPLETE>"},
+		},
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
@@ -46,29 +44,25 @@ func TestRalphLoop_ConvergesOnReviewerAccept(t *testing.T) {
 		HasNoTokenInPlace("story:failed")
 }
 
-// TestRalphLoop_IteratesOnRejectionThenConverges verifies that when the
-// reviewer rejects, the token loops back to the executor for another attempt,
-// and eventually converges when the reviewer accepts.
 func TestRalphLoop_IteratesOnRejectionThenConverges(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "ralph_loop"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
 
 	testutil.WriteSeedFile(t, dir, "story", []byte(`{"title": "iterate and converge"}`))
 
-	work := make(map[string][]interfaces.InferenceResponse)
-
-	work["executor-worker"] = []interfaces.InferenceResponse{
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-	}
-
-	work["reviewer-worker"] = []interfaces.InferenceResponse{
-		{Content: "missing error handling"},
-		{Content: "missing error handling"},
-		{Content: "code with missing error handling <COMPLETE>"},
+	work := map[string][]interfaces.InferenceResponse{
+		"executor-worker": {
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+		},
+		"reviewer-worker": {
+			{Content: "missing error handling"},
+			{Content: "missing error handling"},
+			{Content: "code with missing error handling <COMPLETE>"},
+		},
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
@@ -92,31 +86,27 @@ func TestRalphLoop_IteratesOnRejectionThenConverges(t *testing.T) {
 		HasNoTokenInPlace("story:failed")
 }
 
-// TestRalphLoop_GuardedReviewLoopBreakerTerminatesInfiniteLoop verifies that
-// when the reviewer always rejects, the guarded review loop breaker terminates
-// the loop at max_visits and routes the token to failed.
 func TestRalphLoop_GuardedReviewLoopBreakerTerminatesInfiniteLoop(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "ralph_loop"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
 
 	testutil.WriteSeedFile(t, dir, "story", []byte(`{"title": "infinite loop test"}`))
 
-	work := make(map[string][]interfaces.InferenceResponse)
-
-	work["executor-worker"] = []interfaces.InferenceResponse{
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-	}
-
-	work["reviewer-worker"] = []interfaces.InferenceResponse{
-		{Content: "missing error handling"},
-		{Content: "missing error handling"},
-		{Content: "missing error handling"},
-		{Content: "missing error handling"},
-		{Content: "missing error handling"},
+	work := map[string][]interfaces.InferenceResponse{
+		"executor-worker": {
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+		},
+		"reviewer-worker": {
+			{Content: "missing error handling"},
+			{Content: "missing error handling"},
+			{Content: "missing error handling"},
+			{Content: "missing error handling"},
+			{Content: "missing error handling"},
+		},
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
@@ -127,7 +117,6 @@ func TestRalphLoop_GuardedReviewLoopBreakerTerminatesInfiniteLoop(t *testing.T) 
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	// The guarded review loop breaker max_visits=3 should terminate after 3 reviewer calls.
 	if provider.CallCount("reviewer-worker") != 3 {
 		t.Errorf("expected reviewer called exactly 3 times (max_visits), got %d", provider.CallCount("reviewer-worker"))
 	}
@@ -144,14 +133,10 @@ func TestRalphLoop_GuardedReviewLoopBreakerTerminatesInfiniteLoop(t *testing.T) 
 	assertDispatchHistoryContainsWorkstationRoute(t, snapshot.DispatchHistory, "reviewer-loop-breaker", "story:failed")
 }
 
-// TestRalphLoop_TemplateFieldsResolvePerIteration verifies that the executor
-// workstation's parameterized working_directory and env fields are resolved
-// from token tags and passed to the dispatch on each iteration.
 func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "ralph_loop"))
-	setWorkingDirectory(t, dir)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
+	support.SetWorkingDirectory(t, dir)
 
-	// Write seed file with tags that feed into working_directory and env templates.
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "story",
 		Payload:    []byte(`{"title": "template test"}`),
@@ -162,16 +147,15 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 		},
 	})
 
-	work := make(map[string][]interfaces.InferenceResponse)
-
-	work["executor-worker"] = []interfaces.InferenceResponse{
-		{Content: "code with missing error handling <COMPLETE>"},
-		{Content: "code with missing error handling <COMPLETE>"},
-	}
-
-	work["reviewer-worker"] = []interfaces.InferenceResponse{
-		{Content: "missing error handling"},
-		{Content: "looks good<COMPLETE>"},
+	work := map[string][]interfaces.InferenceResponse{
+		"executor-worker": {
+			{Content: "code with missing error handling <COMPLETE>"},
+			{Content: "code with missing error handling <COMPLETE>"},
+		},
+		"reviewer-worker": {
+			{Content: "missing error handling"},
+			{Content: "looks good<COMPLETE>"},
+		},
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
@@ -182,17 +166,15 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	// Must have at least 2 executor dispatches (proving templates work across iterations).
 	if provider.CallCount("executor-worker") != 2 {
 		t.Fatalf("expected at least 2 executor dispatches, got %d", provider.CallCount("executor-worker"))
 	}
 
-	// Verify each dispatch has WorkingDirTemplate set and tags present.
 	for i, dispatch := range provider.Calls("executor-worker") {
 		if dispatch.WorkingDirectory == "" {
 			t.Errorf("dispatch %d: expected WorkingDirectory to be set, got empty", i)
 		} else {
-			expectedDir := resolvedRuntimePath(dir, "/workspaces/ralph-loop-fixture/ralph/ralph-loop")
+			expectedDir := support.ResolvedRuntimePath(dir, "/workspaces/ralph-loop-fixture/ralph/ralph-loop")
 			if dispatch.WorkingDirectory != expectedDir {
 				t.Errorf("dispatch %d: expected WorkingDirectory '%s', got '%s'", i, expectedDir, dispatch.WorkingDirectory)
 			}
