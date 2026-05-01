@@ -442,6 +442,8 @@ func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 		"infinite-you docs workstation",
 		"Supported docs topics are `config`, `workstation`, `workers`, `resources`,",
 		"`batch-work`, and `templates`.",
+		"infinite-you docs batch-work",
+		"infinite-you docs config",
 	} {
 		if !strings.Contains(contents, want) {
 			t.Fatalf("README missing %q:\n%s", want, contents)

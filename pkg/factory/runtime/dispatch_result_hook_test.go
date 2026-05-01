@@ -34,6 +34,13 @@ func (immediateCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDispatc
 	return 0, false, nil
 }
 
+type plannedCompletionPlanner struct {
+	deliveryTick     int
+	hasDeliveryTick  bool
+	plannedResult    interfaces.WorkResult
+	hasPlannedResult bool
+}
+
 type validatingCompletionPlanner struct {
 	validatedTicks []int
 	validateErr    error
@@ -62,6 +69,20 @@ func (p *validatingCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDis
 func (p *validatingCompletionPlanner) ValidateReplayTick(currentTick int) error {
 	p.validatedTicks = append(p.validatedTicks, currentTick)
 	return p.validateErr
+}
+
+func (p plannedCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
+	return p.deliveryTick, p.hasDeliveryTick, nil
+}
+
+func (p plannedCompletionPlanner) PlannedResultForDispatch(dispatch interfaces.WorkDispatch) (interfaces.WorkResult, bool, error) {
+	if !p.hasPlannedResult {
+		return interfaces.WorkResult{}, false, nil
+	}
+	result := p.plannedResult
+	result.DispatchID = dispatch.DispatchID
+	result.TransitionID = dispatch.TransitionID
+	return result, true, nil
 }
 
 func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerExecutesSynchronously(t *testing.T) {
@@ -102,6 +123,97 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerExecutesSynchrono
 	}
 	if result.Results[0].Output != "executor-output" {
 		t.Fatalf("hook result output = %q, want executor-output", result.Results[0].Output)
+	}
+}
+
+func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerDelaysDeliveryUntilDueTick(t *testing.T) {
+	executor := &recordingExecutor{}
+	hook := newWorkerPoolDispatchResultHook(
+		buildSimpleNet(),
+		workers.NewWorkerPool(logging.NoopLogger{}),
+		map[string]workers.WorkerExecutor{"mock": executor},
+		logging.NoopLogger{},
+		1,
+		plannedCompletionPlanner{deliveryTick: 3, hasDeliveryTick: true},
+	)
+	dispatch := interfaces.WorkDispatch{
+		DispatchID:   "dispatch-delayed",
+		TransitionID: "t-process",
+	}
+
+	if err := hook.SubmitDispatch(context.Background(), dispatch); err != nil {
+		t.Fatalf("SubmitDispatch: %v", err)
+	}
+
+	result, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
+		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			TickCount: 2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("OnTick before due tick: %v", err)
+	}
+	if len(result.Results) != 0 {
+		t.Fatalf("hook result count before due tick = %d, want 0", len(result.Results))
+	}
+
+	result, err = hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
+		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			TickCount: 3,
+		},
+	})
+	if err != nil {
+		t.Fatalf("OnTick at due tick: %v", err)
+	}
+	if len(result.Results) != 1 {
+		t.Fatalf("hook result count at due tick = %d, want 1", len(result.Results))
+	}
+	if result.Results[0].Output != "executor-output" {
+		t.Fatalf("hook result output at due tick = %q, want executor-output", result.Results[0].Output)
+	}
+}
+
+func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerUsesPlannedResultReplacement(t *testing.T) {
+	executor := &recordingExecutor{}
+	hook := newWorkerPoolDispatchResultHook(
+		buildSimpleNet(),
+		workers.NewWorkerPool(logging.NoopLogger{}),
+		map[string]workers.WorkerExecutor{"mock": executor},
+		logging.NoopLogger{},
+		1,
+		plannedCompletionPlanner{
+			plannedResult: interfaces.WorkResult{
+				Outcome: interfaces.OutcomeAccepted,
+				Output:  "planned-output",
+			},
+			hasPlannedResult: true,
+		},
+	)
+	dispatch := interfaces.WorkDispatch{
+		DispatchID:   "dispatch-planned-result",
+		TransitionID: "t-process",
+	}
+
+	if err := hook.SubmitDispatch(context.Background(), dispatch); err != nil {
+		t.Fatalf("SubmitDispatch: %v", err)
+	}
+	if len(executor.calls) != 1 {
+		t.Fatalf("executor call count = %d, want 1", len(executor.calls))
+	}
+
+	result, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
+		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			TickCount: 0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(result.Results) != 1 {
+		t.Fatalf("hook result count = %d, want 1", len(result.Results))
+	}
+	if result.Results[0].Output != "planned-output" {
+		t.Fatalf("hook result output = %q, want planned-output", result.Results[0].Output)
 	}
 }
 
