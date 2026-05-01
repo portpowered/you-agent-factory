@@ -44,9 +44,6 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 		if filepath.Ext(path) != ".go" {
 			return nil
 		}
-		if strings.HasSuffix(path, ".gen.go") {
-			return nil
-		}
 
 		file, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {

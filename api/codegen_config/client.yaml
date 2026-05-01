@@ -4,5 +4,7 @@ generate:
   models: true
   client: true
 output-options:
+  include-operation-ids:
+    - createFactory
+    - getCurrentFactory
   response-type-suffix: ClientResponse
-  skip-prune: true
