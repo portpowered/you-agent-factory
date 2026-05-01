@@ -4,6 +4,9 @@ BIN_DIR     := bin
 BUN         ?= bun
 GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
+FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
+FUNCTIONAL_LONG_TAGS ?= functionallong
+FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion
 SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
@@ -37,7 +40,7 @@ endif
 
 GO_TEST_TIMEOUT ?= 300s
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode  test-race fmt vet deps deps-tidy dashboard-verify ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode  test-race fmt vet deps deps-tidy dashboard-verify ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -82,6 +85,12 @@ test:
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
+
+test-functional:
+	$(GO) test $(FUNCTIONAL_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-functional-long:
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 script-timeout-companion-smoke-100:
 	$(GO) test ./tests/functional_test -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
