@@ -35,6 +35,8 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 		switch r.URL.Path {
 		case "/releases/latest":
 			http.Redirect(w, r, "/releases/tag/v1.2.3", http.StatusFound)
+		case "/releases/tag/v1.2.3":
+			w.WriteHeader(http.StatusOK)
 		case "/releases/download/v1.2.3/" + archiveName:
 			w.Write(archiveBytes)
 		case "/releases/download/v1.2.3/" + checksumName:
@@ -145,10 +147,73 @@ func TestInstallScript_FailsOnUnsupportedOperatingSystem(t *testing.T) {
 	}
 }
 
+func TestSmokeInstallScript_InstallsHostedScriptAndSmokesBinary(t *testing.T) {
+	t.Parallel()
+
+	skipIfInstallScriptUnsupported(t)
+
+	archiveName := "agent-factory_1.2.3_linux_amd64.tar.gz"
+	checksumName := "agent-factory_1.2.3_checksums.txt"
+	archiveBytes := buildTarGzArchive(t, "agent-factory", []byte("#!/usr/bin/env sh\nif [ \"${1:-}\" = \"--help\" ]; then\n  exit 0\nfi\necho installed-from-smoke\n"))
+	checksumContents := fmt.Sprintf("%s  %s\n", sha256Hex(archiveBytes), archiveName)
+	installScript := readInstallScript(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases/download/v1.2.3/install.sh":
+			w.Write(installScript)
+		case "/releases/download/v1.2.3/" + archiveName:
+			w.Write(archiveBytes)
+		case "/releases/download/v1.2.3/" + checksumName:
+			w.Write([]byte(checksumContents))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	installDir := filepath.Join(t.TempDir(), "bin")
+	output, err := runSmokeInstallScript(t, []string{
+		server.URL + "/releases/download/v1.2.3/install.sh",
+		"1.2.3",
+		installDir,
+	}, []string{
+		"AGENT_FACTORY_INSTALL_BASE_URL=" + server.URL + "/releases",
+		"AGENT_FACTORY_INSTALL_OS=linux",
+		"AGENT_FACTORY_INSTALL_ARCH=amd64",
+	})
+	if err != nil {
+		t.Fatalf("run smoke-install.sh: %v\n%s", err, output)
+	}
+
+	installedBinary := filepath.Join(installDir, "agent-factory")
+	info, statErr := os.Stat(installedBinary)
+	if statErr != nil {
+		t.Fatalf("stat installed binary: %v", statErr)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("installed binary mode = %v, want executable bit set", info.Mode())
+	}
+	if !strings.Contains(output, "hosted install smoke passed for "+installedBinary) {
+		t.Fatalf("smoke output = %q, want success message", output)
+	}
+}
+
 func runInstallScript(t *testing.T, env []string) (string, error) {
 	t.Helper()
 
 	cmd := exec.Command("sh", "install.sh")
+	cmd.Dir = testutil.MustRepoRoot(t)
+	cmd.Env = append(os.Environ(), env...)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func runSmokeInstallScript(t *testing.T, args []string, env []string) (string, error) {
+	t.Helper()
+
+	scriptArgs := append([]string{"scripts/release/smoke-install.sh"}, args...)
+	cmd := exec.Command("sh", scriptArgs...)
 	cmd.Dir = testutil.MustRepoRoot(t)
 	cmd.Env = append(os.Environ(), env...)
 	output, err := cmd.CombinedOutput()
@@ -171,6 +236,16 @@ func skipIfInstallScriptUnsupported(t *testing.T) {
 			t.Skip("install.sh runtime smoke requires sha256sum or shasum")
 		}
 	}
+}
+
+func readInstallScript(t *testing.T) []byte {
+	t.Helper()
+
+	contents, err := os.ReadFile(filepath.Join(testutil.MustRepoRoot(t), "install.sh"))
+	if err != nil {
+		t.Fatalf("read install.sh: %v", err)
+	}
+	return contents
 }
 
 func buildTarGzArchive(t *testing.T, name string, contents []byte) []byte {

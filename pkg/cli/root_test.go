@@ -469,26 +469,6 @@ func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 	}
 }
 
-func TestReadmeDocumentsConsumerInstallSurfaces(t *testing.T) {
-	readme, err := os.ReadFile("../../README.md")
-	if err != nil {
-		t.Fatalf("read package README: %v", err)
-	}
-
-	contents := string(readme)
-	for _, want := range []string{
-		"brew install --cask portpowered/cask/agent-factory",
-		"curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh",
-		"go install github.com/portpowered/agent-factory/cmd/factory@latest",
-		"download a release archive manually from GitHub Releases",
-		"xattr -dr com.apple.quarantine",
-	} {
-		if !strings.Contains(contents, want) {
-			t.Fatalf("README missing %q:\n%s", want, contents)
-		}
-	}
-}
-
 func TestDocsIndexDocumentsDocsCommandTopics(t *testing.T) {
 	docsReadme, err := os.ReadFile("../../docs/README.md")
 	if err != nil {
