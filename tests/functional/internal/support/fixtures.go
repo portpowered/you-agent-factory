@@ -40,6 +40,18 @@ func WriteAgentConfig(t *testing.T, dir, workerName, content string) {
 	}
 }
 
+func WriteWorkstationConfig(t *testing.T, dir, workstationName, content string) {
+	t.Helper()
+
+	path := filepath.Join(dir, "workstations", workstationName, "AGENTS.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create workstation config dir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 func AssertArgsContainSequence(t *testing.T, args, want []string) {
 	t.Helper()
 
@@ -88,5 +100,30 @@ func WriteWorkRequestFile(t *testing.T, path string, request interfaces.SubmitRe
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write work request file: %v", err)
+	}
+}
+
+func UpdateFactoryConfig(t *testing.T, dir string, mutate func(map[string]any)) {
+	t.Helper()
+
+	path := filepath.Join(dir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read factory.json: %v", err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal factory.json: %v", err)
+	}
+
+	mutate(cfg)
+
+	updated, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal factory.json: %v", err)
+	}
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		t.Fatalf("write factory.json: %v", err)
 	}
 }

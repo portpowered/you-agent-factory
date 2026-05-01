@@ -1,4 +1,4 @@
-package functional_test
+package guards_batch
 
 import (
 	"context"
@@ -13,12 +13,13 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // TestFactoryRequestBatch_CreatesOneTokenPerWorkItem validates that a
 // FACTORY_REQUEST_BATCH request creates one token per work item.
 func TestFactoryRequestBatch_CreatesOneTokenPerWorkItem(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
 	request := interfaces.WorkRequest{
 		RequestID: "request-batch-1",
@@ -50,7 +51,7 @@ func TestFactoryRequestBatch_CreatesOneTokenPerWorkItem(t *testing.T) {
 // the request batch are carried on each token and accessible during
 // dispatch (which is how they reach prompt rendering).
 func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "tags_test"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 
 	h := testutil.NewServiceTestHarness(t, dir)
 
@@ -83,7 +84,7 @@ func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
 		t.Fatal("expected at least one input token in dispatch")
 	}
 
-	tags := firstInputToken(checker.lastDispatch.InputTokens).Color.Tags
+	tags := support.FirstInputToken(checker.lastDispatch.InputTokens).Color.Tags
 
 	// Verify parent tags propagated.
 	if tags["branch"] != "feature/test" {
@@ -106,8 +107,8 @@ func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
 // verifies explicit factory project context wins over a token project tag in
 // rendered dispatch context while per-token project data stays available.
 func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderContext(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "tags_test"))
-	setWorkingDirectory(t, dir)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
+	support.SetWorkingDirectory(t, dir)
 
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"checker": {{Content: "checked COMPLETE"}},
@@ -140,7 +141,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 	}
 
 	call := calls[0]
-	if call.WorkingDirectory != resolvedRuntimePath(dir, "/workspaces/fixture-default-project/feature/project-override") {
+	if call.WorkingDirectory != support.ResolvedRuntimePath(dir, "/workspaces/fixture-default-project/feature/project-override") {
 		t.Fatalf("working directory = %q, want explicit factory project context path", call.WorkingDirectory)
 	}
 	if call.EnvVars["PROJECT"] != "fixture-default-project" {
@@ -159,7 +160,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 	if len(call.InputTokens) == 0 {
 		t.Fatal("expected provider request input tokens")
 	}
-	tags := firstInputToken(call.InputTokens).Color.Tags
+	tags := support.FirstInputToken(call.InputTokens).Color.Tags
 	if tags["project"] != "billing-api" {
 		t.Fatalf("normalized token project tag = %q, want billing-api", tags["project"])
 	}
@@ -172,8 +173,8 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 // factory-level project config reaches provider-time template context when the
 // submitted request does not include a project tag override.
 func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "tags_test"))
-	setWorkingDirectory(t, dir)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
+	support.SetWorkingDirectory(t, dir)
 
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"checker": {{Content: "checked COMPLETE"}},
@@ -208,7 +209,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 	if call.ProjectID != "fixture-default-project" {
 		t.Fatalf("provider dispatch project ID = %q, want fixture-default-project", call.ProjectID)
 	}
-	if call.WorkingDirectory != resolvedRuntimePath(dir, "/workspaces/fixture-default-project/feature/project-config") {
+	if call.WorkingDirectory != support.ResolvedRuntimePath(dir, "/workspaces/fixture-default-project/feature/project-config") {
 		t.Fatalf("working directory = %q, want factory project config path", call.WorkingDirectory)
 	}
 	if call.EnvVars["PROJECT"] != "fixture-default-project" {
@@ -227,7 +228,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 	if len(call.InputTokens) == 0 {
 		t.Fatal("expected provider request input tokens")
 	}
-	tags := firstInputToken(call.InputTokens).Color.Tags
+	tags := support.FirstInputToken(call.InputTokens).Color.Tags
 	if tags["project"] != "" {
 		t.Fatalf("normalized token project tag = %q, want no project tag override", tags["project"])
 	}
@@ -240,7 +241,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 // relations prevent dependent tokens from dispatching before their
 // predecessors reach the required terminal state.
 func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
 	request := interfaces.WorkRequest{
 		RequestID: "request-deps-1",
@@ -284,7 +285,7 @@ func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
 // service-level tests can submit canonical batches and inspect normalized work
 // through GetEngineStateSnapshot instead of runtime internals.
 func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
 	request := interfaces.WorkRequest{
 		RequestID: "request-snapshot-1",
@@ -354,14 +355,14 @@ func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T)
 // dependency enforcement, canonical history, idempotent retries, and
 // worker-emitted fanout together through the service harness.
 func TestFactoryRequestBatch_EndToEndSmoke(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
-	writeAgentConfig(t, dir, "processor", `---
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
+	support.WriteAgentConfig(t, dir, "processor", `---
 type: MODEL_WORKER
 model: test-model
 ---
 Process the input task.
 `)
-	writeAgentConfig(t, dir, "finisher", `---
+	support.WriteAgentConfig(t, dir, "finisher", `---
 type: MODEL_WORKER
 model: test-model
 ---
@@ -429,14 +430,14 @@ func TestFactoryRequestBatch_ChainingTraceFanIn_EndToEndSmoke(t *testing.T) {
 func newChainingTraceFanInHarness(t *testing.T) (*testutil.ServiceTestHarness, *testutil.MockWorkerMapProvider) {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
-	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
+	support.UpdateFactoryConfig(t, dir, func(cfg map[string]any) {
 		workTypes := cfg["workTypes"].([]any)
 		cfg["workTypes"] = append(workTypes, chainingTraceFanInWorkTypes()...)
 		workstations := cfg["workstations"].([]any)
 		cfg["workstations"] = append(workstations, chainingTraceFanInWorkstation())
 	})
-	writeWorkstationConfig(t, dir, "merge", "---\ntype: MODEL_WORKSTATION\n---\nMerge the completed work.\n")
+	support.WriteWorkstationConfig(t, dir, "merge", "---\ntype: MODEL_WORKSTATION\n---\nMerge the completed work.\n")
 
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {{Content: "merged lineage COMPLETE"}},
@@ -879,7 +880,7 @@ func assertWorkerGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryE
 func assertWorkerGeneratedBatchWorldState(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, lastFactoryEventTick(events))
+	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -1008,7 +1009,7 @@ func assertChainingTraceFanInEvents(t *testing.T, events []factoryapi.FactoryEve
 func assertChainingTraceFanInWorldState(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string, currentChainingTraceID string) {
 	t.Helper()
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, lastFactoryEventTick(events))
+	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

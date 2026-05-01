@@ -130,14 +130,18 @@ func stringPointerValue[T ~string](value *T) string {
 	return string(*value)
 }
 
-func lastFactoryEventTick(events []factoryapi.FactoryEvent) int {
-	tick := 0
-	for _, event := range events {
-		if event.Context.Tick > tick {
-			tick = event.Context.Tick
-		}
+func eventString(value *string) string {
+	if value == nil {
+		return ""
 	}
-	return tick
+	return *value
+}
+
+func eventStringSlice(values *[]string) []string {
+	if values == nil {
+		return nil
+	}
+	return *values
 }
 
 func runRecordReplayCLIWithCapturedStdout(t *testing.T, cfg runcli.RunConfig) (string, error) {

@@ -79,6 +79,21 @@ func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch interfaces.W
 	}, nil
 }
 
+type capturingExecutor struct {
+	result       interfaces.WorkResult
+	lastDispatch interfaces.WorkDispatch
+	callCount    int
+}
+
+func (e *capturingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.lastDispatch = dispatch
+	e.callCount++
+	result := e.result
+	result.DispatchID = dispatch.DispatchID
+	result.TransitionID = dispatch.TransitionID
+	return result, nil
+}
+
 type blockingExecutor struct {
 	releaseCh <-chan struct{}
 	mu        *sync.Mutex
