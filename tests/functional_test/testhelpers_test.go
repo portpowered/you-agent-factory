@@ -2,11 +2,16 @@ package functional_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
+	"testing"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/workers"
 )
 
 // fanoutParserExecutor dynamically spawns N page tokens with ParentID set
@@ -101,4 +106,52 @@ func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {
 		places[tok.PlaceID]++
 	}
 	return places
+}
+
+type fakeCommandRunner struct {
+	stdout   string
+	stderr   string
+	exitCode int
+}
+
+func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
+}
+
+func successRunner(stdout string) workers.CommandRunner {
+	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
+}
+
+func updateScriptFixtureFactory(t *testing.T, dir string, mutate func(map[string]any)) {
+	t.Helper()
+
+	path := filepath.Join(dir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read factory.json: %v", err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal factory.json: %v", err)
+	}
+
+	mutate(cfg)
+
+	updated, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal factory.json: %v", err)
+	}
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+}
+
+func containsEnv(env []string, expected string) bool {
+	for _, entry := range env {
+		if entry == expected {
+			return true
+		}
+	}
+	return false
 }

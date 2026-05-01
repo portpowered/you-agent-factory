@@ -1,116 +1,20 @@
-package functional_test
+package providers
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// fakeCommandRunner implements workers.CommandRunner for testing.
-// It returns preconfigured stdout, stderr, and exit code without
-// invoking any OS process.
-type fakeCommandRunner struct {
-	stdout   string
-	stderr   string
-	exitCode int
-}
-
-func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
-}
-
-type captureCommandRunner struct {
-	mu       sync.Mutex
-	workDirs []string
-	envs     [][]string
-}
-
-func (r *captureCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
-	r.mu.Lock()
-	r.workDirs = append(r.workDirs, req.WorkDir)
-	copiedEnv := make([]string, len(req.Env))
-	copy(copiedEnv, req.Env)
-	r.envs = append(r.envs, copiedEnv)
-	r.mu.Unlock()
-	return workers.CommandResult{Stdout: []byte("script-output-ok")}, nil
-}
-
-func (r *captureCommandRunner) LastWorkDir() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.workDirs) == 0 {
-		return ""
-	}
-	return r.workDirs[len(r.workDirs)-1]
-}
-
-func (r *captureCommandRunner) LastEnv() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.envs) == 0 {
-		return nil
-	}
-	copied := make([]string, len(r.envs[len(r.envs)-1]))
-	copy(copied, r.envs[len(r.envs)-1])
-	return copied
-}
-
-type timeoutThenSuccessCommandRunner struct {
-	mu        sync.Mutex
-	callCount int
-}
-
-func newTimeoutThenSuccessCommandRunner() *timeoutThenSuccessCommandRunner {
-	return &timeoutThenSuccessCommandRunner{}
-}
-
-func (r *timeoutThenSuccessCommandRunner) Run(ctx context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	r.mu.Lock()
-	r.callCount++
-	call := r.callCount
-	r.mu.Unlock()
-
-	if call == 1 {
-		<-ctx.Done()
-		return workers.CommandResult{}, ctx.Err()
-	}
-
-	return workers.CommandResult{Stdout: []byte("script-output-after-retry")}, nil
-}
-
-func (r *timeoutThenSuccessCommandRunner) CallCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.callCount
-}
-
-// successRunner returns a CommandRunner that simulates a successful command
-// with the given stdout output.
-func successRunner(stdout string) workers.CommandRunner {
-	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
-}
-
-// failureRunner returns a CommandRunner that simulates a command exiting
-// with code 1 and the given stderr output.
-func failureRunner(stderr string) workers.CommandRunner {
-	return &fakeCommandRunner{stderr: stderr, exitCode: 1}
-}
-
-// TestScriptExecutor_Success verifies that when a token arrives at a position
-// mapped to a script executor, the script runs, and on success the token
-// is released to the output place.
 func TestScriptExecutor_Success(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -125,23 +29,11 @@ func TestScriptExecutor_Success(t *testing.T) {
 		HasNoTokenInPlace("task:init").
 		HasNoTokenInPlace("task:failed")
 
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:done" {
-			payload := string(tok.Color.Payload)
-			if payload != "script-output-ok" {
-				t.Errorf("expected payload %q, got %q", "script-output-ok", payload)
-			}
-			return
-		}
-	}
-	t.Error("no token found in task:done")
+	assertTokenPayload(t, h.Marking(), "task:done", "script-output-ok")
 }
 
-// TestScriptExecutor_Failure verifies that when a script exits with a non-zero
-// exit code, the token is routed to the failure place (consistent with US-004).
 func TestScriptExecutor_Failure(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -157,10 +49,8 @@ func TestScriptExecutor_Failure(t *testing.T) {
 		HasNoTokenInPlace("task:done")
 }
 
-// TestScriptExecutor_PreservesTokenColor verifies that the script executor
-// preserves input token metadata (WorkID, TraceID, Tags) on the output token.
 func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("original-payload"))
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -177,9 +67,8 @@ func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 	snap := h.Marking()
 	for _, tok := range snap.Tokens {
 		if tok.PlaceID == "task:done" {
-			payload := string(tok.Color.Payload)
-			if payload != "new-payload" {
-				t.Errorf("expected payload %q, got %q", "new-payload", payload)
+			if got := string(tok.Color.Payload); got != "new-payload" {
+				t.Errorf("expected payload %q, got %q", "new-payload", got)
 			}
 			if tok.Color.WorkTypeID != "task" {
 				t.Errorf("expected WorkTypeID 'task', got %q", tok.Color.WorkTypeID)
@@ -190,11 +79,8 @@ func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 	t.Error("no token found in task:done")
 }
 
-// TestScriptExecutor_SuccessWithColorMetadata (US-004) verifies that a successful
-// script routes the token from init to done with preserved
-// color metadata (WorkID, WorkTypeID, TraceID, Tags).
 func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkID:     "work-seed-001",
 		WorkTypeID: "task",
@@ -218,9 +104,8 @@ func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 	snap := h.Marking()
 	for _, tok := range snap.Tokens {
 		if tok.PlaceID == "task:done" {
-			payload := string(tok.Color.Payload)
-			if payload != "success-output" {
-				t.Errorf("expected payload %q, got %q", "success-output", payload)
+			if got := string(tok.Color.Payload); got != "success-output" {
+				t.Errorf("expected payload %q, got %q", "success-output", got)
 			}
 			if tok.Color.WorkID != "work-seed-001" {
 				t.Errorf("WorkID: want 'work-seed-001', got %q", tok.Color.WorkID)
@@ -243,10 +128,8 @@ func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 	t.Error("no token found in task:done")
 }
 
-// TestScriptExecutor_FailureRoutesToFailedPlace (US-005) verifies that a script
-// exiting with non-zero routes the token to task:failed with error information.
 func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -261,11 +144,9 @@ func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
 		HasNoTokenInPlace("task:init").
 		HasNoTokenInPlace("task:done")
 
-	// Verify the failed token has error information in its history.
 	snap := h.Marking()
 	for _, tok := range snap.Tokens {
 		if tok.PlaceID == "task:failed" {
-			// Check LastError or FailureLog for stderr content.
 			if strings.Contains(tok.History.LastError, "script-error-output") {
 				return
 			}
@@ -282,29 +163,15 @@ func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
 	t.Error("no token found in task:failed")
 }
 
-// echoArgsRunner returns a CommandRunner that echoes back the received args
-// as stdout, joined by newlines. This lets tests verify that template
-// substitution in AGENTS.md args resolves correctly end-to-end.
-type echoArgsRunner struct{}
-
-func (e *echoArgsRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(strings.Join(req.Args, "\n"))}, nil
-}
-
-// TestScriptExecutor_ArgTemplating verifies that script args containing
-// Go template expressions (e.g., {{ (index .Inputs 0).Name }}) are resolved
-// using the PromptData model before being passed to the CommandRunner.
 func TestScriptExecutor_ArgTemplating(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
-	// Override the fixture AGENTS.md with templatized args.
 	agentsMD := "---\ntype: SCRIPT_WORKER\ncommand: echo\nargs:\n  - \"{{ (index .Inputs 0).Name }}\"\n  - \"{{ (index .Inputs 0).WorkID }}\"\n---\n"
 	agentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
 	if err := os.WriteFile(agentsPath, []byte(agentsMD), 0o644); err != nil {
 		t.Fatalf("write AGENTS.md: %v", err)
 	}
 
-	// Seed a token with Name and WorkID set.
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "prd-my-feature",
 		WorkID:     "work-abc-123",
@@ -325,24 +192,11 @@ func TestScriptExecutor_ArgTemplating(t *testing.T) {
 		HasNoTokenInPlace("task:init").
 		HasNoTokenInPlace("task:failed")
 
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:done" {
-			payload := string(tok.Color.Payload)
-			if payload != "prd-my-feature\nwork-abc-123" {
-				t.Errorf("expected payload %q, got %q", "prd-my-feature\\nwork-abc-123", payload)
-			}
-			return
-		}
-	}
-	t.Error("no token found in task:done")
+	assertTokenPayload(t, h.Marking(), "task:done", "prd-my-feature\nwork-abc-123")
 }
 
-// TestScriptExecutor_WorkTypeIDFromTargetPlace verifies that the output token's
-// WorkTypeID is always stamped from the target place (Rule 1), and same-type
-// WorkID is preserved (Rule 2 — same work item advancing through states).
 func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "type-stamp-test",
 		WorkID:     "work-type-stamp",
@@ -361,11 +215,9 @@ func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 	snap := h.Marking()
 	for _, tok := range snap.Tokens {
 		if tok.PlaceID == "task:done" {
-			// WorkTypeID must be "task" (from the target place).
 			if tok.Color.WorkTypeID != "task" {
 				t.Errorf("WorkTypeID: want 'task', got %q", tok.Color.WorkTypeID)
 			}
-			// Same-type transition: WorkID is preserved (same work item advancing).
 			if tok.Color.WorkID != "work-type-stamp" {
 				t.Errorf("WorkID: want 'work-type-stamp' (preserved for same-type), got %q", tok.Color.WorkID)
 			}
@@ -375,12 +227,9 @@ func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 	t.Error("no token found in task:done")
 }
 
-// TestScriptExecutor_ArgTemplatingWithTags verifies that tag access via
-// canonical tag access works in script args.
 func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
-	// Override AGENTS.md with tag template args.
 	agentsMD := "---\ntype: SCRIPT_WORKER\ncommand: echo\nargs:\n  - '{{ index (index .Inputs 0).Tags \"env\" }}'\n  - '{{ index (index .Inputs 0).Tags \"team\" }}'\n---\n"
 	agentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
 	if err := os.WriteFile(agentsPath, []byte(agentsMD), 0o644); err != nil {
@@ -405,22 +254,12 @@ func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
 	h.Assert().
 		PlaceTokenCount("task:done", 1)
 
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:done" {
-			payload := string(tok.Color.Payload)
-			if payload != "staging\ninfra" {
-				t.Errorf("expected payload %q, got %q", "staging\\ninfra", payload)
-			}
-			return
-		}
-	}
-	t.Error("no token found in task:done")
+	assertTokenPayload(t, h.Marking(), "task:done", "staging\ninfra")
 }
 
 func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
-	setWorkingDirectory(t, dir)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	support.SetWorkingDirectory(t, dir)
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
 		workstations := cfg["workstations"].([]any)
@@ -455,8 +294,8 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 		PlaceTokenCount("task:done", 1).
 		HasNoTokenInPlace("task:failed")
 
-	if got := runner.LastWorkDir(); got != resolvedRuntimePath(dir, "/tmp/feature-script") {
-		t.Fatalf("expected script runner work dir %q, got %q", resolvedRuntimePath(dir, "/tmp/feature-script"), got)
+	if got := runner.LastWorkDir(); got != support.ResolvedRuntimePath(dir, "/tmp/feature-script") {
+		t.Fatalf("expected script runner work dir %q, got %q", support.ResolvedRuntimePath(dir, "/tmp/feature-script"), got)
 	}
 
 	env := runner.LastEnv()
@@ -469,8 +308,8 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 }
 
 func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTemplates(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
-	setWorkingDirectory(t, dir)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	support.SetWorkingDirectory(t, dir)
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
 		cfg["workTypes"] = []any{
@@ -537,7 +376,7 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 		"name=runtime-template-name",
 		"work=work-runtime-config",
 		"payload=runtime-payload",
-		"workdir=" + resolvedRuntimePath(dir, "/runtime/runtime-template-name/feature-runtime-config"),
+		"workdir=" + support.ResolvedRuntimePath(dir, "/runtime/runtime-template-name/feature-runtime-config"),
 		"env_branch=feature-runtime-config",
 	}
 	assertCommandArgs(t, req, wantArgs)
@@ -546,7 +385,7 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 }
 
 func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
 	workstationAgentsPath := filepath.Join(dir, "workstations", "run-script", "AGENTS.md")
 	agentsMD := "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n"
@@ -592,7 +431,7 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 }
 
 func TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOnLaterTick(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
 	workerAgentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
 	agentsMD := "---\ntype: SCRIPT_WORKER\ncommand: echo\ntimeout: 10ms\n---\nExecute the script.\n"
@@ -631,12 +470,9 @@ func TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOn
 	}
 }
 
-// TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios verifies the
-// real async worker-pool + script-wrap path for the prompt-renderer
-// combinations that regressed when both template and payload were absent.
 func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 	t.Run("SingleFileInputWithTemplateAndPayload_Completes", func(t *testing.T) {
-		dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 		writeWorkstationPromptTemplate(t, dir, "payload: {{ (index .Inputs 0).Payload }}")
 		testutil.WriteSeedFile(t, dir, "task", []byte("template-input"))
 
@@ -656,7 +492,7 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 	})
 
 	t.Run("NoTemplateWithPayload_Completes", func(t *testing.T) {
-		dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 		testutil.WriteSeedFile(t, dir, "task", []byte("payload-only"))
 
 		h := testutil.NewServiceTestHarness(t, dir,
@@ -675,7 +511,7 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 	})
 
 	t.Run("NoTemplateAndNoPayload_Completes", func(t *testing.T) {
-		dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_no_template"))
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_no_template"))
 
 		h := testutil.NewServiceTestHarness(t, dir,
 			testutil.WithFullWorkerPoolAndScriptWrap(),
@@ -700,117 +536,4 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 
 		assertTokenPayload(t, h.Marking(), "task:done", "empty-input-ok")
 	})
-}
-
-func writeRuntimeMergeWorkstationConfig(t *testing.T, dir string) {
-	t.Helper()
-
-	body := strings.Join([]string{
-		`runtime prompt name={{ (index .Inputs 0).Name }}`,
-		`runtime prompt work={{ (index .Inputs 0).WorkID }}`,
-		`runtime prompt workdir={{ .Context.WorkDir }}`,
-		`runtime prompt env={{ index .Context.Env "RUNTIME_BRANCH" }}`,
-	}, "\n")
-	agentsMD := strings.Join([]string{
-		"---",
-		"type: MODEL_WORKSTATION",
-		"worker: script-worker",
-		"outputs:",
-		"  - workType: task",
-		"    state: runtime-done",
-		`workingDirectory: '/runtime/{{ (index .Inputs 0).Name }}/{{ index (index .Inputs 0).Tags "branch" }}'`,
-		`worktree: 'worktrees/{{ index (index .Inputs 0).Tags "branch" }}/{{ (index .Inputs 0).WorkID }}'`,
-		"env:",
-		`  RUNTIME_BRANCH: '{{ index (index .Inputs 0).Tags "branch" }}'`,
-		`  RUNTIME_NAME: '{{ (index .Inputs 0).Name }}'`,
-		"---",
-		body,
-	}, "\n") + "\n"
-
-	writeFixtureFile(t, dir, []string{"workstations", "run-script", "AGENTS.md"}, agentsMD)
-}
-
-func assertRuntimeMergeCommandRequest(t *testing.T, dir string, req workers.CommandRequest) {
-	t.Helper()
-
-	if req.Command != "echo" {
-		t.Fatalf("command = %q, want %q", req.Command, "echo")
-	}
-	if req.WorkDir != resolvedRuntimePath(dir, "/runtime/runtime-template-name/feature-runtime-config") {
-		t.Fatalf("work dir = %q, want resolved runtime working_directory", req.WorkDir)
-	}
-	if req.WorkstationName != "run-script" {
-		t.Fatalf("workstation name = %q, want run-script", req.WorkstationName)
-	}
-	if req.WorkerType != "script-worker" {
-		t.Fatalf("worker type = %q, want script-worker", req.WorkerType)
-	}
-	for _, want := range []string{
-		"INLINE_ONLY=true",
-		"RUNTIME_BRANCH=feature-runtime-config",
-		"RUNTIME_NAME=runtime-template-name",
-	} {
-		if !containsEnv(req.Env, want) {
-			t.Fatalf("script runner env missing %s in %v", want, req.Env)
-		}
-	}
-}
-
-func updateScriptFixtureFactory(t *testing.T, dir string, mutate func(map[string]any)) {
-	t.Helper()
-
-	path := filepath.Join(dir, "factory.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read factory.json: %v", err)
-	}
-
-	var cfg map[string]any
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		t.Fatalf("unmarshal factory.json: %v", err)
-	}
-
-	mutate(cfg)
-
-	updated, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal factory.json: %v", err)
-	}
-	if err := os.WriteFile(path, updated, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
-}
-
-func writeWorkstationPromptTemplate(t *testing.T, dir, templateBody string) {
-	t.Helper()
-
-	path := filepath.Join(dir, "workstations", "run-script", "AGENTS.md")
-	content := "---\ntype: MODEL_WORKSTATION\n---\n" + templateBody + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write workstation AGENTS.md: %v", err)
-	}
-}
-
-func assertTokenPayload(t *testing.T, snap *petri.MarkingSnapshot, placeID, want string) {
-	t.Helper()
-
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == placeID {
-			if got := string(tok.Color.Payload); got != want {
-				t.Fatalf("expected payload %q, got %q", want, got)
-			}
-			return
-		}
-	}
-
-	t.Fatalf("no token found in %s", placeID)
-}
-
-func containsEnv(env []string, expected string) bool {
-	for _, entry := range env {
-		if entry == expected {
-			return true
-		}
-	}
-	return false
 }
