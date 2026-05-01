@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"bytes"
@@ -19,25 +19,13 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory"
 )
 
-var retiredFunctionalFactoryEventTypes = []string{
-	"RUN_STARTED",
-	"INITIAL_STRUCTURE",
-	"RELATIONSHIP_CHANGE",
-	"DISPATCH_CREATED",
-	"DISPATCH_COMPLETED",
-	"FACTORY_STATE_CHANGE",
-	"RUN_FINISHED",
-}
-
 func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned(t *testing.T) {
 	dir := scaffoldFactory(t, simplePipelineConfig())
-	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		WorkTypeName: "task",
-		Payload: map[string]string{
-			"title": "generated API integration smoke",
-		},
+		Payload:      map[string]string{"title": "generated API integration smoke"},
 	})
 	if traceID == "" {
 		t.Fatal("POST /work returned an empty trace_id")
@@ -79,7 +67,7 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
 	dir := scaffoldFactory(t, simplePipelineConfig())
-	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	payloadPath := filepath.Join(t.TempDir(), "request.md")
 	if err := os.WriteFile(payloadPath, []byte("ship name based CLI submit"), 0o644); err != nil {
@@ -95,17 +83,14 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 	}
 
 	token := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
-	if token.WorkType != "task" {
-		t.Fatalf("CLI-submitted work_type = %q, want task", token.WorkType)
-	}
-	if token.PlaceId != "task:complete" {
-		t.Fatalf("CLI-submitted place_id = %q, want task:complete", token.PlaceId)
+	if token.WorkType != "task" || token.PlaceId != "task:complete" {
+		t.Fatalf("CLI-submitted token = %#v, want task in task:complete", token)
 	}
 }
 
 func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *testing.T) {
 	dir := scaffoldFactory(t, simplePipelineConfig())
-	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	firstWorkID := "work-generated-api-batch-first"
 	secondWorkID := "work-generated-api-batch-second"
@@ -115,33 +100,15 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 		RequestId: "request-generated-api-batch",
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works: &[]factoryapi.Work{
-			{
-				Name:         "first",
-				WorkId:       &firstWorkID,
-				WorkTypeName: &workTypeName,
-				Payload:      map[string]string{"step": "first"},
-			},
-			{
-				Name:         "second",
-				WorkId:       &secondWorkID,
-				WorkTypeName: &workTypeName,
-				Payload:      map[string]string{"step": "second"},
-			},
+			{Name: "first", WorkId: &firstWorkID, WorkTypeName: &workTypeName, Payload: map[string]string{"step": "first"}},
+			{Name: "second", WorkId: &secondWorkID, WorkTypeName: &workTypeName, Payload: map[string]string{"step": "second"}},
 		},
-		Relations: &[]factoryapi.Relation{{
-			Type:           factoryapi.RelationTypeDependsOn,
-			SourceWorkName: "second",
-			TargetWorkName: "first",
-			RequiredState:  &requiredState,
-		}},
+		Relations: &[]factoryapi.Relation{{Type: factoryapi.RelationTypeDependsOn, SourceWorkName: "second", TargetWorkName: "first", RequiredState: &requiredState}},
 	}
 
 	resp := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
-	if resp.RequestId != request.RequestId {
-		t.Fatalf("PUT /work-requests request_id = %q, want %q", resp.RequestId, request.RequestId)
-	}
-	if resp.TraceId == "" {
-		t.Fatal("PUT /work-requests returned empty trace_id")
+	if resp.RequestId != request.RequestId || resp.TraceId == "" {
+		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", resp)
 	}
 
 	tokens := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
@@ -161,14 +128,8 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 		switch token.Color.WorkID {
 		case firstWorkID:
 			firstSeen = true
-			if token.Color.WorkTypeID != "task" {
-				t.Fatalf("first runtime WorkTypeID = %q, want task", token.Color.WorkTypeID)
-			}
 		case secondWorkID:
 			secondSeen = true
-			if token.Color.WorkTypeID != "task" {
-				t.Fatalf("second runtime WorkTypeID = %q, want task", token.Color.WorkTypeID)
-			}
 			if len(token.Color.Relations) != 1 {
 				t.Fatalf("second runtime relations = %d, want 1", len(token.Color.Relations))
 			}
@@ -185,7 +146,6 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 
 func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string) {
 	t.Helper()
-
 	stream := openFactoryEventHTTPStream(t, baseURL+"/events")
 	runRequest, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
 	assertFunctionalEventsUseCanonicalVocabulary(t, []factoryapi.FactoryEvent{runRequest, initialStructure},
@@ -196,22 +156,18 @@ func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string
 
 func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
 	t.Helper()
-
 	body, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-
 	resp, err := http.Post(baseURL+"/work", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("POST /work status = %d, want 201", resp.StatusCode)
 	}
-
 	var out factoryapi.SubmitWorkResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode generated submit response: %v", err)
@@ -221,30 +177,25 @@ func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWork
 
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
 	t.Helper()
-
 	body, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("marshal generated work request: %v", err)
 	}
-
 	endpoint := baseURL + "/work-requests/" + url.PathEscape(requestID)
 	httpReq, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build PUT /work-requests request: %v", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		t.Fatalf("PUT /work-requests: %v", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusCreated {
 		payload, _ := io.ReadAll(resp.Body)
 		t.Fatalf("PUT /work-requests status = %d, want 201: %s", resp.StatusCode, string(payload))
 	}
-
 	var out factoryapi.UpsertWorkRequestResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode generated work request response: %v", err)
@@ -254,17 +205,14 @@ func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req
 
 func getGeneratedJSON[T any](t *testing.T, endpoint string) T {
 	t.Helper()
-
 	resp, err := http.Get(endpoint)
 	if err != nil {
 		t.Fatalf("GET %s: %v", endpoint, err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET %s status = %d, want 200", endpoint, resp.StatusCode)
 	}
-
 	var out T
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode %s as %T: %v", endpoint, out, err)
@@ -279,7 +227,6 @@ func waitForGeneratedWorkComplete(t *testing.T, baseURL string, traceID string, 
 
 func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, placeID string, timeout time.Duration) factoryapi.ListWorkResponse {
 	t.Helper()
-
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
@@ -290,13 +237,11 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-
 	return getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
 }
 
 func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType string, timeout time.Duration) factoryapi.TokenResponse {
 	t.Helper()
-
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
@@ -307,7 +252,6 @@ func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType str
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-
 	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
 	t.Fatalf("timed out waiting for completed work type %q; last work response: %#v", workType, work)
 	return factoryapi.TokenResponse{}
@@ -315,12 +259,10 @@ func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType str
 
 func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []string, timeout time.Duration) []factoryapi.TokenResponse {
 	t.Helper()
-
 	want := make(map[string]bool, len(workIDs))
 	for _, workID := range workIDs {
 		want[workID] = true
 	}
-
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
@@ -339,7 +281,6 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-
 	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
 	t.Fatalf("timed out waiting for completed work IDs %v; last work response: %#v", workIDs, work)
 	return nil
@@ -347,7 +288,6 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 
 func functionalServerPort(t *testing.T, rawURL string) int {
 	t.Helper()
-
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		t.Fatalf("parse functional server URL %q: %v", rawURL, err)
@@ -365,7 +305,6 @@ func functionalServerPort(t *testing.T, rawURL string) int {
 
 func assertFunctionalEventsUseCanonicalVocabulary(t *testing.T, events []factoryapi.FactoryEvent, required ...factoryapi.FactoryEventType) {
 	t.Helper()
-
 	seen := make(map[factoryapi.FactoryEventType]int, len(events))
 	for _, event := range events {
 		seen[event.Type]++

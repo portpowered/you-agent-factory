@@ -1,0 +1,207 @@
+package runtime_api
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/portpowered/agent-factory/pkg/api"
+	"github.com/portpowered/agent-factory/pkg/apisurface"
+	"github.com/portpowered/agent-factory/pkg/config"
+	"github.com/portpowered/agent-factory/pkg/factory"
+	"github.com/portpowered/agent-factory/pkg/factory/state"
+	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/agent-factory/pkg/service"
+	"go.uber.org/zap"
+)
+
+type functionalAPIServer struct {
+	httpSrv *httptest.Server
+	factory apisurface.APISurface
+	service *service.FactoryService
+	cancel  context.CancelFunc
+	done    chan struct{}
+}
+
+func scaffoldFactory(t *testing.T, cfg map[string]any) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal factory config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	if workstations, ok := cfg["workstations"].([]map[string]any); ok {
+		for _, ws := range workstations {
+			name, _ := ws["name"].(string)
+			if name == "" {
+				continue
+			}
+			wsDir := filepath.Join(dir, "workstations", name)
+			if err := os.MkdirAll(wsDir, 0o755); err != nil {
+				t.Fatalf("create workstation dir %s: %v", name, err)
+			}
+			agentsMD := "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"
+			if err := os.WriteFile(filepath.Join(wsDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
+				t.Fatalf("write workstation AGENTS.md for %s: %v", name, err)
+			}
+		}
+	}
+
+	return dir
+}
+
+func simplePipelineConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": map[string]string{"workType": "task", "state": "failed"},
+		}},
+	}
+}
+
+func persistTestPipelineConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "stage1", Type: interfaces.StateTypeProcessing},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "step-worker"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{Name: "step1", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}},
+			{Name: "finish", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}},
+		},
+	}
+}
+
+func startFunctionalServerWithConfig(
+	t *testing.T,
+	factoryDir string,
+	useMockWorkers bool,
+	configure func(*service.FactoryServiceConfig),
+	extraOpts ...factory.FactoryOption,
+) *functionalAPIServer {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var handler http.Handler
+	var runtimeFactory apisurface.APISurface
+	readyCh := make(chan struct{})
+
+	cfg := &service.FactoryServiceConfig{
+		Dir:          factoryDir,
+		Port:         1,
+		Logger:       zap.NewNop(),
+		ExtraOptions: extraOpts,
+		APIServerStarter: func(ctx context.Context, f apisurface.APISurface, port int, l *zap.Logger) error {
+			runtimeFactory = f
+			handler = api.NewServer(f, 0, l).Handler()
+			close(readyCh)
+			<-ctx.Done()
+			return nil
+		},
+	}
+	if useMockWorkers {
+		cfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
+	}
+	if configure != nil {
+		configure(cfg)
+	}
+
+	svc, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		cancel()
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := svc.Run(ctx); err != nil && err != context.Canceled {
+			fmt.Printf("runtime_api FunctionalServer: svc.Run ended: %v\n", err)
+		}
+	}()
+
+	select {
+	case <-readyCh:
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Fatal("FunctionalServer: timed out waiting for API handler")
+	}
+
+	if cfg.RuntimeMode == interfaces.RuntimeModeService {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			snapshot, err := svc.GetEngineStateSnapshot(context.Background())
+			if err == nil && snapshot.FactoryState == string(interfaces.FactoryStateRunning) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	httpSrv := httptest.NewServer(handler)
+	server := &functionalAPIServer{
+		httpSrv: httpSrv,
+		factory: runtimeFactory,
+		service: svc,
+		cancel:  cancel,
+		done:    done,
+	}
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
+		httpSrv.Close()
+	})
+	return server
+}
+
+func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool, extraOpts ...factory.FactoryOption) *functionalAPIServer {
+	t.Helper()
+	return startFunctionalServerWithConfig(t, factoryDir, useMockWorkers, nil, extraOpts...)
+}
+
+func (fs *functionalAPIServer) URL() string {
+	return fs.httpSrv.URL
+}
+
+func (fs *functionalAPIServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+	snapshot, err := fs.service.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	return snapshot
+}

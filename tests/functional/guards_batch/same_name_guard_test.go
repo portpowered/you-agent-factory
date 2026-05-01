@@ -1,4 +1,4 @@
-package functional_test
+package guards_batch
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/config"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestSameNameGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "same_name_guard_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
 	factoryJSON, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("read factory.json: %v", err)
@@ -80,7 +80,7 @@ func TestSameNameGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 }
 
 func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "same_name_guard_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -102,9 +102,9 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	waitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
-	waitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, time.Second)
-	waitForHarnessPlaceTokenCount(t, h, "task:ready", 0, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 0, time.Second)
 
 	h.Assert().
 		PlaceTokenCount("task:matched", 1).
@@ -122,7 +122,7 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 }
 
 func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "same_name_guard_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -144,8 +144,8 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	waitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
-	waitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)
 
 	deadline := time.Now().Add(200 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -156,7 +156,7 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetEngineStateSnapshot: %v", err)
 		}
-		if placeTokenCount(snapshot.Marking, "task:matched") != 0 {
+		if support.PlaceTokenCount(snapshot.Marking, "task:matched") != 0 {
 			t.Fatalf("expected no matched output for mismatched names, got marking %#v", snapshot.Marking.PlaceTokens)
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -166,34 +166,4 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("factory run error: %v", err)
 	}
-}
-
-func waitForHarnessPlaceTokenCount(
-	t *testing.T,
-	h *testutil.ServiceTestHarness,
-	placeID string,
-	want int,
-	timeout time.Duration,
-) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot, err := h.GetEngineStateSnapshot()
-		if err != nil {
-			t.Fatalf("GetEngineStateSnapshot: %v", err)
-		}
-		if placeTokenCount(snapshot.Marking, placeID) == want {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	t.Fatalf("timed out waiting for %d token(s) in %s; marking=%#v", want, placeID, snapshot.Marking.PlaceTokens)
-}
-
-func placeTokenCount(marking petri.MarkingSnapshot, placeID string) int {
-	return len(marking.PlaceTokens[placeID])
 }

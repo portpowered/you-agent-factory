@@ -1,44 +1,31 @@
-package functional_test
+package runtime_api
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+
 	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
 	"github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/replay"
-	"os"
-	"path/filepath"
-	"reflect"
-	"testing"
 )
 
-// portos:func-length-exception owner=agent-factory reason=topology-projection-functional-smoke review=2026-07-18 removal=split-live-stream-replay-config-and-projection-assertions-before-next-topology-projection-change
 func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testing.T) {
 	dir := scaffoldFactory(t, map[string]any{
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
+		"workTypes": []map[string]any{{"name": "task", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}, {"name": "failed", "type": "FAILED"}}}},
 		"resources": []map[string]any{{"name": "executor-slot", "capacity": 2}},
 		"workers":   []map[string]string{{"name": "executor"}},
 		"workstations": []map[string]any{{
-			"id":        "process-task-id",
-			"name":      "process-task",
-			"worker":    "executor",
+			"id": "process-task-id", "name": "process-task", "worker": "executor",
 			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": map[string]string{"workType": "task", "state": "failed"},
 			"resources": []map[string]any{{"name": "executor-slot", "capacity": 1}},
-			"guards": []map[string]any{{
-				"type":        "visit_count",
-				"workstation": "process-task",
-				"maxVisits":   3,
-			}},
+			"guards":    []map[string]any{{"type": "visit_count", "workstation": "process-task", "maxVisits": 3}},
 			"stopWords": []string{"BLOCKED"},
 		}},
 	})
@@ -63,7 +50,7 @@ stopWords: ["DONE"]
 Process {{ (index .Inputs 0).WorkID }}.
 `)
 
-	server := StartFunctionalServer(t, dir, false, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, false, factory.WithServiceMode())
 	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
 	requireFunctionalEventStreamPrelude(t, stream)
 	events, err := server.service.GetFactoryEvents(context.Background())
@@ -81,39 +68,21 @@ Process {{ (index .Inputs 0).WorkID }}.
 
 	replayProjection := projectReplayInitialStructureFromEmbeddedConfig(t, dir)
 
-	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{
-		ID:            "executor",
-		Name:          "executor",
-		Provider:      "script_wrap",
-		ModelProvider: "codex",
-		Model:         "gpt-5.4",
-		Config:        map[string]string{"type": interfaces.WorkerTypeModel},
-	})
+	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "script_wrap", ModelProvider: "codex", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
 	assertTopologyWorkstation(t, liveProjection, "process-task", "executor")
 	assertTopologyResource(t, liveProjection, "executor-slot", 2)
-	assertTopologyWorker(t, replayProjection, interfaces.FactoryWorker{
-		ID:            "executor",
-		Name:          "executor",
-		Provider:      "script_wrap",
-		ModelProvider: "codex",
-		Model:         "gpt-5.4",
-		Config:        map[string]string{"type": interfaces.WorkerTypeModel},
-	})
+	assertTopologyWorker(t, replayProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "script_wrap", ModelProvider: "codex", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
 	assertTopologyWorkstation(t, replayProjection, "process-task", "executor")
 	assertTopologyResource(t, replayProjection, "executor-slot", 2)
 }
 
 func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) interfaces.InitialStructurePayload {
 	t.Helper()
-
 	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generatedFactory, err := replay.GeneratedFactoryFromLoadedConfig(
-		loaded,
-		replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
-	)
+	generatedFactory, err := replay.GeneratedFactoryFromLoadedConfig(loaded, replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()))
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
@@ -131,7 +100,6 @@ func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) i
 
 func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) {
 	t.Helper()
-
 	path := filepath.Join(dir, "workstations", workstationName, "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("create workstation config dir %s: %v", filepath.Dir(path), err)
@@ -143,7 +111,6 @@ func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) 
 
 func assertTopologyWorker(t *testing.T, payload interfaces.InitialStructurePayload, want interfaces.FactoryWorker) {
 	t.Helper()
-
 	for _, worker := range payload.Workers {
 		if reflect.DeepEqual(worker, want) {
 			return
@@ -154,7 +121,6 @@ func assertTopologyWorker(t *testing.T, payload interfaces.InitialStructurePaylo
 
 func assertTopologyWorkstation(t *testing.T, payload interfaces.InitialStructurePayload, id, workerID string) {
 	t.Helper()
-
 	for _, workstation := range payload.Workstations {
 		if workstation.ID == id && workstation.WorkerID == workerID {
 			if workstation.Config["type"] != interfaces.WorkstationTypeModel {
@@ -168,7 +134,6 @@ func assertTopologyWorkstation(t *testing.T, payload interfaces.InitialStructure
 
 func assertTopologyResource(t *testing.T, payload interfaces.InitialStructurePayload, id string, capacity int) {
 	t.Helper()
-
 	for _, resource := range payload.Resources {
 		if resource.ID == id && resource.Capacity == capacity {
 			return

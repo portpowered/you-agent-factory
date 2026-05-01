@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"context"
@@ -7,28 +7,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-
 	"github.com/portpowered/agent-factory/pkg/buffers"
 	"github.com/portpowered/agent-factory/pkg/factory/engine"
 	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/factory/subsystems"
+	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// TestRuntimeState_ThreeStagePipeline validates that a 3-stage pipeline processes
-// 5 work items to terminal places and records dispatch history with non-zero durations.
-// Uses the async service harness so that dispatch tracking is handled by the engine.
 func TestRuntimeState_ThreeStagePipeline(t *testing.T) {
 	cfg := threeStageConfig()
 	dir := testutil.ScaffoldFactoryDir(t, cfg)
 
 	const sleepDuration = 10 * time.Millisecond
-	h := testutil.NewServiceTestHarness(t, dir, // TODO: migrate to WithFullWorkerPoolAndScriptWrap
-		testutil.WithRunAsync())
+	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
 	h.SetCustomExecutor("step-worker", &sleepyExecutor{sleep: sleepDuration})
 
 	const numItems = 5
@@ -45,7 +41,6 @@ func TestRuntimeState_ThreeStagePipeline(t *testing.T) {
 		t.Fatalf("RuntimeStatus = %q, want %q", rtSnap.RuntimeStatus, interfaces.RuntimeStatusFinished)
 	}
 
-	// All tokens should be in terminal place.
 	terminalCount := 0
 	for _, tok := range rtSnap.Marking.Tokens {
 		if tok.PlaceID == state.PlaceID("task", "complete") {
@@ -56,15 +51,11 @@ func TestRuntimeState_ThreeStagePipeline(t *testing.T) {
 		t.Errorf("expected %d terminal tokens, got %d", numItems, terminalCount)
 	}
 
-	// Dispatch history: at least one entry per transition (3 transitions).
-	// Due to Dispatches map keying by TransitionID, when multiple tokens fire
-	// the same transition only the last dispatch entry per transition is kept,
-	// so we get at least 3 entries (one per transition) but may get more.
 	if len(rtSnap.DispatchHistory) < 3 {
 		t.Errorf("expected at least 3 dispatch history entries (one per stage), got %d", len(rtSnap.DispatchHistory))
 	}
 	for _, cd := range rtSnap.DispatchHistory {
-		tokenIdentities := deriveTokenIdentities(cd.ConsumedTokens, cd.OutputMutations)
+		tokenIdentities := support.DeriveTokenIdentities(cd.ConsumedTokens, cd.OutputMutations)
 		if cd.Duration < sleepDuration {
 			t.Errorf("dispatch %s duration %v < expected minimum %v", cd.TransitionID, cd.Duration, sleepDuration)
 		}
@@ -83,8 +74,6 @@ func TestRuntimeState_ThreeStagePipeline(t *testing.T) {
 	}
 }
 
-// TestRuntimeState_FailureRouting validates that a failing executor routes the
-// token to the failure place with LastError set and ConsecutiveFailures > 0.
 func TestRuntimeState_FailureRouting(t *testing.T) {
 	n := buildThreeStageNet()
 	h := newThreeStageHarness(t, n)
@@ -122,21 +111,14 @@ func TestRuntimeState_FailureRouting(t *testing.T) {
 		t.Errorf("expected 1 token in failed place, got %d", failedCount)
 	}
 
-	// RuntimeStateSnapshot should show the same information.
 	rtSnap := h.eng.GetRuntimeStateSnapshot()
 	for _, tok := range rtSnap.Marking.Tokens {
-		if tok.PlaceID == "task:failed" {
-			if tok.History.LastError == "" {
-				t.Error("RuntimeStateSnapshot: token in failed place has empty LastError")
-			}
+		if tok.PlaceID == "task:failed" && tok.History.LastError == "" {
+			t.Error("RuntimeStateSnapshot: token in failed place has empty LastError")
 		}
 	}
 }
 
-// TestRuntimeState_MidExecutionConsistency validates that a snapshot taken
-// mid-execution shows consistent state: a dispatched token should not also
-// appear in its original marking place.
-// Uses async dispatch so we can take a snapshot between ticks while the executor blocks.
 func TestRuntimeState_MidExecutionConsistency(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, midExecutionConsistencyConfig())
 	blockExec, releaseCh := newMidExecutionBlockingExecutor()
@@ -157,24 +139,17 @@ func newMidExecutionBlockingExecutor() (*blockingExecutor, chan struct{}) {
 	releaseCh := make(chan struct{})
 	var mu sync.Mutex
 	calls := 0
-	blockExec := &blockingExecutor{
-		releaseCh: releaseCh,
-		mu:        &mu,
-		calls:     &calls,
-	}
+	blockExec := &blockingExecutor{releaseCh: releaseCh, mu: &mu, calls: &calls}
 	return blockExec, releaseCh
 }
 
 func midExecutionConsistencyConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
+		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
+			{Name: "init", Type: interfaces.StateTypeInitial},
+			{Name: "complete", Type: interfaces.StateTypeTerminal},
+			{Name: "failed", Type: interfaces.StateTypeFailed},
+		}}},
 		Workers: []interfaces.WorkerConfig{{Name: "step-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: "step-worker",
@@ -190,7 +165,6 @@ func waitForMidExecutionSnapshot(
 	timeout time.Duration,
 ) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
-
 	deadline := time.Now().Add(timeout)
 	for {
 		rtSnap, err := h.GetEngineStateSnapshot()
@@ -212,7 +186,6 @@ func assertMidExecutionSnapshot(
 	rtSnap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 ) {
 	t.Helper()
-
 	for _, tok := range rtSnap.Marking.Tokens {
 		if tok.PlaceID == state.PlaceID("task", "init") {
 			t.Errorf("token %s still in init place during dispatch; should be consumed", tok.ID)
@@ -234,7 +207,6 @@ func waitForMidExecutionHarnessCompletion(
 	ctx context.Context,
 ) {
 	t.Helper()
-
 	select {
 	case <-h.WaitToComplete():
 		cancel()
@@ -246,27 +218,15 @@ func waitForMidExecutionHarnessCompletion(
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=legacy-runtime-state-fixture review=2026-07-18 removal=split-three-stage-setup-and-created-at-assertions-before-next-runtime-state-change
 func TestRuntimeState_SameTypeTransitionsPreserveCreatedAt(t *testing.T) {
 	n := buildThreeStageNet()
 	t0 := time.Date(2026, time.April, 6, 8, 0, 0, 0, time.UTC)
-	tickTimes := []time.Time{
-		t0.Add(1 * time.Minute),
-		t0.Add(2 * time.Minute),
-		t0.Add(3 * time.Minute),
-	}
+	tickTimes := []time.Time{t0.Add(1 * time.Minute), t0.Add(2 * time.Minute), t0.Add(3 * time.Minute)}
 	clockIndex := 0
 	initialMarking := petri.NewMarking(n.ID)
 	initialMarking.AddToken(&interfaces.Token{
-		ID:        "tok-initial",
-		PlaceID:   "task:init",
-		CreatedAt: t0,
-		EnteredAt: t0,
-		Color: interfaces.TokenColor{
-			WorkID:     "task-1",
-			WorkTypeID: "task",
-			DataType:   interfaces.DataTypeWork,
-		},
+		ID: "tok-initial", PlaceID: "task:init", CreatedAt: t0, EnteredAt: t0,
+		Color: interfaces.TokenColor{WorkID: "task-1", WorkTypeID: "task", DataType: interfaces.DataTypeWork},
 		History: interfaces.TokenHistory{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
@@ -290,9 +250,7 @@ func TestRuntimeState_SameTypeTransitionsPreserveCreatedAt(t *testing.T) {
 		n,
 		initialMarking,
 		[]subsystems.Subsystem{dispatcher, historySubsystem, transitionerSubsystem, termination},
-		engine.WithDispatchHandler(func(dispatch interfaces.WorkDispatch) {
-			_ = dispatch
-		}),
+		engine.WithDispatchHandler(func(dispatch interfaces.WorkDispatch) { _ = dispatch }),
 		engine.WithResultBuffer(resultBuffer),
 	)
 
@@ -337,37 +295,23 @@ func TestRuntimeState_SameTypeTransitionsPreserveCreatedAt(t *testing.T) {
 	}
 }
 
-// --- config helpers ---
-
-// threeStageConfig creates a 3-stage pipeline config using the config package.
 func threeStageConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "stage1", Type: interfaces.StateTypeProcessing},
-				{Name: "stage2", Type: interfaces.StateTypeProcessing},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
+		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
+			{Name: "init", Type: interfaces.StateTypeInitial},
+			{Name: "stage1", Type: interfaces.StateTypeProcessing},
+			{Name: "stage2", Type: interfaces.StateTypeProcessing},
+			{Name: "complete", Type: interfaces.StateTypeTerminal},
+			{Name: "failed", Type: interfaces.StateTypeFailed},
+		}}},
 		Workers: []interfaces.WorkerConfig{{Name: "step-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
-			{Name: "step1", WorkerTypeName: "step-worker",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}},
-			{Name: "step2", WorkerTypeName: "step-worker",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage2"}}},
-			{Name: "finish", WorkerTypeName: "step-worker",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage2"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}},
+			{Name: "step1", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}},
+			{Name: "step2", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage2"}}},
+			{Name: "finish", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage2"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}},
 		},
 	}
 }
-
-// --- net + harness for sync dispatch tests (failure routing) ---
 
 func buildThreeStageNet() *state.Net {
 	return &state.Net{
@@ -380,55 +324,17 @@ func buildThreeStageNet() *state.Net {
 			"task:failed": {ID: "task:failed", TypeID: "task", State: "failed"},
 		},
 		Transitions: map[string]*petri.Transition{
-			"t-stage1": {
-				ID: "t-stage1", Name: "stage1", WorkerType: "agent",
-				InputArcs: []petri.Arc{
-					{ID: "a1", PlaceID: "task:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
-				},
-				OutputArcs: []petri.Arc{
-					{ID: "a2", PlaceID: "task:stage1", Direction: petri.ArcOutput},
-				},
-				FailureArcs: []petri.Arc{
-					{ID: "a3", PlaceID: "task:failed", Direction: petri.ArcOutput},
-				},
-			},
-			"t-stage2": {
-				ID: "t-stage2", Name: "stage2", WorkerType: "agent",
-				InputArcs: []petri.Arc{
-					{ID: "a4", PlaceID: "task:stage1", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
-				},
-				OutputArcs: []petri.Arc{
-					{ID: "a5", PlaceID: "task:stage2", Direction: petri.ArcOutput},
-				},
-				FailureArcs: []petri.Arc{
-					{ID: "a6", PlaceID: "task:failed", Direction: petri.ArcOutput},
-				},
-			},
-			"t-stage3": {
-				ID: "t-stage3", Name: "stage3", WorkerType: "agent",
-				InputArcs: []petri.Arc{
-					{ID: "a7", PlaceID: "task:stage2", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
-				},
-				OutputArcs: []petri.Arc{
-					{ID: "a8", PlaceID: "task:done", Direction: petri.ArcOutput},
-				},
-				FailureArcs: []petri.Arc{
-					{ID: "a9", PlaceID: "task:failed", Direction: petri.ArcOutput},
-				},
-			},
+			"t-stage1": {ID: "t-stage1", Name: "stage1", WorkerType: "agent", InputArcs: []petri.Arc{{ID: "a1", PlaceID: "task:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}}, OutputArcs: []petri.Arc{{ID: "a2", PlaceID: "task:stage1", Direction: petri.ArcOutput}}, FailureArcs: []petri.Arc{{ID: "a3", PlaceID: "task:failed", Direction: petri.ArcOutput}}},
+			"t-stage2": {ID: "t-stage2", Name: "stage2", WorkerType: "agent", InputArcs: []petri.Arc{{ID: "a4", PlaceID: "task:stage1", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}}, OutputArcs: []petri.Arc{{ID: "a5", PlaceID: "task:stage2", Direction: petri.ArcOutput}}, FailureArcs: []petri.Arc{{ID: "a6", PlaceID: "task:failed", Direction: petri.ArcOutput}}},
+			"t-stage3": {ID: "t-stage3", Name: "stage3", WorkerType: "agent", InputArcs: []petri.Arc{{ID: "a7", PlaceID: "task:stage2", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}}, OutputArcs: []petri.Arc{{ID: "a8", PlaceID: "task:done", Direction: petri.ArcOutput}}, FailureArcs: []petri.Arc{{ID: "a9", PlaceID: "task:failed", Direction: petri.ArcOutput}}},
 		},
-		WorkTypes: map[string]*state.WorkType{
-			"task": {
-				ID: "task",
-				States: []state.StateDefinition{
-					{Value: "init", Category: state.StateCategoryInitial},
-					{Value: "stage1", Category: state.StateCategoryProcessing},
-					{Value: "stage2", Category: state.StateCategoryProcessing},
-					{Value: "done", Category: state.StateCategoryTerminal},
-					{Value: "failed", Category: state.StateCategoryFailed},
-				},
-			},
-		},
+		WorkTypes: map[string]*state.WorkType{"task": {ID: "task", States: []state.StateDefinition{
+			{Value: "init", Category: state.StateCategoryInitial},
+			{Value: "stage1", Category: state.StateCategoryProcessing},
+			{Value: "stage2", Category: state.StateCategoryProcessing},
+			{Value: "done", Category: state.StateCategoryTerminal},
+			{Value: "failed", Category: state.StateCategoryFailed},
+		}}},
 	}
 }
 
@@ -445,33 +351,23 @@ func newThreeStageHarness(t *testing.T, n *state.Net) *threeStageHarness {
 
 func newThreeStageHarnessWithMarking(t *testing.T, n *state.Net, marking *petri.Marking) *threeStageHarness {
 	t.Helper()
-	h := &threeStageHarness{
-		t:         t,
-		net:       n,
-		executors: make(map[string]workers.WorkerExecutor),
-	}
+	h := &threeStageHarness{t: t, net: n, executors: make(map[string]workers.WorkerExecutor)}
 
 	historySubsystem := subsystems.NewHistory(nil)
 	transitionerSubsystem := subsystems.NewTransitioner(n, nil)
 	sched := scheduler.NewFIFOScheduler()
 
-	syncDisp := &threeStgSyncDispatcher{
-		net:     n,
-		sched:   sched,
-		harness: h,
-	}
-
+	syncDisp := &threeStgSyncDispatcher{net: n, sched: sched, harness: h}
 	circuitBreaker := subsystems.NewCircuitBreaker(n, nil)
 	termSub := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
-	subs := []subsystems.Subsystem{
+	h.eng = engine.NewFactoryEngine(n, marking, []subsystems.Subsystem{
 		circuitBreaker,
 		syncDisp,
 		historySubsystem,
 		transitionerSubsystem,
 		termSub,
-	}
-	h.eng = engine.NewFactoryEngine(n, marking, subs)
+	})
 	return h
 }
 
@@ -481,32 +377,17 @@ func (h *threeStageHarness) SetExecutor(workerType string, exec workers.WorkerEx
 
 func (h *threeStageHarness) submitWork(workTypeID, workID string) {
 	h.t.Helper()
-	request := workRequestFromSubmitRequests([]interfaces.SubmitRequest{
-		{WorkTypeID: workTypeID, WorkID: workID},
-	})
-	_, err := h.eng.SubmitWorkRequest(context.Background(), request)
-	if err != nil {
+	request := workRequestFromSubmitRequests([]interfaces.SubmitRequest{{WorkTypeID: workTypeID, WorkID: workID}})
+	if _, err := h.eng.SubmitWorkRequest(context.Background(), request); err != nil {
 		h.t.Fatalf("failed to submit work: %v", err)
 	}
 }
 
-// --- executors ---
-
-// failingExecutor always returns FAILED with the configured error message.
-type failingExecutor struct {
-	errorMsg string
-}
+type failingExecutor struct{ errorMsg string }
 
 func (e *failingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
-		DispatchID:   d.DispatchID,
-		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
-		Error:        e.errorMsg,
-	}, nil
+	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeFailed, Error: e.errorMsg}, nil
 }
-
-// --- sync dispatcher for direct engine tests ---
 
 type threeStgSyncDispatcher struct {
 	net     *state.Net
@@ -516,35 +397,26 @@ type threeStgSyncDispatcher struct {
 
 var _ subsystems.Subsystem = (*threeStgSyncDispatcher)(nil)
 
-func (sd *threeStgSyncDispatcher) TickGroup() subsystems.TickGroup {
-	return subsystems.Dispatcher
-}
+func (sd *threeStgSyncDispatcher) TickGroup() subsystems.TickGroup { return subsystems.Dispatcher }
 
 func (sd *threeStgSyncDispatcher) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 	enabled := scheduler.FindEnabledTransitions(sd.net, &snapshot.Marking)
 	if len(enabled) == 0 {
 		return nil, nil
 	}
-
 	decisions := sd.sched.Select(enabled, snapshot)
 	if len(decisions) == 0 {
 		return nil, nil
 	}
 
 	var mutations []interfaces.MarkingMutation
-
 	for _, decision := range decisions {
 		for _, tokenID := range decision.ConsumeTokens {
 			tok, ok := snapshot.Marking.Tokens[tokenID]
 			if !ok {
 				continue
 			}
-			mutations = append(mutations, interfaces.MarkingMutation{
-				Type:      interfaces.MutationConsume,
-				TokenID:   tokenID,
-				FromPlace: tok.PlaceID,
-				Reason:    "consumed by transition " + decision.TransitionID,
-			})
+			mutations = append(mutations, interfaces.MarkingMutation{Type: interfaces.MutationConsume, TokenID: tokenID, FromPlace: tok.PlaceID, Reason: "consumed by transition " + decision.TransitionID})
 		}
 
 		inputTokens := make([]interfaces.Token, 0, len(decision.ConsumeTokens))
@@ -567,12 +439,10 @@ func (sd *threeStgSyncDispatcher) Execute(ctx context.Context, snapshot *interfa
 		if !ok {
 			continue
 		}
-
 		result, err := exec.Execute(ctx, dispatch)
 		if err != nil {
 			continue
 		}
-
 		sd.harness.eng.GetResultBuffer().Write(ctx, result)
 	}
 

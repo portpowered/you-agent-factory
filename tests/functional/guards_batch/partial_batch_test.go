@@ -1,4 +1,4 @@
-package functional_test
+package guards_batch
 
 import (
 	"context"
@@ -8,21 +8,15 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// TestPartialBatch_SomeTokensFail verifies that in a multi-element batch,
-// tokens whose workers do not produce the stop token route to the failure
-// place while tokens that do produce the stop token route to the complete
-// place. The two outcomes are independent: a failure in one token must not
-// affect the completion of another.
 func TestPartialBatch_SomeTokensFail(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "partial_failure"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "partial_failure"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-a"}`))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-b"}`))
 
-	// Two responses: first contains stop token (ACCEPTED -> complete),
-	// second does not (REJECTED with no rejection arcs -> falls back to failure).
 	provider := testutil.NewMockProvider(
 		interfaces.InferenceResponse{Content: "Task done. COMPLETE"},
 		interfaces.InferenceResponse{Content: "Task incomplete, no stop token"},
@@ -42,19 +36,12 @@ func TestPartialBatch_SomeTokensFail(t *testing.T) {
 		TokenCount(2)
 }
 
-// TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs verifies that
-// in a multi-element batch, tokens whose workers return REJECTED (stop token
-// not found) route via the configured RejectionArcs to the rejection place,
-// while accepted tokens route to the complete place. Both rejection and
-// complete states are TERMINAL so WaitToComplete fires after all tokens land.
 func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "partial_rejection"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "partial_rejection"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-accepted"}`))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-rejected"}`))
 
-	// Two responses: first accepted (stop token found), second rejected (not found).
-	// The partial_rejection fixture has on_rejection -> task:rejected (TERMINAL).
 	provider := testutil.NewMockProvider(
 		interfaces.InferenceResponse{Content: "Work accepted. COMPLETE"},
 		interfaces.InferenceResponse{Content: "Work needs review, no stop token"},
@@ -67,8 +54,6 @@ func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	// Accepted token routes via output arc to task:complete.
-	// Rejected token routes via rejection arc to task:rejected.
 	h.Assert().
 		PlaceTokenCount("task:complete", 1).
 		PlaceTokenCount("task:rejected", 1).
@@ -77,14 +62,8 @@ func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
 		TokenCount(2)
 }
 
-// TestPartialBatch_TemplateResolvesFromTags verifies that a workstation
-// configured with a parameterized working_directory template resolves
-// correctly when the submitted token carries
-// the required tag. Successful resolution means the worker is invoked (not
-// short-circuited by a template error), producing the stop token and routing
-// the token to the complete place.
 func TestPartialBatch_TemplateResolvesFromTags(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_parameterized_success"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_parameterized_success"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
@@ -111,14 +90,11 @@ Process the task input.
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	// Template resolved -> worker was called -> stop token found -> complete.
 	h.Assert().
 		PlaceTokenCount("task:complete", 1).
 		HasNoTokenInPlace("task:init").
 		HasNoTokenInPlace("task:failed")
 
-	// Provider-focused migration boundary: this test now asserts the real Codex
-	// CLI dispatch path, while unrelated workflow tests remain on MockProvider.
 	if runner.CallCount() != 1 {
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
@@ -126,7 +102,6 @@ Process the task input.
 	if call.Command != string(workers.ModelProviderCodex) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderCodex, call.Command)
 	}
-	// assertArgsContainSequence(t, call.Args, []string{"--cd", "feature-abc"})
 	assertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
 	if got := call.Args[len(call.Args)-1]; got != "-" {
 		t.Fatalf("expected codex stdin placeholder '-', got %q", got)
@@ -137,7 +112,7 @@ Process the task input.
 }
 
 func TestPartialBatch_ProviderExitFailureRoutesTokenToFailedWithContext(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "worktree_passthrough"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "provider-exit-failure",
@@ -186,26 +161,16 @@ Process the input task.
 
 	snap := h.Marking()
 	for _, tok := range snap.Tokens {
-		if tok.PlaceID != "task:failed" {
-			continue
+		if tok.PlaceID == "task:failed" {
+			return
 		}
-		// for _, want := range []string{
-		// 	"claude exited with code 1",
-		// 	"invalid api key",
-		// 	"provider stdout before failure",
-		// } {
-		// 	if !strings.Contains(tok.History.LastError, want) {
-		// 		t.Fatalf("expected failed token LastError %q to contain %q", tok.History.LastError, want)
-		// 	}
-		// }
-		return
 	}
 
 	t.Fatal("no token found in task:failed")
 }
 
 func TestPartialBatch_RetryableProviderFailuresRetryThroughScriptWrapPath(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "worktree_passthrough"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "provider-retry-success",
@@ -273,7 +238,7 @@ func TestPartialBatch_ThrottledProviderFailureRequeuesToPreTransitionPlace(t *te
 func throttledProviderFailureHarness(t *testing.T) (*testutil.ServiceTestHarness, *testutil.ProviderCommandRunner) {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "worktree_passthrough"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "provider-throttle-requeue",
@@ -334,9 +299,6 @@ func assertThrottledWorkRequeued(t *testing.T, h *testutil.ServiceTestHarness) {
 	if got := requeued.History.ConsecutiveFailures["process"]; got != 1 {
 		t.Fatalf("ConsecutiveFailures[process] = %d, want 1", got)
 	}
-	// if !strings.Contains(requeued.History.LastError, "rate limit exceeded") {
-	// 	t.Fatalf("expected LastError to contain throttle detail, got %q", requeued.History.LastError)
-	// }
 	if len(requeued.History.FailureLog) != 1 {
 		t.Fatalf("FailureLog length = %d, want 1", len(requeued.History.FailureLog))
 	}

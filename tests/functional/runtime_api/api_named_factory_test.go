@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"bytes"
@@ -17,27 +17,30 @@ func TestNamedFactoryAPI_PersistsActivatesAndSwitchesWorkSurface(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startNamedFactoryTestServer(t, rootDir)
+	server := startFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.Logger = zap.NewNop()
+	})
 
-	created := createNamedFactoryFromBody(t, server.httpSrv.URL, "beta", "beta-task")
+	created := createNamedFactoryFromBody(t, server.URL(), "beta", "beta-task")
 	if created.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
 	assertNamedFactoryCurrentPointer(t, rootDir, "beta")
 
-	current := getNamedFactoryCurrent(t, server.httpSrv.URL)
+	current := getNamedFactoryCurrent(t, server.URL())
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
 
-	betaResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "beta-task", "beta", http.StatusCreated)
+	betaResp := submitWorkAndExpectStatus(t, server.URL(), "beta-task", "beta", http.StatusCreated)
 	var betaSubmit factoryapi.SubmitWorkResponse
 	decodeNamedFactoryJSONResponse(t, betaResp, &betaSubmit, "decode beta-task submit response")
 	if betaSubmit.TraceId == "" {
 		t.Fatal("expected non-empty trace ID for activated beta-task submission")
 	}
 
-	legacyResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "alpha-task", "alpha", http.StatusBadRequest)
+	legacyResp := submitWorkAndExpectStatus(t, server.URL(), "alpha-task", "alpha", http.StatusBadRequest)
 	var legacyErr factoryapi.ErrorResponse
 	decodeNamedFactoryJSONResponse(t, legacyResp, &legacyErr, "decode alpha-task error response")
 	if legacyErr.Code != factoryapi.BADREQUEST {
@@ -47,7 +50,6 @@ func TestNamedFactoryAPI_PersistsActivatesAndSwitchesWorkSurface(t *testing.T) {
 
 func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	t.Helper()
-
 	if _, err := config.PersistNamedFactory(rootDir, name, functionalNamedFactoryPayloadWithWorkType(t, name, workType)); err != nil {
 		t.Fatalf("PersistNamedFactory(%s): %v", name, err)
 	}
@@ -56,18 +58,8 @@ func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	}
 }
 
-func startNamedFactoryTestServer(t *testing.T, rootDir string) *FunctionalServer {
-	t.Helper()
-
-	return StartFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.Logger = zap.NewNop()
-	})
-}
-
 func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.NamedFactory {
 	t.Helper()
-
 	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewBufferString(functionalNamedFactoryBody(name, workType)))
 	if err != nil {
 		t.Fatalf("POST /factory: %v", err)
@@ -76,7 +68,6 @@ func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) 
 		resp.Body.Close()
 		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
 	}
-
 	var created factoryapi.NamedFactory
 	decodeNamedFactoryJSONResponse(t, resp, &created, "decode create factory response")
 	return created
@@ -84,7 +75,6 @@ func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) 
 
 func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFactory {
 	t.Helper()
-
 	resp, err := http.Get(serverURL + "/factory/~current")
 	if err != nil {
 		t.Fatalf("GET /factory/~current: %v", err)
@@ -93,7 +83,6 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFact
 		resp.Body.Close()
 		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
 	}
-
 	var current factoryapi.NamedFactory
 	decodeNamedFactoryJSONResponse(t, resp, &current, "decode current factory response")
 	return current
@@ -101,7 +90,6 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFact
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
 	t.Helper()
-
 	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
 	if err != nil {
 		t.Fatalf("POST /work %s: %v", workType, err)
@@ -116,7 +104,6 @@ func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, 
 func decodeNamedFactoryJSONResponse(t *testing.T, resp *http.Response, target any, message string) {
 	t.Helper()
 	defer resp.Body.Close()
-
 	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
 		t.Fatalf("%s: %v", message, err)
 	}
@@ -124,7 +111,6 @@ func decodeNamedFactoryJSONResponse(t *testing.T, resp *http.Response, target an
 
 func assertNamedFactoryCurrentPointer(t *testing.T, rootDir, want string) {
 	t.Helper()
-
 	got, err := config.ReadCurrentFactoryPointer(rootDir)
 	if err != nil {
 		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
@@ -146,28 +132,8 @@ func functionalNamedFactoryBody(name, workType string) string {
 func functionalNamedFactoryPayloadJSON(project, workType string) string {
 	return `{
 		"project":"` + project + `",
-		"workTypes":[{
-			"name":"` + workType + `",
-			"states":[
-				{"name":"init","type":"INITIAL"},
-				{"name":"done","type":"TERMINAL"},
-				{"name":"failed","type":"FAILED"}
-			]
-		}],
-		"workers":[{
-			"name":"planner",
-			"type":"MODEL_WORKER",
-			"modelProvider":"claude",
-			"executorProvider":"script_wrap",
-			"model":"claude-sonnet-4-20250514"
-		}],
-		"workstations":[{
-			"name":"plan-task",
-			"kind":"STANDARD",
-			"type":"MODEL_WORKSTATION",
-			"worker":"planner",
-			"inputs":[{"workType":"` + workType + `","state":"init"}],
-			"outputs":[{"workType":"` + workType + `","state":"done"}]
-		}]
+		"workTypes":[{"name":"` + workType + `","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"claude","executorProvider":"script_wrap","model":"claude-sonnet-4-20250514"}],
+		"workstations":[{"name":"plan-task","kind":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"done"}]}]
 	}`
 }
