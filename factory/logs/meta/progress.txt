@@ -19,6 +19,9 @@
 - Handwritten routes registered ahead of the generated API router can be
   intentional compatibility shims; verify whether they preserve more tolerant
   request parsing before treating them as removable duplication.
+- When a handwritten compatibility route already normalizes tolerant query
+  parsing before calling a handler, prefer keeping that behavior in the wrapper
+  and removing any second copy of the same fallback logic from the handler.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -482,3 +485,53 @@
     to exact completion-time dispatch history
   - keep public config, guard enums, scheduler ownership, and observability
     contracts unchanged in that lane
+
+## 2026-05-01 11:03 -07:00 - meta refresh after completed-dispatch throttle and release pipeline landed
+
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `acac8fc`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  current tracked workflow-input surfaces, ignored local workflow residue, and
+  current open/merged GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Verified that the workspace-local `factory/inputs/**` surface now includes:
+  - already-landed throttle ideas
+  - the still-open PRD lanes for API model cleanup and functional test
+    decomposition
+  - a newly queued local cleanup idea for duplicated `/work` pagination
+    fallback ownership
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `4a20238`
+  - it still treated PR `#29` as open even though it is now merged
+  - it still treated the completed-dispatch throttle history lane as only
+    queued even though PR `#31` is now merged
+- Reconfirmed through direct code inspection that the throttle ask posture has
+  narrowed further on `main`:
+  - `pkg/factory/internal/throttle/windows.go` owns pure active-window
+    derivation
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` now reconstructs throttle
+    failure history from `snapshot.DispatchHistory` using exact
+    `interfaces.CompletedDispatch.EndTime` values
+  - the remaining gap to the customer ask is now factory-level guard
+    ownership/config/lowering rather than event-time reconstruction
+- Confirmed the release quality/customer lane has advanced from PRD to checked-
+  in implementation:
+  - PR `#29` is merged
+  - `.goreleaser.yml`, release workflows, release smoke commands, and release
+    smoke fixtures now exist on `main`
+- Used a sidecar repository explorer plus direct code inspection to identify
+  one new narrow cleanup candidate outside open PRs `#30`, `#20`, `#16`,
+  and `#4`:
+  - `pkg/api/server.go` intentionally preserves tolerant `/work?maxResults=`
+    parsing before generated binding
+  - `pkg/api/handlers.go` still duplicates that tolerant fallback by re-reading
+    raw query text inside `ListWork`
+  - the wrapper remains behavior-bearing, but the handler-level fallback is a
+    small dedupe seam
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+  to keep the handwritten compatibility shim while removing the redundant
+  handler fallback.
