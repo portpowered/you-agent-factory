@@ -1,4 +1,4 @@
-package functional_test
+package workflow
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // TestWorkflowModificationAndReload validates that different workflow versions
@@ -15,9 +16,11 @@ import (
 //	When:  work is submitted to each version independently
 //	Then:  V1 completes via 2 transitions, V2 completes via 3 transitions
 func TestWorkflowModificationAndReload(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow workflow reload smoke")
-	// --- V1 workflow: init → process → processing → finalize → complete ---
-	v1Dir := testutil.CopyFixtureDir(t, fixtureDir(t, "workflow_v1_dir"))
+	if testing.Short() {
+		t.Skip("slow workflow reload smoke")
+	}
+
+	v1Dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v1_dir"))
 	testutil.WriteSeedFile(t, v1Dir, "task", []byte("v1 work item"))
 
 	providerV1 := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
@@ -32,7 +35,6 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 
 	h1.RunUntilComplete(t, 10*time.Second)
 
-	// V1 completes via 2-transition path.
 	h1.Assert().
 		HasTokenInPlace("task:complete").
 		HasNoTokenInPlace("task:init").
@@ -46,8 +48,7 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 		t.Errorf("v1: expected finalizer called 1 time, got %d", providerV1.CallCount("finalizer"))
 	}
 
-	// --- V2 workflow: adds review step between processing and complete ---
-	v2Dir := testutil.CopyFixtureDir(t, fixtureDir(t, "workflow_v2_dir"))
+	v2Dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v2_dir"))
 	testutil.WriteSeedFile(t, v2Dir, "task", []byte("v2 work item"))
 
 	providerV2 := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
@@ -63,7 +64,6 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 
 	h2.RunUntilComplete(t, 10*time.Second)
 
-	// V2 completes via 3-transition path.
 	h2.Assert().
 		HasTokenInPlace("task:complete").
 		HasNoTokenInPlace("task:init").
@@ -89,7 +89,7 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 //	When:  approver rejects once, then accepts
 //	Then:  token completes after one rejection loop
 func TestWorkflowModificationRejectionLoop(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "workflow_v2_rejection_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v2_rejection_dir"))
 	testutil.WriteSeedFile(t, dir, "doc", []byte("needs-revision draft"))
 	h := testutil.NewServiceTestHarness(t, dir)
 
@@ -104,7 +104,6 @@ func TestWorkflowModificationRejectionLoop(t *testing.T) {
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	// Completes after one rejection loop.
 	h.Assert().
 		HasTokenInPlace("doc:complete").
 		HasNoTokenInPlace("doc:init").
@@ -126,9 +125,11 @@ func TestWorkflowModificationRejectionLoop(t *testing.T) {
 //	When:  each runs work items to completion
 //	Then:  neither workflow's results are affected by the other
 func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow independent-workflow reload smoke")
-	// Workflow A: simple pipeline.
-	dirA := testutil.CopyFixtureDir(t, fixtureDir(t, "simple_pipeline"))
+	if testing.Short() {
+		t.Skip("slow independent-workflow reload smoke")
+	}
+
+	dirA := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	testutil.WriteSeedFile(t, dirA, "task", []byte("item for A"))
 
 	providerA := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
@@ -143,8 +144,7 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 
 	hA.Assert().HasTokenInPlace("task:complete").TokenCount(1)
 
-	// Workflow B: 2-transition pipeline (different config).
-	dirB := testutil.CopyFixtureDir(t, fixtureDir(t, "workflow_v1_dir"))
+	dirB := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v1_dir"))
 	testutil.WriteSeedFile(t, dirB, "task", []byte("task for B"))
 
 	providerB := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
@@ -160,7 +160,6 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 
 	hB.Assert().HasTokenInPlace("task:complete").TokenCount(1)
 
-	// Verify A's state is unaffected after B's execution.
 	hA.Assert().
 		HasTokenInPlace("task:complete").
 		HasNoTokenInPlace("task:init").
