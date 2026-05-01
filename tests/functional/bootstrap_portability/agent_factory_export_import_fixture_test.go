@@ -1,4 +1,4 @@
-package functional_test
+package bootstrap_portability
 
 import (
 	"encoding/json"

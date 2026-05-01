@@ -1,4 +1,4 @@
-package functional_test
+package bootstrap_portability
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/replay"
 	"github.com/portpowered/agent-factory/pkg/service"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +33,7 @@ type exportImportFixture struct {
 func newExportImportFixture(t *testing.T) exportImportFixture {
 	t.Helper()
 
-	authoredFactoryDir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	authoredFactoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 
 	loaded, err := config.LoadRuntimeConfig(authoredFactoryDir, nil)
 	if err != nil {

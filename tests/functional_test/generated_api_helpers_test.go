@@ -78,20 +78,6 @@ func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req
 	return out
 }
 
-func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
-	t.Helper()
-
-	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
-	if err != nil {
-		t.Fatalf("POST /work %s: %v", workType, err)
-	}
-	if resp.StatusCode != wantStatus {
-		resp.Body.Close()
-		t.Fatalf("POST /work %s status = %d, want %d", workType, resp.StatusCode, wantStatus)
-	}
-	return resp
-}
-
 func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) {
 	t.Helper()
 

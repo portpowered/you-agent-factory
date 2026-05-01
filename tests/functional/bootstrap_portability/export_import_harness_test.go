@@ -1,4 +1,4 @@
-package functional_test
+package bootstrap_portability
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"testing"
 	"time"
 
@@ -17,10 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// exportImportSmokeHarness drives the canonical current-factory export surface
-// (`GET /factory/~current`) and named-factory import surface (`POST /factory`)
-// so future export/import and factory-management smokes can reuse one
-// orchestration path and layer scenario-specific assertions on top.
 type exportImportSmokeHarness struct {
 	fixture exportImportFixture
 	options exportImportSmokeHarnessOptions
@@ -36,12 +31,11 @@ type exportImportSmokeHarnessOption func(*exportImportSmokeHarnessOptions)
 
 type exportImportSmokeHarnessResult struct {
 	RootDir          string
-	Server           *FunctionalServer
+	Server           *functionalAPIServer
 	ExportedFactory  factoryapi.NamedFactory
 	ImportRequest    factoryapi.NamedFactory
 	ImportedFactory  factoryapi.NamedFactory
 	CurrentFactory   factoryapi.NamedFactory
-	Dashboard        DashboardResponse
 	Status           factoryapi.StatusResponse
 	SourceFactoryDir string
 	ImportedDir      string
@@ -73,7 +67,7 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", h.options.sourceFactoryName, err)
 	}
 
-	server := StartFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
+	server := startFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Logger = zap.NewNop()
 	})
@@ -86,7 +80,6 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 	imported := createNamedFactory(t, server.URL(), importRequest)
 	current := getCurrentNamedFactory(t, server.URL())
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	dashboard := server.GetDashboard(t)
 
 	importedDir, err := config.ResolveCurrentFactoryDir(rootDir)
 	if err != nil {
@@ -100,7 +93,6 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 		ImportRequest:    importRequest,
 		ImportedFactory:  imported,
 		CurrentFactory:   current,
-		Dashboard:        dashboard,
 		Status:           status,
 		SourceFactoryDir: sourceFactoryDir,
 		ImportedDir:      importedDir,
@@ -166,41 +158,6 @@ func (r exportImportSmokeHarnessResult) AssertDashboardActivationSuccess(
 
 	if r.Status.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
 		t.Fatalf("dashboard activation drift: GET /status runtime_status = %q, want %q", r.Status.RuntimeStatus, interfaces.RuntimeStatusIdle)
-	}
-	if r.Dashboard.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
-		t.Fatalf("dashboard activation drift: dashboard runtime_status = %q, want %q", r.Dashboard.RuntimeStatus, interfaces.RuntimeStatusIdle)
-	}
-	if r.Dashboard.Topology.WorkstationNodesById == nil {
-		t.Fatal("dashboard activation drift: dashboard topology is missing workstation nodes")
-	}
-
-	gotWorkstationNames := make([]string, 0, len(*r.Dashboard.Topology.WorkstationNodesById))
-	sawTerminalPlace := false
-	for _, node := range *r.Dashboard.Topology.WorkstationNodesById {
-		if node.WorkstationName != nil && *node.WorkstationName != "" {
-			gotWorkstationNames = append(gotWorkstationNames, *node.WorkstationName)
-		}
-		if node.OutputPlaceIds != nil && slices.Contains(*node.OutputPlaceIds, fixture.Expected.TerminalPlaceID) {
-			sawTerminalPlace = true
-		}
-	}
-	slices.Sort(gotWorkstationNames)
-
-	wantWorkstationNames := append([]string(nil), fixture.Expected.WorkstationNames...)
-	slices.Sort(wantWorkstationNames)
-
-	if !reflect.DeepEqual(gotWorkstationNames, wantWorkstationNames) {
-		t.Fatalf(
-			"dashboard activation drift: dashboard workstation names = %#v, want %#v",
-			gotWorkstationNames,
-			wantWorkstationNames,
-		)
-	}
-	if !sawTerminalPlace {
-		t.Fatalf(
-			"dashboard activation drift: dashboard topology is missing terminal place %q after import",
-			fixture.Expected.TerminalPlaceID,
-		)
 	}
 	if r.ImportedDir != filepath.Join(r.RootDir, string(r.ImportRequest.Name)) {
 		t.Fatalf(

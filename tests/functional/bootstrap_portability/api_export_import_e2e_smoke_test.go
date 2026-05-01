@@ -1,6 +1,8 @@
-package functional_test
+package bootstrap_portability
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -41,4 +43,30 @@ func TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath(t *
 	if legacyErr.Code != factoryapi.BADREQUEST {
 		t.Fatalf("active-factory drift: legacy work type error code = %q, want BAD_REQUEST", legacyErr.Code)
 	}
+}
+
+func submitWorkAndExpectStatus(
+	t *testing.T,
+	serverURL, workTypeName, title string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+
+	request := factoryapi.SubmitWorkRequest{
+		WorkTypeName: workTypeName,
+		Payload:      []byte(`{"title":"` + title + `"}`),
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal submit request: %v", err)
+	}
+	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	if resp.StatusCode != wantStatus {
+		resp.Body.Close()
+		t.Fatalf("POST /work status = %d, want %d", resp.StatusCode, wantStatus)
+	}
+	return resp
 }
