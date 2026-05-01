@@ -1,4 +1,4 @@
-package functional_test
+package bootstrap_portability
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/service"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -92,9 +93,9 @@ func TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFac
 	}
 
 	provider := testutil.NewMockProvider(
-		acceptedProviderResponse(),
-		acceptedProviderResponse(),
-		acceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
 	)
 	core, observedLogs := observer.New(zap.InfoLevel)
 	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
@@ -144,10 +145,10 @@ func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *t
 	}
 
 	provider := testutil.NewMockProvider(
-		acceptedProviderResponse(),
-		acceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
 	)
-	server := StartFunctionalServerWithConfig(t, rootDir, false, func(cfg *service.FactoryServiceConfig) {
+	server := startFunctionalServerWithConfig(t, rootDir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.ProviderOverride = provider
 	})
@@ -200,7 +201,7 @@ func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *t
 func copyCurrentFactoryFixture(t *testing.T, rootDir, name string) string {
 	t.Helper()
 
-	srcDir := fixtureDir(t, "filewatcher_flow")
+	srcDir := support.LegacyFixtureDir(t, "filewatcher_flow")
 	dstDir := filepath.Join(rootDir, name)
 	if err := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -263,7 +264,7 @@ func waitForCurrentFactoryRuntimeIdle(t *testing.T, svc *service.FactoryService,
 
 func waitForCurrentFactoryActivatedRuntime(
 	t *testing.T,
-	server *FunctionalServer,
+	server *functionalAPIServer,
 	wantPlaceID string,
 	timeout time.Duration,
 ) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {

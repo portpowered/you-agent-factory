@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +29,7 @@ const recordReplayProviderSecretEnv = "ANTHROPIC_API_KEY"
 const recordReplayProviderSecretValue = "raw-provider-replay-secret-value"
 
 func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	helperPath := writeRecordReplayScriptHelper(t)
 	writeRecordReplayScriptWorker(t, dir, helperPath)
 
@@ -96,16 +97,16 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 
 // portos:func-length-exception owner=agent-factory reason=record-replay-e2e-fixture review=2026-07-18 removal=split-record-run-replay-run-and-artifact-assertions-before-next-record-replay-change
 func TestRecordReplayEndToEnd_FactoryRequestBatchAndWorkerGeneratedBatchReplayDeterministically(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "factory_request_batch"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	artifactPath := filepath.Join(t.TempDir(), "batch-recording.replay.json")
 
-	writeAgentConfig(t, dir, "processor", `---
+	support.WriteAgentConfig(t, dir, "processor", `---
 type: MODEL_WORKER
 model: test-model
 ---
 Process the input task.
 `)
-	writeAgentConfig(t, dir, "finisher", `---
+	support.WriteAgentConfig(t, dir, "finisher", `---
 type: MODEL_WORKER
 model: test-model
 ---
@@ -186,11 +187,11 @@ Finish the input task.
 }
 
 func TestRecordReplayEndToEnd_ProviderCommandDiagnosticsPersistRedactedEnv(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "provider-recording.replay.json")
 	t.Setenv(recordReplayProviderSecretEnv, recordReplayProviderSecretValue)
 
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
@@ -198,7 +199,7 @@ stopToken: COMPLETE
 ---
 Process the input task.
 `)
-	writeAgentConfig(t, dir, "worker-b", `---
+	support.WriteAgentConfig(t, dir, "worker-b", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
@@ -442,7 +443,7 @@ func writeRecordReplayWorkFile(t *testing.T, path string) {
 		TraceID:    "record-replay-e2e-trace",
 		Payload:    []byte("exercise end-to-end record/replay"),
 	}
-	writeWorkRequestFileForFunctionalTest(t, path, req)
+	support.WriteWorkRequestFile(t, path, req)
 }
 
 func runRecordReplayCLIWithCapturedStdout(t *testing.T, cfg runcli.RunConfig) (string, error) {
@@ -502,22 +503,6 @@ func assertReplayArtifactCommandEnvRedacted(t *testing.T, artifact *interfaces.R
 	if strings.Contains(string(data), envKey) || strings.Contains(string(data), workers.RedactedCommandEnvValue) {
 		t.Fatalf("replay artifact leaked command env metadata for %s", envKey)
 	}
-}
-
-func replayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []factoryapi.DispatchResponseEventPayload {
-	t.Helper()
-	var out []factoryapi.DispatchResponseEventPayload
-	for _, event := range artifact.Events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch completed event %q: %v", event.Id, err)
-		}
-		out = append(out, payload)
-	}
-	return out
 }
 
 func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {

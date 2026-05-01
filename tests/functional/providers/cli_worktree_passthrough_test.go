@@ -1,14 +1,13 @@
-package functional_test
+package providers
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // TestWorktreePassthrough verifies the full worktree template pipeline:
@@ -19,7 +18,7 @@ import (
 // The factory does NOT create the worktree or chdir — it only resolves the
 // template and passes it as --worktree to CLI dispatchers.
 func TestWorktreePassthrough(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "worktree_passthrough"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "my-feature-branch",
@@ -32,7 +31,7 @@ func TestWorktreePassthrough(t *testing.T) {
 	// Provider-focused functional tests run through the exec seam so the real
 	// ScriptWrapProvider command construction stays under test. Broader workflow
 	// tests still use MockProvider until their value comes from CLI behavior.
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
@@ -66,40 +65,9 @@ Process the input task.
 	if call.Command != string(workers.ModelProviderClaude) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
 	}
-	assertArgsContainSequence(t, call.Args, []string{"--worktree", "my-feature-branch"})
-	assertArgsContainSequence(t, call.Args, []string{"--model", "test-model"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "my-feature-branch"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "test-model"})
 	if len(call.Stdin) != 0 {
 		t.Fatalf("expected Claude prompt to stay in args, got stdin %q", string(call.Stdin))
 	}
-}
-
-func writeAgentConfig(t *testing.T, dir, workerName, content string) {
-	t.Helper()
-
-	path := filepath.Join(dir, "workers", workerName, "AGENTS.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("create worker config dir %s: %v", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-func assertArgsContainSequence(t *testing.T, args, want []string) {
-	t.Helper()
-
-	for i := 0; i <= len(args)-len(want); i++ {
-		match := true
-		for j := range want {
-			if args[i+j] != want[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return
-		}
-	}
-
-	t.Fatalf("expected args %v to contain sequence %v", args, want)
 }

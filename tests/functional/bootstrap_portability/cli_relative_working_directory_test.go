@@ -1,4 +1,4 @@
-package functional_test
+package bootstrap_portability
 
 import (
 	"os"
@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=branch-carried functional fixture review=2026-07-22 removal=split setup and command assertions on next relative-working-directory test change
@@ -20,7 +21,7 @@ func TestRelativeWorkingDirectory_UsesFactoryRuntimeRoot(t *testing.T) {
 	}
 
 	writeRelativeWorkingDirectoryFactoryConfig(t, factoryDir)
-	writeAgentConfig(t, factoryDir, "worker-a", `---
+	support.WriteAgentConfig(t, factoryDir, "worker-a", `---
 type: MODEL_WORKER
 modelProvider: codex
 executorProvider: script_wrap
@@ -75,7 +76,7 @@ Process {{ (index .Inputs 0).Name }} from the current working directory.
 	if req.Command != string(workers.ModelProviderCodex) {
 		t.Fatalf("command = %q, want %q", req.Command, workers.ModelProviderCodex)
 	}
-	assertArgsContainSequence(t, req.Args, []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "-"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "-"})
 	if req.WorkDir != expectedWorkDir {
 		t.Fatalf("work dir = %q, want %q", req.WorkDir, expectedWorkDir)
 	}
