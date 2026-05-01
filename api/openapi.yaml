@@ -130,45 +130,7 @@ paths:
               schema:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
-              x-event-schema:
-                type: object
-                additionalProperties: false
-                description: Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.
-                required:
-                  - schemaVersion
-                  - id
-                  - type
-                  - context
-                  - payload
-                properties:
-                  schemaVersion:
-                    type: string
-                    description: Version of the factory event envelope schema.
-                    enum:
-                      - agent-factory.event.v1
-                    x-enum-descriptions:
-                      - Initial unified Agent Factory event schema.
-                  id:
-                    type: string
-                    description: Stable event identifier. Record/replay artifacts must preserve this value.
-                  type:
-                    $ref: '#/components/schemas/FactoryEventType'
-                  context:
-                    $ref: '#/components/schemas/FactoryEventContext'
-                  payload:
-                    oneOf:
-                      - $ref: '#/components/schemas/RunRequestEventPayload'
-                      - $ref: '#/components/schemas/InitialStructureRequestEventPayload'
-                      - $ref: '#/components/schemas/WorkRequestEventPayload'
-                      - $ref: '#/components/schemas/RelationshipChangeRequestEventPayload'
-                      - $ref: '#/components/schemas/DispatchRequestEventPayload'
-                      - $ref: '#/components/schemas/InferenceRequestEventPayload'
-                      - $ref: '#/components/schemas/InferenceResponseEventPayload'
-                      - $ref: '#/components/schemas/ScriptRequestEventPayload'
-                      - $ref: '#/components/schemas/ScriptResponseEventPayload'
-                      - $ref: '#/components/schemas/DispatchResponseEventPayload'
-                      - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
-                      - $ref: '#/components/schemas/RunResponseEventPayload'
+              x-event-schema: '#/components/schemas/FactoryEvent'
         '500':
           $ref: '#/components/responses/InternalError'
   /status:

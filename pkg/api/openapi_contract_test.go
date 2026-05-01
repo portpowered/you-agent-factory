@@ -728,9 +728,19 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertPropertyRef(t, runResponseProperties, "state", "#/components/schemas/FactoryState")
 	assertPropertyRef(t, runResponseProperties, "wallClock", "#/components/schemas/WallClock")
 	assertPropertyRef(t, runResponseProperties, "diagnostics", "#/components/schemas/Diagnostics")
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("paths object is missing")
+	}
+	assertEventStreamSchemaRef(
+		t,
+		pathOperation(t, paths, "/events", "get"),
+		"#/components/schemas/FactoryEvent",
+	)
 }
 
-func TestOpenAPIAuthoring_EventPayloadSchemasUseDedicatedFragments(t *testing.T) {
+func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi-main.yaml")
 	if err != nil {
 		t.Fatalf("read authored openapi contract: %v", err)
@@ -743,6 +753,11 @@ func TestOpenAPIAuthoring_EventPayloadSchemasUseDedicatedFragments(t *testing.T)
 
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
+		"FactoryEvent":                          "./components/schemas/events/FactoryEvent.yaml",
+		"FactoryEventType":                      "./components/schemas/events/FactoryEventType.yaml",
+		"FactoryEventContext":                   "./components/schemas/events/FactoryEventContext.yaml",
+		"DispatchConsumedWorkRef":               "./components/schemas/events/DispatchConsumedWorkRef.yaml",
+		"DispatchRequestEventMetadata":          "./components/schemas/events/DispatchRequestEventMetadata.yaml",
 		"RunRequestEventPayload":                "./components/schemas/events/payloads/RunRequestEventPayload.yaml",
 		"InitialStructureRequestEventPayload":   "./components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml",
 		"WorkRequestEventPayload":               "./components/schemas/events/payloads/WorkRequestEventPayload.yaml",
@@ -755,6 +770,20 @@ func TestOpenAPIAuthoring_EventPayloadSchemasUseDedicatedFragments(t *testing.T)
 		"DispatchResponseEventPayload":          "./components/schemas/events/payloads/DispatchResponseEventPayload.yaml",
 		"FactoryStateResponseEventPayload":      "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
 		"RunResponseEventPayload":               "./components/schemas/events/payloads/RunResponseEventPayload.yaml",
+		"InferenceOutcome":                      "./components/schemas/events/InferenceOutcome.yaml",
+		"ScriptExecutionOutcome":                "./components/schemas/events/ScriptExecutionOutcome.yaml",
+		"ScriptFailureType":                     "./components/schemas/events/ScriptFailureType.yaml",
+		"FactoryState":                          "./components/schemas/events/FactoryState.yaml",
+		"WorkOutcome":                           "./components/schemas/events/WorkOutcome.yaml",
+		"ProviderFailureMetadata":               "./components/schemas/events/ProviderFailureMetadata.yaml",
+		"ProviderSessionMetadata":               "./components/schemas/events/ProviderSessionMetadata.yaml",
+		"WorkMetrics":                           "./components/schemas/events/WorkMetrics.yaml",
+		"WorkDiagnostics":                       "./components/schemas/events/WorkDiagnostics.yaml",
+		"RenderedPromptDiagnostic":              "./components/schemas/events/RenderedPromptDiagnostic.yaml",
+		"ProviderDiagnostic":                    "./components/schemas/events/ProviderDiagnostic.yaml",
+		"Diagnostics":                           "./components/schemas/events/Diagnostics.yaml",
+		"SafeWorkDiagnostics":                   "./components/schemas/events/SafeWorkDiagnostics.yaml",
+		"WallClock":                             "./components/schemas/events/WallClock.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)
@@ -762,6 +791,16 @@ func TestOpenAPIAuthoring_EventPayloadSchemasUseDedicatedFragments(t *testing.T)
 	if _, ok := schemas["payloads"]; ok {
 		t.Fatal("components.schemas.payloads must not be reintroduced as a monolithic event payload source")
 	}
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("paths object is missing")
+	}
+	assertEventStreamSchemaRef(
+		t,
+		pathOperation(t, paths, "/events", "get"),
+		"#/components/schemas/FactoryEvent",
+	)
 }
 
 // portos:func-length-exception owner=agent-factory reason=unified-event-schema-contract review=2026-07-18 removal=split-event-context-payload-and-dispatch-contract-assertions-before-next-event-schema-change
@@ -1947,6 +1986,34 @@ func pathOperation(t *testing.T, paths map[string]any, path string, method strin
 		t.Fatalf("paths.%s.%s is missing", path, method)
 	}
 	return operation
+}
+
+func assertEventStreamSchemaRef(t *testing.T, operation map[string]any, wantRef string) {
+	t.Helper()
+
+	responses, ok := operation["responses"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses is missing")
+	}
+	response, ok := responses["200"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.responses.200 is missing")
+	}
+	content, ok := response["content"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.responses.200.content is missing")
+	}
+	eventStream, ok := content["text/event-stream"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.responses.200.content.text/event-stream is missing")
+	}
+	xEventSchema, ok := eventStream["x-event-schema"].(string)
+	if !ok {
+		t.Fatal("operation.responses.200.content.text/event-stream.x-event-schema is missing")
+	}
+	if xEventSchema != wantRef {
+		t.Fatalf("operation.responses.200.content.text/event-stream.x-event-schema = %q, want %s", xEventSchema, wantRef)
+	}
 }
 
 func assertResponseSchemaRef(t *testing.T, operation map[string]any, status string, wantRef string) {

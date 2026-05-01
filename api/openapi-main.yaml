@@ -130,8 +130,7 @@ paths:
               schema:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
-              x-event-schema:
-                $ref: '#/components/schemas/FactoryEvent'
+              x-event-schema: '#/components/schemas/FactoryEvent'
         '500':
           $ref: '#/components/responses/InternalError'
   /status:

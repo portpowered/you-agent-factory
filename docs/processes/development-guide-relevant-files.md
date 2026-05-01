@@ -15,6 +15,7 @@ This inventory records the checked-in files and directories that the maintainer 
 | `docs/development/openapi-schema-standardization-inventory.md` | OpenAPI cleanup inventory | Records the authored fragment layout, remaining inline schemas, and the canonical bundle and generation verification surfaces for schema-standardization work. |
 | `docs/development/development.md` | Active maintainer guide | Must describe the real repository-root layout used in this checkout and avoid stale `libraries/agent-factory` instructions. |
 | `factory/` | Maintainer workflow surface | Contains checked-in operator guidance and active inbox directories that the development guide may reference for workflow-related tasks. |
+| `pkg/api/openapi_contract_test.go` | OpenAPI contract guard surface | Focused authored-versus-bundled contract assertions live here, including fragment-layout and `/events` schema wiring checks. |
 | `pkg/` | Go implementation surface | Package-specific test commands in the guide should reference the real package paths under this root. |
 | `tests/` | Smoke and fixture surface | Functional and release-facing checks run from the repository root against these checked-in fixtures. |
 | `ui/` | Embedded dashboard workspace | UI build, test, and Storybook commands remain part of the same repository-root workflow. |
@@ -24,3 +25,5 @@ This inventory records the checked-in files and directories that the maintainer 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When a cleanup lane closes with path or contract-alignment work, record the exact root-level verification commands in a `docs/development/*-closeout.md` artifact so the proof survives beyond `progress.txt`.
+- Use `pkg/api/openapi_contract_test.go` for narrow OpenAPI contract guards when the work is about authored schema structure or bundled route/schema alignment rather than handler runtime behavior.
+- For Redocly-bundled vendor extensions that must keep a schema pointer in `api/openapi.yaml`, store the extension value as a string JSON Pointer; nested `$ref` objects under `x-*` fields are inlined during bundling.
