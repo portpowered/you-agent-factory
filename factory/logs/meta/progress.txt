@@ -16,6 +16,9 @@
 - Before re-queuing a local ignored cleanup idea under `factory/inputs/**`,
   compare it against recent merged PR history; ignored residue can remain in
   the workspace after its lane has already landed on `main`.
+- Handwritten routes registered ahead of the generated API router can be
+  intentional compatibility shims; verify whether they preserve more tolerant
+  request parsing before treating them as removable duplication.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -368,3 +371,33 @@
   for that `pkg/config` test-surface dedupe seam.
 - Updated `factory/logs/meta/view.md` to remove the already-landed cleanup
   proposal and to reflect the current `HEAD`, PR state, and next-step posture.
+
+## 2026-05-01 06:05 -07:00 - meta refresh after generated-boundary coverage dedupe landed
+
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `ca942db`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  current tracked `factory/inputs/**` surfaces, ignored local workflow residue,
+  and current open/merged GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `6d20718`
+  - it still treated the generated-boundary alias rejection coverage dedupe as
+    a pending next lane even though PR `#27` is now merged
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#20`, `#16`, and `#4`
+  - merged PRs `#27`, `#26`, `#25`, `#24`, `#23`, `#22`, and `#21`
+- Used a sidecar repository-inspection agent plus direct code inspection to
+  evaluate one candidate cleanup seam outside the open PR set:
+  - `pkg/api/server.go` registers a handwritten `/work` pagination shim
+  - the shim forwards into `pkg/api/handlers.go:ListWork`
+  - `pkg/api/generated/server.gen.go` already binds the same query params
+  - however the handwritten shim intentionally preserves tolerant `maxResults`
+    parsing before the generated binding can reject invalid integers, so this
+    is not confirmed dead code
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the `#27`
+  merge, the live throttle posture, and the fact that no fresh behavior-safe
+  narrow cleanup lane is confirmed yet.
