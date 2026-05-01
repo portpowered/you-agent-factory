@@ -6,6 +6,9 @@
 - The checked-in meta control plane is `factory/logs/meta/asks.md`,
   `factory/logs/meta/view.md`, and `factory/logs/meta/progress.txt`; any other
   path should be treated as legacy or workspace-local until proven otherwise.
+- Before queuing a new meta cleanup lane, compare the candidate file set
+  against `gh pr view <number> --json files` for open PRs so the maintainer
+  loop does not duplicate active work.
 - When the root artifact inventory changes, keep
   `docs/development/root-factory-artifact-contract-inventory.md` and
   `internal/testpath/artifact_contract.go` aligned in the same change or the
@@ -194,3 +197,30 @@
 - Confirmed the checked-in replay summary is now:
   - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
   - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
+
+## 2026-05-01 08:04 -07:00 - meta refresh after process-review cleanup opened
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `d0c4288`.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  recent merged/open PR history, and the tracked `factory/inputs/**` surface
+  before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels, while the idea/task files under `factory/inputs/**` remain ignored
+  workspace-local residue.
+- Confirmed the previous meta world view had drifted again:
+  - it still described `HEAD` as `d55b57e`
+  - it did not mention open PR `#22` `align-process-review-loop-contract`
+- Confirmed that the process/review contract mismatch is still live on `main`,
+  but is now actively covered by open PR `#22`, whose diff reaches the expected
+  factory config, prompt, replay, API, and behavioral-test surfaces.
+- Avoided re-queuing the same cleanup lane while `#22` is open.
+- Used a sidecar repository-inspection agent to identify the next distinct
+  narrow cleanup candidate outside the open PR set.
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/centralize-work-request-trace-normalization.md`
+  for the duplicated legacy/current trace normalization path in
+  `pkg/api/handlers.go`, `pkg/factory/work_request.go`, and
+  `pkg/factory/work_request_json.go`.
+- Updated `factory/logs/meta/view.md` to reflect the current `HEAD`, the open
+  PR state, and the revised follow-up priority.
