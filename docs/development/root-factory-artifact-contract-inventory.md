@@ -34,7 +34,7 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/inputs/thoughts/default/.gitkeep` | `checked_in` | Tracked sentinel that keeps the canonical thought inbox present in clean checkouts. |
 | `factory/logs/meta/asks.md` | `checked_in` | Canonical checked-in customer-ask backlog for the meta and cleaner workflow. |
 | `factory/logs/meta/view.md` | `checked_in` | Checked-in meta world-state view consumed by the cleaner workflow. |
-| `factory/logs/meta/progress.tsx` | `checked_in` | Checked-in meta progress surface consumed by the cleaner workflow. |
+| `factory/logs/meta/progress.txt` | `checked_in` | Checked-in meta progress surface consumed by the cleaner workflow. |
 | `factory/logs/agent-fails.json` | `checked_in` | Event-stream sample for replay artifact conversion coverage. |
 | `factory/logs/agent-fails.replay.json` | `checked_in` | Replay artifact sample paired with `agent-fails.json`. |
 | `factory/meta/asks.md` | `checked_in` | Redirect-only legacy stub that points maintainers back to `factory/logs/meta/asks.md` so a second live ask backlog cannot drift. |

@@ -106,11 +106,6 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Checked-in meta world-state view consumed by the cleaner workflow.",
 	},
 	{
-		Path:           "factory/logs/meta/progress.tsx",
-		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in meta progress surface consumed by the cleaner workflow.",
-	},
-	{
 		Path:           "factory/logs/agent-fails.json",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in event-stream sample used for replay conversion coverage.",

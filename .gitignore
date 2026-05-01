@@ -28,6 +28,7 @@ factory/inputs/**
 
 .claude
 
+factory/logs/complete
 factory/logs/meta/*
-factory/logs/meta/progress.tsx
+factory/logs/meta/progress.txt
 factory/logs/meta/view.md
