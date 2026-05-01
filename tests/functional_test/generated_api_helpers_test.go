@@ -20,31 +20,6 @@ import (
 	"github.com/portpowered/agent-factory/pkg/replay"
 )
 
-func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
-	t.Helper()
-
-	body, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal generated submit request: %v", err)
-	}
-
-	resp, err := http.Post(baseURL+"/work", "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST /work: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("POST /work status = %d, want 201", resp.StatusCode)
-	}
-
-	var out factoryapi.SubmitWorkResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode generated submit response: %v", err)
-	}
-	return out.TraceId
-}
-
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
 	t.Helper()
 
