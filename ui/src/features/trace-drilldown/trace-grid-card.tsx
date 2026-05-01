@@ -21,6 +21,12 @@ import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
 } from "../../components/dashboard/widget-board";
+import { Button } from "../../components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "../../components/ui/collapsible";
 import type {
   DashboardTrace,
   DashboardWorkItemRef,
@@ -30,8 +36,11 @@ import { TraceWorkstationPath } from "./trace-workstation-path";
 
 const TRACE_EXPANDER_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
-const TRACE_EXPANDER_TOGGLE_CLASS =
-  "shrink-0 cursor-pointer rounded-lg border border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.45rem] text-af-accent";
+const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-[0.65rem] py-[0.45rem]";
+const TRACE_WORK_ITEM_BUTTON_CLASS = cx(
+  "h-auto min-h-0 justify-start border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.35rem] text-left text-af-accent",
+  DASHBOARD_SUPPORTING_CODE_CLASS,
+);
 
 export type TraceGridState =
   | { status: "idle"; message: string }
@@ -151,36 +160,42 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
           <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Work items</dt>
           <dd>
             {workItems.length > 0 ? (
-              <section aria-labelledby={`${workItemsID}-heading`} className="grid gap-[0.65rem]">
-                <div className={TRACE_EXPANDER_HEADER_CLASS}>
-                  <h3
-                    className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                    id={`${workItemsID}-heading`}
-                  >
-                    {workItems.length} work item{workItems.length === 1 ? "" : "s"}
-                  </h3>
-                  <button
-                    aria-controls={workItemsID}
-                    aria-expanded={workItemsExpanded}
-                    className={cx(
-                      TRACE_EXPANDER_TOGGLE_CLASS,
-                      DASHBOARD_SUPPORTING_LABEL_CLASS,
-                    )}
-                    onClick={() => setWorkItemsExpanded((current) => !current)}
-                    type="button"
-                  >
-                    {workItemsExpanded ? "Collapse" : "Expand"}
-                  </button>
-                </div>
-                {workItemsExpanded ? (
-                  <div id={workItemsID}>
+              <Collapsible
+                className="grid gap-[0.65rem]"
+                onOpenChange={setWorkItemsExpanded}
+                open={workItemsExpanded}
+              >
+                <section aria-labelledby={`${workItemsID}-heading`} className="grid gap-[0.65rem]">
+                  <div className={TRACE_EXPANDER_HEADER_CLASS}>
+                    <h3
+                      className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                      id={`${workItemsID}-heading`}
+                    >
+                      {workItems.length} work item{workItems.length === 1 ? "" : "s"}
+                    </h3>
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        aria-controls={workItemsID}
+                        aria-expanded={workItemsExpanded}
+                        className={cx(
+                          TRACE_EXPANDER_TOGGLE_CLASS,
+                          DASHBOARD_SUPPORTING_LABEL_CLASS,
+                        )}
+                        size="sm"
+                        tone="secondary"
+                      >
+                        {workItemsExpanded ? "Collapse" : "Expand"}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                  <CollapsibleContent id={workItemsID}>
                     <SelectableWorkList
                       onSelectWorkID={onSelectWorkID}
                       workItems={workItems}
                     />
-                  </div>
-                ) : null}
-              </section>
+                  </CollapsibleContent>
+                </section>
+              </Collapsible>
             ) : (
               "Unavailable"
             )}
@@ -295,17 +310,15 @@ function SelectableWorkList({
       {workItems.map((workItem) => (
         <li className="list-none" key={workItem.work_id}>
           {onSelectWorkID ? (
-            <button
-              className={cx(
-                "rounded-lg border border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.35rem] text-left text-af-accent",
-                DASHBOARD_SUPPORTING_CODE_CLASS,
-              )}
+            <Button
+              className={TRACE_WORK_ITEM_BUTTON_CLASS}
               onClick={() => onSelectWorkID(workItem.work_id)}
+              size="sm"
               title={workItem.work_id}
-              type="button"
+              tone="secondary"
             >
               {formatTypedWorkItemLabel(workItem)}
-            </button>
+            </Button>
           ) : (
             <code className={DASHBOARD_SUPPORTING_CODE_CLASS}>
               {formatTypedWorkItemLabel(workItem)}

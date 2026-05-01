@@ -120,8 +120,12 @@ describe("TraceGridBentoCard", () => {
   });
 
   it("renders populated trace data as a bento card table", () => {
+    const onSelectWorkID = vi.fn();
     const { rerender } = render(
-      <TraceGridBentoCard state={{ status: "ready", trace: populatedTrace }} />,
+      <TraceGridBentoCard
+        onSelectWorkID={onSelectWorkID}
+        state={{ status: "ready", trace: populatedTrace }}
+      />,
     );
 
     const card = screen.getByRole("article", { name: "Trace drill-down" });
@@ -167,8 +171,15 @@ describe("TraceGridBentoCard", () => {
     expect(within(card).queryByRole("columnheader", { name: "Consumed tokens" })).toBeNull();
     expect(within(card).queryByRole("columnheader", { name: "Output mutations" })).toBeNull();
     expect(within(card).queryByRole("columnheader", { name: "Workstation run" })).toBeNull();
+    fireEvent.click(within(card).getAllByRole("button", { name: 'story:"Active Story"' })[0]);
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
 
-    rerender(<TraceGridBentoCard state={{ status: "ready", trace: populatedTrace }} />);
+    rerender(
+      <TraceGridBentoCard
+        onSelectWorkID={onSelectWorkID}
+        state={{ status: "ready", trace: populatedTrace }}
+      />,
+    );
 
     expect(within(card).getByRole("region", { name: "Batch relation graph" })).toBeTruthy();
   });
