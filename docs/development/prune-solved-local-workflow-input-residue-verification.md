@@ -1,14 +1,17 @@
 ## Prune Solved Local Workflow Input Residue Verification
 
 Date: 2026-04-30
-Scope: landed-state verification for `prd.json` `US-001` on branch `ralph/prune-solved-local-workflow-input-residue`.
+Scope: landed-state verification and live-inbox reconciliation for `prd.json`
+`US-001` and `US-002` on branch
+`ralph/prune-solved-local-workflow-input-residue`.
 
 ## Summary
 
 This note verifies that the four workflow-input files named in the PRD do not
 represent active pending work on `main`. The live checked-in inbox directories
 already contain only their canonical `.gitkeep` sentinels, so this iteration is
-limited to recording why that empty state is correct.
+limited to recording why that empty state is correct and why no additional
+archival handling is required.
 
 No approved archival surface for solved workflow-input markdown was found in the
 checked-in workflow docs. For these inboxes, the repository contract is direct
@@ -32,6 +35,9 @@ The live checked-in inbox directories were inspected directly:
 - `factory/inputs/task/default/` contains only `.gitkeep`
 
 That state matches the current landed repository truth for the four cited files.
+No approved archival surface was required because the solved request markdown is
+already absent from the live inboxes, and both canonical sentinels remain
+present and unchanged.
 
 ## Validation
 
