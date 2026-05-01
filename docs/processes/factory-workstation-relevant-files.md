@@ -38,4 +38,5 @@ work inputs.
 - Keep workstation testing guidance behavioral. Prompt instructions should reject source scans, docs-topology checks, asset-bundle string inspections, and command or route inventory assertions unless those surfaces are the product behavior being validated.
 - When public and factory ingestion paths share compatibility semantics, keep the normalization and validation helpers in `pkg/factory` and have API boundaries only translate those shared errors into boundary-specific messages.
 - When an API path already depends on a shared `pkg/factory` compatibility seam, call that seam directly instead of adding API-local wrapper helpers that only forward the same arguments.
+- Treat `pkg/internal/submission` as part of the submit ingestion ownership surface; if it needs trace-alias fallback behavior, call the shared `pkg/factory` seam instead of re-implementing the fallback locally.
 - When compatibility work touches shared request aliases, prove it with API or canonical parsing tests plus normalized request-output assertions; helper-only tests are not enough to prevent boundary drift.

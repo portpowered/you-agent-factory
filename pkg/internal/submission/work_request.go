@@ -5,6 +5,7 @@ import (
 	"maps"
 	"strconv"
 
+	"github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 )
 
@@ -23,10 +24,7 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 		if itemRequestID == "" {
 			itemRequestID = requestID
 		}
-		currentChainingTraceID := req.CurrentChainingTraceID
-		if currentChainingTraceID == "" {
-			currentChainingTraceID = req.TraceID
-		}
+		currentChainingTraceID := factory.ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID)
 		works = append(works, interfaces.Work{
 			Name:                     uniqueSubmitWorkName(req, i, usedNames),
 			WorkID:                   req.WorkID,
@@ -42,10 +40,7 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 			RuntimeRelations:         clonePetriRelations(req.Relations),
 		})
 	}
-	currentChainingTraceID := requests[0].CurrentChainingTraceID
-	if currentChainingTraceID == "" {
-		currentChainingTraceID = requests[0].TraceID
-	}
+	currentChainingTraceID := factory.ResolveWorkRequestCurrentChainingTraceID(requests[0].CurrentChainingTraceID, requests[0].TraceID)
 
 	return interfaces.WorkRequest{
 		RequestID:              requestID,
