@@ -14,7 +14,7 @@ import (
 func main() {
 	binaryPath := flag.String("binary", "", "path to the extracted agent-factory binary to smoke test")
 	fixturePath := flag.String("fixture", "", "path to the canonical release smoke fixture directory")
-	timeout := flag.Duration("timeout", 20*time.Second, "overall smoke timeout")
+	timeout := flag.Duration("timeout", 60*time.Second, "overall smoke timeout")
 	flag.Parse()
 
 	result, err := releasesmoke.Run(context.Background(), releasesmoke.Config{

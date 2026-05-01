@@ -83,6 +83,25 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dashboard dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browser on Linux
+        if: runner.os == 'Linux'
+        working-directory: ui
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright browser on non-Linux runners
+        if: runner.os != 'Linux'
+        working-directory: ui
+        run: bunx playwright install chromium
+
       - name: Download candidate dist
         uses: actions/download-artifact@v4
         with:

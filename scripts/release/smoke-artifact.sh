@@ -6,6 +6,6 @@ if [ "$#" -lt 2 ]; then
   exit 1
 fi
 
-TIMEOUT="${3:-20s}"
+TIMEOUT="${3:-60s}"
 
 go run ./cmd/releasesmoke -binary "$1" -fixture "$2" -timeout "$TIMEOUT"

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,23 +23,25 @@ import (
 )
 
 const (
-	defaultTimeout     = 20 * time.Second
+	defaultTimeout     = 60 * time.Second
 	processStopTimeout = 5 * time.Second
 	maxLogTailBytes    = 8192
 )
 
 type Config struct {
-	BinaryPath  string
-	FixturePath string
-	Timeout     time.Duration
+	BinaryPath              string
+	FixturePath             string
+	Timeout                 time.Duration
+	RenderedDashboardVerify func(context.Context, string) (DashboardRenderEvidence, error)
 }
 
 type Result struct {
-	BaseURL            string   `json:"baseUrl"`
-	DashboardURL       string   `json:"dashboardUrl"`
-	WorkspacePath      string   `json:"workspacePath"`
-	ObservedEventTypes []string `json:"observedEventTypes"`
-	CompletedWorkCount int      `json:"completedWorkCount"`
+	BaseURL                 string                  `json:"baseUrl"`
+	DashboardURL            string                  `json:"dashboardUrl"`
+	WorkspacePath           string                  `json:"workspacePath"`
+	ObservedEventTypes      []string                `json:"observedEventTypes"`
+	CompletedWorkCount      int                     `json:"completedWorkCount"`
+	DashboardRenderEvidence DashboardRenderEvidence `json:"dashboardRenderEvidence"`
 }
 
 type Failure struct {
@@ -52,6 +55,13 @@ type Failure struct {
 	ObservedEventTypes []string `json:"observedEventTypes,omitempty"`
 	StdoutTail         string   `json:"stdoutTail,omitempty"`
 	StderrTail         string   `json:"stderrTail,omitempty"`
+}
+
+type DashboardRenderEvidence struct {
+	AssetRequestPaths []string `json:"assetRequestPaths"`
+	LiveRequestPaths  []string `json:"liveRequestPaths"`
+	StreamMessage     string   `json:"streamMessage"`
+	VisibleTexts      []string `json:"visibleTexts"`
 }
 
 func (f *Failure) Error() string {
@@ -154,17 +164,23 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, observedEvents, "verify_dashboard", err)
 	}
 
+	renderEvidence, err := verifyRenderedDashboard(ctx, cfg, dashboardURL)
+	if err != nil {
+		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, observedEvents, "verify_dashboard_render", err)
+	}
+
 	workCount, err := waitForCompletedWork(ctx, client, baseURL+"/work", waitCh)
 	if err != nil {
 		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, observedEvents, "verify_completed_work", err)
 	}
 
 	return Result{
-		BaseURL:            baseURL,
-		DashboardURL:       dashboardURL,
-		WorkspacePath:      workspacePath,
-		ObservedEventTypes: observedEvents,
-		CompletedWorkCount: workCount,
+		BaseURL:                 baseURL,
+		DashboardURL:            dashboardURL,
+		WorkspacePath:           workspacePath,
+		ObservedEventTypes:      observedEvents,
+		CompletedWorkCount:      workCount,
+		DashboardRenderEvidence: renderEvidence,
 	}, nil
 }
 
@@ -300,6 +316,78 @@ func verifyDashboard(ctx context.Context, client *http.Client, dashboardURL stri
 		return errors.New("dashboard shell was empty")
 	}
 	return nil
+}
+
+func verifyRenderedDashboard(ctx context.Context, cfg Config, dashboardURL string) (DashboardRenderEvidence, error) {
+	verifier := cfg.RenderedDashboardVerify
+	if verifier == nil {
+		verifier = verifyRenderedDashboardWithBrowser
+	}
+	return verifier(ctx, dashboardURL)
+}
+
+func verifyRenderedDashboardWithBrowser(ctx context.Context, dashboardURL string) (DashboardRenderEvidence, error) {
+	runner, err := dashboardBrowserRunner()
+	if err != nil {
+		return DashboardRenderEvidence{}, err
+	}
+
+	scriptPath := filepath.Join("ui", "scripts", "release-dashboard-smoke.mjs")
+	scriptStdout := newLockedBuffer()
+	scriptStderr := newLockedBuffer()
+	cmd := exec.CommandContext(ctx, runner, scriptPath, dashboardURL)
+	cmd.Stdout = scriptStdout
+	cmd.Stderr = scriptStderr
+	if err := cmd.Run(); err != nil {
+		return DashboardRenderEvidence{}, fmt.Errorf(
+			"run dashboard browser smoke via %s: %w; stderr=%s; stdout=%s",
+			runner,
+			err,
+			strings.TrimSpace(scriptStderr.Tail()),
+			strings.TrimSpace(scriptStdout.Tail()),
+		)
+	}
+
+	var evidence DashboardRenderEvidence
+	if err := json.Unmarshal([]byte(scriptStdout.Tail()), &evidence); err != nil {
+		return DashboardRenderEvidence{}, fmt.Errorf("decode dashboard browser smoke output: %w", err)
+	}
+	evidence.AssetRequestPaths = sortedUniqueStrings(evidence.AssetRequestPaths)
+	evidence.LiveRequestPaths = sortedUniqueStrings(evidence.LiveRequestPaths)
+	evidence.VisibleTexts = sortedUniqueStrings(evidence.VisibleTexts)
+	return evidence, nil
+}
+
+func dashboardBrowserRunner() (string, error) {
+	if _, err := exec.LookPath("node"); err == nil {
+		return "node", nil
+	}
+	if _, err := exec.LookPath("bun"); err == nil {
+		return "bun", nil
+	}
+	return "", errors.New("dashboard render verification requires bun or node on PATH")
+}
+
+func sortedUniqueStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	unique := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		unique[trimmed] = struct{}{}
+	}
+
+	result := make([]string, 0, len(unique))
+	for value := range unique {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func waitForCompletedWork(ctx context.Context, client *http.Client, endpoint string, waitCh <-chan error) (int, error) {

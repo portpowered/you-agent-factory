@@ -28,10 +28,20 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	}
 
 	fixturePath := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	var renderedDashboardURL string
 	result, err := releasesmoke.Run(context.Background(), releasesmoke.Config{
 		BinaryPath:  binaryPath,
 		FixturePath: fixturePath,
 		Timeout:     20 * time.Second,
+		RenderedDashboardVerify: func(_ context.Context, dashboardURL string) (releasesmoke.DashboardRenderEvidence, error) {
+			renderedDashboardURL = dashboardURL
+			return releasesmoke.DashboardRenderEvidence{
+				AssetRequestPaths: []string{"/dashboard/ui/assets/index.js"},
+				LiveRequestPaths:  []string{"/events"},
+				StreamMessage:     "Factory event stream connected.",
+				VisibleTexts:      []string{"Agent Factory", "Work totals", "step-one", "step-two"},
+			}, nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("run release smoke harness: %v", err)
@@ -45,5 +55,14 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	}
 	if result.BaseURL == "" || result.DashboardURL == "" {
 		t.Fatalf("result URLs = %#v, want non-empty base and dashboard URLs", result)
+	}
+	if renderedDashboardURL != result.DashboardURL {
+		t.Fatalf("rendered dashboard URL = %q, want %q", renderedDashboardURL, result.DashboardURL)
+	}
+	if result.DashboardRenderEvidence.StreamMessage != "Factory event stream connected." {
+		t.Fatalf("stream message = %q, want connected evidence", result.DashboardRenderEvidence.StreamMessage)
+	}
+	if len(result.DashboardRenderEvidence.AssetRequestPaths) == 0 || len(result.DashboardRenderEvidence.LiveRequestPaths) == 0 {
+		t.Fatalf("dashboard render evidence = %#v, want asset and live request paths", result.DashboardRenderEvidence)
 	}
 }
