@@ -290,41 +290,41 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
     SubmitWorkRequest:
-      $ref: './components/schemas/runtime/SubmitWorkRequest.yaml'
+      $ref: './components/schemas/api/SubmitWorkRequest.yaml'
     SubmitRelation:
-      $ref: './components/schemas/runtime/SubmitRelation.yaml'
+      $ref: './components/schemas/api/SubmitRelation.yaml'
     SubmitWorkResponse:
-      $ref: './components/schemas/runtime/SubmitWorkResponse.yaml'
+      $ref: './components/schemas/api/SubmitWorkResponse.yaml'
     UpsertWorkRequestResponse:
-      $ref: './components/schemas/runtime/UpsertWorkRequestResponse.yaml'
+      $ref: './components/schemas/api/UpsertWorkRequestResponse.yaml'
     ListWorkResponse:
-      $ref: './components/schemas/runtime/ListWorkResponse.yaml'
+      $ref: './components/schemas/api/ListWorkResponse.yaml'
     PaginationContext:
-      $ref: './components/schemas/runtime/PaginationContext.yaml'
+      $ref: './components/schemas/api/PaginationContext.yaml'
     TokenResponse:
-      $ref: './components/schemas/runtime/TokenResponse.yaml'
+      $ref: './components/schemas/api/TokenResponse.yaml'
     TokenHistory:
-      $ref: './components/schemas/runtime/TokenHistory.yaml'
+      $ref: './components/schemas/api/TokenHistory.yaml'
     ResourceUsage:
       $ref: './components/schemas/shared/ResourceUsage.yaml'
     ResourceRequirement:
       $ref: './components/schemas/shared/ResourceRequirement.yaml'
     StatusCategories:
-      $ref: './components/schemas/runtime/StatusCategories.yaml'
+      $ref: './components/schemas/api/StatusCategories.yaml'
     StatusResponse:
-      $ref: './components/schemas/runtime/StatusResponse.yaml'
+      $ref: './components/schemas/api/StatusResponse.yaml'
     ErrorFamily:
-      $ref: './components/schemas/runtime/ErrorFamily.yaml'
+      $ref: './components/schemas/api/ErrorFamily.yaml'
     ErrorResponse:
-      $ref: './components/schemas/runtime/ErrorResponse.yaml'
+      $ref: './components/schemas/api/ErrorResponse.yaml'
     StringMap:
       $ref: './components/schemas/shared/StringMap.yaml'
     IntegerMap:
       $ref: './components/schemas/shared/IntegerMap.yaml'
     FactoryName:
-      $ref: './components/schemas/factory-config/FactoryName.yaml'
+      $ref: './components/schemas/data-models/FactoryName.yaml'
     NamedFactory:
-      $ref: './components/schemas/factory-config/NamedFactory.yaml'
+      $ref: './components/schemas/data-models/NamedFactory.yaml'
     FactoryWorldWorkstationRequestProjectionSlice:
       $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml'
     FactoryWorldRenderedPromptDiagnostic:
@@ -422,67 +422,67 @@ components:
 
     # ==== Raw data schemas for a factor =======
     Factory:
-      $ref: './components/schemas/factory-config/Factory.yaml'
+      $ref: './components/schemas/data-models/Factory.yaml'
     ResourceManifest:
-      $ref: './components/schemas/factory-config/ResourceManifest.yaml'
+      $ref: './components/schemas/data-models/ResourceManifest.yaml'
     RequiredTool:
-      $ref: './components/schemas/factory-config/RequiredTool.yaml'
+      $ref: './components/schemas/data-models/RequiredTool.yaml'
     BundledFile:
-      $ref: './components/schemas/factory-config/BundledFile.yaml'
+      $ref: './components/schemas/data-models/BundledFile.yaml'
     BundledFileContent:
-      $ref: './components/schemas/factory-config/BundledFileContent.yaml'
+      $ref: './components/schemas/data-models/BundledFileContent.yaml'
     InputType:
-      $ref: './components/schemas/factory-config/InputType.yaml'
+      $ref: './components/schemas/data-models/InputType.yaml'
     InputKind:
-      $ref: './components/schemas/factory-config/InputKind.yaml'
+      $ref: './components/schemas/data-models/InputKind.yaml'
     WorkType:
-      $ref: './components/schemas/factory-config/WorkType.yaml'
+      $ref: './components/schemas/data-models/WorkType.yaml'
     WorkState:
-      $ref: './components/schemas/factory-config/WorkState.yaml'
+      $ref: './components/schemas/data-models/WorkState.yaml'
     WorkStateType:
-      $ref: './components/schemas/factory-config/WorkStateType.yaml'
+      $ref: './components/schemas/data-models/WorkStateType.yaml'
     Resource:
-      $ref: './components/schemas/factory-config/Resource.yaml'
+      $ref: './components/schemas/data-models/Resource.yaml'
     Worker:
-      $ref: './components/schemas/factory-config/Worker.yaml'
+      $ref: './components/schemas/data-models/Worker.yaml'
     WorkerType:
-      $ref: './components/schemas/factory-config/WorkerType.yaml'
+      $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:
-      $ref: './components/schemas/factory-config/WorkerModelProvider.yaml'
+      $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
     WorkerProvider:
-      $ref: './components/schemas/factory-config/WorkerProvider.yaml'
+      $ref: './components/schemas/data-models/WorkerProvider.yaml'
     Workstation:
-      $ref: './components/schemas/factory-config/Workstation.yaml'
+      $ref: './components/schemas/data-models/Workstation.yaml'
     WorkstationLimits:
-      $ref: './components/schemas/factory-config/WorkstationLimits.yaml'
+      $ref: './components/schemas/data-models/WorkstationLimits.yaml'
     WorkstationKind:
-      $ref: './components/schemas/factory-config/WorkstationKind.yaml'
+      $ref: './components/schemas/data-models/WorkstationKind.yaml'
     WorkstationType:
-      $ref: './components/schemas/factory-config/WorkstationType.yaml'
+      $ref: './components/schemas/data-models/WorkstationType.yaml'
     WorkstationCron:
-      $ref: './components/schemas/factory-config/WorkstationCron.yaml'
+      $ref: './components/schemas/data-models/WorkstationCron.yaml'
     WorkstationGuardType:
-      $ref: './components/schemas/factory-config/WorkstationGuardType.yaml'
+      $ref: './components/schemas/data-models/WorkstationGuardType.yaml'
     WorkstationGuard:
-      $ref: './components/schemas/factory-config/WorkstationGuard.yaml'
+      $ref: './components/schemas/data-models/WorkstationGuard.yaml'
     WorkstationGuardMatchConfig:
-      $ref: './components/schemas/factory-config/WorkstationGuardMatchConfig.yaml'
+      $ref: './components/schemas/data-models/WorkstationGuardMatchConfig.yaml'
     WorkstationIO:
-      $ref: './components/schemas/factory-config/WorkstationIO.yaml'
+      $ref: './components/schemas/data-models/WorkstationIO.yaml'
     InputGuard:
-      $ref: './components/schemas/factory-config/InputGuard.yaml'
+      $ref: './components/schemas/data-models/InputGuard.yaml'
     InputGuardType:
-      $ref: './components/schemas/factory-config/InputGuardType.yaml'
+      $ref: './components/schemas/data-models/InputGuardType.yaml'
     Transition:
-      $ref: './components/schemas/factory-config/Transition.yaml'
+      $ref: './components/schemas/data-models/Transition.yaml'
     # ==== Raw data types here =======
     WorkRequest:
-      $ref: './components/schemas/runtime/WorkRequest.yaml'
+      $ref: './components/schemas/api/WorkRequest.yaml'
     WorkRequestType:
-      $ref: './components/schemas/runtime/WorkRequestType.yaml'
+      $ref: './components/schemas/api/WorkRequestType.yaml'
     Work:
-      $ref: './components/schemas/runtime/Work.yaml'
+      $ref: './components/schemas/data-models/Work.yaml'
     Relation:
-      $ref: './components/schemas/runtime/Relation.yaml'
+      $ref: './components/schemas/data-models/Relation.yaml'
     RelationType:
-      $ref: './components/schemas/runtime/RelationType.yaml'
+      $ref: './components/schemas/data-models/RelationType.yaml'

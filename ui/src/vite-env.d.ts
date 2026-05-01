@@ -1,9 +1,8 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_AGENT_FACTORY_API_ORIGIN?: string;
-}
+declare function setImmediate(
+  handler: (...args: unknown[]) => void,
+  ...args: unknown[]
+): number;
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+declare function clearImmediate(handle: number): void;

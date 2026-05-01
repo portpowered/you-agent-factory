@@ -1,479 +1,283 @@
-import { startTransition, useEffect, useState } from "react";
+import "./styles.css";
 
+import { useCallback, useEffect, useState } from "react";
+
+import { cx } from "./components/dashboard/classnames";
 import {
-  FACTORY_EVENT_TYPES,
-  type DispatchRequestEventPayload,
-  type DispatchResponseEventPayload,
-  type FactoryEvent,
-  type FactoryEventContext,
-  type FactoryStateResponseEventPayload,
-  type InitialStructureRequestEventPayload,
-  type RunRequestEventPayload,
-  type WorkRequestEventPayload,
-} from "./api/events";
+  AgentBentoLayout,
+  TickSliderControl,
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_PAGE_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+} from "./components/dashboard";
+import {
+  CurrentSelectionWidget,
+  useCurrentSelection,
+  useCurrentSelectionDetails,
+} from "./features/current-selection";
+import { ExportFactoryDialog, useCurrentFactoryExport } from "./features/export";
+import { SubmitWorkWidget } from "./features/submit-work";
+import { TerminalWorkWidget } from "./features/terminal-work";
+import {
+  TraceDrilldownWidget,
+  useTraceDrilldown,
+} from "./features/trace-drilldown";
+import {
+  WorkOutcomeWidget,
+  useWorkOutcomeChart,
+} from "./features/work-outcome";
+import { WorkTotalsWidget } from "./features/work-totals";
+import { WorkflowActivityWidget } from "./features/workflow-activity";
+import { useDashboardSnapshot } from "./hooks/dashboard/useDashboard";
+import {
+  DASHBOARD_WIDGET_IDS,
+  useDashboardLayout,
+} from "./hooks/dashboard/useDashboardLayout";
+import { useDashboardNow } from "./hooks/dashboard/useDashboardNow";
+import { useFactoryTimelineStore } from "./state/factoryTimelineStore";
 
-interface Workstation {
-  id: string;
-  name: string;
-}
-
-interface WorkItem {
-  id: string;
-  name: string;
-  traceID: string;
-  typeName: string;
-}
-
-interface DispatchRecord {
-  id: string;
-  transitionId: string;
-  workIds: string[];
-}
-
-interface DashboardSnapshot {
-  connectionState: "connecting" | "error" | "open";
-  dispatches: DispatchRecord[];
-  factoryState: string;
-  latestTick: number;
-  workItems: Record<string, WorkItem>;
-  workstations: Workstation[];
-}
-
-const eventStreamPath = "/events";
-const initialSnapshot: DashboardSnapshot = {
-  connectionState: "connecting",
-  dispatches: [],
-  factoryState: "Connecting",
-  latestTick: 0,
-  workItems: {},
-  workstations: [],
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function readTick(event: FactoryEvent): number {
-  const tick = event.context.tick;
-  return typeof tick === "number" ? tick : 0;
-}
-
-function readContext(event: FactoryEvent): FactoryEventContext {
-  return event.context;
-}
-
-function extractWorkstations(factory: unknown): Workstation[] {
-  if (!isRecord(factory) || !Array.isArray(factory.workstations)) {
-    return [];
-  }
-
-  return factory.workstations
-    .map((candidate) => {
-      if (!isRecord(candidate)) {
-        return null;
-      }
-
-      const id = readString(candidate.id);
-      const name = readString(candidate.name);
-      if (!id || !name) {
-        return null;
-      }
-
-      return { id, name };
-    })
-    .filter((candidate): candidate is Workstation => candidate !== null);
-}
-
-function extractWorkItem(candidate: unknown): WorkItem | null {
-  if (!isRecord(candidate)) {
-    return null;
-  }
-
-  const id = readString(candidate.work_id) ?? readString(candidate.workId);
-  const name = readString(candidate.name);
-  const traceID = readString(candidate.trace_id) ?? readString(candidate.current_chaining_trace_id) ?? "trace-unavailable";
-  const typeName = readString(candidate.work_type_name) ?? "unknown";
-
-  if (!id || !name) {
-    return null;
-  }
-
-  return {
-    id,
-    name,
-    traceID,
-    typeName,
-  };
-}
-
-function mergeWorkItems(snapshot: DashboardSnapshot, candidates: unknown): DashboardSnapshot {
-  if (!Array.isArray(candidates)) {
-    return snapshot;
-  }
-
-  const nextWorkItems = { ...snapshot.workItems };
-  let changed = false;
-
-  for (const candidate of candidates) {
-    const workItem = extractWorkItem(candidate);
-    if (!workItem) {
-      continue;
-    }
-
-    nextWorkItems[workItem.id] = workItem;
-    changed = true;
-  }
-
-  return changed ? { ...snapshot, workItems: nextWorkItems } : snapshot;
-}
-
-function extractDispatchRecord(event: FactoryEvent, payload: unknown): DispatchRecord | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-
-  const context = readContext(event);
-  const dispatchId = readString(payload.dispatchId) ?? readString(context.dispatchId);
-  const transitionId = readString(payload.transitionId);
-  if (!dispatchId || !transitionId) {
-    return null;
-  }
-
-  const workIds = new Set<string>();
-
-  if (Array.isArray(payload.inputs)) {
-    for (const input of payload.inputs) {
-      if (!isRecord(input)) {
-        continue;
-      }
-
-      const workId = readString(input.workId) ?? readString(input.work_id);
-      if (workId) {
-        workIds.add(workId);
-      }
-    }
-  }
-
-  if (Array.isArray(context.workIds)) {
-    for (const workId of context.workIds) {
-      const resolvedWorkId = readString(workId);
-      if (resolvedWorkId) {
-        workIds.add(resolvedWorkId);
-      }
-    }
-  }
-
-  return {
-    id: dispatchId,
-    transitionId,
-    workIds: [...workIds],
-  };
-}
-
-function readStructurePayload(
-  event: FactoryEvent,
-): InitialStructureRequestEventPayload | RunRequestEventPayload | null {
-  switch (event.type) {
-    case FACTORY_EVENT_TYPES.initialStructureRequest:
-      return event.payload as InitialStructureRequestEventPayload;
-    case FACTORY_EVENT_TYPES.runRequest:
-      return event.payload as RunRequestEventPayload;
-    default:
-      return null;
-  }
-}
-
-function readFactoryStatePayload(event: FactoryEvent): FactoryStateResponseEventPayload | null {
-  if (event.type !== FACTORY_EVENT_TYPES.factoryStateResponse) {
-    return null;
-  }
-
-  return event.payload as FactoryStateResponseEventPayload;
-}
-
-function readWorkRequestPayload(event: FactoryEvent): WorkRequestEventPayload | null {
-  if (event.type !== FACTORY_EVENT_TYPES.workRequest) {
-    return null;
-  }
-
-  return event.payload as WorkRequestEventPayload;
-}
-
-function readDispatchRequestPayload(event: FactoryEvent): DispatchRequestEventPayload | null {
-  if (event.type !== FACTORY_EVENT_TYPES.dispatchRequest) {
-    return null;
-  }
-
-  return event.payload as DispatchRequestEventPayload;
-}
-
-function readDispatchResponsePayload(event: FactoryEvent): DispatchResponseEventPayload | null {
-  if (event.type !== FACTORY_EVENT_TYPES.dispatchResponse) {
-    return null;
-  }
-
-  return event.payload as DispatchResponseEventPayload;
-}
-
-function reduceSnapshot(snapshot: DashboardSnapshot, event: FactoryEvent): DashboardSnapshot {
-  let nextSnapshot: DashboardSnapshot = {
-    ...snapshot,
-    connectionState: "open",
-    latestTick: Math.max(snapshot.latestTick, readTick(event)),
-  };
-
-  const structurePayload = readStructurePayload(event);
-  if (structurePayload) {
-    const workstations = extractWorkstations(structurePayload.factory);
-    if (workstations.length > 0) {
-      nextSnapshot = {
-        ...nextSnapshot,
-        workstations,
-      };
-    }
-  }
-
-  const factoryStatePayload = readFactoryStatePayload(event);
-  if (factoryStatePayload) {
-    const factoryState = readString(factoryStatePayload.state);
-    if (factoryState) {
-      nextSnapshot = {
-        ...nextSnapshot,
-        factoryState,
-      };
-    }
-  }
-
-  const workRequestPayload = readWorkRequestPayload(event);
-  if (workRequestPayload) {
-    nextSnapshot = mergeWorkItems(nextSnapshot, workRequestPayload.works);
-  }
-
-  const dispatchRequestPayload = readDispatchRequestPayload(event);
-  if (dispatchRequestPayload) {
-    const dispatch = extractDispatchRecord(event, dispatchRequestPayload);
-    if (dispatch) {
-      nextSnapshot = {
-        ...nextSnapshot,
-        dispatches: [
-          ...nextSnapshot.dispatches.filter((candidate) => candidate.id !== dispatch.id),
-          dispatch,
-        ],
-      };
-    }
-  }
-
-  const dispatchResponsePayload = readDispatchResponsePayload(event);
-  if (dispatchResponsePayload) {
-    nextSnapshot = mergeWorkItems(nextSnapshot, dispatchResponsePayload.outputWork);
-  }
-
-  return nextSnapshot;
-}
-
-function resolveEventStreamURL() {
-  const apiOrigin = import.meta.env.VITE_AGENT_FACTORY_API_ORIGIN;
-  return apiOrigin ? `${apiOrigin}${eventStreamPath}` : eventStreamPath;
-}
-
-function workstationButtonLabel(workstation: Workstation): string {
-  return `Select ${workstation.name} workstation`;
-}
-
-function uniqueWorkItemsForWorkstation(snapshot: DashboardSnapshot, workstationId: string): WorkItem[] {
-  const workItems: WorkItem[] = [];
-  const seen = new Set<string>();
-
-  for (const dispatch of snapshot.dispatches) {
-    if (dispatch.transitionId !== workstationId) {
-      continue;
-    }
-
-    for (const workId of dispatch.workIds) {
-      const workItem = snapshot.workItems[workId];
-      if (!workItem || seen.has(workItem.id)) {
-        continue;
-      }
-
-      seen.add(workItem.id);
-      workItems.push(workItem);
-    }
-  }
-
-  return workItems;
-}
+const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-5 max-[720px]:p-4";
+const PANEL_CLASS =
+  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
+const STATUS_PANEL_CLASS = cx(PANEL_CLASS, "mb-4 p-5 px-6");
+const DASHBOARD_TOOLBAR_CLASS = cx(
+  PANEL_CLASS,
+  "mb-4 flex flex-wrap items-center gap-4 p-4 px-5",
+);
+const DASHBOARD_TOOLBAR_ACTION_CLASS =
+  "inline-flex items-center gap-2 rounded-lg border border-af-accent/35 bg-af-accent/10 px-3 py-2 text-sm font-bold text-af-accent outline-af-accent transition hover:bg-af-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2";
+const EYEBROW_CLASS =
+  "mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
+const DASHBOARD_TITLE_CLASS = cx("m-0", DASHBOARD_PAGE_HEADING_CLASS);
+const DETAIL_COPY_CLASS = cx("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
+const SESSION_METADATA_CLASS = cx(
+  "m-0 flex min-w-0 flex-1 flex-wrap items-center gap-2 [&_dd]:m-0 [&_div]:inline-flex [&_div]:items-center [&_div]:gap-2 [&_div]:rounded-lg [&_div]:bg-af-overlay/4 [&_div]:px-3 [&_div]:py-2",
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+);
 
 export function App() {
-  const [snapshot, setSnapshot] = useState(initialSnapshot);
-  const [selectedWorkstationId, setSelectedWorkstationId] = useState<string | null>(null);
-  const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(null);
+  const [dashboardRefreshToken, setDashboardRefreshToken] = useState(0);
+  const { snapshot, streamState, isInitialLoading, error } = useDashboardSnapshot({
+    refreshToken: dashboardRefreshToken,
+  });
+  const { dashboardLayout, persistDashboardLayout } = useDashboardLayout();
+  const now = useDashboardNow();
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [selectedTraceID, setSelectedTraceID] = useState<string | null>(null);
+  const timelineEvents = useFactoryTimelineStore((state) => state.events);
+  const selectedTimelineTick = useFactoryTimelineStore((state) => state.selectedTick);
+  const worldViewCache = useFactoryTimelineStore((state) => state.worldViewCache);
+  const workstationRequestsByDispatchID = useFactoryTimelineStore(
+    (state) => state.worldViewCache[state.selectedTick]?.workstationRequestsByDispatchID,
+  );
 
+  const currentSelection = useCurrentSelection({
+    snapshot,
+    workstationRequestsByDispatchID,
+  });
   useEffect(() => {
-    const eventSource = new EventSource(resolveEventStreamURL());
-
-    eventSource.onopen = () => {
-      startTransition(() => {
-        setSnapshot((current) => ({
-          ...current,
-          connectionState: "open",
-        }));
-      });
-    };
-
-    eventSource.onerror = () => {
-      startTransition(() => {
-        setSnapshot((current) => ({
-          ...current,
-          connectionState: "error",
-        }));
-      });
-    };
-
-    eventSource.onmessage = (message) => {
-      const event = JSON.parse(message.data) as FactoryEvent;
-      startTransition(() => {
-        setSnapshot((current) => reduceSnapshot(current, event));
-      });
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    setSelectedTraceID(null);
+  }, [currentSelection.selectedWorkID]);
+  const refreshDashboard = useCallback(() => {
+    setDashboardRefreshToken((currentValue) => currentValue + 1);
   }, []);
+  const { selectedTrace, traceGridState } = useTraceDrilldown(
+    currentSelection.selectedWorkID,
+    selectedTraceID,
+  );
+  const {
+    selectedWorkExecutionDetails,
+    terminalWorkExecutionDetails,
+  } = useCurrentSelectionDetails({
+    currentSelection,
+    selectedTrace,
+    snapshot,
+    workstationRequestsByDispatchID: snapshot?.runtime.workstation_requests_by_dispatch_id,
+  });
+  const workChartModel = useWorkOutcomeChart({
+    selectedTimelineTick,
+    timelineEvents,
+    worldViewCache,
+  });
+  const { currentFactoryExport, isPreparing: isPreparingCurrentFactoryExport } =
+    useCurrentFactoryExport(isExportDialogOpen);
 
-  const selectedWorkstation =
-    snapshot.workstations.find((workstation) => workstation.id === selectedWorkstationId) ?? null;
-  const workstationWorkItems = selectedWorkstation
-    ? uniqueWorkItemsForWorkstation(snapshot, selectedWorkstation.id)
-    : [];
-  const selectedWorkItem =
-    workstationWorkItems.find((workItem) => workItem.id === selectedWorkItemId)
-    ?? workstationWorkItems[0]
-    ?? null;
+  if (isInitialLoading) {
+    return (
+      <main className={DASHBOARD_SHELL_CLASS}>
+        <section className={STATUS_PANEL_CLASS}>
+          <p className={EYEBROW_CLASS}>Agent Factory</p>
+          <h1 className={DASHBOARD_TITLE_CLASS}>Loading dashboard</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (error instanceof Error) {
+    return (
+      <main className={DASHBOARD_SHELL_CLASS}>
+        <section className={cx(STATUS_PANEL_CLASS, "border-af-danger/45")}>
+          <p className={EYEBROW_CLASS}>Agent Factory</p>
+          <h1 className={DASHBOARD_TITLE_CLASS}>Dashboard unavailable</h1>
+          <p className={DETAIL_COPY_CLASS}>{error.message}</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!snapshot) {
+    return null;
+  }
 
   return (
-    <main className="app-shell">
-      <section className="panel panel-hero">
-        <div>
-          <p className="eyebrow">Agent Factory</p>
-          <h1>Agent Factory</h1>
-        </div>
-        <p className="lede">
-          Embedded dashboard smoke surface for the repository-owned replay and CI workflow.
-        </p>
-        <p className="api-contract">
-          Canonical event stream endpoint: <code>{eventStreamPath}</code>
-        </p>
-      </section>
+    <main className={DASHBOARD_SHELL_CLASS}>
+      <section className={DASHBOARD_TOOLBAR_CLASS} aria-label="dashboard summary">
+        <h1 className={DASHBOARD_TITLE_CLASS}>Agent Factory</h1>
 
-      <section className="panel summary-grid">
-        <article aria-label="dashboard summary" className="summary-card">
-          <p className="summary-label">Factory state</p>
-          <strong>{snapshot.factoryState}</strong>
-        </article>
-        <article className="summary-card">
-          <p className="summary-label">Replay progress</p>
-          <strong>{`Tick ${snapshot.latestTick} of ${snapshot.latestTick}`}</strong>
-        </article>
-        <article className="summary-card">
-          <p className="summary-label">Stream status</p>
-          <strong>{snapshot.connectionState}</strong>
-        </article>
-      </section>
+        <TickSliderControl />
 
-      <section className="panel">
-        <div className="section-heading">
-          <h2>Workstations</h2>
-          <p>Select a workstation to inspect replayed work items.</p>
-        </div>
-        <div className="button-row">
-          {snapshot.workstations.map((workstation) => (
-            <button
-              className={selectedWorkstationId === workstation.id ? "workstation-button active" : "workstation-button"}
-              key={workstation.id}
-              onClick={() => {
-                setSelectedWorkstationId(workstation.id);
-                setSelectedWorkItemId(null);
-              }}
-              type="button"
-            >
-              {workstationButtonLabel(workstation)}
-            </button>
-          ))}
-        </div>
-      </section>
+        <dl className={SESSION_METADATA_CLASS}>
+          <div>
+            <dt>Factory state</dt>
+            <dd>{snapshot.factory_state}</dd>
+          </div>
 
-      <section className="detail-layout">
-        <article aria-label="Current selection" className="panel detail-card">
-          <h2>Current selection</h2>
-          {selectedWorkstation ? (
-            <div className="selection-stack">
-              <p>
-                <span className="detail-label">Workstation</span>
-                <strong>{selectedWorkstation.name}</strong>
-              </p>
-              {selectedWorkItem ? (
-                <>
-                  <p>
-                    <span className="detail-label">Work item</span>
-                    <strong>{selectedWorkItem.name}</strong>
-                  </p>
-                  <p>
-                    <span className="detail-label">Work type</span>
-                    <strong>{selectedWorkItem.typeName}</strong>
-                  </p>
-                </>
-              ) : (
-                <p className="muted-copy">No work items have been replayed for this workstation yet.</p>
+          <div>
+            <dt>Stream</dt>
+            <dd
+              className={cx(
+                "inline-flex rounded-full px-[0.7rem] py-1",
+                streamState.status === "live" && "bg-af-success/20 text-af-success-ink",
+                streamState.status === "connecting" && "bg-af-accent/15 text-af-accent",
+                streamState.status === "offline" && "bg-af-danger/15 text-af-danger-ink",
               )}
-            </div>
-          ) : (
-            <p className="muted-copy">Choose a workstation to inspect the replayed state.</p>
-          )}
+            >
+              {streamState.message}
+            </dd>
+          </div>
+        </dl>
 
-          {workstationWorkItems.length > 0 ? (
-            <div className="work-item-list">
-              {workstationWorkItems.map((workItem, index) => (
-                <button
-                  className={selectedWorkItemId === workItem.id ? "work-item-button active" : "work-item-button"}
-                  key={workItem.id}
-                  onClick={() => {
-                    setSelectedWorkItemId(workItem.id);
-                  }}
-                  type="button"
-                >
-                  {`Select work item ${index + 1}`}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </article>
-
-        <article aria-label="Trace drill-down" className="panel detail-card">
-          <h2>Trace drill-down</h2>
-          {selectedWorkItemId && selectedWorkItem ? (
-            <div className="selection-stack">
-              <p>
-                <span className="detail-label">Trace</span>
-                <strong>{selectedWorkItem.traceID}</strong>
-              </p>
-              <p>
-                <span className="detail-label">Work item</span>
-                <strong>{selectedWorkItem.name}</strong>
-              </p>
-              <p className="muted-copy">
-                Replay-driven drill-down uses the recorded event stream rather than seeded component props.
-              </p>
-            </div>
-          ) : (
-            <p className="muted-copy">Select a replayed work item to inspect its trace context.</p>
-          )}
-        </article>
+        <button
+          aria-expanded={isExportDialogOpen}
+          aria-haspopup="dialog"
+          className={DASHBOARD_TOOLBAR_ACTION_CLASS}
+          onClick={() => {
+            setIsExportDialogOpen(true);
+          }}
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M12 4v11" />
+            <path d="M8.5 11.5L12 15l3.5-3.5" />
+            <path d="M5 19h14" />
+          </svg>
+          <span>Export PNG</span>
+        </button>
       </section>
+
+      <AgentBentoLayout
+        cards={[
+          {
+            id: DASHBOARD_WIDGET_IDS.workTotals,
+            children: <WorkTotalsWidget snapshot={snapshot} />,
+          },
+          {
+            id: DASHBOARD_WIDGET_IDS.workGraph,
+            children: (
+              <WorkflowActivityWidget
+                now={now}
+                onFactoryActivated={refreshDashboard}
+                onSelectStateNode={currentSelection.selectStateNode}
+                onSelectWorkItem={currentSelection.selectWorkItem}
+                onSelectWorkstation={currentSelection.selectWorkstation}
+                selection={currentSelection.selection}
+                snapshot={snapshot}
+              />
+            ),
+          },
+          {
+            id: DASHBOARD_WIDGET_IDS.terminalWork,
+            children: (
+              <TerminalWorkWidget
+                completedItems={currentSelection.completedWorkItems}
+                failedItems={currentSelection.failedWorkItems}
+                onSelectItem={currentSelection.openTerminalWorkDetail}
+                selectedItem={currentSelection.terminalWorkDetail}
+                widgetId={DASHBOARD_WIDGET_IDS.terminalWork}
+              />
+            ),
+          },
+          {
+            id: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+            children: (
+              <WorkOutcomeWidget
+                model={workChartModel}
+                widgetId={DASHBOARD_WIDGET_IDS.workOutcomeChart}
+              />
+            ),
+          },
+          {
+            id: DASHBOARD_WIDGET_IDS.currentSelection,
+            children: (
+              <CurrentSelectionWidget
+                activeTraceID={selectedTraceID ?? selectedTrace?.trace_id ?? null}
+                currentSelection={currentSelection}
+                failedWorkDetailsByWorkID={
+                  snapshot.runtime.session.failed_work_details_by_work_id
+                }
+                now={now}
+                onSelectTraceID={setSelectedTraceID}
+                selectedTrace={selectedTrace}
+                selectedWorkExecutionDetails={selectedWorkExecutionDetails}
+                terminalWorkExecutionDetails={terminalWorkExecutionDetails}
+                widgetId={DASHBOARD_WIDGET_IDS.currentSelection}
+              />
+            ),
+          },
+          {
+            id: DASHBOARD_WIDGET_IDS.submitWork,
+            children: (
+              <SubmitWorkWidget submitWorkTypes={snapshot.topology.submit_work_types} />
+            ),
+          },
+          {
+            id: DASHBOARD_WIDGET_IDS.trace,
+            children: (
+              <TraceDrilldownWidget
+                onSelectWorkID={currentSelection.selectWorkByID}
+                state={traceGridState}
+                widgetId={DASHBOARD_WIDGET_IDS.trace}
+              />
+            ),
+          },
+        ]}
+        layout={dashboardLayout}
+        onLayoutChange={persistDashboardLayout}
+      />
+
+      <ExportFactoryDialog
+        isPreparing={isPreparingCurrentFactoryExport}
+        namedFactory={currentFactoryExport.ok ? currentFactoryExport.namedFactory : null}
+        initialFactoryName={
+          currentFactoryExport.ok ? currentFactoryExport.namedFactory.name : "agent-factory"
+        }
+        isOpen={isExportDialogOpen}
+        onClose={() => {
+          setIsExportDialogOpen(false);
+        }}
+        preparationFailure={currentFactoryExport.ok ? null : currentFactoryExport}
+      />
     </main>
   );
 }

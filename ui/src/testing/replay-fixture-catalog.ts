@@ -12,8 +12,44 @@ export const replayCoverageSurfaceCatalog = [
     id: "trace-drilldown",
   },
   {
+    description: "Current-selection card rendering for replayed detail states.",
+    id: "current-selection",
+  },
+  {
+    description: "Failure-path rendering for replayed failed work and provider failures.",
+    id: "failure-rendering",
+  },
+  {
+    description: "Timeline slider history and fixed-tick replay navigation.",
+    id: "timeline-history",
+  },
+  {
+    description: "Graph-state markers and node rendering driven by replayed topology events.",
+    id: "graph-state",
+  },
+  {
+    description: "Selection-history behavior across replay tick changes.",
+    id: "selection-history",
+  },
+  {
     description: "Workspace setup and runtime-config derived projections from replay data.",
     id: "workspace-setup",
+  },
+  {
+    description: "Runtime workstation-request details for active, completed, and failed work.",
+    id: "runtime-request-details",
+  },
+  {
+    description: "Replay-driven terminal work summaries rather than direct seeded snapshots.",
+    id: "terminal-summary",
+  },
+  {
+    description: "Replay-driven mixed script and inference request-history rendering.",
+    id: "script-request-history",
+  },
+  {
+    description: "Replay-driven resource-count assertions against backend world-view counts.",
+    id: "resource-counts",
   },
 ] as const;
 
@@ -44,14 +80,27 @@ export const replayFixtureCatalog = {
       headingName: "Agent Factory",
       name: "baseline replay",
       requiresWorkItemSelection: true,
-      selectedWorkText: "work-1",
       workstationName: /^Select plan workstation$/i,
     },
     description: "Baseline dashboard event-stream replay smoke fixture.",
     fileName: "event-stream-replay.jsonl",
     id: "baseline",
     surfaces: ["dashboard-shell", "selected-work", "trace-drilldown"],
-    verificationLayers: ["browser-integration"],
+    verificationLayers: ["app-smoke", "browser-integration"],
+  },
+  failureAnalysis: {
+    description: "Failure-focused replay fixture with queued, active, and failed work rendering.",
+    fileName: "failure-analysis-replay.jsonl",
+    id: "failureAnalysis",
+    surfaces: ["current-selection", "failure-rendering", "timeline-history"],
+    verificationLayers: ["app-smoke"],
+  },
+  graphStateSmoke: {
+    description: "Graph-state replay fixture covering state markers, selection, and tick changes.",
+    fileName: "graph-state-smoke-replay.jsonl",
+    id: "graphStateSmoke",
+    surfaces: ["dashboard-shell", "graph-state", "selection-history"],
+    verificationLayers: ["app-smoke"],
   },
   runtimeConfigInterfaceConsolidation: {
     browserIntegration: {
@@ -64,10 +113,20 @@ export const replayFixtureCatalog = {
     description: "Captured runtime-config replay fixture with setup-workspace projections.",
     fileName: "event-stream-replay-2.jsonl",
     id: "runtimeConfigInterfaceConsolidation",
-    surfaces: ["selected-work", "trace-drilldown", "workspace-setup"],
-    verificationLayers: ["browser-integration"],
+    surfaces: ["current-selection", "trace-drilldown", "workspace-setup"],
+    verificationLayers: ["browser-integration", "projection-helper"],
   },
-} as const satisfies Record<string, ReplayFixtureScenarioDefinition>;
+  runtimeDetails: {
+    description: "Runtime-request replay fixture with pending, completed, and failed detail rendering.",
+    fileName: "runtime-details-replay.jsonl",
+    id: "runtimeDetails",
+    surfaces: ["current-selection", "failure-rendering", "runtime-request-details"],
+    verificationLayers: ["app-smoke"],
+  },
+} as const satisfies Record<
+  string,
+  ReplayFixtureScenarioDefinition
+>;
 
 export type ReplayFixtureCatalog = typeof replayFixtureCatalog;
 export type ReplayFixtureID = keyof ReplayFixtureCatalog;
@@ -170,9 +229,7 @@ export function formatReplayCoverageReportMarkdown(report: ReplayCoverageReport)
     "| Surface | Status | Covered by | Notes |",
     "| --- | --- | --- | --- |",
     ...report.surfaces.map((surface) => {
-      const coveredBy = surface.scenarios.length > 0
-        ? surface.scenarios.map((scenario) => `\`${scenario}\``).join(", ")
-        : "none yet";
+      const coveredBy = surface.scenarios.length > 0 ? surface.scenarios.map((scenario) => `\`${scenario}\``).join(", ") : "none yet";
       return `| \`${surface.id}\` | ${surface.status} | ${coveredBy} | ${surface.description} |`;
     }),
     "",

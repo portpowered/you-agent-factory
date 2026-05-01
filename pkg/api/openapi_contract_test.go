@@ -974,6 +974,90 @@ func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T)
 	}
 }
 
+func TestOpenAPIAuthoring_APISchemasUseDedicatedFragments(t *testing.T) {
+	data, err := os.ReadFile("../../api/openapi-main.yaml")
+	if err != nil {
+		t.Fatalf("read authored openapi contract: %v", err)
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse authored openapi contract: %v", err)
+	}
+
+	schemas := componentSchemas(t, doc)
+	expectedRefs := map[string]string{
+		"SubmitWorkRequest":         "./components/schemas/api/SubmitWorkRequest.yaml",
+		"SubmitRelation":            "./components/schemas/api/SubmitRelation.yaml",
+		"SubmitWorkResponse":        "./components/schemas/api/SubmitWorkResponse.yaml",
+		"UpsertWorkRequestResponse": "./components/schemas/api/UpsertWorkRequestResponse.yaml",
+		"ListWorkResponse":          "./components/schemas/api/ListWorkResponse.yaml",
+		"PaginationContext":         "./components/schemas/api/PaginationContext.yaml",
+		"TokenResponse":             "./components/schemas/api/TokenResponse.yaml",
+		"TokenHistory":              "./components/schemas/api/TokenHistory.yaml",
+		"StatusCategories":          "./components/schemas/api/StatusCategories.yaml",
+		"StatusResponse":            "./components/schemas/api/StatusResponse.yaml",
+		"ErrorFamily":               "./components/schemas/api/ErrorFamily.yaml",
+		"ErrorResponse":             "./components/schemas/api/ErrorResponse.yaml",
+		"WorkRequest":               "./components/schemas/api/WorkRequest.yaml",
+		"WorkRequestType":           "./components/schemas/api/WorkRequestType.yaml",
+	}
+	for schemaName, wantRef := range expectedRefs {
+		assertSchemaRef(t, schemas, schemaName, wantRef)
+	}
+}
+
+func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
+	data, err := os.ReadFile("../../api/openapi-main.yaml")
+	if err != nil {
+		t.Fatalf("read authored openapi contract: %v", err)
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse authored openapi contract: %v", err)
+	}
+
+	schemas := componentSchemas(t, doc)
+	expectedRefs := map[string]string{
+		"FactoryName":                 "./components/schemas/data-models/FactoryName.yaml",
+		"NamedFactory":                "./components/schemas/data-models/NamedFactory.yaml",
+		"Factory":                     "./components/schemas/data-models/Factory.yaml",
+		"ResourceManifest":            "./components/schemas/data-models/ResourceManifest.yaml",
+		"RequiredTool":                "./components/schemas/data-models/RequiredTool.yaml",
+		"BundledFile":                 "./components/schemas/data-models/BundledFile.yaml",
+		"BundledFileContent":          "./components/schemas/data-models/BundledFileContent.yaml",
+		"InputType":                   "./components/schemas/data-models/InputType.yaml",
+		"InputKind":                   "./components/schemas/data-models/InputKind.yaml",
+		"WorkType":                    "./components/schemas/data-models/WorkType.yaml",
+		"WorkState":                   "./components/schemas/data-models/WorkState.yaml",
+		"WorkStateType":               "./components/schemas/data-models/WorkStateType.yaml",
+		"Resource":                    "./components/schemas/data-models/Resource.yaml",
+		"Worker":                      "./components/schemas/data-models/Worker.yaml",
+		"WorkerType":                  "./components/schemas/data-models/WorkerType.yaml",
+		"WorkerModelProvider":         "./components/schemas/data-models/WorkerModelProvider.yaml",
+		"WorkerProvider":              "./components/schemas/data-models/WorkerProvider.yaml",
+		"Workstation":                 "./components/schemas/data-models/Workstation.yaml",
+		"WorkstationLimits":           "./components/schemas/data-models/WorkstationLimits.yaml",
+		"WorkstationKind":             "./components/schemas/data-models/WorkstationKind.yaml",
+		"WorkstationType":             "./components/schemas/data-models/WorkstationType.yaml",
+		"WorkstationCron":             "./components/schemas/data-models/WorkstationCron.yaml",
+		"WorkstationGuardType":        "./components/schemas/data-models/WorkstationGuardType.yaml",
+		"WorkstationGuard":            "./components/schemas/data-models/WorkstationGuard.yaml",
+		"WorkstationGuardMatchConfig": "./components/schemas/data-models/WorkstationGuardMatchConfig.yaml",
+		"WorkstationIO":               "./components/schemas/data-models/WorkstationIO.yaml",
+		"InputGuard":                  "./components/schemas/data-models/InputGuard.yaml",
+		"InputGuardType":              "./components/schemas/data-models/InputGuardType.yaml",
+		"Transition":                  "./components/schemas/data-models/Transition.yaml",
+		"Work":                        "./components/schemas/data-models/Work.yaml",
+		"Relation":                    "./components/schemas/data-models/Relation.yaml",
+		"RelationType":                "./components/schemas/data-models/RelationType.yaml",
+	}
+	for schemaName, wantRef := range expectedRefs {
+		assertSchemaRef(t, schemas, schemaName, wantRef)
+	}
+}
+
 // portos:func-length-exception owner=agent-factory reason=unified-event-schema-contract review=2026-07-18 removal=split-event-context-payload-and-dispatch-contract-assertions-before-next-event-schema-change
 func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi.yaml")
