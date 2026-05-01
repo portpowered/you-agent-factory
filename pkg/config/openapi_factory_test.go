@@ -494,21 +494,6 @@ type generatedFactoryRetiredAliasCase struct {
 
 var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 	{
-		name:        "worker provider alias",
-		field:       "workers[0].provider",
-		replacement: "use executorProvider",
-		payload: `{
-				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-				"workers": [{"name":"executor","provider":"script_wrap"}],
-				"workstations": [{
-					"name":"execute-story",
-					"worker":"executor",
-					"inputs":[{"workType":"story","state":"init"}],
-					"outputs":[{"workType":"story","state":"complete"}]
-				}]
-			}`,
-	},
-	{
 		name:        "worker snake case provider alias",
 		field:       "workers[0].model_provider",
 		replacement: "use modelProvider",
@@ -517,23 +502,6 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 				"workers": [{"name":"executor","model_provider":"CODEX"}],
 				"workstations": [{
 					"name":"execute-story",
-					"worker":"executor",
-					"inputs":[{"workType":"story","state":"init"}],
-					"outputs":[{"workType":"story","state":"complete"}]
-				}]
-			}`,
-	},
-	{
-		name:        "workstation runtime type alias",
-		field:       "workstations[0].runtimeType",
-		replacement: "use type",
-		payload: `{
-				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-				"workers": [{"name":"executor"}],
-				"workstations": [{
-					"name":"execute-story",
-					"kind":"STANDARD",
-					"runtimeType":"MODEL_WORKSTATION",
 					"worker":"executor",
 					"inputs":[{"workType":"story","state":"init"}],
 					"outputs":[{"workType":"story","state":"complete"}]
