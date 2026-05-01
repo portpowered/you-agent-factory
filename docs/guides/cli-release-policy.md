@@ -10,9 +10,8 @@ single operator workflow for versioned releases.
   commit is already on `main`.
 - Only pushed tags matching `v*` are allowed to trigger release publication in
   GitHub Actions.
-- Phase one release outputs are GitHub release archives and checksums only.
-  Package-manager publishing stays out of scope until a later story changes the
-  policy explicitly.
+- Phase one release outputs are GitHub release archives, checksums, and the
+  Homebrew cask metadata generated from those same release assets.
 
 ## Why Tag On `main`
 

@@ -38,6 +38,35 @@ checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
   algorithm: sha256
 
+homebrew_casks:
+  - name: agent-factory
+    ids:
+      - cli-archives
+    binaries:
+      - agent-factory
+    url:
+      template: "https://github.com/portpowered/infinite-you/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+      verified: "github.com/portpowered/infinite-you/"
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Casks
+    caveats: |
+      `agent-factory` is currently distributed without Apple code signing or notarization.
+      If macOS still blocks launch after install, run:
+        xattr -dr com.apple.quarantine "$(brew --prefix)/bin/agent-factory"
+    homepage: "https://github.com/portpowered/infinite-you"
+    description: "AI agent factory CLI for scheduling and orchestrating concurrent AI work"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/agent-factory"]
+          end
+    repository:
+      owner: portpowered
+      name: cask
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
 
