@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"path/filepath"
@@ -16,9 +16,11 @@ import (
 )
 
 // portos:func-length-exception owner=agent-factory reason=unified-event-log-e2e-smoke review=2026-07-18 removal=split-live-record-replay-projection-and-divergence-assertions-before-next-unified-smoke-change
-func TestUnifiedEventLogEndToEndSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow unified event-log smoke")
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow unified event-log smoke")
+	}
+	dir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/functional_test/testdata/service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "unified-event-log.replay.json")
 	const traceID = "trace-unified-event-log-smoke"
 	const requestID = "request-unified-event-log-smoke"
@@ -57,7 +59,7 @@ func TestUnifiedEventLogEndToEndSmoke_LiveRecordReplayProjectionAndDivergenceUse
 		}},
 	})
 
-	server := StartFunctionalServerWithConfig(
+	server := startFunctionalServerWithConfig(
 		t,
 		dir,
 		false,
@@ -155,7 +157,7 @@ func TestUnifiedEventLogEndToEndSmoke_LiveRecordReplayProjectionAndDivergenceUse
 	if activeView.Runtime.InFlightDispatchCount == 0 {
 		t.Fatalf("selected tick %d has no in-flight dispatches in view: %#v", dispatchCreated.Context.Tick, activeView.Runtime)
 	}
-	dispatchID := stringPointerValue(dispatchCreated.Context.DispatchId)
+	dispatchID := stringValueFromFunctionalPtr(dispatchCreated.Context.DispatchId)
 	if _, ok := activeState.ActiveDispatches[dispatchID]; !ok {
 		t.Fatalf("selected tick %d active dispatches = %#v, want %s from event %s", dispatchCreated.Context.Tick, activeState.ActiveDispatches, dispatchID, dispatchCreated.Id)
 	}
@@ -226,7 +228,7 @@ func nextUnifiedSmokeEvent(t *testing.T, stream *factoryEventHTTPStream, timeout
 	return factoryapi.FactoryEvent{}
 }
 
-func stopFunctionalServerForRecording(t *testing.T, server *FunctionalServer) {
+func stopFunctionalServerForRecording(t *testing.T, server *functionalAPIServer) {
 	t.Helper()
 
 	server.cancel()
@@ -338,7 +340,10 @@ func assertUnifiedSmokeWorkRequestPayload(t *testing.T, event factoryapi.Factory
 	if len(works) != 2 {
 		t.Fatalf("WORK_REQUEST works = %#v, want two batch items", works)
 	}
-	traceIDs := sliceValue(event.Context.TraceIds)
+	var traceIDs []string
+	if event.Context.TraceIds != nil {
+		traceIDs = *event.Context.TraceIds
+	}
 	if len(traceIDs) != 1 || traceIDs[0] != traceID {
 		t.Fatalf("WORK_REQUEST trace IDs = %#v, want [%q]", traceIDs, traceID)
 	}
@@ -375,9 +380,9 @@ func assertUnifiedSmokeDispatchInferenceCorrelation(
 	if _, err := events[indices.dispatchResponse].Payload.AsDispatchResponseEventPayload(); err != nil {
 		t.Fatalf("decode DISPATCH_RESPONSE payload: %v", err)
 	}
-	requestDispatchID := stringPointerValue(events[indices.inferenceRequest].Context.DispatchId)
-	responseDispatchID := stringPointerValue(events[indices.inferenceResponse].Context.DispatchId)
-	dispatchResponseID := stringPointerValue(events[indices.dispatchResponse].Context.DispatchId)
+	requestDispatchID := stringValueFromFunctionalPtr(events[indices.inferenceRequest].Context.DispatchId)
+	responseDispatchID := stringValueFromFunctionalPtr(events[indices.inferenceResponse].Context.DispatchId)
+	dispatchResponseID := stringValueFromFunctionalPtr(events[indices.dispatchResponse].Context.DispatchId)
 	if requestDispatchID != responseDispatchID || responseDispatchID != dispatchResponseID {
 		t.Fatalf("inference/dispatch correlation mismatch: request=%s response=%s dispatch=%s", requestDispatchID, responseDispatchID, dispatchResponseID)
 	}
@@ -572,6 +577,10 @@ func stringSliceContains(values []string, want string) bool {
 	return false
 }
 
+func stringPointer(value string) *string {
+	return &value
+}
+
 func countFunctionalEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
 	count := 0
 	for _, event := range events {
@@ -584,6 +593,18 @@ func countFunctionalEventType(events []factoryapi.FactoryEvent, eventType factor
 
 func lastIndexOfFunctionalEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
 	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == eventType {
+			return i
+		}
+	}
+	return -1
+}
+
+func indexOfFunctionalEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType, start int) int {
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(events); i++ {
 		if events[i].Type == eventType {
 			return i
 		}

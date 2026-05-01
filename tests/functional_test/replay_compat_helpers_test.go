@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
@@ -247,4 +248,87 @@ func normalizeFunctionalStdout(stdout string, trim bool) string {
 		return strings.TrimSpace(stdout)
 	}
 	return stdout
+}
+
+func collectUnifiedSmokeEventsUntilRunResponse(t *testing.T, stream *factoryEventHTTPStream, initialEvents []factoryapi.FactoryEvent, timeout time.Duration) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	events := append([]factoryapi.FactoryEvent(nil), initialEvents...)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		event := stream.next(time.Until(deadline))
+		events = append(events, event)
+		if event.Type == factoryapi.FactoryEventTypeRunResponse {
+			return events
+		}
+	}
+	t.Fatalf("timed out waiting for RUN_RESPONSE in live /events timeline: %#v", unifiedSmokeEventSummaries(events))
+	return nil
+}
+
+func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, artifact *interfaces.ReplayArtifact) {
+	t.Helper()
+
+	recordedByID := make(map[string]factoryapi.FactoryEvent, len(artifact.Events))
+	for _, event := range artifact.Events {
+		recordedByID[event.Id] = event
+	}
+	for _, live := range liveEvents {
+		recorded, ok := recordedByID[live.Id]
+		if !ok {
+			t.Fatalf("live event %s (%s) missing from recorded artifact events: %#v", live.Id, live.Type, unifiedSmokeEventSummaries(artifact.Events))
+		}
+		if recorded.Type != live.Type || recorded.Context.Tick != live.Context.Tick {
+			t.Fatalf("recorded event %s = type %s tick %d, live type %s tick %d", live.Id, recorded.Type, recorded.Context.Tick, live.Type, live.Context.Tick)
+		}
+		if unifiedSmokeDispatchID(recorded) != unifiedSmokeDispatchID(live) {
+			t.Fatalf("recorded event %s dispatch id = %q, live dispatch id = %q", live.Id, unifiedSmokeDispatchID(recorded), unifiedSmokeDispatchID(live))
+		}
+		if strings.Join(unifiedSmokeWorkIDs(recorded), ",") != strings.Join(unifiedSmokeWorkIDs(live), ",") {
+			t.Fatalf("recorded event %s work ids = %#v, live work ids = %#v", live.Id, unifiedSmokeWorkIDs(recorded), unifiedSmokeWorkIDs(live))
+		}
+	}
+}
+
+func maxUnifiedSmokeTick(events []factoryapi.FactoryEvent) int {
+	maxTick := 0
+	for _, event := range events {
+		if event.Context.Tick > maxTick {
+			maxTick = event.Context.Tick
+		}
+	}
+	return maxTick
+}
+
+func unifiedSmokeDispatchID(event factoryapi.FactoryEvent) string {
+	if event.Context.DispatchId != nil {
+		return *event.Context.DispatchId
+	}
+	return ""
+}
+
+func unifiedSmokeWorkIDs(event factoryapi.FactoryEvent) []string {
+	if event.Context.WorkIds == nil {
+		return nil
+	}
+	out := make([]string, len(*event.Context.WorkIds))
+	copy(out, *event.Context.WorkIds)
+	return out
+}
+
+func unifiedSmokeEventSummaries(events []factoryapi.FactoryEvent) []string {
+	out := make([]string, 0, len(events))
+	for _, event := range events {
+		out = append(out, string(event.Type)+"@"+event.Id)
+	}
+	return out
+}
+
+func lastIndexOfFunctionalEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == eventType {
+			return i
+		}
+	}
+	return -1
 }

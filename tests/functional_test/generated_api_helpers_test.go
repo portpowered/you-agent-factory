@@ -189,32 +189,3 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 	t.Fatalf("timed out waiting for completed work IDs %v; last work response: %#v", workIDs, work)
 	return nil
 }
-
-func assertFunctionalEventsUseCanonicalVocabulary(t *testing.T, events []factoryapi.FactoryEvent, required ...factoryapi.FactoryEventType) {
-	t.Helper()
-
-	seen := make(map[factoryapi.FactoryEventType]int, len(events))
-	for _, event := range events {
-		seen[event.Type]++
-		for _, retired := range retiredFunctionalFactoryEventTypes {
-			if string(event.Type) == retired {
-				t.Fatalf("event %s reintroduced retired public event type %q", event.Id, retired)
-			}
-		}
-	}
-	for _, eventType := range required {
-		if seen[eventType] == 0 {
-			t.Fatalf("events %v missing canonical event type %s", functionalEventTypes(events), eventType)
-		}
-	}
-}
-
-var retiredFunctionalFactoryEventTypes = []string{
-	"RUN_STARTED",
-	"INITIAL_STRUCTURE",
-	"RELATIONSHIP_CHANGE",
-	"DISPATCH_CREATED",
-	"DISPATCH_COMPLETED",
-	"FACTORY_STATE_CHANGE",
-	"RUN_FINISHED",
-}
