@@ -22,6 +22,9 @@
 - When a handwritten compatibility route already normalizes tolerant query
   parsing before calling a handler, prefer keeping that behavior in the wrapper
   and removing any second copy of the same fallback logic from the handler.
+- A package-local cleanup candidate can still collide with a broad open PR, so
+  candidate validation must compare exact touched files against every active
+  lane, not just against the candidate's apparent subsystem boundary.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -158,7 +161,7 @@
 
 - Ran `git pull`; `main` and `origin/main` are both at `d55b57e`.
 - Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
-  recent merged/open PR history, and the tracked `factory/inputs/**` surface
+- recent merged/open PR history, and the tracked `factory/inputs/**` surface
   before choosing work.
 - Verified with `git ls-files factory/inputs` that the checked-in workflow
   inboxes still contain only `.gitkeep` sentinels.
@@ -535,3 +538,45 @@
   `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
   to keep the handwritten compatibility shim while removing the redundant
   handler fallback.
+
+## 2026-05-01 12:05 -07:00 - meta refresh after api and website lanes opened
+
+- Fetched `origin` and confirmed the workspace is still synced on `main` at
+  `25580f5`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, checked-in/ignored workflow-input surfaces,
+  and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Verified that the workspace still carries unrelated local dirt outside the
+  meta surfaces:
+  - modified `README.md`
+  - modified `ui/dist/assets/index.js`
+  - modified `ui/dist_stamp.go`
+  - untracked `docs/reference/references.md`
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `acac8fc`
+  - it did not include merged PR `#34`
+  - it did not include newly open PRs `#33` and `#32`
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#33`, `#32`, `#30`, `#20`, `#16`, and `#4`
+  - merged PR `#34` `dedupe-list-work-legacy-pagination-fallback`
+  - merged PR `#31` `derive-throttle-windows-from-completed-dispatch-history`
+  - merged PR `#29` `prd-goreleaser-release-pipeline`
+- Reconfirmed through direct code inspection that the highest-value customer
+  ask remains global throttling, but that the public/config/lowering side is
+  now the remaining gap rather than the timing-derivation side.
+- Used a sidecar inspection agent to evaluate a package-local cleanup seam in
+  `pkg/cli/run`, then rejected it after checking live PR file sets because open
+  PR `#33` already touches `pkg/cli/run/run_test.go`.
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/retire-dispatch-result-hook-syncdispatch-cache.md`
+  for a conflict-free backend simplification seam:
+  - `pkg/factory/runtime/dispatch_result_hook.go` currently caches
+    `syncDispatch` as `planner != nil`
+  - the same hook already reads `h.planner` directly for all related planner
+    behaviors
+  - removing the cached bool reduces duplicate local state without changing
+    public contracts
