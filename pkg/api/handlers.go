@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
@@ -489,14 +488,6 @@ func (s *Server) writeSSEDataJSON(w http.ResponseWriter, v any) error {
 	}
 	_, err = fmt.Fprintf(w, "data: %s\n\n", payload)
 	return err
-}
-
-func positiveAtoiOrDefault(value string, fallback int) int {
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-	return parsed
 }
 
 func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
