@@ -2,22 +2,15 @@ package functional_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/replay"
 )
 
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
@@ -51,44 +44,6 @@ func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req
 		t.Fatalf("decode generated work request response: %v", err)
 	}
 	return out
-}
-
-func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) {
-	t.Helper()
-
-	path := filepath.Join(dir, "workstations", workstationName, "AGENTS.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("create workstation config dir %s: %v", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) interfaces.InitialStructurePayload {
-	t.Helper()
-
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	generatedFactory, err := replay.GeneratedFactoryFromLoadedConfig(
-		loaded,
-		replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
-	)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
-	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generatedFactory)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	mapper := factoryconfig.ConfigMapper{}
-	replayNet, err := mapper.Map(context.Background(), replayRuntimeCfg.Factory)
-	if err != nil {
-		t.Fatalf("Map replay factory: %v", err)
-	}
-	return projections.ProjectInitialStructure(replayNet, replayRuntimeCfg)
 }
 
 func getGeneratedJSON[T any](t *testing.T, endpoint string) T {

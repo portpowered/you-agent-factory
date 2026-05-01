@@ -115,3 +115,10 @@ func eventStringSlice(values *[]string) []string {
 	}
 	return *values
 }
+
+func stringSliceValue(values *[]string) []string {
+	if values == nil {
+		return nil
+	}
+	return *values
+}

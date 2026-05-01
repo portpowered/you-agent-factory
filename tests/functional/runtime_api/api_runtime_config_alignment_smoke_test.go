@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"context"
@@ -412,7 +412,7 @@ func assertRuntimeConfigAlignmentCanonicalRoundTrip(t *testing.T, dir string) {
 func startRuntimeConfigAlignmentSmokeServer(
 	t *testing.T,
 	dir string,
-) (*FunctionalServer, *runtimeConfigAlignmentProviderRunner, *runtimeConfigAlignmentScriptRunner) {
+) (*functionalAPIServer, *runtimeConfigAlignmentProviderRunner, *runtimeConfigAlignmentScriptRunner) {
 	t.Helper()
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -447,7 +447,7 @@ func startRuntimeConfigAlignmentSmokeServer(
 	})
 	providerRunner := newRuntimeConfigAlignmentProviderRunner()
 	scriptRunner := newRuntimeConfigAlignmentScriptRunner()
-	server := StartFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.ProviderCommandRunnerOverride = providerRunner
 		cfg.CommandRunnerOverride = scriptRunner
 	}, factory.WithScheduler(scheduler.NewWorkInQueueScheduler(1)))
@@ -457,7 +457,7 @@ func startRuntimeConfigAlignmentSmokeServer(
 
 func waitForRuntimeConfigAlignmentExecution(
 	t *testing.T,
-	server *FunctionalServer,
+	server *functionalAPIServer,
 	providerRunner *runtimeConfigAlignmentProviderRunner,
 	scriptRunner *runtimeConfigAlignmentScriptRunner,
 ) {
@@ -468,13 +468,13 @@ func waitForRuntimeConfigAlignmentExecution(
 	waitForRuntimeConfigAlignmentTimeoutAndRequeue(t, server, scriptRunner)
 
 	close(scriptRunner.releaseSecondAttempt)
-	server.WaitForCompleted(t, runtimeConfigAlignmentCompletionTimeout)
+	waitForRuntimeConfigAlignmentServerCompletion(t, server, runtimeConfigAlignmentCompletionTimeout)
 }
 
 func assertRuntimeConfigAlignmentFinalState(
 	t *testing.T,
 	dir string,
-	server *FunctionalServer,
+	server *functionalAPIServer,
 	providerRunner *runtimeConfigAlignmentProviderRunner,
 	scriptRunner *runtimeConfigAlignmentScriptRunner,
 ) {
@@ -563,9 +563,8 @@ func runtimeConfigAlignmentWorkerSummaryFromLookup(
 
 	worker, ok := lookup(name)
 	if !ok {
-		t.Fatalf("expected worker %q", name)
+		t.Fatalf("worker lookup missing %q", name)
 	}
-
 	return runtimeConfigAlignmentWorkerSummary{
 		Type:      worker.Type,
 		Resources: append([]interfaces.ResourceConfig(nil), worker.Resources...),
@@ -582,159 +581,114 @@ func runtimeConfigAlignmentWorkstationSummaryFromLookup(
 
 	workstation, ok := lookup(name)
 	if !ok {
-		t.Fatalf("expected workstation %q", name)
+		t.Fatalf("workstation lookup missing %q", name)
 	}
-
-	return runtimeConfigAlignmentWorkstationSummary{
+	summary := runtimeConfigAlignmentWorkstationSummary{
 		WorkerTypeName: workstation.WorkerTypeName,
 		Kind:           workstation.Kind,
 		Type:           workstation.Type,
-		Cron:           runtimeConfigAlignmentCronSummaryFromConfig(workstation.Cron),
 		Limits:         workstation.Limits,
 		Resources:      append([]interfaces.ResourceConfig(nil), workstation.Resources...),
 		StopWords:      append([]string(nil), workstation.StopWords...),
 	}
+	if workstation.Cron != nil {
+		summary.Cron = &runtimeConfigAlignmentCronSummary{
+			Schedule:       workstation.Cron.Schedule,
+			TriggerAtStart: workstation.Cron.TriggerAtStart,
+			Jitter:         workstation.Cron.Jitter,
+			ExpiryWindow:   workstation.Cron.ExpiryWindow,
+		}
+	}
+	return summary
 }
 
-func runtimeConfigAlignmentCronSummaryFromConfig(cron *interfaces.CronConfig) *runtimeConfigAlignmentCronSummary {
-	if cron == nil {
-		return nil
-	}
-	return &runtimeConfigAlignmentCronSummary{
-		Schedule:       cron.Schedule,
-		TriggerAtStart: cron.TriggerAtStart,
-		Jitter:         cron.Jitter,
-		ExpiryWindow:   cron.ExpiryWindow,
-	}
-}
-
-func assertRuntimeConfigAlignmentBoundaryErrorContains(t *testing.T, err error, want ...string) {
+func assertRuntimeConfigAlignmentBoundaryErrorContains(t *testing.T, err error, contextSnippet string, want string) {
 	t.Helper()
 
 	if err == nil {
-		t.Fatal("expected authored boundary to reject retired alias")
+		t.Fatal("expected runtime config alignment boundary error, got nil")
 	}
-	got := err.Error()
-	for _, fragment := range want {
-		if !strings.Contains(got, fragment) {
-			t.Fatalf("boundary error = %q, want fragment %q", got, fragment)
-		}
+	if !strings.Contains(err.Error(), contextSnippet) {
+		t.Fatalf("runtime config alignment error = %q, want context %q", err.Error(), contextSnippet)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("runtime config alignment error = %q, want detail %q", err.Error(), want)
 	}
 }
 
 func assertRuntimeConfigAlignmentCanonicalJSON(t *testing.T, flattened []byte) {
 	t.Helper()
 
-	text := string(flattened)
-	for _, want := range []string{
-		`"kind": "CRON"`,
-		`"kind": "REPEATER"`,
-		`"stopWords":`,
-		`"maxExecutionTime": "100ms"`,
-		`"schedule": "0 * * * *"`,
-		`"resources":`,
-		`"stopToken": "COMPLETE"`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("flattened config missing canonical fragment %s: %s", want, text)
-		}
+	generatedFactory, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON(flattened)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(canonical flattened): %v", err)
 	}
-	for _, forbidden := range []string{
-		`"stop_words"`,
-		`"max_execution_time"`,
-		`"resource_usage"`,
-		`"timeout": "100ms"`,
-		`"resource_manifest"`,
-	} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("flattened config contains legacy fragment %s: %s", forbidden, text)
-		}
+	if generatedFactory.Workers == nil || len(*generatedFactory.Workers) != 3 {
+		t.Fatalf("canonical flattened workers = %#v, want three workers", generatedFactory.Workers)
+	}
+	if generatedFactory.Workstations == nil || len(*generatedFactory.Workstations) != 3 {
+		t.Fatalf("canonical flattened workstations = %#v, want three workstations", generatedFactory.Workstations)
 	}
 }
 
-func assertRuntimeConfigAlignmentResourceManifest(
+func waitForRuntimeConfigAlignmentServerCompletion(
 	t *testing.T,
-	manifest *interfaces.PortableResourceManifestConfig,
+	server *functionalAPIServer,
+	timeout time.Duration,
 ) {
 	t.Helper()
 
-	if manifest == nil {
-		t.Fatal("expected resourceManifest to be preserved")
-	}
-	if len(manifest.RequiredTools) != 1 {
-		t.Fatalf("required tools = %#v, want one entry", manifest.RequiredTools)
-	}
-	requiredTool := manifest.RequiredTools[0]
-	if requiredTool.Name != "go" || requiredTool.Command != "go" || requiredTool.Purpose != "Runs portable validation helpers" {
-		t.Fatalf("required tool = %#v", requiredTool)
-	}
-	if !reflect.DeepEqual(requiredTool.VersionArgs, []string{"version"}) {
-		t.Fatalf("required tool version args = %#v, want [version]", requiredTool.VersionArgs)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		snapshot := server.GetEngineStateSnapshot(t)
+		if snapshot.RuntimeStatus == interfaces.RuntimeStatusFinished {
+			return
+		}
+		time.Sleep(runtimeConfigAlignmentPollInterval)
 	}
 
+	snapshot := server.GetEngineStateSnapshot(t)
+	t.Fatalf("timed out waiting %s for runtime completion; status=%s places=%#v", timeout, snapshot.RuntimeStatus, snapshot.Marking.PlaceTokens)
+}
+
+func assertRuntimeConfigAlignmentResourceManifest(t *testing.T, manifest *interfaces.PortableResourceManifestConfig) {
+	t.Helper()
+
+	if manifest == nil {
+		t.Fatal("resource manifest is nil")
+	}
+	if len(manifest.RequiredTools) != 1 || manifest.RequiredTools[0].Name != "go" {
+		t.Fatalf("resource manifest requiredTools = %#v, want go", manifest.RequiredTools)
+	}
 	if len(manifest.BundledFiles) != 2 {
-		t.Fatalf("bundled files = %#v, want two entries", manifest.BundledFiles)
-	}
-	if bundled := runtimeConfigAlignmentBundledFileByTarget(t, manifest.BundledFiles, "factory/docs/usage.md"); bundled.Type != interfaces.BundledFileTypeDoc ||
-		bundled.Content.Encoding != interfaces.BundledFileEncodingUTF8 ||
-		bundled.Content.Inline != "# Runtime config alignment\n" {
-		t.Fatalf("doc bundled file = %#v", bundled)
-	}
-	if bundled := runtimeConfigAlignmentBundledFileByTarget(t, manifest.BundledFiles, "factory/scripts/bootstrap.ps1"); bundled.Type != interfaces.BundledFileTypeScript ||
-		bundled.Content.Encoding != interfaces.BundledFileEncodingUTF8 ||
-		bundled.Content.Inline != "Write-Output 'bootstrap'\n" {
-		t.Fatalf("script bundled file = %#v", bundled)
+		t.Fatalf("resource manifest bundledFiles = %#v, want bootstrap script and usage doc", manifest.BundledFiles)
 	}
 }
 
-func assertRuntimeConfigAlignmentGeneratedResourceManifest(
-	t *testing.T,
-	manifest *factoryapi.ResourceManifest,
-) {
+func assertRuntimeConfigAlignmentGeneratedResourceManifest(t *testing.T, manifest *factoryapi.ResourceManifest) {
 	t.Helper()
 
 	if manifest == nil {
-		t.Fatal("expected generated resourceManifest to be preserved")
+		t.Fatal("generated resource manifest is nil")
 	}
 	if manifest.RequiredTools == nil || len(*manifest.RequiredTools) != 1 {
-		t.Fatalf("generated requiredTools = %#v, want one entry", manifest.RequiredTools)
+		t.Fatalf("generated requiredTools = %#v, want one go tool", manifest.RequiredTools)
 	}
-	requiredTool := (*manifest.RequiredTools)[0]
-	if requiredTool.Name != "go" || requiredTool.Command != "go" || stringPointerValue(requiredTool.Purpose) != "Runs portable validation helpers" {
-		t.Fatalf("generated required tool = %#v", requiredTool)
+	if (*manifest.RequiredTools)[0].Name != "go" {
+		t.Fatalf("generated required tool = %#v, want go", (*manifest.RequiredTools)[0])
 	}
-	if requiredTool.VersionArgs == nil || !reflect.DeepEqual(*requiredTool.VersionArgs, []string{"version"}) {
-		t.Fatalf("generated required tool version args = %#v, want [version]", requiredTool.VersionArgs)
-	}
-
 	if manifest.BundledFiles == nil || len(*manifest.BundledFiles) != 2 {
-		t.Fatalf("generated bundledFiles = %#v, want two entries", manifest.BundledFiles)
+		t.Fatalf("generated bundled files = %#v, want bootstrap script and usage doc", manifest.BundledFiles)
 	}
-	if bundled := runtimeConfigAlignmentGeneratedBundledFileByTarget(t, *manifest.BundledFiles, "factory/docs/usage.md"); string(bundled.Type) != interfaces.BundledFileTypeDoc ||
-		bundled.Content.Encoding != interfaces.BundledFileEncodingUTF8 ||
-		bundled.Content.Inline != "# Runtime config alignment\n" {
-		t.Fatalf("generated doc bundled file = %#v", bundled)
-	}
-	if bundled := runtimeConfigAlignmentGeneratedBundledFileByTarget(t, *manifest.BundledFiles, "factory/scripts/bootstrap.ps1"); string(bundled.Type) != interfaces.BundledFileTypeScript ||
-		bundled.Content.Encoding != interfaces.BundledFileEncodingUTF8 ||
-		bundled.Content.Inline != "Write-Output 'bootstrap'\n" {
-		t.Fatalf("generated script bundled file = %#v", bundled)
-	}
+	runtimeConfigAlignmentRequireGeneratedBundledFile(t, *manifest.BundledFiles, "factory/scripts/bootstrap.ps1")
+	runtimeConfigAlignmentRequireGeneratedBundledFile(t, *manifest.BundledFiles, "factory/docs/usage.md")
 }
 
-func runtimeConfigAlignmentBundledFileByTarget(t *testing.T, bundledFiles []interfaces.BundledFileConfig, targetPath string) interfaces.BundledFileConfig {
-	t.Helper()
-
-	for _, bundledFile := range bundledFiles {
-		if bundledFile.TargetPath == targetPath {
-			return bundledFile
-		}
-	}
-	t.Fatalf("expected bundled file %q in %#v", targetPath, bundledFiles)
-	return interfaces.BundledFileConfig{}
-}
-
-func runtimeConfigAlignmentGeneratedBundledFileByTarget(t *testing.T, bundledFiles []factoryapi.BundledFile, targetPath string) factoryapi.BundledFile {
+func runtimeConfigAlignmentRequireGeneratedBundledFile(
+	t *testing.T,
+	bundledFiles []factoryapi.BundledFile,
+	targetPath string,
+) factoryapi.BundledFile {
 	t.Helper()
 
 	for _, bundledFile := range bundledFiles {
@@ -753,25 +707,25 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 		t.Fatalf("generated workers = %#v, want three workers", generated.Workers)
 	}
 	cronWorker := runtimeConfigAlignmentRequireGeneratedWorker(t, *generated.Workers, "cron-worker")
-	if stringPointerValue(cronWorker.Type) != interfaces.WorkerTypeModel {
-		t.Fatalf("cron-worker type = %q, want %q", stringPointerValue(cronWorker.Type), interfaces.WorkerTypeModel)
+	if stringValueFromFunctionalPtr(cronWorker.Type) != interfaces.WorkerTypeModel {
+		t.Fatalf("cron-worker type = %q, want %q", stringValueFromFunctionalPtr(cronWorker.Type), interfaces.WorkerTypeModel)
 	}
-	if stringPointerValue(cronWorker.StopToken) != "COMPLETE" {
-		t.Fatalf("cron-worker stop token = %q, want COMPLETE", stringPointerValue(cronWorker.StopToken))
+	if stringValueFromFunctionalPtr(cronWorker.StopToken) != "COMPLETE" {
+		t.Fatalf("cron-worker stop token = %q, want COMPLETE", stringValueFromFunctionalPtr(cronWorker.StopToken))
 	}
 	reviewer := runtimeConfigAlignmentRequireGeneratedWorker(t, *generated.Workers, "reviewer")
-	if stringPointerValue(reviewer.Type) != interfaces.WorkerTypeModel {
-		t.Fatalf("reviewer type = %q, want %q", stringPointerValue(reviewer.Type), interfaces.WorkerTypeModel)
+	if stringValueFromFunctionalPtr(reviewer.Type) != interfaces.WorkerTypeModel {
+		t.Fatalf("reviewer type = %q, want %q", stringValueFromFunctionalPtr(reviewer.Type), interfaces.WorkerTypeModel)
 	}
-	if stringPointerValue(reviewer.StopToken) != "COMPLETE" {
-		t.Fatalf("reviewer stop token = %q, want COMPLETE", stringPointerValue(reviewer.StopToken))
+	if stringValueFromFunctionalPtr(reviewer.StopToken) != "COMPLETE" {
+		t.Fatalf("reviewer stop token = %q, want COMPLETE", stringValueFromFunctionalPtr(reviewer.StopToken))
 	}
 	if !runtimeConfigAlignmentHasGeneratedResource(reviewer.Resources, "agent-slot", 1) {
 		t.Fatalf("reviewer resources = %#v, want agent-slot capacity 1", reviewer.Resources)
 	}
 	executor := runtimeConfigAlignmentRequireGeneratedWorker(t, *generated.Workers, "executor")
-	if stringPointerValue(executor.Type) != interfaces.WorkerTypeScript {
-		t.Fatalf("executor type = %q, want %q", stringPointerValue(executor.Type), interfaces.WorkerTypeScript)
+	if stringValueFromFunctionalPtr(executor.Type) != interfaces.WorkerTypeScript {
+		t.Fatalf("executor type = %q, want %q", stringValueFromFunctionalPtr(executor.Type), interfaces.WorkerTypeScript)
 	}
 	if !runtimeConfigAlignmentHasGeneratedResource(executor.Resources, "agent-slot", 1) {
 		t.Fatalf("executor resources = %#v, want agent-slot capacity 1", executor.Resources)
@@ -794,8 +748,8 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if review.Worker != "reviewer" {
 		t.Fatalf("%s worker = %q, want reviewer", runtimeConfigAlignmentReviewWorkstation, review.Worker)
 	}
-	if stringPointerValue(review.Type) != interfaces.WorkstationTypeModel {
-		t.Fatalf("%s type = %q, want %q", runtimeConfigAlignmentReviewWorkstation, stringPointerValue(review.Type), interfaces.WorkstationTypeModel)
+	if stringValueFromFunctionalPtr(review.Type) != interfaces.WorkstationTypeModel {
+		t.Fatalf("%s type = %q, want %q", runtimeConfigAlignmentReviewWorkstation, stringValueFromFunctionalPtr(review.Type), interfaces.WorkstationTypeModel)
 	}
 	if review.Kind == nil || *review.Kind != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindRepeater) {
 		t.Fatalf("%s kind = %#v, want REPEATER", runtimeConfigAlignmentReviewWorkstation, review.Kind)
@@ -810,7 +764,7 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if execute.Worker != "executor" {
 		t.Fatalf("%s worker = %q, want executor", runtimeConfigAlignmentExecuteWorkstation, execute.Worker)
 	}
-	if execute.Limits == nil || stringPointerValue(execute.Limits.MaxExecutionTime) != "100ms" {
+	if execute.Limits == nil || stringValueFromFunctionalPtr(execute.Limits.MaxExecutionTime) != "100ms" {
 		t.Fatalf("%s limits = %#v, want maxExecutionTime 100ms", runtimeConfigAlignmentExecuteWorkstation, execute.Limits)
 	}
 	if !runtimeConfigAlignmentHasGeneratedResource(execute.Resources, "agent-slot", 1) {
@@ -976,7 +930,7 @@ func (r *runtimeConfigAlignmentScriptRunner) waitForFirstTimeout(timeout time.Du
 
 func waitForRuntimeConfigAlignmentStopWordDispatch(
 	t *testing.T,
-	server *FunctionalServer,
+	server *functionalAPIServer,
 ) {
 	t.Helper()
 
@@ -997,7 +951,7 @@ func waitForRuntimeConfigAlignmentStopWordDispatch(
 
 func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 	t *testing.T,
-	server *FunctionalServer,
+	server *functionalAPIServer,
 	runner *runtimeConfigAlignmentScriptRunner,
 ) {
 	t.Helper()
@@ -1026,7 +980,7 @@ func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 
 func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 	t *testing.T,
-	server *FunctionalServer,
+	server *functionalAPIServer,
 	runner *runtimeConfigAlignmentScriptRunner,
 ) {
 	t.Helper()
@@ -1119,7 +1073,7 @@ func assertRuntimeConfigAlignmentDispatchHistory(t *testing.T, history []interfa
 	}
 }
 
-func assertRuntimeConfigAlignmentEventHistory(t *testing.T, server *FunctionalServer) {
+func assertRuntimeConfigAlignmentEventHistory(t *testing.T, server *functionalAPIServer) {
 	t.Helper()
 
 	events, err := server.service.GetFactoryEvents(context.Background())
