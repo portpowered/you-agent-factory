@@ -671,10 +671,10 @@ func TestGeneratedFactoryEventJSONRoundTripPreservesWorkRequestContextAndWorks(t
 			"works": [
 				{
 					"name": "draft release notes",
-					"work_id": "work-1",
-					"request_id": "request-1",
-					"work_type_name": "task",
-					"trace_id": "trace-1",
+					"workId": "work-1",
+					"requestId": "request-1",
+					"workTypeName": "task",
+					"traceId": "trace-1",
 					"payload": {"title": "event log"},
 					"tags": {"priority": "high"}
 				}
@@ -682,8 +682,8 @@ func TestGeneratedFactoryEventJSONRoundTripPreservesWorkRequestContextAndWorks(t
 			"relations": [
 				{
 					"type": "DEPENDS_ON",
-					"source_work_name": "publish",
-					"target_work_name": "draft release notes"
+					"sourceWorkName": "publish",
+					"targetWorkName": "draft release notes"
 				}
 			],
 			"source": "api",

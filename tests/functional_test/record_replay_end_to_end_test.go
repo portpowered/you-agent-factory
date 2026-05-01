@@ -112,7 +112,7 @@ model: test-model
 Finish the input task.
 `)
 
-	generatedBatchOutput := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","work_id":"work-generated-alpha","work_type_name":"task","payload":"generated alpha"},{"name":"generated-beta","work_id":"work-generated-beta","work_type_name":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","source_work_name":"generated-beta","target_work_name":"generated-alpha","required_state":"complete"}]},"metadata":{"parent_lineage":["request-replay-external-batch","work-external-fanout"],"relation_context":[{"type":"DEPENDS_ON","source_work_name":"generated-beta","target_work_name":"generated-alpha","required_state":"complete"}]}}`
+	generatedBatchOutput := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]},"metadata":{"parentLineage":["request-replay-external-batch","work-external-fanout"],"relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]}}`
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {
 			{Content: "record external first"},

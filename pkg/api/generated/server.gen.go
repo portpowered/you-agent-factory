@@ -390,11 +390,11 @@ type FactoryStateResponseEventPayload struct {
 
 // FactoryWorldMutationView defines model for FactoryWorldMutationView.
 type FactoryWorldMutationView struct {
-	FromPlace *string                `json:"from_place,omitempty"`
+	FromPlace *string                `json:"fromPlace,omitempty"`
 	Reason    *string                `json:"reason,omitempty"`
-	ToPlace   *string                `json:"to_place,omitempty"`
+	ToPlace   *string                `json:"toPlace,omitempty"`
 	Token     *FactoryWorldTokenView `json:"token,omitempty"`
-	TokenId   string                 `json:"token_id"`
+	TokenId   string                 `json:"tokenId"`
 	Type      string                 `json:"type"`
 }
 
@@ -402,14 +402,14 @@ type FactoryWorldMutationView struct {
 type FactoryWorldProviderDiagnostic struct {
 	Model            *string    `json:"model,omitempty"`
 	Provider         *string    `json:"provider,omitempty"`
-	RequestMetadata  *StringMap `json:"request_metadata,omitempty"`
-	ResponseMetadata *StringMap `json:"response_metadata,omitempty"`
+	RequestMetadata  *StringMap `json:"requestMetadata,omitempty"`
+	ResponseMetadata *StringMap `json:"responseMetadata,omitempty"`
 }
 
 // FactoryWorldRenderedPromptDiagnostic defines model for FactoryWorldRenderedPromptDiagnostic.
 type FactoryWorldRenderedPromptDiagnostic struct {
-	SystemPromptHash *string    `json:"system_prompt_hash,omitempty"`
-	UserMessageHash  *string    `json:"user_message_hash,omitempty"`
+	SystemPromptHash *string    `json:"systemPromptHash,omitempty"`
+	UserMessageHash  *string    `json:"userMessageHash,omitempty"`
 	Variables        *StringMap `json:"variables,omitempty"`
 }
 
@@ -418,107 +418,107 @@ type FactoryWorldScriptRequestView struct {
 	Args            *[]string `json:"args,omitempty"`
 	Attempt         *int      `json:"attempt,omitempty"`
 	Command         *string   `json:"command,omitempty"`
-	ScriptRequestId *string   `json:"script_request_id,omitempty"`
+	ScriptRequestId *string   `json:"scriptRequestId,omitempty"`
 }
 
 // FactoryWorldScriptResponseView defines model for FactoryWorldScriptResponseView.
 type FactoryWorldScriptResponseView struct {
 	Attempt         *int    `json:"attempt,omitempty"`
-	DurationMillis  *int64  `json:"duration_millis,omitempty"`
-	ExitCode        *int    `json:"exit_code,omitempty"`
-	FailureType     *string `json:"failure_type,omitempty"`
+	DurationMillis  *int64  `json:"durationMillis,omitempty"`
+	ExitCode        *int    `json:"exitCode,omitempty"`
+	FailureType     *string `json:"failureType,omitempty"`
 	Outcome         *string `json:"outcome,omitempty"`
-	ScriptRequestId *string `json:"script_request_id,omitempty"`
+	ScriptRequestId *string `json:"scriptRequestId,omitempty"`
 	Stderr          *string `json:"stderr,omitempty"`
 	Stdout          *string `json:"stdout,omitempty"`
 }
 
 // FactoryWorldTokenView defines model for FactoryWorldTokenView.
 type FactoryWorldTokenView struct {
-	CurrentChainingTraceId   *string    `json:"current_chaining_trace_id,omitempty"`
+	CurrentChainingTraceId   *string    `json:"currentChainingTraceId,omitempty"`
 	Name                     *string    `json:"name,omitempty"`
-	PlaceId                  string     `json:"place_id"`
-	PreviousChainingTraceIds *[]string  `json:"previous_chaining_trace_ids,omitempty"`
+	PlaceId                  string     `json:"placeId"`
+	PreviousChainingTraceIds *[]string  `json:"previousChainingTraceIds,omitempty"`
 	Tags                     *StringMap `json:"tags,omitempty"`
-	TokenId                  string     `json:"token_id"`
-	TraceId                  *string    `json:"trace_id,omitempty"`
-	WorkId                   *string    `json:"work_id,omitempty"`
-	WorkTypeId               *string    `json:"work_type_id,omitempty"`
+	TokenId                  string     `json:"tokenId"`
+	TraceId                  *string    `json:"traceId,omitempty"`
+	WorkId                   *string    `json:"workId,omitempty"`
+	WorkTypeId               *string    `json:"workTypeId,omitempty"`
 }
 
 // FactoryWorldWorkDiagnostics defines model for FactoryWorldWorkDiagnostics.
 type FactoryWorldWorkDiagnostics struct {
 	Provider       *FactoryWorldProviderDiagnostic       `json:"provider,omitempty"`
-	RenderedPrompt *FactoryWorldRenderedPromptDiagnostic `json:"rendered_prompt,omitempty"`
+	RenderedPrompt *FactoryWorldRenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
 
 // FactoryWorldWorkItemRef defines model for FactoryWorldWorkItemRef.
 type FactoryWorldWorkItemRef struct {
-	CurrentChainingTraceId   *string   `json:"current_chaining_trace_id,omitempty"`
-	DisplayName              *string   `json:"display_name,omitempty"`
-	PreviousChainingTraceIds *[]string `json:"previous_chaining_trace_ids,omitempty"`
-	TraceId                  *string   `json:"trace_id,omitempty"`
-	WorkId                   string    `json:"work_id"`
-	WorkTypeId               *string   `json:"work_type_id,omitempty"`
+	CurrentChainingTraceId   *string   `json:"currentChainingTraceId,omitempty"`
+	DisplayName              *string   `json:"displayName,omitempty"`
+	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
+	TraceId                  *string   `json:"traceId,omitempty"`
+	WorkId                   string    `json:"workId"`
+	WorkTypeId               *string   `json:"workTypeId,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestCountView defines model for FactoryWorldWorkstationRequestCountView.
 type FactoryWorldWorkstationRequestCountView struct {
-	DispatchedCount int `json:"dispatched_count"`
-	ErroredCount    int `json:"errored_count"`
-	RespondedCount  int `json:"responded_count"`
+	DispatchedCount int `json:"dispatchedCount"`
+	ErroredCount    int `json:"erroredCount"`
+	RespondedCount  int `json:"respondedCount"`
 }
 
 // FactoryWorldWorkstationRequestProjectionSlice Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints.
 type FactoryWorldWorkstationRequestProjectionSlice struct {
-	WorkstationRequestsByDispatchId *map[string]FactoryWorldWorkstationRequestView `json:"workstation_requests_by_dispatch_id,omitempty"`
+	WorkstationRequestsByDispatchId *map[string]FactoryWorldWorkstationRequestView `json:"workstationRequestsByDispatchId,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestRequestView defines model for FactoryWorldWorkstationRequestRequestView.
 type FactoryWorldWorkstationRequestRequestView struct {
-	ConsumedTokens           *[]FactoryWorldTokenView       `json:"consumed_tokens,omitempty"`
-	CurrentChainingTraceId   *string                        `json:"current_chaining_trace_id,omitempty"`
-	InputWorkItems           *[]FactoryWorldWorkItemRef     `json:"input_work_items,omitempty"`
-	InputWorkTypeIds         *[]string                      `json:"input_work_type_ids,omitempty"`
+	ConsumedTokens           *[]FactoryWorldTokenView       `json:"consumedTokens,omitempty"`
+	CurrentChainingTraceId   *string                        `json:"currentChainingTraceId,omitempty"`
+	InputWorkItems           *[]FactoryWorldWorkItemRef     `json:"inputWorkItems,omitempty"`
+	InputWorkTypeIds         *[]string                      `json:"inputWorkTypeIds,omitempty"`
 	Model                    *string                        `json:"model,omitempty"`
-	PreviousChainingTraceIds *[]string                      `json:"previous_chaining_trace_ids,omitempty"`
+	PreviousChainingTraceIds *[]string                      `json:"previousChainingTraceIds,omitempty"`
 	Prompt                   *string                        `json:"prompt,omitempty"`
 	Provider                 *string                        `json:"provider,omitempty"`
-	RequestMetadata          *StringMap                     `json:"request_metadata,omitempty"`
-	RequestTime              *string                        `json:"request_time,omitempty"`
-	ScriptRequest            *FactoryWorldScriptRequestView `json:"script_request,omitempty"`
-	StartedAt                *string                        `json:"started_at,omitempty"`
-	TraceIds                 *[]string                      `json:"trace_ids,omitempty"`
-	WorkingDirectory         *string                        `json:"working_directory,omitempty"`
+	RequestMetadata          *StringMap                     `json:"requestMetadata,omitempty"`
+	RequestTime              *string                        `json:"requestTime,omitempty"`
+	ScriptRequest            *FactoryWorldScriptRequestView `json:"scriptRequest,omitempty"`
+	StartedAt                *string                        `json:"startedAt,omitempty"`
+	TraceIds                 *[]string                      `json:"traceIds,omitempty"`
+	WorkingDirectory         *string                        `json:"workingDirectory,omitempty"`
 	Worktree                 *string                        `json:"worktree,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
 	Diagnostics      *FactoryWorldWorkDiagnostics    `json:"diagnostics,omitempty"`
-	DurationMillis   *int64                          `json:"duration_millis,omitempty"`
-	EndTime          *string                         `json:"end_time,omitempty"`
-	ErrorClass       *string                         `json:"error_class,omitempty"`
-	FailureMessage   *string                         `json:"failure_message,omitempty"`
-	FailureReason    *string                         `json:"failure_reason,omitempty"`
+	DurationMillis   *int64                          `json:"durationMillis,omitempty"`
+	EndTime          *string                         `json:"endTime,omitempty"`
+	ErrorClass       *string                         `json:"errorClass,omitempty"`
+	FailureMessage   *string                         `json:"failureMessage,omitempty"`
+	FailureReason    *string                         `json:"failureReason,omitempty"`
 	Feedback         *string                         `json:"feedback,omitempty"`
 	Outcome          *string                         `json:"outcome,omitempty"`
-	OutputMutations  *[]FactoryWorldMutationView     `json:"output_mutations,omitempty"`
-	OutputWorkItems  *[]FactoryWorldWorkItemRef      `json:"output_work_items,omitempty"`
-	ProviderSession  *ProviderSessionMetadata        `json:"provider_session,omitempty"`
-	ResponseMetadata *StringMap                      `json:"response_metadata,omitempty"`
-	ResponseText     *string                         `json:"response_text,omitempty"`
-	ScriptResponse   *FactoryWorldScriptResponseView `json:"script_response,omitempty"`
+	OutputMutations  *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
+	OutputWorkItems  *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
+	ProviderSession  *ProviderSessionMetadata        `json:"providerSession,omitempty"`
+	ResponseMetadata *StringMap                      `json:"responseMetadata,omitempty"`
+	ResponseText     *string                         `json:"responseText,omitempty"`
+	ScriptResponse   *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestView defines model for FactoryWorldWorkstationRequestView.
 type FactoryWorldWorkstationRequestView struct {
 	Counts          FactoryWorldWorkstationRequestCountView     `json:"counts"`
-	DispatchId      string                                      `json:"dispatch_id"`
+	DispatchId      string                                      `json:"dispatchId"`
 	Request         FactoryWorldWorkstationRequestRequestView   `json:"request"`
 	Response        *FactoryWorldWorkstationRequestResponseView `json:"response,omitempty"`
-	TransitionId    string                                      `json:"transition_id"`
-	WorkstationName *string                                     `json:"workstation_name,omitempty"`
+	TransitionId    string                                      `json:"transitionId"`
+	WorkstationName *string                                     `json:"workstationName,omitempty"`
 }
 
 // InferenceOutcome Result category returned by a provider inference attempt.
@@ -662,10 +662,10 @@ type ProviderSessionMetadata struct {
 
 // Relation defines model for Relation.
 type Relation struct {
-	RequiredState  *string `json:"required_state,omitempty"`
-	SourceWorkName string  `json:"source_work_name"`
-	TargetWorkId   *string `json:"target_work_id,omitempty"`
-	TargetWorkName string  `json:"target_work_name"`
+	RequiredState  *string `json:"requiredState,omitempty"`
+	SourceWorkName string  `json:"sourceWorkName"`
+	TargetWorkId   *string `json:"targetWorkId,omitempty"`
+	TargetWorkName string  `json:"targetWorkName"`
 
 	// Type Relationship category between two pieces of work.
 	Type RelationType `json:"type"`
@@ -821,10 +821,10 @@ type StatusCategories struct {
 // StatusResponse defines model for StatusResponse.
 type StatusResponse struct {
 	Categories    StatusCategories `json:"categories"`
-	FactoryState  string           `json:"factory_state"`
+	FactoryState  string           `json:"factoryState"`
 	Resources     *[]ResourceUsage `json:"resources,omitempty"`
-	RuntimeStatus string           `json:"runtime_status"`
-	TotalTokens   int              `json:"total_tokens"`
+	RuntimeStatus string           `json:"runtimeStatus"`
+	TotalTokens   int              `json:"totalTokens"`
 }
 
 // StringMap defines model for StringMap.
@@ -833,7 +833,7 @@ type StringMap map[string]string
 // SubmitWorkRequest defines model for SubmitWorkRequest.
 type SubmitWorkRequest struct {
 	// CurrentChainingTraceId Explicit chaining-trace identifier for the submitted work.
-	CurrentChainingTraceId *string `json:"current_chaining_trace_id,omitempty"`
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 	Name                   *string `json:"name,omitempty"`
 
 	// Payload Opaque work payload forwarded as raw JSON.
@@ -841,38 +841,38 @@ type SubmitWorkRequest struct {
 	Relations *[]Relation `json:"relations,omitempty"`
 	Tags      *StringMap  `json:"tags,omitempty"`
 
-	// TraceId Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id.
-	TraceId *string `json:"trace_id,omitempty"`
+	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+	TraceId *string `json:"traceId,omitempty"`
 
 	// WorkTypeName Configured work type name from factory.json to submit to.
-	WorkTypeName string `json:"work_type_name"`
+	WorkTypeName string `json:"workTypeName"`
 }
 
 // SubmitWorkResponse defines model for SubmitWorkResponse.
 type SubmitWorkResponse struct {
-	TraceId string `json:"trace_id"`
+	TraceId string `json:"traceId"`
 }
 
 // TokenHistory defines model for TokenHistory.
 type TokenHistory struct {
-	ConsecutiveFailures *IntegerMap `json:"consecutive_failures,omitempty"`
-	LastError           *string     `json:"last_error,omitempty"`
-	PlaceVisits         *IntegerMap `json:"place_visits,omitempty"`
-	TotalVisits         *IntegerMap `json:"total_visits,omitempty"`
+	ConsecutiveFailures *IntegerMap `json:"consecutiveFailures,omitempty"`
+	LastError           *string     `json:"lastError,omitempty"`
+	PlaceVisits         *IntegerMap `json:"placeVisits,omitempty"`
+	TotalVisits         *IntegerMap `json:"totalVisits,omitempty"`
 }
 
 // TokenResponse defines model for TokenResponse.
 type TokenResponse struct {
-	CreatedAt time.Time     `json:"created_at"`
-	EnteredAt time.Time     `json:"entered_at"`
+	CreatedAt time.Time     `json:"createdAt"`
+	EnteredAt time.Time     `json:"enteredAt"`
 	History   *TokenHistory `json:"history,omitempty"`
 	Id        string        `json:"id"`
 	Name      *string       `json:"name,omitempty"`
-	PlaceId   string        `json:"place_id"`
+	PlaceId   string        `json:"placeId"`
 	Tags      *StringMap    `json:"tags,omitempty"`
-	TraceId   string        `json:"trace_id"`
-	WorkId    string        `json:"work_id"`
-	WorkType  string        `json:"work_type"`
+	TraceId   string        `json:"traceId"`
+	WorkId    string        `json:"workId"`
+	WorkType  string        `json:"workType"`
 }
 
 // Transition defines model for Transition.
@@ -886,8 +886,8 @@ type Transition struct {
 
 // UpsertWorkRequestResponse defines model for UpsertWorkRequestResponse.
 type UpsertWorkRequestResponse struct {
-	RequestId string `json:"request_id"`
-	TraceId   string `json:"trace_id"`
+	RequestId string `json:"requestId"`
+	TraceId   string `json:"traceId"`
 }
 
 // WallClock defines model for WallClock.
@@ -899,7 +899,7 @@ type WallClock struct {
 // Work A piece of work.
 type Work struct {
 	// CurrentChainingTraceId Explicit chaining-trace identifier for this submitted work item.
-	CurrentChainingTraceId *string `json:"current_chaining_trace_id,omitempty"`
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
 	// Name A human readable name for the work, not unique
 	Name string `json:"name"`
@@ -908,23 +908,23 @@ type Work struct {
 	Payload interface{} `json:"payload,omitempty"`
 
 	// PreviousChainingTraceIds Explicit predecessor chaining traces that directly caused this work item.
-	PreviousChainingTraceIds *[]string `json:"previous_chaining_trace_ids,omitempty"`
+	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
 
 	// RequestId Identifier for the original request that created this work, if applicable
-	RequestId *string `json:"request_id,omitempty"`
+	RequestId *string `json:"requestId,omitempty"`
 
 	// State Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
 	State *string    `json:"state,omitempty"`
 	Tags  *StringMap `json:"tags,omitempty"`
 
-	// TraceId Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id.
-	TraceId *string `json:"trace_id,omitempty"`
+	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+	TraceId *string `json:"traceId,omitempty"`
 
 	// WorkId Unique identifier for the work
-	WorkId *string `json:"work_id,omitempty"`
+	WorkId *string `json:"workId,omitempty"`
 
 	// WorkTypeName Configured work type name from factory.json for this submitted work item.
-	WorkTypeName *string `json:"work_type_name,omitempty"`
+	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
 // WorkDiagnostics defines model for WorkDiagnostics.
@@ -949,13 +949,13 @@ type WorkOutcome string
 // WorkRequest defines model for WorkRequest.
 type WorkRequest struct {
 	// CurrentChainingTraceId Optional default chaining-trace identifier applied to submitted work items that omit it.
-	CurrentChainingTraceId *string `json:"current_chaining_trace_id,omitempty"`
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
 	// Relations Relationships between various work items.
 	Relations *[]Relation `json:"relations,omitempty"`
 
 	// RequestId Stable client-provided request identifier used for idempotent batch submission.
-	RequestId string `json:"request_id"`
+	RequestId string `json:"requestId"`
 
 	// Type Kind of work request accepted by the factory.
 	Type WorkRequestType `json:"type"`

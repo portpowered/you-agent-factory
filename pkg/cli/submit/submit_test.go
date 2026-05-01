@@ -90,8 +90,8 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	if receivedReq.WorkTypeName != "code-change" {
 		t.Errorf("WorkTypeName = %q, want %q", receivedReq.WorkTypeName, "code-change")
 	}
-	if _, ok := rawReq["work_type_name"]; !ok {
-		t.Fatalf("request should include work_type_name, got keys %#v", rawReq)
+	if _, ok := rawReq["workTypeName"]; !ok {
+		t.Fatalf("request should include workTypeName, got keys %#v", rawReq)
 	}
 	if _, ok := rawReq["work_type_id"]; ok {
 		t.Fatalf("request should not include work_type_id, got %#v", rawReq)
@@ -155,7 +155,7 @@ func TestSubmit_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "work_type_name is required", Code: "BAD_REQUEST"})
+		json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "workTypeName is required", Code: "BAD_REQUEST"})
 	}))
 	defer srv.Close()
 
@@ -176,7 +176,7 @@ func TestSubmit_ServerError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for server error response")
 	}
-	if got := err.Error(); got != "submission failed (400): work_type_name is required" {
+	if got := err.Error(); got != "submission failed (400): workTypeName is required" {
 		t.Errorf("unexpected error: %v", got)
 	}
 }

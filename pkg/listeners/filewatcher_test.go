@@ -332,14 +332,14 @@ func TestFileWatcher_JSONFactoryRequestBatch(t *testing.T) {
 func TestFileWatcher_JSONFactoryRequestBatchMapsWorkTypeName(t *testing.T) {
 	dir := setupWatchDir(t)
 	data := []byte(`{
-		"request_id": "request-batch-work-type-name",
+		"requestId": "request-batch-work-type-name",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "first", "work_type_name": "request", "state": "queued", "payload": {"step": "first"}},
-			{"name": "second", "work_type_name": "request", "payload": {"step": "second"}}
+			{"name": "first", "workTypeName": "request", "state": "queued", "payload": {"step": "first"}},
+			{"name": "second", "workTypeName": "request", "payload": {"step": "second"}}
 		],
 		"relations": [
-			{"type": "DEPENDS_ON", "source_work_name": "second", "target_work_name": "first"}
+			{"type": "DEPENDS_ON", "sourceWorkName": "second", "targetWorkName": "first"}
 		]
 	}`)
 	if err := os.WriteFile(filepath.Join(dir, "request", "default", "batch.json"), data, 0o644); err != nil {
@@ -383,16 +383,16 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsWorkTypeName(t *testing.T) {
 func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *testing.T) {
 	dir := setupWatchDir(t)
 	data := []byte(`{
-		"request_id": "request-batch-parent-child",
+		"requestId": "request-batch-parent-child",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "parent", "work_type_name": "request", "trace_id": "trace-parent-child", "payload": {"step": "parent"}},
-			{"name": "prerequisite", "work_type_name": "request", "payload": {"step": "prerequisite"}},
-			{"name": "child", "work_type_name": "request", "payload": {"step": "child"}}
+			{"name": "parent", "workTypeName": "request", "traceId": "trace-parent-child", "payload": {"step": "parent"}},
+			{"name": "prerequisite", "workTypeName": "request", "payload": {"step": "prerequisite"}},
+			{"name": "child", "workTypeName": "request", "payload": {"step": "child"}}
 		],
 		"relations": [
-			{"type": "PARENT_CHILD", "source_work_name": "child", "target_work_name": "parent"},
-			{"type": "DEPENDS_ON", "source_work_name": "child", "target_work_name": "prerequisite"}
+			{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"},
+			{"type": "DEPENDS_ON", "sourceWorkName": "child", "targetWorkName": "prerequisite"}
 		]
 	}`)
 	if err := os.WriteFile(filepath.Join(dir, "request", "default", "batch.json"), data, 0o644); err != nil {
@@ -456,14 +456,14 @@ func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *test
 func TestFileWatcher_JSONFactoryRequestBatchMapsStateAndParentChild(t *testing.T) {
 	dir := setupWatchDir(t)
 	data := []byte(`{
-		"request_id": "request-batch-parent-child",
+		"requestId": "request-batch-parent-child",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "story-set", "work_type_name": "request", "state": "waiting"},
-			{"name": "story-a", "work_type_name": "story", "payload": {"step": "child"}}
+			{"name": "story-set", "workTypeName": "request", "state": "waiting"},
+			{"name": "story-a", "workTypeName": "story", "payload": {"step": "child"}}
 		],
 		"relations": [
-			{"type": "PARENT_CHILD", "source_work_name": "story-a", "target_work_name": "story-set"}
+			{"type": "PARENT_CHILD", "sourceWorkName": "story-a", "targetWorkName": "story-set"}
 		]
 	}`)
 	if err := os.WriteFile(filepath.Join(dir, "BATCH", "default", "batch.json"), data, 0o644); err != nil {
@@ -510,7 +510,7 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsStateAndParentChild(t *testing.T
 func TestFileWatcher_JSONFactoryRequestBatchRejectsWorkTypeIDAlias(t *testing.T) {
 	dir := setupWatchDir(t)
 	data := []byte(`{
-		"request_id": "request-batch-work-type-id",
+		"requestId": "request-batch-work-type-id",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
 			{"name": "first", "work_type_id": "request", "payload": {"step": "first"}}
@@ -526,8 +526,8 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsWorkTypeIDAlias(t *testing.T)
 	if err == nil {
 		t.Fatal("expected retired work_type_id alias to fail")
 	}
-	if !strings.Contains(err.Error(), "work_type_id") || !strings.Contains(err.Error(), "work_type_name") {
-		t.Fatalf("error = %q, want work_type_id rejection with work_type_name guidance", err.Error())
+	if !strings.Contains(err.Error(), "work_type_id") || !strings.Contains(err.Error(), "workTypeName") {
+		t.Fatalf("error = %q, want work_type_id rejection with workTypeName guidance", err.Error())
 	}
 	if submitted := mf.getSubmitted(); len(submitted) != 0 {
 		t.Fatalf("expected no partial submissions, got %d", len(submitted))
@@ -540,10 +540,10 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsWorkTypeIDAlias(t *testing.T)
 func TestFileWatcher_JSONFactoryRequestBatchRejectsTargetStateAlias(t *testing.T) {
 	dir := setupWatchDir(t)
 	data := []byte(`{
-		"request_id": "request-batch-target-state",
+		"requestId": "request-batch-target-state",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "story-set", "work_type_name": "request", "target_state": "waiting"}
+			{"name": "story-set", "workTypeName": "request", "target_state": "waiting"}
 		]
 	}`)
 	if err := os.WriteFile(filepath.Join(dir, "BATCH", "default", "batch.json"), data, 0o644); err != nil {

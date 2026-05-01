@@ -102,7 +102,7 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFact
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
 	t.Helper()
 
-	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"work_type_name":"`+workType+`","payload":{"title":"`+title+`"}}`))
+	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
 	if err != nil {
 		t.Fatalf("POST /work %s: %v", workType, err)
 	}

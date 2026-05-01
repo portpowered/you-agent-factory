@@ -506,10 +506,10 @@ func TestNormalizeWorkRequest_AcceptsStringPayloadAsRawText(t *testing.T) {
 func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 	var request interfaces.WorkRequest
 	if err := json.Unmarshal([]byte(`{
-		"request_id": "request-json",
+		"requestId": "request-json",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "draft", "work_type_name": "task", "state": "queued", "payload": {"title": "Draft"}}
+			{"name": "draft", "workTypeName": "task", "state": "queued", "payload": {"title": "Draft"}}
 		]
 	}`), &request); err != nil {
 		t.Fatalf("Unmarshal WorkRequest: %v", err)
@@ -533,17 +533,17 @@ func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 	}
 	works := raw["works"].([]any)
 	work := works[0].(map[string]any)
-	if got := work["work_type_name"]; got != "task" {
-		t.Fatalf("work_type_name = %#v, want task in %s", got, data)
+	if got := work["workTypeName"]; got != "task" {
+		t.Fatalf("workTypeName = %#v, want task in %s", got, data)
 	}
 	if got := work["state"]; got != "queued" {
 		t.Fatalf("state = %#v, want queued in %s", got, data)
 	}
-	if got := raw["current_chaining_trace_id"]; got != "chain-json" {
-		t.Fatalf("current_chaining_trace_id = %#v, want chain-json in %s", got, data)
+	if got := raw["currentChainingTraceId"]; got != "chain-json" {
+		t.Fatalf("currentChainingTraceId = %#v, want chain-json in %s", got, data)
 	}
-	if got := work["current_chaining_trace_id"]; got != "chain-work-json" {
-		t.Fatalf("work current_chaining_trace_id = %#v, want chain-work-json in %s", got, data)
+	if got := work["currentChainingTraceId"]; got != "chain-work-json" {
+		t.Fatalf("work currentChainingTraceId = %#v, want chain-work-json in %s", got, data)
 	}
 	if _, ok := work["work_type_id"]; ok {
 		t.Fatalf("marshaled WorkRequest must not expose work_type_id: %s", data)
@@ -555,18 +555,18 @@ func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 
 func TestParseCanonicalWorkRequestJSON_RejectsConflictingCurrentChainingTraceID(t *testing.T) {
 	_, err := ParseCanonicalWorkRequestJSON([]byte(`{
-		"request_id": "request-json-conflict",
+		"requestId": "request-json-conflict",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
 			{
 				"name": "draft",
-				"work_type_name": "task",
-				"current_chaining_trace_id": "chain-a",
-				"trace_id": "trace-b"
+				"workTypeName": "task",
+				"currentChainingTraceId": "chain-a",
+				"traceId": "trace-b"
 			}
 		]
 	}`))
-	if err == nil || !strings.Contains(err.Error(), "current_chaining_trace_id and trace_id must match") {
+	if err == nil || !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
 		t.Fatalf("expected conflicting chaining trace rejection, got %v", err)
 	}
 }

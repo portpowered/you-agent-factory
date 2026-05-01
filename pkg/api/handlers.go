@@ -25,10 +25,12 @@ import (
 const defaultMaxResults = 50
 
 const (
-	workTypeIDField             = "work_type_id"
-	targetStateField            = "target_state"
-	traceIDField                = "trace_id"
-	currentChainingTraceIDField = "current_chaining_trace_id"
+	workTypeIDField                   = "work_type_id"
+	targetStateField                  = "target_state"
+	traceIDField                      = "traceId"
+	currentChainingTraceIDField       = "currentChainingTraceId"
+	legacyTraceIDField                = "trace_id"
+	legacyCurrentChainingTraceIDField = "current_chaining_trace_id"
 )
 
 var _ factoryapi.ServerInterface = (*Server)(nil)
@@ -47,7 +49,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.WorkTypeName == "" {
-		s.writeError(w, http.StatusBadRequest, "work_type_name is required", "BAD_REQUEST")
+		s.writeError(w, http.StatusBadRequest, "workTypeName is required", "BAD_REQUEST")
 		return
 	}
 
@@ -98,11 +100,11 @@ func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, reque
 		return
 	}
 	if req.RequestId == "" {
-		s.writeError(w, http.StatusBadRequest, "request_id is required", "BAD_REQUEST")
+		s.writeError(w, http.StatusBadRequest, "requestId is required", "BAD_REQUEST")
 		return
 	}
 	if req.RequestId != requestID {
-		s.writeError(w, http.StatusBadRequest, "request_id path and body must match", "BAD_REQUEST")
+		s.writeError(w, http.StatusBadRequest, "request_id path and requestId body must match", "BAD_REQUEST")
 		return
 	}
 
@@ -720,7 +722,7 @@ func decodeNamedFactoryBody(body io.Reader) (factoryapi.CreateFactoryJSONRequest
 
 func rejectPublicBatchWorkAliases(fields map[string]json.RawMessage, prefix string) error {
 	if _, ok := fields[workTypeIDField]; ok {
-		return requestFieldValidationError{message: fmt.Sprintf("%swork_type_id is not supported; use work_type_name", prefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%swork_type_id is not supported; use workTypeName", prefix)}
 	}
 	if _, ok := fields[targetStateField]; ok {
 		return requestFieldValidationError{message: fmt.Sprintf("%starget_state is not supported; use state", prefix)}
@@ -731,6 +733,12 @@ func rejectPublicBatchWorkAliases(fields map[string]json.RawMessage, prefix stri
 func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, prefix string) error {
 	currentRaw, hasCurrent := fields[currentChainingTraceIDField]
 	legacyRaw, hasLegacy := fields[traceIDField]
+	if !hasCurrent {
+		currentRaw, hasCurrent = fields[legacyCurrentChainingTraceIDField]
+	}
+	if !hasLegacy {
+		legacyRaw, hasLegacy = fields[legacyTraceIDField]
+	}
 	if !hasCurrent || !hasLegacy {
 		return nil
 	}
@@ -744,7 +752,7 @@ func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, pre
 		return err
 	}
 	if current != "" && legacy != "" && current != legacy {
-		return requestFieldValidationError{message: fmt.Sprintf("%scurrent_chaining_trace_id and trace_id must match when both are provided", prefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%scurrentChainingTraceId and traceId must match when both are provided", prefix)}
 	}
 	return nil
 }
@@ -818,7 +826,8 @@ func submitWorkBadRequestMessage(err error) (string, bool) {
 }
 
 func submitWorkTypeNameMessage(message string) string {
-	message = strings.ReplaceAll(message, "work_type_id", "work_type_name")
+	message = strings.ReplaceAll(message, "work_type_name", "workTypeName")
+	message = strings.ReplaceAll(message, "work_type_id", "workTypeName")
 	if strings.Contains(message, "work type name") {
 		return message
 	}

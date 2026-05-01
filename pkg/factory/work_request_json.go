@@ -38,11 +38,11 @@ func RejectRetiredWorkRequestFieldAliases(data []byte) error {
 		return fmt.Errorf("parse work request retired fields: %w", err)
 	}
 	if raw.WorkTypeID != nil {
-		return fmt.Errorf("work request batch uses retired work_type_id field; use work_type_name")
+		return fmt.Errorf("work request batch uses retired work_type_id field; use workTypeName")
 	}
 	for i := range raw.Works {
 		if raw.Works[i].WorkTypeID != nil {
-			return fmt.Errorf("work request batch works[%d] uses retired work_type_id field; use work_type_name", i)
+			return fmt.Errorf("work request batch works[%d] uses retired work_type_id field; use workTypeName", i)
 		}
 		if raw.Works[i].TargetState != nil {
 			return fmt.Errorf("work request batch works[%d] uses retired target_state field; use state", i)
@@ -54,27 +54,37 @@ func RejectRetiredWorkRequestFieldAliases(data []byte) error {
 func RejectConflictingWorkRequestTraceFields(data []byte) error {
 	var raw struct {
 		Works []struct {
-			CurrentChainingTraceID json.RawMessage `json:"current_chaining_trace_id"`
-			TraceID                json.RawMessage `json:"trace_id"`
+			CurrentChainingTraceID json.RawMessage `json:"currentChainingTraceId"`
+			TraceID                json.RawMessage `json:"traceId"`
+			LegacyCurrentChaining  json.RawMessage `json:"current_chaining_trace_id"`
+			LegacyTraceID          json.RawMessage `json:"trace_id"`
 		} `json:"works"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return fmt.Errorf("parse work request chaining traces: %w", err)
 	}
 	for i := range raw.Works {
-		if raw.Works[i].CurrentChainingTraceID == nil || raw.Works[i].TraceID == nil {
+		currentRaw := raw.Works[i].CurrentChainingTraceID
+		if currentRaw == nil {
+			currentRaw = raw.Works[i].LegacyCurrentChaining
+		}
+		traceRaw := raw.Works[i].TraceID
+		if traceRaw == nil {
+			traceRaw = raw.Works[i].LegacyTraceID
+		}
+		if currentRaw == nil || traceRaw == nil {
 			continue
 		}
 		var current string
-		if err := json.Unmarshal(raw.Works[i].CurrentChainingTraceID, &current); err != nil {
+		if err := json.Unmarshal(currentRaw, &current); err != nil {
 			return fmt.Errorf("parse work request works[%d] current chaining trace: %w", i, err)
 		}
 		var legacy string
-		if err := json.Unmarshal(raw.Works[i].TraceID, &legacy); err != nil {
-			return fmt.Errorf("parse work request works[%d] trace_id: %w", i, err)
+		if err := json.Unmarshal(traceRaw, &legacy); err != nil {
+			return fmt.Errorf("parse work request works[%d] traceId: %w", i, err)
 		}
 		if current != "" && legacy != "" && current != legacy {
-			return fmt.Errorf("work request batch works[%d] current_chaining_trace_id and trace_id must match when both are provided", i)
+			return fmt.Errorf("work request batch works[%d] currentChainingTraceId and traceId must match when both are provided", i)
 		}
 	}
 	return nil
