@@ -10,6 +10,7 @@ work inputs.
 | --- | --- | --- |
 | `factory/README.md` | Checked-in workflow overview | Describes the repository-local workflow and canonical inbox directories under `factory/inputs/`. |
 | `factory/logs/meta/asks.md` | Canonical customer-ask backlog | The only checked-in maintainer backlog that owns customer asks; meta and cleaner prompts should read asks here, and `factory/meta/asks.md` remains a redirect-only legacy stub rather than a peer source of truth. |
+| `docs/development/process-review-loop-contract.md` | Checked-in process/review contract note | Defines the canonical meaning of `<CONTINUE>`, `<COMPLETE>`, and true rejection for the repository-maintainer workflow and names the runtime, prompt, config, and replay surfaces that must stay aligned. |
 | `docs/development/root-factory-artifact-contract-inventory.md` | Checked-in artifact inventory | Documents which root-level factory artifacts are checked in, generated, or obsolete. |
 | `docs/guides/batch-inputs.md` | Canonical batch request guide | Defines when to author `FACTORY_REQUEST_BATCH` JSON and where those files belong. |
 | `factory/inputs/idea/default/` | Standalone idea inbox | Checked-in inbox kept present by `.gitkeep`; standalone idea submissions land here as markdown files. |
@@ -32,6 +33,7 @@ work inputs.
 - If a redirect-only stub protects a canonical maintainer surface, add a content-level regression test for the stub text in `pkg/testutil/artifact_contract_test.go`; inventory classification alone does not prevent drift back into a live duplicate surface.
 - When prompt instructions need ordered or multi-item follow-up work, point them to `docs/guides/batch-inputs.md` and `factory/inputs/BATCH/default/` instead of overloading the markdown idea inbox.
 - Keep workstation prompts repository-local and public-surface neutral: cite checked-in docs or `factory/` paths in this repo, never absolute paths to a different checkout or merge-conflict marker text.
+- When the checked-in `process` or `review` loop semantics change, update the contract note, runtime/config surfaces, prompt text, and replay or behavioral evidence together; otherwise ordinary iteration and true rejection drift back into ambiguous history.
 - When a workstation prompt can emit either ideas or batch requests, state the default as one standalone idea file and name the exact condition that permits `FACTORY_REQUEST_BATCH` output.
 - When maintainer prompts need the customer backlog, point them to `factory/logs/meta/asks.md` explicitly and keep any legacy duplicate path as a redirect-only stub rather than a peer control-plane surface.
 - Treat slash-rooted workstation `working_directory` values as portable runtime paths only when they are repo-authored logical locations such as `/repo/...` or `/worktrees/...`; preserve real existing Unix absolute paths as host-absolute instead of rebasing them under the runtime base.
