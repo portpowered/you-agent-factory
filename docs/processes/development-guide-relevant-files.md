@@ -14,6 +14,8 @@ This inventory records the checked-in files and directories that the maintainer 
 | `pkg/` | Go implementation surface | Package-specific test commands in the guide should reference the real package paths under this root. |
 | `tests/` | Smoke and fixture surface | Functional and release-facing checks run from the repository root against these checked-in fixtures. |
 | `ui/` | Embedded dashboard workspace | UI build, test, and Storybook commands remain part of the same repository-root workflow. |
+| `ui/src/testing/replay-fixture-catalog.ts` | Replay integration test contract | Browser-backed dashboard smoke coverage should register scenario metadata here so coverage reporting and integration assertions stay on one source of truth. |
+| `ui/scripts/write-replay-coverage-report.ts` | Replay coverage reporter | Package scripts should use this repository-owned reporter to validate replay metadata instead of embedding ad hoc fixture maps in tests or CI. |
 | `ui/scripts/normalize-dist-output.mjs` | Embedded asset normalizer | The documented UI build path ends by normalizing Vite output names and refreshing `ui/dist_stamp.go` so committed embed assets stay stable for Go builds and CI diffs. |
 
 ## Reusable Rules
@@ -22,4 +24,5 @@ This inventory records the checked-in files and directories that the maintainer 
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
 - When UI assets are committed for Go embedding, keep the build pipeline responsible for normalizing output filenames and refreshing any cache-busting stamp files instead of hand-editing `ui/dist/`.
+- When browser-backed UI replay tests and replay coverage reports share the same scenarios, keep that metadata in one repository-owned catalog so the tests, scripts, and docs cannot silently drift.
 - When a cleanup lane closes with path or contract-alignment work, record the exact root-level verification commands in a `docs/development/*-closeout.md` artifact so the proof survives beyond `progress.txt`.
