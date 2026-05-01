@@ -177,6 +177,117 @@ func TestRecordingProvider_Infer_FailureExitCodeEmissionMatchesDiagnosticPolicy(
 	}
 }
 
+func TestRecordingProvider_Infer_SuccessPreservesProviderSessionAndSafeDiagnostics(t *testing.T) {
+	respSession := &interfaces.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "sess-123"}
+	fake := &recordingProviderFake{
+		responses: []interfaces.InferenceResponse{{
+			Content:         "provider response",
+			ProviderSession: respSession,
+			Diagnostics: &interfaces.WorkDiagnostics{
+				Provider: &interfaces.ProviderDiagnostic{
+					Provider: "claude",
+					Model:    "claude-sonnet-4",
+					RequestMetadata: map[string]string{
+						"worker_type": "worker-a",
+						"unsafe":      "drop-me",
+					},
+					ResponseMetadata: map[string]string{
+						"source": "provider",
+						"unsafe": "drop-me",
+					},
+				},
+			},
+		}},
+	}
+	events := &recordingEvents{}
+	provider := NewRecordingProvider(fake, events.record, WithRecordingProviderClock(sequenceClock(
+		time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC),
+		5*time.Millisecond,
+	)))
+
+	_, err := provider.Infer(context.Background(), recordingProviderDispatch())
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+
+	response := assertInferenceResponseEvent(t, events.items[1])
+	if response.ExitCode != nil {
+		t.Fatalf("exitCode = %#v, want nil", response.ExitCode)
+	}
+	assertProviderSessionPayload(t, response.ProviderSession, "claude", "session_id", "sess-123")
+	assertInferenceProviderDiagnostics(
+		t,
+		response.Diagnostics,
+		"claude",
+		"claude-sonnet-4",
+		map[string]string{
+			"worker_type":       "worker-a",
+			"worktree":          "feature-worktree",
+			"working_directory": "C:\\repo",
+		},
+		map[string]string{
+			"content_bytes":             "17",
+			"provider_session_id":       "sess-123",
+			"provider_session_kind":     "session_id",
+			"provider_session_provider": "claude",
+			"retry_count":               "0",
+			"source":                    "provider",
+		},
+	)
+}
+
+func TestRecordingProvider_Infer_FailureZeroExitCodeStillPreservesProviderSessionAndSafeDiagnostics(t *testing.T) {
+	providerErr := NewProviderErrorWithSession(
+		interfaces.ProviderErrorTypeTimeout,
+		"provider timed out",
+		nil,
+		&interfaces.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "sess-456"},
+	)
+	providerErr.Diagnostics = &interfaces.WorkDiagnostics{
+		Provider: &interfaces.ProviderDiagnostic{
+			Provider: "claude",
+			Model:    "claude-sonnet-4",
+			ResponseMetadata: map[string]string{
+				"source": "stderr",
+				"unsafe": "drop-me",
+			},
+		},
+		Command: &interfaces.CommandDiagnostic{ExitCode: 0},
+	}
+	fake := &recordingProviderFake{errors: []error{providerErr}}
+	events := &recordingEvents{}
+	provider := NewRecordingProvider(fake, events.record, WithRecordingProviderClock(sequenceClock(
+		time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC),
+		17*time.Millisecond,
+	)))
+
+	_, err := provider.Infer(context.Background(), recordingProviderDispatch())
+	if !errors.Is(err, providerErr) {
+		t.Fatalf("Infer error = %v, want provider error", err)
+	}
+
+	response := assertInferenceResponseEvent(t, events.items[1])
+	if response.ExitCode != nil {
+		t.Fatalf("exitCode = %#v, want nil", response.ExitCode)
+	}
+	assertProviderSessionPayload(t, response.ProviderSession, "claude", "session_id", "sess-456")
+	assertInferenceProviderDiagnostics(
+		t,
+		response.Diagnostics,
+		"claude",
+		"claude-sonnet-4",
+		map[string]string{
+			"worker_type":       "worker-a",
+			"worktree":          "feature-worktree",
+			"working_directory": "C:\\repo",
+		},
+		map[string]string{
+			"retry_count": "0",
+			"source":      "stderr",
+		},
+	)
+}
+
 func TestRecordingProvider_Infer_MultipleAttemptsIncrementAndKeepUniqueRequestIDs(t *testing.T) {
 	start := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	fake := &recordingProviderFake{
@@ -326,4 +437,72 @@ func assertInferenceEventContext(t *testing.T, context factoryapi.FactoryEventCo
 	if context.WorkIds == nil || len(*context.WorkIds) != 2 || (*context.WorkIds)[0] != "work-1" || (*context.WorkIds)[1] != "work-2" {
 		t.Fatalf("context workIds = %#v, want work-1/work-2", context.WorkIds)
 	}
+}
+
+func assertProviderSessionPayload(t *testing.T, session *factoryapi.ProviderSessionMetadata, provider, kind, id string) {
+	t.Helper()
+	if session == nil {
+		t.Fatal("providerSession = nil, want payload")
+	}
+	if recordingProviderStringValue(session.Provider) != provider ||
+		recordingProviderStringValue(session.Kind) != kind ||
+		recordingProviderStringValue(session.Id) != id {
+		t.Fatalf("providerSession = %#v, want provider=%q kind=%q id=%q", session, provider, kind, id)
+	}
+}
+
+func assertInferenceProviderDiagnostics(
+	t *testing.T,
+	diagnostics *factoryapi.SafeWorkDiagnostics,
+	provider string,
+	model string,
+	wantRequest map[string]string,
+	wantResponse map[string]string,
+) {
+	t.Helper()
+	if diagnostics == nil || diagnostics.Provider == nil {
+		t.Fatalf("diagnostics = %#v, want provider diagnostics", diagnostics)
+	}
+	if recordingProviderStringValue(diagnostics.Provider.Provider) != provider ||
+		recordingProviderStringValue(diagnostics.Provider.Model) != model {
+		t.Fatalf("provider diagnostics = %#v, want provider=%q model=%q", diagnostics.Provider, provider, model)
+	}
+
+	requestMetadata := recordingProviderStringMapValue(diagnostics.Provider.RequestMetadata)
+	for key, want := range wantRequest {
+		if requestMetadata[key] != want {
+			t.Fatalf("request metadata[%q] = %q, want %q", key, requestMetadata[key], want)
+		}
+	}
+	if _, ok := requestMetadata["unsafe"]; ok {
+		t.Fatalf("request metadata leaked unsafe key: %#v", requestMetadata)
+	}
+
+	responseMetadata := recordingProviderStringMapValue(diagnostics.Provider.ResponseMetadata)
+	for key, want := range wantResponse {
+		if responseMetadata[key] != want {
+			t.Fatalf("response metadata[%q] = %q, want %q", key, responseMetadata[key], want)
+		}
+	}
+	if _, ok := responseMetadata["unsafe"]; ok {
+		t.Fatalf("response metadata leaked unsafe key: %#v", responseMetadata)
+	}
+}
+
+func recordingProviderStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func recordingProviderStringMapValue(values *factoryapi.StringMap) map[string]string {
+	if values == nil {
+		return nil
+	}
+	out := make(map[string]string, len(*values))
+	for key, value := range *values {
+		out[key] = value
+	}
+	return out
 }
