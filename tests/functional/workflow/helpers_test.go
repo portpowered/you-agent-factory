@@ -160,3 +160,18 @@ func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (wo
 func successRunner(stdout string) workers.CommandRunner {
 	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
 }
+
+type capturingExecutor struct {
+	result       interfaces.WorkResult
+	lastDispatch interfaces.WorkDispatch
+	callCount    int
+}
+
+func (e *capturingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.lastDispatch = dispatch
+	e.callCount++
+	result := e.result
+	result.DispatchID = dispatch.DispatchID
+	result.TransitionID = dispatch.TransitionID
+	return result, nil
+}

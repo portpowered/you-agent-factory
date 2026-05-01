@@ -12,7 +12,6 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/workers"
 )
 
 // fanoutParserExecutor dynamically spawns N page tokens with ParentID set
@@ -82,21 +81,6 @@ func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch interfaces.W
 	}, nil
 }
 
-type capturingExecutor struct {
-	result       interfaces.WorkResult
-	lastDispatch interfaces.WorkDispatch
-	callCount    int
-}
-
-func (e *capturingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	e.lastDispatch = dispatch
-	e.callCount++
-	result := e.result
-	result.DispatchID = dispatch.DispatchID
-	result.TransitionID = dispatch.TransitionID
-	return result, nil
-}
-
 type blockingExecutor struct {
 	releaseCh <-chan struct{}
 	mu        *sync.Mutex
@@ -124,20 +108,6 @@ func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {
 		places[tok.PlaceID]++
 	}
 	return places
-}
-
-type fakeCommandRunner struct {
-	stdout   string
-	stderr   string
-	exitCode int
-}
-
-func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
-}
-
-func successRunner(stdout string) workers.CommandRunner {
-	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
 }
 
 func updateScriptFixtureFactory(t *testing.T, dir string, mutate func(map[string]any)) {
