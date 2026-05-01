@@ -1,4 +1,4 @@
-package functional_test
+package bootstrap_portability
 
 import (
 	"context"
@@ -7,13 +7,13 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/service"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// TestValidation_RejectsWorkstationWithNonexistentWorker verifies that
-// BuildFactoryService returns a clear validation error when a workstation
-// references a worker that is not declared in the workers array.
-func TestValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "invalid_worker_reference"))
+// TestFactoryValidation rejects factories whose workstation wiring references
+// undeclared workers before runtime bootstrap succeeds.
+func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "invalid_worker_reference"))
 
 	cfg := &service.FactoryServiceConfig{
 		Dir: dir,
