@@ -72,9 +72,9 @@ printf "Create a minimal release-planning loop for a document processing service
 ## Docs
 
 ```bash
-infinite-you docs
-infinite-you docs workstation
-infinite-you docs batch-work
+agent-factory docs
+agent-factory docs workstation
+agent-factory docs batch-work
 etc
 ```
 
@@ -115,8 +115,8 @@ feedback, fan-out/fan-in, and guarded loop breakers.
 
 ```bash
 infinite-you          # Bootstrap ./factory and keep the default factory running
-infinite-you docs     # List packaged markdown reference topics
-infinite-you docs config  # Print the packaged config reference page
+agent-factory docs     # List packaged markdown reference topics
+agent-factory docs config  # Print the packaged config reference page
 infinite-you init     # Create the default single-step scaffold (--executor codex|claude, default: codex)
 infinite-you init --type ralph --dir ralph-factory  # Create the minimal Ralph PRD-to-execution scaffold
 infinite-you run      # Load workflow and run the factory engine in explicit batch mode
