@@ -394,7 +394,7 @@ If no entry matches, mock-worker mode returns the default accepted result.
 - Keep the public workflow contract in `factory.json`.
 - Use camelCase factory-config fields such as `workTypes`, `resources`,
   `onFailure`, `onRejection`, and `maxVisits`.
-- Use `resourceManifest` only for portability-only concerns such as
+- Use `supportingFiles` only for portability-only concerns such as
   validation-only PATH tools and explicitly bundled scripts or docs.
 - Keep prompt-heavy worker and workstation runtime fields in split `AGENTS.md`
   files unless you intentionally need a single-file config.

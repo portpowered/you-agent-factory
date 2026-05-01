@@ -265,7 +265,7 @@ representative bundle assets:
 - `portable-dependencies.json`
 
 The flattened portable form keeps those files in
-`resourceManifest.bundledFiles` under canonical `factory/...` targets. Expand
+`supportingFiles.bundledFiles` under canonical `factory/...` targets. Expand
 then restores them into the runnable factory-relative layout:
 
 - `factory/scripts/**` restores to `scripts/**`
@@ -273,7 +273,7 @@ then restores them into the runnable factory-relative layout:
 - `factory/portable-dependencies.json` restores to `portable-dependencies.json`
 
 The fixture intentionally keeps `mangaka.exe` and `magick` external. They must
-stay declared in `resourceManifest.requiredTools`. The bundled
+stay declared in `supportingFiles.requiredTools`. The bundled
 `portable-dependencies.json` mirrors that contract for the bounded fixture
 scripts, and neither tool may appear as a bundled binary in the portable
 output.

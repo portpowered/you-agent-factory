@@ -129,7 +129,7 @@ carry bundled helper files beyond workflow topology.
 - The default collected bundle paths for this slice are `factory/scripts/**`,
   `factory/docs/**`, and supported root helper files such as `Makefile`.
 - `config flatten` collects those supported files automatically from a checked-in
-  `factory/` layout and writes them into `resourceManifest.bundledFiles` in
+  `factory/` layout and writes them into `supportingFiles.bundledFiles` in
   deterministic `targetPath` order.
 - `type: "SCRIPT"` entries must target `factory/scripts/...`; `type: "DOC"`
   entries must target `factory/docs/...`; `type: "ROOT_HELPER"` entries must
@@ -149,7 +149,7 @@ carry bundled helper files beyond workflow topology.
   used in `factory.json`.
 - Use camelCase public config fields in `factory.json`; do not author new
   configs with retired snake_case aliases.
-- Keep portability-only declarations under `resourceManifest`; do not overload
+- Keep portability-only declarations under `supportingFiles`; do not overload
   runtime-capacity `resources` with bundled files or external tool checks.
 - Treat `inputs/` as submission data, not as part of the topology. The runtime
   watches the path and turns those files into work requests.
@@ -162,7 +162,7 @@ and `LoadRuntimeConfig(...)` without redefining the manifest shape.
 
 - `config flatten` adds supported `factory/scripts/**`, `factory/docs/**`, and
   root helper files such as `Makefile` to
-  `resourceManifest.bundledFiles` automatically for checked-in `factory/`
+  `supportingFiles.bundledFiles` automatically for checked-in `factory/`
   layouts.
 - `config expand` restores bundled files onto disk beside the expanded
   `factory.json`, `workers/**/AGENTS.md`, and `workstations/**/AGENTS.md`
