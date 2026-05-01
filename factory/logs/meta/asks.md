@@ -6,17 +6,7 @@
 
 we look generally to make the system amenable to consumption via other customers beyond us. 
 
-## release plans
-
-### go releaser
-1. add a goreleaser to the project such that we can configure the project to release to windows/linux/mac on x86 and arm
-
-### CI/CD via github actions
-2. add docker ci configurations such that we have mechanisms to deploy the code and confirm that things are worker, then we should update the instructions for our AGENTS.md in our workstations under factory so that the factory submissions are working. We should have a CI step that basically compiels the agent factory and use the agent factory root factory with mock workers and confirm that it passes
-- ensure that everything passes
-
-
-## system deficits
+## system deficits (P0)
 
 recently, we were trying to test and we had a system outage due to lack of capacity and our system kept retrying without obeying the global resource limits for retries and whatnot for throttles
 
@@ -28,11 +18,11 @@ what i mean is we should remove the separate logic for global throttle limts and
 
 The logical implementation should be that we flatten this guard doen to the transition guards that we currently have on the petri transition. it should just be treated as any normal guard. The only special thing in our logic is how we do the transformation from the input config into the corresponding itneranal petri transitions/guards.
 
-## quality
-
+## quality (P0)
 - we need to improve our overall system quality, to reduce future rework rates and what not
+please look towards implementing our systems and moving towards the standards outlined for both the website and the backend. Generally, keep a checklist as part of the progress towards migration our systems towards alignment with the standards denoted at docs/standards/code/general-website-standards.md and  docs/standards/code/general-backend-standards.md 
 
-### website quality
+### website quality (more details - p0/p1 - follow on from quality)
 
 right now the website quality is kind of bad for various reasons, the main ones in consideration for me are as follows: 
 
@@ -42,11 +32,7 @@ right now the website quality is kind of bad for various reasons, the main ones 
 
 3. we need more robust testing, we should look to increase the coverage of our website testing to confirm the system behavior for storybook tests, but we should add a couple more integration tests confirming that our system behaves properly such as for tick controls, and API calls for export PNG and import PNG. 
 
-4. we should have
-
-### backend quality
-
-#### functional tests
+#### functional tests (p1)
 The functional tests cover a lot of functionality, but they're a bit obtuse to understand. 
 To help with that we should 
 - refactor our the fucntional tests into separate packages/folders around what they are responsbile for so that we have less flatness and more structure
@@ -59,13 +45,13 @@ we don't have much linting automation in place and we should add some
 - magic numbers
 - basically everything that we would have in golang ci lint
 
-### docs audit
+### docs audit (p2)
 we should audit our docs, some of it is stale and what not, especially the ones we embed as part of our systems cli, we should try to keep those up to date for now
 
-### manual qa
+### manual qa (p2)
 we should try to run a few (20) manual qa runs with mock runners with a variety of possible schemas of factories and feedback into our plans on how things should be fixed. 
 
-### systems quality
+### systems quality (p2)
 
 we are lacking some copmponents in our docs for systems quality
 
