@@ -46,16 +46,7 @@ func assertArgsContainSequence(t *testing.T, args, want []string) {
 
 func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.ProviderErrorCorpusEntry {
 	t.Helper()
-
-	corpus, err := workers.LoadProviderErrorCorpus()
-	if err != nil {
-		t.Fatalf("workers.LoadProviderErrorCorpus() error = %v", err)
-	}
-	entry, ok := corpus.Entry(name)
-	if !ok {
-		t.Fatalf("provider error corpus entry %q not found", name)
-	}
-	return entry
+	return support.ProviderErrorCorpusEntry(t, name)
 }
 
 type fanoutParserExecutor struct {

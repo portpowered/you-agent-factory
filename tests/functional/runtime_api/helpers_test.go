@@ -197,6 +197,17 @@ func (fs *functionalAPIServer) URL() string {
 	return fs.httpSrv.URL
 }
 
+func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, requests ...interfaces.SubmitRequest) []interfaces.SubmitRequest {
+	t.Helper()
+
+	normalized := normalizeSubmitRequestsForFunctionalTest(requests)
+	workRequest := workRequestFromSubmitRequests(normalized)
+	if _, err := fs.factory.SubmitWorkRequest(context.Background(), workRequest); err != nil {
+		t.Fatalf("factory.SubmitWorkRequest: %v", err)
+	}
+	return normalized
+}
+
 func (fs *functionalAPIServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
 	snapshot, err := fs.service.GetEngineStateSnapshot(context.Background())

@@ -50,6 +50,30 @@ func workRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 	}
 }
 
+func normalizeSubmitRequestsForFunctionalTest(requests []interfaces.SubmitRequest) []interfaces.SubmitRequest {
+	if len(requests) == 0 {
+		return nil
+	}
+	normalized := make([]interfaces.SubmitRequest, len(requests))
+	copy(normalized, requests)
+	traceID := ""
+	for _, request := range normalized {
+		if request.TraceID != "" {
+			traceID = request.TraceID
+			break
+		}
+	}
+	if traceID == "" {
+		traceID = fmt.Sprintf("trace-functional-%d", time.Now().UnixNano())
+	}
+	for i := range normalized {
+		if normalized[i].TraceID == "" {
+			normalized[i].TraceID = traceID
+		}
+	}
+	return normalized
+}
+
 func sharedSubmitRequestIDForFunctionalTest(requests []interfaces.SubmitRequest) string {
 	var shared string
 	for _, req := range requests {

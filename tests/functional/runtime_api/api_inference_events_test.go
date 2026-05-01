@@ -1000,10 +1000,24 @@ type DashboardResponse struct {
 }
 
 type DashboardRuntime struct {
+	ActiveThrottlePauses          *[]DashboardThrottlePause                `json:"active_throttle_pauses,omitempty"`
 	ActiveWorkstationNodeIds      *[]string                               `json:"active_workstation_node_ids,omitempty"`
 	InFlightDispatchCount         int                                     `json:"in_flight_dispatch_count"`
 	InferenceAttemptsByDispatchId *map[string]map[string]InferenceAttempt `json:"inference_attempts_by_dispatch_id,omitempty"`
 	Session                       DashboardSessionRuntime                 `json:"session"`
+}
+
+type DashboardThrottlePause struct {
+	AffectedTransitionIds    *[]string  `json:"affected_transition_ids,omitempty"`
+	AffectedWorkTypeIds      *[]string  `json:"affected_work_type_ids,omitempty"`
+	AffectedWorkerTypes      *[]string  `json:"affected_worker_types,omitempty"`
+	AffectedWorkstationNames *[]string  `json:"affected_workstation_names,omitempty"`
+	LaneId                   string     `json:"lane_id"`
+	Model                    string     `json:"model"`
+	PausedAt                 *time.Time `json:"paused_at,omitempty"`
+	PausedUntil              time.Time  `json:"paused_until"`
+	Provider                 string     `json:"provider"`
+	RecoverAt                time.Time  `json:"recover_at"`
 }
 
 type InferenceAttempt struct {
@@ -1067,6 +1081,7 @@ func (fs *functionalAPIServer) ListWork(t *testing.T) factoryapi.ListWorkRespons
 func dashboardResponseFromWorldView(worldView interfaces.FactoryWorldView) DashboardResponse {
 	return DashboardResponse{
 		Runtime: DashboardRuntime{
+			ActiveThrottlePauses:          dashboardThrottlePauses(worldView.Runtime.ActiveThrottlePauses),
 			ActiveWorkstationNodeIds:      stringSlicePtr(worldView.Runtime.ActiveWorkstationNodeIDs),
 			InFlightDispatchCount:         worldView.Runtime.InFlightDispatchCount,
 			InferenceAttemptsByDispatchId: dashboardInferenceAttemptsByDispatchID(worldView.Runtime.InferenceAttemptsByDispatchID),
@@ -1078,6 +1093,28 @@ func dashboardResponseFromWorldView(worldView interfaces.FactoryWorldView) Dashb
 			},
 		},
 	}
+}
+
+func dashboardThrottlePauses(input []interfaces.FactoryWorldThrottlePause) *[]DashboardThrottlePause {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]DashboardThrottlePause, 0, len(input))
+	for _, pause := range input {
+		out = append(out, DashboardThrottlePause{
+			AffectedTransitionIds:    stringSlicePtr(pause.AffectedTransitionIDs),
+			AffectedWorkTypeIds:      stringSlicePtr(pause.AffectedWorkTypeIDs),
+			AffectedWorkerTypes:      stringSlicePtr(pause.AffectedWorkerTypes),
+			AffectedWorkstationNames: stringSlicePtr(pause.AffectedWorkstationNames),
+			LaneId:                   pause.LaneID,
+			Model:                    pause.Model,
+			PausedAt:                 dashboardOptionalTimePtr(pause.PausedAt),
+			PausedUntil:              pause.PausedUntil,
+			Provider:                 pause.Provider,
+			RecoverAt:                pause.RecoverAt,
+		})
+	}
+	return &out
 }
 
 func dashboardInferenceAttemptsByDispatchID(input map[string]map[string]interfaces.FactoryWorldInferenceAttempt) *map[string]map[string]InferenceAttempt {
@@ -1207,5 +1244,13 @@ func copyIntPointer(value *int) *int {
 		return nil
 	}
 	copy := *value
+	return &copy
+}
+
+func dashboardOptionalTimePtr(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	copy := value
 	return &copy
 }

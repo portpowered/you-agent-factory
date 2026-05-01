@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"testing"
@@ -11,9 +11,10 @@ import (
 	"github.com/portpowered/agent-factory/pkg/service"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// portos:func-length-exception owner=agent-factory reason=legacy-provider-throttle-observability-smoke review=2026-07-19 removal=split-runtime-snapshot-dashboard-and-event-assertions-before-next-provider-error-smoke-change
+// portos:func-length-exception owner=agent-factory reason=provider-throttle-runtime-observability-smoke review=2026-07-19 removal=split-pause-setup-runtime-polling-and-dashboard-assertions-before-next-throttle-observability-change
 func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapshotAndDashboard(t *testing.T) {
 	skipSlowFunctionalSmokeInShort(t, "slow throttle-pause observability smoke")
 	pauseDuration := 2 * time.Second
@@ -38,7 +39,7 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 	)
 	runner := pauseHarness.ProviderRunner()
 	pauseHarness.QueueProviderResults(
-		providerErrorCorpusEntryForTest(t, "claude_rate_limit_error").RepeatedCommandResults(3)...,
+		support.ProviderErrorCorpusEntry(t, "claude_rate_limit_error").RepeatedCommandResults(3)...,
 	)
 	pauseHarness.QueueProviderResults(
 		workers.CommandResult{Stdout: []byte("codex lane completed while claude was paused. COMPLETE")},
@@ -69,7 +70,7 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 	}
 	pauseHarness.SeedWork(t, throttledWork)
 
-	server := StartFunctionalServerWithConfig(
+	server := startFunctionalServerWithConfig(
 		t,
 		pauseHarness.Dir,
 		false,
@@ -80,19 +81,17 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		factory.WithProviderThrottlePauseDuration(pauseDuration),
 	)
 
-	activeEngineState := waitForEngineStateSnapshot(
+	activeEngineState := waitForRuntimeAPIEngineStateSnapshot(
 		t,
 		server,
 		10*time.Second,
 		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
 			return len(snapshot.ActiveThrottlePauses) == 1 &&
-				hasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":init", throttledWork.WorkID)
+				support.HasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":init", throttledWork.WorkID)
 		},
 	)
 	assertActiveThrottlePause(t, activeEngineState, workers.ModelProviderClaude, "claude-sonnet-4-5-20250514")
-
-	activeDashboard := server.GetDashboard(t)
-	assertDashboardThrottlePausesMatchEngineState(t, "active pause dashboard", activeEngineState, activeDashboard)
+	assertDashboardThrottlePausesMatchEngineState(t, "active pause dashboard", activeEngineState, server.GetDashboard(t))
 
 	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
 		Name:       unaffectedWork.Name,
@@ -102,14 +101,14 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		Payload:    unaffectedWork.Payload,
 	})
 
-	isolatedEngineState := waitForEngineStateSnapshot(
+	isolatedEngineState := waitForRuntimeAPIEngineStateSnapshot(
 		t,
 		server,
 		5*time.Second,
 		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
 			return len(snapshot.ActiveThrottlePauses) == 1 &&
-				hasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":init", throttledWork.WorkID) &&
-				hasWorkTokenInPlace(snapshot.Marking, unaffectedWork.WorkTypeID+":complete", unaffectedWork.WorkID)
+				support.HasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":init", throttledWork.WorkID) &&
+				support.HasWorkTokenInPlace(snapshot.Marking, unaffectedWork.WorkTypeID+":complete", unaffectedWork.WorkID)
 		},
 	)
 	assertDashboardThrottlePausesMatchEngineState(t, "pause isolation dashboard", isolatedEngineState, server.GetDashboard(t))
@@ -125,18 +124,18 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		Payload:    reconcileWork.Payload,
 	})
 
-	recoveredEngineState := waitForEngineStateSnapshot(
+	recoveredEngineState := waitForRuntimeAPIEngineStateSnapshot(
 		t,
 		server,
 		10*time.Second,
 		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
 			return len(snapshot.ActiveThrottlePauses) == 0 &&
-				hasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":complete", throttledWork.WorkID) &&
-				hasWorkTokenInPlace(snapshot.Marking, unaffectedWork.WorkTypeID+":complete", unaffectedWork.WorkID) &&
-				hasWorkTokenInPlace(snapshot.Marking, reconcileWork.WorkTypeID+":complete", reconcileWork.WorkID)
+				support.HasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":complete", throttledWork.WorkID) &&
+				support.HasWorkTokenInPlace(snapshot.Marking, unaffectedWork.WorkTypeID+":complete", unaffectedWork.WorkID) &&
+				support.HasWorkTokenInPlace(snapshot.Marking, reconcileWork.WorkTypeID+":complete", reconcileWork.WorkID)
 		},
 	)
-	recoveredDashboard := waitForDashboardSnapshot(
+	recoveredDashboard := waitForRuntimeAPIDashboardSnapshot(
 		t,
 		5*time.Second,
 		func() (DashboardResponse, bool) {
@@ -146,7 +145,6 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 				dashboard.Runtime.Session.CompletedCount >= 3
 		},
 	)
-	assertDashboardMatchesEngineState(t, "recovered dashboard", recoveredEngineState, recoveredDashboard)
 
 	requests := runner.Requests()
 	if len(requests) < 4 {
@@ -178,6 +176,50 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 	if unaffectedDispatches[0].Outcome != interfaces.OutcomeAccepted {
 		t.Fatalf("unaffected dispatch outcome = %s, want %s", unaffectedDispatches[0].Outcome, interfaces.OutcomeAccepted)
 	}
+	assertDashboardThrottlePausesMatchEngineState(t, "recovered dashboard", recoveredEngineState, recoveredDashboard)
+}
+
+func waitForRuntimeAPIEngineStateSnapshot(
+	t *testing.T,
+	server *functionalAPIServer,
+	timeout time.Duration,
+	match func(*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool,
+) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		snapshot := server.GetEngineStateSnapshot(t)
+		if match(snapshot) {
+			return snapshot
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	snapshot := server.GetEngineStateSnapshot(t)
+	t.Fatalf("timed out waiting for engine state snapshot within %s", timeout)
+	return snapshot
+}
+
+func waitForRuntimeAPIDashboardSnapshot(
+	t *testing.T,
+	timeout time.Duration,
+	check func() (DashboardResponse, bool),
+) DashboardResponse {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		snapshot, ok := check()
+		if ok {
+			return snapshot
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	snapshot, _ := check()
+	t.Fatalf("timed out waiting for dashboard condition within %s", timeout)
+	return snapshot
 }
 
 func assertActiveThrottlePause(
@@ -235,12 +277,7 @@ func assertDashboardThrottlePausesMatchEngineState(
 
 	pauses := sliceValue(dashboard.Runtime.ActiveThrottlePauses)
 	if len(pauses) != len(engineState.ActiveThrottlePauses) {
-		t.Fatalf(
-			"%s active throttle pause count = %d, want engine-state count %d",
-			label,
-			len(pauses),
-			len(engineState.ActiveThrottlePauses),
-		)
+		t.Fatalf("%s active throttle pause count = %d, want engine-state count %d", label, len(pauses), len(engineState.ActiveThrottlePauses))
 	}
 	for i, pause := range pauses {
 		enginePause := engineState.ActiveThrottlePauses[i]
