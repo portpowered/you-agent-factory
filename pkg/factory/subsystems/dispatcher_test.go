@@ -498,12 +498,7 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 			},
 		},
 	}
-	sched := &mockScheduler{
-		decisions: []interfaces.FiringDecision{
-			{TransitionID: "t-a", ConsumeTokens: []string{"tok-a"}, WorkerType: "worker-a"},
-			{TransitionID: "t-b", ConsumeTokens: []string{"tok-b"}, WorkerType: "worker-b"},
-		},
-	}
+	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
 	dispatcher := NewDispatcher(
 		n,
@@ -544,6 +539,12 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 	}
 	if result == nil {
 		t.Fatal("expected dispatch result")
+	}
+	if len(sched.received) != 1 {
+		t.Fatalf("expected scheduler to receive only the healthy lane, got %d enabled transitions", len(sched.received))
+	}
+	if sched.received[0].TransitionID != "t-b" {
+		t.Fatalf("expected scheduler to receive only healthy transition t-b, got %s", sched.received[0].TransitionID)
 	}
 	if len(result.Dispatches) != 1 {
 		t.Fatalf("expected 1 dispatch after pause filtering, got %d", len(result.Dispatches))
@@ -987,6 +988,16 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 	}
 	if result.Dispatches[0].Dispatch.TransitionID != "t-b" {
 		t.Fatalf("expected healthy transition t-b to dispatch, got %s", result.Dispatches[0].Dispatch.TransitionID)
+	}
+	if !result.ThrottlePausesObserved {
+		t.Fatal("expected dispatcher to keep reporting the paused lane in throttle pause observability")
+	}
+	if len(result.ActiveThrottlePauses) != 1 {
+		t.Fatalf("active throttle pauses = %d, want 1", len(result.ActiveThrottlePauses))
+	}
+	pause := result.ActiveThrottlePauses[0]
+	if pause.Provider != "claude" || pause.Model != "claude-sonnet" || pause.LaneID != "claude/claude-sonnet" {
+		t.Fatalf("unexpected active throttle pause lane: %#v", pause)
 	}
 }
 
