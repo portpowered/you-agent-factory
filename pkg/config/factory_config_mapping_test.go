@@ -13,6 +13,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	mapper := NewFactoryConfigMapper()
 
 	original := &interfaces.FactoryConfig{
+		Name:    "customer-facing-name",
 		Project: "sample-service",
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{
@@ -65,6 +66,9 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	if expanded.Project != original.Project {
 		t.Fatalf("expected project %q, got %q", original.Project, expanded.Project)
 	}
+	if expanded.Name != original.Name {
+		t.Fatalf("expected name %q, got %q", original.Name, expanded.Name)
+	}
 
 	if len(expanded.WorkTypes) != len(original.WorkTypes) {
 		t.Fatalf("expected %d work types, got %d", len(original.WorkTypes), len(expanded.WorkTypes))
@@ -96,6 +100,7 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name": "analytics-factory",
 		"id": "analytics-platform",
 		"inputTypes": [{"name":"default","type":"DEFAULT"}],
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
@@ -123,6 +128,9 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 	}
 	if cfg.Project != "analytics-platform" {
 		t.Fatalf("expected id analytics-platform to map to project, got %q", cfg.Project)
+	}
+	if cfg.Name != "analytics-factory" {
+		t.Fatalf("expected name analytics-factory to map through boundary, got %q", cfg.Name)
 	}
 
 	if cfg.Workstations[0].ID != "execute-story-id" {
@@ -585,6 +593,7 @@ func TestFactoryConfigMapper_ExpandPreservesPerInputGuard(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"per-input-guard-test",
 		"workTypes": [
 			{"name":"request","states":[{"name":"waiting","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]},
 			{"name":"page","states":[{"name":"complete","type":"TERMINAL"}]}
@@ -619,6 +628,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesSameNamePerInputGuard(t *t
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"same-name-guard-test",
 		"workTypes": [
 			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
 			{"name":"taskItem","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
@@ -674,6 +684,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesMatchesFieldsWorkstationGu
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"matches-fields-guard-test",
 		"workTypes": [
 			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
 		],
@@ -762,6 +773,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"inline-runtime-definitions-test",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
@@ -858,6 +870,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesPortableResourceManifest(t
 
 func portableResourceManifestMapperFixture() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
+		Name: "portable-resource-manifest-test",
 		WorkTypes: []interfaces.WorkTypeConfig{{
 			Name: "story",
 			States: []interfaces.StateConfig{
@@ -988,6 +1001,7 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"canonical-workstation-kind-test",
 		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
 		"workstations": [{
@@ -1026,6 +1040,7 @@ func TestFactoryConfigMapper_FlattenRoundTripsCopyReferencedScriptsAsCanonicalCa
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"copy-referenced-scripts-test",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{

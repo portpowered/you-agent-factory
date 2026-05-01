@@ -1,4 +1,5 @@
 {
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -46,3 +47,4 @@
     }
   ]
 }
+

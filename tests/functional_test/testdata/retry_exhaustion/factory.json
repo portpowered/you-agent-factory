@@ -1,4 +1,5 @@
 {
+  "name": "retry_exhaustion",
   "workTypes": [
     {
       "name": "task",
@@ -101,3 +102,4 @@
     }
   ]
 }
+

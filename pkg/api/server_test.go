@@ -1746,6 +1746,7 @@ func validNamedFactoryBody(name, workType string) string {
 
 func namedFactoryPayloadJSON(project, workType string) string {
 	return fmt.Sprintf(`{
+		"name": %q,
 		"id": %q,
 		"workTypes": [{
 			"name": %q,
@@ -1770,7 +1771,7 @@ func namedFactoryPayloadJSON(project, workType string) string {
 			"inputs":[{"workType":%q,"state":"init"}],
 			"outputs":[{"workType":%q,"state":"done"}]
 		}]
-	}`, project, workType, workType, workType)
+	}`, project, project, workType, workType, workType)
 }
 
 func submittedRequestNamed(t *testing.T, requests []interfaces.SubmitRequest, name string) interfaces.SubmitRequest {

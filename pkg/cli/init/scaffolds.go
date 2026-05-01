@@ -65,6 +65,7 @@ func defaultScaffoldDefinition() scaffoldDefinition {
 		inputWorkType: DefaultFactoryInputType,
 		files: map[string]string{
 			interfaces.FactoryConfigFile: `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "tasks",
@@ -180,6 +181,7 @@ The planner writes ` + "`prd.md`" + `, ` + "`prd.json`" + `, and ` + "`progress.
 The executor keeps those artifacts aligned and returns ` + "`<COMPLETE>`" + ` only when every story passes.
 `,
 			interfaces.FactoryConfigFile: `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "request",

@@ -82,6 +82,7 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
+		"name": name,
 		"id": name,
 		"workTypes": []map[string]any{
 			{

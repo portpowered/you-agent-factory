@@ -21,6 +21,7 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 	}
 	runtimeConfig := interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...)
 	return interfaces.InitialStructurePayload{
+		Name:         runtimeFactoryName(runtimeConfig),
 		Resources:    factoryResources(net.Resources),
 		Constraints:  factoryConstraints(net, runtimeConfig),
 		Workers:      factoryWorkers(net.Transitions, runtimeConfig),
@@ -29,6 +30,17 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 		Places:       factoryPlaces(net.Places, net),
 		Relations:    topologyRelations(net.Transitions),
 	}
+}
+
+func runtimeFactoryName(runtimeConfig interfaces.RuntimeDefinitionLookup) string {
+	type factoryConfigReader interface {
+		FactoryConfig() *interfaces.FactoryConfig
+	}
+	reader, ok := runtimeConfig.(factoryConfigReader)
+	if !ok || reader.FactoryConfig() == nil {
+		return ""
+	}
+	return reader.FactoryConfig().Name
 }
 
 func factoryResources(resources map[string]*state.ResourceDef) []interfaces.FactoryResource {

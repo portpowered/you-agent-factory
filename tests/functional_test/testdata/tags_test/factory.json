@@ -1,4 +1,5 @@
 {
+  "name": "fixture-default-project",
   "id": "fixture-default-project",
   "workTypes": [
     {
@@ -54,3 +55,4 @@
     }
   ]
 }
+

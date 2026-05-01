@@ -1,4 +1,5 @@
 {
+  "name": "code_review",
   "workTypes": [
     {
       "name": "code-change",
@@ -77,3 +78,4 @@
     }
   ]
 }
+

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()
+	ensureFactoryNameMap(cfg, filepath.Base(dir))
 
 	// Write factory.json.
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -53,6 +55,24 @@ func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 	}
 
 	return dir
+}
+
+func ensureFactoryNameMap(cfg map[string]any, fallback string) {
+	if cfg == nil {
+		return
+	}
+	if name, ok := cfg["name"].(string); ok && strings.TrimSpace(name) != "" {
+		return
+	}
+	if id, ok := cfg["id"].(string); ok && strings.TrimSpace(id) != "" {
+		cfg["name"] = id
+		return
+	}
+	fallback = strings.TrimSpace(fallback)
+	if fallback == "" {
+		fallback = "factory"
+	}
+	cfg["name"] = fallback
 }
 
 // simplePipelineConfig returns a factory config for a single-transition

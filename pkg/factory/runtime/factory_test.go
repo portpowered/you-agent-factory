@@ -1675,6 +1675,7 @@ func safeBoundaryResult(
 func safeBoundaryGeneratedFactory() factoryapi.Factory {
 	workstationID := "t-process"
 	return factoryapi.Factory{
+		Name: "safe-boundary-factory",
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "task",
 			States: []factoryapi.WorkState{

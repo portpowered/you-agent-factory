@@ -1,4 +1,5 @@
 {
+  "name": "rejection_no_arcs_resources",
   "resources": [
     {
       "capacity": 1,
@@ -58,3 +59,4 @@
     }
   ]
 }
+

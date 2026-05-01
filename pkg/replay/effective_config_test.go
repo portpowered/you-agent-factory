@@ -23,6 +23,8 @@ import (
 func TestGeneratedFactoryFromLoadedConfig_EmbedsLoadedFactoryAndRuntimeConfig(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "customer-facing-name",
+		"id":   "internal-id",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -81,6 +83,12 @@ Fallback body.
 
 	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
 		t.Fatalf("generated workstations = %#v, want one", generated.Workstations)
+	}
+	if generated.Name != "customer-facing-name" {
+		t.Fatalf("generated factory name = %q, want customer-facing-name", generated.Name)
+	}
+	if generated.Id == nil || *generated.Id != "internal-id" {
+		t.Fatalf("generated factory id = %#v, want internal-id", generated.Id)
 	}
 	workstation := (*generated.Workstations)[0]
 	if workstation.Name != "execute-story" {
@@ -916,6 +924,7 @@ func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 
 func writeFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	t.Helper()
+	ensureFactoryName(cfg, filepath.Base(factoryDir))
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("MarshalIndent: %v", err)
@@ -923,6 +932,24 @@ func writeFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)
 	}
+}
+
+func ensureFactoryName(cfg map[string]any, fallback string) {
+	if cfg == nil {
+		return
+	}
+	if name, ok := cfg["name"].(string); ok && strings.TrimSpace(name) != "" {
+		return
+	}
+	if id, ok := cfg["id"].(string); ok && strings.TrimSpace(id) != "" {
+		cfg["name"] = id
+		return
+	}
+	if strings.TrimSpace(fallback) != "" {
+		cfg["name"] = fallback
+		return
+	}
+	cfg["name"] = "factory"
 }
 
 func writeAgentsMD(t *testing.T, dir, content string) {

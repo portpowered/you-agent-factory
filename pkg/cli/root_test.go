@@ -156,6 +156,7 @@ func writeFlattenCommandFixture(t *testing.T, factoryDir string) {
 	t.Helper()
 
 	writeRootTestFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), `{
+		"name":"flatten-command-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{"name":"executor"}],
@@ -335,6 +336,7 @@ func TestConfigExpandCommand_WritesSplitFactoryLayout(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
 	writeRootTestFile(t, factoryPath, `{
+		"name":"expand-command-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [],
 		"workers": [{"name":"executor"}],

@@ -20,7 +20,7 @@
             "workers_hash": "sha256:d13c18c81766f8e7ebd7f0364abb121dfe7e2147cae329be41015754ea22d52b",
             "workstations_hash": "sha256:9f0a8b33237120cb72b1b87c544c54c004b4cbae22ae910189b68bc89f9a9e80"
           },
-          "name": "",
+          "name": "factory",
           "resources": [
             {
               "capacity": 1,
@@ -121,12 +121,12 @@
           ],
           "workers": [
             {
-              "body": "Use `\u003cCOMPLETE\u003e` only when the current workstation is ready to advance through\nits accepted route.\n\nIf a repeater workstation such as `process` made ordinary partial progress and\nneeds another execution pass, respond with `\u003cCONTINUE\u003e` instead of treating that\nresult as rejection.\n\nReserve true rejection semantics for workstations that explicitly send work back\nthrough `onRejection`, such as a review step returning `\u003cREJECTED\u003e`.",
+              "body": "Use `<COMPLETE>` only when the current workstation is ready to advance through\nits accepted route.\n\nIf a repeater workstation such as `process` made ordinary partial progress and\nneeds another execution pass, respond with `<CONTINUE>` instead of treating that\nresult as rejection.\n\nReserve true rejection semantics for workstations that explicitly send work back\nthrough `onRejection`, such as a review step returning `<REJECTED>`.",
               "executorProvider": "SCRIPT_WRAP",
               "modelProvider": "CODEX",
               "name": "processor",
               "skipPermissions": true,
-              "stopToken": "\u003cCOMPLETE\u003e",
+              "stopToken": "<COMPLETE>",
               "type": "MODEL_WORKER"
             },
             {
@@ -141,7 +141,7 @@
           ],
           "workstations": [
             {
-              "body": "You are the disambiguator and idea break downer. \nThe customer is asking a bunch of ambiguous things, but they are too large in scope to implement in a single work item. Roughly speaking, one header/section should map to a single idea. \n\nYour job is to break down these items to standard idea files that are small enough to do within the scope of a day. \n\nAll idea files MUST follow the checked-in idea shape already present under `factory/inputs/idea/default/`.\n\n# Steps\n## Step 1 - read\nRead up on the relevant files in the documentation that would lead to the issue. \nRead the existing files under `factory/inputs/idea/default/` to match the current idea shape.\n\n## Step 2 - write the files\nFor each idea you should write the idea into `factory/inputs/idea/default/{your-idea-name}.md`. Note that you should only write after the idea is fully fleshed out, as each idea you write triggers out work to be deployed.\n\n## Step 3 - complete\n\nAfter you have done your work, please respond with \"\u003cCOMPLETE\u003e\".\n# Your Task\n\nYour contents to disambiguate and break down into ideas are as follows:\n\n## Customer request\n {{ (index .Inputs 0).Payload }}.",
+              "body": "You are the disambiguator and idea break downer. \nThe customer is asking a bunch of ambiguous things, but they are too large in scope to implement in a single work item. Roughly speaking, one header/section should map to a single idea. \n\nYour job is to break down these items to standard idea files that are small enough to do within the scope of a day. \n\nAll idea files MUST follow the checked-in idea shape already present under `factory/inputs/idea/default/`.\n\n# Steps\n## Step 1 - read\nRead up on the relevant files in the documentation that would lead to the issue. \nRead the existing files under `factory/inputs/idea/default/` to match the current idea shape.\n\n## Step 2 - write the files\nFor each idea you should write the idea into `factory/inputs/idea/default/{your-idea-name}.md`. Note that you should only write after the idea is fully fleshed out, as each idea you write triggers out work to be deployed.\n\n## Step 3 - complete\n\nAfter you have done your work, please respond with \"<COMPLETE>\".\n# Your Task\n\nYour contents to disambiguate and break down into ideas are as follows:\n\n## Customer request\n {{ (index .Inputs 0).Payload }}.",
               "inputs": [
                 {
                   "state": "init",
@@ -159,7 +159,7 @@
                   "workType": "thoughts"
                 }
               ],
-              "promptTemplate": "You are the disambiguator and idea break downer. \nThe customer is asking a bunch of ambiguous things, but they are too large in scope to implement in a single work item. Roughly speaking, one header/section should map to a single idea. \n\nYour job is to break down these items to standard idea files that are small enough to do within the scope of a day. \n\nAll idea files MUST follow the checked-in idea shape already present under `factory/inputs/idea/default/`.\n\n# Steps\n## Step 1 - read\nRead up on the relevant files in the documentation that would lead to the issue. \nRead the existing files under `factory/inputs/idea/default/` to match the current idea shape.\n\n## Step 2 - write the files\nFor each idea you should write the idea into `factory/inputs/idea/default/{your-idea-name}.md`. Note that you should only write after the idea is fully fleshed out, as each idea you write triggers out work to be deployed.\n\n## Step 3 - complete\n\nAfter you have done your work, please respond with \"\u003cCOMPLETE\u003e\".\n# Your Task\n\nYour contents to disambiguate and break down into ideas are as follows:\n\n## Customer request\n {{ (index .Inputs 0).Payload }}.",
+              "promptTemplate": "You are the disambiguator and idea break downer. \nThe customer is asking a bunch of ambiguous things, but they are too large in scope to implement in a single work item. Roughly speaking, one header/section should map to a single idea. \n\nYour job is to break down these items to standard idea files that are small enough to do within the scope of a day. \n\nAll idea files MUST follow the checked-in idea shape already present under `factory/inputs/idea/default/`.\n\n# Steps\n## Step 1 - read\nRead up on the relevant files in the documentation that would lead to the issue. \nRead the existing files under `factory/inputs/idea/default/` to match the current idea shape.\n\n## Step 2 - write the files\nFor each idea you should write the idea into `factory/inputs/idea/default/{your-idea-name}.md`. Note that you should only write after the idea is fully fleshed out, as each idea you write triggers out work to be deployed.\n\n## Step 3 - complete\n\nAfter you have done your work, please respond with \"<COMPLETE>\".\n# Your Task\n\nYour contents to disambiguate and break down into ideas are as follows:\n\n## Customer request\n {{ (index .Inputs 0).Payload }}.",
               "resources": [
                 {
                   "capacity": 1,
@@ -170,7 +170,7 @@
               "worker": "processor"
             },
             {
-              "body": "You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nRead `docs/standards/STANDARDS.md`, then follow the most relevant checked-in standard it points you to for PRD and planning work.\n\nRead the standard before writing anything.\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.json`, as well as corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.md`, relative to the repository root for the corresponding PRD.\n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"\u003cCOMPLETE\u003e\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ (index .Inputs 0).Payload }}",
+              "body": "You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nRead `docs/standards/STANDARDS.md`, then follow the most relevant checked-in standard it points you to for PRD and planning work.\n\nRead the standard before writing anything.\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.json`, as well as corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.md`, relative to the repository root for the corresponding PRD.\n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"<COMPLETE>\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ (index .Inputs 0).Payload }}",
               "inputs": [
                 {
                   "state": "init",
@@ -196,7 +196,7 @@
                   "workType": "plan"
                 }
               ],
-              "promptTemplate": "You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nRead `docs/standards/STANDARDS.md`, then follow the most relevant checked-in standard it points you to for PRD and planning work.\n\nRead the standard before writing anything.\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.json`, as well as corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.md`, relative to the repository root for the corresponding PRD.\n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"\u003cCOMPLETE\u003e\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ (index .Inputs 0).Payload }}",
+              "promptTemplate": "You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }}.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nRead `docs/standards/STANDARDS.md`, then follow the most relevant checked-in standard it points you to for PRD and planning work.\n\nRead the standard before writing anything.\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.json`, as well as corresponding `tasks/todo/{{ (index .Inputs 0).Name }}.md`, relative to the repository root for the corresponding PRD.\n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"<COMPLETE>\".\n\n# Customer ask \nThe customer ask is as follows: \n\n{{ (index .Inputs 0).Payload }}",
               "resources": [
                 {
                   "capacity": 1,
@@ -233,7 +233,7 @@
             },
             {
               "behavior": "REPEATER",
-              "body": "You are an autonomous coding agent working on a software project. \n\n## Your Task\n\n1. Read the PRD at `prd.json` (in the current working directory)\n2. Read the progress log at `progress.txt` \n3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.\n4. Do the following: \n4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. \n4.2. Pick the **highest priority** user story where `passes: false`, \n5. Read the appropriate standard. You MUST always try follow a standard. See the docs/standards/STANDARDS.md for instructions.\n6. Perform the changes requested by said user story. \n7. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)\n8. Update the relevant docs/processes/{*-relevant-files}.md files if you discover reusable patterns.\n9. If checks pass, commit ALL code/doc changes except `prd.json`, `prd.md` and `progress.txt` with message: `feat: [Story ID] - [Story Title]`\n10. Update the PRD to set `passes: true` for the completed story\n11. Append your progress to `progress.txt`.\n12. When working through the project, you will come up with issues and learnings that you think we should do to the system to improve the overall system. When doing so write your thoughts out under tasks/ideas-to-review/{one-of-the-project-directories-like-backend-or-agent-factory-or-whatever}/{your-idea}.md. Then we can iteratively work through them as part of the project, to optimize future concerns with the work. i.e. maybe it was hard to find how logging should work, or if there were too many places to modify, we look to consolidate them into a single place. \n13. If you think that there's too much to do, currently, break down the current task into smaller tasks, complete the smaller tasks, and leave the new tasks for future iterations. \n14. Stage and commit the updated `prd.json`, `prd.md` and `progress.txt` locally only if your workflow requires preserving them in the worktree, but DO NOT include them in the code review commit or PR branch history. NEVER bypass hooks with `git commit --no-verify` just to include them.\n15. Push the branch after each successful code/doc commit that is intended for review.\n16. After pushing, reconcile the PR state:\n16.1. If there is no existing PR and all tasks in the current PRD are complete, create the PR for the branch, named {{ (index .Inputs 0).Name }}\n16.2. If a PR already exists, update it by pushing the new commit(s) and, if relevant, reply to or resolve the addressed review comments.\n16.3. Verify that the reviewed code changes are actually present in the PR diff after the push. \n17. Respond finally as follows: \n17.1. Respond `\u003cCOMPLETE\u003e` only when all items in the PRD have been marked as passes:true, all PR comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.\n17.2. Respond `\u003cCONTINUE\u003e` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.\n17.3. Do not use rejection to mean \"more executor work remains\". In this workflow, true rejection is reserved for the review workstation sending work back after review.\n\n## Important\n\n- Work on ONE story per iteration\n- Commit frequently\n- Keep CI green\n- Read the Codebase Patterns section in progress.txt before starting\n\n## Progress Report Format\n\nAPPEND to progress.txt (never replace, always append):\n```\n## [Date/Time] - [Story ID]\n- What was implemented\n- Files changed\n- **Learnings for future iterations:**\n  - Patterns discovered (e.g., \"this codebase uses X for Y\")\n  - Gotchas encountered (e.g., \"don't forget to update Z when changing W\")\n  - Useful context (e.g., \"the evaluation panel is in component X\")\n---\n```\n\nThe learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.\n\n## Consolidate Patterns\n\nIf you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:\n\n```\n## Codebase Patterns\n- Example: Use `sql\u003cnumber\u003e` template for aggregations\n- Example: Always use `IF NOT EXISTS` for migrations\n- Example: Export types from actions.ts for UI components\n```\n\nOnly add patterns that are **general and reusable**, not story-specific details.",
+              "body": "You are an autonomous coding agent working on a software project. \n\n## Your Task\n\n1. Read the PRD at `prd.json` (in the current working directory)\n2. Read the progress log at `progress.txt` \n3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.\n4. Do the following: \n4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. \n4.2. Pick the **highest priority** user story where `passes: false`, \n5. Read the appropriate standard. You MUST always try follow a standard. See the docs/standards/STANDARDS.md for instructions.\n6. Perform the changes requested by said user story. \n7. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)\n8. Update the relevant docs/processes/{*-relevant-files}.md files if you discover reusable patterns.\n9. If checks pass, commit ALL code/doc changes except `prd.json`, `prd.md` and `progress.txt` with message: `feat: [Story ID] - [Story Title]`\n10. Update the PRD to set `passes: true` for the completed story\n11. Append your progress to `progress.txt`.\n12. When working through the project, you will come up with issues and learnings that you think we should do to the system to improve the overall system. When doing so write your thoughts out under tasks/ideas-to-review/{one-of-the-project-directories-like-backend-or-agent-factory-or-whatever}/{your-idea}.md. Then we can iteratively work through them as part of the project, to optimize future concerns with the work. i.e. maybe it was hard to find how logging should work, or if there were too many places to modify, we look to consolidate them into a single place. \n13. If you think that there's too much to do, currently, break down the current task into smaller tasks, complete the smaller tasks, and leave the new tasks for future iterations. \n14. Stage and commit the updated `prd.json`, `prd.md` and `progress.txt` locally only if your workflow requires preserving them in the worktree, but DO NOT include them in the code review commit or PR branch history. NEVER bypass hooks with `git commit --no-verify` just to include them.\n15. Push the branch after each successful code/doc commit that is intended for review.\n16. After pushing, reconcile the PR state:\n16.1. If there is no existing PR and all tasks in the current PRD are complete, create the PR for the branch, named {{ (index .Inputs 0).Name }}\n16.2. If a PR already exists, update it by pushing the new commit(s) and, if relevant, reply to or resolve the addressed review comments.\n16.3. Verify that the reviewed code changes are actually present in the PR diff after the push. \n17. Respond finally as follows: \n17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all PR comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.\n17.2. Respond `<CONTINUE>` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.\n17.3. Do not use rejection to mean \"more executor work remains\". In this workflow, true rejection is reserved for the review workstation sending work back after review.\n\n## Important\n\n- Work on ONE story per iteration\n- Commit frequently\n- Keep CI green\n- Read the Codebase Patterns section in progress.txt before starting\n\n## Progress Report Format\n\nAPPEND to progress.txt (never replace, always append):\n```\n## [Date/Time] - [Story ID]\n- What was implemented\n- Files changed\n- **Learnings for future iterations:**\n  - Patterns discovered (e.g., \"this codebase uses X for Y\")\n  - Gotchas encountered (e.g., \"don't forget to update Z when changing W\")\n  - Useful context (e.g., \"the evaluation panel is in component X\")\n---\n```\n\nThe learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.\n\n## Consolidate Patterns\n\nIf you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:\n\n```\n## Codebase Patterns\n- Example: Use `sql<number>` template for aggregations\n- Example: Always use `IF NOT EXISTS` for migrations\n- Example: Export types from actions.ts for UI components\n```\n\nOnly add patterns that are **general and reusable**, not story-specific details.",
               "inputs": [
                 {
                   "state": "init",
@@ -259,7 +259,7 @@
                   "workType": "task"
                 }
               ],
-              "promptTemplate": "You are an autonomous coding agent working on a software project. \n\n## Your Task\n\n1. Read the PRD at `prd.json` (in the current working directory)\n2. Read the progress log at `progress.txt` \n3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.\n4. Do the following: \n4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. \n4.2. Pick the **highest priority** user story where `passes: false`, \n5. Read the appropriate standard. You MUST always try follow a standard. See the docs/standards/STANDARDS.md for instructions.\n6. Perform the changes requested by said user story. \n7. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)\n8. Update the relevant docs/processes/{*-relevant-files}.md files if you discover reusable patterns.\n9. If checks pass, commit ALL code/doc changes except `prd.json`, `prd.md` and `progress.txt` with message: `feat: [Story ID] - [Story Title]`\n10. Update the PRD to set `passes: true` for the completed story\n11. Append your progress to `progress.txt`.\n12. When working through the project, you will come up with issues and learnings that you think we should do to the system to improve the overall system. When doing so write your thoughts out under tasks/ideas-to-review/{one-of-the-project-directories-like-backend-or-agent-factory-or-whatever}/{your-idea}.md. Then we can iteratively work through them as part of the project, to optimize future concerns with the work. i.e. maybe it was hard to find how logging should work, or if there were too many places to modify, we look to consolidate them into a single place. \n13. If you think that there's too much to do, currently, break down the current task into smaller tasks, complete the smaller tasks, and leave the new tasks for future iterations. \n14. Stage and commit the updated `prd.json`, `prd.md` and `progress.txt` locally only if your workflow requires preserving them in the worktree, but DO NOT include them in the code review commit or PR branch history. NEVER bypass hooks with `git commit --no-verify` just to include them.\n15. Push the branch after each successful code/doc commit that is intended for review.\n16. After pushing, reconcile the PR state:\n16.1. If there is no existing PR and all tasks in the current PRD are complete, create the PR for the branch, named {{ (index .Inputs 0).Name }}\n16.2. If a PR already exists, update it by pushing the new commit(s) and, if relevant, reply to or resolve the addressed review comments.\n16.3. Verify that the reviewed code changes are actually present in the PR diff after the push. \n17. Respond finally as follows: \n17.1. Respond `\u003cCOMPLETE\u003e` only when all items in the PRD have been marked as passes:true, all PR comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.\n17.2. Respond `\u003cCONTINUE\u003e` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.\n17.3. Do not use rejection to mean \"more executor work remains\". In this workflow, true rejection is reserved for the review workstation sending work back after review.\n\n## Important\n\n- Work on ONE story per iteration\n- Commit frequently\n- Keep CI green\n- Read the Codebase Patterns section in progress.txt before starting\n\n## Progress Report Format\n\nAPPEND to progress.txt (never replace, always append):\n```\n## [Date/Time] - [Story ID]\n- What was implemented\n- Files changed\n- **Learnings for future iterations:**\n  - Patterns discovered (e.g., \"this codebase uses X for Y\")\n  - Gotchas encountered (e.g., \"don't forget to update Z when changing W\")\n  - Useful context (e.g., \"the evaluation panel is in component X\")\n---\n```\n\nThe learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.\n\n## Consolidate Patterns\n\nIf you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:\n\n```\n## Codebase Patterns\n- Example: Use `sql\u003cnumber\u003e` template for aggregations\n- Example: Always use `IF NOT EXISTS` for migrations\n- Example: Export types from actions.ts for UI components\n```\n\nOnly add patterns that are **general and reusable**, not story-specific details.",
+              "promptTemplate": "You are an autonomous coding agent working on a software project. \n\n## Your Task\n\n1. Read the PRD at `prd.json` (in the current working directory)\n2. Read the progress log at `progress.txt` \n3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.\n4. Do the following: \n4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. \n4.2. Pick the **highest priority** user story where `passes: false`, \n5. Read the appropriate standard. You MUST always try follow a standard. See the docs/standards/STANDARDS.md for instructions.\n6. Perform the changes requested by said user story. \n7. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)\n8. Update the relevant docs/processes/{*-relevant-files}.md files if you discover reusable patterns.\n9. If checks pass, commit ALL code/doc changes except `prd.json`, `prd.md` and `progress.txt` with message: `feat: [Story ID] - [Story Title]`\n10. Update the PRD to set `passes: true` for the completed story\n11. Append your progress to `progress.txt`.\n12. When working through the project, you will come up with issues and learnings that you think we should do to the system to improve the overall system. When doing so write your thoughts out under tasks/ideas-to-review/{one-of-the-project-directories-like-backend-or-agent-factory-or-whatever}/{your-idea}.md. Then we can iteratively work through them as part of the project, to optimize future concerns with the work. i.e. maybe it was hard to find how logging should work, or if there were too many places to modify, we look to consolidate them into a single place. \n13. If you think that there's too much to do, currently, break down the current task into smaller tasks, complete the smaller tasks, and leave the new tasks for future iterations. \n14. Stage and commit the updated `prd.json`, `prd.md` and `progress.txt` locally only if your workflow requires preserving them in the worktree, but DO NOT include them in the code review commit or PR branch history. NEVER bypass hooks with `git commit --no-verify` just to include them.\n15. Push the branch after each successful code/doc commit that is intended for review.\n16. After pushing, reconcile the PR state:\n16.1. If there is no existing PR and all tasks in the current PRD are complete, create the PR for the branch, named {{ (index .Inputs 0).Name }}\n16.2. If a PR already exists, update it by pushing the new commit(s) and, if relevant, reply to or resolve the addressed review comments.\n16.3. Verify that the reviewed code changes are actually present in the PR diff after the push. \n17. Respond finally as follows: \n17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all PR comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.\n17.2. Respond `<CONTINUE>` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.\n17.3. Do not use rejection to mean \"more executor work remains\". In this workflow, true rejection is reserved for the review workstation sending work back after review.\n\n## Important\n\n- Work on ONE story per iteration\n- Commit frequently\n- Keep CI green\n- Read the Codebase Patterns section in progress.txt before starting\n\n## Progress Report Format\n\nAPPEND to progress.txt (never replace, always append):\n```\n## [Date/Time] - [Story ID]\n- What was implemented\n- Files changed\n- **Learnings for future iterations:**\n  - Patterns discovered (e.g., \"this codebase uses X for Y\")\n  - Gotchas encountered (e.g., \"don't forget to update Z when changing W\")\n  - Useful context (e.g., \"the evaluation panel is in component X\")\n---\n```\n\nThe learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.\n\n## Consolidate Patterns\n\nIf you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:\n\n```\n## Codebase Patterns\n- Example: Use `sql<number>` template for aggregations\n- Example: Always use `IF NOT EXISTS` for migrations\n- Example: Export types from actions.ts for UI components\n```\n\nOnly add patterns that are **general and reusable**, not story-specific details.",
               "resources": [
                 {
                   "capacity": 1,
@@ -272,7 +272,7 @@
               "worktree": "{{ (index .Inputs 0).Name }}"
             },
             {
-              "body": "You are a code reviewer agent.\n\n## Your Task\n\nYou are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }} that is relative to the work item named {{ (index .Inputs 0).Name }}.\n\n### Step 1 — Gather context\n1. Read prd.json to understand what was implemented\n2. Read docs/standards/code/code-review-standards.md (STD-015) — you MUST follow all regulations\n3. Run: gh pr diff $prNumber  — to see the full diff\n4. Read the changed files to understand the implementation in full\n5. Read surrounding codebase code (the code the PR touches) to check for pattern conformance\n\n### Step 2 — Run quality checks\nRun: make test\nReport any failures. Failing checks are a BLOCKING issue.\n\nIf the change involves modification to the website, you should use the playwright browser and READ instructions for docs/processes/manual-qa.md.\n\n### Step 3 — Verify project acceptance criteria\n\nGo through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: \n- State the criterion\n- Check whether the code diff satisfies it\n- Mark it as PASS or FAIL with a brief explanation\n\nIf ANY project-level acceptance criterion fails, call it out clearly in the PR comment. This is the primary gate — individual story acceptance criteria are secondary.\n\n**Behavioral assertion check:**\nFor each story marked `passes:true`, verify that the acceptance criteria include at least one **behavioral assertion** — a criterion describing an observable outcome, not just compilation or structural presence. If a story only has structural/compile-time criteria (e.g., \"interface defined\", \"typecheck passes\"), flag it as a **BLOCKING** issue. Structural criteria like \"typecheck passes\" and \"tests pass\" are necessary quality gates but are NOT sufficient on their own — they do not prove the system actually functions.\n\n### Step 4 — Apply STD-015 regulations in order\n\nRead docs/standards/code/code-review-standards.md, check the code against the standard and confirm its as expected. \n\n### Step 5 - handle feedback\n\n- Post a PR comment with your review summary, including the acceptance criteria checklist results.\n- Include any blocking issues, correctness concerns, missing tests, CI failures, or standards violations in that comment.\n- If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.\n\nUse `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.\n\n### Step 6 - merge if correct. \n\nIf you believe that the PR is complete, please merge the PR. \n\nIf the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes. \n\nNote that due to billing issues the current CI will fail, so ignore them for now. \n\n### Step 7 - respond back\n\nTo terminate the review loop, please respond exactly with\n\n\"\u003cCOMPLETE\u003e\": if you think the PR was completed, and you have merged the PR. \n\n\"\u003cREJECTED\u003e\": if you think the PR was not completed.",
+              "body": "You are a code reviewer agent.\n\n## Your Task\n\nYou are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }} that is relative to the work item named {{ (index .Inputs 0).Name }}.\n\n### Step 1 — Gather context\n1. Read prd.json to understand what was implemented\n2. Read docs/standards/code/code-review-standards.md (STD-015) — you MUST follow all regulations\n3. Run: gh pr diff $prNumber  — to see the full diff\n4. Read the changed files to understand the implementation in full\n5. Read surrounding codebase code (the code the PR touches) to check for pattern conformance\n\n### Step 2 — Run quality checks\nRun: make test\nReport any failures. Failing checks are a BLOCKING issue.\n\nIf the change involves modification to the website, you should use the playwright browser and READ instructions for docs/processes/manual-qa.md.\n\n### Step 3 — Verify project acceptance criteria\n\nGo through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: \n- State the criterion\n- Check whether the code diff satisfies it\n- Mark it as PASS or FAIL with a brief explanation\n\nIf ANY project-level acceptance criterion fails, call it out clearly in the PR comment. This is the primary gate — individual story acceptance criteria are secondary.\n\n**Behavioral assertion check:**\nFor each story marked `passes:true`, verify that the acceptance criteria include at least one **behavioral assertion** — a criterion describing an observable outcome, not just compilation or structural presence. If a story only has structural/compile-time criteria (e.g., \"interface defined\", \"typecheck passes\"), flag it as a **BLOCKING** issue. Structural criteria like \"typecheck passes\" and \"tests pass\" are necessary quality gates but are NOT sufficient on their own — they do not prove the system actually functions.\n\n### Step 4 — Apply STD-015 regulations in order\n\nRead docs/standards/code/code-review-standards.md, check the code against the standard and confirm its as expected. \n\n### Step 5 - handle feedback\n\n- Post a PR comment with your review summary, including the acceptance criteria checklist results.\n- Include any blocking issues, correctness concerns, missing tests, CI failures, or standards violations in that comment.\n- If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.\n\nUse `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.\n\n### Step 6 - merge if correct. \n\nIf you believe that the PR is complete, please merge the PR. \n\nIf the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes. \n\nNote that due to billing issues the current CI will fail, so ignore them for now. \n\n### Step 7 - respond back\n\nTo terminate the review loop, please respond exactly with\n\n\"<COMPLETE>\": if you think the PR was completed, and you have merged the PR. \n\n\"<REJECTED>\": if you think the PR was not completed.",
               "inputs": [
                 {
                   "state": "in-review",
@@ -294,7 +294,7 @@
                   "workType": "task"
                 }
               ],
-              "promptTemplate": "You are a code reviewer agent.\n\n## Your Task\n\nYou are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }} that is relative to the work item named {{ (index .Inputs 0).Name }}.\n\n### Step 1 — Gather context\n1. Read prd.json to understand what was implemented\n2. Read docs/standards/code/code-review-standards.md (STD-015) — you MUST follow all regulations\n3. Run: gh pr diff $prNumber  — to see the full diff\n4. Read the changed files to understand the implementation in full\n5. Read surrounding codebase code (the code the PR touches) to check for pattern conformance\n\n### Step 2 — Run quality checks\nRun: make test\nReport any failures. Failing checks are a BLOCKING issue.\n\nIf the change involves modification to the website, you should use the playwright browser and READ instructions for docs/processes/manual-qa.md.\n\n### Step 3 — Verify project acceptance criteria\n\nGo through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: \n- State the criterion\n- Check whether the code diff satisfies it\n- Mark it as PASS or FAIL with a brief explanation\n\nIf ANY project-level acceptance criterion fails, call it out clearly in the PR comment. This is the primary gate — individual story acceptance criteria are secondary.\n\n**Behavioral assertion check:**\nFor each story marked `passes:true`, verify that the acceptance criteria include at least one **behavioral assertion** — a criterion describing an observable outcome, not just compilation or structural presence. If a story only has structural/compile-time criteria (e.g., \"interface defined\", \"typecheck passes\"), flag it as a **BLOCKING** issue. Structural criteria like \"typecheck passes\" and \"tests pass\" are necessary quality gates but are NOT sufficient on their own — they do not prove the system actually functions.\n\n### Step 4 — Apply STD-015 regulations in order\n\nRead docs/standards/code/code-review-standards.md, check the code against the standard and confirm its as expected. \n\n### Step 5 - handle feedback\n\n- Post a PR comment with your review summary, including the acceptance criteria checklist results.\n- Include any blocking issues, correctness concerns, missing tests, CI failures, or standards violations in that comment.\n- If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.\n\nUse `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.\n\n### Step 6 - merge if correct. \n\nIf you believe that the PR is complete, please merge the PR. \n\nIf the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes. \n\nNote that due to billing issues the current CI will fail, so ignore them for now. \n\n### Step 7 - respond back\n\nTo terminate the review loop, please respond exactly with\n\n\"\u003cCOMPLETE\u003e\": if you think the PR was completed, and you have merged the PR. \n\n\"\u003cREJECTED\u003e\": if you think the PR was not completed.",
+              "promptTemplate": "You are a code reviewer agent.\n\n## Your Task\n\nYou are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }} that is relative to the work item named {{ (index .Inputs 0).Name }}.\n\n### Step 1 — Gather context\n1. Read prd.json to understand what was implemented\n2. Read docs/standards/code/code-review-standards.md (STD-015) — you MUST follow all regulations\n3. Run: gh pr diff $prNumber  — to see the full diff\n4. Read the changed files to understand the implementation in full\n5. Read surrounding codebase code (the code the PR touches) to check for pattern conformance\n\n### Step 2 — Run quality checks\nRun: make test\nReport any failures. Failing checks are a BLOCKING issue.\n\nIf the change involves modification to the website, you should use the playwright browser and READ instructions for docs/processes/manual-qa.md.\n\n### Step 3 — Verify project acceptance criteria\n\nGo through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: \n- State the criterion\n- Check whether the code diff satisfies it\n- Mark it as PASS or FAIL with a brief explanation\n\nIf ANY project-level acceptance criterion fails, call it out clearly in the PR comment. This is the primary gate — individual story acceptance criteria are secondary.\n\n**Behavioral assertion check:**\nFor each story marked `passes:true`, verify that the acceptance criteria include at least one **behavioral assertion** — a criterion describing an observable outcome, not just compilation or structural presence. If a story only has structural/compile-time criteria (e.g., \"interface defined\", \"typecheck passes\"), flag it as a **BLOCKING** issue. Structural criteria like \"typecheck passes\" and \"tests pass\" are necessary quality gates but are NOT sufficient on their own — they do not prove the system actually functions.\n\n### Step 4 — Apply STD-015 regulations in order\n\nRead docs/standards/code/code-review-standards.md, check the code against the standard and confirm its as expected. \n\n### Step 5 - handle feedback\n\n- Post a PR comment with your review summary, including the acceptance criteria checklist results.\n- Include any blocking issues, correctness concerns, missing tests, CI failures, or standards violations in that comment.\n- If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.\n\nUse `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.\n\n### Step 6 - merge if correct. \n\nIf you believe that the PR is complete, please merge the PR. \n\nIf the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes. \n\nNote that due to billing issues the current CI will fail, so ignore them for now. \n\n### Step 7 - respond back\n\nTo terminate the review loop, please respond exactly with\n\n\"<COMPLETE>\": if you think the PR was completed, and you have merged the PR. \n\n\"<REJECTED>\": if you think the PR was not completed.",
               "resources": [
                 {
                   "capacity": 1,
@@ -1946,7 +1946,7 @@
           "durationNanos": 529511264200
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -1966,7 +1966,7 @@
           "durationNanos": 601768662700
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -1986,7 +1986,7 @@
           "durationNanos": 654866622300
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2006,7 +2006,7 @@
           "durationNanos": 747427113600
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2026,7 +2026,7 @@
           "durationNanos": 871685222700
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2046,7 +2046,7 @@
           "durationNanos": 284874254200
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2066,7 +2066,7 @@
           "durationNanos": 366497584200
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2086,7 +2086,7 @@
           "durationNanos": 949704067000
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2106,7 +2106,7 @@
           "durationNanos": 1075616852200
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2126,7 +2126,7 @@
           "durationNanos": 462485506400
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2146,7 +2146,7 @@
           "durationNanos": 342427364400
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2166,7 +2166,7 @@
           "durationNanos": 602175567700
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2186,7 +2186,7 @@
           "durationNanos": 552500100100
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2206,7 +2206,7 @@
           "durationNanos": 322811649200
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2226,7 +2226,7 @@
           "durationNanos": 405984365800
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2246,7 +2246,7 @@
           "durationNanos": 176205130300
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2266,7 +2266,7 @@
           "durationNanos": 351791561500
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2286,7 +2286,7 @@
           "durationNanos": 273296296000
         },
         "outcome": "REJECTED",
-        "output": "\u003cREJECTED\u003e\n",
+        "output": "<REJECTED>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2306,7 +2306,7 @@
           "durationNanos": 492062683400
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2326,7 +2326,7 @@
           "durationNanos": 421630805500
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2346,7 +2346,7 @@
           "durationNanos": 683579362100
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2366,7 +2366,7 @@
           "durationNanos": 725107737700
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2386,7 +2386,7 @@
           "durationNanos": 793630428100
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2406,7 +2406,7 @@
           "durationNanos": 693477446200
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2426,7 +2426,7 @@
           "durationNanos": 747781957700
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2446,7 +2446,7 @@
           "durationNanos": 242842893100
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2466,7 +2466,7 @@
           "durationNanos": 554482155500
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2486,7 +2486,7 @@
           "durationNanos": 699732376400
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2506,7 +2506,7 @@
           "durationNanos": 876307255600
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2526,7 +2526,7 @@
           "durationNanos": 395290696800
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2546,7 +2546,7 @@
           "durationNanos": 515458919200
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2566,7 +2566,7 @@
           "durationNanos": 284087527800
         },
         "outcome": "REJECTED",
-        "output": "\"\u003cREJECTED\u003e\"\n",
+        "output": "\"<REJECTED>\"\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2586,7 +2586,7 @@
           "durationNanos": 390918710000
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2606,7 +2606,7 @@
           "durationNanos": 386774512400
         },
         "outcome": "REJECTED",
-        "output": "\u003cREJECTED\u003e\n",
+        "output": "<REJECTED>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2626,7 +2626,7 @@
           "durationNanos": 574581688900
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2646,7 +2646,7 @@
           "durationNanos": 262540918100
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2666,7 +2666,7 @@
           "durationNanos": 800299027100
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2686,7 +2686,7 @@
           "durationNanos": 208675389700
         },
         "outcome": "REJECTED",
-        "output": "\u003cREJECTED\u003e\n",
+        "output": "<REJECTED>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2706,7 +2706,7 @@
           "durationNanos": 267631498100
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2726,7 +2726,7 @@
           "durationNanos": 4154411385000
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2746,7 +2746,7 @@
           "durationNanos": 275964156000
         },
         "outcome": "ACCEPTED",
-        "output": "\u003cCOMPLETE\u003e\n",
+        "output": "<COMPLETE>\n",
         "transitionId": "review"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2766,7 +2766,7 @@
           "durationNanos": 411848941900
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2786,7 +2786,7 @@
           "durationNanos": 1040317098400
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2806,7 +2806,7 @@
           "durationNanos": 557400681600
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2826,7 +2826,7 @@
           "durationNanos": 463985223500
         },
         "outcome": "CONTINUE",
-        "output": "\u003cCONTINUE\u003e\n",
+        "output": "<CONTINUE>\n",
         "transitionId": "process"
       },
       "schemaVersion": "agent-factory.event.v1",
@@ -2834,3 +2834,4 @@
     }
   ]
 }
+

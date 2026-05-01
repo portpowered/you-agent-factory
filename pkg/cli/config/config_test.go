@@ -20,6 +20,7 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
 	writeCLITestFile(t, factoryPath, `{
+		"name":"expand-config-deterministic",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{
@@ -191,6 +192,7 @@ func TestExpandFactoryConfig_WritesPromptFileFromBodyWhenPromptTemplateMissing(t
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
 	writeCLITestFile(t, factoryPath, `{
+		"name":"expand-config-prompt-file",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [],
 		"workers": [{
@@ -347,6 +349,7 @@ func writePortableResourceManifestFactoryConfigWithScriptTarget(t *testing.T, fa
 	t.Helper()
 
 	writeCLITestFile(t, factoryPath, `{
+		"name":"portable-resource-manifest-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"supportingFiles": {
 			"requiredTools": [`+requiredToolsJSON+`],
@@ -586,6 +589,7 @@ func TestExpandFactoryConfig_KeepsExistingCanonicalSplitDefinitionsWhenInlineDef
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
+				"name":"keep-existing-canonical-split-definitions",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"resources": [],
 				"workers": [{"name":"executor"}],
@@ -693,6 +697,7 @@ Existing workstation body.
 func TestFlattenFactoryConfig_FlattensCanonicalWorkstationStopWords(t *testing.T) {
 	dir := t.TempDir()
 	writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
+		"name":"flatten-canonical-workstation-stop-words",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [],
 		"workers": [{
@@ -760,6 +765,7 @@ func TestExpandFactoryConfig_PreservesExistingSplitDefinitionsWhenInlineDefiniti
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
+				"name":"preserve-existing-split-definitions",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"resources": [],
 				"workers": [{"name":"executor"}],

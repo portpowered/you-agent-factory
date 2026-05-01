@@ -1,4 +1,5 @@
 {
+  "name": "idea_plan_execute_review_with_limits",
   "resources": [
     {
       "capacity": 5,
@@ -292,3 +293,4 @@
     }
   ]
 }
+

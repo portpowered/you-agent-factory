@@ -1,4 +1,5 @@
 {
+  "name": "repeater_resource",
   "resources": [
     {
       "capacity": 1,
@@ -114,3 +115,4 @@
     }
   ]
 }
+

@@ -339,6 +339,46 @@ Run the work.
 	}
 }
 
+func TestLoadRuntimeConfig_RejectsMissingRequiredFactoryName(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writePortableNameOmittedFactoryJSON := map[string]any{
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{{"name": "executor"}},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(writePortableNameOmittedFactoryJSON, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	_, err = LoadRuntimeConfig(factoryDir, nil)
+	if err == nil {
+		t.Fatal("expected missing factory.name to be rejected")
+	}
+	if !containsAll(err.Error(), generatedFactoryBoundaryErrorPrefix, "factory.name is required") {
+		t.Fatalf("expected missing factory.name boundary error, got %v", err)
+	}
+}
+
 func TestLoadRuntimeConfig_RejectsRetiredExhaustionRulesWithMigrationGuidance(t *testing.T) {
 	factoryDir := t.TempDir()
 
@@ -1568,6 +1608,7 @@ func assertCanonicalInlineRuntimeFields(t *testing.T, workstation *interfaces.Fa
 
 func writeRuntimeFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	t.Helper()
+	ensureFactoryNameForTestConfig(cfg, filepath.Base(factoryDir))
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("MarshalIndent: %v", err)
@@ -1603,6 +1644,7 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 
 	cfg := map[string]any{
+		"name": project,
 		"id": project,
 		"workTypes": []map[string]any{
 			{
@@ -1637,6 +1679,24 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 		t.Fatalf("Marshal(namedFactoryPayload): %v", err)
 	}
 	return data
+}
+
+func ensureFactoryNameForTestConfig(cfg map[string]any, fallback string) {
+	if cfg == nil {
+		return
+	}
+	if name, ok := cfg["name"].(string); ok && strings.TrimSpace(name) != "" {
+		return
+	}
+	if id, ok := cfg["id"].(string); ok && strings.TrimSpace(id) != "" {
+		cfg["name"] = id
+		return
+	}
+	if strings.TrimSpace(fallback) != "" {
+		cfg["name"] = fallback
+		return
+	}
+	cfg["name"] = "factory"
 }
 
 func writeRuntimeWorkerAgentsMD(t *testing.T, factoryDir, workerName, content string) {

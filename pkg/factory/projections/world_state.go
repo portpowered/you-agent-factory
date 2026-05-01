@@ -1190,6 +1190,7 @@ func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEve
 	}
 
 	return interfaces.InitialStructurePayload{
+		Name:         string(factoryPayload.Name),
 		Resources:    resources,
 		Workers:      workers,
 		WorkTypes:    workTypes,

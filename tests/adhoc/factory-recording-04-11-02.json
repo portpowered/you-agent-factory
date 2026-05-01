@@ -10,6 +10,7 @@
       "payload": {
         "diagnostics": {},
         "factory": {
+          "name": "factory",
           "factoryDirectory": "c:\\Users\\andre\\work\\portos\\portos-backend\\libraries\\agent-factory\\tests\\adhoc\\factory",
           "metadata": {
             "factory_hash": "sha256:07959407c09011da37c92aba5efe63126ca978ed9f54356cea5ff915fb8cb43f",

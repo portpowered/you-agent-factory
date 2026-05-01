@@ -1,4 +1,5 @@
 {
+  "name": "repeater_workstation",
   "workTypes": [
     {
       "name": "task",
@@ -103,3 +104,4 @@
     }
   ]
 }
+

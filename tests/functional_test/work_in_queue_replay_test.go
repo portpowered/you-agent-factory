@@ -188,6 +188,7 @@ func workInProgressPriorityFixture(t *testing.T) string {
 
 	dir := t.TempDir()
 	factoryJSON := `{
+  "name": "work-in-progress-priority-fixture",
   "workTypes": [
     {
       "name": "task",

@@ -1,4 +1,5 @@
 {
+  "name": "full_ideation_pipeline",
   "workTypes": [
     {
       "name": "idea",
@@ -182,3 +183,4 @@
     }
   ]
 }
+

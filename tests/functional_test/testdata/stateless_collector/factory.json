@@ -1,4 +1,5 @@
 {
+  "name": "stateless_collector",
   "workTypes": [
     {
       "name": "task",
@@ -70,3 +71,4 @@
     }
   ]
 }
+

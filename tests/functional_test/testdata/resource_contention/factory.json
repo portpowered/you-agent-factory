@@ -1,4 +1,5 @@
 {
+  "name": "resource_contention",
   "resources": [
     {
       "capacity": 1,
@@ -58,3 +59,4 @@
     }
   ]
 }
+

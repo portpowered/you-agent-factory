@@ -1,4 +1,5 @@
 {
+  "name": "simple-tasks",
   "resources": [
     {
       "capacity": 1,
@@ -119,3 +120,4 @@
     }
   ]
 }
+

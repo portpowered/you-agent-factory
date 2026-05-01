@@ -1,4 +1,5 @@
 {
+  "name": "same_name_guard_dir",
   "workTypes": [
     {
       "name": "plan",
@@ -57,3 +58,4 @@
     }
   ]
 }
+

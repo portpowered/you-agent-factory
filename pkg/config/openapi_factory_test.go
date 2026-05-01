@@ -12,6 +12,7 @@ import (
 
 func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"finish-chapter-factory",
 		"workTypes": [
 			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
 			{"name":"page","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}
@@ -72,6 +73,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"customer-facing-name",
 		"id": "customer-project",
 		"workTypes": [
 			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
@@ -150,6 +152,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"same-name-input-guard-factory",
 		"workTypes": [
 			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
 			{"name":"taskItem","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
@@ -206,6 +209,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"matches-fields-guard-factory",
 		"workTypes": [
 			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
 		],
@@ -250,6 +254,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"retired-fan-in-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -275,6 +280,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *t
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredExhaustionRulesFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"retired-exhaustion-rules-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -306,6 +312,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredExhaustionRulesFieldAtBou
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredCronIntervalFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"retired-cron-interval-factory",
 		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -341,6 +348,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			fieldPath: "workers[0].type",
 			value:     "model_worker",
 			payload: `{
+				"name":"worker-type-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","type":"model_worker"}],
 				"workstations": [{
@@ -356,6 +364,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			fieldPath: "workers[0].modelProvider",
 			value:     "Claude",
 			payload: `{
+				"name":"worker-model-provider-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","type":"MODEL_WORKER","modelProvider":"Claude"}],
 				"workstations": [{
@@ -372,6 +381,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			fieldPath: "workstations[0].behavior",
 			value:     "cron",
 			payload: `{
+				"name":"workstation-behavior-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","type":"MODEL_WORKER"}],
 				"workstations": [{
@@ -389,6 +399,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			fieldPath: "workstations[0].type",
 			value:     "logical_move",
 			payload: `{
+				"name":"workstation-type-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","type":"MODEL_WORKER"}],
 				"workstations": [{
@@ -423,6 +434,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 
 func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"uppercase-enums-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
@@ -472,6 +484,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBo
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"unsupported-executor-provider-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
@@ -515,6 +528,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workers[0].model_provider",
 		replacement: "use modelProvider",
 		payload: `{
+				"name":"worker-snake-case-provider-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","model_provider":"CODEX"}],
 				"workstations": [{
@@ -530,6 +544,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].resource_usage",
 		replacement: "use resources",
 		payload: `{
+				"name":"workstation-resource-usage-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
@@ -546,6 +561,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].stop_token",
 		replacement: "use stopWords",
 		payload: `{
+				"name":"workstation-stop-token-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
@@ -562,6 +578,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].cron.trigger_at_start",
 		replacement: "use triggerAtStart",
 		payload: `{
+				"name":"cron-trigger-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
@@ -578,6 +595,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].definition.runtime_type",
 		replacement: "use type",
 		payload: `{
+				"name":"definition-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
@@ -621,6 +639,7 @@ func assertGeneratedFactoryRejectsRetiredRenamedFieldAlias(t *testing.T, tc gene
 
 func TestFactoryConfigFromOpenAPIJSON_MapsCopyReferencedScriptsField(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"copy-referenced-scripts-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -654,6 +673,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCopyReferencedScriptsField(t *testing.
 
 func TestFactoryConfigFromOpenAPIJSON_PreservesMapKeysAndCurrentInputGuards(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"preserve-map-keys-and-input-guards-factory",
 		"metadata":{"factory_hash":"sha256:test"},
 		"workTypes": [
 			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},

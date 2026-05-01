@@ -1,4 +1,5 @@
 {
+  "name": "matches_fields_pair_guard_dir",
   "workTypes": [
     {
       "name": "draft",
@@ -64,3 +65,4 @@
     }
   ]
 }
+

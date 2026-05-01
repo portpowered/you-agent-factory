@@ -21,6 +21,7 @@ func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 		"payload": map[string]any{
 			"recordedAt": time.Date(2026, 4, 21, 0, 0, 0, 0, time.UTC).Format(time.RFC3339),
 			"factory": map[string]any{
+				"name": "retired-factory-alias-event",
 				"workTypes": []map[string]any{
 					{
 						"name": "story",

@@ -70,6 +70,7 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
+		"name": project,
 		"id": project,
 		"workTypes": []map[string]any{{
 			"name": workType,
@@ -109,6 +110,7 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 	t.Helper()
 
 	generated, err := config.GeneratedFactoryFromOpenAPIJSON([]byte(`{
+		"name":"` + name + `",
 		"id":"` + name + `",
 		"workTypes":[{"name":"` + workType + `","states":[
 			{"name":"init","type":"INITIAL"},
@@ -168,6 +170,7 @@ func assertWatcherDidNotDetectWorkType(t *testing.T, logs *observer.ObservedLogs
 // writeFactoryJSON writes a factory.json into the given directory.
 func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 	t.Helper()
+	ensureFactoryNameForServiceTest(cfg, filepath.Base(dir))
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal factory config: %v", err)
@@ -175,6 +178,24 @@ func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)
 	}
+}
+
+func ensureFactoryNameForServiceTest(cfg map[string]any, fallback string) {
+	if cfg == nil {
+		return
+	}
+	if name, ok := cfg["name"].(string); ok && strings.TrimSpace(name) != "" {
+		return
+	}
+	if id, ok := cfg["id"].(string); ok && strings.TrimSpace(id) != "" {
+		cfg["name"] = id
+		return
+	}
+	if strings.TrimSpace(fallback) != "" {
+		cfg["name"] = fallback
+		return
+	}
+	cfg["name"] = "factory"
 }
 
 func TestBuildFactoryService_LoadsFromFactoryJSON(t *testing.T) {

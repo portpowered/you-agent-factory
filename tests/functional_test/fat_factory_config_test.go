@@ -544,10 +544,20 @@ func assertFlattenedInlineScriptStandaloneExecutes(t *testing.T, standaloneDir s
 func canonicalFactoryPayload(t *testing.T, data []byte) any {
 	t.Helper()
 
-	mapper := factoryconfig.NewFactoryConfigMapper()
-	cfg, err := mapper.Expand(data)
+	var authored map[string]any
+	if err := json.Unmarshal(data, &authored); err != nil {
+		t.Fatalf("unmarshal authored canonical factory payload: %v\n%s", err, string(data))
+	}
+	ensureFactoryNameMap(authored, "factory")
+	normalized, err := json.Marshal(authored)
 	if err != nil {
-		t.Fatalf("expand canonical factory payload: %v\n%s", err, string(data))
+		t.Fatalf("marshal normalized canonical factory payload: %v", err)
+	}
+
+	mapper := factoryconfig.NewFactoryConfigMapper()
+	cfg, err := mapper.Expand(normalized)
+	if err != nil {
+		t.Fatalf("expand canonical factory payload: %v\n%s", err, string(normalized))
 	}
 	flattened, err := mapper.Flatten(cfg)
 	if err != nil {
@@ -573,7 +583,16 @@ func prettyJSON(t *testing.T, value any) string {
 
 func writeFatFactoryJSON(t *testing.T, dir, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(content), 0o644); err != nil {
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(content), &cfg); err != nil {
+		t.Fatalf("parse fat factory.json fixture: %v", err)
+	}
+	ensureFactoryNameMap(cfg, "factory")
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal fat factory.json fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), data, 0o644); err != nil {
 		t.Fatalf("write fat factory.json: %v", err)
 	}
 }

@@ -1,4 +1,5 @@
 {
+  "name": "matches_fields_single_input_dir",
   "workTypes": [
     {
       "name": "asset",
@@ -46,3 +47,4 @@
     }
   ]
 }
+

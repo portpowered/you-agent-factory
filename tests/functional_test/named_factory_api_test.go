@@ -145,6 +145,7 @@ func functionalNamedFactoryBody(name, workType string) string {
 
 func functionalNamedFactoryPayloadJSON(project, workType string) string {
 	return `{
+		"name":"` + project + `",
 		"id":"` + project + `",
 		"workTypes":[{
 			"name":"` + workType + `",

@@ -1,4 +1,5 @@
 {
+  "name": "review_retry_exhaustion",
   "workTypes": [
     {
       "name": "code-change",
@@ -101,3 +102,4 @@
     }
   ]
 }
+

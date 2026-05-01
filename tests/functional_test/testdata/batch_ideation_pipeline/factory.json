@@ -1,4 +1,5 @@
 {
+  "name": "batch_ideation_pipeline",
   "resources": [
     {
       "capacity": 2,
@@ -212,3 +213,4 @@
     }
   ]
 }
+

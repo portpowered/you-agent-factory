@@ -1,4 +1,5 @@
 {
+  "name": "partial_rejection",
   "workTypes": [
     {
       "name": "task",
@@ -54,3 +55,4 @@
     }
   ]
 }
+

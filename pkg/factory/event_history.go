@@ -443,11 +443,19 @@ func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Fac
 	workstations := generatedWorkstations(payload.Workstations, payload.Places)
 
 	return factoryapi.Factory{
+		Name:         generatedFactoryName(payload.Name),
 		Resources:    slicePtr(resources),
 		WorkTypes:    slicePtr(workTypes),
 		Workers:      slicePtr(workers),
 		Workstations: slicePtr(workstations),
 	}
+}
+
+func generatedFactoryName(name string) factoryapi.FactoryName {
+	if strings.TrimSpace(name) == "" {
+		return "factory"
+	}
+	return factoryapi.FactoryName(name)
 }
 
 func generatedResources(resources []interfaces.FactoryResource) []factoryapi.Resource {

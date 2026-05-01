@@ -442,6 +442,7 @@ func functionalNamedFactoryPayloadWithTerminalState(t *testing.T, project, termi
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
+		"name": project,
 		"id": project,
 		"workTypes": []map[string]any{{
 			"name": "task",

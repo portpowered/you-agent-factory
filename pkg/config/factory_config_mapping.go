@@ -260,6 +260,9 @@ func decodeGeneratedFactoryBoundary(data []byte) (factoryapi.Factory, error) {
 	if err := ensureFactoryBoundaryEOF(decoder); err != nil {
 		return factoryapi.Factory{}, err
 	}
+	if err := validateGeneratedFactoryBoundary(apiCfg); err != nil {
+		return factoryapi.Factory{}, err
+	}
 	return apiCfg, nil
 }
 
@@ -272,6 +275,13 @@ func ensureFactoryBoundaryEOF(decoder *json.Decoder) error {
 		return fmt.Errorf("unmarshal factory api model: %w", err)
 	}
 	return fmt.Errorf("unmarshal factory api model: unexpected trailing JSON value")
+}
+
+func validateGeneratedFactoryBoundary(apiCfg factoryapi.Factory) error {
+	if strings.TrimSpace(string(apiCfg.Name)) == "" {
+		return fmt.Errorf("factory.name is required")
+	}
+	return nil
 }
 
 // Flatten serializes an internal factory configuration into canonical JSON that is
@@ -363,6 +373,9 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 }
 
 func factoryReferenceName(cfg *interfaces.FactoryConfig) factoryapi.FactoryName {
+	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
+		return factoryapi.FactoryName(cfg.Name)
+	}
 	if cfg != nil && strings.TrimSpace(cfg.Project) != "" {
 		return factoryapi.FactoryName(cfg.Project)
 	}
@@ -376,7 +389,7 @@ func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) factoryapi.Factory {
 }
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
-	cfg := interfaces.FactoryConfig{}
+	cfg := interfaces.FactoryConfig{Name: string(apiCfg.Name)}
 	if apiCfg.Id != nil {
 		cfg.Project = *apiCfg.Id
 	}

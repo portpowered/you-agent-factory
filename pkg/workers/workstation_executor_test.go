@@ -435,6 +435,9 @@ Work from {{ .Context.WorkDir }}
 
 func writeRuntimeLookupFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	t.Helper()
+	if _, ok := cfg["name"]; !ok {
+		cfg["name"] = filepath.Base(factoryDir)
+	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

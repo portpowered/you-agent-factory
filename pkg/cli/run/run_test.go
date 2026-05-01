@@ -210,6 +210,7 @@ func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 	rootDir := t.TempDir()
 
 	payload, err := json.Marshal(map[string]any{
+		"name": "alpha-factory",
 		"id": "alpha",
 		"workTypes": []map[string]any{{
 			"name": "task",
@@ -1273,6 +1274,7 @@ func writeDashboardRunFixture(t *testing.T) (string, string) {
 
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "factory.json"), `{
+  "name": "dashboard-run-fixture",
   "workTypes": [
     {
       "name": "task",

@@ -38,6 +38,14 @@ type EmbeddedRuntimeConfig struct {
 
 var _ interfaces.RuntimeConfigLookup = (*EmbeddedRuntimeConfig)(nil)
 
+// FactoryConfig returns the embedded canonical public factory configuration.
+func (c *EmbeddedRuntimeConfig) FactoryConfig() *interfaces.FactoryConfig {
+	if c == nil {
+		return nil
+	}
+	return c.Factory
+}
+
 // FactoryDir returns the authored factory root embedded in the replay artifact.
 func (c *EmbeddedRuntimeConfig) FactoryDir() string {
 	if c == nil {

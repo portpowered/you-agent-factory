@@ -186,6 +186,7 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 		return nil, nil
 	}
 	cloned := &interfaces.FactoryConfig{
+		Name:             cfg.Name,
 		Project:          cfg.Project,
 		InputTypes:       cloneInputTypeConfigs(cfg.InputTypes),
 		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),

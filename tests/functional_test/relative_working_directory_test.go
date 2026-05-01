@@ -88,6 +88,7 @@ func writeRelativeWorkingDirectoryFactoryConfig(t *testing.T, factoryDir string)
 	t.Helper()
 
 	config := `{
+  "name": "relative-working-directory-factory",
   "workTypes": [
     {
       "name": "task",

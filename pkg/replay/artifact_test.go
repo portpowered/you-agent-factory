@@ -331,6 +331,7 @@ func TestLoad_AcceptsInferenceEventsInCanonicalEventsArray(t *testing.T) {
 func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	factoryJSON := []byte(`{
+		"name": "customer-facing-name",
 		"id": "customer-project",
 		"workTypes": [
 			{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
@@ -374,6 +375,7 @@ func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 func TestLoad_RunStartedFactoryBoundaryRejectsRetiredFanInField(t *testing.T) {
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	factoryJSON := []byte(`{
+		"name": "retired-fan-in-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -403,6 +405,7 @@ func TestLoad_RunStartedFactoryBoundaryRejectsRetiredFanInField(t *testing.T) {
 func TestLoad_RunStartedFactoryBoundaryRejectsRetiredExhaustionRulesField(t *testing.T) {
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	factoryJSON := []byte(`{
+		"name": "retired-exhaustion-rules-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -438,6 +441,7 @@ func TestLoad_RunStartedFactoryBoundaryRejectsRetiredExhaustionRulesField(t *tes
 func TestLoad_RunStartedFactoryBoundaryRejectsRetiredCronIntervalField(t *testing.T) {
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	factoryJSON := []byte(`{
+		"name": "retired-cron-interval-factory",
 		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -467,6 +471,7 @@ func TestLoad_RunStartedFactoryBoundaryRejectsRetiredCronIntervalField(t *testin
 func TestLoad_RunStartedFactoryBoundaryRejectsUnsupportedGeneratedField(t *testing.T) {
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	factoryJSON := []byte(`{
+		"name": "unsupported-generated-field-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -541,6 +546,7 @@ func TestSave_ReplacesArtifactThroughRecoverableTempFile(t *testing.T) {
 
 func minimalValidArtifact(recordedAt time.Time) *interfaces.ReplayArtifact {
 	artifact, err := NewEventLogArtifactFromFactory(recordedAt, factoryapi.Factory{
+		Name:         "minimal-artifact-factory",
 		WorkTypes:    &[]factoryapi.WorkType{},
 		Resources:    &[]factoryapi.Resource{},
 		Workers:      &[]factoryapi.Worker{},
@@ -554,6 +560,7 @@ func minimalValidArtifact(recordedAt time.Time) *interfaces.ReplayArtifact {
 
 func artifactTestFactory() factoryapi.Factory {
 	return factoryapi.Factory{
+		Name:             "artifact-test-factory",
 		FactoryDirectory: stringPtrIfNotEmpty("fixtures/customer-run"),
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "story",
