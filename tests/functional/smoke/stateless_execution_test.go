@@ -1,4 +1,4 @@
-package functional_test
+package smoke
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 type dispatchRecorder struct {
@@ -41,7 +42,7 @@ func (r *dispatchRecorder) Dispatches() []interfaces.WorkDispatch {
 }
 
 func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "stateless_collector"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"shared-executor"}`))
 
 	provider := testutil.NewMockProvider(
@@ -84,7 +85,7 @@ func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testi
 }
 
 func TestStatelessExecution_ThinDispatchCarriesLookupReferencesOnly(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "stateless_collector"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"thin-dispatch"}`))
 
 	recorder := &dispatchRecorder{}
@@ -123,7 +124,7 @@ func TestStatelessExecution_ThinDispatchCarriesLookupReferencesOnly(t *testing.T
 }
 
 func TestStatelessExecution_DifferentWorkstationsResolveDifferentWorkers(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "stateless_collector"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"different-workers"}`))
 
 	rewriteStatelessCollectorForDifferentWorkers(t, dir)
