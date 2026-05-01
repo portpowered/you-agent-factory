@@ -3,7 +3,9 @@ package runtime
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -35,6 +37,22 @@ func (immediateCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDispatc
 type validatingCompletionPlanner struct {
 	validatedTicks []int
 	validateErr    error
+}
+
+type asyncRecordingExecutor struct {
+	started chan interfaces.WorkDispatch
+	release chan struct{}
+}
+
+func (e *asyncRecordingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.started <- dispatch
+	<-e.release
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		Output:       "async-executor-output",
+	}, nil
 }
 
 func (p *validatingCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
@@ -122,5 +140,103 @@ func TestWorkerPoolDispatchResultHook_OnTickValidatesReplayTick(t *testing.T) {
 	}
 	if len(planner.validatedTicks) != 2 || planner.validatedTicks[1] != 8 {
 		t.Fatalf("validated ticks after error = %#v, want [7 8]", planner.validatedTicks)
+	}
+}
+
+func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerUsesWorkerPoolAsyncFlow(t *testing.T) {
+	executor := &asyncRecordingExecutor{
+		started: make(chan interfaces.WorkDispatch, 1),
+		release: make(chan struct{}),
+	}
+	pool := workers.NewWorkerPool(logging.NoopLogger{})
+	pool.Register("mock", executor)
+	pool.Start()
+	defer pool.Stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hook := newWorkerPoolDispatchResultHook(
+		buildSimpleNet(),
+		pool,
+		nil,
+		logging.NoopLogger{},
+		1,
+		nil,
+	)
+	hook.Start(ctx)
+
+	dispatch := interfaces.WorkDispatch{
+		DispatchID:   "dispatch-async",
+		TransitionID: "t-process",
+	}
+	if err := hook.SubmitDispatch(context.Background(), dispatch); err != nil {
+		t.Fatalf("SubmitDispatch: %v", err)
+	}
+
+	select {
+	case started := <-executor.started:
+		if started.DispatchID != dispatch.DispatchID {
+			t.Fatalf("started dispatch ID = %q, want %q", started.DispatchID, dispatch.DispatchID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for worker-pool executor to start")
+	}
+
+	result, err := hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
+		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			TickCount: 0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("OnTick before release: %v", err)
+	}
+	if len(result.Results) != 0 {
+		t.Fatalf("hook result count before worker completion = %d, want 0", len(result.Results))
+	}
+
+	close(executor.release)
+
+	select {
+	case <-hook.WaitCh():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for async worker-pool completion signal")
+	}
+
+	result, err = hook.OnTick(context.Background(), interfaces.DispatchResultHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]{
+		Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			TickCount: 0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("OnTick after release: %v", err)
+	}
+	if len(result.Results) != 1 {
+		t.Fatalf("hook result count after worker completion = %d, want 1", len(result.Results))
+	}
+	if result.Results[0].Output != "async-executor-output" {
+		t.Fatalf("hook result output = %q, want async-executor-output", result.Results[0].Output)
+	}
+}
+
+func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerReturnsMissingRunnerError(t *testing.T) {
+	hook := newWorkerPoolDispatchResultHook(
+		buildSimpleNet(),
+		workers.NewWorkerPool(logging.NoopLogger{}),
+		nil,
+		logging.NoopLogger{},
+		1,
+		nil,
+	)
+
+	err := hook.SubmitDispatch(context.Background(), interfaces.WorkDispatch{
+		DispatchID:   "dispatch-missing-runner",
+		TransitionID: "t-process",
+	})
+	if err == nil {
+		t.Fatal("SubmitDispatch error = nil, want missing runner error")
+	}
+	if !strings.Contains(err.Error(), `no worker pool runner for worker type "mock"`) {
+		t.Fatalf("SubmitDispatch error = %q, want missing runner error", err)
 	}
 }
