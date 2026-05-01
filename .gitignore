@@ -27,3 +27,7 @@ factory/inputs/**
 !factory/inputs/thoughts/default/.gitkeep
 
 .claude
+
+factory/logs/meta/*
+factory/logs/meta/progress.tsx
+factory/logs/meta/view.md

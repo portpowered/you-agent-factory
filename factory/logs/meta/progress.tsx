@@ -2,18 +2,18 @@ export const metaProgress = {
   updatedAt: "2026-04-30",
   branch: "main",
   status:
-    "main_at_5d75096_no_customer_asks_contract_guard_lane_landed_and_runtime_lookup_test_fixture_cleanup_is_next",
+    "main_at_f0400fd_meta_ask_surface_canonicalized_artifact_contract_dedup_landed_and_local_input_residue_cleanup_is_next",
   priority:
-    "dispatch_a_narrow_pkg_testutil_runtime_lookup_fixture_consolidation_instead_of_reopening_contract_guard_audits",
+    "keep_the_meta_world_state_current_and_dispatch_a_narrow_local_workflow_input_residue_cleanup",
   summary:
-    "Main is up to date on 5d75096 after pull request #5 landed the contract-guard hygiene and instruction-path alignment lane, there is still no customer ask, and the next repeated cleanup gap is duplicated runtime-lookup test scaffolding across package tests rather than another contract-guard audit.",
+    "Main is up to date on f0400fd after pull requests #9, #11, #12, #13, and #14 landed the runtime-lookup fixture cleanup, cleaner prompt and starter-contract alignment, starter verification updates, canonical meta ask ownership, and artifact-contract deduplication. The remaining narrow cleanliness gap is stale repository-local workflow input residue for lanes that already landed.",
   blockers: [
-    "The checked-in meta surfaces needed to be realigned from the pre-#5 snapshot to the actual main state",
-    "The repository still lacks one shared test-owned runtime lookup fixture seam, so small test changes continue to duplicate FactoryDir, RuntimeBaseDir, Worker, and Workstation plumbing",
-    "The checked-in cleanup backlog is crowded with overlapping contract-guard ideas, which makes it easier to reopen an old audit than to reduce the next real duplication source",
+    "The checked-in meta world-state surfaces had drifted behind main and were still advertising the pre-#14 world",
+    "The repository-local workflow input inboxes still contain solved idea and task files that can be redispatched by mistake",
+    "The current customer asks are broader than the repo needs while local workflow hygiene is still stale",
   ],
   nextAction:
-    "Avoid reopening the contract-guard lane and dispatch a narrow pkg/testutil runtime-lookup fixture consolidation for the repeated map-backed test doubles.",
+    "Do not start the non-urgent customer asks yet; keep the meta view current and dispatch one narrow cleanup that prunes solved repository-local workflow input residue.",
 };
 
 export default function MetaProgress() {
