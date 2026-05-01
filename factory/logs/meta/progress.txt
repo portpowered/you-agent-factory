@@ -324,3 +324,47 @@
   for that legacy-boundary dedupe seam.
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged PR
   state, and the revised next cleanup lane.
+
+## 2026-05-01 05:02 -07:00 - meta refresh after retired-boundary alias dedupe landed
+
+- Ran `git pull`; `main` and `origin/main` are both at `6d20718`.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  recent open/merged PR history, the tracked workflow-input surfaces, and the
+  current workspace-local `factory/inputs/**` residue before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `161da97`
+  - it still proposed `dedupe-retired-boundary-alias-rejection-tables` as the
+    next cleanup lane even though PR `#26` is now merged
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#20`, `#16`, and `#4`
+  - merged PR `#26` `dedupe-retired-boundary-alias-rejection-tables`
+  - merged PRs `#25`, `#24`, `#23`, `#22`, `#21`, `#19`, `#18`, and `#17`
+- Confirmed that the generated-boundary alias dedupe lane is complete on
+  `main`:
+  - `pkg/config/factory_config_mapping.go` now reuses the retired-field
+    inventories instead of duplicating them between top-level and nested
+    `definition` objects
+  - `pkg/config/factory_config_mapping_test.go` now covers top-level, nested
+    `definition`, and nested `definition.cron` alias rejection paths
+- Reconfirmed that the broad `INFERENCE_THROTTLE_GUARD` customer ask is still
+  architectural rather than a ready narrow cleanup lane, because the live
+  implementation still spans dispatcher-owned pause state, runtime snapshots,
+  and observability surfaces.
+- Used a sidecar repository-inspection agent to identify one new narrow cleanup
+  candidate outside the open PR set:
+  - `pkg/config/factory_config_mapping_test.go` and
+    `pkg/config/openapi_factory_test.go` both cover the same retired generated
+    boundary alias rejection seam
+  - both entrypoints converge on the same generated-boundary decode and alias
+    rejection owner in `pkg/config/factory_config_mapping.go`
+  - reducing the duplicated cases is low-risk because it narrows test-surface
+    redundancy without changing production behavior
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/dedupe-generated-boundary-alias-rejection-coverage.md`
+  for that `pkg/config` test-surface dedupe seam.
+- Updated `factory/logs/meta/view.md` to remove the already-landed cleanup
+  proposal and to reflect the current `HEAD`, PR state, and next-step posture.
