@@ -324,271 +324,31 @@ components:
     NamedFactory:
       $ref: './components/schemas/factory-config/NamedFactory.yaml'
     FactoryWorldWorkstationRequestProjectionSlice:
-      type: object
-      additionalProperties: false
-      description: >-
-        Additive dashboard read-model contract slice that publishes
-        workstation-request projections keyed by dispatch ID without
-        reintroducing removed `/dashboard` endpoints.
-      properties:
-        workstationRequestsByDispatchId:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/FactoryWorldWorkstationRequestView'
+      $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml'
     FactoryWorldRenderedPromptDiagnostic:
-      type: object
-      additionalProperties: false
-      properties:
-        systemPromptHash:
-          type: string
-        userMessageHash:
-          type: string
-        variables:
-          $ref: '#/components/schemas/StringMap'
+      $ref: './components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml'
     FactoryWorldProviderDiagnostic:
-      type: object
-      additionalProperties: false
-      properties:
-        provider:
-          type: string
-        model:
-          type: string
-        requestMetadata:
-          $ref: '#/components/schemas/StringMap'
-        responseMetadata:
-          $ref: '#/components/schemas/StringMap'
+      $ref: './components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml'
     FactoryWorldWorkDiagnostics:
-      type: object
-      additionalProperties: false
-      properties:
-        renderedPrompt:
-          $ref: '#/components/schemas/FactoryWorldRenderedPromptDiagnostic'
-        provider:
-          $ref: '#/components/schemas/FactoryWorldProviderDiagnostic'
+      $ref: './components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml'
     FactoryWorldWorkItemRef:
-      type: object
-      additionalProperties: false
-      required:
-        - workId
-      properties:
-        workId:
-          type: string
-        workTypeId:
-          type: string
-        displayName:
-          type: string
-        currentChainingTraceId:
-          type: string
-        previousChainingTraceIds:
-          type: array
-          items:
-            type: string
-        traceId:
-          type: string
+      $ref: './components/schemas/factory-world/FactoryWorldWorkItemRef.yaml'
     FactoryWorldTokenView:
-      type: object
-      additionalProperties: false
-      required:
-        - tokenId
-        - placeId
-      properties:
-        tokenId:
-          type: string
-        placeId:
-          type: string
-        name:
-          type: string
-        workId:
-          type: string
-        workTypeId:
-          type: string
-        currentChainingTraceId:
-          type: string
-        previousChainingTraceIds:
-          type: array
-          items:
-            type: string
-        traceId:
-          type: string
-        tags:
-          $ref: '#/components/schemas/StringMap'
+      $ref: './components/schemas/factory-world/FactoryWorldTokenView.yaml'
     FactoryWorldMutationView:
-      type: object
-      additionalProperties: false
-      required:
-        - type
-        - tokenId
-      properties:
-        type:
-          type: string
-        tokenId:
-          type: string
-        fromPlace:
-          type: string
-        toPlace:
-          type: string
-        reason:
-          type: string
-        token:
-          $ref: '#/components/schemas/FactoryWorldTokenView'
+      $ref: './components/schemas/factory-world/FactoryWorldMutationView.yaml'
     FactoryWorldScriptRequestView:
-      type: object
-      additionalProperties: false
-      properties:
-        scriptRequestId:
-          type: string
-        attempt:
-          type: integer
-          minimum: 1
-        command:
-          type: string
-        args:
-          type: array
-          items:
-            type: string
+      $ref: './components/schemas/factory-world/FactoryWorldScriptRequestView.yaml'
     FactoryWorldScriptResponseView:
-      type: object
-      additionalProperties: false
-      properties:
-        scriptRequestId:
-          type: string
-        attempt:
-          type: integer
-          minimum: 1
-        outcome:
-          type: string
-        stdout:
-          type: string
-        stderr:
-          type: string
-        durationMillis:
-          type: integer
-          format: int64
-          minimum: 0
-        exitCode:
-          type: integer
-        failureType:
-          type: string
+      $ref: './components/schemas/factory-world/FactoryWorldScriptResponseView.yaml'
     FactoryWorldWorkstationRequestCountView:
-      type: object
-      additionalProperties: false
-      required:
-        - dispatchedCount
-        - respondedCount
-        - erroredCount
-      properties:
-        dispatchedCount:
-          type: integer
-          minimum: 0
-        respondedCount:
-          type: integer
-          minimum: 0
-        erroredCount:
-          type: integer
-          minimum: 0
+      $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml'
     FactoryWorldWorkstationRequestRequestView:
-      type: object
-      additionalProperties: false
-      properties:
-        startedAt:
-          type: string
-        requestTime:
-          type: string
-        inputWorkItems:
-          type: array
-          items:
-            $ref: '#/components/schemas/FactoryWorldWorkItemRef'
-        inputWorkTypeIds:
-          type: array
-          items:
-            type: string
-        currentChainingTraceId:
-          type: string
-        previousChainingTraceIds:
-          type: array
-          items:
-            type: string
-        traceIds:
-          type: array
-          items:
-            type: string
-        consumedTokens:
-          type: array
-          items:
-            $ref: '#/components/schemas/FactoryWorldTokenView'
-        prompt:
-          type: string
-        workingDirectory:
-          type: string
-        worktree:
-          type: string
-        provider:
-          type: string
-        model:
-          type: string
-        requestMetadata:
-          $ref: '#/components/schemas/StringMap'
-        scriptRequest:
-          $ref: '#/components/schemas/FactoryWorldScriptRequestView'
+      $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestRequestView.yaml'
     FactoryWorldWorkstationRequestResponseView:
-      type: object
-      additionalProperties: false
-      properties:
-        outcome:
-          type: string
-        feedback:
-          type: string
-        failureReason:
-          type: string
-        failureMessage:
-          type: string
-        responseText:
-          type: string
-        errorClass:
-          type: string
-        providerSession:
-          $ref: '#/components/schemas/ProviderSessionMetadata'
-        diagnostics:
-          $ref: '#/components/schemas/FactoryWorldWorkDiagnostics'
-        responseMetadata:
-          $ref: '#/components/schemas/StringMap'
-        scriptResponse:
-          $ref: '#/components/schemas/FactoryWorldScriptResponseView'
-        endTime:
-          type: string
-        durationMillis:
-          type: integer
-          format: int64
-          minimum: 0
-        outputWorkItems:
-          type: array
-          items:
-            $ref: '#/components/schemas/FactoryWorldWorkItemRef'
-        outputMutations:
-          type: array
-          items:
-            $ref: '#/components/schemas/FactoryWorldMutationView'
+      $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestResponseView.yaml'
     FactoryWorldWorkstationRequestView:
-      type: object
-      additionalProperties: false
-      required:
-        - dispatchId
-        - transitionId
-        - counts
-        - request
-      properties:
-        dispatchId:
-          type: string
-        transitionId:
-          type: string
-        workstationName:
-          type: string
-        counts:
-          $ref: '#/components/schemas/FactoryWorldWorkstationRequestCountView'
-        request:
-          $ref: '#/components/schemas/FactoryWorldWorkstationRequestRequestView'
-        response:
-          $ref: '#/components/schemas/FactoryWorldWorkstationRequestResponseView'
+      $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestView.yaml'
 
     # ==== Unified Agent Factory event log schemas =======
     FactoryEvent:

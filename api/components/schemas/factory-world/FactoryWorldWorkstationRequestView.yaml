@@ -1,0 +1,20 @@
+type: object
+additionalProperties: false
+required:
+  - dispatchId
+  - transitionId
+  - counts
+  - request
+properties:
+  dispatchId:
+    type: string
+  transitionId:
+    type: string
+  workstationName:
+    type: string
+  counts:
+    $ref: './FactoryWorldWorkstationRequestCountView.yaml'
+  request:
+    $ref: './FactoryWorldWorkstationRequestRequestView.yaml'
+  response:
+    $ref: './FactoryWorldWorkstationRequestResponseView.yaml'

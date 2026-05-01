@@ -210,6 +210,26 @@ func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	}
 }
 
+func TestSubmitWork_RelationsReturnBadRequest(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","sourceWorkName":"draft","targetWorkName":"review"}]}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "relations are only supported on PUT /work-requests/{request_id}")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
+}
+
 func TestCreateFactory_ReturnsCreatedNamedFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)

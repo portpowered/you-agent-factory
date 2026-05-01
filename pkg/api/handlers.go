@@ -52,6 +52,10 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "workTypeName is required", "BAD_REQUEST")
 		return
 	}
+	if req.Relations != nil && len(*req.Relations) > 0 {
+		s.writeError(w, http.StatusBadRequest, "relations are only supported on PUT /work-requests/{request_id}", "BAD_REQUEST")
+		return
+	}
 
 	payload, err := generatedPayloadToRawMessage(req.Payload)
 	if err != nil {
@@ -66,7 +70,6 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		TraceID:                resolvedCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
-		Relations:              generatedRelations(req.Relations),
 	}
 	workRequest := submission.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
 
@@ -557,21 +560,6 @@ func generatedStringMap(values *factoryapi.StringMap) map[string]string {
 		return nil
 	}
 	return map[string]string(*values)
-}
-
-func generatedRelations(values *[]factoryapi.Relation) []interfaces.Relation {
-	if values == nil || len(*values) == 0 {
-		return nil
-	}
-	relations := make([]interfaces.Relation, 0, len(*values))
-	for _, relation := range *values {
-		relations = append(relations, interfaces.Relation{
-			Type:          interfaces.RelationType(relation.Type),
-			TargetWorkID:  *relation.TargetWorkId,
-			RequiredState: stringValue(relation.RequiredState),
-		})
-	}
-	return relations
 }
 
 func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkRequest {

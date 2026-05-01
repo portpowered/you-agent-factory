@@ -935,6 +935,38 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	)
 }
 
+func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T) {
+	data, err := os.ReadFile("../../api/openapi-main.yaml")
+	if err != nil {
+		t.Fatalf("read authored openapi contract: %v", err)
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse authored openapi contract: %v", err)
+	}
+
+	schemas := componentSchemas(t, doc)
+	expectedRefs := map[string]string{
+		"FactoryWorldWorkstationRequestProjectionSlice": "./components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml",
+		"FactoryWorldRenderedPromptDiagnostic":          "./components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml",
+		"FactoryWorldProviderDiagnostic":                "./components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml",
+		"FactoryWorldWorkDiagnostics":                   "./components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml",
+		"FactoryWorldWorkItemRef":                       "./components/schemas/factory-world/FactoryWorldWorkItemRef.yaml",
+		"FactoryWorldTokenView":                         "./components/schemas/factory-world/FactoryWorldTokenView.yaml",
+		"FactoryWorldMutationView":                      "./components/schemas/factory-world/FactoryWorldMutationView.yaml",
+		"FactoryWorldScriptRequestView":                 "./components/schemas/factory-world/FactoryWorldScriptRequestView.yaml",
+		"FactoryWorldScriptResponseView":                "./components/schemas/factory-world/FactoryWorldScriptResponseView.yaml",
+		"FactoryWorldWorkstationRequestCountView":       "./components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml",
+		"FactoryWorldWorkstationRequestRequestView":     "./components/schemas/factory-world/FactoryWorldWorkstationRequestRequestView.yaml",
+		"FactoryWorldWorkstationRequestResponseView":    "./components/schemas/factory-world/FactoryWorldWorkstationRequestResponseView.yaml",
+		"FactoryWorldWorkstationRequestView":            "./components/schemas/factory-world/FactoryWorldWorkstationRequestView.yaml",
+	}
+	for schemaName, wantRef := range expectedRefs {
+		assertSchemaRef(t, schemas, schemaName, wantRef)
+	}
+}
+
 // portos:func-length-exception owner=agent-factory reason=unified-event-schema-contract review=2026-07-18 removal=split-event-context-payload-and-dispatch-contract-assertions-before-next-event-schema-change
 func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi.yaml")

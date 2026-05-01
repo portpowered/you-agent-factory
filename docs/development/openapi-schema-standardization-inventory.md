@@ -11,6 +11,8 @@ schema-file cleanup stories move the remaining inline definitions out of
 - Existing checked-in fragment family:
   `api/components/schemas/events/` and
   `api/components/schemas/events/payloads/`
+- Additive read-model fragment family:
+  `api/components/schemas/factory-world/`
 - Generated downstream surfaces:
   `pkg/api/generated/server.gen.go` and `ui/src/api/generated/openapi.ts`
 
@@ -38,6 +40,10 @@ The event contract family already uses one-file-per-schema fragments under
 
 `api/openapi-main.yaml` already references these schemas instead of redefining
 their bodies inline.
+
+The additive factory-world read models also now follow the same pattern under
+`api/components/schemas/factory-world/` instead of remaining inline in the
+authored entrypoint.
 
 ### Still authored inline in `api/openapi-main.yaml`
 
@@ -73,22 +79,6 @@ scope for the follow-on extraction stories.
 - `Work`
 - `Relation`
 - `RelationType`
-
-#### Additive factory-world and dashboard-facing read models
-
-- `FactoryWorldWorkstationRequestProjectionSlice`
-- `FactoryWorldRenderedPromptDiagnostic`
-- `FactoryWorldProviderDiagnostic`
-- `FactoryWorldWorkDiagnostics`
-- `FactoryWorldWorkItemRef`
-- `FactoryWorldTokenView`
-- `FactoryWorldMutationView`
-- `FactoryWorldScriptRequestView`
-- `FactoryWorldScriptResponseView`
-- `FactoryWorldWorkstationRequestCountView`
-- `FactoryWorldWorkstationRequestRequestView`
-- `FactoryWorldWorkstationRequestResponseView`
-- `FactoryWorldWorkstationRequestView`
 
 #### Factory-config and named-factory public contract
 
@@ -197,6 +187,9 @@ api/components/schemas/
 - Generated artifacts remain derived outputs only. Authors should never
   hand-edit `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, or
   `ui/src/api/generated/openapi.ts`.
+- Additive `FactoryWorld*` read models follow the same dedicated-fragment rule
+  as runtime and factory-config schemas; they should not be left inline in
+  `api/openapi-main.yaml` once extracted.
 
 ## Verification Surfaces That Must Stay Aligned
 

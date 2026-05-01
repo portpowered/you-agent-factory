@@ -1,0 +1,37 @@
+type: object
+additionalProperties: false
+properties:
+  outcome:
+    type: string
+  feedback:
+    type: string
+  failureReason:
+    type: string
+  failureMessage:
+    type: string
+  responseText:
+    type: string
+  errorClass:
+    type: string
+  providerSession:
+    $ref: '../events/ProviderSessionMetadata.yaml'
+  diagnostics:
+    $ref: './FactoryWorldWorkDiagnostics.yaml'
+  responseMetadata:
+    $ref: '../shared/StringMap.yaml'
+  scriptResponse:
+    $ref: './FactoryWorldScriptResponseView.yaml'
+  endTime:
+    type: string
+  durationMillis:
+    type: integer
+    format: int64
+    minimum: 0
+  outputWorkItems:
+    type: array
+    items:
+      $ref: './FactoryWorldWorkItemRef.yaml'
+  outputMutations:
+    type: array
+    items:
+      $ref: './FactoryWorldMutationView.yaml'
