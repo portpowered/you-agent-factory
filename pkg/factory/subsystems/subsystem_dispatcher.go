@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
+	factory_throttle "github.com/portpowered/agent-factory/pkg/factory/internal/throttle"
 	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -278,16 +279,13 @@ func (d *DispatcherSubsystem) reconcileThrottlePauses(snapshot *interfaces.Engin
 	if snapshot == nil || len(snapshot.Results) == 0 {
 		return observed
 	}
-	for i := range snapshot.Results {
-		key, ok := d.throttlePauseKeyForResult(snapshot, snapshot.Results[i])
-		if !ok {
-			continue
-		}
-		candidateUntil := now.Add(d.throttlePauseDuration)
+	for _, pause := range factory_throttle.DeriveActiveThrottlePauses(d.throttleFailureHistory(snapshot, now), d.throttlePauseDuration, now) {
+		key := providerModelKey{provider: pause.Provider, model: pause.Model}
+		candidateUntil := pause.PausedUntil
 		if existing, exists := d.throttlePauses[key]; exists && existing.pausedUntil.After(candidateUntil) {
 			continue
 		}
-		pausedAt := now
+		pausedAt := pause.PausedAt
 		if existing, exists := d.throttlePauses[key]; exists && !existing.pausedAt.IsZero() {
 			pausedAt = existing.pausedAt
 		}
@@ -327,10 +325,27 @@ func (d *DispatcherSubsystem) filterPausedEnabledTransitions(enabled []interface
 	return filtered
 }
 
-func (d *DispatcherSubsystem) throttlePauseKeyForResult(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result interfaces.WorkResult) (providerModelKey, bool) {
-	if result.ProviderFailure == nil || result.ProviderFailure.Family != interfaces.ProviderErrorFamilyThrottle {
-		return providerModelKey{}, false
+func (d *DispatcherSubsystem) throttleFailureHistory(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], observedAt time.Time) []factory_throttle.FailureRecord {
+	if snapshot == nil || len(snapshot.Results) == 0 {
+		return nil
 	}
+	history := make([]factory_throttle.FailureRecord, 0, len(snapshot.Results))
+	for i := range snapshot.Results {
+		key, ok := d.throttlePauseKeyForResult(snapshot.Results[i])
+		if !ok {
+			continue
+		}
+		history = append(history, factory_throttle.FailureRecord{
+			Provider:        key.provider,
+			Model:           key.model,
+			OccurredAt:      observedAt,
+			ProviderFailure: snapshot.Results[i].ProviderFailure,
+		})
+	}
+	return history
+}
+
+func (d *DispatcherSubsystem) throttlePauseKeyForResult(result interfaces.WorkResult) (providerModelKey, bool) {
 	transition, ok := d.state.Transitions[result.TransitionID]
 	if !ok {
 		return providerModelKey{}, false
