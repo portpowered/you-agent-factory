@@ -227,14 +227,16 @@ type DispatchRequestEventMetadata struct {
 
 // DispatchRequestEventPayload Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history.
 type DispatchRequestEventPayload struct {
-	// CurrentChainingTraceId Explicit chaining-trace identifier for the dispatch currently being represented.
+	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CurrentChainingTraceId *string                   `json:"currentChainingTraceId,omitempty"`
 	Inputs                 []DispatchConsumedWorkRef `json:"inputs"`
 
 	// Metadata Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here.
 	Metadata *DispatchRequestEventMetadata `json:"metadata,omitempty"`
 
-	// PreviousChainingTraceIds Explicit predecessor chaining traces consumed by this dispatch in deterministic order.
+	// PreviousChainingTraceIds Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PreviousChainingTraceIds *[]string   `json:"previousChainingTraceIds,omitempty"`
 	Resources                *[]Resource `json:"resources,omitempty"`
 	TransitionId             string      `json:"transitionId"`
@@ -244,7 +246,8 @@ type DispatchRequestEventPayload struct {
 type DispatchResponseEventPayload struct {
 	CompletionId *string `json:"completionId,omitempty"`
 
-	// CurrentChainingTraceId Explicit chaining-trace identifier for the dispatch currently being represented.
+	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CurrentChainingTraceId *string      `json:"currentChainingTraceId,omitempty"`
 	DurationMillis         *int64       `json:"durationMillis,omitempty"`
 	Error                  *string      `json:"error,omitempty"`
@@ -260,7 +263,8 @@ type DispatchResponseEventPayload struct {
 	OutputResources *[]Resource `json:"outputResources,omitempty"`
 	OutputWork      *[]Work     `json:"outputWork,omitempty"`
 
-	// PreviousChainingTraceIds Explicit predecessor chaining traces consumed by this dispatch in deterministic order.
+	// PreviousChainingTraceIds Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PreviousChainingTraceIds *[]string                `json:"previousChainingTraceIds,omitempty"`
 	ProviderFailure          *ProviderFailureMetadata `json:"providerFailure,omitempty"`
 	TransitionId             string                   `json:"transitionId"`
@@ -341,11 +345,17 @@ type FactoryEventSchemaVersion string
 
 // FactoryEventContext defines model for FactoryEventContext.
 type FactoryEventContext struct {
+	// CurrentChainingTraceId Canonical chaining-trace identifier for the dispatch currently represented by this event context.
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
 	// DispatchId Canonical dispatch identity for dispatch and inference events; payloads must not restate it.
 	DispatchId *string `json:"dispatchId,omitempty"`
 
 	// EventTime Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.
 	EventTime time.Time `json:"eventTime"`
+
+	// PreviousChainingTraceIds Canonical predecessor chaining traces consumed by the dispatch in deterministic order.
+	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
 
 	// RequestId Canonical request identity for all request-scoped events; payload metadata must not restate it.
 	RequestId *string `json:"requestId,omitempty"`

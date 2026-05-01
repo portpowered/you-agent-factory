@@ -924,6 +924,14 @@ components:
         dispatchId:
           type: string
           description: Canonical dispatch identity for dispatch and inference events; payloads must not restate it.
+        currentChainingTraceId:
+          type: string
+          description: Canonical chaining-trace identifier for the dispatch currently represented by this event context.
+        previousChainingTraceIds:
+          type: array
+          description: Canonical predecessor chaining traces consumed by the dispatch in deterministic order.
+          items:
+            type: string
         source:
           type: string
           description: Human-readable source such as api, filewatcher, replay, cron, or worker.
@@ -1017,10 +1025,12 @@ components:
           type: string
         currentChainingTraceId:
           type: string
-          description: Explicit chaining-trace identifier for the dispatch currently being represented.
+          deprecated: true
+          description: Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
         previousChainingTraceIds:
           type: array
-          description: Explicit predecessor chaining traces consumed by this dispatch in deterministic order.
+          deprecated: true
+          description: Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
           items:
             type: string
         inputs:
@@ -1185,10 +1195,12 @@ components:
           type: string
         currentChainingTraceId:
           type: string
-          description: Explicit chaining-trace identifier for the dispatch currently being represented.
+          deprecated: true
+          description: Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
         previousChainingTraceIds:
           type: array
-          description: Explicit predecessor chaining traces consumed by this dispatch in deterministic order.
+          deprecated: true
+          description: Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
           items:
             type: string
         outcome:

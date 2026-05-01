@@ -1232,6 +1232,7 @@ function applyRequest(state: WorldState, event: DispatchRequestEvent): void {
       traceToken(item, event.context.eventTime),
     ),
     currentChainingTraceID:
+      event.context.currentChainingTraceId ??
       event.payload.currentChainingTraceId ??
       legacyPayload.current_chaining_trace_id ??
       publicWorkItems.find((item) => item.current_chaining_trace_id)
@@ -1240,7 +1241,9 @@ function applyRequest(state: WorldState, event: DispatchRequestEvent): void {
     dispatchID,
     model: legacyPayload.worker?.model ?? worker?.model,
     modelProvider: workerModelProvider(legacyPayload.worker) ?? worker?.model_provider,
-    previousChainingTraceIDs: event.payload.previousChainingTraceIds
+    previousChainingTraceIDs: event.context.previousChainingTraceIds
+      ? [...event.context.previousChainingTraceIds]
+      : event.payload.previousChainingTraceIds
       ? [...event.payload.previousChainingTraceIds]
       : legacyPayload.previous_chaining_trace_ids
         ? [...legacyPayload.previous_chaining_trace_ids]
@@ -1607,6 +1610,7 @@ function responseCompletion(
   return {
     consumedTokens: active?.consumedTokens ?? [],
     currentChainingTraceID:
+      event.context.currentChainingTraceId ??
       event.payload.currentChainingTraceId ??
       legacyPayload.current_chaining_trace_id ??
       active?.currentChainingTraceID ??
@@ -1626,6 +1630,7 @@ function responseCompletion(
     outputItems: uniqueSortedWorkRefs([...outputRefs, ...terminalRefs]),
     outputMutations: [],
     previousChainingTraceIDs:
+      event.context.previousChainingTraceIds ??
       event.payload.previousChainingTraceIds ??
       legacyPayload.previous_chaining_trace_ids ??
       active?.previousChainingTraceIDs,
@@ -2496,6 +2501,8 @@ function workstationRequestFromActiveDispatch(
     request: {
       consumedTokens: dispatch.consumedTokens,
       consumed_tokens: dispatch.consumedTokens,
+      currentChainingTraceId: dispatch.currentChainingTraceID,
+      current_chaining_trace_id: dispatch.currentChainingTraceID,
       inputWorkItems: inputWorkItems,
       input_work_items: inputWorkItems,
       inputWorkTypeIds: uniqueSorted(
@@ -2505,6 +2512,12 @@ function workstationRequestFromActiveDispatch(
         inputWorkItems.map((item) => item.work_type_id ?? ""),
       ),
       model: dispatch.model,
+      previousChainingTraceIds: dispatch.previousChainingTraceIDs
+        ? [...dispatch.previousChainingTraceIDs]
+        : undefined,
+      previous_chaining_trace_ids: dispatch.previousChainingTraceIDs
+        ? [...dispatch.previousChainingTraceIDs]
+        : undefined,
       prompt: latestAttempt?.prompt,
       provider: resolveWorkstationRequestProvider(
         undefined,
@@ -2550,6 +2563,8 @@ function workstationRequestFromCompletion(
     request: {
       consumedTokens: completion.consumedTokens,
       consumed_tokens: completion.consumedTokens,
+      currentChainingTraceId: completion.currentChainingTraceID,
+      current_chaining_trace_id: completion.currentChainingTraceID,
       inputWorkItems: inputWorkItems,
       input_work_items: inputWorkItems,
       inputWorkTypeIds: uniqueSorted(
@@ -2559,6 +2574,12 @@ function workstationRequestFromCompletion(
         inputWorkItems.map((item) => item.work_type_id ?? ""),
       ),
       model: completion.diagnostics?.provider?.model,
+      previousChainingTraceIds: completion.previousChainingTraceIDs
+        ? [...completion.previousChainingTraceIDs]
+        : undefined,
+      previous_chaining_trace_ids: completion.previousChainingTraceIDs
+        ? [...completion.previousChainingTraceIDs]
+        : undefined,
       prompt: latestAttempt?.prompt,
       provider: resolveWorkstationRequestProvider(
         completion.diagnostics,

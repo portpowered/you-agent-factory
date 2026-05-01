@@ -63,6 +63,6 @@ Task:
 
 ## Related
 
-- `agent-factory docs workstation`
-- `agent-factory docs workers`
-- `agent-factory docs batch-work`
+- `infinite-you docs workstation`
+- `infinite-you docs workers`
+- `infinite-you docs batch-work`

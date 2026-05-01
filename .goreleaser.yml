@@ -1,0 +1,47 @@
+version: 2
+
+project_name: agent-factory
+
+before:
+  hooks:
+    - make ui-build
+
+builds:
+  - id: agent-factory
+    main: ./cmd/factory
+    binary: agent-factory
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: cli-archives
+    ids:
+      - agent-factory
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+release:
+  name_template: "{{ .ProjectName }} {{ .Version }}"
+  draft: false
+  prerelease: auto

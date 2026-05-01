@@ -69,7 +69,7 @@ Use a guarded `LOGICAL_MOVE` workstation to cap repeater or review loops.
 
 ## Related
 
-- `agent-factory docs config`
-- `agent-factory docs workers`
-- `agent-factory docs resources`
-- `agent-factory docs templates`
+- `infinite-you docs config`
+- `infinite-you docs workers`
+- `infinite-you docs resources`
+- `infinite-you docs templates`

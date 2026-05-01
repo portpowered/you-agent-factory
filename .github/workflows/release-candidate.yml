@@ -1,0 +1,203 @@
+name: Release Candidate Verification
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Manual semver tag to validate for a candidate-only run.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep this pinned version aligned with ui/package.json's packageManager value.
+  BUN_VERSION: 1.3.12
+  GORELEASER_VERSION: v2.12.7
+
+jobs:
+  resolve-release-tag:
+    name: Resolve Release Tag
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Validate semver release tag
+        id: tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          output="$(go run ./cmd/releasetagcheck -tag "$RELEASE_TAG")"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" >> "$GITHUB_OUTPUT"
+
+  build-candidate-artifacts:
+    name: Build Candidate Artifacts
+    needs: resolve-release-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dashboard dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
+
+      - name: Build snapshot candidate artifacts without publishing
+        run: go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --snapshot --clean -f .goreleaser.yml
+
+      - name: Upload candidate dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-dist
+          path: dist
+          if-no-files-found: error
+
+  smoke-candidate-artifacts:
+    name: Smoke Candidate Artifacts (${{ matrix.asset_id }})
+    needs:
+      - resolve-release-tag
+      - build-candidate-artifacts
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - asset_id: linux-amd64
+            runner: ubuntu-latest
+            archive_glob: agent-factory_*_linux_amd64.tar.gz
+            binary_name: agent-factory
+          - asset_id: linux-arm64
+            runner: ubuntu-24.04-arm
+            archive_glob: agent-factory_*_linux_arm64.tar.gz
+            binary_name: agent-factory
+          - asset_id: darwin-amd64
+            runner: macos-15-intel
+            archive_glob: agent-factory_*_darwin_amd64.tar.gz
+            binary_name: agent-factory
+          - asset_id: darwin-arm64
+            runner: macos-latest
+            archive_glob: agent-factory_*_darwin_arm64.tar.gz
+            binary_name: agent-factory
+          - asset_id: windows-amd64
+            runner: windows-latest
+            archive_glob: agent-factory_*_windows_amd64.zip
+            binary_name: agent-factory.exe
+          - asset_id: windows-arm64
+            runner: windows-11-arm
+            archive_glob: agent-factory_*_windows_arm64.zip
+            binary_name: agent-factory.exe
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dashboard dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browser on Linux
+        if: runner.os == 'Linux'
+        working-directory: ui
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright browser on non-Linux runners
+        if: runner.os != 'Linux'
+        working-directory: ui
+        run: bunx playwright install chromium
+
+      - name: Download candidate dist
+        uses: actions/download-artifact@v4
+        with:
+          name: release-candidate-dist
+          path: dist
+
+      - name: Extract candidate archive on Unix
+        if: runner.os != 'Windows'
+        id: extract-unix
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find dist -maxdepth 1 -type f -name '${{ matrix.archive_glob }}' | head -n 1)"
+          if [ -z "$archive" ]; then
+            echo "candidate archive not found for pattern ${{ matrix.archive_glob }}" >&2
+            exit 1
+          fi
+          mkdir -p extracted
+          tar -xzf "$archive" -C extracted
+          binary="$(pwd)/extracted/${{ matrix.binary_name }}"
+          chmod +x "$binary"
+          echo "binary_path=$binary" >> "$GITHUB_OUTPUT"
+
+      - name: Extract candidate archive on Windows
+        if: runner.os == 'Windows'
+        id: extract-windows
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem -Path dist -Filter '${{ matrix.archive_glob }}' | Select-Object -First 1
+          if (-not $archive) {
+            Write-Error "candidate archive not found for pattern ${{ matrix.archive_glob }}"
+          }
+          New-Item -ItemType Directory -Path extracted -Force | Out-Null
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath extracted -Force
+          $binary = (Resolve-Path "extracted/${{ matrix.binary_name }}").Path
+          "binary_path=$binary" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Smoke packaged binary on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh ./scripts/release/smoke-artifact.sh \
+            "${{ steps.extract-unix.outputs.binary_path }}" \
+            "tests/release/testdata/cli_smoke_factory"
+
+      - name: Smoke packaged binary on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/release/smoke-artifact.ps1 `
+            -BinaryPath "${{ steps.extract-windows.outputs.binary_path }}" `
+            -FixturePath "tests/release/testdata/cli_smoke_factory"

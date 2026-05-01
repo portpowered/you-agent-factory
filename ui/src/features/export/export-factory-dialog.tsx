@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { FactoryValue } from "../../api/named-factory";
 import {
@@ -8,40 +8,37 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard";
 import { cx } from "../../components/dashboard/classnames";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from "../../components/ui";
 import { buildFactoryExportFilename } from "./build-factory-export-filename";
 import { downloadBlobAsFile } from "./browser-download";
 import type { CurrentFactoryExportFailure } from "./use-current-factory-export";
 import { writeFactoryExportPng } from "./factory-png-export";
 
-const DIALOG_BACKDROP_CLASS =
-  "fixed inset-0 z-50 flex items-center justify-center bg-af-canvas/78 px-5 py-6 backdrop-blur-sm";
-const DIALOG_PANEL_CLASS =
-  "w-full max-w-xl rounded-[1.75rem] border border-af-overlay/12 bg-af-surface/96 p-6 shadow-af-panel";
-const DIALOG_HEADER_CLASS = "mb-4 flex items-start justify-between gap-4";
 const DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const DIALOG_BODY_CLASS = cx("m-0 max-w-lg", DASHBOARD_BODY_TEXT_CLASS);
 const DIALOG_HINT_CLASS = cx("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
-const DIALOG_FORM_CLASS = "mt-6 space-y-5";
+const DIALOG_FORM_CLASS = "space-y-5";
 const DIALOG_FIELD_GROUP_CLASS = "space-y-2";
 const DIALOG_FIELD_LABEL_CLASS = cx(
   "block text-sm font-semibold text-af-ink",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
-const DIALOG_FIELD_INPUT_CLASS =
-  "w-full rounded-xl border border-af-overlay/14 bg-af-canvas/78 px-3 py-2.5 text-sm text-af-ink outline-af-accent transition placeholder:text-af-ink/42 focus-visible:outline-2 focus-visible:outline-offset-2";
 const DIALOG_FILE_INPUT_CLASS =
   "block w-full rounded-xl border border-dashed border-af-overlay/18 bg-af-overlay/4 px-3 py-3 text-sm text-af-ink/80 file:mr-3 file:rounded-lg file:border-0 file:bg-af-accent/12 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-af-accent hover:bg-af-overlay/6";
 const DIALOG_FIELD_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const DIALOG_VALIDATION_CLASS = "m-0 text-sm font-medium text-af-danger-ink";
 const DIALOG_ERROR_PANEL_CLASS =
   "rounded-2xl border border-af-danger/30 bg-af-danger/10 px-4 py-3 text-sm text-af-danger-ink";
-const DIALOG_CLOSE_BUTTON_CLASS =
-  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4 text-af-ink/72 outline-af-accent transition hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2";
-const DIALOG_ACTION_ROW_CLASS = "mt-6 flex flex-wrap items-center justify-end gap-3";
-const DIALOG_CANCEL_BUTTON_CLASS =
-  "rounded-lg border border-af-overlay/14 bg-af-overlay/6 px-4 py-2 text-sm font-semibold text-af-ink/78 outline-af-accent transition hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2";
-const DIALOG_EXPORT_BUTTON_CLASS =
-  "rounded-lg bg-af-accent px-4 py-2 text-sm font-semibold text-af-accent-contrast outline-af-accent transition hover:bg-af-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-af-overlay/18 disabled:text-af-ink/48";
+const DIALOG_CONTENT_CLASS = "w-[min(92vw,42rem)] gap-6";
 
 export interface ExportFactoryDialogProps {
   factory: FactoryValue | null;
@@ -65,6 +62,7 @@ export function ExportFactoryDialog({
   onClose,
   preparationFailure = null,
 }: ExportFactoryDialogProps) {
+  const validationIdBase = useId();
   const [exportName, setExportName] = useState(initialFactoryName);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageSelectionError, setImageSelectionError] = useState<string | null>(null);
@@ -77,23 +75,6 @@ export function ExportFactoryDialog({
     exportAttemptRef.current += 1;
     onClose();
   };
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        handleClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleClose, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -123,8 +104,15 @@ export function ExportFactoryDialog({
     : imageTouched && !selectedImage
       ? "Choose a cover image before exporting."
       : null;
+  const nameValidationId = `${validationIdBase}-name-validation`;
+  const imageValidationId = `${validationIdBase}-image-validation`;
   const isExporting = dialogState.status === "exporting";
   const exportDisabled = isExporting || isPreparing || factory === null;
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      handleClose();
+    }
+  };
 
   const handleImageSelection = (files: FileList | null) => {
     setImageTouched(true);
@@ -196,50 +184,19 @@ export function ExportFactoryDialog({
   };
 
   return (
-    <div className={DIALOG_BACKDROP_CLASS} onClick={handleClose}>
-      <section
-        aria-describedby="export-factory-dialog-description"
-        aria-labelledby="export-factory-dialog-title"
-        aria-modal="true"
-        className={DIALOG_PANEL_CLASS}
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
-        <header className={DIALOG_HEADER_CLASS}>
+    <Dialog onOpenChange={handleOpenChange} open={isOpen}>
+      <DialogContent className={DIALOG_CONTENT_CLASS}>
+        <DialogHeader>
           <div className="space-y-2">
-            <h2 className={DIALOG_TITLE_CLASS} id="export-factory-dialog-title">
+            <DialogTitle className={DIALOG_TITLE_CLASS}>
               Export factory
-            </h2>
-            <p className={DIALOG_BODY_CLASS} id="export-factory-dialog-description">
+            </DialogTitle>
+            <DialogDescription className={DIALOG_BODY_CLASS}>
               Package the current factory into a PNG artifact without changing the live
               dashboard state.
-            </p>
+            </DialogDescription>
           </div>
-
-          <button
-            aria-label="Close export dialog"
-            className={DIALOG_CLOSE_BUTTON_CLASS}
-            onClick={handleClose}
-            type="button"
-          >
-            <svg
-              aria-hidden="true"
-              fill="none"
-              height="18"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-              viewBox="0 0 24 24"
-              width="18"
-            >
-              <path d="M6 6l12 12" />
-              <path d="M18 6L6 18" />
-            </svg>
-          </button>
-        </header>
+        </DialogHeader>
 
         <p className={DIALOG_HINT_CLASS}>
           Confirming export keeps the current dashboard state unchanged and downloads
@@ -251,8 +208,10 @@ export function ExportFactoryDialog({
             <label className={DIALOG_FIELD_LABEL_CLASS} htmlFor="export-factory-name">
               Factory name
             </label>
-            <input
-              className={DIALOG_FIELD_INPUT_CLASS}
+            <Input
+              aria-describedby={nameValidationMessage ? nameValidationId : undefined}
+              aria-invalid={nameValidationMessage ? "true" : undefined}
+              className={DASHBOARD_BODY_TEXT_CLASS}
               disabled={isExporting}
               id="export-factory-name"
               onBlur={() => {
@@ -274,7 +233,9 @@ export function ExportFactoryDialog({
               downloaded filename.
             </p>
             {nameValidationMessage ? (
-              <p className={DIALOG_VALIDATION_CLASS}>{nameValidationMessage}</p>
+              <p className={DIALOG_VALIDATION_CLASS} id={nameValidationId}>
+                {nameValidationMessage}
+              </p>
             ) : null}
           </div>
 
@@ -284,6 +245,8 @@ export function ExportFactoryDialog({
             </label>
             <input
               accept="image/*"
+              aria-describedby={imageValidationMessage ? imageValidationId : undefined}
+              aria-invalid={imageValidationMessage ? "true" : undefined}
               className={DIALOG_FILE_INPUT_CLASS}
               disabled={isExporting}
               id="export-factory-image"
@@ -303,7 +266,9 @@ export function ExportFactoryDialog({
               <p className={DIALOG_HINT_CLASS}>Selected image: {selectedImage.name}</p>
             ) : null}
             {imageValidationMessage ? (
-              <p className={DIALOG_VALIDATION_CLASS}>{imageValidationMessage}</p>
+              <p className={DIALOG_VALIDATION_CLASS} id={imageValidationId}>
+                {imageValidationMessage}
+              </p>
             ) : null}
           </div>
 
@@ -326,16 +291,12 @@ export function ExportFactoryDialog({
           ) : null}
         </div>
 
-        <div className={DIALOG_ACTION_ROW_CLASS}>
-          <button
-            className={DIALOG_CANCEL_BUTTON_CLASS}
-            onClick={handleClose}
-            type="button"
-          >
+        <DialogFooter>
+          <Button onClick={handleClose} tone="outline" type="button">
             Cancel
-          </button>
-          <button
-            className={DIALOG_EXPORT_BUTTON_CLASS}
+          </Button>
+          <Button
+            aria-busy={isExporting ? "true" : undefined}
             disabled={exportDisabled}
             onClick={() => {
               void handleExport();
@@ -343,9 +304,9 @@ export function ExportFactoryDialog({
             type="button"
           >
             {dialogState.status === "exporting" ? "Exporting..." : "Export PNG"}
-          </button>
-        </div>
-      </section>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

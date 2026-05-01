@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 
+import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartModel } from "./trends";
 
@@ -107,11 +108,17 @@ const emptyTrend: WorkChartModel = {
 };
 
 describe("D3CompletionInformationCard", () => {
+  const restoreBrowserShims = installDashboardBrowserTestShims();
+
+  afterAll(() => {
+    restoreBrowserShims();
+  });
+
   afterEach(() => {
     cleanup();
   });
 
-  it("renders a D3-backed accessible work outcome chart from dashboard samples", () => {
+  it("renders a shared-chart accessible work outcome visualization from dashboard samples", () => {
     render(
       <D3CompletionInformationCard
         model={populatedTrend}
@@ -126,28 +133,11 @@ describe("D3CompletionInformationCard", () => {
     expect(
       within(card).getByRole("img", { name: "Work outcome chart for 15m" }),
     ).toBeTruthy();
-    expect(card.querySelector("[data-chart-series='queued']")).toBeTruthy();
-    expect(card.querySelector("[data-chart-series='inFlight']")).toBeTruthy();
-    expect(card.querySelector("[data-chart-series='completed']")).toBeTruthy();
-    expect(card.querySelector("[data-chart-series='failed']")).toBeTruthy();
-    expect(
-      card.querySelector("[data-chart-series='queued']")?.getAttribute("data-chart-series-color"),
-    ).toBe("var(--color-af-chart-queued)");
-    expect(
-      card.querySelector("[data-chart-series='inFlight']")?.getAttribute("data-chart-series-color"),
-    ).toBe("var(--color-af-chart-in-flight)");
-    expect(
-      card.querySelector("[data-chart-series='completed']")?.getAttribute("data-chart-series-color"),
-    ).toBe("var(--color-af-chart-completed)");
-    expect(
-      card.querySelector("[data-chart-series='failed']")?.getAttribute("data-chart-series-color"),
-    ).toBe("var(--color-af-chart-failed)");
-    expect(
-      card.querySelector("[data-chart-series='failed']")?.getAttribute("class"),
-    ).toContain("[stroke-width:2.25]");
-    expect(card.querySelector("circle")).toBeNull();
-    expect(card.querySelector("[data-axis-tick='x'][data-axis-tick-value='7']")).toBeTruthy();
-    expect(card.querySelector("[data-axis-tick='y'][data-axis-tick-value='0']")).toBeTruthy();
+    expect(card.querySelector(".recharts-wrapper")).toBeTruthy();
+    expect(within(card).getByText("Queued")).toBeTruthy();
+    expect(within(card).getByText("In-flight")).toBeTruthy();
+    expect(within(card).getByText("Completed")).toBeTruthy();
+    expect(within(card).getByText("Failed/retried")).toBeTruthy();
     expect(within(card).getByText("Ticks")).toBeTruthy();
     expect(within(card).getByText("Work count")).toBeTruthy();
   });

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
+	factory_throttle "github.com/portpowered/agent-factory/pkg/factory/internal/throttle"
 	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -275,19 +276,16 @@ func (d *DispatcherSubsystem) reconcileThrottlePauses(snapshot *interfaces.Engin
 			observed = true
 		}
 	}
-	if snapshot == nil || len(snapshot.Results) == 0 {
+	if snapshot == nil || len(snapshot.DispatchHistory) == 0 {
 		return observed
 	}
-	for i := range snapshot.Results {
-		key, ok := d.throttlePauseKeyForResult(snapshot, snapshot.Results[i])
-		if !ok {
-			continue
-		}
-		candidateUntil := now.Add(d.throttlePauseDuration)
+	for _, pause := range factory_throttle.DeriveActiveThrottlePauses(d.throttleFailureHistoryFromCompletedDispatches(snapshot.DispatchHistory), d.throttlePauseDuration, now) {
+		key := providerModelKey{provider: pause.Provider, model: pause.Model}
+		candidateUntil := pause.PausedUntil
 		if existing, exists := d.throttlePauses[key]; exists && existing.pausedUntil.After(candidateUntil) {
 			continue
 		}
-		pausedAt := now
+		pausedAt := pause.PausedAt
 		if existing, exists := d.throttlePauses[key]; exists && !existing.pausedAt.IsZero() {
 			pausedAt = existing.pausedAt
 		}
@@ -327,11 +325,40 @@ func (d *DispatcherSubsystem) filterPausedEnabledTransitions(enabled []interface
 	return filtered
 }
 
-func (d *DispatcherSubsystem) throttlePauseKeyForResult(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result interfaces.WorkResult) (providerModelKey, bool) {
-	if result.ProviderFailure == nil || result.ProviderFailure.Family != interfaces.ProviderErrorFamilyThrottle {
-		return providerModelKey{}, false
+func (d *DispatcherSubsystem) throttleFailureHistoryFromCompletedDispatches(history []interfaces.CompletedDispatch) []factory_throttle.FailureRecord {
+	if len(history) == 0 {
+		return nil
 	}
-	transition, ok := d.state.Transitions[result.TransitionID]
+	records := make([]factory_throttle.FailureRecord, 0, len(history))
+	for i := range history {
+		if !workers.ProviderFailureDecisionFromMetadata(history[i].ProviderFailure).TriggersThrottlePause {
+			continue
+		}
+		key, ok := d.throttlePauseKeyForCompletedDispatch(history[i])
+		if !ok {
+			continue
+		}
+		records = append(records, factory_throttle.FailureRecord{
+			Provider:        key.provider,
+			Model:           key.model,
+			OccurredAt:      history[i].EndTime,
+			ProviderFailure: history[i].ProviderFailure,
+		})
+	}
+	sort.SliceStable(records, func(i, j int) bool {
+		if !records[i].OccurredAt.Equal(records[j].OccurredAt) {
+			return records[i].OccurredAt.Before(records[j].OccurredAt)
+		}
+		if records[i].Provider != records[j].Provider {
+			return records[i].Provider < records[j].Provider
+		}
+		return records[i].Model < records[j].Model
+	})
+	return records
+}
+
+func (d *DispatcherSubsystem) throttlePauseKeyForCompletedDispatch(dispatch interfaces.CompletedDispatch) (providerModelKey, bool) {
+	transition, ok := d.state.Transitions[dispatch.TransitionID]
 	if !ok {
 		return providerModelKey{}, false
 	}

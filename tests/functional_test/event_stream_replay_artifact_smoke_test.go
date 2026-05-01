@@ -141,16 +141,32 @@ func assertReplayEventTimelineMatchesRuntime(
 		t.Fatalf("get runtime factory events: %v", err)
 	}
 	runResponseIndex := lastIndexOfFunctionalEventType(runtimeEvents, factoryapi.FactoryEventTypeRunResponse)
-	if runResponseIndex < 0 {
+	if runResponseIndex < 0 || len(streamedEvents) == 0 {
 		t.Fatalf("runtime event history missing RUN_RESPONSE: %#v", unifiedSmokeEventSummaries(runtimeEvents))
+	}
+	streamedRunResponse := streamedEvents[len(streamedEvents)-1]
+	if streamedRunResponse.Type != factoryapi.FactoryEventTypeRunResponse {
+		t.Fatalf("streamed event tail = %#v, want RUN_RESPONSE", streamedRunResponse)
+	}
+	matchedRunResponse := false
+	for i := range runtimeEvents {
+		if runtimeEvents[i].Id == streamedRunResponse.Id {
+			runResponseIndex = i
+			matchedRunResponse = true
+			break
+		}
+	}
+	if !matchedRunResponse {
+		t.Fatalf("runtime event history missing streamed RUN_RESPONSE id %q: %#v", streamedRunResponse.Id, unifiedSmokeEventSummaries(runtimeEvents))
 	}
 	runtimePrefix := runtimeEvents[:runResponseIndex+1]
 
 	if len(streamedEvents) != len(runtimePrefix) {
 		t.Fatalf(
-			"streamed event count = %d, want runtime /events mirror count %d through RUN_RESPONSE",
+			"streamed event count = %d, want runtime /events mirror count %d through streamed RUN_RESPONSE %q",
 			len(streamedEvents),
 			len(runtimePrefix),
+			streamedRunResponse.Id,
 		)
 	}
 

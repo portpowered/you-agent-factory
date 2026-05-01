@@ -403,6 +403,10 @@ export interface components {
             workIds?: string[];
             /** @description Canonical dispatch identity for dispatch and inference events; payloads must not restate it. */
             dispatchId?: string;
+            /** @description Canonical chaining-trace identifier for the dispatch currently represented by this event context. */
+            currentChainingTraceId?: string;
+            /** @description Canonical predecessor chaining traces consumed by the dispatch in deterministic order. */
+            previousChainingTraceIds?: string[];
             /** @description Human-readable source such as api, filewatcher, replay, cron, or worker. */
             source?: string;
         };
@@ -443,9 +447,15 @@ export interface components {
         /** @description Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history. */
         DispatchRequestEventPayload: {
             transitionId: string;
-            /** @description Explicit chaining-trace identifier for the dispatch currently being represented. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+             */
             currentChainingTraceId?: string;
-            /** @description Explicit predecessor chaining traces consumed by this dispatch in deterministic order. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+             */
             previousChainingTraceIds?: string[];
             inputs: components["schemas"]["DispatchConsumedWorkRef"][];
             resources?: components["schemas"]["Resource"][];
@@ -524,9 +534,15 @@ export interface components {
         DispatchResponseEventPayload: {
             completionId?: string;
             transitionId: string;
-            /** @description Explicit chaining-trace identifier for the dispatch currently being represented. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+             */
             currentChainingTraceId?: string;
-            /** @description Explicit predecessor chaining traces consumed by this dispatch in deterministic order. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+             */
             previousChainingTraceIds?: string[];
             outcome: components["schemas"]["WorkOutcome"];
             output?: string;
