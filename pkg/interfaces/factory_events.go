@@ -130,6 +130,7 @@ type FactoryWorkstation struct {
 	Config            map[string]string `json:"config,omitempty"`
 	InputPlaceIDs     []string          `json:"input_place_ids,omitempty"`
 	OutputPlaceIDs    []string          `json:"output_place_ids,omitempty"`
+	ContinuePlaceIDs  []string          `json:"continue_place_ids,omitempty"`
 	RejectionPlaceIDs []string          `json:"rejection_place_ids,omitempty"`
 	FailurePlaceIDs   []string          `json:"failure_place_ids,omitempty"`
 }

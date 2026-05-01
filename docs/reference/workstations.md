@@ -10,8 +10,9 @@ topology fields, scheduling kinds, runtime `type`, and outcome routing.
   `LOGICAL_MOVE`.
 - Use `worker` for the bound worker name. Omit it only for logical routing
   workstations such as `LOGICAL_MOVE`.
-- Route accepted results through `outputs`, rejected results through
-  `onRejection`, and failed or timed-out results through `onFailure`.
+- Route accepted results through `outputs`, ordinary partial-progress results
+  through `onContinue`, rejected results through `onRejection`, and failed or
+  timed-out results through `onFailure`.
 - Use workstation-level `guards` only for `visit_count` gating. Use a guarded
   `LOGICAL_MOVE` workstation when you need an explicit loop-breaker route.
 
@@ -20,7 +21,7 @@ topology fields, scheduling kinds, runtime `type`, and outcome routing.
 `kind` answers "when should this workstation run?"
 
 - `standard` is the default fire-once step.
-- `repeater` re-runs after rejected results until the work is accepted or
+- `repeater` re-runs after continue results until the work is accepted or
   fails.
 - `cron` runs on a schedule in service mode.
 
@@ -50,12 +51,13 @@ replace runtime implementation.
 For a basic workflow step:
 
 - `outputs` handles accepted completion.
-- `onRejection` handles "not ready yet" routing.
+- `onContinue` handles ordinary "keep iterating" routing when configured.
+- `onRejection` handles true negative outcomes or review send-back.
 - `onFailure` handles execution failure or timeout.
 
-Use `repeater` when rejection should keep the same workstation active instead
-of routing to a different review state. Pair long-running review loops with a
-guarded `LOGICAL_MOVE` loop breaker so repeated rejection has an explicit
+Use `repeater` when continue should keep the same workstation active instead of
+routing to a different review state. Pair long-running review loops with a
+guarded `LOGICAL_MOVE` loop breaker so repeated true rejection has an explicit
 terminal path.
 
 ## When To Use Each Kind

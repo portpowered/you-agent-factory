@@ -125,6 +125,16 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 				TransitionID: t.ID,
 			})
 		}
+		if ws.OnContinue != nil {
+			placeID := mapToID(*ws.OnContinue)
+			name := fmt.Sprintf("%s:%s:continue:%s", ws.OnContinue.WorkTypeName, ws.OnContinue.StateName, t.Name)
+			t.ContinueArcs = append(t.ContinueArcs, petri.Arc{
+				ID:           uuid.NewString(),
+				Name:         name,
+				PlaceID:      placeID,
+				TransitionID: t.ID,
+			})
+		}
 		if ws.OnRejection != nil {
 			placeID := mapToID(*ws.OnRejection)
 			name := fmt.Sprintf("%s:%s:rejection:%s", ws.OnRejection.WorkTypeName, ws.OnRejection.StateName, t.Name)

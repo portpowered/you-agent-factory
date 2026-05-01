@@ -49,6 +49,8 @@ type WorkOutcome string
 const (
 	// OutcomeAccepted means the transition succeeded. Use output arcs.
 	OutcomeAccepted WorkOutcome = "ACCEPTED"
+	// OutcomeContinue means the worker made partial progress. Use continue arcs.
+	OutcomeContinue WorkOutcome = "CONTINUE"
 	// OutcomeRejected means the business result was negative. Use rejection arcs.
 	OutcomeRejected WorkOutcome = "REJECTED"
 	// OutcomeFailed means execution crashed, timed out, or hit a system error.

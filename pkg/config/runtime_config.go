@@ -370,6 +370,9 @@ func applyWorkstationRuntimeTopology(workstation *interfaces.FactoryWorkstationC
 	if len(runtimeDef.Outputs) > 0 {
 		workstation.Outputs = cloneIOConfigs(runtimeDef.Outputs)
 	}
+	if runtimeDef.OnContinue != nil {
+		workstation.OnContinue = cloneIOConfigPtr(runtimeDef.OnContinue)
+	}
 	if runtimeDef.OnRejection != nil {
 		workstation.OnRejection = cloneIOConfigPtr(runtimeDef.OnRejection)
 	}

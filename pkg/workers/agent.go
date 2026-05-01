@@ -263,7 +263,8 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 
 // evaluateOutcome determines the WorkOutcome based on stop token evaluation.
 // When no stop token is configured, all successful provider responses are ACCEPTED.
-// When a stop token is configured, the output is checked: found → ACCEPTED, absent → REJECTED.
+// When a stop token is configured, the output is checked: found → ACCEPTED,
+// <CONTINUE> → CONTINUE, otherwise → REJECTED.
 func (ae *AgentExecutor) evaluateOutcome(resp interfaces.InferenceResponse, workerDef *interfaces.WorkerConfig) interfaces.WorkOutcome {
 	if workerDef.StopToken == "" {
 		ae.logger.Info("no stop token configured; defaulting to ACCEPTED outcome")
@@ -272,6 +273,9 @@ func (ae *AgentExecutor) evaluateOutcome(resp interfaces.InferenceResponse, work
 	if ContainsStopToken(resp.Content, workerDef.StopToken) {
 		ae.logger.Info("stop token found in output; returning ACCEPTED outcome", "stop_token", workerDef.StopToken)
 		return interfaces.OutcomeAccepted
+	}
+	if strings.Contains(resp.Content, "<CONTINUE>") {
+		return interfaces.OutcomeContinue
 	}
 	return interfaces.OutcomeRejected
 }

@@ -53,9 +53,9 @@ type WorkstationTypeRegistry struct {
 }
 
 // RepeaterWorkstationType re-fires a transition after a non-terminal result.
-// REJECTED outcomes keep the token in its input place (ActionRepeat) so the
-// worker is invoked again on the next tick. ACCEPTED and FAILED outcomes
-// advance normally via the appropriate arc set.
+// CONTINUE outcomes keep the token in its input place (ActionRepeat) so the
+// worker is invoked again on the next tick. ACCEPTED, REJECTED, and FAILED
+// outcomes advance normally via the appropriate arc set.
 type RepeaterWorkstationType struct{}
 
 // Kind returns WorkstationKindRepeater.
@@ -63,10 +63,10 @@ func (r *RepeaterWorkstationType) Kind() interfaces.WorkstationKind {
 	return interfaces.WorkstationKindRepeater
 }
 
-// HandleResult returns ActionRepeat for REJECTED outcomes (the worker signals
-// "not done yet") and ActionAdvance for ACCEPTED (done) or FAILED (system error).
+// HandleResult returns ActionRepeat for CONTINUE outcomes (the worker signals
+// "not done yet") and ActionAdvance for ACCEPTED, REJECTED, or FAILED.
 func (r *RepeaterWorkstationType) HandleResult(result interfaces.WorkResult) PostResultAction {
-	if result.Outcome == interfaces.OutcomeRejected {
+	if result.Outcome == interfaces.OutcomeContinue {
 		return ActionRepeat
 	}
 	return ActionAdvance

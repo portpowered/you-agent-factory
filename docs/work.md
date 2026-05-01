@@ -117,6 +117,7 @@ worker outcome:
 | Worker outcome | Routing field |
 |----------------|---------------|
 | Accepted | `outputs` |
+| Continue | `onContinue` |
 | Rejected | `onRejection` |
 | Failed, timed out, or errored | `onFailure` |
 

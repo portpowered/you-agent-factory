@@ -549,6 +549,10 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
+	onContinue, err := workstationIOPtrInternalFromAPI(workstation.OnContinue, fieldPath+".on_continue")
+	if err != nil {
+		return interfaces.FactoryWorkstationConfig{}, err
+	}
 	onRejection, err := workstationIOPtrInternalFromAPI(workstation.OnRejection, fieldPath+".on_rejection")
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
@@ -568,6 +572,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		Cron:                  workstationCronInternalFromAPI(workstation.Cron),
 		Inputs:                inputs,
 		Outputs:               outputs,
+		OnContinue:            onContinue,
 		OnRejection:           onRejection,
 		OnFailure:             onFailure,
 		Resources:             resourceRequirementsInternalFromAPI(workstation.Resources),
@@ -717,6 +722,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Inputs:                workstationIOsAPIFromInternal(normalized.Inputs),
 		Outputs:               workstationIOsAPIFromInternal(normalized.Outputs),
 		Cron:                  workstationCronAPIFromInternal(normalized.Cron),
+		OnContinue:            workstationIOPtrAPIFromInternal(normalized.OnContinue),
 		OnRejection:           workstationIOPtrAPIFromInternal(normalized.OnRejection),
 		OnFailure:             workstationIOPtrAPIFromInternal(normalized.OnFailure),
 		Resources:             resourceRequirementsAPIFromInternal(normalized.Resources),

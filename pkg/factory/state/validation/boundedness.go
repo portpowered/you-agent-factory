@@ -71,10 +71,10 @@ func resourceInputPlaces(arcs []petri.Arc, resourcePlaces map[string]*state.Reso
 }
 
 // resourceOutputPlaces returns resource place IDs produced by any output arc set
-// (success, rejection, or failure).
+// (success, continue, rejection, or failure).
 func resourceOutputPlaces(t *petri.Transition, resourcePlaces map[string]*state.ResourceDef) map[string]bool {
 	returned := map[string]bool{}
-	for _, arcSet := range [][]petri.Arc{t.OutputArcs, t.RejectionArcs, t.FailureArcs} {
+	for _, arcSet := range [][]petri.Arc{t.OutputArcs, t.ContinueArcs, t.RejectionArcs, t.FailureArcs} {
 		for _, a := range arcSet {
 			if _, isResource := resourcePlaces[a.PlaceID]; isResource {
 				returned[a.PlaceID] = true

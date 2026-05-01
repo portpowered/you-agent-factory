@@ -2,8 +2,9 @@
 
 ## world state
 
-- repository `HEAD` is `d0c4288` on `main` after `git pull --ff-only` on
-  May 1, 2026, and `origin/main` is at the same commit.
+- repository `HEAD` is `c8735e0` on
+  `ralph/align-process-review-loop-contract` on May 1, 2026, and
+  `origin/main` is `606f6c3`.
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent.
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -13,12 +14,9 @@
   - `factory/inputs/plan/default/.gitkeep`
   - `factory/inputs/task/default/.gitkeep`
   - `factory/inputs/thoughts/default/.gitkeep`
-- this workspace still has ignored local residue under the inbox surface:
-  - `factory/inputs/idea/default/align-process-review-loop-contract.md`
-  - `factory/inputs/idea/default/dedupe-dispatcher-throttle-pause-filter.md`
-  - `factory/inputs/idea/default/systems-cleanup.md`
-  - `factory/inputs/idea/default/test-cleanup.md`
-  - `factory/inputs/task/default/ci-cd.md`
+- the workspace-local `factory/inputs/**` surface currently shows only the
+  tracked `.gitkeep` sentinels, so there is no active ignored inbox residue to
+  factor into the next lane choice.
 - the recent GitHub lane state on May 1, 2026 is now:
   - open PR `#22` `align-process-review-loop-contract`
   - merged PR `#21` `dedupe-dispatcher-throttle-pause-filter`
@@ -45,24 +43,18 @@
   - `docs/development/functional-test-cleanup-closeout.md` records the
     remaining behavioral coverage
   - workstation prompts now explicitly steer away from structural/meta tests
-- the historical replay still shows a live workflow-contract mismatch in the
-  checked-in maintainer loop:
+- the checked-in replay evidence now reflects the landed continue-versus-
+  rejection contract in the maintainer loop:
   - `process` completions in `factory/logs/agent-fails.replay.json`:
-    `9 ACCEPTED <COMPLETE>`, `27 REJECTED <CONTINUE>`
+    `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
   - `review` completions: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
-  - `factory/workers/processor/AGENTS.md` still configures stop token
-    `<COMPLETE>` only
-  - `factory/workstations/process/AGENTS.md` still instructs the executor to
-    return `<CONTINUE>` when only one story iteration is done
-  - `factory/factory.json` still maps `process` rejection back to `task:init`
-    and `review` rejection back to `task:init`
-- that mismatch is actively being worked in open PR `#22`:
-  - the PR is `MERGEABLE` as of May 1, 2026
-  - its diff reaches the expected contract surfaces:
-    `factory/factory.json`, `factory/workers/processor/AGENTS.md`,
-    `factory/workstations/process/AGENTS.md`, replay fixtures, generated API
-    surfaces, and focused behavioral coverage
-  - the cleanup lane should not be re-queued while `#22` is still open
+  - the embedded `process` workstation topology now includes `onContinue`
+  - the embedded `process` prompt now reserves rejection for true review
+    send-back and treats `<CONTINUE>` as ordinary executor iteration
+  - `review` still uses rejection to send work back through `task:init`
+- that cleanup is still under review in open PR `#22`
+  `align-process-review-loop-contract`, whose diff now includes the aligned
+  runtime, prompts, replay fixtures, docs, and focused behavioral coverage.
 - the broader throttle customer ask remains open at the architecture level:
   - the current system still keeps pause state as dispatcher-owned runtime
     memory keyed by provider/model
@@ -82,21 +74,18 @@
 
 ## current blockers
 
-1. the checked-in world view had drifted behind `HEAD` again and still
-   described `main` as `d55b57e` without the new open PR `#22`.
-2. `main` still has the process/review contract mismatch until `#22` merges,
-   even though the fix is already in flight.
-3. the broad `INFERENCE_THROTTLE_GUARD` customer ask is still too large for a
+1. open PR `#22` still needs to be merged back to `main` before the cleaned-up
+   process/review contract becomes the repository default there.
+2. the broad `INFERENCE_THROTTLE_GUARD` customer ask is still too large for a
    safe direct jump from the current dispatcher-owned runtime policy.
 
 ## theory of mind
 
 - the repository state has advanced in the right direction, but the checked-in
   meta model must keep pace with active PR lanes as well as merged ones.
-- the highest-signal maintainer-loop issue on `main` is still the
-  `<CONTINUE>`/rejection mismatch, but it is no longer an unowned problem:
-  PR `#22` already covers the intended contract alignment with code, docs, API,
-  and focused coverage.
+- the highest-signal maintainer-loop issue is now implemented on this branch
+  and in its checked-in replay evidence, but it does not become repository
+  truth until PR `#22` merges.
 - the best next cleanup idea should therefore avoid the active PR set and stay
   narrow.
 - the next defensible cleanup after `#22` is to centralize work-request trace
@@ -115,7 +104,7 @@
   duplication so the next worker has a ready follow-up once the current PR
   stack clears.
 - leave the broader `INFERENCE_THROTTLE_GUARD` redesign for a later dedicated
-  lane after the maintainer loop semantics are cleaner.
+  lane now that the maintainer loop semantics are cleaner.
 
 ## customer asks
 
@@ -123,9 +112,6 @@
 - no ask is marked urgent as of May 1, 2026.
 - the throttling ask is still active, but the already-merged PR `#21` closed
   only the narrow duplicate-filter cleanup slice.
-- the best next customer-facing cleanup lane on `main` is still the
-  process/review contract alignment, but that work is already active in PR
-  `#22`.
-- after that lands, the next narrow cleanup lane should be the duplicated
-  work-request trace normalization path rather than another overlapping control-
-  plane request.
+- the best next customer-facing cleanup lane after `#22` lands should be the
+  duplicated work-request trace normalization path rather than another
+  overlapping control-plane request.

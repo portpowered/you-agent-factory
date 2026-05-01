@@ -754,6 +754,25 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 	if result.Outcome != interfaces.OutcomeRejected {
 		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeRejected)
 	}
+
+	executor = NewAgentExecutor(
+		runtimeCfg,
+		&agentMockProvider{response: interfaces.InferenceResponse{Content: "Still iterating\n<CONTINUE>"}} ,
+	)
+	result, err = executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-3",
+			TransitionID: "t-1",
+			WorkerType:   "worker-a",
+		},
+		withAgentPrompts("sys", "msg"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeContinue {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeContinue)
+	}
 }
 
 func TestAgentExecutor_StopTokenComesFromRuntimeConfigWithoutDispatchState(t *testing.T) {

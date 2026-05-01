@@ -144,6 +144,7 @@ func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig
 			Config:            workstationConfig(transition, runtimeConfig),
 			InputPlaceIDs:     arcPlaceIDs(transition.InputArcs),
 			OutputPlaceIDs:    arcPlaceIDs(transition.OutputArcs),
+			ContinuePlaceIDs:  arcPlaceIDs(transition.ContinueArcs),
 			RejectionPlaceIDs: arcPlaceIDs(transition.RejectionArcs),
 			FailurePlaceIDs:   arcPlaceIDs(transition.FailureArcs),
 		})
@@ -216,6 +217,7 @@ func transitionGuardConstraints(transitions map[string]*petri.Transition) []inte
 		}
 		constraints = append(constraints, arcGuardConstraints(transition, "input", transition.InputArcs)...)
 		constraints = append(constraints, arcGuardConstraints(transition, "output", transition.OutputArcs)...)
+		constraints = append(constraints, arcGuardConstraints(transition, "continue", transition.ContinueArcs)...)
 		constraints = append(constraints, arcGuardConstraints(transition, "rejection", transition.RejectionArcs)...)
 		constraints = append(constraints, arcGuardConstraints(transition, "failure", transition.FailureArcs)...)
 	}

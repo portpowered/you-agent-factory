@@ -192,6 +192,11 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 	}
 
 	switch in.Outcome {
+	case interfaces.OutcomeContinue:
+		if token.Color.Tags == nil {
+			token.Color.Tags = make(map[string]string)
+		}
+		token.Color.Tags["continue_feedback"] = in.Feedback
 	case interfaces.OutcomeRejected:
 		if token.Color.Tags == nil {
 			token.Color.Tags = make(map[string]string)

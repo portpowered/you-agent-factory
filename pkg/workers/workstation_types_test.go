@@ -16,7 +16,7 @@ func TestStandardWorkstationType_Kind(t *testing.T) {
 func TestStandardWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 	s := &StandardWorkstationType{}
 
-	outcomes := []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeRejected, interfaces.OutcomeFailed}
+	outcomes := []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected, interfaces.OutcomeFailed}
 	for _, outcome := range outcomes {
 		result := interfaces.WorkResult{Outcome: outcome}
 		action := s.HandleResult(result)
@@ -121,7 +121,8 @@ func TestRepeaterWorkstationType_HandleResult(t *testing.T) {
 		outcome interfaces.WorkOutcome
 		want    PostResultAction
 	}{
-		{interfaces.OutcomeRejected, ActionRepeat},
+		{interfaces.OutcomeContinue, ActionRepeat},
+		{interfaces.OutcomeRejected, ActionAdvance},
 		{interfaces.OutcomeAccepted, ActionAdvance},
 		{interfaces.OutcomeFailed, ActionAdvance},
 	}
@@ -141,7 +142,7 @@ func TestCronWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 		t.Errorf("expected %q, got %q", interfaces.WorkstationKindCron, c.Kind())
 	}
 
-	for _, outcome := range []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeRejected, interfaces.OutcomeFailed} {
+	for _, outcome := range []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected, interfaces.OutcomeFailed} {
 		result := interfaces.WorkResult{Outcome: outcome}
 		if got := c.HandleResult(result); got != ActionAdvance {
 			t.Errorf("outcome %q: expected %q, got %q", outcome, ActionAdvance, got)

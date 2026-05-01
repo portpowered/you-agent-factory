@@ -29,6 +29,7 @@ func (tv *TypeAlignmentValidator) Validate(n *state.Net) []Violation {
 	var violations []Violation
 	for _, transition := range n.Transitions {
 		violations = append(violations, checkTypeAlignment(transition, transition.OutputArcs, n, arcSetOutput)...)
+		violations = append(violations, checkTypeAlignment(transition, transition.ContinueArcs, n, arcSetOutput)...)
 		violations = append(violations, checkTypeAlignment(transition, transition.RejectionArcs, n, arcSetRejection)...)
 		violations = append(violations, checkTypeAlignment(transition, transition.FailureArcs, n, arcSetFailure)...)
 	}

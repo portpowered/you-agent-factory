@@ -28,8 +28,9 @@ You are an autonomous coding agent working on a software project.
 16.2. If a PR already exists, update it by pushing the new commit(s) and, if relevant, reply to or resolve the addressed review comments.
 16.3. Verify that the reviewed code changes are actually present in the PR diff after the push. 
 17. Respond finally as follows: 
-17.1. Respond `<COMPLETE>` If all the items in the PRD have been marked as passes:true, and all PR comments have been addressed, and the PR has been updated to the latest commits.
-17.2. Respond `<CONTINUE>` if not all items have not been completed, any PR feedback has not been updated, or the PR was not updated after addressing feedback.
+17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all PR comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.
+17.2. Respond `<CONTINUE>` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.
+17.3. Do not use rejection to mean "more executor work remains". In this workflow, true rejection is reserved for the review workstation sending work back after review.
 
 ## New Task standards
 

@@ -464,7 +464,7 @@ func (r *factoryWorldReducer) dispatchOutputWorkItem(
 	if explicitPlaceID == "" {
 		if derivedPlaceID := r.outputPlaceForWork(dispatch.Workstation.ID, payload.Outcome, item.WorkTypeID); derivedPlaceID != "" {
 			item.PlaceID = derivedPlaceID
-		} else if payload.Outcome == factoryapi.WorkOutcomeRejected {
+		} else if payload.Outcome == factoryapi.WorkOutcomeContinue || payload.Outcome == factoryapi.WorkOutcomeRejected {
 			item.PlaceID = previousPlaceID
 		}
 	}
@@ -846,6 +846,11 @@ func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome f
 	}
 	routes := workstation.OutputPlaceIDs
 	switch outcome {
+	case factoryapi.WorkOutcomeContinue:
+		if len(workstation.ContinuePlaceIDs) == 0 {
+			return ""
+		}
+		routes = workstation.ContinuePlaceIDs
 	case factoryapi.WorkOutcomeRejected:
 		if len(workstation.RejectionPlaceIDs) == 0 {
 			return ""
@@ -1178,6 +1183,7 @@ func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEve
 			Config:            nilIfEmptyStringMap(config),
 			InputPlaceIDs:     placeIDsFromGeneratedIOs(workstation.Inputs),
 			OutputPlaceIDs:    placeIDsFromGeneratedIOs(workstation.Outputs),
+			ContinuePlaceIDs:  placeIDsFromGeneratedIOPtr(workstation.OnContinue),
 			RejectionPlaceIDs: placeIDsFromGeneratedIOPtr(workstation.OnRejection),
 			FailurePlaceIDs:   placeIDsFromGeneratedIOPtr(workstation.OnFailure),
 		})

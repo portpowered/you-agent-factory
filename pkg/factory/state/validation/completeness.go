@@ -18,6 +18,7 @@ func (cv *CompletenessValidator) Validate(n *state.Net) []Violation {
 	for _, t := range n.Transitions {
 		violations = append(violations, checkArcs(n, t.ID, "input_arcs", t.InputArcs)...)
 		violations = append(violations, checkArcs(n, t.ID, "output_arcs", t.OutputArcs)...)
+		violations = append(violations, checkArcs(n, t.ID, "continue_arcs", t.ContinueArcs)...)
 		violations = append(violations, checkArcs(n, t.ID, "rejection_arcs", t.RejectionArcs)...)
 		violations = append(violations, checkArcs(n, t.ID, "failure_arcs", t.FailureArcs)...)
 	}

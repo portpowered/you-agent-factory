@@ -634,7 +634,7 @@ export interface components {
          * @description Result category returned by a workstation execution.
          * @enum {string}
          */
-        WorkOutcome: "ACCEPTED" | "REJECTED" | "FAILED";
+        WorkOutcome: "ACCEPTED" | "CONTINUE" | "REJECTED" | "FAILED";
         ProviderFailureMetadata: {
             family?: string;
             type?: string;
@@ -1013,6 +1013,8 @@ export interface components {
             inputs: components["schemas"]["WorkstationIO"][];
             /** @description Work states emitted after this workstation succeeds. */
             outputs: components["schemas"]["WorkstationIO"][];
+            /** @description Optional destination emitted when the workstation makes partial progress and should continue iterating. */
+            onContinue?: components["schemas"]["WorkstationIO"];
             /** @description Optional destination emitted when the worker rejects the current work without a hard failure. */
             onRejection?: components["schemas"]["WorkstationIO"];
             /** @description Optional destination emitted when the workstation fails permanently. */

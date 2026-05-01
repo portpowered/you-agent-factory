@@ -59,7 +59,7 @@ func checkBindingUniqueness(t *petri.Transition) []Violation {
 func checkGuardFields(t *petri.Transition) []Violation {
 	var violations []Violation
 
-	allArcs := [][]petri.Arc{t.InputArcs, t.OutputArcs, t.RejectionArcs, t.FailureArcs}
+	allArcs := [][]petri.Arc{t.InputArcs, t.OutputArcs, t.ContinueArcs, t.RejectionArcs, t.FailureArcs}
 	for _, arcs := range allArcs {
 		for _, a := range arcs {
 			if a.Guard == nil {

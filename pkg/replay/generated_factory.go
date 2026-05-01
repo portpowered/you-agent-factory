@@ -147,6 +147,9 @@ func mergeRuntimeWorkstationForGeneratedFactory(base, runtime interfaces.Factory
 	if len(merged.Outputs) == 0 {
 		merged.Outputs = base.Outputs
 	}
+	if merged.OnContinue == nil {
+		merged.OnContinue = base.OnContinue
+	}
 	if merged.OnRejection == nil {
 		merged.OnRejection = base.OnRejection
 	}

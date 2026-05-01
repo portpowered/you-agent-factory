@@ -162,6 +162,8 @@ func completedDispatchReasonFromResult(result interfaces.WorkResult) string {
 	switch result.Outcome {
 	case interfaces.OutcomeFailed:
 		return result.Error
+	case interfaces.OutcomeContinue:
+		return result.Feedback
 	case interfaces.OutcomeRejected:
 		return result.Feedback
 	default:
@@ -174,6 +176,8 @@ func workResultForCompletedDispatch(result interfaces.WorkResult, completed inte
 	switch completed.Outcome {
 	case interfaces.OutcomeFailed:
 		result.Error = completed.Reason
+	case interfaces.OutcomeContinue:
+		result.Feedback = completed.Reason
 	case interfaces.OutcomeRejected:
 		result.Feedback = completed.Reason
 	}

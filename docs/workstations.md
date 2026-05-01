@@ -61,6 +61,7 @@ execute:
 | `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch and cron workstations. |
 | `inputs` | Usually | IO places that enable the workstation. |
 | `outputs` | Usually | IO places produced when the worker returns accepted. |
+| `onContinue` | No | IO place produced when the worker reports ordinary partial progress and the work should iterate without being classified as rejection. |
 | `onRejection` | No | IO place produced when the worker returns rejected. |
 | `onFailure` | Recommended | IO place produced when execution fails or times out. |
 | `resources` | No | Resource capacity consumed while the workstation runs. |
@@ -75,7 +76,7 @@ implementation, such as `MODEL_WORKSTATION` or `LOGICAL_MOVE`.
 | Kind | Behavior |
 |------|----------|
 | `standard` | Default fire-once scheduling. Inputs are consumed, the worker runs, and output routing follows the worker outcome. |
-| `repeater` | Re-fires after rejected results. Use for agent loops that should keep working until accepted or failed. |
+| `repeater` | Re-fires after continue results. Use for agent loops that should keep working until accepted or failed, while reserving rejection for true negative outcomes. |
 | `cron` | Creates internal time work in service mode and dispatches when the schedule and any configured inputs are ready. |
 
 ### Standard Kind
@@ -97,7 +98,8 @@ Omitting `kind` has the same runtime behavior as `"kind": "standard"`.
 
 ### Repeater Kind
 
-Use `repeater` when rejection means "not done yet":
+Use `repeater` when ordinary partial progress should continue iterating without
+being treated as rejection:
 
 ```json
 {
@@ -106,9 +108,13 @@ Use `repeater` when rejection means "not done yet":
   "worker": "executor",
   "inputs": [{ "workType": "story", "state": "init" }],
   "outputs": [{ "workType": "story", "state": "in-review" }],
+  "onContinue": { "workType": "story", "state": "init" },
   "onFailure": { "workType": "story", "state": "failed" }
 }
 ```
+
+For execution-review loops, keep `onContinue` for "another executor pass is
+needed" and reserve `onRejection` for true negative business or review results.
 
 Pair repeaters with a guarded loop-breaker workstation:
 
