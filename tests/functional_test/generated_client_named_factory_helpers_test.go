@@ -29,6 +29,25 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 	return convertNamedFactoryFromGeneratedClient(t, *resp.JSON201)
 }
 
+func createNamedFactoryExpectBadRequest(t *testing.T, serverURL string, namedFactory factoryapi.NamedFactory) generatedclient.CreateFactoryBadRequest {
+	t.Helper()
+
+	client := newGeneratedFactoryClient(t, serverURL)
+	request := convertNamedFactoryForGeneratedClient(t, namedFactory)
+	resp, err := client.CreateFactoryWithResponse(context.Background(), request)
+	if err != nil {
+		t.Fatalf("CreateFactoryWithResponse: %v", err)
+	}
+	if resp.StatusCode() != http.StatusBadRequest {
+		t.Fatalf("CreateFactoryWithResponse status = %d, want 400: %s", resp.StatusCode(), string(resp.Body))
+	}
+	if resp.JSON400 == nil {
+		t.Fatal("CreateFactoryWithResponse returned nil JSON400 payload")
+	}
+
+	return *resp.JSON400
+}
+
 func getCurrentNamedFactory(t *testing.T, serverURL string) factoryapi.NamedFactory {
 	t.Helper()
 

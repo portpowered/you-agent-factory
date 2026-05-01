@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -100,6 +102,30 @@ func TestNamedFactoryAPI_PersistsActivatesAndSwitchesWorkSurface(t *testing.T) {
 	decodeNamedFactoryJSONResponse(t, legacyResp, &legacyErr, "decode alpha-task error response")
 	if legacyErr.Code != factoryapi.BADREQUEST {
 		t.Fatalf("alpha-task error code = %q, want BAD_REQUEST", legacyErr.Code)
+	}
+}
+
+func TestNamedFactoryAPI_RejectsReservedCurrentFactoryNameOnCreate(t *testing.T) {
+	rootDir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	server := startNamedFactoryTestServer(t, rootDir)
+
+	resp := createNamedFactoryExpectBadRequest(t, server.httpSrv.URL, factoryapi.NamedFactory{
+		Name:    apisurface.DefaultCurrentFactoryName,
+		Factory: convertViaJSON[factoryapi.Factory](t, json.RawMessage(functionalNamedFactoryPayloadJSON("reserved-name", "reserved-task"))),
+	})
+	if string(resp.Code) != "INVALID_FACTORY_NAME" {
+		t.Fatalf("CreateFactoryWithResponse error code = %q, want INVALID_FACTORY_NAME", resp.Code)
+	}
+	if resp.Message != "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier." {
+		t.Fatalf("CreateFactoryWithResponse error message = %q", resp.Message)
+	}
+
+	current := getNamedFactoryCurrent(t, server.httpSrv.URL)
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name after reserved-name rejection = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if _, err := config.ReadCurrentFactoryPointer(rootDir); !os.IsNotExist(err) {
+		t.Fatalf("ReadCurrentFactoryPointer after reserved-name create rejection error = %v, want not-exist", err)
 	}
 }
 

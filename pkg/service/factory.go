@@ -1143,8 +1143,8 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 	if rootDir == "" && fs.cfg != nil {
 		rootDir = fs.cfg.Dir
 	}
-	if err := factoryconfig.ValidateNamedFactoryName(string(namedFactory.Name)); err != nil {
-		return factoryapi.NamedFactory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactoryName, err)
+	if err := apisurface.ValidateWritableNamedFactoryName(namedFactory.Name); err != nil {
+		return factoryapi.NamedFactory{}, err
 	}
 
 	payload, err := json.Marshal(namedFactory.Factory)

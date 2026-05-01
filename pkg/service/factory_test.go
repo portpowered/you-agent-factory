@@ -435,6 +435,29 @@ func TestFactoryService_CreateNamedFactory_ActivatesPersistedFactoryFromDefaultR
 	}
 }
 
+func TestFactoryService_CreateNamedFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	_, err = svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContract(t, string(apisurface.DefaultCurrentFactoryName)))
+	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
+		t.Fatalf("CreateNamedFactory(%q) error = %v, want %v", apisurface.DefaultCurrentFactoryName, err, apisurface.ErrInvalidNamedFactoryName)
+	}
+	assertCurrentFactoryPointerMissing(t, rootDir, "after reserved-name rejection")
+}
+
 func TestFactoryService_ActivateNamedFactory_FromDefaultRuntimeLeavesRootReadableWhenReplacementBuildFails(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)

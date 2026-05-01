@@ -417,7 +417,18 @@ func TestCreateFactory_RejectsInvalidFactoryName(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators.")
+	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.")
+}
+
+func TestCreateFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody(string(apisurface.DefaultCurrentFactoryName), "task")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.")
 }
 
 func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {
