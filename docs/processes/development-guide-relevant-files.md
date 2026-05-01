@@ -19,4 +19,5 @@ This inventory records the checked-in files and directories that the maintainer 
 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
+- When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
 - When a cleanup lane closes with path or contract-alignment work, record the exact root-level verification commands in a `docs/development/*-closeout.md` artifact so the proof survives beyond `progress.txt`.
