@@ -2,13 +2,16 @@ type: string
 description: Result category returned by a workstation execution.
 x-enum-varnames:
   - WorkOutcomeAccepted
+  - WorkOutcomeContinue
   - WorkOutcomeRejected
   - WorkOutcomeFailed
 enum:
   - ACCEPTED
+  - CONTINUE
   - REJECTED
   - FAILED
 x-enum-descriptions:
   - The workstation accepted the input and completed its intended work.
+  - The workstation made partial progress and should follow the continue route for another iteration.
   - The workstation completed normally but rejected the input for business reasons.
   - The workstation could not complete because execution crashed, timed out, or hit a system error.

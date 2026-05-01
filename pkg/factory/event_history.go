@@ -530,6 +530,7 @@ func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places 
 			Type:        interfaces.GeneratedPublicFactoryWorkstationTypePtr(workstation.Config["type"]),
 			Inputs:      generatedWorkstationIOs(workstation.InputPlaceIDs, placesByID),
 			Outputs:     generatedWorkstationIOs(workstation.OutputPlaceIDs, placesByID),
+			OnContinue:  generatedWorkstationIOPtr(workstation.ContinuePlaceIDs, placesByID),
 			OnRejection: generatedWorkstationIOPtr(workstation.RejectionPlaceIDs, placesByID),
 			OnFailure:   generatedWorkstationIOPtr(workstation.FailurePlaceIDs, placesByID),
 		}

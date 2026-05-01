@@ -319,6 +319,9 @@ func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, auth
 			if workstation.OnFailure == nil {
 				workstation.OnFailure = authoredWorkstation.OnFailure
 			}
+			if workstation.OnContinue == nil {
+				workstation.OnContinue = authoredWorkstation.OnContinue
+			}
 			if workstation.OnRejection == nil {
 				workstation.OnRejection = authoredWorkstation.OnRejection
 			}

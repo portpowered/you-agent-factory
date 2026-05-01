@@ -58,8 +58,11 @@ func buildPlaceAdjacency(n *state.Net) map[string]map[string]bool {
 		// Collect all input place IDs for this transition.
 		inputPlaces := collectPlaceIDs(t.InputArcs)
 
-		// Collect all output place IDs (success + rejection + failure).
+		// Collect all output place IDs (success + continue + rejection + failure).
 		outputPlaces := collectPlaceIDs(t.OutputArcs)
+		for pid := range collectPlaceIDs(t.ContinueArcs) {
+			outputPlaces[pid] = true
+		}
 		for pid := range collectPlaceIDs(t.RejectionArcs) {
 			outputPlaces[pid] = true
 		}

@@ -460,6 +460,7 @@ func uniqueNonEmpty(values []string) []string {
 
 func appendWorkstationOutputPlaceIDs(workstation interfaces.FactoryWorkstation) []string {
 	outputs := append([]string(nil), workstation.OutputPlaceIDs...)
+	outputs = append(outputs, workstation.ContinuePlaceIDs...)
 	outputs = append(outputs, workstation.RejectionPlaceIDs...)
 	outputs = append(outputs, workstation.FailurePlaceIDs...)
 	return outputs

@@ -38,6 +38,7 @@ func buildFactoryWorldTopologyView(topology interfaces.InitialStructurePayload) 
 		workstation := workstationsByID[nodeID]
 		inputPlaceIDs := filterCustomerPlaceIDs(workstation.InputPlaceIDs)
 		outputPlaceIDs := append([]string(nil), workstation.OutputPlaceIDs...)
+		outputPlaceIDs = append(outputPlaceIDs, workstation.ContinuePlaceIDs...)
 		outputPlaceIDs = append(outputPlaceIDs, workstation.RejectionPlaceIDs...)
 		outputPlaceIDs = append(outputPlaceIDs, workstation.FailurePlaceIDs...)
 		outputPlaceIDs = filterCustomerPlaceIDs(outputPlaceIDs)
@@ -122,6 +123,7 @@ func buildFactoryWorldEdges(nodeIDs []string, workstations map[string]interfaces
 	for _, sourceID := range nodeIDs {
 		workstation := workstations[sourceID]
 		edges = append(edges, buildFactoryWorldEdgesForPlaces(sourceID, workstation.OutputPlaceIDs, "accepted", inputsByPlace, places, seen)...)
+		edges = append(edges, buildFactoryWorldEdgesForPlaces(sourceID, workstation.ContinuePlaceIDs, "continue", inputsByPlace, places, seen)...)
 		edges = append(edges, buildFactoryWorldEdgesForPlaces(sourceID, workstation.RejectionPlaceIDs, "rejected", inputsByPlace, places, seen)...)
 		edges = append(edges, buildFactoryWorldEdgesForPlaces(sourceID, workstation.FailurePlaceIDs, "failed", inputsByPlace, places, seen)...)
 	}

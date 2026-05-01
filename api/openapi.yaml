@@ -1353,14 +1353,17 @@ components:
       description: Result category returned by a workstation execution.
       x-enum-varnames:
         - WorkOutcomeAccepted
+        - WorkOutcomeContinue
         - WorkOutcomeRejected
         - WorkOutcomeFailed
       enum:
         - ACCEPTED
+        - CONTINUE
         - REJECTED
         - FAILED
       x-enum-descriptions:
         - The workstation accepted the input and completed its intended work.
+        - The workstation made partial progress and should follow the continue route for another iteration.
         - The workstation completed normally but rejected the input for business reasons.
         - The workstation could not complete because execution crashed, timed out, or hit a system error.
     ProviderFailureMetadata:
@@ -1561,6 +1564,9 @@ components:
             outputs:
               - workType: story
                 state: inReview
+            onContinue:
+              workType: story
+              state: init
             onRejection:
               workType: story
               state: init
@@ -1916,6 +1922,9 @@ components:
           description: Work states emitted after this workstation succeeds.
           items:
             $ref: '#/components/schemas/WorkstationIO'
+        onContinue:
+          $ref: '#/components/schemas/WorkstationIO'
+          description: Optional destination emitted when the workstation makes partial progress and should continue iterating.
         onRejection:
           $ref: '#/components/schemas/WorkstationIO'
           description: Optional destination emitted when the worker rejects the current work without a hard failure.

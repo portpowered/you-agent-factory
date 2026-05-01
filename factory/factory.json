@@ -99,6 +99,7 @@
       "worker": "processor",
       "inputs":  [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "in-review" }],
+      "onContinue": { "workType": "task", "state": "init" },
       "onRejection": { "workType": "task", "state": "init" },
       "onFailure": { "workType": "task", "state": "failed" },
       "resources": [{ "name": "executor-slot", "capacity": 1 }],

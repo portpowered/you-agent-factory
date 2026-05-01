@@ -216,6 +216,7 @@ func CloneWorkstationConfig(def interfaces.FactoryWorkstationConfig) interfaces.
 		cron := *def.Cron
 		def.Cron = &cron
 	}
+	def.OnContinue = cloneIOConfigPtr(def.OnContinue)
 	def.OnRejection = cloneIOConfigPtr(def.OnRejection)
 	def.OnFailure = cloneIOConfigPtr(def.OnFailure)
 	if def.Env != nil {
@@ -1018,6 +1019,7 @@ type workstationFrontmatter struct {
 	Cron             *cronFrontmatter             `yaml:"cron,omitempty"`
 	Inputs           []ioFrontmatter              `yaml:"inputs,omitempty"`
 	Outputs          []ioFrontmatter              `yaml:"outputs,omitempty"`
+	OnContinue       *ioFrontmatter               `yaml:"onContinue,omitempty"`
 	OnRejection      *ioFrontmatter               `yaml:"onRejection,omitempty"`
 	OnFailure        *ioFrontmatter               `yaml:"onFailure,omitempty"`
 	Resources        []interfaces.ResourceConfig  `yaml:"resources,omitempty"`
@@ -1087,6 +1089,7 @@ func workstationFrontmatterForExpansion(def interfaces.FactoryWorkstationConfig)
 		Limits:           workstationLimitsFrontmatter{MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime},
 		Inputs:           ioFrontmatterSlice(def.Inputs),
 		Outputs:          ioFrontmatterSlice(def.Outputs),
+		OnContinue:       ioFrontmatterPtr(def.OnContinue),
 		OnRejection:      ioFrontmatterPtr(def.OnRejection),
 		OnFailure:        ioFrontmatterPtr(def.OnFailure),
 		Resources:        append([]interfaces.ResourceConfig(nil), def.Resources...),

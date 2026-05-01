@@ -53,6 +53,9 @@ properties:
     description: Work states emitted after this workstation succeeds.
     items:
       $ref: './WorkstationIO.yaml'
+  onContinue:
+    $ref: './WorkstationIO.yaml'
+    description: Optional destination emitted when the workstation makes partial progress and should continue iterating.
   onRejection:
     $ref: './WorkstationIO.yaml'
     description: Optional destination emitted when the worker rejects the current work without a hard failure.
@@ -86,4 +89,3 @@ properties:
   env:
     $ref: '..\shared\StringMap.yaml'
     description: Environment variables added to the workstation execution context.
-

@@ -82,7 +82,7 @@ func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResu
 	history.TotalVisits[result.TransitionID]++
 
 	switch result.Outcome {
-	case interfaces.OutcomeAccepted, interfaces.OutcomeRejected:
+	case interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected:
 		// Reset consecutive failures — the worker didn't fail.
 		history.ConsecutiveFailures[result.TransitionID] = 0
 	case interfaces.OutcomeFailed:

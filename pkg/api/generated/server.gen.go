@@ -116,6 +116,7 @@ const (
 // Defines values for WorkOutcome.
 const (
 	WorkOutcomeAccepted WorkOutcome = "ACCEPTED"
+	WorkOutcomeContinue WorkOutcome = "CONTINUE"
 	WorkOutcomeFailed   WorkOutcome = "FAILED"
 	WorkOutcomeRejected WorkOutcome = "REJECTED"
 )
@@ -1093,6 +1094,9 @@ type Workstation struct {
 
 	// OnFailure One authored work-state reference consumed or emitted by a workstation.
 	OnFailure *WorkstationIO `json:"onFailure,omitempty"`
+
+	// OnContinue One authored work-state reference consumed or emitted by a workstation.
+	OnContinue *WorkstationIO `json:"onContinue,omitempty"`
 
 	// OnRejection One authored work-state reference consumed or emitted by a workstation.
 	OnRejection *WorkstationIO `json:"onRejection,omitempty"`

@@ -678,6 +678,8 @@ func displayCompletedDispatchStatus(outcome string) string {
 	switch interfaces.WorkOutcome(outcome) {
 	case interfaces.OutcomeAccepted:
 		return "Success"
+	case interfaces.OutcomeContinue:
+		return "Continue"
 	case interfaces.OutcomeRejected:
 		return "Rejected"
 	case interfaces.OutcomeFailed:

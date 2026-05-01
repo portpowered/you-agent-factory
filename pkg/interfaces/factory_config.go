@@ -124,6 +124,7 @@ type FactoryWorkstationConfig struct {
 	Cron                  *CronConfig       `json:"cron,omitempty" yaml:"cron,omitempty"`
 	Inputs                []IOConfig        `json:"inputs" yaml:"inputs,omitempty"`
 	Outputs               []IOConfig        `json:"outputs" yaml:"outputs,omitempty"`
+	OnContinue            *IOConfig         `json:"on_continue,omitempty" yaml:"onContinue,omitempty"`
 	OnRejection           *IOConfig         `json:"on_rejection,omitempty" yaml:"onRejection,omitempty"`
 	OnFailure             *IOConfig         `json:"on_failure,omitempty" yaml:"onFailure,omitempty"`
 	Resources             []ResourceConfig  `json:"resources,omitempty" yaml:"resources,omitempty"`

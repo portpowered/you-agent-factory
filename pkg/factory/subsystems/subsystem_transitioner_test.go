@@ -21,6 +21,9 @@ func TestCalculateArcs(t *testing.T) {
 		OutputArcs: []petri.Arc{
 			{ID: "accepted-arc", PlaceID: "wt-code:done"},
 		},
+		ContinueArcs: []petri.Arc{
+			{ID: "continue-arc", PlaceID: "wt-code:init"},
+		},
 		RejectionArcs: []petri.Arc{
 			{ID: "rejected-arc", PlaceID: "wt-code:init"},
 		},
@@ -36,6 +39,7 @@ func TestCalculateArcs(t *testing.T) {
 		wantErr   bool
 	}{
 		{name: "Accepted_ReturnsOutputArcs", outcome: interfaces.OutcomeAccepted, wantArcID: "accepted-arc"},
+		{name: "Continue_ReturnsContinueArcs", outcome: interfaces.OutcomeContinue, wantArcID: "continue-arc"},
 		{name: "Rejected_ReturnsRejectionArcs", outcome: interfaces.OutcomeRejected, wantArcID: "rejected-arc"},
 		{name: "Failed_ReturnsFailureArcs", outcome: interfaces.OutcomeFailed, wantArcID: "failed-arc"},
 		{name: "UnknownOutcome_ReturnsError", outcome: interfaces.WorkOutcome("UNKNOWN"), wantErr: true},

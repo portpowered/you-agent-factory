@@ -263,6 +263,8 @@ func completedDispatchReason(result resolvedWorkResult) string {
 	switch result.outcome {
 	case interfaces.OutcomeFailed:
 		return result.err
+	case interfaces.OutcomeContinue:
+		return result.feedback
 	case interfaces.OutcomeRejected:
 		return result.feedback
 	default:
@@ -589,6 +591,8 @@ func (t *TransitionerSubsystem) logArcSelection(transitionID string, outcome int
 	switch outcome {
 	case interfaces.OutcomeAccepted:
 		t.logger.Info("transitioner: result accepted", "transitionID", transitionID)
+	case interfaces.OutcomeContinue:
+		t.logger.Info("transitioner: result continued", "transitionID", transitionID)
 	case interfaces.OutcomeRejected:
 		t.logger.Info("transitioner: result rejected", "transitionID", transitionID)
 	case interfaces.OutcomeFailed:
@@ -598,7 +602,7 @@ func (t *TransitionerSubsystem) logArcSelection(transitionID string, outcome int
 
 func (t *TransitionerSubsystem) releaseResourceTokensOnFailureMutations(outcome interfaces.WorkOutcome, transitionID string, consumedTokens []interfaces.Token, arcs []petri.Arc, now time.Time) []interfaces.MarkingMutation {
 	mutations := []interfaces.MarkingMutation{}
-	if outcome == interfaces.OutcomeFailed || outcome == interfaces.OutcomeRejected {
+	if outcome == interfaces.OutcomeFailed || outcome == interfaces.OutcomeContinue || outcome == interfaces.OutcomeRejected {
 		covered := make(map[string]bool, len(arcs))
 		for _, a := range arcs {
 			covered[a.PlaceID] = true
@@ -622,6 +626,11 @@ func calculateArcs(currentTransition *petri.Transition, outcome interfaces.WorkO
 	switch outcome {
 	case interfaces.OutcomeAccepted:
 		return currentTransition.OutputArcs, nil
+	case interfaces.OutcomeContinue:
+		if len(currentTransition.ContinueArcs) > 0 {
+			return currentTransition.ContinueArcs, nil
+		}
+		return currentTransition.RejectionArcs, nil
 	case interfaces.OutcomeRejected:
 		return currentTransition.RejectionArcs, nil
 	case interfaces.OutcomeFailed:

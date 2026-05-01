@@ -106,6 +106,7 @@ func buildSimpleDashboardWorkstationNodes(
 
 func appendCustomerOutputPlaceIDs(workstation interfaces.FactoryWorkstation) []string {
 	outputPlaceIDs := append([]string(nil), workstation.OutputPlaceIDs...)
+	outputPlaceIDs = append(outputPlaceIDs, workstation.ContinuePlaceIDs...)
 	outputPlaceIDs = append(outputPlaceIDs, workstation.RejectionPlaceIDs...)
 	outputPlaceIDs = append(outputPlaceIDs, workstation.FailurePlaceIDs...)
 	return outputPlaceIDs
