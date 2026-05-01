@@ -22,6 +22,7 @@
       "name": "idea",
       "states": [
         { "name": "init", "type": "INITIAL" },
+        { "name": "to-complete", "type": "PROCESSING" },
         { "name": "complete", "type": "TERMINAL" },
         { "name": "failed", "type": "FAILED" }
       ]
@@ -30,7 +31,6 @@
       "name": "plan",
       "states": [
         { "name": "init", "type": "INITIAL" },
-        { "name": "to-complete", "type": "PROCESSING" },
         { "name": "complete", "type": "TERMINAL" },
         { "name": "failed", "type": "FAILED" }
       ]
@@ -64,7 +64,7 @@
       "name": "plan",
       "worker": "processor",
       "inputs":  [{ "workType": "idea", "state": "init" }],
-      "outputs": [{ "workType": "idea", "state": "complete" }, { "workType": "plan", "state": "init" }],
+      "outputs": [{ "workType": "idea", "state": "to-complete" }, { "workType": "plan", "state": "init" }],
       "resources": [{ "name": "executor-slot", "capacity": 1 }],
       "onRejection": { "workType": "idea", "state": "failed" },
       "onFailure": { "workType": "idea", "state": "failed" }
@@ -74,7 +74,7 @@
       "type": "LOGICAL_MOVE",
       "inputs":  [
         { 
-          "workType": "plan", 
+          "workType": "idea", 
           "state": "to-complete", 
           "guards": [{
             "type": "SAME_NAME",
@@ -83,14 +83,14 @@
         }, 
         { "workType": "task", "state": "to-complete" }
       ],
-      "outputs": [{ "workType": "plan", "state": "complete" }, { "workType": "task", "state": "complete" }]
+      "outputs": [{ "workType": "idea", "state": "complete" }, { "workType": "task", "state": "complete" }]
     },
     {
       "name": "setup-workspace",
       "type": "MODEL_WORKSTATION",
       "worker": "workspace-setup",
       "inputs":  [{ "workType": "plan", "state": "init" }],
-      "outputs": [{ "workType": "plan", "state": "to-complete" }, { "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "plan", "state": "complete" }, { "workType": "task", "state": "init" }],
       "onFailure": { "workType": "plan", "state": "failed" }
     },
     {
