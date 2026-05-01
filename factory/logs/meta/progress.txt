@@ -577,6 +577,40 @@
   - `pkg/factory/runtime/dispatch_result_hook.go` currently caches
     `syncDispatch` as `planner != nil`
   - the same hook already reads `h.planner` directly for all related planner
-    behaviors
+  behaviors
   - removing the cached bool reduces duplicate local state without changing
-    public contracts
+  public contracts
+
+## 2026-05-01 13:03 -07:00 - meta refresh after website lane landed
+
+- Ran `git pull` and verified the workspace is synced on `main` at `24a6463`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, local
+  ignored workflow residue, open/merged PR state, and relevant code before
+  choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `25580f5`
+  - it still treated PR `#32` `shadcn-components-for-website` as open even
+    though it is now merged
+  - it still described the worktree as dirty even though `git status --short`
+    is now empty
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#33`, `#30`, `#20`, `#16`, and `#4`
+  - merged PR `#34` `dedupe-list-work-legacy-pagination-fallback`
+  - merged PR `#32` `shadcn-components-for-website`
+- Used a sidecar repository-inspection agent plus direct code inspection to
+  reassess the next narrow cleanup lane outside the open PR file sets:
+  - `pkg/factory/runtime/dispatch_result_hook.go` still has a valid
+    duplicate-state seam around cached `syncDispatch`, but it touches live
+    runtime dispatch behavior
+  - `pkg/cli/dashboard/dashboard.go` has a narrower dashboard-only seam:
+    `worldViewFallbackCompletedWorkItems` and
+    `worldViewFallbackFailedWorkItems` are similar single-caller helpers that
+    both derive fallback work refs from `session.DispatchHistory`
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, clean
+  worktree, merged/open PR state, and revised next-lane recommendation.
