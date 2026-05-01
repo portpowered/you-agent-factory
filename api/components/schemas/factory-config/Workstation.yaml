@@ -66,7 +66,7 @@ properties:
     type: array
     description: Resource capacity this workstation consumes while one dispatch is in flight.
     items:
-      $ref: '..\shared\ResourceRequirement.yaml'
+      $ref: '../shared/ResourceRequirement.yaml'
   copyReferencedScripts:
     type: boolean
     description: Copy supported referenced script files into the expanded workstation layout when config expand runs.
@@ -87,5 +87,5 @@ properties:
     type: string
     description: Go template resolved and passed as the worktree path to CLI dispatchers.
   env:
-    $ref: '..\shared\StringMap.yaml'
+    $ref: '../shared/StringMap.yaml'
     description: Environment variables added to the workstation execution context.

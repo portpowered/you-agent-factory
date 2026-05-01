@@ -33,7 +33,7 @@ properties:
     type: array
     description: Resource capacity this worker requires before it can be dispatched.
     items:
-      $ref: '..\shared\ResourceRequirement.yaml'
+      $ref: '../shared/ResourceRequirement.yaml'
   timeout:
     type: string
     description: Optional Go duration that caps one worker execution attempt.
@@ -46,4 +46,3 @@ properties:
   body:
     type: string
     description: Inline worker instructions or script body when the worker is authored directly in factory config.
-

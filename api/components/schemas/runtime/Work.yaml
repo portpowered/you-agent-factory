@@ -34,6 +34,5 @@ properties:
   payload:
     description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. 
   tags:
-    $ref: '..\shared\StringMap.yaml'
+    $ref: '../shared/StringMap.yaml'
     description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.
-

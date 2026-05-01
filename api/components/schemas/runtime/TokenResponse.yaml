@@ -22,7 +22,7 @@ properties:
   traceId:
     type: string
   tags:
-    $ref: '..\shared\StringMap.yaml'
+    $ref: '../shared/StringMap.yaml'
   createdAt:
     type: string
     format: date-time
@@ -31,4 +31,3 @@ properties:
     format: date-time
   history:
     $ref: './TokenHistory.yaml'
-

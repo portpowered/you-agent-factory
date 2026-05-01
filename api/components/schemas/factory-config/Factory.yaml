@@ -102,7 +102,7 @@ properties:
     type: string
     description: Optional workflow identity associated with this serialized runtime config.
   metadata:
-    $ref: '..\shared\StringMap.yaml'
+    $ref: '../shared/StringMap.yaml'
     description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
   inputTypes:
     type: array
@@ -132,4 +132,3 @@ properties:
     description: Processing steps that consume work, invoke workers, and emit the next work states.
     items:
       $ref: './Workstation.yaml'
-

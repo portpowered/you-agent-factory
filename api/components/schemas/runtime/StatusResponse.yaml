@@ -17,5 +17,4 @@ properties:
   resources:
     type: array
     items:
-      $ref: '..\shared\ResourceUsage.yaml'
-
+      $ref: '../shared/ResourceUsage.yaml'
