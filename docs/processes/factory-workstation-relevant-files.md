@@ -10,7 +10,7 @@ work inputs.
 | --- | --- | --- |
 | `factory/README.md` | Checked-in workflow overview | Describes the repository-local workflow and canonical inbox directories under `factory/inputs/`. |
 | `factory/logs/meta/asks.md` | Canonical customer-ask backlog | The only checked-in maintainer backlog that owns customer asks; meta and cleaner prompts should read asks here, and `factory/meta/asks.md` remains a redirect-only legacy stub rather than a peer source of truth. |
-| `docs/development/process-review-loop-contract.md` | Checked-in process/review contract note | Defines the canonical meaning of `<CONTINUE>`, `<COMPLETE>`, and true rejection for the repository-maintainer workflow and names the runtime, prompt, config, and replay surfaces that must stay aligned. |
+| `docs/development/process-review-loop-contract.md` | Checked-in process/review contract note | Defines the canonical meaning of `<CONTINUE>`, `<COMPLETE>`, and true rejection for the repository-maintainer workflow, records that the old rejection-overload mismatch is historical rather than current, and names the runtime, prompt, config, and replay surfaces that must stay aligned. |
 | `docs/development/root-factory-artifact-contract-inventory.md` | Checked-in artifact inventory | Documents which root-level factory artifacts are checked in, generated, or obsolete. |
 | `docs/guides/batch-inputs.md` | Canonical batch request guide | Defines when to author `FACTORY_REQUEST_BATCH` JSON and where those files belong. |
 | `factory/inputs/idea/default/` | Standalone idea inbox | Checked-in inbox kept present by `.gitkeep`; standalone idea submissions land here as markdown files. |

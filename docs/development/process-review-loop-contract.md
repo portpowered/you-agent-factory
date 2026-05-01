@@ -1,30 +1,21 @@
 # Process Review Loop Contract
 
-This note records the current checked-in mismatch in the repository-maintainer
-workflow and defines the canonical contract that follow-up runtime and prompt
-stories must implement.
+This note records the canonical continue-versus-rejection contract for the
+checked-in repository-maintainer workflow and the repository surfaces that must
+stay aligned with it.
 
-## Current Mismatch
+## Status
 
-The checked-in maintainer loop currently uses rejection for two different
-meanings:
+The checked-in maintainer loop now uses an explicit continue path for ordinary
+partial executor progress. `process` `<CONTINUE>` responses route through
+`onContinue` and record `CONTINUE`, while true review send-back remains
+`REJECTED` and continues to route through `review.onRejection`.
 
-1. `factory/workers/processor/AGENTS.md` sets `stopToken: "<COMPLETE>"`, so
-   `pkg/workers/agent.go` classifies any successful model response without
-   `<COMPLETE>` as `REJECTED`.
-2. `factory/workstations/process/AGENTS.md` instructs the executor to respond
-   with `<CONTINUE>` when the current PRD still has unfinished work after the
-   current iteration.
-3. `factory/factory.json` routes `process.onRejection` back to `task:init`, so
-   ordinary partial progress uses the same rejection arc that the checked-in
-   `review` workstation uses for true send-back behavior.
-4. `tests/functional_test/testdata/adhoc-recording-batch-event-log.json`
-   preserves the mismatch in replay evidence: repeated `process` dispatches
-   record `outcome: "REJECTED"` with `output: "<CONTINUE>\n"`, while actual
-   review send-back records `outcome: "REJECTED"` with `output: "<REJECTED>\n"`.
-
-The result is that replay and history surfaces cannot distinguish normal
-story-by-story executor iteration from an actual review rejection.
+This replaced an older mismatch where `<CONTINUE>` fell through the rejection
+path and made replay/history evidence look like rejection churn. Historical
+notes or fixtures may still mention that older behavior as context, but the
+repository's active workflow contract is the continue-versus-rejection split
+described below.
 
 ## Canonical Contract
 
@@ -48,12 +39,12 @@ The following surfaces must agree on the contract above:
 
 - Runtime outcome classification:
   `pkg/interfaces/work_execution.go`, `pkg/workers/agent.go`, and any other
-  worker outcome mappers that currently collapse missing stop tokens into
-  `REJECTED`.
+  worker outcome mappers that classify workstation responses into accepted,
+  continued, rejected, or failed outcomes.
 - Workstation config and public authoring contract:
   `factory/factory.json`, workstation config structs and mapping in `pkg/`,
-  and the workstation authoring docs that currently describe only
-  `outputs`, `onRejection`, and `onFailure`.
+  and the workstation authoring docs that describe `outputs`, `onContinue`,
+  `onRejection`, and `onFailure`.
 - Checked-in maintainer prompts:
   `factory/workers/processor/AGENTS.md`,
   `factory/workstations/process/AGENTS.md`, and
@@ -63,14 +54,14 @@ The following surfaces must agree on the contract above:
   `tests/functional_test/testdata/adhoc-recording-batch-event-log.json` plus
   focused tests that assert the observable routing and outcome history.
 
-## Story Boundaries
+## Closeout Scope
 
-- `US-001` defines the contract and the exact surfaces that must change.
-- `US-002` should introduce a first-class continue outcome and routing path in
-  the runtime and config layers.
-- `US-003` should align the checked-in prompts and scaffolded workflow text to
-  the runtime contract.
-- `US-004` should add focused behavioral coverage for continue, rejection, and
-  loop-breaker behavior.
-- `US-005` should remove stale maintainer-facing wording that still describes
-  ordinary partial progress as rejection.
+This cleanup is complete only when all of the following stay true together:
+
+- `process` `<CONTINUE>` traffic records as `CONTINUE`, not `REJECTED`.
+- The checked-in `process` loop uses `onContinue` for ordinary executor
+  iteration and reserves rejection for true negative outcomes.
+- The checked-in `review` loop still uses rejection for send-back behavior and
+  keeps loop-breaker safeguards based on actual rejection accumulation.
+- Maintainer-facing prompts, docs, and focused behavioral tests all describe
+  the same contract without calling ordinary partial progress rejection.
