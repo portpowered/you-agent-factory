@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 const dualDispatchSmokeRequestID = "request-thin-dual-dispatch-smoke"
@@ -32,7 +33,7 @@ type dualDispatchSmokeFixture struct {
 	scriptWorkID string
 }
 
-func TestThinEventDualDispatchSmoke_SharedArtifactCapturesModelAndScriptDispatches(t *testing.T) {
+func TestReplayThinEventDualDispatchSmoke_SharedArtifactCapturesModelAndScriptDispatches(t *testing.T) {
 	smoke := runThinEventDualDispatchSmoke(t)
 
 	assertThinEventWorkRequestContainsBothPaths(t, smoke.liveEvents, smoke.requestID, smoke.traceID, smoke.modelWorkID, smoke.scriptWorkID)
@@ -43,7 +44,7 @@ func TestThinEventDualDispatchSmoke_SharedArtifactCapturesModelAndScriptDispatch
 	assertLiveEventsMatchRecordedArtifact(t, smoke.liveEvents, smoke.artifact)
 }
 
-func TestThinEventDualDispatchSmoke_SharedArtifactGuardsThinRawContract(t *testing.T) {
+func TestReplayThinEventDualDispatchSmoke_SharedArtifactGuardsThinRawContract(t *testing.T) {
 	smoke := runThinEventDualDispatchSmoke(t)
 
 	assertThinEventRawArtifactOmitsRetiredFields(t, smoke.artifact.Events)
@@ -51,7 +52,7 @@ func TestThinEventDualDispatchSmoke_SharedArtifactGuardsThinRawContract(t *testi
 	assertThinEventScriptBoundaryFacts(t, smoke.artifact.Events, smoke.scriptWorkID)
 }
 
-func TestThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact(t *testing.T) {
+func TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact(t *testing.T) {
 	smoke := runThinEventDualDispatchSmoke(t)
 
 	replayHarness := testutil.AssertReplaySucceeds(t, smoke.artifactPath, 10*time.Second)
@@ -75,7 +76,7 @@ func TestThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact(t *testi
 func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	configureThinEventDualDispatchFixture(t, dir)
 
 	artifactPath := filepath.Join(t.TempDir(), "thin-event-dual-dispatch.replay.json")
@@ -179,11 +180,11 @@ func configureThinEventDualDispatchFixture(t *testing.T, dir string) {
 		})
 	})
 
-	writeThinEventDualDispatchFixtureFile(t, dir, []string{"workstations", "run-script", "AGENTS.md"}, "---\ntype: MODEL_WORKSTATION\n---\nExecute the script.\n")
-	writeThinEventDualDispatchFixtureFile(t, dir, []string{"workers", "script-worker", "AGENTS.md"}, "---\ntype: SCRIPT_WORKER\ncommand: script-tool\nargs:\n  - --mode\n  - smoke\n---\nExecute the script.\n")
+	writeReplayFixtureFile(t, dir, []string{"workstations", "run-script", "AGENTS.md"}, "---\ntype: MODEL_WORKSTATION\n---\nExecute the script.\n")
+	writeReplayFixtureFile(t, dir, []string{"workers", "script-worker", "AGENTS.md"}, "---\ntype: SCRIPT_WORKER\ncommand: script-tool\nargs:\n  - --mode\n  - smoke\n---\nExecute the script.\n")
 }
 
-func writeThinEventDualDispatchFixtureFile(t *testing.T, dir string, pathParts []string, content string) {
+func writeReplayFixtureFile(t *testing.T, dir string, pathParts []string, content string) {
 	t.Helper()
 
 	path := filepath.Join(append([]string{dir}, pathParts...)...)
@@ -205,19 +206,19 @@ func assertThinEventWorkRequestContainsBothPaths(
 ) {
 	t.Helper()
 
-	index := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeWorkRequest, 0)
+	index := indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeWorkRequest, 0)
 	if index < 0 {
-		t.Fatalf("event order = %v, want WORK_REQUEST for the shared smoke batch", functionalEventTypes(events))
+		t.Fatalf("event order = %v, want WORK_REQUEST for the shared smoke batch", replayContractEventTypes(events))
 	}
 	event := events[index]
 	workRequest, err := event.Payload.AsWorkRequestEventPayload()
 	if err != nil {
 		t.Fatalf("decode WORK_REQUEST payload: %v", err)
 	}
-	if stringValueFromFunctionalPtr(event.Context.RequestId) != requestID {
-		t.Fatalf("WORK_REQUEST request_id = %q, want %q", stringValueFromFunctionalPtr(event.Context.RequestId), requestID)
+	if stringPointerValue(event.Context.RequestId) != requestID {
+		t.Fatalf("WORK_REQUEST request_id = %q, want %q", stringPointerValue(event.Context.RequestId), requestID)
 	}
-	if got := sliceValue(event.Context.TraceIds); len(got) != 1 || got[0] != traceID {
+	if got := stringSlicePointerValue(event.Context.TraceIds); len(got) != 1 || got[0] != traceID {
 		t.Fatalf("WORK_REQUEST trace_ids = %#v, want [%q]", got, traceID)
 	}
 
@@ -247,7 +248,7 @@ func assertThinEventDispatchLifecycleForWork(
 	completedIndex := requireThinEventDispatchEventIndexAfter(t, events, factoryapi.FactoryEventTypeDispatchResponse, dispatchID, responseIndex+1)
 
 	if requestIndex > responseIndex || responseIndex > completedIndex {
-		t.Fatalf("dispatch %s event order = %v, want %s then %s then DISPATCH_RESPONSE", dispatchID, functionalEventTypes(events), requestType, responseType)
+		t.Fatalf("dispatch %s event order = %v, want %s then %s then DISPATCH_RESPONSE", dispatchID, replayContractEventTypes(events), requestType, responseType)
 	}
 
 	for _, index := range []int{dispatchIndex, requestIndex, responseIndex, completedIndex} {
@@ -265,7 +266,7 @@ func requireThinEventDispatchRequestIndexForWork(t *testing.T, events []factorya
 			return i
 		}
 	}
-	t.Fatalf("missing DISPATCH_REQUEST for work %q in %v", workID, functionalEventTypes(events))
+	t.Fatalf("missing DISPATCH_REQUEST for work %q in %v", workID, replayContractEventTypes(events))
 	return -1
 }
 
@@ -279,16 +280,16 @@ func requireThinEventDispatchEventIndexAfter(
 	t.Helper()
 
 	for i := start; i < len(events); i++ {
-		if events[i].Type == eventType && stringValueFromFunctionalPtr(events[i].Context.DispatchId) == dispatchID {
+		if events[i].Type == eventType && stringPointerValue(events[i].Context.DispatchId) == dispatchID {
 			return i
 		}
 	}
-	t.Fatalf("missing %s for dispatch %q in %v", eventType, dispatchID, functionalEventTypes(events))
+	t.Fatalf("missing %s for dispatch %q in %v", eventType, dispatchID, replayContractEventTypes(events))
 	return -1
 }
 
 func functionalEventContextHasWorkID(event factoryapi.FactoryEvent, workID string) bool {
-	for _, candidate := range sliceValue(event.Context.WorkIds) {
+	for _, candidate := range stringSlicePointerValue(event.Context.WorkIds) {
 		if candidate == workID {
 			return true
 		}
@@ -298,7 +299,7 @@ func functionalEventContextHasWorkID(event factoryapi.FactoryEvent, workID strin
 
 func factoryWorksIncludeID(works []factoryapi.Work, workID string) bool {
 	for _, work := range works {
-		if stringValueFromFunctionalPtr(work.WorkId) == workID {
+		if stringPointerValue(work.WorkId) == workID {
 			return true
 		}
 	}
@@ -356,18 +357,18 @@ func assertThinEventModelAttemptCorrelation(t *testing.T, events []factoryapi.Fa
 	dispatchID := thinEventDispatchIDFromEvent(t, events[dispatchIndex], workID)
 
 	requestIndex := requireThinEventDispatchEventIndexAfter(t, events, factoryapi.FactoryEventTypeInferenceRequest, dispatchID, dispatchIndex+1)
-	request := assertFunctionalInferenceRequest(t, events[requestIndex], dispatchID, 1)
+	request := assertReplayInferenceRequest(t, events[requestIndex], dispatchID, 1)
 	responseIndex := requireThinEventDispatchEventIndexAfter(t, events, factoryapi.FactoryEventTypeInferenceResponse, dispatchID, requestIndex+1)
-	response := assertFunctionalInferenceResponse(t, events[responseIndex], dispatchID, request.InferenceRequestId, request.Attempt)
+	response := assertReplayInferenceResponse(t, events[responseIndex], dispatchID, request.InferenceRequestId, request.Attempt)
 
 	requireThinEventRawPath(t, rawEvents[requestIndex], "payload.inferenceRequestId")
 	requireThinEventRawPath(t, rawEvents[responseIndex], "payload.inferenceRequestId")
 
-	if stringValueFromFunctionalPtr(events[requestIndex].Context.DispatchId) != dispatchID {
-		t.Fatalf("INFERENCE_REQUEST context.dispatchId = %q, want %q", stringValueFromFunctionalPtr(events[requestIndex].Context.DispatchId), dispatchID)
+	if stringPointerValue(events[requestIndex].Context.DispatchId) != dispatchID {
+		t.Fatalf("INFERENCE_REQUEST context.dispatchId = %q, want %q", stringPointerValue(events[requestIndex].Context.DispatchId), dispatchID)
 	}
-	if stringValueFromFunctionalPtr(events[responseIndex].Context.DispatchId) != dispatchID {
-		t.Fatalf("INFERENCE_RESPONSE context.dispatchId = %q, want %q", stringValueFromFunctionalPtr(events[responseIndex].Context.DispatchId), dispatchID)
+	if stringPointerValue(events[responseIndex].Context.DispatchId) != dispatchID {
+		t.Fatalf("INFERENCE_RESPONSE context.dispatchId = %q, want %q", stringPointerValue(events[responseIndex].Context.DispatchId), dispatchID)
 	}
 	if !functionalEventContextHasWorkID(events[requestIndex], workID) || !functionalEventContextHasWorkID(events[responseIndex], workID) {
 		t.Fatalf("inference event work IDs = request:%#v response:%#v, want %q", events[requestIndex].Context.WorkIds, events[responseIndex].Context.WorkIds, workID)
@@ -375,7 +376,7 @@ func assertThinEventModelAttemptCorrelation(t *testing.T, events []factoryapi.Fa
 	if request.InferenceRequestId == "" {
 		t.Fatalf("INFERENCE_REQUEST inferenceRequestId is empty")
 	}
-	if stringValueFromFunctionalPtr(response.Response) == "" {
+	if stringPointerValue(response.Response) == "" {
 		t.Fatalf("INFERENCE_RESPONSE response is empty for dispatch %q", dispatchID)
 	}
 }
@@ -435,11 +436,11 @@ func assertThinEventScriptBoundaryFacts(t *testing.T, events []factoryapi.Factor
 	if response.DurationMillis < 0 {
 		t.Fatalf("SCRIPT_RESPONSE durationMillis = %d, want non-negative", response.DurationMillis)
 	}
-	if stringValueFromFunctionalPtr(events[requestIndex].Context.DispatchId) != dispatchID {
-		t.Fatalf("SCRIPT_REQUEST context.dispatchId = %q, want %q", stringValueFromFunctionalPtr(events[requestIndex].Context.DispatchId), dispatchID)
+	if stringPointerValue(events[requestIndex].Context.DispatchId) != dispatchID {
+		t.Fatalf("SCRIPT_REQUEST context.dispatchId = %q, want %q", stringPointerValue(events[requestIndex].Context.DispatchId), dispatchID)
 	}
-	if stringValueFromFunctionalPtr(events[responseIndex].Context.DispatchId) != dispatchID {
-		t.Fatalf("SCRIPT_RESPONSE context.dispatchId = %q, want %q", stringValueFromFunctionalPtr(events[responseIndex].Context.DispatchId), dispatchID)
+	if stringPointerValue(events[responseIndex].Context.DispatchId) != dispatchID {
+		t.Fatalf("SCRIPT_RESPONSE context.dispatchId = %q, want %q", stringPointerValue(events[responseIndex].Context.DispatchId), dispatchID)
 	}
 	if !functionalEventContextHasWorkID(events[requestIndex], workID) || !functionalEventContextHasWorkID(events[responseIndex], workID) {
 		t.Fatalf("script event work IDs = request:%#v response:%#v, want %q", events[requestIndex].Context.WorkIds, events[responseIndex].Context.WorkIds, workID)
@@ -668,7 +669,7 @@ func thinEventDispatchIDForWork(t *testing.T, events []factoryapi.FactoryEvent, 
 func thinEventDispatchIDFromEvent(t *testing.T, event factoryapi.FactoryEvent, workID string) string {
 	t.Helper()
 
-	dispatchID := stringValueFromFunctionalPtr(event.Context.DispatchId)
+	dispatchID := stringPointerValue(event.Context.DispatchId)
 	if dispatchID == "" {
 		t.Fatalf("DISPATCH_REQUEST context.dispatchId is empty for work %q", workID)
 	}
@@ -689,4 +690,72 @@ func thinEventCompletedDispatchForID(
 	}
 	t.Fatalf("completed dispatches = %#v, want dispatch %q", completions, dispatchID)
 	return interfaces.FactoryWorldDispatchCompletion{}
+}
+
+func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, artifact *interfaces.ReplayArtifact) {
+	t.Helper()
+
+	recordedByID := make(map[string]factoryapi.FactoryEvent, len(artifact.Events))
+	for _, event := range artifact.Events {
+		recordedByID[event.Id] = event
+	}
+	for _, live := range liveEvents {
+		recorded, ok := recordedByID[live.Id]
+		if !ok {
+			t.Fatalf("live event %s (%s) missing from recorded artifact events: %#v", live.Id, live.Type, replayContractEventTypes(artifact.Events))
+		}
+		if recorded.Type != live.Type || recorded.Context.Tick != live.Context.Tick {
+			t.Fatalf("recorded event %s = type %s tick %d, live type %s tick %d", live.Id, recorded.Type, recorded.Context.Tick, live.Type, live.Context.Tick)
+		}
+		if stringPointerValue(recorded.Context.DispatchId) != stringPointerValue(live.Context.DispatchId) {
+			t.Fatalf("recorded event %s dispatch id = %q, live dispatch id = %q", live.Id, stringPointerValue(recorded.Context.DispatchId), stringPointerValue(live.Context.DispatchId))
+		}
+		if strings.Join(stringSlicePointerValue(recorded.Context.WorkIds), ",") != strings.Join(stringSlicePointerValue(live.Context.WorkIds), ",") {
+			t.Fatalf("recorded event %s work ids = %#v, live work ids = %#v", live.Id, stringSlicePointerValue(recorded.Context.WorkIds), stringSlicePointerValue(live.Context.WorkIds))
+		}
+	}
+}
+
+func assertReplayInferenceRequest(
+	t *testing.T,
+	event factoryapi.FactoryEvent,
+	dispatchID string,
+	attempt int,
+) factoryapi.InferenceRequestEventPayload {
+	t.Helper()
+
+	request, err := event.Payload.AsInferenceRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode inference-request payload: %v", err)
+	}
+	if stringPointerValue(event.Context.DispatchId) != dispatchID || request.Attempt != attempt {
+		t.Fatalf("inference request correlation = %#v, want dispatch=%s attempt=%d", request, dispatchID, attempt)
+	}
+	if request.InferenceRequestId == "" || request.Prompt == "" {
+		t.Fatalf("inference request missing request ID or prompt: %#v", request)
+	}
+	return request
+}
+
+func assertReplayInferenceResponse(
+	t *testing.T,
+	event factoryapi.FactoryEvent,
+	dispatchID string,
+	requestID string,
+	attempt int,
+) factoryapi.InferenceResponseEventPayload {
+	t.Helper()
+
+	response, err := event.Payload.AsInferenceResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode inference-response payload: %v", err)
+	}
+	if stringPointerValue(event.Context.DispatchId) != dispatchID ||
+		response.InferenceRequestId != requestID || response.Attempt != attempt {
+		t.Fatalf("inference response correlation = %#v, want dispatch=%s request=%s attempt=%d", response, dispatchID, requestID, attempt)
+	}
+	if response.DurationMillis < 0 {
+		t.Fatalf("durationMillis = %d, want non-negative", response.DurationMillis)
+	}
+	return response
 }

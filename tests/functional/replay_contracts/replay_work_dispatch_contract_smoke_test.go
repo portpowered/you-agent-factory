@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"context"
@@ -11,9 +11,10 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-func TestWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t *testing.T) {
+func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t *testing.T) {
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "canonical dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
@@ -41,12 +42,12 @@ func TestWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t *testi
 		workName:                 "canonical-dispatch-smoke",
 		branch:                   "factory-struct-cleanup",
 		team:                     "agent-factory",
-		workingDirectory:         resolvedRuntimePath(dir, "/tmp/factory-struct-cleanup"),
+		workingDirectory:         support.ResolvedRuntimePath(dir, "/tmp/factory-struct-cleanup"),
 		payloadTitle:             "canonical dispatch contract",
 	})
 }
 
-func TestWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayload(t *testing.T) {
+func TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayload(t *testing.T) {
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "legacy dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
@@ -74,12 +75,12 @@ func TestWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayload(t 
 		workName:                 "legacy-dispatch-smoke",
 		branch:                   "legacy-adapter",
 		team:                     "agent-factory",
-		workingDirectory:         resolvedRuntimePath(dir, "/tmp/legacy-adapter"),
+		workingDirectory:         support.ResolvedRuntimePath(dir, "/tmp/legacy-adapter"),
 		payloadTitle:             "legacy dispatch contract",
 	})
 }
 
-func TestWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation(t *testing.T) {
+func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation(t *testing.T) {
 	run := runRecordedWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "recorded dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
@@ -107,7 +108,7 @@ func TestWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation(t *
 		workName:                 "recorded-dispatch-smoke",
 		branch:                   "record-replay",
 		team:                     "agent-factory",
-		workingDirectory:         resolvedRuntimePath(run.dir, "/tmp/record-replay"),
+		workingDirectory:         support.ResolvedRuntimePath(run.dir, "/tmp/record-replay"),
 		payloadTitle:             "recorded dispatch contract",
 	}
 
@@ -148,9 +149,9 @@ func runWorkDispatchContractSmoke(t *testing.T, scenario dispatchContractScenari
 func runRecordedWorkDispatchContractSmoke(t *testing.T, scenario dispatchContractScenario) recordedDispatchContractRun {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	artifactPath := filepath.Join(t.TempDir(), "work-dispatch-contract-smoke.replay.json")
-	setWorkingDirectory(t, dir)
+	support.SetWorkingDirectory(t, dir)
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
 		workstations := cfg["workstations"].([]any)
 		workstation := workstations[0].(map[string]any)
@@ -274,10 +275,10 @@ func assertCommandExecutionMetadata(t *testing.T, req workers.CommandRequest, wa
 func assertCommandEnvironment(t *testing.T, req workers.CommandRequest, want expectedDispatchPayload) {
 	t.Helper()
 
-	if !containsEnv(req.Env, "BRANCH="+want.branch) {
+	if !commandEnvContains(req.Env, "BRANCH="+want.branch) {
 		t.Fatalf("command env missing BRANCH=%s in %v", want.branch, req.Env)
 	}
-	if !containsEnv(req.Env, "TEAM="+want.team) {
+	if !commandEnvContains(req.Env, "TEAM="+want.team) {
 		t.Fatalf("command env missing TEAM=%s in %v", want.team, req.Env)
 	}
 }
@@ -363,11 +364,11 @@ func assertDispatchSmokeEventCorrelation(
 		t.Fatalf("decode dispatch response payload: %v", err)
 	}
 
-	dispatchID := stringValueForFunctionalTest(events[indices.dispatch].Context.DispatchId)
+	dispatchID := stringPointerValue(events[indices.dispatch].Context.DispatchId)
 	if dispatchID != req.DispatchID {
 		t.Fatalf("dispatch event context dispatchId = %q, want command request dispatchId %q", dispatchID, req.DispatchID)
 	}
-	if got := stringValueForFunctionalTest(events[indices.dispatch].Context.RequestId); got != want.requestID {
+	if got := stringPointerValue(events[indices.dispatch].Context.RequestId); got != want.requestID {
 		t.Fatalf("dispatch request context requestId = %q, want %q", got, want.requestID)
 	}
 	for _, idx := range []int{indices.dispatch, indices.request, indices.response, indices.completed} {
@@ -389,16 +390,16 @@ func assertDispatchSmokeEventCorrelation(
 	if scriptRequest.Command != req.Command {
 		t.Fatalf("script request command = %q, want %q", scriptRequest.Command, req.Command)
 	}
-	if !equalStringSlicesFunctionalTest(scriptRequest.Args, req.Args) {
+	if !equalStringSlices(scriptRequest.Args, req.Args) {
 		t.Fatalf("script request args = %#v, want %#v", scriptRequest.Args, req.Args)
 	}
 	if scriptResponse.ScriptRequestId != scriptRequest.ScriptRequestId {
 		t.Fatalf("script response request ID = %q, want %q", scriptResponse.ScriptRequestId, scriptRequest.ScriptRequestId)
 	}
-	if normalizeFunctionalStdout(scriptResponse.Stdout, true) != wantOutput {
-		t.Fatalf("script response stdout = %q, want %q", normalizeFunctionalStdout(scriptResponse.Stdout, true), wantOutput)
+	if normalizeReplayContractStdout(scriptResponse.Stdout, true) != wantOutput {
+		t.Fatalf("script response stdout = %q, want %q", normalizeReplayContractStdout(scriptResponse.Stdout, true), wantOutput)
 	}
-	if dispatchResponse.Output == nil || normalizeFunctionalStdout(*dispatchResponse.Output, true) != wantOutput {
+	if dispatchResponse.Output == nil || normalizeReplayContractStdout(*dispatchResponse.Output, true) != wantOutput {
 		t.Fatalf("dispatch response output = %#v, want %q", dispatchResponse.Output, wantOutput)
 	}
 
@@ -417,11 +418,11 @@ func assertDispatchSmokeEventContext(
 ) {
 	t.Helper()
 
-	if got := stringValueForFunctionalTest(event.Context.DispatchId); got != wantDispatchID {
+	if got := stringPointerValue(event.Context.DispatchId); got != wantDispatchID {
 		t.Fatalf("%s context dispatchId = %q, want %q", event.Type, got, wantDispatchID)
 	}
 	if event.Context.RequestId != nil {
-		if got := stringValueForFunctionalTest(event.Context.RequestId); got != want.requestID {
+		if got := stringPointerValue(event.Context.RequestId); got != want.requestID {
 			t.Fatalf("%s context requestId = %q, want %q", event.Type, got, want.requestID)
 		}
 	}
@@ -442,10 +443,10 @@ func assertDispatchSmokeChaining(
 ) {
 	t.Helper()
 
-	if got := stringValueForFunctionalTest(current); got != want.currentChainingTraceID {
+	if got := stringPointerValue(current); got != want.currentChainingTraceID {
 		t.Fatalf("%s current chaining trace ID = %q, want %q", label, got, want.currentChainingTraceID)
 	}
-	if previous == nil || !equalStringSlicesFunctionalTest(*previous, want.previousChainingTraceIDs) {
+	if previous == nil || !equalStringSlices(*previous, want.previousChainingTraceIDs) {
 		t.Fatalf("%s previous chaining trace IDs = %#v, want %v", label, previous, want.previousChainingTraceIDs)
 	}
 }
@@ -468,7 +469,7 @@ func assertDispatchSmokeEventsRecordedInArtifact(
 		}
 		recorded, ok := recordedByID[live.Id]
 		if !ok {
-			t.Fatalf("recorded artifact missing dispatch event %s from live history; artifact events=%v", live.Id, functionalEventTypes(recordedEvents))
+			t.Fatalf("recorded artifact missing dispatch event %s from live history; artifact events=%v", live.Id, replayContractEventTypes(recordedEvents))
 		}
 		if recorded.Type != live.Type {
 			t.Fatalf("recorded dispatch event %s = type %s, live type %s", live.Id, recorded.Type, live.Type)
@@ -488,7 +489,7 @@ func assertDispatchSmokeEventsRecordedInArtifact(
 	}
 }
 
-func equalStringSlicesFunctionalTest(left, right []string) bool {
+func equalStringSlices(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
 	}

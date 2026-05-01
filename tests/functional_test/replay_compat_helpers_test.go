@@ -116,13 +116,6 @@ func factoryWorksValue(value *[]factoryapi.Work) []factoryapi.Work {
 	return *value
 }
 
-func stringValueFromFunctionalPtr[T ~string](value *T) string {
-	if value == nil {
-		return ""
-	}
-	return string(*value)
-}
-
 func factoryRelationsValue(value *[]factoryapi.Relation) []factoryapi.Relation {
 	if value == nil {
 		return nil
@@ -182,85 +175,6 @@ func runRecordReplayCLIWithCapturedStdout(t *testing.T, cfg runcli.RunConfig) (s
 	return string(output), runErr
 }
 
-type scriptBoundaryEventIndices struct {
-	dispatch  int
-	request   int
-	response  int
-	completed int
-}
-
-func requireScriptResponseEventIndices(t *testing.T, events []factoryapi.FactoryEvent) scriptBoundaryEventIndices {
-	t.Helper()
-
-	indices := scriptBoundaryEventIndices{
-		dispatch:  indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0),
-		request:   indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeScriptRequest, 0),
-		response:  indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeScriptResponse, 0),
-		completed: indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse, 0),
-	}
-	if indices.dispatch < 0 || indices.request < 0 || indices.response < 0 || indices.completed < 0 {
-		t.Fatalf("event order = %v, want dispatch-request, script-request, script-response, dispatch-response", functionalEventTypes(events))
-	}
-	return indices
-}
-
-func assertFunctionalScriptEventDoesNotLeak(t *testing.T, event factoryapi.FactoryEvent, forbidden []string) {
-	t.Helper()
-
-	encoded, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("marshal script event: %v", err)
-	}
-	body := string(encoded)
-	for _, value := range forbidden {
-		if strings.Contains(body, value) {
-			t.Fatalf("script event leaked %s: %s", value, body)
-		}
-	}
-}
-
-func assertScriptEventsRecordedInArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, recordedEvents []factoryapi.FactoryEvent) {
-	t.Helper()
-
-	recordedByID := make(map[string]factoryapi.FactoryEvent, len(recordedEvents))
-	for _, event := range recordedEvents {
-		recordedByID[event.Id] = event
-	}
-
-	for _, live := range liveEvents {
-		if live.Type != factoryapi.FactoryEventTypeScriptRequest && live.Type != factoryapi.FactoryEventTypeScriptResponse {
-			continue
-		}
-
-		recorded, ok := recordedByID[live.Id]
-		if !ok {
-			t.Fatalf("recorded artifact missing script event %s from live history; artifact events=%v", live.Id, functionalEventTypes(recordedEvents))
-		}
-		if recorded.Type != live.Type {
-			t.Fatalf("recorded script event %s = type %s, live type %s", live.Id, recorded.Type, live.Type)
-		}
-
-		liveJSON, err := json.Marshal(live)
-		if err != nil {
-			t.Fatalf("marshal live script event %s: %v", live.Id, err)
-		}
-		recordedJSON, err := json.Marshal(recorded)
-		if err != nil {
-			t.Fatalf("marshal recorded script event %s: %v", recorded.Id, err)
-		}
-		if string(recordedJSON) != string(liveJSON) {
-			t.Fatalf("recorded script event %s does not match live history\nrecorded=%s\nlive=%s", live.Id, recordedJSON, liveJSON)
-		}
-	}
-}
-
-func normalizeFunctionalStdout(stdout string, trim bool) string {
-	if trim {
-		return strings.TrimSpace(stdout)
-	}
-	return stdout
-}
-
 func collectUnifiedSmokeEventsUntilRunResponse(t *testing.T, stream *factoryEventHTTPStream, initialEvents []factoryapi.FactoryEvent, timeout time.Duration) []factoryapi.FactoryEvent {
 	t.Helper()
 
@@ -277,30 +191,6 @@ func collectUnifiedSmokeEventsUntilRunResponse(t *testing.T, stream *factoryEven
 	return nil
 }
 
-func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, artifact *interfaces.ReplayArtifact) {
-	t.Helper()
-
-	recordedByID := make(map[string]factoryapi.FactoryEvent, len(artifact.Events))
-	for _, event := range artifact.Events {
-		recordedByID[event.Id] = event
-	}
-	for _, live := range liveEvents {
-		recorded, ok := recordedByID[live.Id]
-		if !ok {
-			t.Fatalf("live event %s (%s) missing from recorded artifact events: %#v", live.Id, live.Type, unifiedSmokeEventSummaries(artifact.Events))
-		}
-		if recorded.Type != live.Type || recorded.Context.Tick != live.Context.Tick {
-			t.Fatalf("recorded event %s = type %s tick %d, live type %s tick %d", live.Id, recorded.Type, recorded.Context.Tick, live.Type, live.Context.Tick)
-		}
-		if unifiedSmokeDispatchID(recorded) != unifiedSmokeDispatchID(live) {
-			t.Fatalf("recorded event %s dispatch id = %q, live dispatch id = %q", live.Id, unifiedSmokeDispatchID(recorded), unifiedSmokeDispatchID(live))
-		}
-		if strings.Join(unifiedSmokeWorkIDs(recorded), ",") != strings.Join(unifiedSmokeWorkIDs(live), ",") {
-			t.Fatalf("recorded event %s work ids = %#v, live work ids = %#v", live.Id, unifiedSmokeWorkIDs(recorded), unifiedSmokeWorkIDs(live))
-		}
-	}
-}
-
 func maxUnifiedSmokeTick(events []factoryapi.FactoryEvent) int {
 	maxTick := 0
 	for _, event := range events {
@@ -309,22 +199,6 @@ func maxUnifiedSmokeTick(events []factoryapi.FactoryEvent) int {
 		}
 	}
 	return maxTick
-}
-
-func unifiedSmokeDispatchID(event factoryapi.FactoryEvent) string {
-	if event.Context.DispatchId != nil {
-		return *event.Context.DispatchId
-	}
-	return ""
-}
-
-func unifiedSmokeWorkIDs(event factoryapi.FactoryEvent) []string {
-	if event.Context.WorkIds == nil {
-		return nil
-	}
-	out := make([]string, len(*event.Context.WorkIds))
-	copy(out, *event.Context.WorkIds)
-	return out
 }
 
 func unifiedSmokeEventSummaries(events []factoryapi.FactoryEvent) []string {
@@ -492,64 +366,4 @@ func requireFunctionalEventStreamPrelude(
 	}
 
 	return runStarted, initialStructure
-}
-
-func indexOfFunctionalEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType, start int) int {
-	if start < 0 {
-		start = 0
-	}
-	for i := start; i < len(events); i++ {
-		if events[i].Type == eventType {
-			return i
-		}
-	}
-	return -1
-}
-
-func functionalEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
-	types := make([]factoryapi.FactoryEventType, len(events))
-	for i, event := range events {
-		types[i] = event.Type
-	}
-	return types
-}
-
-func assertFunctionalInferenceRequest(t *testing.T, event factoryapi.FactoryEvent, dispatchID string, attempt int) factoryapi.InferenceRequestEventPayload {
-	t.Helper()
-
-	request, err := event.Payload.AsInferenceRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode inference-request payload: %v", err)
-	}
-	if stringValueFromFunctionalPtr(event.Context.DispatchId) != dispatchID || request.Attempt != attempt {
-		t.Fatalf("inference request correlation = %#v, want dispatch=%s attempt=%d", request, dispatchID, attempt)
-	}
-	if request.InferenceRequestId == "" || request.Prompt == "" {
-		t.Fatalf("inference request missing request ID or prompt: %#v", request)
-	}
-	return request
-}
-
-func assertFunctionalInferenceResponse(t *testing.T, event factoryapi.FactoryEvent, dispatchID, requestID string, attempt int) factoryapi.InferenceResponseEventPayload {
-	t.Helper()
-
-	response, err := event.Payload.AsInferenceResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode inference-response payload: %v", err)
-	}
-	if stringValueFromFunctionalPtr(event.Context.DispatchId) != dispatchID ||
-		response.InferenceRequestId != requestID || response.Attempt != attempt {
-		t.Fatalf("inference response correlation = %#v, want dispatch=%s request=%s attempt=%d", response, dispatchID, requestID, attempt)
-	}
-	if response.DurationMillis < 0 {
-		t.Fatalf("durationMillis = %d, want non-negative", response.DurationMillis)
-	}
-	return response
-}
-
-func stringValueForFunctionalTest(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
