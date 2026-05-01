@@ -117,6 +117,66 @@ func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t
 	}
 }
 
+func TestRecordingProvider_Infer_FailureExitCodeEmissionMatchesDiagnosticPolicy(t *testing.T) {
+	testCases := []struct {
+		name         string
+		diagnostics  *interfaces.WorkDiagnostics
+		wantExitCode *int
+	}{
+		{
+			name:         "omits without command diagnostics",
+			diagnostics:  nil,
+			wantExitCode: nil,
+		},
+		{
+			name: "omits zero exit code",
+			diagnostics: &interfaces.WorkDiagnostics{
+				Command: &interfaces.CommandDiagnostic{ExitCode: 0},
+			},
+			wantExitCode: nil,
+		},
+		{
+			name: "emits nonzero exit code",
+			diagnostics: &interfaces.WorkDiagnostics{
+				Command: &interfaces.CommandDiagnostic{ExitCode: 23},
+			},
+			wantExitCode: intPtr(23),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			providerErr := NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timed out", nil)
+			providerErr.Diagnostics = tc.diagnostics
+			fake := &recordingProviderFake{errors: []error{providerErr}}
+			events := &recordingEvents{}
+			provider := NewRecordingProvider(fake, events.record, WithRecordingProviderClock(sequenceClock(
+				time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC),
+				17*time.Millisecond,
+			)))
+
+			_, err := provider.Infer(context.Background(), recordingProviderDispatch())
+			if !errors.Is(err, providerErr) {
+				t.Fatalf("Infer error = %v, want provider error", err)
+			}
+			if len(events.items) != 2 {
+				t.Fatalf("recorded events = %d, want 2", len(events.items))
+			}
+
+			response := assertInferenceResponseEvent(t, events.items[1])
+			if tc.wantExitCode == nil {
+				if response.ExitCode != nil {
+					t.Fatalf("exitCode = %#v, want nil", response.ExitCode)
+				}
+				return
+			}
+			if response.ExitCode == nil || *response.ExitCode != *tc.wantExitCode {
+				t.Fatalf("exitCode = %#v, want %d", response.ExitCode, *tc.wantExitCode)
+			}
+		})
+	}
+}
+
 func TestRecordingProvider_Infer_MultipleAttemptsIncrementAndKeepUniqueRequestIDs(t *testing.T) {
 	start := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	fake := &recordingProviderFake{
