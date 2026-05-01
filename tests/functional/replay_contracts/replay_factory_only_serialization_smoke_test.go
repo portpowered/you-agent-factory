@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"context"
@@ -14,10 +14,11 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/replay"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-func TestFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "repeater_resource"))
+func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_resource"))
 	artifactPath := filepath.Join(t.TempDir(), "factory-only-serialization.replay.json")
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "factory-only serialization smoke",
@@ -80,7 +81,7 @@ func requireFactoryOnlyRunStartedPayload(t *testing.T, events []factoryapi.Facto
 		}
 		return payload
 	}
-	t.Fatalf("recorded events missing RUN_REQUEST: %#v", unifiedSmokeEventSummaries(events))
+	t.Fatalf("recorded events missing RUN_REQUEST: %#v", replayEventSummaries(events))
 	return factoryapi.RunRequestEventPayload{}
 }
 
@@ -276,4 +277,12 @@ func generatedWorkstations(factory factoryapi.Factory) []factoryapi.Workstation 
 		return nil
 	}
 	return *factory.Workstations
+}
+
+func replayEventSummaries(events []factoryapi.FactoryEvent) []string {
+	out := make([]string, 0, len(events))
+	for _, event := range events {
+		out = append(out, string(event.Type)+"@"+event.Id)
+	}
+	return out
 }

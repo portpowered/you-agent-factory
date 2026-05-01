@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"path/filepath"
@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/replay"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestReplayRegressionHarness_LoadsArtifactAndAssertsSuccessfulReplay(t *testing.T) {
@@ -82,7 +83,7 @@ func mutateFirstDispatchCreatedEvent(t *testing.T, artifact *interfaces.ReplayAr
 func recordReplayHarnessFixtureArtifact(t *testing.T) string {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "service-simple-replay.json")
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

@@ -1,4 +1,4 @@
-package functional_test
+package replay_contracts
 
 import (
 	"context"
@@ -13,10 +13,11 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/replay"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-func TestRuntimeReplayIntegrationSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "canonical-workstations.replay.json")
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
@@ -99,10 +100,10 @@ func assertRecordedDispatchHistory(t *testing.T, h *testutil.ServiceTestHarness)
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	if got := countFactoryEvents(events, factoryapi.FactoryEventTypeDispatchRequest); got != 2 {
+	if got := countReplayEvents(events, factoryapi.FactoryEventTypeDispatchRequest); got != 2 {
 		t.Fatalf("DISPATCH_CREATED events = %d, want 2", got)
 	}
-	if got := countFactoryEvents(events, factoryapi.FactoryEventTypeDispatchResponse); got != 2 {
+	if got := countReplayEvents(events, factoryapi.FactoryEventTypeDispatchResponse); got != 2 {
 		t.Fatalf("DISPATCH_COMPLETED events = %d, want 2", got)
 	}
 }
@@ -146,7 +147,7 @@ func assertCanonicalReplayWorkstationMap(t *testing.T, artifactPath string, arti
 	}
 }
 
-func countFactoryEvents(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
+func countReplayEvents(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
 	count := 0
 	for _, event := range events {
 		if event.Type == eventType {
