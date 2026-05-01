@@ -163,7 +163,6 @@ export interface components {
             /** @description Opaque work payload forwarded as raw JSON. */
             payload?: unknown;
             tags?: components["schemas"]["StringMap"];
-            relations?: components["schemas"]["Relation"][];
         };
         SubmitWorkResponse: {
             traceId: string;

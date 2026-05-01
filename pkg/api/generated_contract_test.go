@@ -105,6 +105,13 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	if submitRequest.CurrentChainingTraceId == nil || *submitRequest.CurrentChainingTraceId != "chain-submit-1" {
 		t.Fatal("generated submit request should expose current chaining trace ID")
 	}
+	submitRequestJSON, err := json.Marshal(submitRequest)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	if strings.Contains(string(submitRequestJSON), `"relations"`) {
+		t.Fatalf("generated submit request JSON must not advertise batch-only relations: %s", submitRequestJSON)
+	}
 	if workRequest.Relations == nil || len(*workRequest.Relations) != 2 || (*workRequest.Relations)[1].Type != factoryapi.RelationTypeParentChild {
 		t.Fatal("generated work request relations should advertise parent-child support")
 	}

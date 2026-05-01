@@ -18,8 +18,4 @@ properties:
     description: Opaque work payload forwarded as raw JSON.
   tags:
     $ref: '..\shared\StringMap.yaml'
-  relations:
-    type: array
-    items:
-      $ref: './Relation.yaml'
 

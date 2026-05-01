@@ -52,10 +52,6 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "workTypeName is required", "BAD_REQUEST")
 		return
 	}
-	if req.Relations != nil && len(*req.Relations) > 0 {
-		s.writeError(w, http.StatusBadRequest, "relations are only supported on PUT /work-requests/{request_id}", "BAD_REQUEST")
-		return
-	}
 
 	payload, err := generatedPayloadToRawMessage(req.Payload)
 	if err != nil {
@@ -629,6 +625,9 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
+	}
+	if _, ok := fields["relations"]; ok {
+		return factoryapi.SubmitWorkJSONRequestBody{}, requestFieldValidationError{message: "relations are only supported on PUT /work-requests/{request_id}"}
 	}
 	if err := rejectPublicBatchWorkAliases(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err

@@ -310,10 +310,6 @@ components:
           description: Opaque work payload forwarded as raw JSON.
         tags:
           $ref: '#/components/schemas/StringMap'
-        relations:
-          type: array
-          items:
-            $ref: '#/components/schemas/Relation'
     SubmitWorkResponse:
       type: object
       additionalProperties: false

@@ -243,6 +243,9 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if _, ok := submitWorkRequestProperties["currentChainingTraceId"].(map[string]any); !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties.currentChainingTraceId is missing")
 	}
+	if _, ok := submitWorkRequestProperties["relations"]; ok {
+		t.Fatalf("components.schemas.SubmitWorkRequest.properties.relations must not be advertised for POST /work")
+	}
 	if _, ok := submitWorkRequestProperties["work_type_id"]; ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties.work_type_id must not be advertised for submitted work")
 	}

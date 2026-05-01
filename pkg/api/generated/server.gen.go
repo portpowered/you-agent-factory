@@ -837,9 +837,8 @@ type SubmitWorkRequest struct {
 	Name                   *string `json:"name,omitempty"`
 
 	// Payload Opaque work payload forwarded as raw JSON.
-	Payload   interface{} `json:"payload,omitempty"`
-	Relations *[]Relation `json:"relations,omitempty"`
-	Tags      *StringMap  `json:"tags,omitempty"`
+	Payload interface{} `json:"payload,omitempty"`
+	Tags    *StringMap  `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`
