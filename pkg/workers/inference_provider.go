@@ -188,11 +188,6 @@ func (p *ScriptWrapProvider) Infer(ctx context.Context, req interfaces.ProviderI
 	}, nil
 }
 
-// buildArgs constructs the CLI arguments for the configured dispatcher.
-func (p *ScriptWrapProvider) buildArgs(req interfaces.ProviderInferenceRequest) []string {
-	return providerBehaviorFor(req.ModelProvider, p.Logger).BuildArgs(req, p.SkipPermissions)
-}
-
 type ModelProvider string
 
 const (

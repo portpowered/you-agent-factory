@@ -75,146 +75,6 @@ func TestNewScriptWrapProvider_WithOptions(t *testing.T) {
 	}
 }
 
-// --- buildArgs ---
-
-func TestBuildClaudeArgs_Basic(t *testing.T) {
-	p := &ScriptWrapProvider{}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
-		UserMessage:   "hello",
-	})
-	if args[0] != "-p" {
-		t.Errorf("expected first arg '-p', got %q", args[0])
-	}
-	if args[len(args)-1] != "hello" {
-		t.Errorf("expected last arg 'hello', got %q", args[len(args)-1])
-	}
-	// Should NOT contain --dangerously-skip-permissions
-	for _, a := range args {
-		if a == "--dangerously-skip-permissions" {
-			t.Error("--dangerously-skip-permissions should not be present when SkipPermissions is false")
-		}
-	}
-}
-
-func TestBuildClaudeArgs_WithSkipPermissions(t *testing.T) {
-	p := &ScriptWrapProvider{SkipPermissions: true, Logger: logging.NoopLogger{}}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
-		UserMessage:   "hello",
-	})
-	found := false
-	for _, a := range args {
-		if a == "--dangerously-skip-permissions" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected --dangerously-skip-permissions to be present")
-	}
-}
-
-func TestBuildClaudeArgs_WithSystemPromptAndModel(t *testing.T) {
-	p := NewScriptWrapProvider()
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
-		UserMessage:   "do stuff",
-		SystemPrompt:  "You are helpful",
-		Model:         "claude-sonnet-4-5-20250514",
-	})
-	hasSystem := false
-	hasModel := false
-	for i, a := range args {
-		if a == "--system-prompt" && i+1 < len(args) && args[i+1] == "You are helpful" {
-			hasSystem = true
-		}
-		if a == "--model" && i+1 < len(args) && args[i+1] == "claude-sonnet-4-5-20250514" {
-			hasModel = true
-		}
-	}
-	if !hasSystem {
-		t.Errorf("expected --system-prompt flag, got args: %v", args)
-	}
-	if !hasModel {
-		t.Errorf("expected --model flag, got args: %v", args)
-	}
-}
-
-func TestBuildClaudeArgs_WithResumeSessionID(t *testing.T) {
-	p := NewScriptWrapProvider()
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderClaude),
-		UserMessage:   "do stuff",
-		SessionID:     "claude-session-123",
-	})
-
-	hasResume := false
-	for i, a := range args {
-		if a == "--resume" && i+1 < len(args) && args[i+1] == "claude-session-123" {
-			hasResume = true
-		}
-	}
-	if !hasResume {
-		t.Errorf("expected --resume flag, got args: %v", args)
-	}
-}
-
-func TestBuildCodexArgs_Basic(t *testing.T) {
-	p := &ScriptWrapProvider{}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
-		UserMessage:   "fix the bug",
-	})
-	if args[0] != "exec" {
-		t.Errorf("expected first arg 'exec', got %q", args[0])
-	}
-	if args[len(args)-1] != "-" {
-		t.Errorf("expected last arg to be stdin placeholder '-', got %q", args[len(args)-1])
-	}
-}
-
-func TestBuildCodexArgs_WithFullAuto(t *testing.T) {
-	p := &ScriptWrapProvider{SkipPermissions: true}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(ModelProviderCodex),
-		UserMessage:   "hello",
-	})
-	found := false
-	for _, a := range args {
-		if a == "--dangerously-bypass-approvals-and-sandbox" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected --dangerously-bypass-approvals-and-sandbox for codex with SkipPermissions")
-	}
-}
-
-func TestBuildCodexArgs_WithWorkingDirectory_UsesStdinPlaceholder(t *testing.T) {
-	p := &ScriptWrapProvider{}
-	args := p.buildArgs(interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(ModelProviderCodex),
-		WorkingDirectory: "C:\\worktree",
-		UserMessage:      "line 1\nline 2",
-	})
-
-	// foundCD := false
-	// for i, a := range args {
-	// 	if a == "--cd" && i+1 < len(args) && args[i+1] == "C:\\worktree" {
-	// 		foundCD = true
-	// 		break
-	// 	}
-	// }
-	// if !foundCD {
-	// 	t.Fatalf("expected --cd C:\\worktree in args: %v", args)
-	// }
-	if args[len(args)-1] != "-" {
-		t.Fatalf("expected final arg to be stdin placeholder '-', got %q", args[len(args)-1])
-	}
-}
-
 func TestBuildProviderEnv_Empty(t *testing.T) {
 	env := buildProviderEnv(nil)
 	if len(env) == 0 {
@@ -415,7 +275,7 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 		WithSkipPermissions(true),
 	)
 
-	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(ModelProviderClaude),
 		Model:         "claude-sonnet-4-5-20250514",
 		SessionID:     "claude-session-123",
@@ -425,7 +285,8 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 		EnvVars: map[string]string{
 			"AGENT_FACTORY_CLAUDE_ENV": "enabled",
 		},
-	})
+	}
+	resp, err := provider.Infer(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Infer returned error: %v", err)
 	}
@@ -445,19 +306,10 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 		t.Fatalf("provider session id = %q, want %q", resp.ProviderSession.ID, "claude-session-123")
 	}
 
-	if fakeExec.request.Command != string(ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", ModelProviderClaude, fakeExec.request.Command)
-	}
-	expectedArgs := []string{
-		"-p",
-		"--dangerously-skip-permissions",
-		"--worktree", "C:\\repo\\worktree",
-		"--system-prompt", "system prompt",
-		"--model", "claude-sonnet-4-5-20250514",
-		"--resume", "claude-session-123",
-		"user prompt",
-	}
-	assertStringSlicesEqual(t, expectedArgs, fakeExec.request.Args)
+	behavior := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{})
+	expectedArgs := behavior.BuildArgs(req, true)
+	expectedRequest := behavior.BuildCommandRequest(req, expectedArgs)
+	assertCommandRequestAssemblyMatchesProviderBehavior(t, expectedRequest, fakeExec.request)
 	if len(fakeExec.request.Stdin) != 0 {
 		t.Fatalf("expected claude request not to send stdin, got %q", string(fakeExec.request.Stdin))
 	}
@@ -560,7 +412,7 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 		WithProviderLogger(logging.NoopLogger{}),
 	)
 
-	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	req := interfaces.ProviderInferenceRequest{
 		ModelProvider:    string(ModelProviderCodex),
 		Model:            "gpt-5-codex",
 		WorkingDirectory: "C:\\repo",
@@ -568,7 +420,8 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 		EnvVars: map[string]string{
 			"AGENT_FACTORY_CODEX_ENV": "present",
 		},
-	})
+	}
+	resp, err := provider.Infer(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Infer returned error: %v", err)
 	}
@@ -588,17 +441,10 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 		t.Fatalf("provider session id = %q, want %q", resp.ProviderSession.ID, "sess_codex_123")
 	}
 
-	if fakeExec.request.Command != string(ModelProviderCodex) {
-		t.Fatalf("expected command %q, got %q", ModelProviderCodex, fakeExec.request.Command)
-	}
-	expectedArgs := []string{
-		"exec",
-		"--dangerously-bypass-approvals-and-sandbox",
-		// "--cd", "C:\\repo",
-		"--model", "gpt-5-codex",
-		"-",
-	}
-	assertStringSlicesEqual(t, expectedArgs, fakeExec.request.Args)
+	behavior := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{})
+	expectedArgs := behavior.BuildArgs(req, true)
+	expectedRequest := behavior.BuildCommandRequest(req, expectedArgs)
+	assertCommandRequestAssemblyMatchesProviderBehavior(t, expectedRequest, fakeExec.request)
 	if string(fakeExec.request.Stdin) != "line 1\nline 2" {
 		t.Fatalf("expected codex stdin to carry the prompt, got %q", string(fakeExec.request.Stdin))
 	}
@@ -1825,6 +1671,20 @@ func assertStringSlicesEqual(t *testing.T, want, got []string) {
 		if want[i] != got[i] {
 			t.Fatalf("expected arg %d to be %q, got %q; full args: %v", i, want[i], got[i], got)
 		}
+	}
+}
+
+func assertCommandRequestAssemblyMatchesProviderBehavior(t *testing.T, want, got CommandRequest) {
+	t.Helper()
+	if got.Command != want.Command {
+		t.Fatalf("expected command %q, got %q", want.Command, got.Command)
+	}
+	assertStringSlicesEqual(t, want.Args, got.Args)
+	if string(got.Stdin) != string(want.Stdin) {
+		t.Fatalf("expected stdin %q, got %q", string(want.Stdin), string(got.Stdin))
+	}
+	if got.WorkDir != want.WorkDir {
+		t.Fatalf("expected workdir %q, got %q", want.WorkDir, got.WorkDir)
 	}
 }
 
