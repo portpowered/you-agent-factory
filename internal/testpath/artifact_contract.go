@@ -121,19 +121,9 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Reason:         "Checked-in replay artifact sample paired with the event-stream conversion smoke.",
 	},
 	{
-		Path:           "factory/logs/meta/asks.md",
+		Path:           "factory/meta/asks.md",
 		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in meta ask surface used by the repository-maintainer cleanup loop.",
-	},
-	{
-		Path:           "factory/logs/meta/progress.tsx",
-		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in meta progress surface used by the repository-maintainer cleanup loop.",
-	},
-	{
-		Path:           "factory/logs/meta/view.md",
-		Classification: ArtifactCheckedIn,
-		Reason:         "Checked-in meta world-view surface used by the repository-maintainer cleanup loop.",
+		Reason:         "Redirect-only legacy stub that points maintainers back to the canonical checked-in meta ask surface.",
 	},
 	{
 		Path:           "tests/adhoc/factory-recording-04-11-02.json",
@@ -209,11 +199,6 @@ var artifactContractEntries = []ArtifactContractEntry{
 		Path:           "factory/workstations/review/AGENTS.md",
 		Classification: ArtifactCheckedIn,
 		Reason:         "Checked-in canonical review workstation prompt.",
-	},
-	{
-		Path:           "factory/meta/asks.md",
-		Classification: ArtifactObsolete,
-		Reason:         "Retired duplicate ask surface; customer backlog ownership stays only at factory/logs/meta/asks.md.",
 	},
 	{
 		Path:           "factory/workers/executor/AGENTS.md",

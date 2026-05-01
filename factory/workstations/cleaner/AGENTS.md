@@ -11,6 +11,8 @@ Your job is to periodically inspect the repository and:
 The canonical checked-in customer-ask surface for this workflow is
 `factory/logs/meta/asks.md`. Treat any other ask file path as non-canonical
 unless a checked-in maintainer document explicitly redirects ownership there.
+If you encounter `factory/meta/asks.md`, treat it as a redirect-only legacy
+stub and do not read or edit it as a second backlog surface.
 
 # Steps
 ## step 0 - update the repo

@@ -37,9 +37,7 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/logs/meta/progress.tsx` | `checked_in` | Checked-in meta progress surface consumed by the cleaner workflow. |
 | `factory/logs/agent-fails.json` | `checked_in` | Event-stream sample for replay artifact conversion coverage. |
 | `factory/logs/agent-fails.replay.json` | `checked_in` | Replay artifact sample paired with `agent-fails.json`. |
-| `factory/logs/meta/asks.md` | `checked_in` | Checked-in meta ask surface for the repository-maintainer cleanup loop. |
-| `factory/logs/meta/progress.tsx` | `checked_in` | Checked-in meta progress surface used by the repository-maintainer cleanup loop. |
-| `factory/logs/meta/view.md` | `checked_in` | Checked-in meta world-view surface used by the repository-maintainer cleanup loop. |
+| `factory/meta/asks.md` | `checked_in` | Redirect-only legacy stub that points maintainers back to `factory/logs/meta/asks.md` so a second live ask backlog cannot drift. |
 | `tests/adhoc/factory-recording-04-11-02.json` | `checked_in` | Canonical replay fixture used by adhoc and replay package tests. |
 | `tests/adhoc/factory/README.md` | `checked_in` | Checked-in adhoc fixture doc. |
 | `tests/adhoc/factory/factory.json` | `checked_in` | Checked-in adhoc fixture config. |
@@ -55,7 +53,6 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/workstations/plan/AGENTS.md` | `checked_in` | Checked-in canonical planning workstation prompt. |
 | `factory/workstations/process/AGENTS.md` | `checked_in` | Checked-in canonical execution workstation prompt. |
 | `factory/workstations/review/AGENTS.md` | `checked_in` | Checked-in canonical review workstation prompt. |
-| `factory/meta/asks.md` | `obsolete` | Retired duplicate ask surface; customer backlog ownership stays only at `factory/logs/meta/asks.md`. |
 | `factory/workers/executor/AGENTS.md` | `obsolete` | Legacy story-starter worker path. |
 | `factory/workers/reviewer/AGENTS.md` | `obsolete` | Legacy story-starter worker path. |
 | `factory/workstations/execute-story/AGENTS.md` | `obsolete` | Legacy story-starter workstation path. |

@@ -56,6 +56,25 @@ func TestArtifactContractInventory_DocumentationMatchesClassifications(t *testin
 	}
 }
 
+func TestArtifactContractInventory_LegacyMetaAskPathRemainsRedirectOnlyStub(t *testing.T) {
+	path := MustClassifiedArtifactPath(t, "factory/meta/asks.md", ArtifactCheckedIn)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read legacy meta ask stub: %v", err)
+	}
+
+	const want = `> redirect-only legacy path: the canonical checked-in customer-ask backlog
+> lives at ` + "`factory/logs/meta/asks.md`" + `.
+>
+> do not add, edit, or prioritize asks in this file. keep backlog ownership in
+> ` + "`factory/logs/meta/asks.md`" + ` so the repository cannot drift into two live ask
+> surfaces.`
+
+	if got := strings.TrimSpace(string(data)); got != want {
+		t.Fatalf("legacy meta ask stub drifted from the redirect-only contract\nwant:\n%s\n\ngot:\n%s", want, got)
+	}
+}
+
 type artifactContractDocEntry struct {
 	Path           string
 	Classification string

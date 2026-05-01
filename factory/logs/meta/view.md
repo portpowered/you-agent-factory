@@ -54,9 +54,13 @@
     - `pkg/service/factory_test.go`
   - `pkg/replay/EmbeddedRuntimeConfig` is the real production implementation
     and should not be folded into test-only helpers
-- the former duplicate ask path `factory/meta/asks.md` has been retired from
-  the checked-in artifact contract, so the canonical ownership rule now has one
-  checked-in backlog surface to protect.
+- the legacy path `factory/meta/asks.md` now exists only as a redirect-only
+  stub:
+  - it points maintainers back to `factory/logs/meta/asks.md`
+  - it is still tracked so compatibility references fail loudly instead of
+    silently reintroducing a second live backlog
+  - `pkg/testutil/artifact_contract_test.go` pins its stub text so the path
+    cannot drift back into a peer backlog surface
 
 ## current blockers
 
@@ -106,7 +110,7 @@
   - the current checked-in asks are backlog inputs, not approved in-flight
     product work
   - stability and theory-of-mind accuracy are still higher value than
-    speculative product work
+    speculative product work unless an ask is marked urgent
 
 ## next best move
 

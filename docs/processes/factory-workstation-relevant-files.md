@@ -9,7 +9,7 @@ work inputs.
 | Surface | Role in the workflow | Current contract |
 | --- | --- | --- |
 | `factory/README.md` | Checked-in workflow overview | Describes the repository-local workflow and canonical inbox directories under `factory/inputs/`. |
-| `factory/logs/meta/asks.md` | Canonical customer-ask backlog for the meta cleanup loop | Meta and cleaner prompts should read customer asks here; `factory/meta/asks.md` is a retired duplicate path and must not return as a peer source of truth. |
+| `factory/logs/meta/asks.md` | Canonical customer-ask backlog | The only checked-in maintainer backlog that owns customer asks; meta and cleaner prompts should read asks here, and `factory/meta/asks.md` remains a redirect-only legacy stub rather than a peer source of truth. |
 | `docs/development/root-factory-artifact-contract-inventory.md` | Checked-in artifact inventory | Documents which root-level factory artifacts are checked in, generated, or obsolete. |
 | `docs/guides/batch-inputs.md` | Canonical batch request guide | Defines when to author `FACTORY_REQUEST_BATCH` JSON and where those files belong. |
 | `factory/inputs/idea/default/` | Standalone idea inbox | Checked-in inbox kept present by `.gitkeep`; standalone idea submissions land here as markdown files. |
@@ -20,7 +20,11 @@ work inputs.
 ## Notes for future iterations
 
 - Treat `factory/inputs/idea/default/` as the live standalone idea inbox, not as a checked-in template catalog; clean checkouts may only contain `.gitkeep`.
+- Treat `factory/logs/meta/asks.md` as the only checked-in customer-ask backlog; if another path mentions asks, use this file as the ownership source of truth.
+- When a legacy maintainer path must remain for compatibility, reduce it to a redirect-only stub that names the canonical checked-in surface and carries no duplicated backlog content.
+- If a legacy checked-in path remains as a redirect-only stub, classify that stub explicitly in `docs/development/root-factory-artifact-contract-inventory.md` and `internal/testpath/artifact_contract.go` so the redirect contract stays test-enforced.
+- If a redirect-only stub protects a canonical maintainer surface, add a content-level regression test for the stub text in `pkg/testutil/artifact_contract_test.go`; inventory classification alone does not prevent drift back into a live duplicate surface.
 - When prompt instructions need ordered or multi-item follow-up work, point them to `docs/guides/batch-inputs.md` and `factory/inputs/BATCH/default/` instead of overloading the markdown idea inbox.
 - Keep workstation prompts repository-local and public-surface neutral: cite checked-in docs or `factory/` paths in this repo, never absolute paths to a different checkout or merge-conflict marker text.
 - When a workstation prompt can emit either ideas or batch requests, state the default as one standalone idea file and name the exact condition that permits `FACTORY_REQUEST_BATCH` output.
-- When maintainer prompts need the customer backlog, point them to `factory/logs/meta/asks.md` explicitly and keep any retired duplicate path classified as obsolete so peer control planes cannot silently reappear.
+- When maintainer prompts need the customer backlog, point them to `factory/logs/meta/asks.md` explicitly and keep any legacy duplicate path as a redirect-only stub rather than a peer control-plane surface.
