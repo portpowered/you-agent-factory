@@ -444,3 +444,41 @@
     history and an injected clock time
   - do not yet change scheduler gating, public config, or observability
     contracts
+
+## 2026-05-01 10:26 -07:00 - meta refresh after throttle derivation landed
+
+- Ran `git pull` and verified the workspace is synced on `main` at `4a20238`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  current tracked workflow-input surfaces, ignored local workflow residue, and
+  current open/merged GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `21884a0`
+  - it still treated the throttle-window derivation seam as only queued even
+    though PR `#28` is merged
+  - it did not include the newly open PRD lanes `#29` and `#30`
+- Reconfirmed through direct code inspection that the throttle ask remains the
+  highest-value customer problem, but its posture changed after PR `#28`:
+  - `pkg/factory/internal/throttle/windows.go` now owns the pure active-window
+    derivation rules
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` still owns the mutable
+    pause map and scheduler gating
+  - the dispatcher still adapts failures from `snapshot.Results` using the
+    current observation time even though runtime dispatch history already
+    carries exact completion timing in `interfaces.CompletedDispatch.EndTime`
+- Re-validated that the handwritten `/work` route is still not cleanup-ready:
+  - `pkg/api/server.go` preserves tolerant `maxResults` parsing ahead of the
+    generated binder
+  - `pkg/api/server_test.go` still locks in that tolerant compatibility
+    behavior
+- Queued one new ignored decomposition idea at
+  `factory/inputs/idea/default/derive-throttle-windows-from-completed-dispatch-history.md`
+  as the next narrow lane for the throttling ask:
+  - move the throttle derivation input from observation-time `snapshot.Results`
+    to exact completion-time dispatch history
+  - keep public config, guard enums, scheduler ownership, and observability
+    contracts unchanged in that lane
