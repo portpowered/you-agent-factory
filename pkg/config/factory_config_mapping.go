@@ -34,6 +34,27 @@ type retiredBoundaryField struct {
 	replacement string
 }
 
+var retiredWorkerBoundaryFields = []retiredBoundaryField{
+	{key: "provider", replacement: "use executorProvider"},
+	{key: "model_provider", replacement: "use modelProvider"},
+	{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
+	{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
+	{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
+}
+
+var retiredWorkstationBoundaryFields = []retiredBoundaryField{
+	{key: "runtimeType", replacement: "use type"},
+	{key: "runtime_type", replacement: "use type"},
+	{key: "resourceUsage", replacement: "use resources"},
+	{key: "resource_usage", replacement: "use resources"},
+	{key: "resource-usage", replacement: "use resources"},
+	{key: "stopToken", replacement: "use stopWords"},
+	{key: "stop_token", replacement: "use stopWords"},
+	{key: "runtimeStopWords", replacement: "use stopWords"},
+	{key: "runtime_stop_words", replacement: "use stopWords"},
+	{key: "timeout", replacement: "use limits.maxExecutionTime"},
+}
+
 func rejectRetiredFanInField(data []byte) error {
 	var payload struct {
 		Workstations []map[string]json.RawMessage `json:"workstations"`
@@ -105,26 +126,14 @@ func rejectRetiredWorkerBoundaryAliases(root map[string]any) error {
 			continue
 		}
 		basePath := fmt.Sprintf("workers[%d]", index)
-		if err := rejectRetiredBoundaryFields(worker, basePath, []retiredBoundaryField{
-			{key: "provider", replacement: "use executorProvider"},
-			{key: "model_provider", replacement: "use modelProvider"},
-			{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
-		}); err != nil {
+		if err := rejectRetiredBoundaryFields(worker, basePath, retiredWorkerBoundaryFields); err != nil {
 			return err
 		}
 		definition, ok := worker["definition"].(map[string]any)
 		if !ok {
 			continue
 		}
-		if err := rejectRetiredBoundaryFields(definition, basePath+".definition", []retiredBoundaryField{
-			{key: "provider", replacement: "use executorProvider"},
-			{key: "model_provider", replacement: "use modelProvider"},
-			{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
-		}); err != nil {
+		if err := rejectRetiredBoundaryFields(definition, basePath+".definition", retiredWorkerBoundaryFields); err != nil {
 			return err
 		}
 	}
@@ -142,18 +151,7 @@ func rejectRetiredWorkstationBoundaryAliases(root map[string]any) error {
 			continue
 		}
 		basePath := fmt.Sprintf("workstations[%d]", index)
-		if err := rejectRetiredBoundaryFields(workstation, basePath, []retiredBoundaryField{
-			{key: "runtimeType", replacement: "use type"},
-			{key: "runtime_type", replacement: "use type"},
-			{key: "resourceUsage", replacement: "use resources"},
-			{key: "resource_usage", replacement: "use resources"},
-			{key: "resource-usage", replacement: "use resources"},
-			{key: "stopToken", replacement: "use stopWords"},
-			{key: "stop_token", replacement: "use stopWords"},
-			{key: "runtimeStopWords", replacement: "use stopWords"},
-			{key: "runtime_stop_words", replacement: "use stopWords"},
-			{key: "timeout", replacement: "use limits.maxExecutionTime"},
-		}); err != nil {
+		if err := rejectRetiredBoundaryFields(workstation, basePath, retiredWorkstationBoundaryFields); err != nil {
 			return err
 		}
 		if err := rejectRetiredCronBoundaryAliases(workstation["cron"], basePath+".cron"); err != nil {
@@ -163,18 +161,7 @@ func rejectRetiredWorkstationBoundaryAliases(root map[string]any) error {
 		if !ok {
 			continue
 		}
-		if err := rejectRetiredBoundaryFields(definition, basePath+".definition", []retiredBoundaryField{
-			{key: "runtimeType", replacement: "use type"},
-			{key: "runtime_type", replacement: "use type"},
-			{key: "resourceUsage", replacement: "use resources"},
-			{key: "resource_usage", replacement: "use resources"},
-			{key: "resource-usage", replacement: "use resources"},
-			{key: "stopToken", replacement: "use stopWords"},
-			{key: "stop_token", replacement: "use stopWords"},
-			{key: "runtimeStopWords", replacement: "use stopWords"},
-			{key: "runtime_stop_words", replacement: "use stopWords"},
-			{key: "timeout", replacement: "use limits.maxExecutionTime"},
-		}); err != nil {
+		if err := rejectRetiredBoundaryFields(definition, basePath+".definition", retiredWorkstationBoundaryFields); err != nil {
 			return err
 		}
 		if err := rejectRetiredCronBoundaryAliases(definition["cron"], basePath+".definition.cron"); err != nil {

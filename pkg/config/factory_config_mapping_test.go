@@ -298,6 +298,118 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 	}
 }
 
+func TestFactoryConfigMapper_ExpandRejectsRetiredNestedWorkerDefinitionAliases(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{
+			"name":"executor",
+			"definition":{"type":"MODEL_WORKER","provider":"script_wrap"}
+		}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	_, err := mapper.Expand(raw)
+	if err == nil {
+		t.Fatal("expected retired nested worker definition alias to be rejected")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workers[0].definition.provider is not supported; use executorProvider") {
+		t.Fatalf("expected nested provider retirement guidance, got %v", err)
+	}
+}
+
+func TestFactoryConfigMapper_ExpandRejectsRetiredTopLevelWorkstationAliases(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"runtimeType":"SCRIPT",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	_, err := mapper.Expand(raw)
+	if err == nil {
+		t.Fatal("expected retired top-level workstation alias to be rejected")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].runtimeType is not supported; use type") {
+		t.Fatalf("expected top-level workstation retirement guidance, got %v", err)
+	}
+}
+
+func TestFactoryConfigMapper_ExpandRejectsRetiredNestedWorkstationDefinitionAliases(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"definition":{"runtimeType":"SCRIPT"},
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	_, err := mapper.Expand(raw)
+	if err == nil {
+		t.Fatal("expected retired nested workstation definition alias to be rejected")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].definition.runtimeType is not supported; use type") {
+		t.Fatalf("expected nested workstation retirement guidance, got %v", err)
+	}
+}
+
+func TestFactoryConfigMapper_ExpandRejectsRetiredNestedWorkstationCronAliases(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"daily-refresh",
+			"kind":"cron",
+			"worker":"executor",
+			"definition":{
+				"cron":{"trigger_at_start":true}
+			},
+			"outputs":[{"workType":"task","state":"complete"}]
+		}]
+	}`)
+
+	_, err := mapper.Expand(raw)
+	if err == nil {
+		t.Fatal("expected retired nested cron alias to be rejected")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].definition.cron.trigger_at_start is not supported; use triggerAtStart") {
+		t.Fatalf("expected nested cron retirement guidance, got %v", err)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandRejectsRetiredFanInField(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 
