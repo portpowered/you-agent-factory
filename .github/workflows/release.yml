@@ -133,6 +133,38 @@ jobs:
           path: tap
           token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
+      - name: Verify published cask metadata matches the tagged release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_version="${{ needs.resolve-release-tag.outputs.release_version }}"
+          release_tag="${{ needs.resolve-release-tag.outputs.release_tag }}"
+          cask_path="$(pwd)/tap/Casks/agent-factory.rb"
+          metadata_dir="$(pwd)/release-metadata"
+          checksum_name="agent-factory_${release_version}_checksums.txt"
+          intel_archive="agent-factory_${release_version}_darwin_amd64.tar.gz"
+          arm_archive="agent-factory_${release_version}_darwin_arm64.tar.gz"
+
+          mkdir -p "$metadata_dir"
+          gh release download "$release_tag" \
+            --repo "${{ github.event.workflow_run.repository.full_name }}" \
+            --pattern "$checksum_name" \
+            --dir "$metadata_dir"
+
+          checksum_path="$metadata_dir/$checksum_name"
+          intel_sha="$(awk -v name="$intel_archive" '$2 == name { print $1; exit }' "$checksum_path")"
+          arm_sha="$(awk -v name="$arm_archive" '$2 == name { print $1; exit }' "$checksum_path")"
+
+          test -n "$intel_sha"
+          test -n "$arm_sha"
+          grep -F "version \"${release_version}\"" "$cask_path"
+          grep -F "$intel_archive" "$cask_path"
+          grep -F "$arm_archive" "$cask_path"
+          grep -F "$intel_sha" "$cask_path"
+          grep -F "$arm_sha" "$cask_path"
+
       - name: Install published Homebrew cask from tap
         shell: bash
         run: |

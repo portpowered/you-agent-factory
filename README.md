@@ -102,15 +102,15 @@ cd ~/src/sample-project
 
 2) Start the default starter factory:
 ```bash
-infinite-you
+agent-factory
 ```
 
-With no arguments, `infinite-you` creates or reuses  a  `./factory` directory and opens up the dashboard.
+With no arguments, `agent-factory` creates or reuses a `./factory` directory and opens up the dashboard.
 
 If you want to scaffold the starter layout without launching the runtime, use:
 ```bash
-infinite-you init
-infinite-you init --executor claude --dir my-factory
+agent-factory init
+agent-factory init --executor claude --dir my-factory
 ```
 
 Supported starter scaffold options are `codex` and `claude`.
@@ -124,27 +124,27 @@ The factory watches `factory/inputs/tasks/default`, picks up new Markdown or
 JSON files, and dispatches them through the default Codex-backed workflow.
 
 ## Custom inits
-If you want to create the starter files explicitly before you run the factory, use `infinite-you init`:
+If you want to create the starter files explicitly before you run the factory, use `agent-factory init`:
 
 ```bash
 # Default starter scaffold (Codex-backed)
-infinite-you init
+agent-factory init
 
 # Claude-backed default scaffold
-infinite-you init --executor claude --dir my-factory
+agent-factory init --executor claude --dir my-factory
 
 # Dedicated Ralph Loop
-infinite-you init --type ralph --dir ralph-factory
-infinite-you run --dir ralph-factory
+agent-factory init --type ralph --dir ralph-factory
+agent-factory run --dir ralph-factory
 printf "Create a minimal release-planning loop for a document processing service.\nGenerate a human-readable PRD, a matching Ralph JSON plan, and an execution loop that completes one story per iteration until the work is done.\nKeep the plan product-neutral unless the customer request names a specific product.\n" > ralph-factory/inputs/request/default/release-planning-loop.md
 ```
 
 ## Docs
 
 ```bash
-infinite-you docs
-infinite-you docs workstation
-infinite-you docs batch-work
+agent-factory docs
+agent-factory docs workstation
+agent-factory docs batch-work
 etc
 ```
 
@@ -184,15 +184,15 @@ feedback, fan-out/fan-in, and guarded loop breakers.
 ##  CLI Commands
 
 ```bash
-infinite-you          # Bootstrap ./factory and keep the default factory running
-infinite-you docs     # List packaged markdown reference topics
-infinite-you docs config  # Print the packaged config reference page
-infinite-you init     # Create the default single-step scaffold (--executor codex|claude, default: codex)
-infinite-you init --type ralph --dir ralph-factory  # Create the minimal Ralph PRD-to-execution scaffold
-infinite-you run      # Load workflow and run the factory engine in explicit batch mode
-infinite-you config flatten ./factory  # Write canonical camelCase single-file factory JSON to stdout
-infinite-you config expand ./factory.json  # Write split factory files beside factory.json
-infinite-you submit --work-type-name <work-type-name> --payload <path>  # Submit work to a running factory
+agent-factory          # Bootstrap ./factory and keep the default factory running
+agent-factory docs     # List packaged markdown reference topics
+agent-factory docs config  # Print the packaged config reference page
+agent-factory init     # Create the default single-step scaffold (--executor codex|claude, default: codex)
+agent-factory init --type ralph --dir ralph-factory  # Create the minimal Ralph PRD-to-execution scaffold
+agent-factory run      # Load workflow and run the factory engine in explicit batch mode
+agent-factory config flatten ./factory  # Write canonical camelCase single-file factory JSON to stdout
+agent-factory config expand ./factory.json  # Write split factory files beside factory.json
+agent-factory submit --work-type-name <work-type-name> --payload <path>  # Submit work to a running factory
 ```
 
 Common flags:
