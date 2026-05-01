@@ -19,13 +19,14 @@ func TestRootFactoryTemplate_CopiedFactoryRendersScriptAndScriptWrapCommandReque
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "root-factory-template-branch",
-		WorkID:     "root-plan-work",
-		WorkTypeID: "plan",
+		WorkID:     "root-idea-work",
+		WorkTypeID: "idea",
 		TraceID:    "trace-root-factory-template",
 		Payload:    []byte("root factory plan payload"),
 	})
 
 	runner := testutil.NewProviderCommandRunner(
+		workers.CommandResult{Stdout: []byte("plan accepted <COMPLETE>")},
 		workers.CommandResult{Stdout: []byte("workspace ready from script")},
 		workers.CommandResult{Stdout: []byte("process accepted <COMPLETE>")},
 		workers.CommandResult{Stdout: []byte("review accepted <COMPLETE>")},
@@ -39,8 +40,11 @@ func TestRootFactoryTemplate_CopiedFactoryRendersScriptAndScriptWrapCommandReque
 	h.RunUntilComplete(t, 60*time.Second)
 
 	h.Assert().
+		PlaceTokenCount("idea:complete", 1).
 		PlaceTokenCount("plan:complete", 1).
 		PlaceTokenCount("task:complete", 1).
+		HasNoTokenInPlace("idea:init").
+		HasNoTokenInPlace("idea:failed").
 		HasNoTokenInPlace("plan:init").
 		HasNoTokenInPlace("plan:failed").
 		HasNoTokenInPlace("task:init").
@@ -48,12 +52,13 @@ func TestRootFactoryTemplate_CopiedFactoryRendersScriptAndScriptWrapCommandReque
 		HasNoTokenInPlace("task:failed")
 
 	requests := runner.Requests()
-	if len(requests) != 3 {
-		t.Fatalf("root factory command request count = %d, want 3", len(requests))
+	if len(requests) != 4 {
+		t.Fatalf("root factory command request count = %d, want 4", len(requests))
 	}
-	assertRootFactoryWorkspaceSetupRequest(t, requests[0])
-	assertRootFactoryProcessRequest(t, dir, requests[1])
-	assertRootFactoryReviewRequest(t, dir, requests[2])
+	assertRootFactoryPlanRequest(t, requests[0])
+	assertRootFactoryWorkspaceSetupRequest(t, requests[1])
+	assertRootFactoryProcessRequest(t, dir, requests[2])
+	assertRootFactoryReviewRequest(t, dir, requests[3])
 }
 
 func rootFactoryDir(t *testing.T) string {
@@ -91,9 +96,21 @@ func assertRootFactoryWorkspaceSetupRequest(t *testing.T, req workers.CommandReq
 	if token.Color.Name != "root-factory-template-branch" {
 		t.Fatalf("workspace setup input name = %q, want root-factory-template-branch", token.Color.Name)
 	}
-	if token.Color.Payload == nil || string(token.Color.Payload) != "root factory plan payload" {
-		t.Fatalf("workspace setup input payload = %q, want root factory plan payload", string(token.Color.Payload))
+	if token.Color.Payload == nil || string(token.Color.Payload) != "plan accepted <COMPLETE>" {
+		t.Fatalf("workspace setup input payload = %q, want plan accepted <COMPLETE>", string(token.Color.Payload))
 	}
+}
+
+func assertRootFactoryPlanRequest(t *testing.T, req workers.CommandRequest) {
+	t.Helper()
+
+	assertRootFactoryProcessorRequest(t, req, rootFactoryProcessorWant{
+		workstation:   "plan",
+		workDir:       "",
+		stdinContains: "Please convert the file into the corresponding `tasks/todo/",
+		inputPlace:    "idea:init",
+		inputName:     "root-factory-template-branch",
+	})
 }
 
 func assertRootFactoryProcessRequest(t *testing.T, dir string, req workers.CommandRequest) {
