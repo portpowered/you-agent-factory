@@ -108,3 +108,36 @@
 - Updated `factory/logs/meta/view.md` to reflect the post-`#18` repository
   state and deferred new ask handling until the in-flight local control-plane
   cleanup is resolved.
+
+## 2026-04-30 23:04 -07:00 - meta refresh after main advanced again
+
+- Ran `git pull` and verified the workspace is synced on `main` at `d844505`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  current `factory/factory.json`, open and merged GitHub PR state, and the
+  tracked `factory/inputs/**` surface before choosing work.
+- Verified that the tracked workflow inboxes on `HEAD` still contain only
+  `.gitkeep` sentinels, while ignored local residue currently exists at:
+  - `factory/inputs/idea/default/systems-cleanup.md`
+  - `factory/inputs/idea/default/test-cleanup.md`
+  - `factory/inputs/task/default/ci-cd.md`
+- Confirmed the previously checked-in world model is stale in two important
+  ways:
+  - the checkout is clean now, not mid-cleanup
+  - `main` has advanced past the `#18` merge point to `d844505`
+- Confirmed the replay churn has an explicit workflow-contract cause rather than
+  an unexplained runtime regression:
+  - the shared processor worker accepts only outputs containing
+    `<COMPLETE>`
+  - the `process` workstation prompt tells the executor to return
+    `<CONTINUE>` until the full PRD and PR state are finished
+  - `factory/factory.json` routes `process` rejection back to `task:init`
+- Confirmed the throttle ask still maps to live duplicate logic in the current
+  code:
+  - pause state is dispatcher-owned runtime memory keyed by provider/model
+  - pause enforcement currently runs both before scheduling and after scheduling
+  - runtime snapshots and dashboard/world-view types mirror that state for
+    observability
+- Queued one narrow ignored cleanup idea at
+  `factory/inputs/idea/default/dedupe-dispatcher-throttle-pause-filter.md`
+  to simplify the dispatcher throttle path before any broader guard redesign.
