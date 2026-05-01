@@ -17,7 +17,7 @@ ordering or mixed-work-type batch JSON instead.
 # Steps
 ## Step 1 - read
 Read up on the relevant files in the documentation that would lead to the issue. 
-Read `factory/README.md`, `docs/development/root-factory-artifact-contract-inventory.md`, and `docs/guides/batch-inputs.md` before deciding whether this request should become standalone ideas or one ordered batch request.
+Read `factory/README.md`, and `docs/guides/batch-inputs.md` before deciding whether this request should become standalone ideas or one ordered batch request.
 
 ## Step 2 - write the files
 

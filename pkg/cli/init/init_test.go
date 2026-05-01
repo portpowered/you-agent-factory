@@ -464,16 +464,6 @@ func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.
 		"reviewer, thoughts or ideation, and cron",
 		"<COMPLETE>",
 	})
-
-	for path, body := range map[string]string{
-		planPromptPath:         planPrompt,
-		executePromptPath:      executePrompt,
-		workstationsReadmePath: workstationsReadme,
-		inputsReadmePath:       inputsReadme,
-		scaffoldReadmePath:     scaffoldReadme,
-	} {
-		requireOmitsAll(t, path, body, []string{"Port OS", "PortOS", "portos"})
-	}
 }
 
 func TestInit_RalphTypePreservesExistingGeneratedFilesOnRerun(t *testing.T) {

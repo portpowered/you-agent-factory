@@ -69,9 +69,6 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make lint` runs `go vet ./...` and the pinned deadcode analyzer. The deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/development/deadcode-baseline.txt`. Review any drift before updating the baseline.
 
-`make release-surface-smoke` is the standalone-release readiness check for customer-facing cleanup work. It reruns the product-agnostic functional smoke suite against the package README, checked-in starter, shipped examples and sample payloads, verifies generated `agent-factory init` output stays neutral, and finishes with `go run ./cmd/publicsurfacecheck` so release-facing Port OS coupling cannot silently return.
-
-`make artifact-contract-closeout` is the root factory artifact contract closeout for this cleanup lane. Use it after touching the root starter inventory, release-surface smoke coverage, or the targeted `pkg/api`, `pkg/config`, `pkg/replay`, `tests/adhoc`, and `tests/functional_test` contract tests. It first proves the checked-in inventory doc still matches the enforced classifications, then reruns `make release-surface-smoke`, and finally reruns the targeted package bundle that stabilized this repository contract.
 
 Use `make ui-storybook` followed by `make ui-test-storybook` when dashboard Storybook stories, play functions, runtime mocks, or the package-local Storybook runner change. `ui-storybook` builds `ui/storybook-static`; `ui-test-storybook` serves that static build on the dashboard-owned runner port and executes the dashboard Storybook interaction tests through the UI package's `test-storybook` script.
 
@@ -126,7 +123,6 @@ Review any generated diff together with the authored OpenAPI change. Do not hand
 The canonical export/import sharing boundary is the generated OpenAPI
 `NamedFactory` payload returned by `GET /factory/~current` and accepted by
 `POST /factory`. PNG export and import reuse that exact payload through
-`PortOSFactoryPngEnvelope`, which adds only `schemaVersion`.
 
 Use [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md)
 as the detailed contract reference. Keep the dashboard on the authored API
@@ -298,7 +294,6 @@ The config validator checks workstation scheduling values against a known set of
 - [Record and Replay](record-replay.md)
 - [Provider Error Corpus Audit](provider-error-corpus-audit.md)
 - [Root Factory Artifact Contract Inventory](root-factory-artifact-contract-inventory.md)
-- [Port OS Reference Inventory](portos-reference-inventory.md)
 - [Dashboard UI Workflow Baseline](dashboard-ui-workflow-baseline.md)
 - [Dashboard UI Bun Validation](dashboard-ui-bun-validation.md)
 - [Agent Factory Intent](../intents/agent-factory.md)

@@ -245,7 +245,6 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 // one of the findings triggers another scan cycle (meta-pipeline loops once),
 // producing 2 more items for Workflow A (5 total). Exhaustion guard limits
 // meta-pipeline to 2 scan iterations max.
-// portos:func-length-exception owner=agent-factory reason=recursive-cross-workflow-stress-fixture review=2026-07-19 removal=split-recursive-setup-and-assertions-before-next-cross-workflow-stress-change
 func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")

@@ -1564,9 +1564,6 @@ components:
             outputs:
               - workType: story
                 state: inReview
-            onContinue:
-              workType: story
-              state: init
             onRejection:
               workType: story
               state: init

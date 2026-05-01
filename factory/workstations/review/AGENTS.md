@@ -54,9 +54,7 @@ Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or
 
 If you believe that the PR is complete, please merge the PR. 
 
-If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes. 
-
-Note that due to billing issues the current CI will fail, so ignore them for now. 
+If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
 
 ### Step 7 - respond back
 

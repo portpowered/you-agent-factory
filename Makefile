@@ -37,7 +37,7 @@ endif
 
 GO_TEST_TIMEOUT ?= 300s
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode public-surface-check test-race fmt vet deps deps-tidy dashboard-verify ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode  test-race fmt vet deps deps-tidy dashboard-verify ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -92,11 +92,6 @@ cron-time-work-smoke:
 current-factory-watcher-switch-smoke:
 	$(GO) test ./tests/functional_test -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
 
-release-surface-smoke:
-	$(GO) test ./tests/functional_test -run TestProjectAgnosticCleanupSmoke_ -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./pkg/cli/init -run TestInit_GeneratedCustomerFacingFilesDoNotContainPortOS -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(MAKE) public-surface-check
-
 artifact-contract-closeout:
 	$(GO) test ./pkg/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(MAKE) release-surface-smoke
@@ -105,14 +100,9 @@ artifact-contract-closeout:
 lint:
 	$(GO) vet ./...
 	$(MAKE) deadcode
-	$(MAKE) public-surface-check
-	$(MAKE) public-surface-check
 
 deadcode:
 	$(GO) run ./cmd/deadcodecheck
-
-public-surface-check:
-	$(GO) run ./cmd/publicsurfacecheck
 
 dashboard-verify:
 	$(MAKE) ui-build

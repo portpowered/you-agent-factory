@@ -1092,11 +1092,11 @@ type Workstation struct {
 	// Name Customer-authored workstation name used by guards, diagnostics, and authored references.
 	Name string `json:"name"`
 
-	// OnFailure One authored work-state reference consumed or emitted by a workstation.
-	OnFailure *WorkstationIO `json:"onFailure,omitempty"`
-
 	// OnContinue One authored work-state reference consumed or emitted by a workstation.
 	OnContinue *WorkstationIO `json:"onContinue,omitempty"`
+
+	// OnFailure One authored work-state reference consumed or emitted by a workstation.
+	OnFailure *WorkstationIO `json:"onFailure,omitempty"`
 
 	// OnRejection One authored work-state reference consumed or emitted by a workstation.
 	OnRejection *WorkstationIO `json:"onRejection,omitempty"`
