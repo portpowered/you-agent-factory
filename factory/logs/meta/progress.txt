@@ -13,6 +13,9 @@
   `docs/development/root-factory-artifact-contract-inventory.md` and
   `internal/testpath/artifact_contract.go` aligned in the same change or the
   targeted artifact-contract test will fail immediately.
+- Before re-queuing a local ignored cleanup idea under `factory/inputs/**`,
+  compare it against recent merged PR history; ignored residue can remain in
+  the workspace after its lane has already landed on `main`.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -258,3 +261,36 @@
   for that duplicated enum-alias ownership seam.
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged PR
   state, the remaining customer-ask posture, and the revised next cleanup lane.
+
+## 2026-05-01 03:10 -07:00 - meta refresh after enum-alias consolidation landed
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `05fb827`.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  recent open/merged PR history, and the tracked `factory/inputs/**` surface
+  before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that the canonical meta control-plane files are unchanged.
+- Verified that the workspace-local `factory/inputs/**` surface still contains
+  ignored residue, including multiple idea files whose lanes are already
+  merged on `main`.
+- Confirmed the previous meta world view had drifted again:
+  - it still described `HEAD` as `c213e25`
+  - it still treated the public-factory enum alias cleanup as the next lane
+    even though PR `#24` is now merged
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#20`, `#16`, and `#4`
+  - merged PRs `#24`, `#23`, `#22`, `#21`, `#19`, `#18`, and `#17`
+- Used a sidecar repository-inspection agent plus direct code inspection to
+  identify the next narrow cleanup candidate outside the open PR set:
+  - `pkg/workers/inference_provider.go` still defines
+    `ScriptWrapProvider.buildArgs`
+  - production inference already routes argument construction through
+    `providerBehaviorFor(...).BuildArgs(...)`
+  - `pkg/workers/inference_provider_test.go` is now the only remaining caller
+    of the forwarding shim
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/retire-scriptwrap-build-args-shim.md`
+  for that dead-code/duplicate-helper seam.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  PR state, and the revised next cleanup lane.
