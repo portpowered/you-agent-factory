@@ -247,6 +247,50 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeBaseD
 	}
 }
 
+func TestWorkstationExecutor_ResolvesPortableRootedWorkingDirectoryAgainstRuntimeBaseDirectoryOverride(t *testing.T) {
+	wantDir := t.TempDir()
+	setTestWorkingDirectory(t, t.TempDir())
+
+	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			RuntimeBasePath: wantDir,
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {
+					Type:             interfaces.WorkstationTypeModel,
+					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
+					WorkingDirectory: "/worktrees/feature-abc",
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-portable-rooted",
+		TransitionID:    "t-portable-rooted",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	expectedDir := filepath.Join(wantDir, "worktrees", "feature-abc")
+	if mock.dispatch.WorkingDirectory != expectedDir {
+		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, expectedDir)
+	}
+	if mock.dispatch.UserMessage != "Work from "+expectedDir {
+		t.Fatalf("user message = %q", mock.dispatch.UserMessage)
+	}
+}
+
 func TestWorkstationExecutor_LoadedRuntimeConfigRuntimeBaseDirOverrideDrivesRelativeExecutionPath(t *testing.T) {
 	factoryDir := t.TempDir()
 	runtimeBaseDir := t.TempDir()

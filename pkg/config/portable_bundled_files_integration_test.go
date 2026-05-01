@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -189,8 +190,8 @@ func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *te
 	if !strings.Contains(err.Error(), "must use forward slashes") {
 		t.Fatalf("error = %q, want forward-slash validation message", err.Error())
 	}
-	if !strings.Contains(err.Error(), filepath.Base(escapeTarget)) {
-		t.Fatalf("error = %q, want offending target file %q", err.Error(), filepath.Base(escapeTarget))
+	if !strings.Contains(err.Error(), path.Base(strings.ReplaceAll(escapeTarget, `\`, `/`))) {
+		t.Fatalf("error = %q, want offending target file %q", err.Error(), path.Base(strings.ReplaceAll(escapeTarget, `\`, `/`)))
 	}
 	if _, statErr := os.Stat(outsidePath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no escaped bundled file write at %s, stat err = %v", outsidePath, statErr)
