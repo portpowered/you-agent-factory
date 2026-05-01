@@ -288,8 +288,11 @@ type ErrorResponseCode string
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
-	// FactoryDir Directory that contained the factory.json used for this serialized runtime config.
-	FactoryDir *string `json:"factoryDir,omitempty"`
+	// FactoryDirectory Directory that contained the factory.json used for this serialized runtime config.
+	FactoryDirectory *string `json:"factoryDirectory,omitempty"`
+
+	// Id Factory identifier used as the factory-level template context fallback.
+	Id *string `json:"id,omitempty"`
 
 	// InputTypes Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
@@ -298,26 +301,20 @@ type Factory struct {
 	// Name Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
 	Name FactoryName `json:"name"`
 
-	// Project Project identifier used as the factory-level template context fallback.
-	Project *string `json:"project,omitempty"`
-
-	// ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
-	ResourceManifest *ResourceManifest `json:"resourceManifest,omitempty"`
-
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
 
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
 
+	// SupportingFiles Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
+	SupportingFiles *ResourceManifest `json:"supportingFiles,omitempty"`
+
 	// WorkTypes Customer-authored work item categories and the lifecycle states each one can occupy.
 	WorkTypes *[]WorkType `json:"workTypes,omitempty"`
 
 	// Workers Reusable worker definitions that workstations reference by name when dispatching work.
 	Workers *[]Worker `json:"workers,omitempty"`
-
-	// WorkflowId Optional workflow identity associated with this serialized runtime config.
-	WorkflowId *string `json:"workflowId,omitempty"`
 
 	// Workstations Processing steps that consume work, invoke workers, and emit the next work states.
 	Workstations *[]Workstation `json:"workstations,omitempty"`

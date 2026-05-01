@@ -173,9 +173,8 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 
 func comparableExportImportFactory(factory factoryapi.Factory) factoryapi.Factory {
 	comparable := factory
-	comparable.FactoryDir = nil
+	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
-	comparable.WorkflowId = nil
 	comparable.Metadata = nil
 	return comparable
 }

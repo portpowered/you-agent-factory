@@ -77,16 +77,17 @@ const WORKSTATION_KIND_ALIASES: Record<string, NonNullable<FactoryWorkstation["k
   standard: "STANDARD",
 };
 const FACTORY_KEYS = new Set([
-  "factoryDir",
+  "factoryDirectory",
+  "id",
   "inputTypes",
   "metadata",
-  "project",
+  "name",
   "resources",
   "sourceDirectory",
+  "supportingFiles",
   "workers",
   "workTypes",
   "workstations",
-  "workflowId",
 ]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set(["name", "states"]);
@@ -186,11 +187,9 @@ export class FactoryDefinitionAPIError extends Error {
 
 export function normalizeFactoryDefinition(factoryPayload: unknown): CanonicalFactoryDefinition {
   const factory = withAliasedKeys(asRecord(factoryPayload), {
-    factory_dir: "factoryDir",
     input_types: "inputTypes",
     source_directory: "sourceDirectory",
     work_types: "workTypes",
-    workflow_id: "workflowId",
   });
 
   if (Array.isArray(factory.inputTypes)) {
@@ -542,28 +541,28 @@ function decodeFactoryDefinition(
   const factory: CanonicalFactoryDefinition = {
     name: readRequiredString(value, "name", path),
   };
-  const project = readOptionalString(value, "project", path);
-  const factoryDir = readOptionalString(value, "factoryDir", path);
+  const id = readOptionalString(value, "id", path);
+  const factoryDirectory = readOptionalString(value, "factoryDirectory", path);
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);
-  const workflowId = readOptionalString(value, "workflowId", path);
   const metadata = readOptionalStringMap(value, "metadata", path);
   const inputTypes = readOptionalArray(value, "inputTypes", path, decodeInputType);
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
+  const supportingFiles = readOptionalObject(value, "supportingFiles", path, expectObject);
   const workers = readOptionalArray(value, "workers", path, decodeWorker);
   const workstations = readOptionalArray(value, "workstations", path, decodeWorkstation);
 
-  if (project !== undefined) {
-    factory.project = project;
+  if (id !== undefined) {
+    factory.id = id;
   }
-  if (factoryDir !== undefined) {
-    factory.factoryDir = factoryDir;
+  if (factoryDirectory !== undefined) {
+    factory.factoryDirectory = factoryDirectory;
   }
   if (sourceDirectory !== undefined) {
     factory.sourceDirectory = sourceDirectory;
   }
-  if (workflowId !== undefined) {
-    factory.workflowId = workflowId;
+  if (supportingFiles !== undefined) {
+    factory.supportingFiles = supportingFiles as CanonicalFactoryDefinition["supportingFiles"];
   }
   if (metadata !== undefined) {
     factory.metadata = metadata;

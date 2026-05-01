@@ -72,7 +72,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
-		"project": "customer-project",
+		"id": "customer-project",
 		"workTypes": [
 			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
 			{"name":"page","states":[{"name":"complete","type":"TERMINAL"}]}
@@ -99,8 +99,8 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
-	if generated.Project == nil || *generated.Project != "customer-project" {
-		t.Fatalf("expected generated project customer-project, got %#v", generated.Project)
+	if generated.Id == nil || *generated.Id != "customer-project" {
+		t.Fatalf("expected generated id customer-project, got %#v", generated.Id)
 	}
 	if generated.Workers == nil || len(*generated.Workers) != 1 {
 		t.Fatalf("expected one generated worker, got %#v", generated.Workers)

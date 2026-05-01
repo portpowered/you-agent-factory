@@ -11,7 +11,7 @@
         "diagnostics": {},
         "factory": {
           "name": "factory",
-          "factoryDir": "c:\\Users\\user\\work\\factory\\portos-backend\\libraries\\agent-factory\\tests\\adhoc\\factory",
+          "factoryDirectory": "c:\\Users\\user\\work\\factory\\portos-backend\\libraries\\agent-factory\\tests\\adhoc\\factory",
           "metadata": {
             "factory_hash": "sha256:e45471acad8c079e2218cf068333fff847ae9ea902112ea5b7c2243ab71b59f9",
             "runtime_config_hash": "sha256:880ff10968a0b391ac4510528c0f53da8bcc917ad80d4f3e1a077a2b69e56e35",

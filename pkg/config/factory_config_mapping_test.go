@@ -96,7 +96,7 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
-		"project": "analytics-platform",
+		"id": "analytics-platform",
 		"inputTypes": [{"name":"default","type":"DEFAULT"}],
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
@@ -122,7 +122,7 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 		t.Fatalf("expected one parsed work type named story, got %#v", cfg.WorkTypes)
 	}
 	if cfg.Project != "analytics-platform" {
-		t.Fatalf("expected project analytics-platform, got %q", cfg.Project)
+		t.Fatalf("expected id analytics-platform to map to project, got %q", cfg.Project)
 	}
 
 	if cfg.Workstations[0].ID != "execute-story-id" {
@@ -252,7 +252,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 	mapper := NewFactoryConfigMapper()
 
 	legacy := []byte(`{
-		"project": "analytics-platform",
+		"id": "analytics-platform",
 		"inputTypes": [{"name":"default","type":"default"}],
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
@@ -908,9 +908,9 @@ func portableResourceManifestMapperFixture() *interfaces.FactoryConfig {
 func assertFlattenedPortableResourceManifestPayload(t *testing.T, payload map[string]any) {
 	t.Helper()
 
-	resourceManifest, ok := payload["resourceManifest"].(map[string]any)
+	resourceManifest, ok := payload["supportingFiles"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected canonical payload to include resourceManifest, got %#v", payload["resourceManifest"])
+		t.Fatalf("expected canonical payload to include supportingFiles, got %#v", payload["supportingFiles"])
 	}
 	requiredTools, ok := resourceManifest["requiredTools"].([]any)
 	if !ok || len(requiredTools) != 1 {

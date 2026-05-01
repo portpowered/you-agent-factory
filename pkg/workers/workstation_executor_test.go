@@ -396,7 +396,7 @@ func writeRuntimeLookupFixture(t *testing.T, factoryDir string) {
 	t.Helper()
 
 	writeRuntimeLookupFactoryJSON(t, factoryDir, map[string]any{
-		"project": "agent-factory",
+		"id": "agent-factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",

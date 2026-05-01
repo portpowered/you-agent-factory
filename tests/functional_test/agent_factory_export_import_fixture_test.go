@@ -72,7 +72,7 @@ func writeAgentFactoryExportImportAuthoredLayout(
 	t.Helper()
 
 	payload, err := json.MarshalIndent(map[string]any{
-		"project": project,
+		"id": project,
 		"workTypes": []map[string]any{{
 			"name": workType,
 			"states": []map[string]string{

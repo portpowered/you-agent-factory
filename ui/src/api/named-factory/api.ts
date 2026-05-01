@@ -1,8 +1,12 @@
 import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
 
-export type NamedFactoryDefinition = components["schemas"]["Factory"];
-export type NamedFactoryValue = components["schemas"]["Factory"];
+export interface NamedFactoryValue {
+  factory: components["schemas"]["Factory"];
+  name: components["schemas"]["Factory"]["name"];
+}
+
+export type NamedFactoryDefinition = NamedFactoryValue;
 
 export type NamedFactoryAPIErrorCode =
   | "BAD_REQUEST"
@@ -199,7 +203,8 @@ function isNamedFactoryValue(value: unknown): value is NamedFactoryValue {
   return (
     isRecord(value) &&
     typeof value.name === "string" &&
-    !Array.isArray(value.workTypes)
+    isRecord(value.factory) &&
+    !Array.isArray(value.factory)
   );
 }
 

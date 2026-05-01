@@ -168,7 +168,7 @@ func TestPersistNamedFactory_RejectsInvalidPayloadWithoutChangingCurrentFactory(
 	}
 
 	invalidPayload, err := json.Marshal(map[string]any{
-		"project": "broken",
+		"id": "broken",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -860,7 +860,7 @@ func TestLoadRuntimeConfig_RejectsMissingRequiredToolInResourceManifest(t *testi
 				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
 			},
 		},
-		"resourceManifest": map[string]any{
+		"supportingFiles": map[string]any{
 			"requiredTools": []map[string]any{
 				{
 					"name":    "missing helper",
@@ -1603,7 +1603,7 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 
 	cfg := map[string]any{
-		"project": project,
+		"id": project,
 		"workTypes": []map[string]any{
 			{
 				"name": "task",

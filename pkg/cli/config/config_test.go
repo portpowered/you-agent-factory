@@ -348,7 +348,7 @@ func writePortableResourceManifestFactoryConfigWithScriptTarget(t *testing.T, fa
 
 	writeCLITestFile(t, factoryPath, `{
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"resourceManifest": {
+		"supportingFiles": {
 			"requiredTools": [`+requiredToolsJSON+`],
 			"bundledFiles": [{
 				"type":"SCRIPT",
@@ -397,9 +397,9 @@ func expandPortableResourceManifestFactory(t *testing.T, factoryPath string) (st
 func assertPortableResourceManifestPayload(t *testing.T, canonical map[string]any, wantCommand string) {
 	t.Helper()
 
-	resourceManifest, ok := canonical["resourceManifest"].(map[string]any)
+	resourceManifest, ok := canonical["supportingFiles"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected expanded canonical factory.json to preserve resourceManifest, got %#v", canonical["resourceManifest"])
+		t.Fatalf("expected expanded canonical factory.json to preserve supportingFiles, got %#v", canonical["supportingFiles"])
 	}
 	requiredTools, ok := resourceManifest["requiredTools"].([]any)
 	if !ok || len(requiredTools) != 1 {
@@ -437,8 +437,8 @@ func assertFlattenedPortableResourceManifestPreserved(t *testing.T, targetDir st
 		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
 	}
 	flattenedPayload := mustDecodeCanonicalFactoryPayload(t, flattened)
-	if _, ok := flattenedPayload["resourceManifest"].(map[string]any); !ok {
-		t.Fatalf("expected flattened expanded layout to preserve resourceManifest, got %#v", flattenedPayload["resourceManifest"])
+	if _, ok := flattenedPayload["supportingFiles"].(map[string]any); !ok {
+		t.Fatalf("expected flattened expanded layout to preserve supportingFiles, got %#v", flattenedPayload["supportingFiles"])
 	}
 }
 
@@ -450,9 +450,9 @@ func assertFlattenedPortableResourceManifestPreservedWithCommand(t *testing.T, t
 		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
 	}
 	flattenedPayload := mustDecodeCanonicalFactoryPayload(t, flattened)
-	flattenedManifest, ok := flattenedPayload["resourceManifest"].(map[string]any)
+	flattenedManifest, ok := flattenedPayload["supportingFiles"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected flattened expanded layout to preserve resourceManifest, got %#v", flattenedPayload["resourceManifest"])
+		t.Fatalf("expected flattened expanded layout to preserve supportingFiles, got %#v", flattenedPayload["supportingFiles"])
 	}
 	requiredTools, ok := flattenedManifest["requiredTools"].([]any)
 	if !ok || len(requiredTools) != 1 {
@@ -514,7 +514,7 @@ func assertLoadedPortableResourceManifest(t *testing.T, targetDir string) {
 func writePortableResourceManifestWithMissingTool(t *testing.T, canonicalPath string, canonical map[string]any) {
 	t.Helper()
 
-	resourceManifest := canonical["resourceManifest"].(map[string]any)
+	resourceManifest := canonical["supportingFiles"].(map[string]any)
 	requiredTools := resourceManifest["requiredTools"].([]any)
 	resourceManifest["requiredTools"] = append(requiredTools, map[string]any{
 		"name":    "Missing helper",

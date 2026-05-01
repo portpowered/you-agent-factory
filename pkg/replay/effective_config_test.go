@@ -124,9 +124,6 @@ Fallback body.
 	if generated.SourceDirectory == nil || *generated.SourceDirectory != factoryDir {
 		t.Fatalf("source directory = %#v, want %q", generated.SourceDirectory, factoryDir)
 	}
-	if generated.WorkflowId == nil || *generated.WorkflowId != "workflow-123" {
-		t.Fatalf("workflow ID = %#v, want workflow-123", generated.WorkflowId)
-	}
 	if generated.Metadata == nil {
 		t.Fatal("expected generated metadata")
 	}
@@ -225,7 +222,7 @@ Move the token.
 func TestRuntimeConfigFromGeneratedFactory_KeepsCanonicalRelativeExecutionPath(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
-		"project": "agent-factory",
+		"id": "agent-factory",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{

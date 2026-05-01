@@ -1,5 +1,5 @@
 {
-  "project": "fixture-default-project",
+  "id": "fixture-default-project",
   "workTypes": [
     {
       "name": "task",

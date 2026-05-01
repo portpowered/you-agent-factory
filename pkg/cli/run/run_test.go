@@ -210,7 +210,7 @@ func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 	rootDir := t.TempDir()
 
 	payload, err := json.Marshal(map[string]any{
-		"project": "alpha",
+		"id": "alpha",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{

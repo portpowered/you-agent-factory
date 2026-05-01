@@ -119,9 +119,12 @@ export async function readFactoryImportPng({
     ok: true,
     value: {
       envelope: envelope.value,
-      factory: envelope.value,
+      factory: envelope.value.factory,
       factoryName: envelope.value.name,
-      namedFactory: envelope.value,
+      namedFactory: {
+        factory: envelope.value.factory,
+        name: envelope.value.name,
+      },
       previewImageSrc,
       revokePreviewImageSrc: () => {
         revokePreviewImageSrc(previewImageSrc);
@@ -267,9 +270,7 @@ function normalizeFactoryEnvelope(
 ): ImportStepResult<PortOSFactoryPngEnvelope> {
   let normalizedFactory: CanonicalFactoryDefinition;
   try {
-    const factoryPayload = { ...parsedEnvelope };
-    delete factoryPayload.schemaVersion;
-    normalizedFactory = normalizeFactoryDefinition(factoryPayload);
+    normalizedFactory = normalizeFactoryPayload(parsedEnvelope);
   } catch {
     return {
       error: {
@@ -288,11 +289,26 @@ function normalizeFactoryEnvelope(
   return {
     ok: true,
     value: {
-      ...normalizedFactory,
+      factory: normalizedFactory,
       name: normalizedFactoryName.value,
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     },
   };
+}
+
+function normalizeFactoryPayload(
+  parsedEnvelope: Record<string, unknown>,
+): CanonicalFactoryDefinition {
+  const canonicalPayload = parsedEnvelope.factory;
+  if (canonicalPayload !== undefined) {
+    return normalizeFactoryDefinition(canonicalPayload);
+  }
+
+  const legacyPayload = { ...parsedEnvelope };
+  delete legacyPayload.factoryName;
+  delete legacyPayload.name;
+  delete legacyPayload.schemaVersion;
+  return normalizeFactoryDefinition(legacyPayload);
 }
 
 function readFactoryEnvelopeName(parsedEnvelope: Record<string, unknown>): ImportStepResult<string> {

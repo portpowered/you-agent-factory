@@ -178,7 +178,7 @@ func runtimeConfigAlignmentFactoryJSONConfig() map[string]any {
 	return map[string]any{
 		"workTypes":        runtimeConfigAlignmentWorkTypes(),
 		"resources":        runtimeConfigAlignmentResources(),
-		"resourceManifest": runtimeConfigAlignmentResourceManifest(),
+		"supportingFiles": runtimeConfigAlignmentResourceManifest(),
 		"workers":          runtimeConfigAlignmentWorkers(),
 		"workstations":     runtimeConfigAlignmentWorkstations(),
 	}
@@ -392,8 +392,8 @@ func assertRuntimeConfigAlignmentCanonicalRoundTrip(t *testing.T, dir string) {
 			runtimeConfigAlignmentComparableFactory(generatedFactory),
 		)
 	}
-	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, flattenedFactory.ResourceManifest)
-	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, generatedFactory.ResourceManifest)
+	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, flattenedFactory.SupportingFiles)
+	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, generatedFactory.SupportingFiles)
 
 	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(generatedFactory)
 	if err != nil {
@@ -852,9 +852,8 @@ func runtimeConfigAlignmentRequireGeneratedWorkstation(
 
 func runtimeConfigAlignmentComparableFactory(factory factoryapi.Factory) factoryapi.Factory {
 	comparable := factory
-	comparable.FactoryDir = nil
+	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
-	comparable.WorkflowId = nil
 	comparable.Metadata = nil
 	return comparable
 }

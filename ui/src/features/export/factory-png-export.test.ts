@@ -11,7 +11,8 @@ const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
 
 const canonicalFactory: FactorySchemas["Factory"] = {
-  project: "agent-factory",
+  id: "agent-factory",
+  name: "agent-factory",
   workTypes: [
     {
       name: "story",

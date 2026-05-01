@@ -439,9 +439,8 @@ func assertComparableFactoryContractsMatch(t *testing.T, flattened factoryapi.Fa
 	t.Helper()
 
 	comparable := generated
-	comparable.FactoryDir = nil
+	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
-	comparable.WorkflowId = nil
 	comparable.Metadata = nil
 	if !reflect.DeepEqual(flattened, comparable) {
 		t.Fatalf("flattened canonical config and generated Factory model diverged\nflattened: %#v\ngenerated: %#v", flattened, comparable)
@@ -452,7 +451,7 @@ func assertFactoryConfigSmokeDescriptions(t *testing.T, factory *openapi3.Schema
 	t.Helper()
 
 	assertOpenAPI3Description(t, "Factory", factory.Description)
-	assertOpenAPI3PropertyDescription(t, factory, "Factory", "project")
+	assertOpenAPI3PropertyDescription(t, factory, "Factory", "id")
 	workType := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "workTypes")
 	resource := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "resources")
 	worker := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "workers")
@@ -580,9 +579,9 @@ func rewriteSmokeFixtureFile(t *testing.T, path string, replacer *strings.Replac
 }
 
 func factoryConfigSmokeCanonicalJSON() string {
-	return `{
+  return `{
   "name": "analytics-platform",
-  "project": "analytics-platform",
+  "id": "analytics-platform",
   "inputTypes": [{"name":"batch","type":"DEFAULT"}],
   "workTypes": [
     {"name":"parent","states":[{"name":"init","type":"INITIAL"}]},
@@ -640,9 +639,9 @@ func factoryConfigSmokeCanonicalJSON() string {
 }
 
 func factoryConfigSmokeLegacyJSON() string {
-	return `{
+  return `{
   "name": "analytics-platform",
-  "project": "analytics-platform",
+  "id": "analytics-platform",
   "input_types": [{"name":"batch","type":"default"}],
   "work_types": [
     {"name":"parent","states":[{"name":"init","type":"INITIAL"}]},

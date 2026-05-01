@@ -12,7 +12,8 @@ const ONE_PIXEL_PNG_BASE64 =
 
 const canonicalNamedFactory: NamedFactoryValue = {
   factory: {
-    project: "agent-factory",
+    id: "agent-factory",
+    name: "agent-factory",
     workTypes: [
       {
         name: "story",

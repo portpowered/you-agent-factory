@@ -439,7 +439,7 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 
 	factory := requireOpenAPI3ComponentSchema(t, doc, "Factory")
 	assertOpenAPI3Description(t, "Factory", factory.Description)
-	assertOpenAPI3PropertyDescription(t, factory, "Factory", "project")
+	assertOpenAPI3PropertyDescription(t, factory, "Factory", "id")
 	workType := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "workTypes")
 	resource := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "resources")
 	worker := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "workers")
@@ -1160,7 +1160,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 
 	factory := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factory, "Factory")
-	for _, field := range []string{"factoryDir", "sourceDirectory", "workflowId", "metadata", "inputTypes", "workTypes"} {
+	for _, field := range []string{"factoryDirectory", "sourceDirectory", "metadata", "inputTypes", "workTypes"} {
 		if _, ok := factoryProperties[field]; !ok {
 			t.Fatalf("Factory.properties.%s is missing", field)
 		}
@@ -1477,9 +1477,9 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 		"recordedAt": "2026-04-10T12:00:00Z",
 		"factory": map[string]any{
 			"name":            "runtime-factory",
-			"factoryDir":      "/tmp/runtime-factory",
+			"factoryDirectory": "/tmp/runtime-factory",
 			"sourceDirectory": "/tmp/customer-factory",
-			"workflowId":      "workflow-123",
+			"id":              "runtime-factory",
 			"metadata":        map[string]any{"factory_hash": "sha256:test"},
 			"inputTypes": []any{
 				map[string]any{"name": "default", "type": "DEFAULT"},

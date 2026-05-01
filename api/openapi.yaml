@@ -1481,7 +1481,7 @@ components:
                 type: FAILED
               - name: complete
                 type: TERMINAL
-        resourceManifest:
+        supportingFiles:
           requiredTools:
             - name: python
               command: python
@@ -1550,18 +1550,15 @@ components:
       properties:
         name:
           $ref: '#/components/schemas/FactoryName'
-        project:
+        id:
           type: string
-          description: Project identifier used as the factory-level template context fallback.
-        factoryDir:
+          description: Factory identifier used as the factory-level template context fallback.
+        factoryDirectory:
           type: string
           description: Directory that contained the factory.json used for this serialized runtime config.
         sourceDirectory:
           type: string
           description: Original source directory for record/replay and drift diagnostics.
-        workflowId:
-          type: string
-          description: Optional workflow identity associated with this serialized runtime config.
         metadata:
           $ref: '#/components/schemas/StringMap'
           description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
@@ -1580,7 +1577,7 @@ components:
           description: Shared capacity pools that workers or workstations can consume while work is executing.
           items:
             $ref: '#/components/schemas/Resource'
-        resourceManifest:
+        supportingFiles:
           $ref: '#/components/schemas/ResourceManifest'
           description: Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources.
         workers:

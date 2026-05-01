@@ -34,6 +34,7 @@ This inventory records the checked-in files and directories that the maintainer 
 | `ui/src/testing/replay-fixture-catalog.ts` | Replay integration test contract | Browser-backed dashboard smoke coverage should register scenario metadata here so coverage reporting and integration assertions stay on one source of truth. |
 | `ui/scripts/write-replay-coverage-report.ts` | Replay coverage reporter | Package scripts should use this repository-owned reporter to validate replay metadata instead of embedding ad hoc fixture maps in tests or CI. |
 | `ui/scripts/normalize-dist-output.mjs` | Embedded asset normalizer | The documented UI build path ends by normalizing Vite output names and refreshing `ui/dist_stamp.go` so committed embed assets stay stable for Go builds and CI diffs. |
+| `ui/src/features/import/factory-png-import.ts` | PNG import envelope boundary | PNG metadata keeps the named-factory wrapper plus `schemaVersion`; the importer must normalize the nested `factory` payload and strip PNG-only fields before handing values to `/factory`. |
 
 ## Reusable Rules
 
@@ -53,6 +54,7 @@ This inventory records the checked-in files and directories that the maintainer 
 - Keep `docs/development/root-factory-artifact-contract-inventory.md` and `internal/testpath/artifact_contract.go` synchronized; the doc is not descriptive-only, it is a checked-in contract surface with order-sensitive tests.
 - When public OpenAPI field names change, update `pkg/api/testdata/canonical-event-vocabulary-stream.json` together with the contract guards so fixture validation keeps exercising the current bundled vocabulary.
 - When `/factory` contract shapes change, update `api/openapi-main.yaml`, run `make generate-api`, and then reconcile the handwritten wrappers in `pkg/api/handlers.go`, `pkg/apisurface/contract.go`, `pkg/service/factory.go`, and `ui/src/api/named-factory/api.ts`; those seams still own request decoding and current-factory adapter behavior after generation.
+- Keep the PNG import/export envelope boundary separate from the `/factory` API boundary: PNG metadata may carry `schemaVersion`, but activation requests must send only the named-factory payload `{ name, factory }`.
 - When public request-batch field names change, update `pkg/interfaces/factory_runtime.go`, `pkg/factory/work_request_json.go`, and watched-file/worker batch fixtures together; those handwritten JSON boundaries are not generated and will drift silently if only `api/openapi.yaml` and generated clients are regenerated.
 - Keep shared public worker and workstation enum aliases in `pkg/interfaces/public_factory_enums.go`; generated/OpenAPI boundary normalizers should call the strict helpers while generated/public round-trip helpers should call the permissive ones instead of cloning alias tables in `pkg/config` or UI export code.
 - In `pkg/config/factory_config_mapping.go`, keep mirrored generated-boundary retirement guards data-driven: define one retired-field inventory per boundary type and reuse it for both the top-level object and any nested `definition` object so only the caller-owned path text differs.

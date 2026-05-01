@@ -12,7 +12,8 @@ const ONE_PIXEL_PNG_BASE64 =
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
 const canonicalFactory: FactorySchemas["Factory"] = {
-  project: "agent-factory",
+  id: "agent-factory",
+  name: "agent-factory",
   workTypes: [
     {
       name: "story",
@@ -115,6 +116,7 @@ describe("readFactoryImportPng", () => {
           factory: {
             exhaustion_rules: [],
             project: "legacy-factory",
+            name: "legacy-factory",
           },
           name: "Invalid Factory Import",
           schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,

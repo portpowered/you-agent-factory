@@ -85,7 +85,7 @@ camelCase config fields.
 
 ```json
 {
-  "project": "sample-service",
+  "id": "sample-service",
   "resources": [
     { "name": "agent-slot", "capacity": 1 }
   ],
@@ -140,12 +140,12 @@ guarded loop breaker so a rejected story cannot cycle forever.
 
 ### Optional portability manifest
 
-Add `resourceManifest` only when the workflow also needs declarative host-tool
+Add `supportingFiles` only when the workflow also needs declarative host-tool
 checks or bundled helper files that should travel with the factory contract.
 
 ```json
 {
-  "resourceManifest": {
+  "supportingFiles": {
     "requiredTools": [
       {
         "name": "python",

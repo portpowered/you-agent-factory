@@ -331,7 +331,7 @@ func TestLoad_AcceptsInferenceEventsInCanonicalEventsArray(t *testing.T) {
 func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	factoryJSON := []byte(`{
-		"project": "customer-project",
+		"id": "customer-project",
 		"workTypes": [
 			{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
 			{"name":"page","states":[{"name":"complete","type":"TERMINAL"}]}
@@ -554,7 +554,7 @@ func minimalValidArtifact(recordedAt time.Time) *interfaces.ReplayArtifact {
 
 func artifactTestFactory() factoryapi.Factory {
 	return factoryapi.Factory{
-		FactoryDir: stringPtrIfNotEmpty("fixtures/customer-run"),
+		FactoryDirectory: stringPtrIfNotEmpty("fixtures/customer-run"),
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "story",
 			States: []factoryapi.WorkState{{

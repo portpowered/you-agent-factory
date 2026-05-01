@@ -9,7 +9,7 @@
       "id": "factory-event/run-started",
       "payload": {
         "factory": {
-          "factoryDir": "fixtures/inference-events",
+          "factoryDirectory": "fixtures/inference-events",
           "resources": [],
           "workTypes": [
             {
@@ -217,4 +217,3 @@
   "recordedAt": "2026-04-19T08:00:00Z",
   "schemaVersion": "agent-factory.replay.v1"
 }
-

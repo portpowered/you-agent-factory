@@ -226,17 +226,14 @@ func adjacentFactoryDir(eventStreamPath string) (string, bool) {
 
 func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, authored factoryapi.Factory) factoryapi.Factory {
 	merged := recorded
-	if merged.FactoryDir == nil {
-		merged.FactoryDir = authored.FactoryDir
+	if merged.FactoryDirectory == nil {
+		merged.FactoryDirectory = authored.FactoryDirectory
 	}
 	if merged.SourceDirectory == nil {
 		merged.SourceDirectory = authored.SourceDirectory
 	}
-	if merged.WorkflowId == nil {
-		merged.WorkflowId = authored.WorkflowId
-	}
-	if merged.Project == nil {
-		merged.Project = authored.Project
+	if merged.Id == nil {
+		merged.Id = authored.Id
 	}
 	if merged.Metadata == nil || len(*merged.Metadata) == 0 {
 		merged.Metadata = authored.Metadata

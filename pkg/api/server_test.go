@@ -1746,7 +1746,7 @@ func validNamedFactoryBody(name, workType string) string {
 
 func namedFactoryPayloadJSON(project, workType string) string {
 	return fmt.Sprintf(`{
-		"project": %q,
+		"id": %q,
 		"workTypes": [{
 			"name": %q,
 			"states": [

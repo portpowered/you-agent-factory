@@ -9,8 +9,12 @@ describe("normalizeFactoryDefinition", () => {
     expect(
       normalizeFactoryDefinition({
         input_types: [{ name: "default", type: "default" }],
-        project: "agent-factory",
+        id: "agent-factory",
+        name: "agent-factory",
         source_directory: "/tmp/legacy-factory",
+        supportingFiles: {
+          requiredTools: [{ command: "python", name: "python" }],
+        },
         workers: [
           {
             model_provider: "OPENAI",
@@ -51,9 +55,13 @@ describe("normalizeFactoryDefinition", () => {
         ],
       }),
     ).toEqual({
+      name: "agent-factory",
       inputTypes: [{ name: "default", type: "DEFAULT" }],
-      project: "agent-factory",
+      id: "agent-factory",
       sourceDirectory: "/tmp/legacy-factory",
+      supportingFiles: {
+        requiredTools: [{ command: "python", name: "python" }],
+      },
       workers: [
         {
           executorProvider: "script_wrap",
@@ -97,12 +105,12 @@ describe("normalizeFactoryDefinition", () => {
   it("rejects fields outside the generated contract", () => {
     expect(() =>
       normalizeFactoryDefinition({
-        exhaustion_rules: [],
         project: "legacy-factory",
+        name: "legacy-factory",
       }),
     ).toThrowError(
       new FactoryDefinitionAPIError(
-        "factory.exhaustion_rules is not allowed by the generated factory contract.",
+        "factory.project is not allowed by the generated factory contract.",
       ),
     );
   });
@@ -112,7 +120,8 @@ describe("isCanonicalFactoryDefinition", () => {
   it("returns true for canonical generated payloads", () => {
     expect(
       isCanonicalFactoryDefinition({
-        project: "agent-factory",
+        id: "agent-factory",
+        name: "agent-factory",
         workstations: [
           {
             inputs: [{ state: "new", workType: "story" }],

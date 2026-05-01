@@ -70,7 +70,7 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
-		"project": project,
+		"id": project,
 		"workTypes": []map[string]any{{
 			"name": workType,
 			"states": []map[string]string{
@@ -109,7 +109,7 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 	t.Helper()
 
 	generated, err := config.GeneratedFactoryFromOpenAPIJSON([]byte(`{
-		"project":"` + name + `",
+		"id":"` + name + `",
 		"workTypes":[{"name":"` + workType + `","states":[
 			{"name":"init","type":"INITIAL"},
 			{"name":"complete","type":"TERMINAL"},
@@ -376,7 +376,7 @@ func TestFactoryService_ActivateNamedFactory_RollsBackCurrentPointerWhenReplacem
 	}
 
 	betaFactoryPath := filepath.Join(rootDir, "beta", interfaces.FactoryConfigFile)
-	if err := os.WriteFile(betaFactoryPath, []byte(`{"project":"beta","workTypes":[`), 0o644); err != nil {
+	if err := os.WriteFile(betaFactoryPath, []byte(`{"id":"beta","workTypes":[`), 0o644); err != nil {
 		t.Fatalf("corrupt beta factory.json: %v", err)
 	}
 
@@ -435,8 +435,8 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	if current.Name != factoryapi.FactoryName("alpha") {
 		t.Fatalf("current factory name = %q, want alpha", current.Name)
 	}
-	if current.Project == nil || *current.Project != "alpha" {
-		t.Fatalf("current factory project = %#v, want alpha", current.Project)
+	if current.Id == nil || *current.Id != "alpha" {
+		t.Fatalf("current factory id = %#v, want alpha", current.Id)
 	}
 	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryConfig().Project != "beta" {
 		t.Fatalf("service runtime project = %q, want unchanged beta runtime", svc.runtimeCfg.FactoryConfig().Project)
@@ -695,7 +695,7 @@ func corruptNamedFactoryConfig(t *testing.T, rootDir, name string) {
 	t.Helper()
 
 	factoryPath := filepath.Join(rootDir, name, interfaces.FactoryConfigFile)
-	if err := os.WriteFile(factoryPath, []byte(`{"project":"`+name+`","workTypes":[`), 0o644); err != nil {
+	if err := os.WriteFile(factoryPath, []byte(`{"id":"`+name+`","workTypes":[`), 0o644); err != nil {
 		t.Fatalf("corrupt %s factory.json: %v", name, err)
 	}
 }
@@ -1837,8 +1837,8 @@ func TestBuildFactoryService_RecordModeWritesInitialArtifact(t *testing.T) {
 	if artifact.Factory.Workers == nil {
 		t.Fatal("expected embedded factory config")
 	}
-	if artifact.Factory.FactoryDir == nil || *artifact.Factory.FactoryDir != dir {
-		t.Fatalf("factory dir = %#v, want %q", artifact.Factory.FactoryDir, dir)
+	if artifact.Factory.FactoryDirectory == nil || *artifact.Factory.FactoryDirectory != dir {
+		t.Fatalf("factory directory = %#v, want %q", artifact.Factory.FactoryDirectory, dir)
 	}
 }
 

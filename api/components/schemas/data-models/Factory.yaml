@@ -25,7 +25,7 @@ example:
           type: FAILED
         - name: complete
           type: TERMINAL
-  resourceManifest:
+  supportingFiles:
     requiredTools:
       - name: python
         command: python
@@ -94,18 +94,15 @@ example:
 properties:
   name:
     $ref: './FactoryName.yaml'
-  project:
+  id:
     type: string
-    description: Project identifier used as the factory-level template context fallback.
-  factoryDir:
+    description: Factory identifier used as the factory-level template context fallback.
+  factoryDirectory:
     type: string
     description: Directory that contained the factory.json used for this serialized runtime config.
   sourceDirectory:
     type: string
     description: Original source directory for record/replay and drift diagnostics.
-  workflowId:
-    type: string
-    description: Optional workflow identity associated with this serialized runtime config.
   metadata:
     $ref: '../shared/StringMap.yaml'
     description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
@@ -124,7 +121,7 @@ properties:
     description: Shared capacity pools that workers or workstations can consume while work is executing.
     items:
       $ref: './Resource.yaml'
-  resourceManifest:
+  supportingFiles:
     $ref: './ResourceManifest.yaml'
     description: Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources.
   workers:

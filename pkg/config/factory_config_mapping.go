@@ -34,6 +34,16 @@ type retiredBoundaryField struct {
 	replacement string
 }
 
+var retiredFactoryBoundaryFields = []retiredBoundaryField{
+	{key: "project", replacement: "use id"},
+	{key: "factoryDir", replacement: "use factoryDirectory"},
+	{key: "factory_dir", replacement: "use factoryDirectory"},
+	{key: "resourceManifest", replacement: "use supportingFiles"},
+	{key: "resource_manifest", replacement: "use supportingFiles"},
+	{key: "workflowId", replacement: "remove workflowId"},
+	{key: "workflow_id", replacement: "remove workflowId"},
+}
+
 var retiredWorkerBoundaryFields = []retiredBoundaryField{
 	{key: "provider", replacement: "use executorProvider"},
 	{key: "model_provider", replacement: "use modelProvider"},
@@ -105,6 +115,9 @@ func rejectRetiredGeneratedBoundaryAliases(data []byte) error {
 	var payload map[string]any
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return nil
+	}
+	if err := rejectRetiredBoundaryFields(payload, "factory", retiredFactoryBoundaryFields); err != nil {
+		return err
 	}
 	if err := rejectRetiredWorkerBoundaryAliases(payload); err != nil {
 		return err
@@ -289,7 +302,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 
 	apiCfg := factoryapi.Factory{Name: factoryReferenceName(cfg)}
 	if cfg.Project != "" {
-		apiCfg.Project = stringPtr(cfg.Project)
+		apiCfg.Id = stringPtr(cfg.Project)
 	}
 	if len(cfg.InputTypes) > 0 {
 		inputTypes := make([]factoryapi.InputType, len(cfg.InputTypes))
@@ -329,7 +342,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		apiCfg.Resources = &resources
 	}
 	if cfg.ResourceManifest != nil {
-		apiCfg.ResourceManifest = resourceManifestAPIFromInternal(cfg.ResourceManifest)
+		apiCfg.SupportingFiles = resourceManifestAPIFromInternal(cfg.ResourceManifest)
 	}
 	if len(cfg.Workers) > 0 {
 		workers := make([]factoryapi.Worker, len(cfg.Workers))
@@ -363,8 +376,8 @@ func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) factoryapi.Factory {
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
 	cfg := interfaces.FactoryConfig{}
-	if apiCfg.Project != nil {
-		cfg.Project = *apiCfg.Project
+	if apiCfg.Id != nil {
+		cfg.Project = *apiCfg.Id
 	}
 	if apiCfg.InputTypes != nil {
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
@@ -375,8 +388,8 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	if apiCfg.Resources != nil {
 		cfg.Resources = resourcesInternalFromAPI(*apiCfg.Resources)
 	}
-	if apiCfg.ResourceManifest != nil {
-		cfg.ResourceManifest = resourceManifestInternalFromAPI(apiCfg.ResourceManifest)
+	if apiCfg.SupportingFiles != nil {
+		cfg.ResourceManifest = resourceManifestInternalFromAPI(apiCfg.SupportingFiles)
 	}
 	if apiCfg.Workers != nil {
 		workers, err := workersInternalFromAPI(*apiCfg.Workers)

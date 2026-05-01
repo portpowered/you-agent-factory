@@ -1000,8 +1000,9 @@ const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
 
 const exportTimelineEvents: FactoryEvent[] = [
   factoryEvent("export-run-request", 0, FACTORY_EVENT_TYPES.runRequest, {
-    factory: {
-      project: "semantic-workflow",
+  factory: {
+      id: "semantic-workflow",
+      name: "semantic-workflow",
       source_directory: "/work/factories/semantic-workflow",
       workers: [
         {
@@ -1037,7 +1038,8 @@ const currentNamedFactoryExportResponse = {
     metadata: {
       contractSource: "current-factory-api",
     },
-    project: "authored-current-factory",
+    id: "authored-current-factory",
+    name: "authored-current-factory",
     workers: [
       {
         executorProvider: "script_wrap",
@@ -1732,7 +1734,8 @@ describe("App", () => {
           ...currentNamedFactoryExportResponse.factory.metadata,
           contractSource: "refetched-current-factory-api",
         },
-        project: "authored-refetched-factory",
+        id: "authored-refetched-factory",
+        name: "authored-refetched-factory",
       },
       name: "imported-workflow",
     } satisfies NamedFactoryValue;

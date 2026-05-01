@@ -128,11 +128,11 @@ Each `workType` and `state` pair becomes a place named
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `project` | No | Factory-level project identifier. Prompt context uses this when a submitted work item does not carry a `project` tag. |
+| `id` | No | Factory-level identifier. Prompt context uses this when a submitted work item does not carry a `project` tag. |
 | `inputTypes` | No | Named input kinds. The implicit `default` input type already exists; omit this unless adding a supported non-default input kind. |
 | `workTypes` | Yes | Work categories and lifecycle states. Workstation input and output places must reference these names. |
 | `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
-| `resourceManifest` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
+| `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
 | `workers` | Yes | Worker identities and optional inline worker runtime config. Workstations reference workers by `name`. |
 | `workstations` | Yes | Dispatch steps that consume input states, invoke workers or logical routing, and produce output states. |
 
@@ -143,12 +143,12 @@ behavior.
 
 ## Portability Resource Manifest
 
-Use `resourceManifest` when the factory must declare portability dependencies
+Use `supportingFiles` when the factory must declare portability dependencies
 that are not runtime-capacity pools.
 
 ```json
 {
-  "resourceManifest": {
+  "supportingFiles": {
     "requiredTools": [
       {
         "name": "python",
@@ -453,7 +453,7 @@ feedback to route the story back for another execution pass. Guarded
 
 ```json
 {
-  "project": "sample-service",
+  "id": "sample-service",
   "workTypes": [
     {
       "name": "story",

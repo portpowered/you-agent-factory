@@ -680,7 +680,7 @@ export interface components {
          *           ]
          *         }
          *       ],
-         *       "resourceManifest": {
+         *       "supportingFiles": {
          *         "requiredTools": [
          *           {
          *             "name": "python",
@@ -790,14 +790,12 @@ export interface components {
          */
         Factory: {
             name: components["schemas"]["FactoryName"];
-            /** @description Project identifier used as the factory-level template context fallback. */
-            project?: string;
+            /** @description Factory identifier used as the factory-level template context fallback. */
+            id?: string;
             /** @description Directory that contained the factory.json used for this serialized runtime config. */
-            factoryDir?: string;
+            factoryDirectory?: string;
             /** @description Original source directory for record/replay and drift diagnostics. */
             sourceDirectory?: string;
-            /** @description Optional workflow identity associated with this serialized runtime config. */
-            workflowId?: string;
             /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
             metadata?: components["schemas"]["StringMap"];
             /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
@@ -807,7 +805,7 @@ export interface components {
             /** @description Shared capacity pools that workers or workstations can consume while work is executing. */
             resources?: components["schemas"]["Resource"][];
             /** @description Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources. */
-            resourceManifest?: components["schemas"]["ResourceManifest"];
+            supportingFiles?: components["schemas"]["ResourceManifest"];
             /** @description Reusable worker definitions that workstations reference by name when dispatching work. */
             workers?: components["schemas"]["Worker"][];
             /** @description Processing steps that consume work, invoke workers, and emit the next work states. */

@@ -19,6 +19,7 @@ var supportedFactoryConfigLegacyConfigTokens = []string{
 	"exhaustion_rules",
 	"expiry_window",
 	"factory_dir",
+	"factoryDir",
 	"input_types",
 	"max_execution_time",
 	"max_retries",
@@ -32,6 +33,7 @@ var supportedFactoryConfigLegacyConfigTokens = []string{
 	"prompt_template",
 	"resource_usage",
 	"resourceUsage",
+	"resourceManifest",
 	"runtime_stop_words",
 	"runtimeStopWords",
 	"session_id",
@@ -46,6 +48,7 @@ var supportedFactoryConfigLegacyConfigTokens = []string{
 	"work_types",
 	"working_directory",
 	"workflow_id",
+	"workflowId",
 }
 
 var supportedFactoryConfigLegacyDocTokens = []string{

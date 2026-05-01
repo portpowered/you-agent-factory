@@ -5,9 +5,9 @@ file lives.
 
 ## Current Contract
 
-- `factory.json` is the canonical root file. It owns project-level workflow
-  topology such as `workTypes`, `workers`, `workstations`, routes, optional
-  runtime `resources`, and the optional portability `resourceManifest`.
+- `factory.json` is the canonical root file. It owns factory-level workflow
+  topology such as `id`, `workTypes`, `workers`, `workstations`, routes,
+  optional runtime `resources`, and the optional portability `supportingFiles`.
 - Keep worker runtime instructions in `workers/<name>/AGENTS.md`.
 - Keep workstation runtime instructions in `workstations/<name>/AGENTS.md`.
 - Keep watched work inputs under `inputs/<work-type-or-BATCH>/<channel>/`.
@@ -16,7 +16,7 @@ file lives.
 - When both inline runtime fields and a split `AGENTS.md` file exist for the
   same workstation, the split runtime definition is authoritative for the
   overlapping runtime fields.
-- Treat `resourceManifest` as a portability-only contract: `requiredTools`
+- Treat `supportingFiles` as a portability-only contract: `requiredTools`
   declare validation-only PATH dependencies, while `bundledFiles` carry
   portable file content for factory-relative restoration.
 
@@ -39,7 +39,7 @@ factory/
 
 ```json
 {
-  "project": "sample-service",
+  "id": "sample-service",
   "workTypes": [
     {
       "name": "task",
@@ -77,12 +77,12 @@ For that minimal factory:
 
 ## Portability Manifest
 
-Use `resourceManifest` when the portable factory must declare external tools or
+Use `supportingFiles` when the portable factory must declare external tools or
 carry bundled helper files beyond workflow topology.
 
 ```json
 {
-  "resourceManifest": {
+  "supportingFiles": {
     "requiredTools": [
       {
         "name": "python",
