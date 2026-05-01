@@ -11,19 +11,59 @@ That way, you can run 10-100+ agents at once, and have even more leverage to do 
 
 ## 📦 Install
 
-1. Install the local Codex provider used by your environment and authenticate it.
+Install the local Codex provider used by your environment and authenticate it
+first, then choose the install path that matches your machine.
 
-2. Use the install path that matches your environment.
+### Homebrew cask for macOS
 
-For Go toolchain users, the supported source install path is:
+Use Homebrew when you are on macOS and want the standard package-manager flow:
+
+```bash
+brew install --cask portpowered/cask/agent-factory
+```
+
+The cask installs the packaged `agent-factory` release binary into Homebrew's
+normal binary location. The binary is not code signed or notarized yet. The
+cask tries to clear the macOS quarantine attribute automatically, but if macOS
+still blocks launch run:
+
+```bash
+xattr -dr com.apple.quarantine "$(brew --prefix)/bin/agent-factory"
+```
+
+### `install.sh` for macOS and Linux
+
+Use the hosted installer when you want the packaged release binary without
+manual archive selection or unpacking:
+
+```bash
+curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh
+```
+
+`install.sh` supports macOS and Linux on `amd64` and `arm64`, verifies the
+published checksum before extraction, installs into a user-writable directory,
+and prints the final binary path plus `PATH` guidance when needed. On macOS it
+also prints the exact `xattr` command above if quarantine removal still needs a
+manual retry.
+
+### `go install` for Go toolchain users
+
+Use `go install` only when you already have a working Go toolchain and want the
+CLI built from source instead of the packaged release artifact:
 
 ```bash
 go install github.com/portpowered/agent-factory/cmd/factory@latest
 ```
 
-This path is meant for developers who already use Go. It installs the current
-`cmd/factory` entrypoint from source. Because `go install` names the binary from
-the leaf package directory, this command installs `factory` into your `GOBIN`.
+This path installs the current `cmd/factory` entrypoint from source. Because
+`go install` names the binary from the leaf package directory, this command
+installs `factory` into your `GOBIN` rather than `agent-factory`.
+
+### Manual release archive fallback
+
+If you cannot use Homebrew, `install.sh`, or `go install`, you can still
+download a release archive manually from GitHub Releases, unpack it, and place
+`agent-factory` on your `PATH`.
 
 If you are working from a local checkout instead, build and install the binary:
 
@@ -33,8 +73,8 @@ cd infinite-you
 make install     # installs to $GOBIN
 ```
 
-The packaged release archives and docs examples continue to use the
-`agent-factory` command surface:
+The packaged release archives and docs examples use the `agent-factory` command
+surface:
 
 ```bash
 agent-factory
