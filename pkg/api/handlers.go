@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/apisurface"
 	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
+	factorypkg "github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/internal/submission"
@@ -751,8 +752,8 @@ func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, pre
 	if err := json.Unmarshal(legacyRaw, &legacy); err != nil {
 		return err
 	}
-	if current != "" && legacy != "" && current != legacy {
-		return requestFieldValidationError{message: fmt.Sprintf("%scurrentChainingTraceId and traceId must match when both are provided", prefix)}
+	if err := factorypkg.ValidateWorkRequestTraceFields(current, legacy); err != nil {
+		return requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
 	}
 	return nil
 }
@@ -798,10 +799,7 @@ func applyStableTraceToWorkRequest(req *interfaces.WorkRequest) {
 }
 
 func resolvedCurrentChainingTraceID(current string, legacy string) string {
-	if current != "" {
-		return current
-	}
-	return legacy
+	return factorypkg.ResolveWorkRequestCurrentChainingTraceID(current, legacy)
 }
 
 func generatedPayloadToRawMessage(payload any) (json.RawMessage, error) {

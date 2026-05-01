@@ -2,11 +2,64 @@ package factory
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 )
+
+func TestResolveWorkRequestCurrentChainingTraceID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		current string
+		legacy  string
+		want    string
+	}{
+		{name: "prefers current", current: "chain-current", legacy: "trace-legacy", want: "chain-current"},
+		{name: "falls back to legacy", legacy: "trace-legacy", want: "trace-legacy"},
+		{name: "empty when neither present", want: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ResolveWorkRequestCurrentChainingTraceID(tc.current, tc.legacy); got != tc.want {
+				t.Fatalf("ResolveWorkRequestCurrentChainingTraceID(%q, %q) = %q, want %q", tc.current, tc.legacy, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateWorkRequestTraceFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		current string
+		legacy  string
+		wantErr error
+	}{
+		{name: "matching aliases", current: "chain-1", legacy: "chain-1"},
+		{name: "current only", current: "chain-1"},
+		{name: "legacy only", legacy: "trace-1"},
+		{name: "conflicting aliases", current: "chain-1", legacy: "trace-1", wantErr: errConflictingWorkRequestTraceFields},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidateWorkRequestTraceFields(tc.current, tc.legacy)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("ValidateWorkRequestTraceFields(%q, %q) error = %v, want %v", tc.current, tc.legacy, err, tc.wantErr)
+			}
+		})
+	}
+}
 
 func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testing.T) {
 	request := interfaces.WorkRequest{

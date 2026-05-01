@@ -83,8 +83,8 @@ func RejectConflictingWorkRequestTraceFields(data []byte) error {
 		if err := json.Unmarshal(traceRaw, &legacy); err != nil {
 			return fmt.Errorf("parse work request works[%d] traceId: %w", i, err)
 		}
-		if current != "" && legacy != "" && current != legacy {
-			return fmt.Errorf("work request batch works[%d] currentChainingTraceId and traceId must match when both are provided", i)
+		if err := ValidateWorkRequestTraceFields(current, legacy); err != nil {
+			return fmt.Errorf("work request batch works[%d] %w", i, err)
 		}
 	}
 	return nil
