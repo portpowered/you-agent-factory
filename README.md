@@ -52,7 +52,7 @@ Use `go install` only when you already have a working Go toolchain and want the
 CLI built from source instead of the packaged release artifact:
 
 ```bash
-go install github.com/portpowered/agent-factory/cmd/factory@latest
+go install github.com/portpowered/infinite-you/cmd/factory@latest
 ```
 
 This path installs the current `cmd/factory` entrypoint from source. Because

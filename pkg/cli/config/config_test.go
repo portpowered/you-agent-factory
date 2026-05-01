@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // portos:func-length-exception owner=agent-factory reason=table-heavy-cli-config-round-trip-fixture review=2026-07-18 removal=split-fixture-setup-and-idempotency-assertions-before-next-cli-config-expand-change

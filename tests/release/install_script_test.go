@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *testing.T) {

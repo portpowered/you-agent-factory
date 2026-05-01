@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // NormalizeWorkRequest validates a FACTORY_REQUEST_BATCH and converts it into runtime submit requests.

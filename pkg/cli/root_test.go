@@ -13,13 +13,13 @@ import (
 	"strings"
 	"testing"
 
-	docscli "github.com/portpowered/agent-factory/pkg/cli/docs"
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
-	submitcli "github.com/portpowered/agent-factory/pkg/cli/submit"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 func TestNewRootCommand_HasSubcommands(t *testing.T) {

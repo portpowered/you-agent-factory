@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 func TestSubmit_MissingWorkTypeName(t *testing.T) {

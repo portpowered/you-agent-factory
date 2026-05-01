@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/cli/dashboard"
-	"github.com/portpowered/agent-factory/pkg/cli/dashboardrender"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupportedBoundaries(t *testing.T) {

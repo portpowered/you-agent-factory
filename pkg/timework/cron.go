@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (

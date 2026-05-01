@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func loadProviderErrorCorpusForTest(t *testing.T) workers.ProviderErrorCorpus {

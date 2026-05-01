@@ -3,7 +3,7 @@ package petri
 import (
 	"maps"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // Marking represents the complete state of tokens across places in a petri net.

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 type agentMockProvider struct {
@@ -757,7 +757,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 
 	executor = NewAgentExecutor(
 		runtimeCfg,
-		&agentMockProvider{response: interfaces.InferenceResponse{Content: "Still iterating\n<CONTINUE>"}} ,
+		&agentMockProvider{response: interfaces.InferenceResponse{Content: "Still iterating\n<CONTINUE>"}},
 	)
 	result, err = executor.Execute(context.Background(), testAgentRequest(
 		interfaces.WorkDispatch{

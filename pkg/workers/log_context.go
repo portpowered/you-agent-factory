@@ -1,6 +1,6 @@
 package workers
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 const (
 	WorkLogEventWorkerPoolSubmitted         = "worker_pool.submitted"

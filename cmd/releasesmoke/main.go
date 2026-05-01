@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/releasesmoke"
+	"github.com/portpowered/infinite-you/internal/releasesmoke"
 )
 
 func main() {

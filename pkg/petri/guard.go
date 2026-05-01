@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // Guard is a predicate evaluated against tokens in a place to determine

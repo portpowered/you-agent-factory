@@ -5,8 +5,8 @@ import (
 	"strings"
 	"text/template"
 
-	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // PromptRenderer interpolates token color data into prompt templates using

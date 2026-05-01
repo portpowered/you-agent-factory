@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"gopkg.in/yaml.v3"
 )
 

@@ -11,13 +11,13 @@ import (
 	"strings"
 	"syscall"
 
-	configcli "github.com/portpowered/agent-factory/pkg/cli/config"
-	defaultcmd "github.com/portpowered/agent-factory/pkg/cli/default"
-	docscli "github.com/portpowered/agent-factory/pkg/cli/docs"
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
-	submitcli "github.com/portpowered/agent-factory/pkg/cli/submit"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
+	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
 

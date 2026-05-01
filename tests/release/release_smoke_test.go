@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/releasesmoke"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/releasesmoke"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T) {

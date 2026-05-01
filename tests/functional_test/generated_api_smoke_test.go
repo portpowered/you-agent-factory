@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	submitcli "github.com/portpowered/agent-factory/pkg/cli/submit"
-	"github.com/portpowered/agent-factory/pkg/factory"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	"github.com/portpowered/infinite-you/pkg/factory"
 )
 
 var retiredFunctionalFactoryEventTypes = []string{

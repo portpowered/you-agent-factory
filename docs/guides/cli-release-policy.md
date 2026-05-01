@@ -108,7 +108,7 @@ entrypoint.
 For Go users, the supported command is:
 
 ```bash
-go install github.com/portpowered/agent-factory/cmd/factory@latest
+go install github.com/portpowered/infinite-you/cmd/factory@latest
 ```
 
 This install path is for environments that already have a working Go toolchain.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // TestMultiChannelFileWatcher_DefaultSubmission confirms that a seed file

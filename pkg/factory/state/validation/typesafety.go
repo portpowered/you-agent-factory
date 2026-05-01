@@ -3,8 +3,8 @@ package validation
 import (
 	"fmt"
 
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // validColorFields lists the fields available on TokenColor for guard matching.

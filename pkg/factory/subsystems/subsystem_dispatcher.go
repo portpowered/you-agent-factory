@@ -8,14 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
-	factory_throttle "github.com/portpowered/agent-factory/pkg/factory/internal/throttle"
-	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	factory_throttle "github.com/portpowered/infinite-you/pkg/factory/internal/throttle"
+	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // DispatcherSubsystem fires transitions by consuming input tokens and producing

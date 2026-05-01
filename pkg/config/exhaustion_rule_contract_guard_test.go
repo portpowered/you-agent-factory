@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/contractguard"
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 var retiredAuthoredExhaustionIdentifiers = map[string]struct{}{
@@ -188,7 +188,7 @@ func scanTransitionExhaustionUses(file *ast.File, fset *token.FileSet, petriAlia
 func transitionImportAliases(file *ast.File) map[string]struct{} {
 	aliases := map[string]struct{}{}
 	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/agent-factory/pkg/petri"` {
+		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/infinite-you/pkg/petri"` {
 			continue
 		}
 		name := "petri"

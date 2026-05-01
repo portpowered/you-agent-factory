@@ -3,7 +3,7 @@ package functional_test
 import (
 	"fmt"
 
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func buildModelWorkerConfig(provider workers.ModelProvider, model string) string {
