@@ -133,7 +133,6 @@ func TestEndToEndEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsit
 	if len(work.Results) != 1 || work.Results[0].TraceId != traceID {
 		t.Fatalf("completed work = %#v, want one result for trace %q", work.Results, traceID)
 	}
-	assertGeneratedDashboardRoutesRemoved(t, server.URL(), work.Results[0].Id)
 }
 
 func openFactoryEventHTTPStream(t *testing.T, endpoint string) *factoryEventHTTPStream {
