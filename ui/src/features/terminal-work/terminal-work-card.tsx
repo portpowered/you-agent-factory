@@ -18,6 +18,12 @@ import {
   DETAIL_CARD_CLASS,
   DETAIL_COPY_CLASS,
 } from "../../components/dashboard/widget-board";
+import { Button } from "../../components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "../../components/ui/collapsible";
 import type {
   DashboardProviderSessionAttempt,
   DashboardWorkItemRef,
@@ -50,8 +56,8 @@ interface TerminalWorkRowProps {
   emptyMessage: string;
   expanded: boolean;
   items: TerminalWorkItem[];
+  onExpandedChange: (expanded: boolean) => void;
   onSelectItem: (item: TerminalWorkItem) => void;
-  onToggle: () => void;
   selectedLabel?: string;
   status: TerminalWorkStatus;
   title: string;
@@ -64,15 +70,15 @@ const TERMINAL_ROW_HEADER_CLASS =
   "mb-[0.55rem] flex items-center justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-ink/58";
 const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
-const TERMINAL_TOGGLE_CLASS =
-  "shrink-0 cursor-pointer rounded-lg border border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.45rem] text-xs text-af-accent";
 const TERMINAL_LIST_CLASS = "grid gap-2";
+const TERMINAL_TOGGLE_CLASS = "min-h-9 shrink-0 px-[0.65rem] py-[0.45rem] text-xs";
 const TERMINAL_BUTTON_CLASS = cx(
-  "grid cursor-pointer gap-[0.3rem] rounded-lg border border-af-info/35 bg-af-info/10 px-3 py-[0.55rem] text-left text-af-info-ink [overflow-wrap:anywhere]",
+  "grid h-auto min-h-0 w-full justify-start gap-[0.3rem] border-af-info/35 bg-af-info/10 px-3 py-[0.55rem] text-left text-af-info-ink [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const TERMINAL_BUTTON_FAILED_CLASS = "border-af-danger/35 bg-af-danger/10 text-af-danger-ink";
-const TERMINAL_BUTTON_SELECTED_CLASS = "shadow-af-accent-chip";
+const TERMINAL_BUTTON_SELECTED_CLASS =
+  "border-af-accent/55 bg-af-accent/14 text-af-accent shadow-af-accent-chip";
 const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
 const TERMINAL_BUTTON_META_CLASS = cx(
   "leading-snug text-af-ink/66",
@@ -106,8 +112,8 @@ export function CompletedFailedWorkstationCard({
           emptyMessage="No completed work recorded yet."
           expanded={completedExpanded}
           items={completedItems}
+          onExpandedChange={setCompletedExpanded}
           onSelectItem={(item) => onSelectItem("completed", item)}
-          onToggle={() => setCompletedExpanded((current) => !current)}
           selectedLabel={selectedItem?.status === "completed" ? selectedItem.label : undefined}
           status="completed"
           title="Completed"
@@ -116,8 +122,8 @@ export function CompletedFailedWorkstationCard({
           emptyMessage="No failed work recorded yet."
           expanded={failedExpanded}
           items={failedItems}
+          onExpandedChange={setFailedExpanded}
           onSelectItem={(item) => onSelectItem("failed", item)}
-          onToggle={() => setFailedExpanded((current) => !current)}
           selectedLabel={selectedItem?.status === "failed" ? selectedItem.label : undefined}
           status="failed"
           title="Failed"
@@ -131,8 +137,8 @@ function TerminalWorkRow({
   emptyMessage,
   expanded,
   items,
+  onExpandedChange,
   onSelectItem,
-  onToggle,
   selectedLabel,
   status,
   title,
@@ -147,59 +153,62 @@ function TerminalWorkRow({
       aria-labelledby={`${rowId}-heading`}
       data-terminal-work-status={status}
     >
-      <div className={TERMINAL_ROW_HEADER_CLASS}>
-        <div>
-          <div className={TERMINAL_ROW_TITLE_CLASS} data-terminal-work-title>
-            <GraphSemanticIcon
-              className={cx(
-                TERMINAL_ROW_TITLE_ICON_CLASS,
-                terminalStatusIconClassName(status),
-              )}
-              kind={terminalStatusIconKind(status)}
-              label={iconLabel}
-            />
-            <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${rowId}-heading`}>
-              {title}
-            </h4>
+      <Collapsible onOpenChange={onExpandedChange} open={expanded}>
+        <div className={TERMINAL_ROW_HEADER_CLASS}>
+          <div>
+            <div className={TERMINAL_ROW_TITLE_CLASS} data-terminal-work-title>
+              <GraphSemanticIcon
+                className={cx(
+                  TERMINAL_ROW_TITLE_ICON_CLASS,
+                  terminalStatusIconClassName(status),
+                )}
+                kind={terminalStatusIconKind(status)}
+                label={iconLabel}
+              />
+              <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${rowId}-heading`}>
+                {title}
+              </h4>
+            </div>
+            <p className={DASHBOARD_SUPPORTING_TEXT_CLASS}>{itemCountLabel}</p>
           </div>
-          <p className={DASHBOARD_SUPPORTING_TEXT_CLASS}>{itemCountLabel}</p>
+          <CollapsibleTrigger asChild>
+            <Button
+              aria-controls={rowId}
+              aria-expanded={expanded}
+              className={TERMINAL_TOGGLE_CLASS}
+              size="sm"
+              tone="secondary"
+            >
+              {expanded ? "Collapse" : "Expand"}
+            </Button>
+          </CollapsibleTrigger>
         </div>
-        <button
-          aria-controls={rowId}
-          aria-expanded={expanded}
-          className={TERMINAL_TOGGLE_CLASS}
-          onClick={onToggle}
-          type="button"
-        >
-          {expanded ? "Collapse" : "Expand"}
-        </button>
-      </div>
 
-      {expanded ? (
-        <div className={TERMINAL_LIST_CLASS} id={rowId}>
+        <CollapsibleContent className={TERMINAL_LIST_CLASS} id={rowId}>
           {items.length > 0 ? (
             items.map((item) => (
-              <button
+              <Button
                 aria-label={item.label}
-                key={`${status}-${item.label}`}
                 className={cx(
                   TERMINAL_BUTTON_CLASS,
                   status === "failed" && TERMINAL_BUTTON_FAILED_CLASS,
                   selectedLabel === item.label && TERMINAL_BUTTON_SELECTED_CLASS,
                 )}
                 data-selected={selectedLabel === item.label ? "true" : undefined}
+                key={`${status}-${item.label}`}
                 onClick={() => onSelectItem(item)}
-                type="button"
+                size="sm"
+                tone="outline"
               >
                 <span className={TERMINAL_BUTTON_LABEL_CLASS}>{item.label}</span>
                 {renderTerminalWorkContext(item, status)}
-              </button>
+              </Button>
             ))
           ) : (
             <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>
           )}
-        </div>
-      ) : null}
+        </CollapsibleContent>
+      </Collapsible>
     </section>
   );
 }

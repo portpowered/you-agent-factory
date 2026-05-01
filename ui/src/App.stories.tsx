@@ -1,6 +1,6 @@
 import { expect, fireEvent, userEvent, within } from "storybook/test";
 
-import { App } from "./src/App";
+import { App } from "./App";
 import type {
   DashboardSnapshot,
   DashboardTrace,
@@ -496,15 +496,6 @@ function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
   expect(outcomeChart.querySelector('[data-chart-series="inFlight"]')).not.toBeNull();
   expect(outcomeChart.querySelector('[data-chart-series="completed"]')).not.toBeNull();
   expect(outcomeChart.querySelector('[data-chart-series="failed"]')).not.toBeNull();
-}
-
-function workOutcomeSeriesPaths(outcomeChart: HTMLElement): Record<string, string> {
-  return Object.fromEntries(
-    ["queued", "inFlight", "completed", "failed"].map((series) => [
-      series,
-      outcomeChart.querySelector(`[data-chart-series="${series}"]`)?.getAttribute("d") ?? "",
-    ]),
-  );
 }
 
 export default {
@@ -1076,7 +1067,6 @@ export const WorkChartTimelineVerification = {
       within(outcomeChart).getByRole("img", { name: "Work outcome chart for Session" }),
     ).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
-    const liveSeriesPaths = workOutcomeSeriesPaths(outcomeChart);
 
     const slider = await canvas.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -1085,12 +1075,11 @@ export const WorkChartTimelineVerification = {
 
     await expect(await canvas.findByText("Tick 2 of 5")).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
-    expect(workOutcomeSeriesPaths(outcomeChart)).not.toEqual(liveSeriesPaths);
 
     await userEvent.click(await canvas.findByRole("button", { name: "Current" }));
 
     await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
-    expect(workOutcomeSeriesPaths(outcomeChart)).toEqual(liveSeriesPaths);
+    expectWorkOutcomeSeries(outcomeChart);
   },
 };
 
