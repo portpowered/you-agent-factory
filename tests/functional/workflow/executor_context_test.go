@@ -1,4 +1,4 @@
-package functional_test
+package workflow
 
 import (
 	"bytes"
@@ -7,13 +7,13 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// TestExecutorContext_InputTokenColors verifies that the dispatched WorkDispatch
-// contains input token colors carrying the original payload and tags submitted
-// with the work item.
+// TestExecutorContext_InputTokenColors verifies that the dispatched work keeps
+// the original payload, tags, and work type on the executor input token.
 func TestExecutorContext_InputTokenColors(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "code_review"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	payload := []byte(`{"feature": "dark mode", "priority": "high"}`)
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -23,8 +23,8 @@ func TestExecutorContext_InputTokenColors(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		acceptedProviderResponse(),
-		acceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -33,7 +33,7 @@ func TestExecutorContext_InputTokenColors(t *testing.T) {
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	sweCalls := providerCallsForWorker(provider, "swe")
+	sweCalls := support.ProviderCallsForWorker(provider, "swe")
 	if len(sweCalls) != 1 {
 		t.Fatalf("expected swe called 1 time, got %d", len(sweCalls))
 	}
@@ -44,31 +44,24 @@ func TestExecutorContext_InputTokenColors(t *testing.T) {
 	}
 
 	color := firstInputToken(dispatch.InputTokens).Color
-
-	// Verify payload is carried through.
 	if !bytes.Equal(color.Payload, payload) {
 		t.Errorf("expected payload %q, got %q", payload, color.Payload)
 	}
-
-	// Verify tags are carried through.
 	if color.Tags["team"] != "frontend" {
 		t.Errorf("expected tag team=frontend, got %q", color.Tags["team"])
 	}
 	if color.Tags["sprint"] != "42" {
 		t.Errorf("expected tag sprint=42, got %q", color.Tags["sprint"])
 	}
-
-	// Verify work type is correct.
 	if color.WorkTypeID != "code-change" {
 		t.Errorf("expected WorkTypeID %q, got %q", "code-change", color.WorkTypeID)
 	}
 }
 
-// TestExecutorContext_RejectionFeedback verifies that when a reviewer rejects,
-// the rejection feedback is propagated to the executor's next dispatch via the
-// _rejection_feedback tag on the input token.
+// TestExecutorContext_RejectionFeedback verifies that reviewer feedback is
+// attached to the next executor dispatch through the input token tags.
 func TestExecutorContext_RejectionFeedback(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "code_review"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
 
@@ -90,14 +83,11 @@ func TestExecutorContext_RejectionFeedback(t *testing.T) {
 	}
 
 	calls := sweMock.Calls()
-
-	// First dispatch should have no rejection feedback.
 	firstColor := firstInputToken(calls[0].InputTokens).Color
 	if _, ok := firstColor.Tags["_rejection_feedback"]; ok {
 		t.Error("first dispatch should not have _rejection_feedback tag")
 	}
 
-	// Second dispatch should carry the rejection feedback.
 	secondColor := firstInputToken(calls[1].InputTokens).Color
 	feedback, ok := secondColor.Tags["_rejection_feedback"]
 	if !ok {
@@ -106,18 +96,15 @@ func TestExecutorContext_RejectionFeedback(t *testing.T) {
 	if feedback != "needs unit tests" {
 		t.Errorf("expected rejection feedback %q, got %q", "needs unit tests", feedback)
 	}
-
-	// Original payload should still be present after rejection loop.
 	if !bytes.Contains(secondColor.Payload, []byte("auth")) {
 		t.Errorf("expected payload to contain 'auth' after rejection, got %q", secondColor.Payload)
 	}
 }
 
-// TestExecutorContext_ParentLineage verifies that when a token is submitted with
-// relations (e.g., PARENT_CHILD), the dispatched WorkDispatch carries those
-// relations on the input token so the executor can track lineage.
+// TestExecutorContext_ParentLineage verifies that parent-child and depends-on
+// relations survive onto the executor dispatch token for workflow lineage.
 func TestExecutorContext_ParentLineage(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "code_review"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID:  "code-change",
@@ -143,8 +130,8 @@ func TestExecutorContext_ParentLineage(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		acceptedProviderResponse(),
-		acceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
+		support.AcceptedProviderResponse(),
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -153,7 +140,7 @@ func TestExecutorContext_ParentLineage(t *testing.T) {
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	sweCalls := providerCallsForWorker(provider, "swe")
+	sweCalls := support.ProviderCallsForWorker(provider, "swe")
 	if len(sweCalls) != 1 {
 		t.Fatalf("expected swe called 1 time, got %d", len(sweCalls))
 	}
@@ -164,13 +151,9 @@ func TestExecutorContext_ParentLineage(t *testing.T) {
 	}
 
 	color := firstInputToken(dispatch.InputTokens).Color
-
-	// Verify WorkID is preserved.
 	if color.WorkID != "child-work-1" {
 		t.Errorf("expected WorkID %q, got %q", "child-work-1", color.WorkID)
 	}
-
-	// Verify relations are preserved on the input token.
 	if len(color.Relations) != 2 {
 		t.Fatalf("expected 2 relations, got %d", len(color.Relations))
 	}
