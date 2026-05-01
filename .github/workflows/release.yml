@@ -99,7 +99,105 @@ jobs:
       - name: Publish GitHub release assets from the tagged commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
         run: go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --clean -f .goreleaser.yml
+
+      - name: Upload hosted install.sh release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.resolve-release-tag.outputs.release_tag }}" \
+            --repo "${{ github.event.workflow_run.repository.full_name }}" \
+            --clobber \
+            install.sh
+
+  verify-homebrew-cask:
+    name: Verify Homebrew Cask Publication
+    needs:
+      - resolve-release-tag
+      - publish-release
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: portpowered/cask
+          ref: main
+          path: tap
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Install published Homebrew cask from tap
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install --cask "$(pwd)/tap/Casks/agent-factory.rb"
+
+      - name: Verify installed Homebrew binary starts successfully
+        shell: bash
+        run: |
+          set -euo pipefail
+          agent-factory --help >/dev/null
+
+  smoke-hosted-installer:
+    name: Smoke Hosted install.sh (${{ matrix.os_id }})
+    needs:
+      - resolve-release-tag
+      - publish-release
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_id: linux
+            runner: ubuntu-latest
+          - os_id: macos
+            runner: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Smoke hosted install.sh against the published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_url="https://github.com/${{ github.event.workflow_run.repository.full_name }}/releases/download/${{ needs.resolve-release-tag.outputs.release_tag }}/install.sh"
+          sh ./scripts/release/smoke-install.sh \
+            "$install_url" \
+            "${{ needs.resolve-release-tag.outputs.release_version }}" \
+            "$(pwd)/installed-bin"
+
+  verify-go-install:
+    name: Verify Go Install Surface
+    needs:
+      - resolve-release-tag
+      - publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Smoke go install verification contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./tests/release -run TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN -count=1
 
   smoke-released-artifacts:
     name: Smoke Released Artifacts (${{ matrix.asset_id }})
