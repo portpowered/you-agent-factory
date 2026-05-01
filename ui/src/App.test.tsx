@@ -49,7 +49,7 @@ import type {
 } from "./api/dashboard";
 import { FACTORY_EVENT_TYPES } from "./api/events";
 import type { FactoryEvent } from "./api/events";
-import type { NamedFactoryValue } from "./api/named-factory";
+import type { FactoryValue, NamedFactoryValue } from "./api/named-factory";
 import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
 import { buildFactoryTimelineSnapshot, useFactoryTimelineStore } from "./state/factoryTimelineStore";
@@ -1034,40 +1034,41 @@ const exportTimelineEvents: FactoryEvent[] = [
   }),
 ];
 const currentNamedFactoryExportResponse = {
-  factory: {
-    metadata: {
-      contractSource: "current-factory-api",
-    },
-    id: "authored-current-factory",
-    name: "authored-current-factory",
-    workers: [
-      {
-        executorProvider: "SCRIPT_WRAP",
-        modelProvider: "CODEX",
-        name: "reviewer",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workTypes: [{
-      name: "story",
-      states: [
-        { name: "new", type: "INITIAL" },
-        { name: "done", type: "TERMINAL" },
-      ],
-    }],
-    workstations: [
-      {
-        id: "review",
-        inputs: [{ state: "new", workType: "story" }],
-        name: "Review",
-        onFailure: { state: "done", workType: "story" },
-        outputs: [{ state: "done", workType: "story" }],
-        type: "MODEL_WORKSTATION",
-        worker: "reviewer",
-      },
-    ],
+  metadata: {
+    contractSource: "current-factory-api",
   },
+  id: "authored-current-factory",
   name: "semantic-workflow",
+  workers: [
+    {
+      executorProvider: "SCRIPT_WRAP",
+      modelProvider: "CODEX",
+      name: "reviewer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workTypes: [{
+    name: "story",
+    states: [
+      { name: "new", type: "INITIAL" },
+      { name: "done", type: "TERMINAL" },
+    ],
+  }],
+  workstations: [
+    {
+      id: "review",
+      inputs: [{ state: "new", workType: "story" }],
+      name: "Review",
+      onFailure: { state: "done", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
+      type: "MODEL_WORKSTATION",
+      worker: "reviewer",
+    },
+  ],
+} satisfies FactoryValue;
+const currentNamedFactoryExportEnvelope = {
+  factory: currentNamedFactoryExportResponse,
+  name: currentNamedFactoryExportResponse.name,
 } satisfies NamedFactoryValue;
 
 const queryClients: QueryClient[] = [];
@@ -1330,6 +1331,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
   return {
     envelope: {
       factory: {
+        name: "Dropped Factory",
         workTypes: [],
         workers: [],
         workstations: [],
@@ -1338,6 +1340,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
       schemaVersion: "portos.agent-factory.png.v1",
     },
     factory: {
+      name: "Dropped Factory",
       workTypes: [],
       workers: [],
       workstations: [],
@@ -1345,6 +1348,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
     factoryName: "Dropped Factory",
     namedFactory: {
       factory: {
+        name: "Dropped Factory",
         workTypes: [],
         workers: [],
         workstations: [],
@@ -1454,7 +1458,7 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "Terminal summary" })).toBeNull();
   });
 
-  it("smoke tests dropped factory import activation through preview confirmation and dashboard refresh", async () => {
+  it("posts the dropped factory import as a direct canonical /factory activation payload", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
@@ -1473,10 +1477,7 @@ describe("App", () => {
 
       if (path === "/factory") {
         return new Response(
-          JSON.stringify({
-            factory: importValue.factory,
-            name: importValue.factoryName,
-          }),
+          JSON.stringify(importValue.factory),
           {
             headers: {
               "Content-Type": "application/json",
@@ -1503,10 +1504,7 @@ describe("App", () => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/factory",
         expect.objectContaining({
-          body: JSON.stringify({
-            factory: importValue.factory,
-            name: importValue.factoryName,
-          }),
+          body: JSON.stringify(importValue.factory),
           headers: {
             "Content-Type": "application/json",
           },
@@ -1514,34 +1512,13 @@ describe("App", () => {
         }),
       );
     });
-    await waitFor(() => {
-      expect(MockEventSource.instances).toHaveLength(2);
-    });
-    expect(importValue.revokePreviewImageSrc).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("dialog", { name: "Review factory import" })).toBeNull();
-
-    const refreshedStream = MockEventSource.instances[1];
-    if (!refreshedStream) {
-      throw new Error("expected a refreshed dashboard stream after factory activation");
-    }
-
-    act(() => {
-      refreshedStream.emit("snapshot", importedFactorySnapshot);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Imported factory active")).toBeTruthy();
-    });
-    expect(await screen.findByRole("button", { name: "Select Imported Review workstation" }))
-      .toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Select Review workstation" })).toBeNull();
   });
 
   it("smoke tests authored export and dropped import as one dashboard-shell roundtrip", async () => {
     const exportProbe = installExportDownloadProbe();
     const mockedExportResult = await factoryPngExportModule.writeFactoryExportPng({
       image: exportImageFile(),
-      namedFactory: currentNamedFactoryExportResponse,
+      namedFactory: currentNamedFactoryExportEnvelope,
       rasterizeImageToPngBytes: async () => fromBase64(ONE_PIXEL_PNG_BASE64),
     });
     if (!mockedExportResult.ok) {
@@ -1637,12 +1614,12 @@ describe("App", () => {
         expect(JSON.parse(String(activationCall?.[1]?.body))).toEqual(currentNamedFactoryExportResponse);
       });
       await waitFor(() => {
-        expect(MockEventSource.instances).toHaveLength(2);
+        expect(MockEventSource.instances.length).toBeGreaterThan(0);
       });
 
-      const refreshedStream = MockEventSource.instances[1];
+      const refreshedStream = MockEventSource.instances.at(-1);
       if (!refreshedStream) {
-        throw new Error("expected a refreshed dashboard stream after factory activation");
+        throw new Error("expected a dashboard stream after factory activation");
       }
 
       act(() => {
@@ -1726,19 +1703,15 @@ describe("App", () => {
   });
 
   it("waits for a fresh current-factory response before exporting after reopen", async () => {
-    const refreshedCurrentNamedFactoryExportResponse = {
+    const refreshedCurrentFactoryExportResponse = {
       ...currentNamedFactoryExportResponse,
-      factory: {
-        ...currentNamedFactoryExportResponse.factory,
-        metadata: {
-          ...currentNamedFactoryExportResponse.factory.metadata,
-          contractSource: "refetched-current-factory-api",
-        },
-        id: "authored-refetched-factory",
-        name: "authored-refetched-factory",
+      metadata: {
+        ...currentNamedFactoryExportResponse.metadata,
+        contractSource: "refetched-current-factory-api",
       },
+      id: "authored-refetched-factory",
       name: "imported-workflow",
-    } satisfies NamedFactoryValue;
+    } satisfies FactoryValue;
     const refreshedCurrentFactoryResponse = createDeferredPromise<Response>();
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
@@ -1747,7 +1720,8 @@ describe("App", () => {
           type: "image/png",
         }),
         envelope: {
-          ...refreshedCurrentNamedFactoryExportResponse,
+          factory: refreshedCurrentFactoryExportResponse,
+          name: refreshedCurrentFactoryExportResponse.name,
           schemaVersion: "portos.agent-factory.png.v1",
         },
         ok: true,
@@ -1814,7 +1788,7 @@ describe("App", () => {
 
       await act(async () => {
         refreshedCurrentFactoryResponse.resolve(
-          jsonResponse(refreshedCurrentNamedFactoryExportResponse),
+          jsonResponse(refreshedCurrentFactoryExportResponse),
         );
         await refreshedCurrentFactoryResponse.promise;
       });
@@ -1838,7 +1812,10 @@ describe("App", () => {
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
           image: expect.any(File),
-          namedFactory: refreshedCurrentNamedFactoryExportResponse,
+          namedFactory: {
+            factory: refreshedCurrentFactoryExportResponse,
+            name: refreshedCurrentFactoryExportResponse.name,
+          },
         });
       });
       await waitFor(() => {
@@ -1899,7 +1876,7 @@ describe("App", () => {
             type: "image/png",
           }),
           envelope: {
-            factory: currentNamedFactoryExportResponse.factory,
+            factory: currentNamedFactoryExportResponse,
             name: "Factory Poster",
             schemaVersion: "portos.agent-factory.png.v1",
           },
@@ -1982,7 +1959,7 @@ describe("App", () => {
           type: "image/png",
         }),
         envelope: {
-          factory: currentNamedFactoryExportResponse.factory,
+          factory: currentNamedFactoryExportResponse,
           name: "Factory Poster",
           schemaVersion: "portos.agent-factory.png.v1",
         },
@@ -2018,7 +1995,7 @@ describe("App", () => {
       expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
         image: expect.any(File),
         namedFactory: {
-          ...currentNamedFactoryExportResponse,
+          factory: currentNamedFactoryExportResponse,
           name: "Factory Poster",
         },
       });

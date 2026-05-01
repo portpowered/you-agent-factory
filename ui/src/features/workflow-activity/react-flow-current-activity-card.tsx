@@ -14,8 +14,8 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  type FactoryValue,
   type NamedFactoryAPIError,
-  type NamedFactoryValue,
 } from "../../api/named-factory";
 import {
   DashboardButton,
@@ -99,7 +99,7 @@ export type CurrentActivitySelection =
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
 
 interface ReactFlowCurrentActivityCardProps {
-  activateNamedFactory?: (value: NamedFactoryValue) => Promise<NamedFactoryValue>;
+  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   onFactoryActivated?: () => void;
   now: number;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
@@ -618,7 +618,7 @@ function nodePosition(
 }
 
 export function ReactFlowCurrentActivityCard({
-  activateNamedFactory,
+  activateFactory,
   onFactoryActivated,
   now,
   onFactoryImportReady,
@@ -645,7 +645,7 @@ export function ReactFlowCurrentActivityCard({
     activationState,
     clearActivationError,
   } = useFactoryImportActivation({
-    activateNamedFactory,
+    activateFactory,
     onActivated: handleFactoryActivated,
   });
   const handleImportPreviewReady = useCallback((value: FactoryPngImportValue, file: File) => {

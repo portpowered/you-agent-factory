@@ -2,10 +2,10 @@ import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
 import {
-  createNamedFactory,
+  createFactory,
+  type FactoryValue,
   NamedFactoryAPIError,
   type NamedFactoryAPIErrorCode,
-  type NamedFactoryValue,
 } from "../../api/named-factory";
 import type { FactoryPngImportValue } from "./factory-png-import";
 
@@ -17,8 +17,8 @@ export type FactoryImportActivationState =
   | { error: NamedFactoryAPIError; status: "error" };
 
 export interface UseFactoryImportActivationOptions {
-  activateNamedFactory?: (value: NamedFactoryValue) => Promise<NamedFactoryValue>;
-  onActivated?: (value: NamedFactoryValue) => void;
+  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
+  onActivated?: (value: FactoryValue) => void;
 }
 
 export interface UseFactoryImportActivationResult {
@@ -30,12 +30,12 @@ export interface UseFactoryImportActivationResult {
 const IDLE_ACTIVATION_STATE: FactoryImportActivationState = { status: "idle" };
 
 export function useFactoryImportActivation({
-  activateNamedFactory = createNamedFactory,
+  activateFactory = createFactory,
   onActivated,
 }: UseFactoryImportActivationOptions = {}): UseFactoryImportActivationResult {
   const [activationError, setActivationError] = useState<NamedFactoryAPIError | null>(null);
   const mutation = useMutation({
-    mutationFn: (value: NamedFactoryValue) => activateNamedFactory(value),
+    mutationFn: (value: FactoryValue) => activateFactory(value),
     onError: (error) => {
       setActivationError(normalizeActivationError(error));
     },
@@ -48,7 +48,7 @@ export function useFactoryImportActivation({
   const activateImport = useCallback(async (value: FactoryPngImportValue) => {
     setActivationError(null);
     try {
-      await mutation.mutateAsync(value.namedFactory);
+      await mutation.mutateAsync(value.factory);
     } catch {
       return;
     }

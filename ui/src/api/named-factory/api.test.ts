@@ -1,23 +1,22 @@
 import {
-  createNamedFactory,
+  createFactory,
+  getCurrentFactory,
   NamedFactoryAPIError,
 } from "./api";
 
-describe("createNamedFactory", () => {
+describe("factory API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("posts the typed factory activation payload to /factory and returns the canonical response", async () => {
+  it("posts the direct canonical factory payload to /factory and returns the canonical response", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          factory: {
-            workTypes: [],
-            workers: [],
-            workstations: [],
-          },
           name: "Dropped Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
         }),
         {
           headers: {
@@ -30,32 +29,26 @@ describe("createNamedFactory", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      createNamedFactory({
-        factory: {
-          workTypes: [],
-          workers: [],
-          workstations: [],
-        },
+      createFactory({
         name: "Dropped Factory",
-      }),
-    ).resolves.toEqual({
-      factory: {
         workTypes: [],
         workers: [],
         workstations: [],
-      },
+      }),
+    ).resolves.toEqual({
       name: "Dropped Factory",
+      workTypes: [],
+      workers: [],
+      workstations: [],
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/factory",
       expect.objectContaining({
         body: JSON.stringify({
-          factory: {
-            workTypes: [],
-            workers: [],
-            workstations: [],
-          },
           name: "Dropped Factory",
+          workTypes: [],
+          workers: [],
+          workstations: [],
         }),
         headers: {
           "Content-Type": "application/json",
@@ -65,7 +58,7 @@ describe("createNamedFactory", () => {
     );
   });
 
-  it("maps structured API failures into a typed activation error", async () => {
+  it("maps structured activation failures into a typed API error", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -86,13 +79,11 @@ describe("createNamedFactory", () => {
     );
 
     await expect(
-      createNamedFactory({
-        factory: {
-          workTypes: [],
-          workers: [],
-          workstations: [],
-        },
+      createFactory({
         name: "Dropped Factory",
+        workTypes: [],
+        workers: [],
+        workstations: [],
       }),
     ).rejects.toEqual(
       new NamedFactoryAPIError("Current factory runtime must be idle before activation.", {
@@ -103,6 +94,76 @@ describe("createNamedFactory", () => {
           code: "FACTORY_NOT_IDLE",
           message: "Current factory runtime must be idle before activation.",
         },
+      }),
+    );
+  });
+
+  it("reads the current factory as a direct canonical factory payload", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            name: "Current Factory",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      ),
+    );
+
+    await expect(getCurrentFactory()).resolves.toEqual({
+      name: "Current Factory",
+      workTypes: [],
+      workers: [],
+      workstations: [],
+    });
+  });
+
+  it("rejects retired named-factory wrapper responses from the current factory endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            factory: {
+              workTypes: [],
+              workers: [],
+              workstations: [],
+            },
+            name: "Current Factory",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      ),
+    );
+
+    await expect(getCurrentFactory()).rejects.toEqual(
+      new NamedFactoryAPIError("The current factory API returned an invalid response.", {
+        code: "INTERNAL_ERROR",
+        responseBody: {
+          factory: {
+            workTypes: [],
+            workers: [],
+            workstations: [],
+          },
+          name: "Current Factory",
+        },
+        status: 200,
+        statusText: "OK",
       }),
     );
   });

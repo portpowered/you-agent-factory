@@ -15,7 +15,7 @@ import {
   workstationKindParityExpectations,
   workstationKindParityDashboardSnapshot,
 } from "../../components/dashboard/test-fixtures";
-import type { NamedFactoryValue } from "../../api/named-factory";
+import type { FactoryValue } from "../../api/named-factory";
 import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
@@ -165,6 +165,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
   return {
     envelope: {
       factory: {
+        name: "Dropped Factory",
         workTypes: [],
         workers: [],
         workstations: [],
@@ -173,6 +174,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
       schemaVersion: "portos.agent-factory.png.v1",
     },
     factory: {
+      name: "Dropped Factory",
       workTypes: [],
       workers: [],
       workstations: [],
@@ -180,6 +182,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
     factoryName: "Dropped Factory",
     namedFactory: {
       factory: {
+        name: "Dropped Factory",
         workTypes: [],
         workers: [],
         workstations: [],
@@ -364,7 +367,7 @@ function CurrentActivityImportStory({ snapshot }: CurrentActivityStoryProps) {
     <>
       <div style={{ minHeight: "760px" }}>
         <ReactFlowCurrentActivityCard
-          activateNamedFactory={async (value: NamedFactoryValue) => value}
+          activateFactory={async (value: FactoryValue) => value}
           now={Date.parse("2026-04-08T12:00:04Z")}
           onFactoryActivated={() => {
             setActivationStatus(`Activated factory: ${importValue.factoryName}`);

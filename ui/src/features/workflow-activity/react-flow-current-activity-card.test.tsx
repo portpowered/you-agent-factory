@@ -12,8 +12,8 @@ import {
   currentActivityTopologyKey,
 } from "./react-flow-current-activity-card";
 import {
+  type FactoryValue,
   NamedFactoryAPIError,
-  type NamedFactoryValue,
 } from "../../api/named-factory";
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
@@ -35,7 +35,7 @@ import type {
 import { useCurrentActivityGraphStore } from "../../state/currentActivityGraphStore";
 
 interface RenderCurrentActivityOptions {
-  activateNamedFactory?: (value: NamedFactoryValue) => Promise<NamedFactoryValue>;
+  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
@@ -93,7 +93,7 @@ function expectFixedWorkstationNodeDimensions(node: Element | null) {
 }
 
 function renderCurrentActivity({
-  activateNamedFactory,
+  activateFactory,
   onFactoryActivated,
   onFactoryImportReady,
   readFactoryImportFile,
@@ -113,7 +113,7 @@ function renderCurrentActivity({
 
   renderWithQueryClient(
     <ReactFlowCurrentActivityCard
-      activateNamedFactory={activateNamedFactory}
+      activateFactory={activateFactory}
       now={Date.parse("2026-04-08T12:00:04Z")}
       onFactoryActivated={onFactoryActivated}
       onFactoryImportReady={onFactoryImportReady}
@@ -149,6 +149,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
   return {
     envelope: {
       factory: {
+        name: "Dropped Factory",
         workTypes: [],
         workers: [],
         workstations: [],
@@ -157,6 +158,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
       schemaVersion: "portos.agent-factory.png.v1",
     },
     factory: {
+      name: "Dropped Factory",
       workTypes: [],
       workers: [],
       workstations: [],
@@ -164,6 +166,7 @@ function createFactoryImportValue(): FactoryPngImportValue {
     factoryName: "Dropped Factory",
     namedFactory: {
       factory: {
+        name: "Dropped Factory",
         workTypes: [],
         workers: [],
         workstations: [],
@@ -582,11 +585,8 @@ describe("ReactFlowCurrentActivityCard", () => {
   it("activates the dropped factory, closes the preview, and requests an active-view refresh", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
-    const activateNamedFactory = vi.fn<(value: NamedFactoryValue) => Promise<NamedFactoryValue>>()
-      .mockResolvedValue({
-        factory: importValue.factory,
-        name: importValue.factoryName,
-      });
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .mockResolvedValue(importValue.factory);
     const onFactoryActivated = vi.fn<() => void>();
     const readFactoryImportFile = vi.fn<ReadFactoryImportFile>().mockResolvedValue({
       ok: true,
@@ -594,7 +594,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
 
     renderCurrentActivity({
-      activateNamedFactory,
+      activateFactory,
       onFactoryActivated,
       readFactoryImportFile,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -609,10 +609,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     fireEvent.click(within(previewDialog).getByRole("button", { name: "Activate factory" }));
 
     await waitFor(() => {
-      expect(activateNamedFactory).toHaveBeenCalledWith({
-        factory: importValue.factory,
-        name: "Dropped Factory",
-      });
+      expect(activateFactory).toHaveBeenCalledWith(importValue.factory);
     });
     await waitFor(() => {
       expect(onFactoryActivated).toHaveBeenCalledTimes(1);
@@ -626,7 +623,7 @@ describe("ReactFlowCurrentActivityCard", () => {
   it("shows a distinct duplicate-name activation error without changing the current view", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
-    const activateNamedFactory = vi.fn<(value: NamedFactoryValue) => Promise<NamedFactoryValue>>()
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError("Named factory already exists.", {
           code: "FACTORY_ALREADY_EXISTS",
@@ -640,7 +637,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
 
     renderCurrentActivity({
-      activateNamedFactory,
+      activateFactory,
       onFactoryActivated,
       readFactoryImportFile,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -666,7 +663,7 @@ describe("ReactFlowCurrentActivityCard", () => {
   it("shows a distinct non-idle activation error without changing the current view", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
-    const activateNamedFactory = vi.fn<(value: NamedFactoryValue) => Promise<NamedFactoryValue>>()
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockRejectedValue(
         new NamedFactoryAPIError("Current factory runtime must be idle before activation.", {
           code: "FACTORY_NOT_IDLE",
@@ -680,7 +677,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
 
     renderCurrentActivity({
-      activateNamedFactory,
+      activateFactory,
       onFactoryActivated,
       readFactoryImportFile,
       snapshot: semanticWorkflowDashboardSnapshot,

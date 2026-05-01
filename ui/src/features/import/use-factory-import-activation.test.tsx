@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import type { NamedFactoryValue } from "../../api/named-factory";
+import type { FactoryValue, NamedFactoryValue } from "../../api/named-factory";
 import { writeFactoryExportPng } from "../export/factory-png-export";
 import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION, readFactoryImportPng } from "./factory-png-import";
 import { useFactoryImportActivation } from "./use-factory-import-activation";
@@ -46,10 +46,10 @@ const canonicalNamedFactory: NamedFactoryValue = {
 };
 
 describe("useFactoryImportActivation", () => {
-  it("activates the exact NamedFactory payload produced by export and parsed by import", async () => {
-    const activateNamedFactory = vi.fn<(value: NamedFactoryValue) => Promise<NamedFactoryValue>>()
+  it("activates the direct factory payload while preserving the PNG named-factory envelope", async () => {
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
       .mockImplementation(async (value) => value);
-    const onActivated = vi.fn<(value: NamedFactoryValue) => void>();
+    const onActivated = vi.fn<(value: FactoryValue) => void>();
     const pngBytes = fromBase64(ONE_PIXEL_PNG_BASE64);
     const exportResult = await writeFactoryExportPng({
       image: new Blob([toArrayBuffer(pngBytes)], { type: "image/png" }),
@@ -79,7 +79,7 @@ describe("useFactoryImportActivation", () => {
     }
 
     const { result } = renderHook(
-      () => useFactoryImportActivation({ activateNamedFactory, onActivated }),
+      () => useFactoryImportActivation({ activateFactory, onActivated }),
       { wrapper: createQueryClientWrapper() },
     );
 
@@ -88,10 +88,10 @@ describe("useFactoryImportActivation", () => {
     });
 
     await waitFor(() => {
-      expect(activateNamedFactory).toHaveBeenCalledWith(canonicalNamedFactory);
+      expect(activateFactory).toHaveBeenCalledWith(canonicalNamedFactory.factory);
     });
-    expect(activateNamedFactory).toHaveBeenCalledTimes(1);
-    expect(onActivated).toHaveBeenCalledWith(canonicalNamedFactory);
+    expect(activateFactory).toHaveBeenCalledTimes(1);
+    expect(onActivated).toHaveBeenCalledWith(canonicalNamedFactory.factory);
     expect(importResult.value.namedFactory).toEqual(canonicalNamedFactory);
     expect(importResult.value.factoryName).toBe(canonicalNamedFactory.name);
     expect(result.current.activationState).toEqual({ status: "idle" });
