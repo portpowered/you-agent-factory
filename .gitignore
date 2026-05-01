@@ -1,7 +1,7 @@
 bin/
 .playwright-mcp/
 tests/adhoc/.playwright-mcp/
-*.png
+
 
 node_modules/
 storybook-static/
