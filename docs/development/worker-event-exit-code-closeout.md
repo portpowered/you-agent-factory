@@ -24,8 +24,9 @@ Run from the repository root:
 ```text
 go test ./pkg/workers/...
 make lint
+make test
 ```
 
-`make test` remained red on the branch baseline for unrelated `pkg/cli` and
-`tests/functional_test` failures, so the focused worker package lane is the
-relevant proof point for this cleanup.
+The focused worker package lane remains the narrowest regression proof for this
+cleanup, and the full repository quality gate also passed on the branch after
+the README docs-surface fix landed.
