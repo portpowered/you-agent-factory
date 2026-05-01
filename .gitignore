@@ -30,5 +30,6 @@ factory/inputs/**
 
 factory/logs/complete
 factory/logs/meta/*
-factory/logs/meta/progress.txt
-factory/logs/meta/view.md
+!factory/logs/meta/asks.md
+!factory/logs/meta/progress.txt
+!factory/logs/meta/view.md

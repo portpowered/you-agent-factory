@@ -1,0 +1,25 @@
+## Codebase Patterns
+
+- Before treating files under `factory/inputs/**` or `factory/logs/meta/*` as
+  checked-in workflow truth, confirm them with `git ls-files`; ignored local
+  residue can coexist with the canonical control-plane surface.
+- The checked-in meta control plane is `factory/logs/meta/asks.md`,
+  `factory/logs/meta/view.md`, and `factory/logs/meta/progress.txt`; any other
+  path should be treated as legacy or workspace-local until proven otherwise.
+
+## 2026-04-30 - meta control-plane reconciliation
+
+- Ran `git pull --ff-only`; `main` is at `1542835`.
+- Re-read the checked-in meta backlog, world view, factory contract docs, and
+  replay artifacts before choosing work.
+- Verified that the checked-in `idea`, `task`, and `BATCH` inboxes contain only
+  `.gitkeep` sentinels.
+- Confirmed that
+  `factory/inputs/plan/default/dedupe-root-factory-artifact-contract-entries.md`
+  is ignored local residue in this workspace, not a tracked file on `HEAD`.
+- Confirmed contract drift in the meta progress surface: the docs and prompts
+  expect `factory/logs/meta/progress.txt`, but `HEAD` tracked
+  `factory/logs/meta/progress.tsx` instead and had no checked-in `progress.txt`.
+- Restored `factory/logs/meta/progress.txt`, updated `factory/logs/meta/view.md`
+  to match `main`, and queued a narrow idea to retire the legacy tracked
+  `progress.tsx` surface.
