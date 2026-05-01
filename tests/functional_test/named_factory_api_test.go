@@ -4,14 +4,72 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
+
+func TestNamedFactoryAPI_DefaultCurrentFactoryReadbackAndImportSwitch(t *testing.T) {
+	fixture := newExportImportFixture(t)
+	rootDir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	server := startNamedFactoryTestServer(t, rootDir)
+
+	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
+
+	current := getNamedFactoryCurrent(t, server.httpSrv.URL)
+	if current.Name != factoryapi.FactoryName("UNDEFINED") {
+		t.Fatalf("default current factory name = %q, want UNDEFINED", current.Name)
+	}
+	if !reflect.DeepEqual(
+		comparableExportImportFactory(current.Factory),
+		comparableExportImportFactory(fixture.GeneratedExportFactor),
+	) {
+		t.Fatalf(
+			"default current factory payload drifted from the root runtime contract\ngot:  %#v\nwant: %#v",
+			comparableExportImportFactory(current.Factory),
+			comparableExportImportFactory(fixture.GeneratedExportFactor),
+		)
+	}
+
+	rootResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "task", "default-runtime", http.StatusCreated)
+	var rootSubmit factoryapi.SubmitWorkResponse
+	decodeNamedFactoryJSONResponse(t, rootResp, &rootSubmit, "decode default-runtime submit response")
+	if rootSubmit.TraceId == "" {
+		t.Fatal("expected non-empty trace ID for default-runtime submission")
+	}
+
+	created := createNamedFactoryFromBody(t, server.httpSrv.URL, "beta", "beta-task")
+	if created.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("created factory name = %q, want beta", created.Name)
+	}
+	assertNamedFactoryCurrentPointer(t, rootDir, "beta")
+
+	current = getNamedFactoryCurrent(t, server.httpSrv.URL)
+	if current.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("current factory name after import = %q, want beta", current.Name)
+	}
+
+	betaResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "beta-task", "beta", http.StatusCreated)
+	var betaSubmit factoryapi.SubmitWorkResponse
+	decodeNamedFactoryJSONResponse(t, betaResp, &betaSubmit, "decode beta-task submit response")
+	if betaSubmit.TraceId == "" {
+		t.Fatal("expected non-empty trace ID for activated beta-task submission")
+	}
+
+	legacyResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "task", "default-runtime", http.StatusBadRequest)
+	var legacyErr factoryapi.ErrorResponse
+	decodeNamedFactoryJSONResponse(t, legacyResp, &legacyErr, "decode default-runtime error response")
+	if legacyErr.Code != factoryapi.BADREQUEST {
+		t.Fatalf("default-runtime error code after import = %q, want BAD_REQUEST", legacyErr.Code)
+	}
+}
 
 func TestNamedFactoryAPI_PersistsActivatesAndSwitchesWorkSurface(t *testing.T) {
 	rootDir := t.TempDir()
