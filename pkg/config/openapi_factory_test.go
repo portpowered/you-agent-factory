@@ -404,6 +404,87 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_CanonicalizesSupportedSharedEnumAliasesAtBoundary(t *testing.T) {
+	cfgJSON := []byte(`{
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{
+			"name":"executor",
+			"type":"MODEL_WORKER",
+			"modelProvider":"OPENAI",
+			"executorProvider":"local-claude"
+		}],
+		"workstations": [{
+			"name":"execute-story",
+			"kind":"STANDARD",
+			"worker":"executor",
+			"type":"MODEL_WORKSTATION",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Workers == nil || len(*generated.Workers) != 1 {
+		t.Fatalf("expected one generated worker, got %#v", generated.Workers)
+	}
+	worker := (*generated.Workers)[0]
+	if worker.ModelProvider == nil || *worker.ModelProvider != factoryapi.WorkerModelProviderCodex {
+		t.Fatalf("expected generated worker modelProvider codex, got %#v", worker.ModelProvider)
+	}
+	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
+		t.Fatalf("expected generated worker executorProvider script_wrap, got %#v", worker.ExecutorProvider)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	if got := cfg.Workers[0].ModelProvider; got != "codex" {
+		t.Fatalf("expected runtime worker modelProvider codex, got %q", got)
+	}
+	if got := cfg.Workers[0].ExecutorProvider; got != "script_wrap" {
+		t.Fatalf("expected runtime worker executorProvider script_wrap, got %q", got)
+	}
+	if got := cfg.Workstations[0].Type; got != interfaces.WorkstationTypeModel {
+		t.Fatalf("expected runtime workstation type MODEL_WORKSTATION, got %q", got)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBoundary(t *testing.T) {
+	cfgJSON := []byte(`{
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{
+			"name":"executor",
+			"type":"MODEL_WORKER",
+			"executorProvider":"custom-executor"
+		}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"type":"MODEL_WORKSTATION",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected unsupported executorProvider to fail at generated boundary")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workers[0].executorProvider") {
+		t.Fatalf("expected executorProvider field path in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `unsupported value "custom-executor"`) {
+		t.Fatalf("expected unsupported executorProvider value in error, got %v", err)
+	}
+}
+
 type generatedFactoryRetiredAliasCase struct {
 	name        string
 	field       string

@@ -58,7 +58,7 @@ const (
 	publicFactoryWorkerProviderScriptWrap  = "script_wrap"
 )
 
-func canonicalPublicFactoryEnumValue(value string, aliases map[string]string) string {
+func normalizePublicFactoryEnumValue(value string, aliases map[string]string, preserveUnknown bool) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return ""
@@ -66,32 +66,55 @@ func canonicalPublicFactoryEnumValue(value string, aliases map[string]string) st
 	if canonical, ok := aliases[trimmed]; ok {
 		return canonical
 	}
-	return trimmed
+	if preserveUnknown {
+		return trimmed
+	}
+	return ""
 }
 
-// CanonicalPublicFactoryWorkerType returns the canonical public worker type.
-func CanonicalPublicFactoryWorkerType(value string) string {
-	return canonicalPublicFactoryEnumValue(value, publicFactoryWorkerTypeAliases)
+// PermissivePublicFactoryWorkerType canonicalizes supported public worker types and preserves unknown values.
+func PermissivePublicFactoryWorkerType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerTypeAliases, true)
 }
 
-// CanonicalPublicFactoryWorkerModelProvider returns the canonical public worker model provider.
-func CanonicalPublicFactoryWorkerModelProvider(value string) string {
-	return canonicalPublicFactoryEnumValue(value, publicFactoryWorkerModelProviderAliases)
+// StrictPublicFactoryWorkerType canonicalizes supported public worker types and rejects unknown values.
+func StrictPublicFactoryWorkerType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerTypeAliases, false)
 }
 
-// CanonicalPublicFactoryWorkerProvider returns the canonical public worker provider.
-func CanonicalPublicFactoryWorkerProvider(value string) string {
-	return canonicalPublicFactoryEnumValue(value, publicFactoryWorkerProviderAliases)
+// PermissivePublicFactoryWorkerModelProvider canonicalizes supported public worker model providers and preserves unknown values.
+func PermissivePublicFactoryWorkerModelProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelProviderAliases, true)
 }
 
-// CanonicalPublicFactoryWorkstationType returns the canonical public workstation type.
-func CanonicalPublicFactoryWorkstationType(value string) string {
-	return canonicalPublicFactoryEnumValue(value, publicFactoryWorkstationTypeAliases)
+// StrictPublicFactoryWorkerModelProvider canonicalizes supported public worker model providers and rejects unknown values.
+func StrictPublicFactoryWorkerModelProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelProviderAliases, false)
+}
+
+// PermissivePublicFactoryWorkerProvider canonicalizes supported public worker providers and preserves unknown values.
+func PermissivePublicFactoryWorkerProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerProviderAliases, true)
+}
+
+// StrictPublicFactoryWorkerProvider canonicalizes supported public worker providers and rejects unknown values.
+func StrictPublicFactoryWorkerProvider(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerProviderAliases, false)
+}
+
+// PermissivePublicFactoryWorkstationType canonicalizes supported public workstation types and preserves unknown values.
+func PermissivePublicFactoryWorkstationType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationTypeAliases, true)
+}
+
+// StrictPublicFactoryWorkstationType canonicalizes supported public workstation types and rejects unknown values.
+func StrictPublicFactoryWorkstationType(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationTypeAliases, false)
 }
 
 // GeneratedPublicFactoryWorkerType returns the generated worker type enum.
 func GeneratedPublicFactoryWorkerType(value string) factoryapi.WorkerType {
-	return factoryapi.WorkerType(CanonicalPublicFactoryWorkerType(value))
+	return factoryapi.WorkerType(PermissivePublicFactoryWorkerType(value))
 }
 
 // GeneratedPublicFactoryWorkerTypePtr returns the generated worker type enum when non-empty.
@@ -105,7 +128,7 @@ func GeneratedPublicFactoryWorkerTypePtr(value string) *factoryapi.WorkerType {
 
 // GeneratedPublicFactoryWorkerModelProvider returns the generated worker model provider enum.
 func GeneratedPublicFactoryWorkerModelProvider(value string) factoryapi.WorkerModelProvider {
-	return factoryapi.WorkerModelProvider(CanonicalPublicFactoryWorkerModelProvider(value))
+	return factoryapi.WorkerModelProvider(PermissivePublicFactoryWorkerModelProvider(value))
 }
 
 // GeneratedPublicFactoryWorkerModelProviderPtr returns the generated worker model provider enum when non-empty.
@@ -119,7 +142,7 @@ func GeneratedPublicFactoryWorkerModelProviderPtr(value string) *factoryapi.Work
 
 // GeneratedPublicFactoryWorkerProvider returns the generated worker provider enum.
 func GeneratedPublicFactoryWorkerProvider(value string) factoryapi.WorkerProvider {
-	return factoryapi.WorkerProvider(CanonicalPublicFactoryWorkerProvider(value))
+	return factoryapi.WorkerProvider(PermissivePublicFactoryWorkerProvider(value))
 }
 
 // GeneratedPublicFactoryWorkerProviderPtr returns the generated worker provider enum when non-empty.
@@ -133,7 +156,7 @@ func GeneratedPublicFactoryWorkerProviderPtr(value string) *factoryapi.WorkerPro
 
 // GeneratedPublicFactoryWorkstationType returns the generated workstation type enum.
 func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationType {
-	return factoryapi.WorkstationType(CanonicalPublicFactoryWorkstationType(value))
+	return factoryapi.WorkstationType(PermissivePublicFactoryWorkstationType(value))
 }
 
 // GeneratedPublicFactoryWorkstationTypePtr returns the generated workstation type enum when non-empty.
