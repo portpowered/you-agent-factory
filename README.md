@@ -236,6 +236,19 @@ Start with the [Agent Factory Development Guide](./docs/development/development.
 
 ### 🔨 Build and test
 
+GitHub Actions CI for this repository lives in [`.github/workflows/ci.yml`](./.github/workflows/ci.yml). It runs on pull requests and branch pushes, validates the current build, lint, API, and test surfaces, and intentionally stops short of deployment automation in this first pass.
+
+To reproduce the CI lanes locally from the repository root, run the same commands in workflow order:
+
+1. `cd ui && bun install --frozen-lockfile`
+2. `cd ui && bun run tsc`
+3. `make build`
+4. `make ui-build`
+5. `make lint`
+6. `make api-smoke`
+7. `make ui-test`
+8. `make test`
+
 For dashboard review readiness after UI source changes that affect embedded assets, run the serialized verification target:
 
 ```bash

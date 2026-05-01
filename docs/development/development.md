@@ -47,6 +47,23 @@ make ui-storybook
 make ui-test-storybook
 ```
 
+## GitHub Actions CI Baseline
+
+The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
+
+The workflow currently executes these repository-owned commands in order:
+
+1. `ui/bun install --frozen-lockfile`
+2. `cd ui && bun run tsc`
+3. `make build`
+4. `make ui-build`
+5. `make lint`
+6. `make api-smoke`
+7. `make ui-test`
+8. `make test`
+
+Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and Bun from the pinned `packageManager` contract in `ui/package.json`, so local reproduction should start from the repository root with the same checked-in toolchain expectations.
+
 Use `make dashboard-verify` for dashboard review readiness after UI source changes that affect embedded assets. It runs `ui-build`, `lint`, and the short Go test suite sequentially so Vite asset rotation does not race with Go embed scanning.
 
 `make lint` runs `go vet ./...` and the pinned deadcode analyzer. The deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/development/deadcode-baseline.txt`. Review any drift before updating the baseline.
