@@ -81,3 +81,30 @@
   remote state, and the narrower next move: remove the live duplicate progress
   surface and align artifact-contract enforcement before taking on non-urgent
   customer asks.
+
+## 2026-04-30 22:02 -07:00 - meta refresh after api-clean landed
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `b47e277`.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  recent merged history, and the tracked workflow-input surfaces before
+  choosing work.
+- Verified that `git ls-files factory/inputs/** factory/logs/meta/** factory/meta/**`
+  still shows only tracked inbox sentinels plus both legacy/current meta
+  surfaces on `HEAD`.
+- Verified that this workspace is still dirty and mid-cleanup:
+  - `factory/logs/meta/progress.tsx` is deleted locally
+  - `factory/meta/asks.md` is deleted locally
+  - `factory/workstations/cleaner/AGENTS.md` is modified locally
+  - artifact-contract and functional-test files are also being changed locally
+- Confirmed that the earlier artifact-contract mismatch around
+  `factory/logs/meta/progress.txt` is fixed on `HEAD` because
+  `internal/testpath/artifact_contract.go` now classifies that path.
+- Confirmed that the more accurate remaining concern is repository and
+  workspace-level duplicate-surface cleanup, not a fresh doc/code mismatch.
+- Summarized the replay failure shape for the current theory of mind:
+  - `process`: `9 ACCEPTED`, `27 REJECTED`
+  - `review`: `5 ACCEPTED`, `4 REJECTED`
+  - rejected `process` outputs overwhelmingly return `<CONTINUE>`
+- Updated `factory/logs/meta/view.md` to reflect the post-`#18` repository
+  state and deferred new ask handling until the in-flight local control-plane
+  cleanup is resolved.
