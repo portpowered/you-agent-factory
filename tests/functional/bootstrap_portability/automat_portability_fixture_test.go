@@ -1,4 +1,4 @@
-package functional_test
+package bootstrap_portability
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 const (
@@ -45,7 +46,7 @@ type automatRequiredTool struct {
 }
 
 func TestAutomatPortabilityFixture_ModelsBoundedPortableRuntimeLayout(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, automatFixtureName))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, automatFixtureName))
 	activateAutomatRequiredToolsOnPath(t)
 
 	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
@@ -258,7 +259,7 @@ func flattenAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, []b
 
 	projectDir := t.TempDir()
 	authoredFactoryDir := filepath.Join(projectDir, "factory")
-	copyFixtureIntoDir(t, fixtureDir(t, automatFixtureName), authoredFactoryDir)
+	copyFixtureIntoDir(t, support.LegacyFixtureDir(t, automatFixtureName), authoredFactoryDir)
 
 	var flattenOut bytes.Buffer
 	flattenCmd := cli.NewRootCommand()
