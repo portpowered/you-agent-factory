@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // TestDashboard_InFlightDispatches validates that the runtime state shows
@@ -58,7 +58,7 @@ func TestDashboard_InFlightDispatches(t *testing.T) {
 	now := time.Now()
 	for _, d := range rt.Dispatches {
 		dur := now.Sub(d.StartTime)
-		tokenIdentities := deriveTokenIdentities(d.ConsumedTokens, nil)
+		tokenIdentities := support.DeriveTokenIdentities(d.ConsumedTokens, nil)
 		dispatchLabel := d.TransitionID
 		if len(tokenIdentities.WorkIDs) > 0 {
 			dispatchLabel = tokenIdentities.WorkIDs[0]
@@ -84,25 +84,4 @@ func TestDashboard_InFlightDispatches(t *testing.T) {
 	if err := <-errCh; err != nil && err != context.Canceled {
 		t.Fatalf("factory run error: %v", err)
 	}
-}
-
-// blockingExecutor blocks until releaseCh is closed, then returns ACCEPTED.
-type blockingExecutor struct {
-	releaseCh <-chan struct{}
-	mu        *sync.Mutex
-	calls     *int
-}
-
-func (e *blockingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	e.mu.Lock()
-	*e.calls++
-	e.mu.Unlock()
-
-	<-e.releaseCh
-
-	return interfaces.WorkResult{
-		DispatchID:   d.DispatchID,
-		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
-	}, nil
 }

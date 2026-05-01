@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // TestDispatchTiming_HistoryRecordsDuration validates that after a dispatch
@@ -38,7 +39,7 @@ func TestDispatchTiming_HistoryRecordsDuration(t *testing.T) {
 	}
 
 	for _, cd := range rtSnap.DispatchHistory {
-		tokenIdentities := deriveTokenIdentities(cd.ConsumedTokens, cd.OutputMutations)
+		tokenIdentities := support.DeriveTokenIdentities(cd.ConsumedTokens, cd.OutputMutations)
 		if cd.Duration < sleepDuration {
 			t.Errorf("CompletedDispatch %s duration %v < expected minimum %v",
 				cd.TransitionID, cd.Duration, sleepDuration)
@@ -116,21 +117,6 @@ func TestDispatchTiming_InFlightStartTime(t *testing.T) {
 	if err := <-errCh; err != nil && err != context.Canceled {
 		t.Fatalf("factory run error: %v", err)
 	}
-}
-
-// sleepyExecutor sleeps for a fixed duration before returning ACCEPTED.
-// Requires custom executor: MockProvider cannot simulate execution timing delays.
-type sleepyExecutor struct {
-	sleep time.Duration
-}
-
-func (e *sleepyExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	time.Sleep(e.sleep)
-	return interfaces.WorkResult{
-		DispatchID:   d.DispatchID,
-		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
-	}, nil
 }
 
 // channelExecutor blocks until releaseCh is closed, then returns ACCEPTED.

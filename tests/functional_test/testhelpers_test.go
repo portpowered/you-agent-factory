@@ -74,6 +74,26 @@ func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch interfaces.W
 	}, nil
 }
 
+type blockingExecutor struct {
+	releaseCh <-chan struct{}
+	mu        *sync.Mutex
+	calls     *int
+}
+
+func (e *blockingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.mu.Lock()
+	*e.calls++
+	e.mu.Unlock()
+
+	<-e.releaseCh
+
+	return interfaces.WorkResult{
+		DispatchID:   d.DispatchID,
+		TransitionID: d.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+	}, nil
+}
+
 // tokenPlaces returns a map of place ID → token count for debugging.
 func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {
 	places := make(map[string]int)
