@@ -1,4 +1,4 @@
-package functional_test
+package providers
 
 import (
 	"fmt"
@@ -12,10 +12,11 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script accept payload"))
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -33,7 +34,7 @@ func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testin
 }
 
 func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script reject payload"))
 	logDir := t.TempDir()
 	exitCode := 9
@@ -86,7 +87,7 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 }
 
 func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script reject zero exit payload"))
 	exitCode := 0
 
@@ -128,7 +129,7 @@ func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *tes
 }
 
 func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script command payload"))
 	sideEffectPath := filepath.Join(t.TempDir(), "mock-script-side-effect.txt")
 

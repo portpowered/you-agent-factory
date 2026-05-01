@@ -1,4 +1,4 @@
-package functional_test
+package providers
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/service"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
@@ -39,7 +40,7 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir := testutil.CopyFixtureDir(t, fixtureDir(t, tt.fixture))
+			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, tt.fixture))
 			testutil.WriteSeedFile(t, dir, tt.workType, []byte("mock-worker service payload"))
 			logDir := t.TempDir()
 			runtimeID := strings.ReplaceAll(tt.name, " ", "-")

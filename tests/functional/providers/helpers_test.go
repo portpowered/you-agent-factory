@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -487,6 +488,32 @@ func assertTokenPayload(t *testing.T, snap *petri.MarkingSnapshot, placeID, want
 	}
 
 	t.Fatalf("no token found in %s", placeID)
+}
+
+func findRuntimeLogRecord(t *testing.T, path, eventName string) map[string]any {
+	t.Helper()
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open runtime log %s: %v", path, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var record map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			t.Fatalf("decode runtime log record: %v", err)
+		}
+		if record["event_name"] == eventName {
+			return record
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan runtime log %s: %v", path, err)
+	}
+	t.Fatalf("runtime log %s did not contain event_name %q", path, eventName)
+	return nil
 }
 
 func containsEnv(env []string, expected string) bool {

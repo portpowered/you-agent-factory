@@ -1,9 +1,6 @@
-package functional_test
+package providers
 
 import (
-	"bufio"
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,10 +10,11 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "executor_success"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock accept payload"))
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -42,7 +40,7 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 }
 
 func TestMockWorkers_AgentRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "rejection_with_arcs"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject payload"))
 	logDir := t.TempDir()
 	exitCode := 7
@@ -94,7 +92,7 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureAndLogsCommandOutput(t *testi
 }
 
 func TestMockWorkers_AgentRejectConfigWithZeroExitCodeStillRoutesFailure(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "rejection_with_arcs"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject zero exit payload"))
 	exitCode := 0
 
@@ -132,30 +130,4 @@ func TestMockWorkers_AgentRejectConfigWithZeroExitCodeStillRoutesFailure(t *test
 	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "code 1") {
 		t.Fatalf("dispatch reason = %q, want defensive non-zero exit code detail", snapshot.DispatchHistory[0].Reason)
 	}
-}
-
-func findRuntimeLogRecord(t *testing.T, path, eventName string) map[string]any {
-	t.Helper()
-
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open runtime log %s: %v", path, err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		var record map[string]any
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			t.Fatalf("decode runtime log record: %v", err)
-		}
-		if record["event_name"] == eventName {
-			return record
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan runtime log %s: %v", path, err)
-	}
-	t.Fatalf("runtime log %s did not contain event_name %q", path, eventName)
-	return nil
 }
