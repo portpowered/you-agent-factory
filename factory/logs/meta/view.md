@@ -2,93 +2,106 @@
 
 ## world state
 
-- repository `HEAD` is `d844505` on `main` after `git pull` on April 30, 2026,
-  and `origin/main` is at the same commit.
-- the latest merged lane is still pull request `#18` (`ralph/api-clean`),
-  merged on May 1, 2026; since then `main` has advanced with the direct
-  `d844505` standards update.
-- the canonical checked-in maintainer backlog remains
+- repository `HEAD` is `d55b57e` on `main` after `git pull` on May 1, 2026, and
+  `origin/main` is at the same commit.
+- the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent.
-- the checked-in workflow inboxes on `HEAD` still contain only tracked
-  `.gitkeep` sentinels, but this workspace has ignored local residue under the
-  inbox surface:
+- the checked-in workflow inboxes still contain only tracked `.gitkeep`
+  sentinels:
+  - `factory/inputs/BATCH/default/.gitkeep`
+  - `factory/inputs/idea/default/.gitkeep`
+  - `factory/inputs/plan/default/.gitkeep`
+  - `factory/inputs/task/default/.gitkeep`
+  - `factory/inputs/thoughts/default/.gitkeep`
+- this workspace still has ignored local residue under the inbox surface:
+  - `factory/inputs/idea/default/dedupe-dispatcher-throttle-pause-filter.md`
   - `factory/inputs/idea/default/systems-cleanup.md`
   - `factory/inputs/idea/default/test-cleanup.md`
   - `factory/inputs/task/default/ci-cd.md`
-- the repository is no longer in the dirty control-plane state described by the
-  previous view:
-  - `git status --short` is clean
-  - the earlier local deletions and modified meta files are gone from this
-    checkout
-- there are already active cleanup/review lanes in GitHub:
-  - open PR `#19` `systems-cleanup`
-  - open PR `#17` `ci-cd`
+- the recent GitHub lane state materially changed on May 1, 2026:
+  - merged PR `#21` `dedupe-dispatcher-throttle-pause-filter`
+  - merged PR `#19` `systems-cleanup`
+  - merged PR `#17` `ci-cd`
+  - open PR `#20` `test-cleanup`
   - open PR `#16` `dedupe-root-factory-artifact-contract-entries`
   - open PR `#4` `standardize-contract-guard-skip-policy`
-- the historical replay still points to a workflow-contract stability problem:
+- the narrow throttle dedupe follow-up is no longer pending:
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` no longer carries the
+    redundant post-scheduler pause filter removed by PR `#21`
+  - `pkg/factory/projections/throttle_pause_projection.go` now owns the
+    projection path for throttle-pause observability
+  - `pkg/service/factory.go` now enriches the rendered world view through the
+    throttle-pause projection wrapper rather than the base world-view builder
+  - `docs/development/dispatcher-throttle-pause-audit-closeout.md` records the
+    closeout evidence and the deliberately deferred broader redesign
+- the CI/CD ask has partially landed:
+  - `.github/workflows/ci.yml` now exists on `main`
+  - `README.md` and `docs/development/development.md` document the repository
+    CI workflow and local reproduction commands
+- the functional-test cleanup ask also advanced:
+  - `docs/development/functional-test-cleanup-closeout.md` records the
+    remaining behavioral coverage
+  - workstation prompts now explicitly steer away from structural/meta tests
+- the historical replay still shows a live workflow-contract mismatch in the
+  checked-in maintainer loop:
   - `process` completions in `factory/logs/agent-fails.replay.json`:
-    `9 ACCEPTED`, `27 REJECTED`
-  - rejected `process` outputs overwhelmingly return `<CONTINUE>`
-  - `review` completions show `5 ACCEPTED`, `4 REJECTED`
-- the replay churn is explained by the checked-in maintainer workflow itself:
-  - `factory/workers/processor/AGENTS.md` configures stop token
+    `9 ACCEPTED <COMPLETE>`, `27 REJECTED <CONTINUE>`
+  - `review` completions: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
+  - `factory/workers/processor/AGENTS.md` still configures stop token
     `<COMPLETE>` only
-  - `factory/workstations/process/AGENTS.md` instructs the executor to emit
-    `<CONTINUE>` until the whole PRD and PR state are done
-  - `factory/factory.json` maps `process` rejection back to `task:init`, so
-    partial progress is encoded as a retry loop
-- the highest-risk system-deficit ask is still the throttle handling design,
-  and the current implementation remains dispatcher-owned runtime policy rather
-  than a config-authored guard:
-  - `pkg/factory/subsystems/subsystem_dispatcher.go` stores provider/model pause
-    state in `throttlePauses map[providerModelKey]providerModelPause`
-  - pause state is mirrored into runtime snapshots and dashboard/world-view
-    types for observability
-  - throttle enforcement currently runs in two dispatcher-specific filter passes
-    instead of one canonical guard path
+  - `factory/workstations/process/AGENTS.md` still instructs the executor to
+    return `<CONTINUE>` when only one story iteration is done
+  - `factory/factory.json` still maps `process` rejection back to `task:init`
+    and `review` rejection back to `task:init`
+- the broader throttle customer ask remains open at the architecture level:
+  - the current system still keeps pause state as dispatcher-owned runtime
+    memory keyed by provider/model
+  - the ask for config-authored `factory.guards` with
+    `INFERENCE_THROTTLE_GUARD` is not implemented on `main`
+  - that redesign should now be considered separately from the already-landed
+    duplicate-filter cleanup
 
 ## current blockers
 
-1. the checked-in world view had drifted behind `HEAD` and still described a
-   dirty checkout that no longer exists.
-2. the replay evidence still shows repeated executor churn, but the root cause
-   is the current process/review contract rather than an unexplained runtime
-   regression.
-3. the throttle ask is still broad at the backlog level, so the right next move
-   is a narrow cleanup slice rather than the full guard redesign in one pass.
+1. the checked-in world view had drifted behind `HEAD` and still described the
+   throttle-dedup lane as pending even though PR `#21` merged on May 1, 2026.
+2. the replay evidence still encodes ordinary executor partial progress as
+   rejection because the process prompt, worker stop token, and workstation
+   state machine do not agree on what success looks like mid-iteration.
+3. the broad `INFERENCE_THROTTLE_GUARD` customer ask is still too large for a
+   safe direct jump from the current dispatcher-owned runtime policy.
 
 ## theory of mind
 
-- the control plane is stable enough again to dispatch new follow-up work; the
-  earlier "do not queue more work from this checkout" constraint is obsolete.
-- the repository now has two distinct cleanup opportunities:
-  - workflow semantics: the executor loop treats successful partial progress as
-    rejection, which inflates replay churn
-  - system simplification: throttle pause handling duplicates enforcement logic
-    inside the dispatcher
-- the throttle architecture matches the customer complaint precisely: retry and
-  failure normalization are part of the provider-failure contract, but throttle
-  pause enforcement is a separate runtime policy with its own state and filters.
-- the narrowest defensible response to the throttle ask is not the full
-  event-log-backed guard redesign yet; it is reducing duplicate dispatcher
-  throttle logic first so the current behavior has one simpler choke point.
+- the repository is in a materially better state than the prior meta entry
+  described:
+  - the narrow dispatcher throttle simplification is done
+  - the first CI workflow is checked in
+  - the functional-test cleanup lane already removed several structural tests
+- the highest-signal remaining cleanup lane is now workflow semantics, not
+  throttle deduplication.
+- the checked-in maintainer factory currently treats the healthy partial result
+  `<CONTINUE>` as a rejection path, which inflates replay churn and blurs the
+  meaning of failure versus normal iteration.
+- the right follow-up for the throttle customer ask is no longer another narrow
+  dispatcher cleanup. The next defensible step is either:
+  - process/review contract alignment to reduce workflow churn, or
+  - a later explicitly scoped design lane for `INFERENCE_THROTTLE_GUARD`.
 
 ## next best move
 
 - update the checked-in meta world model and progress log now.
-- queue one narrow cleanup idea that simplifies current throttle handling by
-  removing duplicate dispatcher pause enforcement while preserving the existing
-  runtime behavior and observability.
-- leave the broader `INFERENCE_THROTTLE_GUARD` redesign for a later lane after
-  the current throttle surface is smaller and easier to reason about.
-- keep the executor/review `<CONTINUE>` churn as the next likely quality lane if
-  the throttle simplification lands cleanly.
+- queue one narrow cleanup idea to align the checked-in process/review contract
+  so normal partial progress is not represented as rejection.
+- leave the broader `INFERENCE_THROTTLE_GUARD` redesign for a later dedicated
+  lane after the maintainer loop semantics are cleaner.
 
 ## customer asks
 
 - `factory/logs/meta/asks.md` remains the only checked-in backlog surface.
-- no ask is marked urgent as of April 30, 2026.
-- the release/quality backlog already has active lanes in flight (`systems-cleanup`
-  and `ci-cd`), while the throttle ask still lacks a queued narrow cleanup slice.
-- the throttle simplification ask is the best next customer-facing lane because
-  it targets real runtime behavior and removes duplicated policy logic.
+- no ask is marked urgent as of May 1, 2026.
+- the throttling ask is still active, but the already-merged PR `#21` closed
+  only the narrow duplicate-filter cleanup slice.
+- the best next customer-facing cleanup lane is the process/review contract
+  alignment because it removes a current control-plane ambiguity that the replay
+  artifacts prove is still live.

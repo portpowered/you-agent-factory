@@ -141,3 +141,38 @@
 - Queued one narrow ignored cleanup idea at
   `factory/inputs/idea/default/dedupe-dispatcher-throttle-pause-filter.md`
   to simplify the dispatcher throttle path before any broader guard redesign.
+
+## 2026-05-01 00:02 -07:00 - meta refresh after ci-cd and throttle dedupe landed
+
+- Ran `git pull`; `main` and `origin/main` are both at `d55b57e`.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  recent merged/open PR history, and the tracked `factory/inputs/**` surface
+  before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels.
+- Verified that this workspace still has ignored local residue under
+  `factory/inputs/**`, including the already-landed throttle-dedup idea file
+  and older local cleanup residues.
+- Confirmed that the previous meta theory of mind was stale in three important
+  ways:
+  - PR `#21` `dedupe-dispatcher-throttle-pause-filter` merged on May 1, 2026,
+    so the narrow duplicate dispatcher throttle filter cleanup is complete
+  - PR `#17` `ci-cd` merged on May 1, 2026, so repository CI now exists at
+    `.github/workflows/ci.yml`
+  - PR `#19` `systems-cleanup` merged on May 1, 2026, so the structural
+    functional-test cleanup lane has already advanced and documented its
+    closeout
+- Reconfirmed that the replay-contract churn remains a live checked-in workflow
+  issue rather than a solved historical artifact:
+  - `factory/workers/processor/AGENTS.md` still accepts `<COMPLETE>` only
+  - `factory/workstations/process/AGENTS.md` still instructs `<CONTINUE>` for
+    incomplete multi-iteration work
+  - `factory/factory.json` still routes `process` rejection back to `task:init`
+  - `factory/logs/agent-fails.replay.json` still summarizes as
+    `9 process ACCEPTED <COMPLETE>` and `27 process REJECTED <CONTINUE>`
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  PR state, and the revised theory of mind.
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/align-process-review-loop-contract.md` as the
+  next narrow cleanup lane instead of duplicating the already-merged throttle
+  simplification.
