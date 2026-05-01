@@ -53,7 +53,7 @@ The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automati
 
 The workflow currently executes these repository-owned commands in order:
 
-1. `ui/bun install --frozen-lockfile`
+1. `cd ui && bun install --frozen-lockfile`
 2. `cd ui && bun run tsc`
 3. `make build`
 4. `make ui-build`

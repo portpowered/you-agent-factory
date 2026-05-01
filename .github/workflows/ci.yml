@@ -26,6 +26,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2
@@ -52,6 +53,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2
@@ -91,6 +93,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2
