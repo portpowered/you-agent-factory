@@ -37,7 +37,7 @@ endif
 
 GO_TEST_TIMEOUT ?= 300s
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -56,8 +56,13 @@ bundle-api:
 
 generate-api: bundle-api generate-go-api generate-ui-api
 
-generate-go-api:
+generate-go-api: generate-go-server-api generate-go-client-api
+
+generate-go-server-api:
 	$(GO) generate -tags=interfaces ./pkg/api
+
+generate-go-client-api:
+	$(GO) generate -tags=interfaces ./pkg/api/generatedclient
 
 generate-ui-api:
 	cd ui && $(BUN) run generate-api
@@ -66,7 +71,7 @@ api-smoke:
 	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
 	$(MAKE) generate-api
 	$(MAKE) generate-api
-	git diff --exit-code -- api/openapi.yaml pkg/api/generated/server.gen.go ui/src/api/generated/openapi.ts
+	git diff --exit-code -- api/openapi.yaml pkg/api/generated/server.gen.go pkg/api/generatedclient/client.gen.go ui/src/api/generated/openapi.ts
 	$(GO) test ./pkg/api -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional_test -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1
 

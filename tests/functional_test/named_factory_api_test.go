@@ -68,35 +68,16 @@ func startNamedFactoryTestServer(t *testing.T, rootDir string) *FunctionalServer
 func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.NamedFactory {
 	t.Helper()
 
-	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewBufferString(functionalNamedFactoryBody(name, workType)))
-	if err != nil {
-		t.Fatalf("POST /factory: %v", err)
+	var request factoryapi.NamedFactory
+	if err := json.Unmarshal([]byte(functionalNamedFactoryBody(name, workType)), &request); err != nil {
+		t.Fatalf("unmarshal named factory request: %v", err)
 	}
-	if resp.StatusCode != http.StatusCreated {
-		resp.Body.Close()
-		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
-	}
-
-	var created factoryapi.NamedFactory
-	decodeNamedFactoryJSONResponse(t, resp, &created, "decode create factory response")
-	return created
+	return createNamedFactory(t, serverURL, request)
 }
 
 func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFactory {
 	t.Helper()
-
-	resp, err := http.Get(serverURL + "/factory/~current")
-	if err != nil {
-		t.Fatalf("GET /factory/~current: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
-	}
-
-	var current factoryapi.NamedFactory
-	decodeNamedFactoryJSONResponse(t, resp, &current, "decode current factory response")
-	return current
+	return getCurrentNamedFactory(t, serverURL)
 }
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {

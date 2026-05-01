@@ -35,6 +35,14 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 		if walkErr != nil {
 			return walkErr
 		}
+		relPath, err := filepath.Rel(moduleRoot, path)
+		if err != nil {
+			return err
+		}
+		relPath = filepath.ToSlash(relPath)
+		if relPath == "pkg/api/generatedclient" && entry.IsDir() {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
 			if handwrittensourceguard.ShouldSkipDir("pkg/api/legacy_model_guard_test.go", moduleRoot, path) {
 				return filepath.SkipDir
