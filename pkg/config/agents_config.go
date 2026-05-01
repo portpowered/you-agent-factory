@@ -139,13 +139,13 @@ func normalizeWorkstationPublicEnums(cfg *interfaces.FactoryWorkstationConfig) {
 		cfg.Kind = internalFactoryWorkstationKindFromPublic(&behavior)
 	}
 	for i := range cfg.Guards {
-		cfg.Guards[i].Type = internalFactoryWorkstationGuardTypeFromPublic(factoryapi.WorkstationGuardType(cfg.Guards[i].Type))
+		cfg.Guards[i].Type = internalFactoryGuardTypeFromPublic(factoryapi.GuardType(cfg.Guards[i].Type))
 	}
 	for i := range cfg.Inputs {
 		if cfg.Inputs[i].Guard == nil {
 			continue
 		}
-		cfg.Inputs[i].Guard.Type = internalFactoryInputGuardTypeFromPublic(factoryapi.InputGuardType(cfg.Inputs[i].Guard.Type))
+		cfg.Inputs[i].Guard.Type = internalFactoryGuardTypeFromPublic(factoryapi.GuardType(cfg.Inputs[i].Guard.Type))
 	}
 }
 

@@ -484,16 +484,11 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 	for _, propertyName := range []string{"workType", "state", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstationIO, "WorkstationIO", propertyName)
 	}
-	inputGuard := assertOpenAPI3ArrayPropertyDescription(t, workstationIO, "WorkstationIO", "guards")
+	assertOpenAPI3ArrayPropertyDescription(t, workstationIO, "WorkstationIO", "guards")
 
-	assertOpenAPI3Description(t, "WorkstationGuard", workstationGuard.Description)
-	for _, propertyName := range []string{"type", "workstation", "maxVisits"} {
-		assertOpenAPI3PropertyDescription(t, workstationGuard, "WorkstationGuard", propertyName)
-	}
-
-	assertOpenAPI3Description(t, "InputGuard", inputGuard.Description)
-	for _, propertyName := range []string{"type", "parentInput", "spawnedBy"} {
-		assertOpenAPI3PropertyDescription(t, inputGuard, "InputGuard", propertyName)
+	assertOpenAPI3Description(t, "Guard", workstationGuard.Description)
+	for _, propertyName := range []string{"type", "workstation", "maxVisits", "matchConfig", "parentInput", "matchInput", "spawnedBy"} {
+		assertOpenAPI3PropertyDescription(t, workstationGuard, "Guard", propertyName)
 	}
 }
 
@@ -1039,12 +1034,10 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkstationKind":             "./components/schemas/data-models/WorkstationKind.yaml",
 		"WorkstationType":             "./components/schemas/data-models/WorkstationType.yaml",
 		"WorkstationCron":             "./components/schemas/data-models/WorkstationCron.yaml",
-		"WorkstationGuardType":        "./components/schemas/data-models/WorkstationGuardType.yaml",
-		"WorkstationGuard":            "./components/schemas/data-models/WorkstationGuard.yaml",
-		"WorkstationGuardMatchConfig": "./components/schemas/data-models/WorkstationGuardMatchConfig.yaml",
+		"GuardType":                   "./components/schemas/data-models/GuardType.yaml",
+		"Guard":                       "./components/schemas/data-models/Guard.yaml",
+		"GuardMatchConfig":            "./components/schemas/data-models/GuardMatchConfig.yaml",
 		"WorkstationIO":               "./components/schemas/data-models/WorkstationIO.yaml",
-		"InputGuard":                  "./components/schemas/data-models/InputGuard.yaml",
-		"InputGuardType":              "./components/schemas/data-models/InputGuardType.yaml",
 		"Transition":                  "./components/schemas/data-models/Transition.yaml",
 		"Work":                        "./components/schemas/data-models/Work.yaml",
 		"Relation":                    "./components/schemas/data-models/Relation.yaml",
@@ -1726,8 +1719,8 @@ func generatedFactoryLoopBreakerPayload(t *testing.T) map[string]any {
 			Type:    &logicalMoveType,
 			Inputs:  []generated.WorkstationIO{{WorkType: "story", State: "in_review"}},
 			Outputs: []generated.WorkstationIO{{WorkType: "story", State: "failed"}},
-			Guards: &[]generated.WorkstationGuard{{
-				Type:        generated.WorkstationGuardTypeVisitCount,
+			Guards: &[]generated.Guard{{
+				Type:        generated.GuardTypeVisitCount,
 				Workstation: &guardedWorkstation,
 				MaxVisits:   &maxVisits,
 			}},
@@ -1767,8 +1760,8 @@ func assertGeneratedFactoryLoopBreakerPayload(t *testing.T, payload map[string]a
 	if !ok {
 		t.Fatalf("generated.Factory workstation guard must be an object, got %T", guards[0])
 	}
-	if guard["type"] != string(generated.WorkstationGuardTypeVisitCount) {
-		t.Fatalf("generated.Factory workstation guard type = %#v, want %q", guard["type"], generated.WorkstationGuardTypeVisitCount)
+	if guard["type"] != string(generated.GuardTypeVisitCount) {
+		t.Fatalf("generated.Factory workstation guard type = %#v, want %q", guard["type"], generated.GuardTypeVisitCount)
 	}
 	if guard["workstation"] != "review-story" {
 		t.Fatalf("generated.Factory workstation guard workstation = %#v, want %q", guard["workstation"], "review-story")
@@ -1996,8 +1989,22 @@ func assertPropertyRef(t *testing.T, properties map[string]any, propertyName str
 	if !ok {
 		t.Fatalf("properties.%s is missing", propertyName)
 	}
-	if got, ok := property["$ref"].(string); !ok || got != wantRef {
-		t.Fatalf("properties.%s.$ref = %v, want %s", propertyName, property["$ref"], wantRef)
+	if got, ok := property["$ref"].(string); ok {
+		if got != wantRef {
+			t.Fatalf("properties.%s.$ref = %v, want %s", propertyName, got, wantRef)
+		}
+		return
+	}
+	allOf, ok := property["allOf"].([]any)
+	if !ok || len(allOf) == 0 {
+		t.Fatalf("properties.%s has neither $ref nor allOf", propertyName)
+	}
+	first, ok := allOf[0].(map[string]any)
+	if !ok {
+		t.Fatalf("properties.%s.allOf[0] must be an object", propertyName)
+	}
+	if got, ok := first["$ref"].(string); !ok || got != wantRef {
+		t.Fatalf("properties.%s ref = %v, want %s", propertyName, first["$ref"], wantRef)
 	}
 }
 

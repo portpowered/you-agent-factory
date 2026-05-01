@@ -459,18 +459,14 @@ components:
       $ref: './components/schemas/data-models/WorkstationType.yaml'
     WorkstationCron:
       $ref: './components/schemas/data-models/WorkstationCron.yaml'
-    WorkstationGuardType:
-      $ref: './components/schemas/data-models/WorkstationGuardType.yaml'
-    WorkstationGuard:
-      $ref: './components/schemas/data-models/WorkstationGuard.yaml'
-    WorkstationGuardMatchConfig:
-      $ref: './components/schemas/data-models/WorkstationGuardMatchConfig.yaml'
+    GuardType:
+      $ref: './components/schemas/data-models/GuardType.yaml'
+    Guard:
+      $ref: './components/schemas/data-models/Guard.yaml'
+    GuardMatchConfig:
+      $ref: './components/schemas/data-models/GuardMatchConfig.yaml'
     WorkstationIO:
       $ref: './components/schemas/data-models/WorkstationIO.yaml'
-    InputGuard:
-      $ref: './components/schemas/data-models/InputGuard.yaml'
-    InputGuardType:
-      $ref: './components/schemas/data-models/InputGuardType.yaml'
     Transition:
       $ref: './components/schemas/data-models/Transition.yaml'
     # ==== Raw data types here =======

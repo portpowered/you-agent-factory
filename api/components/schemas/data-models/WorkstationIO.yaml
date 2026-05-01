@@ -15,5 +15,4 @@ properties:
     type: array
     description: Per-input guards that must pass before this specific input can be used.
     items:
-      $ref: './InputGuard.yaml'
-
+      $ref: './Guard.yaml'

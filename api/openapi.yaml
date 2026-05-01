@@ -1901,9 +1901,9 @@ components:
           description: Copy supported referenced script files into the expanded workstation layout when config expand runs.
         guards:
           type: array
-          description: Guarded loop breakers should use `visit_count` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
+          description: Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
           items:
-            $ref: '#/components/schemas/WorkstationGuard'
+            $ref: '#/components/schemas/Guard'
         stopWords:
           type: array
           description: Stop words authored on the topology entry for model-oriented dispatches.
@@ -1977,28 +1977,38 @@ components:
         expiryWindow:
           type: string
           description: Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.
-    WorkstationGuardType:
+    GuardType:
       type: string
-      description: Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
+      description: Guard condition attached to a workstation or one of its specific inputs.
       x-enum-varnames:
-        - WorkstationGuardTypeVisitCount
-        - WorkstationGuardTypeMatchesFields
+        - GuardTypeVisitCount
+        - GuardTypeMatchesFields
+        - GuardTypeAllChildrenComplete
+        - GuardTypeAnyChildFailed
+        - GuardTypeSameName
       enum:
         - VISIT_COUNT
         - MATCHES_FIELDS
+        - ALL_CHILDREN_COMPLETE
+        - ANY_CHILD_FAILED
+        - SAME_NAME
       x-enum-descriptions:
         - Allows or blocks work based on how many times a workstation has already handled it.
         - Requires all candidate workstation inputs to resolve the same configured field value.
-    WorkstationGuard:
+        - This input is available only after all matching child work completes.
+        - This input is available when any matching child work fails.
+        - This input is available only when its token name exactly matches the bound token name from another input.
+    Guard:
       type: object
-      description: Guard attached to a workstation as a whole before it is allowed to consume work.
+      description: Shared guard attached either to a workstation as a whole or to one specific workstation input.
       additionalProperties: false
       required:
         - type
       properties:
         type:
-          $ref: '#/components/schemas/WorkstationGuardType'
-          description: Guard condition to evaluate before this workstation is allowed to run.
+          allOf:
+            - $ref: '#/components/schemas/GuardType'
+          description: Guard condition to evaluate for this workstation-level or input-level attachment.
         workstation:
           type: string
           description: For `VISIT_COUNT` guards, the workstation whose visits are counted.
@@ -2007,9 +2017,19 @@ components:
           minimum: 1
           description: For `VISIT_COUNT` guards, the visit threshold.
         matchConfig:
-          $ref: '#/components/schemas/WorkstationGuardMatchConfig'
+          allOf:
+            - $ref: '#/components/schemas/GuardMatchConfig'
           description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
-    WorkstationGuardMatchConfig:
+        parentInput:
+          type: string
+          description: For parent-aware input guards, the parent workType name from another input in the same workstation.
+        matchInput:
+          type: string
+          description: For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation.
+        spawnedBy:
+          type: string
+          description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    GuardMatchConfig:
       type: object
       additionalProperties: false
       required:
@@ -2037,41 +2057,7 @@ components:
           type: array
           description: Per-input guards that must pass before this specific input can be used.
           items:
-            $ref: '#/components/schemas/InputGuard'
-    InputGuard:
-      type: object
-      description: Guard attached to one workstation input for parent-aware fan-in or same-name matching against another input.
-      additionalProperties: false
-      required:
-        - type
-      properties:
-        type:
-          $ref: '#/components/schemas/InputGuardType'
-          description: Input guard condition to evaluate for this specific workstation input.
-        parentInput:
-          type: string
-          description: Parent workType name from another input in the same workstation.
-        matchInput:
-          type: string
-          description: Peer input workType name from another input in the same workstation for same-name matching.
-        spawnedBy:
-          type: string
-          description: Workstation that spawns the children for dynamic fanout count tracking.
-    InputGuardType:
-      type: string
-      description: Guard condition attached to a specific workstation input.
-      x-enum-varnames:
-        - InputGuardTypeAllChildrenComplete
-        - InputGuardTypeAnyChildFailed
-        - InputGuardTypeSameName
-      enum:
-        - ALL_CHILDREN_COMPLETE
-        - ANY_CHILD_FAILED
-        - SAME_NAME
-      x-enum-descriptions:
-        - This input is available only after all matching child work completes.
-        - This input is available when any matching child work fails.
-        - This input is available only when its token name exactly matches the bound token name from another input.
+            $ref: '#/components/schemas/Guard'
     Transition:
       type: object
       additionalProperties: false

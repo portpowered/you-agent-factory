@@ -249,7 +249,7 @@ func normalizeFactoryWorkstationGuardEntries(workstation map[string]any, worksta
 		if !ok {
 			continue
 		}
-		if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].guards[%d].type", workstationIndex, guardIndex), publicFactoryWorkstationGuardTypeAliases); err != nil {
+		if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].guards[%d].type", workstationIndex, guardIndex), publicFactoryGuardTypeAliases); err != nil {
 			return err
 		}
 	}
@@ -275,7 +275,7 @@ func normalizeFactoryWorkstationInputGuardEntries(workstation map[string]any, wo
 			if !ok {
 				continue
 			}
-			if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].inputs[%d].guards[%d].type", workstationIndex, inputIndex, guardIndex), publicFactoryInputGuardTypeAliases); err != nil {
+			if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].inputs[%d].guards[%d].type", workstationIndex, inputIndex, guardIndex), publicFactoryGuardTypeAliases); err != nil {
 				return err
 			}
 		}

@@ -74,17 +74,19 @@ const (
 	FactoryStateRunning   FactoryState = "RUNNING"
 )
 
+// Defines values for GuardType.
+const (
+	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
+	GuardTypeAnyChildFailed      GuardType = "ANY_CHILD_FAILED"
+	GuardTypeMatchesFields       GuardType = "MATCHES_FIELDS"
+	GuardTypeSameName            GuardType = "SAME_NAME"
+	GuardTypeVisitCount          GuardType = "VISIT_COUNT"
+)
+
 // Defines values for InferenceOutcome.
 const (
 	InferenceOutcomeFailed    InferenceOutcome = "FAILED"
 	InferenceOutcomeSucceeded InferenceOutcome = "SUCCEEDED"
-)
-
-// Defines values for InputGuardType.
-const (
-	InputGuardTypeAllChildrenComplete InputGuardType = "ALL_CHILDREN_COMPLETE"
-	InputGuardTypeAnyChildFailed      InputGuardType = "ANY_CHILD_FAILED"
-	InputGuardTypeSameName            InputGuardType = "SAME_NAME"
 )
 
 // Defines values for InputKind.
@@ -149,12 +151,6 @@ const (
 const (
 	WorkerTypeModelWorker  WorkerType = "MODEL_WORKER"
 	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
-)
-
-// Defines values for WorkstationGuardType.
-const (
-	WorkstationGuardTypeMatchesFields WorkstationGuardType = "MATCHES_FIELDS"
-	WorkstationGuardTypeVisitCount    WorkstationGuardType = "VISIT_COUNT"
 )
 
 // Defines values for WorkstationKind.
@@ -522,6 +518,39 @@ type FactoryWorldWorkstationRequestView struct {
 	WorkstationName *string                                     `json:"workstationName,omitempty"`
 }
 
+// Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
+type Guard struct {
+	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
+
+	// MatchInput For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation.
+	MatchInput *string `json:"matchInput,omitempty"`
+
+	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
+	ParentInput *string `json:"parentInput,omitempty"`
+
+	// SpawnedBy For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+	SpawnedBy *string `json:"spawnedBy,omitempty"`
+
+	// Type Guard condition to evaluate for this workstation-level or input-level attachment.
+	Type GuardType `json:"type"`
+
+	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
+	Workstation *string `json:"workstation,omitempty"`
+}
+
+// GuardMatchConfig defines model for GuardMatchConfig.
+type GuardMatchConfig struct {
+	// InputKey Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.
+	InputKey string `json:"inputKey"`
+}
+
+// GuardType Guard condition attached to a workstation or one of its specific inputs.
+type GuardType string
+
 // InferenceOutcome Result category returned by a provider inference attempt.
 type InferenceOutcome string
 
@@ -579,24 +608,6 @@ type InitialStructureRequestEventPayload struct {
 	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
 	WorkflowId      *string    `json:"workflowId,omitempty"`
 }
-
-// InputGuard Guard attached to one workstation input for parent-aware fan-in or same-name matching against another input.
-type InputGuard struct {
-	// MatchInput Peer input workType name from another input in the same workstation for same-name matching.
-	MatchInput *string `json:"matchInput,omitempty"`
-
-	// ParentInput Parent workType name from another input in the same workstation.
-	ParentInput *string `json:"parentInput,omitempty"`
-
-	// SpawnedBy Workstation that spawns the children for dynamic fanout count tracking.
-	SpawnedBy *string `json:"spawnedBy,omitempty"`
-
-	// Type Guard condition attached to a specific workstation input.
-	Type InputGuardType `json:"type"`
-}
-
-// InputGuardType Guard condition attached to a specific workstation input.
-type InputGuardType string
 
 // InputKind Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
 type InputKind string
@@ -1068,8 +1079,8 @@ type Workstation struct {
 	Cron *WorkstationCron `json:"cron,omitempty"`
 	Env  *StringMap       `json:"env,omitempty"`
 
-	// Guards Guarded loop breakers should use `visit_count` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
-	Guards *[]WorkstationGuard `json:"guards,omitempty"`
+	// Guards Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
+	Guards *[]Guard `json:"guards,omitempty"`
 
 	// Id Optional stable identifier for this workstation in serialized runtime and replay payloads.
 	Id *string `json:"id,omitempty"`
@@ -1138,33 +1149,10 @@ type WorkstationCron struct {
 	TriggerAtStart *bool `json:"triggerAtStart,omitempty"`
 }
 
-// WorkstationGuard Guard attached to a workstation as a whole before it is allowed to consume work.
-type WorkstationGuard struct {
-	MatchConfig *WorkstationGuardMatchConfig `json:"matchConfig,omitempty"`
-
-	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
-	MaxVisits *int `json:"maxVisits,omitempty"`
-
-	// Type Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
-	Type WorkstationGuardType `json:"type"`
-
-	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
-	Workstation *string `json:"workstation,omitempty"`
-}
-
-// WorkstationGuardMatchConfig defines model for WorkstationGuardMatchConfig.
-type WorkstationGuardMatchConfig struct {
-	// InputKey Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.
-	InputKey string `json:"inputKey"`
-}
-
-// WorkstationGuardType Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
-type WorkstationGuardType string
-
 // WorkstationIO One authored work-state reference consumed or emitted by a workstation.
 type WorkstationIO struct {
 	// Guards Per-input guards that must pass before this specific input can be used.
-	Guards *[]InputGuard `json:"guards,omitempty"`
+	Guards *[]Guard `json:"guards,omitempty"`
 
 	// State Name of the work state consumed or emitted for the referenced work type.
 	State string `json:"state"`

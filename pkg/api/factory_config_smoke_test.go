@@ -484,13 +484,13 @@ func assertFactoryConfigSmokeDescriptions(t *testing.T, factory *openapi3.Schema
 
 	assertOpenAPI3Description(t, "WorkstationIO", workstationIO.Description)
 	assertOpenAPI3PropertyDescription(t, workstationIO, "WorkstationIO", "guards")
-	inputGuard := assertOpenAPI3ArrayPropertyDescription(t, workstationIO, "WorkstationIO", "guards")
+	guard := assertOpenAPI3ArrayPropertyDescription(t, workstationIO, "WorkstationIO", "guards")
 
-	assertOpenAPI3Description(t, "InputGuard", inputGuard.Description)
-	assertOpenAPI3PropertyDescription(t, inputGuard, "InputGuard", "type")
+	assertOpenAPI3Description(t, "Guard", guard.Description)
+	assertOpenAPI3PropertyDescription(t, guard, "Guard", "type")
 
-	assertOpenAPI3Description(t, "WorkstationGuard", workstationGuard.Description)
-	assertOpenAPI3PropertyDescription(t, workstationGuard, "WorkstationGuard", "type")
+	assertOpenAPI3Description(t, "Guard", workstationGuard.Description)
+	assertOpenAPI3PropertyDescription(t, workstationGuard, "Guard", "type")
 
 	assertOpenAPI3Description(t, "WorkstationCron", workstationCron.Description)
 	assertOpenAPI3PropertyDescription(t, workstationCron, "WorkstationCron", "triggerAtStart")
@@ -517,8 +517,7 @@ func assertFactoryConfigSmokeEnumRefs(t *testing.T) {
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelProvider", "#/components/schemas/WorkerModelProvider")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
-	assertSchemaPropertyRef(t, schemas, "WorkstationGuard", "type", "#/components/schemas/WorkstationGuardType")
-	assertSchemaPropertyRef(t, schemas, "InputGuard", "type", "#/components/schemas/InputGuardType")
+	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
 }
 
 func assertFactoryConfigSmokeGeneratedBoundary(t *testing.T, factory factoryapi.Factory) {
@@ -544,10 +543,10 @@ func assertFactoryConfigSmokeGeneratedBoundary(t *testing.T, factory factoryapi.
 	if firstWorkstation.Type == nil || *firstWorkstation.Type != factoryapi.WorkstationTypeModelWorkstation {
 		t.Fatalf("generated boundary workstation type = %#v, want MODEL_WORKSTATION", firstWorkstation.Type)
 	}
-	if firstWorkstation.Guards == nil || len(*firstWorkstation.Guards) != 1 || (*firstWorkstation.Guards)[0].Type != factoryapi.WorkstationGuardTypeVisitCount {
+	if firstWorkstation.Guards == nil || len(*firstWorkstation.Guards) != 1 || (*firstWorkstation.Guards)[0].Type != factoryapi.GuardTypeVisitCount {
 		t.Fatalf("generated boundary workstation guards = %#v, want VISIT_COUNT", firstWorkstation.Guards)
 	}
-	if len(firstWorkstation.Inputs) < 2 || firstWorkstation.Inputs[1].Guards == nil || len(*firstWorkstation.Inputs[1].Guards) != 1 || (*firstWorkstation.Inputs[1].Guards)[0].Type != factoryapi.InputGuardTypeAllChildrenComplete {
+	if len(firstWorkstation.Inputs) < 2 || firstWorkstation.Inputs[1].Guards == nil || len(*firstWorkstation.Inputs[1].Guards) != 1 || (*firstWorkstation.Inputs[1].Guards)[0].Type != factoryapi.GuardTypeAllChildrenComplete {
 		t.Fatalf("generated boundary input guards = %#v, want ALL_CHILDREN_COMPLETE", firstWorkstation.Inputs)
 	}
 }

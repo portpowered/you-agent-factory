@@ -499,8 +499,8 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesPerInputGuardFanIn(t *testin
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
-	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-complete"), "page", string(factoryapi.InputGuardTypeAllChildrenComplete))
-	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-failed"), "page", string(factoryapi.InputGuardTypeAnyChildFailed))
+	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-complete"), "page", string(factoryapi.GuardTypeAllChildrenComplete))
+	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-failed"), "page", string(factoryapi.GuardTypeAnyChildFailed))
 	data, err := json.Marshal(generated)
 	if err != nil {
 		t.Fatalf("marshal generated factory: %v", err)

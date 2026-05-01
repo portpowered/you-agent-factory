@@ -178,7 +178,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 		t.Fatalf("expected generated same-name guard to survive boundary decode, got %#v", workstation.Inputs)
 	}
 	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.Type != factoryapi.InputGuardTypeSameName {
+	if guard.Type != factoryapi.GuardTypeSameName {
 		t.Fatalf("expected generated guard type SAME_NAME, got %#v", guard.Type)
 	}
 	if guard.MatchInput == nil || *guard.MatchInput != "planItem" {
@@ -228,7 +228,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 		t.Fatalf("expected generated matches-fields guard to survive boundary decode, got %#v", workstation.Guards)
 	}
 	guard := (*workstation.Guards)[0]
-	if guard.Type != factoryapi.WorkstationGuardTypeMatchesFields {
+	if guard.Type != factoryapi.GuardTypeMatchesFields {
 		t.Fatalf("expected generated guard type MATCHES_FIELDS, got %#v", guard.Type)
 	}
 	if guard.MatchConfig == nil || guard.MatchConfig.InputKey != `.Tags["_last_output"]` {
@@ -826,9 +826,9 @@ func TestFactoryConfigFromOpenAPI_ExplicitMapperMatchesJSONBoundary(t *testing.T
 }
 
 func TestFactoryConfigFromOpenAPI_ReportsNestedGeneratedFieldPathOnMappingError(t *testing.T) {
-	guards := []factoryapi.InputGuard{
-		{Type: factoryapi.InputGuardTypeAllChildrenComplete},
-		{Type: factoryapi.InputGuardTypeAnyChildFailed},
+	guards := []factoryapi.Guard{
+		{Type: factoryapi.GuardTypeAllChildrenComplete},
+		{Type: factoryapi.GuardTypeAnyChildFailed},
 	}
 	workstations := []factoryapi.Workstation{{
 		Name:   "finish-story",

@@ -3,7 +3,7 @@ import type { components } from "../generated/openapi";
 export type CanonicalFactoryDefinition = components["schemas"]["Factory"];
 
 type FactorySchemas = components["schemas"];
-type FactoryInputGuard = FactorySchemas["InputGuard"];
+type FactoryGuard = FactorySchemas["Guard"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
@@ -11,19 +11,18 @@ type FactoryWorker = FactorySchemas["Worker"];
 type FactoryWorkState = FactorySchemas["WorkState"];
 type FactoryWorkstation = FactorySchemas["Workstation"];
 type FactoryWorkstationCron = FactorySchemas["WorkstationCron"];
-type FactoryWorkstationGuard = FactorySchemas["WorkstationGuard"];
 type FactoryWorkstationIO = FactorySchemas["WorkstationIO"];
 type FactoryWorkstationLimits = FactorySchemas["WorkstationLimits"];
 type FactoryWorkType = FactorySchemas["WorkType"];
 
-const WORKSTATION_GUARD_TYPE_ALIASES: Record<string, string> = {
+const GUARD_TYPE_ALIASES: Record<string, string> = {
   VISIT_COUNT: "VISIT_COUNT",
-  visit_count: "VISIT_COUNT",
-};
-const INPUT_GUARD_TYPE_ALIASES: Record<string, string> = {
+  MATCHES_FIELDS: "MATCHES_FIELDS",
   ALL_CHILDREN_COMPLETE: "ALL_CHILDREN_COMPLETE",
   ANY_CHILD_FAILED: "ANY_CHILD_FAILED",
   SAME_NAME: "SAME_NAME",
+  visit_count: "VISIT_COUNT",
+  matches_fields: "MATCHES_FIELDS",
   all_children_complete: "ALL_CHILDREN_COMPLETE",
   any_child_failed: "ANY_CHILD_FAILED",
   same_name: "SAME_NAME",
@@ -109,8 +108,15 @@ const WORKSTATION_KEYS = new Set([
   "worktree",
 ]);
 const WORKSTATION_IO_KEYS = new Set(["guards", "state", "workType"]);
-const WORKSTATION_GUARD_KEYS = new Set(["maxVisits", "type", "workstation"]);
-const INPUT_GUARD_KEYS = new Set(["matchInput", "parentInput", "spawnedBy", "type"]);
+const GUARD_KEYS = new Set([
+  "matchConfig",
+  "matchInput",
+  "maxVisits",
+  "parentInput",
+  "spawnedBy",
+  "type",
+  "workstation",
+]);
 const WORKSTATION_LIMITS_KEYS = new Set(["maxExecutionTime", "maxRetries"]);
 const WORKSTATION_CRON_KEYS = new Set([
   "expiryWindow",
@@ -148,10 +154,9 @@ const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>
   "LOGICAL_MOVE",
   "MODEL_WORKSTATION",
 ]);
-const WORKSTATION_GUARD_TYPE_VALUES = new Set<FactoryWorkstationGuard["type"]>([
+const GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
   "VISIT_COUNT",
-]);
-const INPUT_GUARD_TYPE_VALUES = new Set<FactoryInputGuard["type"]>([
+  "MATCHES_FIELDS",
   "ALL_CHILDREN_COMPLETE",
   "ANY_CHILD_FAILED",
   "SAME_NAME",
@@ -277,12 +282,9 @@ function canonicalizeWorkstation(workstation: unknown): Record<string, unknown> 
 
   if (Array.isArray(normalizedWorkstation.guards)) {
     normalizedWorkstation.guards = normalizedWorkstation.guards.map((guard) =>
-      canonicalizeGuard(
-        withAliasedKeys(asRecord(guard), {
-          max_visits: "maxVisits",
-        }),
-        WORKSTATION_GUARD_TYPE_ALIASES,
-      ),
+      canonicalizeGuard(withAliasedKeys(asRecord(guard), {
+        max_visits: "maxVisits",
+      })),
     );
   }
 
@@ -310,14 +312,11 @@ function canonicalizeWorkstationIO(value: unknown): Record<string, unknown> {
 
   if (Array.isArray(normalizedIO.guards)) {
     normalizedIO.guards = normalizedIO.guards.map((guard) =>
-      canonicalizeGuard(
-        withAliasedKeys(asRecord(guard), {
-          match_input: "matchInput",
-          parent_input: "parentInput",
-          spawned_by: "spawnedBy",
-        }),
-        INPUT_GUARD_TYPE_ALIASES,
-      ),
+      canonicalizeGuard(withAliasedKeys(asRecord(guard), {
+        match_input: "matchInput",
+        parent_input: "parentInput",
+        spawned_by: "spawnedBy",
+      })),
     );
   }
 
@@ -348,15 +347,12 @@ function withAliasedKeys(
   return normalizedValue;
 }
 
-function canonicalizeGuard(
-  guard: Record<string, unknown>,
-  typeAliases: Record<string, string>,
-): Record<string, unknown> {
+function canonicalizeGuard(guard: Record<string, unknown>): Record<string, unknown> {
   const normalizedGuard = { ...guard };
   const guardType = normalizedGuard.type;
 
-  if (typeof guardType === "string" && typeAliases[guardType] !== undefined) {
-    normalizedGuard.type = typeAliases[guardType];
+  if (typeof guardType === "string" && GUARD_TYPE_ALIASES[guardType] !== undefined) {
+    normalizedGuard.type = GUARD_TYPE_ALIASES[guardType];
   }
 
   return normalizedGuard;
@@ -768,15 +764,19 @@ function decodeWorkstationIO(value: unknown, path: string): FactoryWorkstationIO
   return io;
 }
 
-function decodeWorkstationGuard(value: unknown, path: string): FactoryWorkstationGuard {
+function decodeWorkstationGuard(value: unknown, path: string): FactoryGuard {
   const record = expectObject(value, path);
-  rejectUnknownKeys(record, WORKSTATION_GUARD_KEYS, path);
+  rejectUnknownKeys(record, GUARD_KEYS, path);
 
-  const guard: FactoryWorkstationGuard = {
-    type: readRequiredEnum(record, "type", path, WORKSTATION_GUARD_TYPE_VALUES),
+  const guard: FactoryGuard = {
+    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
   };
+  const matchConfig = readOptionalGuardMatchConfig(record, path);
   const workstation = readOptionalString(record, "workstation", path);
   const maxVisits = readOptionalInteger(record, "maxVisits", path);
+  if (matchConfig !== undefined) {
+    guard.matchConfig = matchConfig;
+  }
   if (workstation !== undefined) {
     guard.workstation = workstation;
   }
@@ -786,12 +786,12 @@ function decodeWorkstationGuard(value: unknown, path: string): FactoryWorkstatio
   return guard;
 }
 
-function decodeInputGuard(value: unknown, path: string): FactoryInputGuard {
+function decodeInputGuard(value: unknown, path: string): FactoryGuard {
   const record = expectObject(value, path);
-  rejectUnknownKeys(record, INPUT_GUARD_KEYS, path);
+  rejectUnknownKeys(record, GUARD_KEYS, path);
 
-  const guard: FactoryInputGuard = {
-    type: readRequiredEnum(record, "type", path, INPUT_GUARD_TYPE_VALUES),
+  const guard: FactoryGuard = {
+    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
   };
   const matchInput = readOptionalString(record, "matchInput", path);
   const parentInput = readOptionalString(record, "parentInput", path);
@@ -806,6 +806,22 @@ function decodeInputGuard(value: unknown, path: string): FactoryInputGuard {
     guard.spawnedBy = spawnedBy;
   }
   return guard;
+}
+
+function readOptionalGuardMatchConfig(
+  record: Record<string, unknown>,
+  path: string,
+): FactoryGuard["matchConfig"] | undefined {
+  const rawValue = record.matchConfig;
+  if (rawValue === undefined) {
+    return undefined;
+  }
+  const matchConfigPath = `${path}.matchConfig`;
+  const matchConfig = expectObject(rawValue, matchConfigPath);
+  rejectUnknownKeys(matchConfig, new Set(["inputKey"]), matchConfigPath);
+  return {
+    inputKey: readRequiredString(matchConfig, "inputKey", matchConfigPath),
+  };
 }
 
 function decodeWorkstationLimits(value: unknown, path: string): FactoryWorkstationLimits {

@@ -665,7 +665,7 @@ func workstationIOInternalFromAPI(cfg factoryapi.WorkstationIO, fieldPath string
 	}, nil
 }
 
-func inputGuardInternalFromAPI(guards *[]factoryapi.InputGuard, fieldPath string) (*interfaces.InputGuardConfig, error) {
+func inputGuardInternalFromAPI(guards *[]factoryapi.Guard, fieldPath string) (*interfaces.InputGuardConfig, error) {
 	if guards == nil || len(*guards) == 0 {
 		return nil, nil
 	}
@@ -674,7 +674,7 @@ func inputGuardInternalFromAPI(guards *[]factoryapi.InputGuard, fieldPath string
 	}
 	guard := (*guards)[0]
 	return &interfaces.InputGuardConfig{
-		Type:        internalFactoryInputGuardTypeFromPublic(guard.Type),
+		Type:        internalFactoryGuardTypeFromPublic(guard.Type),
 		MatchInput:  stringValue(guard.MatchInput),
 		ParentInput: stringValue(guard.ParentInput),
 		SpawnedBy:   stringValue(guard.SpawnedBy),
@@ -695,14 +695,14 @@ func resourceRequirementsInternalFromAPI(resources *[]factoryapi.ResourceRequire
 	return values
 }
 
-func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []interfaces.GuardConfig {
+func workstationGuardsInternalFromAPI(guards *[]factoryapi.Guard) []interfaces.GuardConfig {
 	if guards == nil {
 		return nil
 	}
 	values := make([]interfaces.GuardConfig, len(*guards))
 	for i, guard := range *guards {
 		values[i] = interfaces.GuardConfig{
-			Type:        internalFactoryWorkstationGuardTypeFromPublic(guard.Type),
+			Type:        internalFactoryGuardTypeFromPublic(guard.Type),
 			Workstation: stringValue(guard.Workstation),
 			MaxVisits:   intValue(guard.MaxVisits),
 			MatchConfig: guardMatchConfigInternalFromAPI(guard.MatchConfig),
@@ -711,7 +711,7 @@ func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []i
 	return values
 }
 
-func guardMatchConfigInternalFromAPI(matchConfig *factoryapi.WorkstationGuardMatchConfig) *interfaces.GuardMatchConfig {
+func guardMatchConfigInternalFromAPI(matchConfig *factoryapi.GuardMatchConfig) *interfaces.GuardMatchConfig {
 	if matchConfig == nil {
 		return nil
 	}
@@ -907,15 +907,15 @@ func workstationIOAPIFromInternal(cfg interfaces.IOConfig) factoryapi.Workstatio
 		WorkType: cfg.WorkTypeName,
 	}
 	if cfg.Guard != nil {
-		guards := []factoryapi.InputGuard{inputGuardAPIFromInternal(*cfg.Guard)}
+		guards := []factoryapi.Guard{inputGuardAPIFromInternal(*cfg.Guard)}
 		apiIO.Guards = &guards
 	}
 	return apiIO
 }
 
-func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.InputGuard {
-	apiGuard := factoryapi.InputGuard{
-		Type: publicFactoryInputGuardTypeFromInternal(guard.Type),
+func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.Guard {
+	apiGuard := factoryapi.Guard{
+		Type: publicFactoryGuardTypeFromInternal(guard.Type),
 	}
 	if guard.MatchInput != "" {
 		apiGuard.MatchInput = stringPtr(guard.MatchInput)
@@ -943,14 +943,14 @@ func resourceRequirementsAPIFromInternal(resources []interfaces.ResourceConfig) 
 	return &values
 }
 
-func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.WorkstationGuard {
+func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.Guard {
 	if len(guards) == 0 {
 		return nil
 	}
-	values := make([]factoryapi.WorkstationGuard, len(guards))
+	values := make([]factoryapi.Guard, len(guards))
 	for i, guard := range guards {
-		values[i] = factoryapi.WorkstationGuard{
-			Type:        publicFactoryWorkstationGuardTypeFromInternal(guard.Type),
+		values[i] = factoryapi.Guard{
+			Type:        publicFactoryGuardTypeFromInternal(guard.Type),
 			Workstation: stringPtrIfNotEmpty(guard.Workstation),
 			MaxVisits:   intPtrIfNonZero(guard.MaxVisits),
 			MatchConfig: guardMatchConfigAPIFromInternal(guard.MatchConfig),
@@ -959,11 +959,11 @@ func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factor
 	return &values
 }
 
-func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *factoryapi.WorkstationGuardMatchConfig {
+func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *factoryapi.GuardMatchConfig {
 	if matchConfig == nil {
 		return nil
 	}
-	return &factoryapi.WorkstationGuardMatchConfig{
+	return &factoryapi.GuardMatchConfig{
 		InputKey: matchConfig.InputKey,
 	}
 }

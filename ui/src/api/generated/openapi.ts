@@ -967,8 +967,8 @@ export interface components {
             resources?: components["schemas"]["ResourceRequirement"][];
             /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
             copyReferencedScripts?: boolean;
-            /** @description Guarded loop breakers should use `visit_count` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules. */
-            guards?: components["schemas"]["WorkstationGuard"][];
+            /** @description Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules. */
+            guards?: components["schemas"]["Guard"][];
             /** @description Stop words authored on the topology entry for model-oriented dispatches. */
             stopWords?: string[];
             /** @description Go template resolved from token tags at dispatch time. */
@@ -1011,22 +1011,28 @@ export interface components {
             expiryWindow?: string;
         };
         /**
-         * @description Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
+         * @description Guard condition attached to a workstation or one of its specific inputs.
          * @enum {string}
          */
-        WorkstationGuardType: "VISIT_COUNT" | "MATCHES_FIELDS";
-        /** @description Guard attached to a workstation as a whole before it is allowed to consume work. */
-        WorkstationGuard: {
-            /** @description Guard condition to evaluate before this workstation is allowed to run. */
-            type: components["schemas"]["WorkstationGuardType"];
+        GuardType: "VISIT_COUNT" | "MATCHES_FIELDS" | "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME";
+        /** @description Shared guard attached either to a workstation as a whole or to one specific workstation input. */
+        Guard: {
+            /** @description Guard condition to evaluate for this workstation-level or input-level attachment. */
+            type: components["schemas"]["GuardType"];
             /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
             workstation?: string;
             /** @description For `VISIT_COUNT` guards, the visit threshold. */
             maxVisits?: number;
             /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
-            matchConfig?: components["schemas"]["WorkstationGuardMatchConfig"];
+            matchConfig?: components["schemas"]["GuardMatchConfig"];
+            /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
+            parentInput?: string;
+            /** @description For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation. */
+            matchInput?: string;
+            /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
+            spawnedBy?: string;
         };
-        WorkstationGuardMatchConfig: {
+        GuardMatchConfig: {
             /** @description Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`. */
             inputKey: string;
         };
@@ -1037,24 +1043,8 @@ export interface components {
             /** @description Name of the work state consumed or emitted for the referenced work type. */
             state: string;
             /** @description Per-input guards that must pass before this specific input can be used. */
-            guards?: components["schemas"]["InputGuard"][];
+            guards?: components["schemas"]["Guard"][];
         };
-        /** @description Guard attached to one workstation input for parent-aware fan-in or same-name matching against another input. */
-        InputGuard: {
-            /** @description Input guard condition to evaluate for this specific workstation input. */
-            type: components["schemas"]["InputGuardType"];
-            /** @description Parent workType name from another input in the same workstation. */
-            parentInput?: string;
-            /** @description Peer input workType name from another input in the same workstation for same-name matching. */
-            matchInput?: string;
-            /** @description Workstation that spawns the children for dynamic fanout count tracking. */
-            spawnedBy?: string;
-        };
-        /**
-         * @description Guard condition attached to a specific workstation input.
-         * @enum {string}
-         */
-        InputGuardType: "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME";
         Transition: {
             /** @description Source workstation name. */
             from: string;
