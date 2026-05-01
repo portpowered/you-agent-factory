@@ -176,3 +176,21 @@
   `factory/inputs/idea/default/align-process-review-loop-contract.md` as the
   next narrow cleanup lane instead of duplicating the already-merged throttle
   simplification.
+
+## 2026-05-01 01:20 -07:00 - meta replay-contract closeout
+
+- Re-read the checked-in replay samples, the live adhoc factory prompt/config
+  surfaces, and the contract closeout note before reconciling the last review
+  blocker on the process/review cleanup lane.
+- Regenerated the embedded run-started factory payload inside
+  `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and
+  `tests/functional_test/testdata/adhoc-recording-batch-event-log.json` from
+  the current `tests/adhoc/factory` runtime config so the checked-in replay
+  evidence now serializes `process.onContinue`, the clarified `<CONTINUE>` /
+  `<COMPLETE>` prompt contract, and the current runtime hashes together.
+- Updated `factory/logs/meta/view.md` so it no longer describes ordinary
+  executor partial progress as live rejection churn.
+- Confirmed the checked-in replay summary is now:
+  - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
+  - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`

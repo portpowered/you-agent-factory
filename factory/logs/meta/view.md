@@ -42,17 +42,15 @@
   - `docs/development/functional-test-cleanup-closeout.md` records the
     remaining behavioral coverage
   - workstation prompts now explicitly steer away from structural/meta tests
-- the historical replay still shows a live workflow-contract mismatch in the
-  checked-in maintainer loop:
+- the checked-in replay evidence now reflects the landed continue-versus-
+  rejection contract in the maintainer loop:
   - `process` completions in `factory/logs/agent-fails.replay.json`:
-    `9 ACCEPTED <COMPLETE>`, `27 REJECTED <CONTINUE>`
+    `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
   - `review` completions: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
-  - `factory/workers/processor/AGENTS.md` still configures stop token
-    `<COMPLETE>` only
-  - `factory/workstations/process/AGENTS.md` still instructs the executor to
-    return `<CONTINUE>` when only one story iteration is done
-  - `factory/factory.json` still maps `process` rejection back to `task:init`
-    and `review` rejection back to `task:init`
+  - the embedded `process` workstation topology now includes `onContinue`
+  - the embedded `process` prompt now reserves rejection for true review
+    send-back and treats `<CONTINUE>` as ordinary executor iteration
+  - `review` still uses rejection to send work back through `task:init`
 - the broader throttle customer ask remains open at the architecture level:
   - the current system still keeps pause state as dispatcher-owned runtime
     memory keyed by provider/model
@@ -63,12 +61,7 @@
 
 ## current blockers
 
-1. the checked-in world view had drifted behind `HEAD` and still described the
-   throttle-dedup lane as pending even though PR `#21` merged on May 1, 2026.
-2. the replay evidence still encodes ordinary executor partial progress as
-   rejection because the process prompt, worker stop token, and workstation
-   state machine do not agree on what success looks like mid-iteration.
-3. the broad `INFERENCE_THROTTLE_GUARD` customer ask is still too large for a
+1. the broad `INFERENCE_THROTTLE_GUARD` customer ask is still too large for a
    safe direct jump from the current dispatcher-owned runtime policy.
 
 ## theory of mind
@@ -78,23 +71,20 @@
   - the narrow dispatcher throttle simplification is done
   - the first CI workflow is checked in
   - the functional-test cleanup lane already removed several structural tests
-- the highest-signal remaining cleanup lane is now workflow semantics, not
-  throttle deduplication.
-- the checked-in maintainer factory currently treats the healthy partial result
-  `<CONTINUE>` as a rejection path, which inflates replay churn and blurs the
-  meaning of failure versus normal iteration.
+- the highest-signal remaining cleanup lane is no longer workflow semantics;
+  that contract cleanup is now landed in both the live workflow and the
+  checked-in replay evidence.
 - the right follow-up for the throttle customer ask is no longer another narrow
   dispatcher cleanup. The next defensible step is either:
-  - process/review contract alignment to reduce workflow churn, or
+  - a broader throttle-guard design lane, or
   - a later explicitly scoped design lane for `INFERENCE_THROTTLE_GUARD`.
 
 ## next best move
 
-- update the checked-in meta world model and progress log now.
-- queue one narrow cleanup idea to align the checked-in process/review contract
-  so normal partial progress is not represented as rejection.
+- update the checked-in meta world model and progress log when repository
+  state changes again.
 - leave the broader `INFERENCE_THROTTLE_GUARD` redesign for a later dedicated
-  lane after the maintainer loop semantics are cleaner.
+  lane now that the maintainer loop semantics are cleaner.
 
 ## customer asks
 
@@ -102,6 +92,6 @@
 - no ask is marked urgent as of May 1, 2026.
 - the throttling ask is still active, but the already-merged PR `#21` closed
   only the narrow duplicate-filter cleanup slice.
-- the best next customer-facing cleanup lane is the process/review contract
-  alignment because it removes a current control-plane ambiguity that the replay
-  artifacts prove is still live.
+- the best next customer-facing cleanup lane is no longer the process/review
+  contract alignment because that ambiguity is now resolved in both routing and
+  checked-in replay evidence.
