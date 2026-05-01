@@ -565,6 +565,12 @@ func assertEventHistoryRequestLineage(t *testing.T, event factoryapi.FactoryEven
 	if got := stringSliceValueForEventHistoryTest(requestPayload.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
 		t.Fatalf("dispatch request previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
 	}
+	if stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId) != "trace-z" {
+		t.Fatalf("dispatch request context current chaining trace ID = %q, want trace-z", stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId))
+	}
+	if got := stringSliceValueForEventHistoryTest(event.Context.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+		t.Fatalf("dispatch request context previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
 	if len(requestPayload.Inputs) != 2 {
 		t.Fatalf("dispatch request inputs = %#v, want two consumed work refs", requestPayload.Inputs)
 	}
@@ -588,6 +594,12 @@ func assertEventHistoryResponseLineage(t *testing.T, event factoryapi.FactoryEve
 	}
 	if got := stringSliceValueForEventHistoryTest(responsePayload.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
 		t.Fatalf("dispatch response previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
+	if stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId) != "trace-z" {
+		t.Fatalf("dispatch response context current chaining trace ID = %q, want trace-z", stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId))
+	}
+	if got := stringSliceValueForEventHistoryTest(event.Context.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+		t.Fatalf("dispatch response context previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
 	}
 	if responsePayload.OutputWork == nil || len(*responsePayload.OutputWork) != 1 {
 		t.Fatalf("output work = %#v, want one generated output work item", responsePayload.OutputWork)

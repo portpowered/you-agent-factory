@@ -33,6 +33,14 @@ properties:
   dispatchId:
     type: string
     description: Canonical dispatch identity for dispatch and inference events; payloads must not restate it.
+  currentChainingTraceId:
+    type: string
+    description: Canonical chaining-trace identifier for the dispatch currently represented by this event context.
+  previousChainingTraceIds:
+    type: array
+    description: Canonical predecessor chaining traces consumed by the dispatch in deterministic order.
+    items:
+      type: string
   source:
     type: string
     description: Human-readable source such as api, filewatcher, replay, cron, or worker.
