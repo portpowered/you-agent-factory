@@ -970,8 +970,6 @@ components:
       properties:
         factory:
           $ref: '#/components/schemas/Factory'
-        workflowId:
-          type: string
         sourceDirectory:
           type: string
         metadata:

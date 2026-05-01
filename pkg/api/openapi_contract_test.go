@@ -1141,7 +1141,14 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	}
 
 	initialStructure := schemaObject(t, schemas, "InitialStructureRequestEventPayload")
-	assertPropertyRef(t, schemaProperties(t, initialStructure, "InitialStructureRequestEventPayload"), "factory", "#/components/schemas/Factory")
+	initialStructureProperties := schemaProperties(t, initialStructure, "InitialStructureRequestEventPayload")
+	assertPropertyRef(t, initialStructureProperties, "factory", "#/components/schemas/Factory")
+	if _, ok := initialStructureProperties["workflowId"]; ok {
+		t.Fatal("InitialStructureRequestEventPayload.properties.workflowId must not be advertised")
+	}
+	if _, ok := reflect.TypeOf(generated.InitialStructureRequestEventPayload{}).FieldByName("WorkflowId"); ok {
+		t.Fatal("generated.InitialStructureRequestEventPayload must not expose WorkflowId")
+	}
 
 	runRequest := schemaObject(t, schemas, "RunRequestEventPayload")
 	assertRequiredFields(t, runRequest, "recordedAt", "factory")

@@ -606,7 +606,6 @@ type InitialStructureRequestEventPayload struct {
 	Factory         Factory    `json:"factory"`
 	Metadata        *StringMap `json:"metadata,omitempty"`
 	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
-	WorkflowId      *string    `json:"workflowId,omitempty"`
 }
 
 // InputKind Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.

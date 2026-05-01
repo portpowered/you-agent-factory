@@ -426,7 +426,6 @@ export interface components {
         /** @description Runtime topology snapshot before work moves. */
         InitialStructureRequestEventPayload: {
             factory: components["schemas"]["Factory"];
-            workflowId?: string;
             sourceDirectory?: string;
             metadata?: components["schemas"]["StringMap"];
         };
