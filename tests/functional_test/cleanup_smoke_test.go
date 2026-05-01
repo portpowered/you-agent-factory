@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 )
 
-func TestCleanupSmoke_BackendDashboardAndCLIExposeOnlyCleanedFactorySurfaces(t *testing.T) {
+func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
 	dir := scaffoldFactory(t, simplePipelineConfig())
 	server := StartFunctionalServer(t, dir, true, factory.WithServiceMode())
 
