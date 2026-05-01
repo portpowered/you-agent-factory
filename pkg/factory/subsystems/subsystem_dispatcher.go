@@ -345,8 +345,48 @@ func (d *DispatcherSubsystem) throttleFailureHistory(snapshot *interfaces.Engine
 	return history
 }
 
+func (d *DispatcherSubsystem) throttleFailureHistoryFromCompletedDispatches(history []interfaces.CompletedDispatch) []factory_throttle.FailureRecord {
+	if len(history) == 0 {
+		return nil
+	}
+	records := make([]factory_throttle.FailureRecord, 0, len(history))
+	for i := range history {
+		if !workers.ProviderFailureDecisionFromMetadata(history[i].ProviderFailure).TriggersThrottlePause {
+			continue
+		}
+		key, ok := d.throttlePauseKeyForCompletedDispatch(history[i])
+		if !ok {
+			continue
+		}
+		records = append(records, factory_throttle.FailureRecord{
+			Provider:        key.provider,
+			Model:           key.model,
+			OccurredAt:      history[i].EndTime,
+			ProviderFailure: history[i].ProviderFailure,
+		})
+	}
+	sort.SliceStable(records, func(i, j int) bool {
+		if !records[i].OccurredAt.Equal(records[j].OccurredAt) {
+			return records[i].OccurredAt.Before(records[j].OccurredAt)
+		}
+		if records[i].Provider != records[j].Provider {
+			return records[i].Provider < records[j].Provider
+		}
+		return records[i].Model < records[j].Model
+	})
+	return records
+}
+
 func (d *DispatcherSubsystem) throttlePauseKeyForResult(result interfaces.WorkResult) (providerModelKey, bool) {
 	transition, ok := d.state.Transitions[result.TransitionID]
+	if !ok {
+		return providerModelKey{}, false
+	}
+	return d.providerModelKeyForWorker(transition.WorkerType)
+}
+
+func (d *DispatcherSubsystem) throttlePauseKeyForCompletedDispatch(dispatch interfaces.CompletedDispatch) (providerModelKey, bool) {
+	transition, ok := d.state.Transitions[dispatch.TransitionID]
 	if !ok {
 		return providerModelKey{}, false
 	}
