@@ -298,6 +298,35 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 	}
 }
 
+func TestFactoryConfigMapper_ExpandRejectsRetiredNestedWorkerDefinitionAliases(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{
+			"name":"executor",
+			"definition":{"type":"MODEL_WORKER","provider":"script_wrap"}
+		}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	_, err := mapper.Expand(raw)
+	if err == nil {
+		t.Fatal("expected retired nested worker definition alias to be rejected")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workers[0].definition.provider is not supported; use executorProvider") {
+		t.Fatalf("expected nested provider retirement guidance, got %v", err)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandRejectsRetiredFanInField(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

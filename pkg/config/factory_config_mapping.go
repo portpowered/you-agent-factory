@@ -34,6 +34,14 @@ type retiredBoundaryField struct {
 	replacement string
 }
 
+var retiredWorkerBoundaryFields = []retiredBoundaryField{
+	{key: "provider", replacement: "use executorProvider"},
+	{key: "model_provider", replacement: "use modelProvider"},
+	{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
+	{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
+	{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
+}
+
 func rejectRetiredFanInField(data []byte) error {
 	var payload struct {
 		Workstations []map[string]json.RawMessage `json:"workstations"`
@@ -105,26 +113,14 @@ func rejectRetiredWorkerBoundaryAliases(root map[string]any) error {
 			continue
 		}
 		basePath := fmt.Sprintf("workers[%d]", index)
-		if err := rejectRetiredBoundaryFields(worker, basePath, []retiredBoundaryField{
-			{key: "provider", replacement: "use executorProvider"},
-			{key: "model_provider", replacement: "use modelProvider"},
-			{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
-		}); err != nil {
+		if err := rejectRetiredBoundaryFields(worker, basePath, retiredWorkerBoundaryFields); err != nil {
 			return err
 		}
 		definition, ok := worker["definition"].(map[string]any)
 		if !ok {
 			continue
 		}
-		if err := rejectRetiredBoundaryFields(definition, basePath+".definition", []retiredBoundaryField{
-			{key: "provider", replacement: "use executorProvider"},
-			{key: "model_provider", replacement: "use modelProvider"},
-			{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
-			{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
-		}); err != nil {
+		if err := rejectRetiredBoundaryFields(definition, basePath+".definition", retiredWorkerBoundaryFields); err != nil {
 			return err
 		}
 	}
