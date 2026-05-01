@@ -1,9 +1,18 @@
 package support
 
 import (
+	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
 )
+
+func AcceptedProviderResponse() interfaces.InferenceResponse {
+	return interfaces.InferenceResponse{Content: "COMPLETE"}
+}
+
+func RejectedProviderResponse(content string) interfaces.InferenceResponse {
+	return interfaces.InferenceResponse{Content: content}
+}
 
 func AcceptedCommandResults(count int) []workers.CommandResult {
 	results := make([]workers.CommandResult, count)
