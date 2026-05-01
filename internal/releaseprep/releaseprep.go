@@ -7,16 +7,15 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"regexp"
 	"strings"
+
+	"github.com/portpowered/agent-factory/internal/releasetag"
 )
 
 const (
 	defaultBranch = "main"
 	defaultRemote = "origin"
 )
-
-var semverTagPattern = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
 
 var readinessTargets = []string{
 	"typecheck",
@@ -47,9 +46,11 @@ func Run(ctx context.Context, opts Options) error {
 	if version == "" {
 		return errors.New("release version is required; use make release VERSION=v1.2.3")
 	}
-	if !semverTagPattern.MatchString(version) {
-		return fmt.Errorf("release version %q must match vMAJOR.MINOR.PATCH", version)
+	normalizedVersion, err := releasetag.RequireSemver(version)
+	if err != nil {
+		return err
 	}
+	version = normalizedVersion
 
 	branch := valueOrDefault(opts.Branch, defaultBranch)
 	remote := valueOrDefault(opts.Remote, defaultRemote)

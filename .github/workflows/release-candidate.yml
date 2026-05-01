@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Manual semver tag to validate for a candidate-only run.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,8 +24,35 @@ env:
   GORELEASER_VERSION: v2.12.7
 
 jobs:
+  resolve-release-tag:
+    name: Resolve Release Tag
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Validate semver release tag
+        id: tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          output="$(go run ./cmd/releasetagcheck -tag "$RELEASE_TAG")"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" >> "$GITHUB_OUTPUT"
+
   build-candidate-artifacts:
     name: Build Candidate Artifacts
+    needs: resolve-release-tag
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -54,24 +86,38 @@ jobs:
           if-no-files-found: error
 
   smoke-candidate-artifacts:
-    name: Smoke Candidate Artifacts (${{ matrix.label }})
-    needs: build-candidate-artifacts
+    name: Smoke Candidate Artifacts (${{ matrix.asset_id }})
+    needs:
+      - resolve-release-tag
+      - build-candidate-artifacts
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: Linux
+          - asset_id: linux-amd64
             runner: ubuntu-latest
             archive_glob: agent-factory_*_linux_amd64.tar.gz
             binary_name: agent-factory
-          - label: macOS
-            runner: macos-13
+          - asset_id: linux-arm64
+            runner: ubuntu-24.04-arm
+            archive_glob: agent-factory_*_linux_arm64.tar.gz
+            binary_name: agent-factory
+          - asset_id: darwin-amd64
+            runner: macos-15-intel
             archive_glob: agent-factory_*_darwin_amd64.tar.gz
             binary_name: agent-factory
-          - label: Windows
+          - asset_id: darwin-arm64
+            runner: macos-latest
+            archive_glob: agent-factory_*_darwin_arm64.tar.gz
+            binary_name: agent-factory
+          - asset_id: windows-amd64
             runner: windows-latest
             archive_glob: agent-factory_*_windows_amd64.zip
+            binary_name: agent-factory.exe
+          - asset_id: windows-arm64
+            runner: windows-11-arm
+            archive_glob: agent-factory_*_windows_arm64.zip
             binary_name: agent-factory.exe
     steps:
       - name: Check out repository

@@ -37,18 +37,21 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
       - name: Resolve semver tag for released commit
         id: tag
         shell: bash
         run: |
           set -euo pipefail
           git fetch --force --tags origin
-          mapfile -t tags < <(git tag --points-at "$(git rev-parse HEAD)" --list 'v*' | sort)
-          if [ "${#tags[@]}" -ne 1 ]; then
-            printf 'expected exactly one v* tag for %s, found: %s\n' "$(git rev-parse HEAD)" "${tags[*]-<none>}" >&2
-            exit 1
-          fi
-          echo "release_tag=${tags[0]}" >> "$GITHUB_OUTPUT"
+          output="$(go run ./cmd/releasetagcheck -points-at HEAD)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" >> "$GITHUB_OUTPUT"
 
   publish-release:
     name: Publish GitHub Release
