@@ -20,8 +20,13 @@ export const Default = {
     await expect(canvas.getByRole("textbox", { name: "Showcase request text" })).toBeVisible();
     await expect(canvas.getByRole("combobox", { name: "Showcase work type" })).toBeVisible();
     await expect(canvas.getByRole("img", { name: "Primitive chart showcase" })).toBeVisible();
-    await expect(canvas.getByRole("table")).toBeVisible();
+    await expect(
+      canvas.getByRole("table", { name: "Primitive table foundation for trace and detail surfaces." }),
+    ).toBeVisible();
+    await expect(canvas.getByRole("table", { name: "Primitive data table showcase" })).toBeVisible();
     await expect(canvas.getByLabelText("Primitive calendar showcase")).toBeVisible();
+    await expect(canvas.getByText("Sidebar panel")).toBeVisible();
+    await expect(canvas.getByText("Detail panel")).toBeVisible();
 
     const collapseButton = canvas.getByRole("button", { name: "Collapse" });
     await userEvent.click(collapseButton);

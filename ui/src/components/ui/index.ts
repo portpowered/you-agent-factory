@@ -2,6 +2,7 @@ export * from "./button";
 export * from "./calendar";
 export * from "./chart";
 export * from "./collapsible";
+export * from "./data-table";
 export * from "./dialog";
 export * from "./input";
 export * from "./resizable";

@@ -27,6 +27,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../../components/ui/collapsible";
+import { Skeleton } from "../../components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../components/ui/table";
 import type {
   DashboardTrace,
   DashboardWorkItemRef,
@@ -37,6 +47,7 @@ import { TraceWorkstationPath } from "./trace-workstation-path";
 const TRACE_EXPANDER_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
 const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-[0.65rem] py-[0.45rem]";
+const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-[12rem]";
 const TRACE_WORK_ITEM_BUTTON_CLASS = cx(
   "h-auto min-h-0 justify-start border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.35rem] text-left text-af-accent",
   DASHBOARD_SUPPORTING_CODE_CLASS,
@@ -98,6 +109,11 @@ function renderTraceState(
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>Loading trace</h3>
           <p>Reconstructing dispatch history for {state.workID}.</p>
+          <div aria-hidden="true" className="grid gap-2 pt-2">
+            <Skeleton className={TRACE_LOADING_SKELETON_CLASS} />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className={TRACE_LOADING_SKELETON_CLASS} />
+          </div>
         </div>
       );
     case "empty":
@@ -221,73 +237,73 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
       </dl>
 
       {trace.dispatches.length > 0 ? (
-        <div className="min-w-0 overflow-x-auto">
-          <table
-            className={cx(
-              "w-full min-w-[860px] border-collapse [&_td]:border-t [&_td]:border-af-overlay/8 [&_td]:p-[0.7rem] [&_td]:text-left [&_td]:align-top [&_th]:border-t [&_th]:border-af-overlay/8 [&_th]:p-[0.7rem] [&_th]:text-left [&_th]:align-top",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-          >
-            <caption
-              className={cx(
-                "mb-2 text-left",
-                DASHBOARD_SUPPORTING_LABEL_CLASS,
-              )}
-            >
-              Trace dispatch grid
-            </caption>
-            <thead>
-              <tr>
-                <th className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">Dispatch</th>
-                <th className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">Workstation</th>
-                <th className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">Outcome</th>
-                <th className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">Input items</th>
-                <th className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">Output items</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trace.dispatches.map((dispatch) => (
-                <tr key={dispatch.dispatch_id}>
-                  <th scope="row">
-                    <span
-                      className={cx(
-                        "inline-flex rounded-full bg-af-info/15 px-2 py-[0.18rem] text-af-info-ink",
-                        DASHBOARD_SUPPORTING_CODE_CLASS,
-                      )}
-                    >
-                      {dispatch.dispatch_id}
-                    </span>
-                  </th>
-                  <td>{dispatch.workstation_name || dispatch.transition_id}</td>
-                  <td>
-                    {formatTraceOutcome(dispatch.outcome)} ·{" "}
-                    {formatDurationMillis(dispatch.duration_millis)}
-                  </td>
-                  <td>
-                    {dispatch.input_items && dispatch.input_items.length > 0 ? (
-                      <SelectableWorkList
-                        onSelectWorkID={onSelectWorkID}
-                        workItems={dispatch.input_items}
-                      />
-                    ) : (
-                      <span>No input items recorded.</span>
+        <Table className={cx("min-w-[860px]", DASHBOARD_BODY_TEXT_CLASS)}>
+          <TableCaption className={cx("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
+            Trace dispatch grid
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                Dispatch
+              </TableHead>
+              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                Workstation
+              </TableHead>
+              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                Outcome
+              </TableHead>
+              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                Input items
+              </TableHead>
+              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                Output items
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {trace.dispatches.map((dispatch) => (
+              <TableRow key={dispatch.dispatch_id}>
+                <TableHead className="align-top" scope="row">
+                  <span
+                    className={cx(
+                      "inline-flex rounded-full bg-af-info/15 px-2 py-[0.18rem] text-af-info-ink",
+                      DASHBOARD_SUPPORTING_CODE_CLASS,
                     )}
-                  </td>
-                  <td>
-                    {dispatch.output_items && dispatch.output_items.length > 0 ? (
-                      <SelectableWorkList
-                        onSelectWorkID={onSelectWorkID}
-                        workItems={dispatch.output_items}
-                      />
-                    ) : (
-                      <span>No output items recorded.</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  >
+                    {dispatch.dispatch_id}
+                  </span>
+                </TableHead>
+                <TableCell className="align-top">
+                  {dispatch.workstation_name || dispatch.transition_id}
+                </TableCell>
+                <TableCell className="align-top">
+                  {formatTraceOutcome(dispatch.outcome)} ·{" "}
+                  {formatDurationMillis(dispatch.duration_millis)}
+                </TableCell>
+                <TableCell className="align-top">
+                  {dispatch.input_items && dispatch.input_items.length > 0 ? (
+                    <SelectableWorkList
+                      onSelectWorkID={onSelectWorkID}
+                      workItems={dispatch.input_items}
+                    />
+                  ) : (
+                    <span>No input items recorded.</span>
+                  )}
+                </TableCell>
+                <TableCell className="align-top">
+                  {dispatch.output_items && dispatch.output_items.length > 0 ? (
+                    <SelectableWorkList
+                      onSelectWorkID={onSelectWorkID}
+                      workItems={dispatch.output_items}
+                    />
+                  ) : (
+                    <span>No output items recorded.</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       ) : (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
           <h3>Trace history unavailable</h3>

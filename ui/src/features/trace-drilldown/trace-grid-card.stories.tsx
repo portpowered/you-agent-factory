@@ -110,6 +110,13 @@ export const EmptyTrace = {
   },
 };
 
+export const LoadingTrace = {
+  args: {
+    state: { status: "loading", workID: "work-active-story" },
+    widgetId: "trace-loading-story",
+  },
+};
+
 export const TraceError = {
   args: {
     state: { status: "error", message: "dashboard event history is unavailable" },

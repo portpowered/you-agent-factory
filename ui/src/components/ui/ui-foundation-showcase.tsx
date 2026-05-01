@@ -12,6 +12,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  DataTable,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -46,6 +47,19 @@ const chartConfig = {
   completed: { color: "var(--color-af-chart-completed)", label: "Completed" },
   failed: { color: "var(--color-af-chart-failed)", label: "Failed" },
 };
+
+const showcaseDispatchRows = [
+  {
+    dispatch: "dispatch-review-1",
+    duration: "420ms",
+    status: "ACCEPTED",
+  },
+  {
+    dispatch: "dispatch-review-2",
+    duration: "1.2s",
+    status: "FAILED",
+  },
+];
 
 export interface UIFoundationShowcaseProps {
   includeResizable?: boolean;
@@ -151,6 +165,19 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
               </TableRow>
             </TableBody>
           </Table>
+
+          <DataTable
+            ariaLabel="Primitive data table showcase"
+            caption="Reusable data table helper for dashboard detail grids."
+            columns={[
+              { cell: (row) => row.dispatch, header: "Dispatch", id: "dispatch" },
+              { cell: (row) => row.status, header: "Status", id: "status" },
+              { cell: (row) => row.duration, header: "Duration", id: "duration" },
+            ]}
+            data={showcaseDispatchRows}
+            getRowKey={(row) => row.dispatch}
+            rowClassName={(row) => (row.status === "FAILED" ? "data-[state=selected]:bg-af-accent/10" : undefined)}
+          />
         </div>
 
         <div className="grid gap-3">

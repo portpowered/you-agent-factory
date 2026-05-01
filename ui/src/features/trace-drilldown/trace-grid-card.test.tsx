@@ -185,7 +185,7 @@ describe("TraceGridBentoCard", () => {
   });
 
   it("renders explicit empty, loading, and error states", () => {
-    const { rerender } = render(
+    const { container, rerender } = render(
       <TraceGridBentoCard state={{ status: "empty", workID: "work-missing" }} />,
     );
 
@@ -194,6 +194,7 @@ describe("TraceGridBentoCard", () => {
     rerender(<TraceGridBentoCard state={{ status: "loading", workID: "work-active" }} />);
     expect(screen.getByText("Loading trace")).toBeTruthy();
     expect(screen.getByText("Reconstructing dispatch history for work-active.")).toBeTruthy();
+    expect(container.querySelectorAll(".animate-pulse")).toHaveLength(3);
 
     rerender(<TraceGridBentoCard state={{ status: "error", message: "network failed" }} />);
     expect(screen.getByText("Trace lookup failed")).toBeTruthy();

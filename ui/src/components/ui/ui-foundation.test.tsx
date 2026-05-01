@@ -24,7 +24,12 @@ describe("UIFoundationShowcase", () => {
     expect(screen.getByRole("textbox", { name: "Showcase request text" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Showcase work type" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Primitive chart showcase" })).toBeTruthy();
-    expect(screen.getByRole("table")).toBeTruthy();
+    expect(
+      screen.getByRole("table", {
+        name: "Primitive table foundation for trace and detail surfaces.",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByRole("table", { name: "Primitive data table showcase" })).toBeTruthy();
     expect(screen.getByLabelText("Primitive calendar showcase")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Open dialog" }));
