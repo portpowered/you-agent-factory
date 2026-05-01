@@ -1,27 +1,13 @@
 package functional_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
-	"os"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 )
-
-func writeWorkRequestFileForFunctionalTest(t *testing.T, path string, request interfaces.SubmitRequest) {
-	t.Helper()
-	data, err := json.Marshal(workRequestFromSubmitRequests([]interfaces.SubmitRequest{request}))
-	if err != nil {
-		t.Fatalf("marshal work request file: %v", err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write work request file: %v", err)
-	}
-}
 
 func normalizeSubmitRequestsForFunctionalTest(requests []interfaces.SubmitRequest) []interfaces.SubmitRequest {
 	if len(requests) == 0 {
