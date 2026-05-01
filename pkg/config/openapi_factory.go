@@ -197,13 +197,13 @@ func normalizeFactoryWorkerEntries(root map[string]any) error {
 			continue
 		}
 		mergeInlineDefinitionFields(worker)
-		if err := normalizeFactoryEnumObjectField(worker, "type", fmt.Sprintf("workers[%d].type", i), publicFactoryWorkerTypeAliases); err != nil {
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "type", fmt.Sprintf("workers[%d].type", i), interfaces.StrictPublicFactoryWorkerType); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectField(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), publicFactoryWorkerModelProviderAliases); err != nil {
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectField(worker, "executorProvider", fmt.Sprintf("workers[%d].executorProvider", i), publicFactoryWorkerProviderAliases); err != nil {
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "executorProvider", fmt.Sprintf("workers[%d].executorProvider", i), interfaces.StrictPublicFactoryWorkerProvider); err != nil {
 			return err
 		}
 		normalizeRuntimeResourceRequirements(worker, "resources")
@@ -225,7 +225,7 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectField(workstation, "kind", fmt.Sprintf("workstations[%d].kind", i), publicFactoryWorkstationKindAliases); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectField(workstation, "type", fmt.Sprintf("workstations[%d].type", i), publicFactoryWorkstationTypeAliases); err != nil {
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
 			return err
 		}
 		if err := normalizeFactoryWorkstationGuardEntries(workstation, i); err != nil {
@@ -285,6 +285,13 @@ func normalizeFactoryWorkstationInputGuardEntries(workstation map[string]any, wo
 
 func normalizeFactoryEnumObjectField(container map[string]any, key string, fieldPath string, aliases map[string]string) error {
 	if err := normalizePublicFactoryEnumValueInObject(container, key, aliases); err != nil {
+		return fmt.Errorf("%s: %w", fieldPath, err)
+	}
+	return nil
+}
+
+func normalizeFactoryEnumObjectFieldWithNormalizer(container map[string]any, key string, fieldPath string, normalize func(string) string) error {
+	if err := normalizePublicFactoryEnumValueInObjectWith(container, key, normalize); err != nil {
 		return fmt.Errorf("%s: %w", fieldPath, err)
 	}
 	return nil

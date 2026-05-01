@@ -106,8 +106,8 @@ func factoryWorker(workerID string, def *interfaces.WorkerConfig) interfaces.Fac
 	return interfaces.FactoryWorker{
 		ID:            workerID,
 		Name:          workerID,
-		Provider:      interfaces.CanonicalPublicFactoryWorkerProvider(def.ExecutorProvider),
-		ModelProvider: interfaces.CanonicalPublicFactoryWorkerModelProvider(def.ModelProvider),
+		Provider:      interfaces.PermissivePublicFactoryWorkerProvider(def.ExecutorProvider),
+		ModelProvider: interfaces.PermissivePublicFactoryWorkerModelProvider(def.ModelProvider),
 		Model:         def.Model,
 		Config:        workerConfig(def),
 	}

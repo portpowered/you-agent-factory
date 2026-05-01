@@ -129,5 +129,5 @@ func generatedWorkerHasRuntimeDefinition(worker factoryapi.Worker) bool {
 }
 
 func normalizeReplayWorkerProvider(value string) string {
-	return interfaces.CanonicalPublicFactoryWorkerProvider(strings.TrimSpace(value))
+	return interfaces.PermissivePublicFactoryWorkerProvider(strings.TrimSpace(value))
 }

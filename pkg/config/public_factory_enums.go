@@ -32,46 +32,6 @@ var publicFactoryInputKindAliases = map[string]string{
 	"default": publicFactoryInputKindDefault,
 }
 
-var publicFactoryWorkerTypeAliases = map[string]string{
-	publicFactoryWorkerTypeModel:  publicFactoryWorkerTypeModel,
-	publicFactoryWorkerTypeScript: publicFactoryWorkerTypeScript,
-}
-
-var publicFactoryWorkerModelProviderAliases = map[string]string{
-	"ANTHROPIC": publicFactoryWorkerModelProviderClaude,
-	"CLAUDE":    publicFactoryWorkerModelProviderClaude,
-	"CODEX":     publicFactoryWorkerModelProviderCodex,
-	"OPENAI":    publicFactoryWorkerModelProviderCodex,
-	"anthropic": publicFactoryWorkerModelProviderClaude,
-	"claude":    publicFactoryWorkerModelProviderClaude,
-	"codex":     publicFactoryWorkerModelProviderCodex,
-	"openai":    publicFactoryWorkerModelProviderCodex,
-}
-
-var publicFactoryWorkerProviderAliases = map[string]string{
-	"ANTHROPIC":    publicFactoryWorkerProviderScriptWrap,
-	"CLAUDE":       publicFactoryWorkerProviderScriptWrap,
-	"CLAUDE_CLI":   publicFactoryWorkerProviderScriptWrap,
-	"CODEX_CLI":    publicFactoryWorkerProviderScriptWrap,
-	"LOCAL":        publicFactoryWorkerProviderScriptWrap,
-	"SCRIPT":       publicFactoryWorkerProviderScriptWrap,
-	"SCRIPTWRAP":   publicFactoryWorkerProviderScriptWrap,
-	"SCRIPT_WRAP":  publicFactoryWorkerProviderScriptWrap,
-	"anthropic":    publicFactoryWorkerProviderScriptWrap,
-	"claude":       publicFactoryWorkerProviderScriptWrap,
-	"claude_cli":   publicFactoryWorkerProviderScriptWrap,
-	"claude-cli":   publicFactoryWorkerProviderScriptWrap,
-	"codex_cli":    publicFactoryWorkerProviderScriptWrap,
-	"codex-cli":    publicFactoryWorkerProviderScriptWrap,
-	"local":        publicFactoryWorkerProviderScriptWrap,
-	"local_claude": publicFactoryWorkerProviderScriptWrap,
-	"local-claude": publicFactoryWorkerProviderScriptWrap,
-	"script":       publicFactoryWorkerProviderScriptWrap,
-	"scriptwrap":   publicFactoryWorkerProviderScriptWrap,
-	"script_wrap":  publicFactoryWorkerProviderScriptWrap,
-	"script-wrap":  publicFactoryWorkerProviderScriptWrap,
-}
-
 var publicFactoryWorkstationKindAliases = map[string]string{
 	publicFactoryWorkstationKindCron:     publicFactoryWorkstationKindCron,
 	publicFactoryWorkstationKindRepeater: publicFactoryWorkstationKindRepeater,
@@ -79,11 +39,6 @@ var publicFactoryWorkstationKindAliases = map[string]string{
 	"cron":                               publicFactoryWorkstationKindCron,
 	"repeater":                           publicFactoryWorkstationKindRepeater,
 	"standard":                           publicFactoryWorkstationKindStandard,
-}
-
-var publicFactoryWorkstationTypeAliases = map[string]string{
-	publicFactoryWorkstationTypeLogical: publicFactoryWorkstationTypeLogical,
-	publicFactoryWorkstationTypeModel:   publicFactoryWorkstationTypeModel,
 }
 
 var publicFactoryWorkstationGuardTypeAliases = map[string]string{
@@ -129,6 +84,22 @@ func normalizePublicFactoryEnumValueInObject(container map[string]any, key strin
 	return fmt.Errorf("unsupported value %q", value)
 }
 
+func normalizePublicFactoryEnumValueInObjectWith(container map[string]any, key string, normalize func(string) string) error {
+	raw, ok := container[key]
+	if !ok {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	if canonical := normalize(value); canonical != "" {
+		container[key] = canonical
+		return nil
+	}
+	return fmt.Errorf("unsupported value %q", value)
+}
+
 func publicFactoryInputKindFromInternal(kind interfaces.InputKind) factoryapi.InputKind {
 	return factoryapi.InputKind(publicFactoryInputKindStringFromInternal(kind))
 }
@@ -154,7 +125,7 @@ func publicFactoryWorkerTypeFromInternal(value string) factoryapi.WorkerType {
 }
 
 func internalFactoryWorkerTypeFromPublic(value factoryapi.WorkerType) string {
-	if canonical := canonicalPublicFactoryEnumValue(string(value), publicFactoryWorkerTypeAliases); canonical != "" {
+	if canonical := interfaces.PermissivePublicFactoryWorkerType(string(value)); canonical != "" {
 		return canonical
 	}
 	return strings.TrimSpace(string(value))
@@ -168,7 +139,7 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 	if value == nil {
 		return ""
 	}
-	switch canonicalPublicFactoryEnumValue(string(*value), publicFactoryWorkerModelProviderAliases) {
+	switch interfaces.PermissivePublicFactoryWorkerModelProvider(string(*value)) {
 	case publicFactoryWorkerModelProviderClaude:
 		return string(factoryapiToInternalModelProviderClaude())
 	case publicFactoryWorkerModelProviderCodex:
@@ -186,7 +157,7 @@ func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) s
 	if value == nil {
 		return ""
 	}
-	if canonical := canonicalPublicFactoryEnumValue(string(*value), publicFactoryWorkerProviderAliases); canonical != "" {
+	if canonical := interfaces.PermissivePublicFactoryWorkerProvider(string(*value)); canonical != "" {
 		return canonical
 	}
 	return strings.TrimSpace(string(*value))
@@ -220,7 +191,7 @@ func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType)
 	if value == nil {
 		return ""
 	}
-	if canonical := canonicalPublicFactoryEnumValue(string(*value), publicFactoryWorkstationTypeAliases); canonical != "" {
+	if canonical := interfaces.PermissivePublicFactoryWorkstationType(string(*value)); canonical != "" {
 		return canonical
 	}
 	return strings.TrimSpace(string(*value))
