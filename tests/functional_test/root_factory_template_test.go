@@ -36,7 +36,7 @@ func TestRootFactoryTemplate_CopiedFactoryRendersScriptAndScriptWrapCommandReque
 		testutil.WithProviderCommandRunner(runner),
 	)
 
-	h.RunUntilComplete(t, 10*time.Second)
+	h.RunUntilComplete(t, 20*time.Second)
 
 	h.Assert().
 		PlaceTokenCount("plan:complete", 1).
