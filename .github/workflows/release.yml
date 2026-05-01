@@ -30,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.tag.outputs.release_tag }}
+      release_version: ${{ steps.version.outputs.release_version }}
     steps:
       - name: Check out release commit
         uses: actions/checkout@v4
@@ -52,6 +53,15 @@ jobs:
           output="$(go run ./cmd/releasetagcheck -points-at HEAD)"
           printf '%s\n' "$output"
           printf '%s\n' "$output" >> "$GITHUB_OUTPUT"
+
+      - name: Derive GoReleaser asset version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_tag="${{ steps.tag.outputs.release_tag }}"
+          release_version="${release_tag#v}"
+          printf 'release_version=%s\n' "$release_version" >> "$GITHUB_OUTPUT"
 
   publish-release:
     name: Publish GitHub Release
@@ -176,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist smoke-output
-          asset_name="agent-factory_${{ needs.resolve-release-tag.outputs.release_tag }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          asset_name="agent-factory_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           printf '%s\n' "$asset_name" > "smoke-output/${{ matrix.asset_id }}-asset.txt"
           gh release download "${{ needs.resolve-release-tag.outputs.release_tag }}" \
             --repo "${{ github.event.workflow_run.repository.full_name }}" \
@@ -191,7 +201,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           New-Item -ItemType Directory -Path smoke-output -Force | Out-Null
-          $assetName = "agent-factory_${{ needs.resolve-release-tag.outputs.release_tag }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          $assetName = "agent-factory_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           $assetName | Out-File -FilePath "smoke-output/${{ matrix.asset_id }}-asset.txt" -Encoding utf8
           gh release download "${{ needs.resolve-release-tag.outputs.release_tag }}" `
             --repo "${{ github.event.workflow_run.repository.full_name }}" `
@@ -204,7 +214,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          archive="dist/agent-factory_${{ needs.resolve-release-tag.outputs.release_tag }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          archive="dist/agent-factory_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           if [ ! -f "$archive" ]; then
             echo "released archive not found: $archive" >&2
             exit 1
@@ -220,7 +230,7 @@ jobs:
         id: extract-windows
         shell: pwsh
         run: |
-          $archive = "dist/agent-factory_${{ needs.resolve-release-tag.outputs.release_tag }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          $archive = "dist/agent-factory_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           if (-not (Test-Path -LiteralPath $archive)) {
             Write-Error "released archive not found: $archive"
           }

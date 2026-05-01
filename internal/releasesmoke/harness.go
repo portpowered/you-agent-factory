@@ -69,11 +69,7 @@ func (f *Failure) Error() string {
 }
 
 func Run(ctx context.Context, cfg Config) (Result, error) {
-	timeout := cfg.Timeout
-	if timeout <= 0 {
-		timeout = defaultTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, configuredTimeout(cfg.Timeout))
 	defer cancel()
 
 	binaryPath, fixturePath, err := validatePaths(cfg)
@@ -81,20 +77,64 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
+	workspacePath, err := prepareWorkspace(binaryPath, fixturePath)
+	if err != nil {
+		return Result{}, err
+	}
+
+	session, err := newHarnessSession(binaryPath, fixturePath, workspacePath)
+	if err != nil {
+		_ = os.RemoveAll(workspacePath)
+		return Result{}, err
+	}
+	defer session.Close()
+
+	if err := session.Start(ctx); err != nil {
+		return Result{}, err
+	}
+
+	return session.RunChecks(ctx, cfg)
+}
+
+func configuredTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return defaultTimeout
+	}
+	return timeout
+}
+
+func prepareWorkspace(binaryPath string, fixturePath string) (string, error) {
 	workspacePath, err := copyFixtureToTemp(fixturePath)
 	if err != nil {
-		return Result{}, &Failure{
+		return "", &Failure{
 			Phase:       "prepare_workspace",
 			Message:     err.Error(),
 			BinaryPath:  binaryPath,
 			FixturePath: fixturePath,
 		}
 	}
-	defer os.RemoveAll(workspacePath)
+	return workspacePath, nil
+}
 
+type harnessSession struct {
+	binaryPath    string
+	fixturePath   string
+	workspacePath string
+	port          int
+	baseURL       string
+	dashboardURL  string
+	client        *http.Client
+	stdoutBuf     *lockedBuffer
+	stderrBuf     *lockedBuffer
+	cmd           *exec.Cmd
+	stopProcess   context.CancelFunc
+	waitCh        chan error
+}
+
+func newHarnessSession(binaryPath string, fixturePath string, workspacePath string) (*harnessSession, error) {
 	port, err := reservePort()
 	if err != nil {
-		return Result{}, &Failure{
+		return nil, &Failure{
 			Phase:         "reserve_port",
 			Message:       err.Error(),
 			BinaryPath:    binaryPath,
@@ -104,84 +144,116 @@ func Run(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	dashboardURL := baseURL + "/dashboard/ui"
-	stdoutBuf := newLockedBuffer()
-	stderrBuf := newLockedBuffer()
+	return &harnessSession{
+		binaryPath:    binaryPath,
+		fixturePath:   fixturePath,
+		workspacePath: workspacePath,
+		port:          port,
+		baseURL:       baseURL,
+		dashboardURL:  baseURL + "/dashboard/ui",
+		client:        &http.Client{Timeout: 2 * time.Second},
+		stdoutBuf:     newLockedBuffer(),
+		stderrBuf:     newLockedBuffer(),
+		waitCh:        make(chan error, 1),
+	}, nil
+}
 
+func (s *harnessSession) Start(ctx context.Context) error {
 	procCtx, stopProcess := context.WithCancel(ctx)
-	defer stopProcess()
-
-	cmd := exec.CommandContext(
+	s.stopProcess = stopProcess
+	s.cmd = exec.CommandContext(
 		procCtx,
-		binaryPath,
+		s.binaryPath,
 		"run",
-		"--dir", workspacePath,
+		"--dir", s.workspacePath,
 		"--continuously",
 		"--with-mock-workers",
-		"--port", fmt.Sprintf("%d", port),
+		"--port", fmt.Sprintf("%d", s.port),
 		"--quiet",
 	)
-	cmd.Stdout = stdoutBuf
-	cmd.Stderr = stderrBuf
-	cmd.Dir = workspacePath
+	s.cmd.Stdout = s.stdoutBuf
+	s.cmd.Stderr = s.stderrBuf
+	s.cmd.Dir = s.workspacePath
 
-	waitCh := make(chan error, 1)
-	if err := cmd.Start(); err != nil {
-		return Result{}, &Failure{
-			Phase:         "start_binary",
-			Message:       err.Error(),
-			BaseURL:       baseURL,
-			DashboardURL:  dashboardURL,
-			BinaryPath:    binaryPath,
-			FixturePath:   fixturePath,
-			WorkspacePath: workspacePath,
-			StdoutTail:    stdoutBuf.Tail(),
-			StderrTail:    stderrBuf.Tail(),
-		}
+	if err := s.cmd.Start(); err != nil {
+		return s.failure(nil, "start_binary", err)
 	}
 	go func() {
-		waitCh <- cmd.Wait()
+		s.waitCh <- s.cmd.Wait()
 	}()
-	defer stopCommand(cmd, stopProcess, waitCh)
+	return nil
+}
 
-	client := &http.Client{Timeout: 2 * time.Second}
-	if err := waitForStatus(ctx, client, baseURL, waitCh); err != nil {
-		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, nil, "wait_for_status", err)
+func (s *harnessSession) RunChecks(ctx context.Context, cfg Config) (Result, error) {
+	if err := waitForStatus(ctx, s.client, s.baseURL, s.waitCh); err != nil {
+		return Result{}, s.failure(nil, "wait_for_status", err)
 	}
 
-	stream, err := openEventStream(ctx, client, baseURL+"/events")
+	stream, err := openEventStream(ctx, s.client, s.baseURL+"/events")
 	if err != nil {
-		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, nil, "open_events", err)
+		return Result{}, s.failure(nil, "open_events", err)
 	}
 	defer stream.Close()
 
-	observedEvents, err := waitForEventPreludeAndWork(ctx, stream, waitCh)
+	observedEvents, err := waitForEventPreludeAndWork(ctx, stream, s.waitCh)
 	if err != nil {
-		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, observedEvents, "verify_events", err)
+		return Result{}, s.failure(observedEvents, "verify_events", err)
 	}
 
-	if err := verifyDashboard(ctx, client, dashboardURL); err != nil {
-		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, observedEvents, "verify_dashboard", err)
+	renderEvidence, err := s.verifyDashboardChecks(ctx, cfg, observedEvents)
+	if err != nil {
+		return Result{}, err
 	}
 
-	renderEvidence, err := verifyRenderedDashboard(ctx, cfg, dashboardURL)
+	workCount, err := waitForCompletedWork(ctx, s.client, s.baseURL+"/work", s.waitCh)
 	if err != nil {
-		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, observedEvents, "verify_dashboard_render", err)
-	}
-
-	workCount, err := waitForCompletedWork(ctx, client, baseURL+"/work", waitCh)
-	if err != nil {
-		return Result{}, failureFor(baseURL, dashboardURL, binaryPath, fixturePath, workspacePath, stdoutBuf, stderrBuf, observedEvents, "verify_completed_work", err)
+		return Result{}, s.failure(observedEvents, "verify_completed_work", err)
 	}
 
 	return Result{
-		BaseURL:                 baseURL,
-		DashboardURL:            dashboardURL,
-		WorkspacePath:           workspacePath,
+		BaseURL:                 s.baseURL,
+		DashboardURL:            s.dashboardURL,
+		WorkspacePath:           s.workspacePath,
 		ObservedEventTypes:      observedEvents,
 		CompletedWorkCount:      workCount,
 		DashboardRenderEvidence: renderEvidence,
 	}, nil
+}
+
+func (s *harnessSession) verifyDashboardChecks(ctx context.Context, cfg Config, observedEvents []string) (DashboardRenderEvidence, error) {
+	if err := verifyDashboard(ctx, s.client, s.dashboardURL); err != nil {
+		return DashboardRenderEvidence{}, s.failure(observedEvents, "verify_dashboard", err)
+	}
+
+	renderEvidence, err := verifyRenderedDashboard(ctx, cfg, s.dashboardURL)
+	if err != nil {
+		return DashboardRenderEvidence{}, s.failure(observedEvents, "verify_dashboard_render", err)
+	}
+	return renderEvidence, nil
+}
+
+func (s *harnessSession) failure(observed []string, phase string, err error) error {
+	return failureFor(
+		s.baseURL,
+		s.dashboardURL,
+		s.binaryPath,
+		s.fixturePath,
+		s.workspacePath,
+		s.stdoutBuf,
+		s.stderrBuf,
+		observed,
+		phase,
+		err,
+	)
+}
+
+func (s *harnessSession) Close() {
+	if s.cmd != nil && s.stopProcess != nil {
+		stopCommand(s.cmd, s.stopProcess, s.waitCh)
+	}
+	if s.workspacePath != "" {
+		_ = os.RemoveAll(s.workspacePath)
+	}
 }
 
 func validatePaths(cfg Config) (string, string, error) {
