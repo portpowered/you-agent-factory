@@ -409,6 +409,17 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantResult:    interfaces.OutcomeFailed,
 			wantErrorText: "execution cancelled: exec: file not found",
 		},
+		{
+			name: "process error omits zero exit code diagnostics",
+			runner: commandRunnerFunc(func(_ context.Context, _ CommandRequest) (CommandResult, error) {
+				return CommandResult{Stderr: []byte("exec failed"), ExitCode: 0}, errors.New("exec: file not found")
+			}),
+			wantOutcome:   factoryapi.ScriptExecutionOutcomeProcessError,
+			wantFailure:   &processError,
+			wantStderr:    "exec failed",
+			wantResult:    interfaces.OutcomeFailed,
+			wantErrorText: "execution cancelled: exec: file not found",
+		},
 	}
 }
 
