@@ -242,8 +242,8 @@ To reproduce the CI lanes locally from the repository root, run the same command
 
 1. `cd ui && bun install --frozen-lockfile`
 2. `cd ui && bun run tsc`
-3. `make build`
-4. `make ui-build`
+3. `make ui-build`
+4. `make build`
 5. `make lint`
 6. `make api-smoke`
 7. `cd ui && bunx playwright install --with-deps chromium`

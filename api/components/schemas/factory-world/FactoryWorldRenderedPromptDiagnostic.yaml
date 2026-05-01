@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+properties:
+  systemPromptHash:
+    type: string
+  userMessageHash:
+    type: string
+  variables:
+    $ref: '../shared/StringMap.yaml'

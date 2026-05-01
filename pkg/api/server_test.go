@@ -95,7 +95,7 @@ func TestSubmitWork(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"work_type_name": "prd", "trace_id": "test-trace-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"workTypeName": "prd", "traceId": "test-trace-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -141,7 +141,7 @@ func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T)
 	}
 	srv := newTestServer(mf)
 
-	body := `{"work_type_name": "prd", "current_chaining_trace_id": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -178,13 +178,13 @@ func TestSubmitWork_ConflictingCurrentChainingTraceIDReturnsBadRequest(t *testin
 	}
 	srv := newTestServer(mf)
 
-	body := `{"work_type_name": "prd", "current_chaining_trace_id": "chain-submit-1", "trace_id": "trace-submit-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "traceId": "trace-submit-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "current_chaining_trace_id and trace_id must match when both are provided")
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "currentChainingTraceId and traceId must match when both are provided")
 	if len(mf.Submitted) != 0 {
 		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
 	}
@@ -198,15 +198,44 @@ func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"work_type_id": "legacy-task", "trace_id": "test-trace-legacy", "payload": {"title": "Legacy"}}`
+	body := `{"work_type_id": "legacy-task", "traceId": "test-trace-legacy", "payload": {"title": "Legacy"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "work_type_id is not supported; use work_type_name")
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "work_type_id is not supported; use workTypeName")
 	if len(mf.Submitted) != 0 {
 		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
+}
+
+func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if len(mf.Submitted[0].Relations) != 1 {
+		t.Fatalf("submitted relations = %d, want 1", len(mf.Submitted[0].Relations))
+	}
+	relation := mf.Submitted[0].Relations[0]
+	if relation.Type != interfaces.RelationDependsOn || relation.TargetWorkID != "review-work" || relation.RequiredState != "complete" {
+		t.Fatalf("submitted relation = %#v, want dependency on review-work at complete", relation)
 	}
 }
 
@@ -347,13 +376,13 @@ func TestSubmitWork_WorkTypeNameWithWorkTypeIDReturnsBadRequest(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"work_type_name": "tasks", "work_type_id": "legacy-task", "payload": "fix lint"}`
+	body := `{"workTypeName": "tasks", "work_type_id": "legacy-task", "payload": "fix lint"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "work_type_id is not supported; use work_type_name")
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "work_type_id is not supported; use workTypeName")
 	if len(mf.Submitted) != 0 {
 		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
 	}
@@ -367,12 +396,12 @@ func TestSubmitWorkMissingWorkType(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"trace_id": "test-trace-1"}`
+	body := `{"traceId": "test-trace-1"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "work_type_name is required")
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "workTypeName is required")
 }
 
 func TestSubmitWorkMarkdownPayload(t *testing.T) {
@@ -383,7 +412,7 @@ func TestSubmitWorkMarkdownPayload(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"work_type_name": "tasks", "trace_id": "trace-markdown", "payload": "# Fix lint\n\nRun gofmt."}`
+	body := `{"workTypeName": "tasks", "traceId": "trace-markdown", "payload": "# Fix lint\n\nRun gofmt."}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -411,7 +440,7 @@ func TestSubmitWorkInvalidPayload_ReturnsDocumentedBadRequest(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(`{"work_type_name":`))
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(`{"workTypeName":`))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -427,7 +456,7 @@ func TestSubmitWorkUnknownWorkTypeReturnsBadRequest(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"name": "unknown-work", "work_type_name": "unknown", "payload": "fix lint"}`
+	body := `{"name": "unknown-work", "workTypeName": "unknown", "payload": "fix lint"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -444,7 +473,7 @@ func TestSubmitWorkAutoTraceID(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"work_type_name": "prd"}`
+	body := `{"workTypeName": "prd"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -469,17 +498,17 @@ func TestUpsertWorkRequest_FirstSubmitAndRepeatedRequestID(t *testing.T) {
 	srv := newTestServer(mf)
 
 	firstBody := `{
-		"request_id": "request-api-1",
+		"requestId": "request-api-1",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "draft", "work_type_name": "task", "trace_id": "trace-original", "payload": {"title": "Draft"}}
+			{"name": "draft", "workTypeName": "task", "traceId": "trace-original", "payload": {"title": "Draft"}}
 		]
 	}`
 	retryBody := `{
-		"request_id": "request-api-1",
+		"requestId": "request-api-1",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "changed-draft", "work_type_name": "task", "trace_id": "trace-retry", "payload": {"title": "Changed retry"}}
+			{"name": "changed-draft", "workTypeName": "task", "traceId": "trace-retry", "payload": {"title": "Changed retry"}}
 		]
 	}`
 
@@ -537,15 +566,15 @@ func TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime(t *testing.T) {
 	srv := newTestServer(mf)
 
 	body := `{
-		"request_id": "request-api-batch",
-		"current_chaining_trace_id": "chain-request-batch",
+		"requestId": "request-api-batch",
+		"currentChainingTraceId": "chain-request-batch",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "draft", "work_type_name": "task", "state": "queued", "current_chaining_trace_id": "chain-draft", "trace_id": "chain-draft", "payload": {"title": "Draft"}},
-			{"name": "review", "work_type_name": "review", "payload": "review draft"}
+			{"name": "draft", "workTypeName": "task", "state": "queued", "currentChainingTraceId": "chain-draft", "traceId": "chain-draft", "payload": {"title": "Draft"}},
+			{"name": "review", "workTypeName": "review", "payload": "review draft"}
 		],
 		"relations": [
-			{"type": "DEPENDS_ON", "source_work_name": "review", "target_work_name": "draft", "required_state": "complete"}
+			{"type": "DEPENDS_ON", "sourceWorkName": "review", "targetWorkName": "draft", "requiredState": "complete"}
 		]
 	}`
 	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-api-batch", bytes.NewBufferString(body))
@@ -617,16 +646,16 @@ func TestUpsertWorkRequest_AcceptsParentChildRelationsByWorkName(t *testing.T) {
 	srv := newTestServer(mf)
 
 	body := `{
-		"request_id": "request-api-parent-child",
+		"requestId": "request-api-parent-child",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "parent", "work_type_name": "task", "trace_id": "trace-parent-child", "payload": {"title": "Parent"}},
-			{"name": "prerequisite", "work_type_name": "task", "payload": {"title": "Prerequisite"}},
-			{"name": "child", "work_type_name": "task", "payload": {"title": "Child"}}
+			{"name": "parent", "workTypeName": "task", "traceId": "trace-parent-child", "payload": {"title": "Parent"}},
+			{"name": "prerequisite", "workTypeName": "task", "payload": {"title": "Prerequisite"}},
+			{"name": "child", "workTypeName": "task", "payload": {"title": "Child"}}
 		],
 		"relations": [
-			{"type": "PARENT_CHILD", "source_work_name": "child", "target_work_name": "parent"},
-			{"type": "DEPENDS_ON", "source_work_name": "child", "target_work_name": "prerequisite"}
+			{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"},
+			{"type": "DEPENDS_ON", "sourceWorkName": "child", "targetWorkName": "prerequisite"}
 		]
 	}`
 	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-api-parent-child", bytes.NewBufferString(body))
@@ -671,7 +700,7 @@ func TestUpsertWorkRequest_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	srv := newTestServer(mf)
 
 	body := `{
-		"request_id": "request-api-legacy",
+		"requestId": "request-api-legacy",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
 			{"name": "draft", "work_type_id": "legacy-task", "payload": {"title": "Draft"}}
@@ -682,7 +711,7 @@ func TestUpsertWorkRequest_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].work_type_id is not supported; use work_type_name")
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].work_type_id is not supported; use workTypeName")
 	if len(mf.WorkRequests) != 0 {
 		t.Fatalf("work request submissions = %d, want 0", len(mf.WorkRequests))
 	}
@@ -700,10 +729,10 @@ func TestUpsertWorkRequest_TargetStateReturnsBadRequest(t *testing.T) {
 	srv := newTestServer(mf)
 
 	body := `{
-		"request_id": "request-api-state-alias",
+		"requestId": "request-api-state-alias",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "draft", "work_type_name": "task", "target_state": "queued", "payload": {"title": "Draft"}}
+			{"name": "draft", "workTypeName": "task", "target_state": "queued", "payload": {"title": "Draft"}}
 		]
 	}`
 	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-api-state-alias", bytes.NewBufferString(body))
@@ -729,10 +758,10 @@ func TestUpsertWorkRequest_ConflictingCurrentChainingTraceIDReturnsBadRequest(t 
 	srv := newTestServer(mf)
 
 	body := `{
-		"request_id": "request-api-chaining-conflict",
+		"requestId": "request-api-chaining-conflict",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "draft", "work_type_name": "task", "current_chaining_trace_id": "chain-a", "trace_id": "trace-b", "payload": {"title": "Draft"}}
+			{"name": "draft", "workTypeName": "task", "currentChainingTraceId": "chain-a", "traceId": "trace-b", "payload": {"title": "Draft"}}
 		]
 	}`
 	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-api-chaining-conflict", bytes.NewBufferString(body))
@@ -740,7 +769,7 @@ func TestUpsertWorkRequest_ConflictingCurrentChainingTraceIDReturnsBadRequest(t 
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].current_chaining_trace_id and trace_id must match when both are provided")
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].currentChainingTraceId and traceId must match when both are provided")
 	if len(mf.WorkRequests) != 0 {
 		t.Fatalf("work request submissions = %d, want 0", len(mf.WorkRequests))
 	}
@@ -769,10 +798,10 @@ func TestUpsertWorkRequest_InvalidExplicitStateReturnsBadRequest(t *testing.T) {
 	srv := newTestServer(mf)
 
 	body := `{
-		"request_id": "request-api-invalid-state",
+		"requestId": "request-api-invalid-state",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "draft", "work_type_name": "task", "state": "queued", "payload": {"title": "Draft"}}
+			{"name": "draft", "workTypeName": "task", "state": "queued", "payload": {"title": "Draft"}}
 		]
 	}`
 	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-api-invalid-state", bytes.NewBufferString(body))
@@ -801,61 +830,61 @@ func TestUpsertWorkRequestValidationFailures(t *testing.T) {
 		{
 			name:    "invalid_json",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id":`,
+			body:    `{"requestId":`,
 			wantMsg: "invalid request payload",
 		},
 		{
 			name:    "missing_required_request_id",
 			path:    "/work-requests/request-api-1",
-			body:    `{"type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "work_type_name": "task"}]}`,
-			wantMsg: "request_id is required",
+			body:    `{"type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "workTypeName": "task"}]}`,
+			wantMsg: "requestId is required",
 		},
 		{
 			name:    "path_body_mismatch",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id": "request-api-2", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "work_type_name": "task"}]}`,
-			wantMsg: "request_id path and body must match",
+			body:    `{"requestId": "request-api-2", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "workTypeName": "task"}]}`,
+			wantMsg: "request_id path and requestId body must match",
 		},
 		{
 			name:    "cycle_error",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "a", "work_type_name": "task"}, {"name": "b", "work_type_name": "task"}], "relations": [{"type": "DEPENDS_ON", "source_work_name": "a", "target_work_name": "b"}, {"type": "DEPENDS_ON", "source_work_name": "b", "target_work_name": "a"}]}`,
+			body:    `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "a", "workTypeName": "task"}, {"name": "b", "workTypeName": "task"}], "relations": [{"type": "DEPENDS_ON", "sourceWorkName": "a", "targetWorkName": "b"}, {"type": "DEPENDS_ON", "sourceWorkName": "b", "targetWorkName": "a"}]}`,
 			wantMsg: `work_request: dependency cycle detected involving "a"`,
 		},
 		{
 			name:    "malformed_relation",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "a", "work_type_name": "task"}], "relations": [{"type": "DEPENDS_ON", "source_work_name": "a", "target_work_name": "missing"}]}`,
-			wantMsg: `work_request: relations[0] references unknown target_work_name "missing"`,
+			body:    `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "a", "workTypeName": "task"}], "relations": [{"type": "DEPENDS_ON", "sourceWorkName": "a", "targetWorkName": "missing"}]}`,
+			wantMsg: `work_request: relations[0] references unknown targetWorkName "missing"`,
 		},
 		{
 			name:    "self_parenting_relation",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "a", "work_type_name": "task"}], "relations": [{"type": "PARENT_CHILD", "source_work_name": "a", "target_work_name": "a"}]}`,
+			body:    `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "a", "workTypeName": "task"}], "relations": [{"type": "PARENT_CHILD", "sourceWorkName": "a", "targetWorkName": "a"}]}`,
 			wantMsg: `work_request: relations[0] has self-parenting on "a"`,
 		},
 		{
 			name:    "duplicate_parent_child_relation",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "parent", "work_type_name": "task"}, {"name": "child", "work_type_name": "task"}], "relations": [{"type": "PARENT_CHILD", "source_work_name": "child", "target_work_name": "parent"}, {"type": "PARENT_CHILD", "source_work_name": "child", "target_work_name": "parent"}]}`,
+			body:    `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "parent", "workTypeName": "task"}, {"name": "child", "workTypeName": "task"}], "relations": [{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"}, {"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"}]}`,
 			wantMsg: `work_request: relations[1] duplicates relations[0] ("PARENT_CHILD" "child" -> "parent")`,
 		},
 		{
 			name:    "missing_work_type_name",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft"}]}`,
-			wantMsg: `work_request: works[0] ("draft") is missing work_type_name`,
+			body:    `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft"}]}`,
+			wantMsg: `work_request: works[0] ("draft") is missing workTypeName`,
 		},
 		{
 			name:    "work_type_id_not_supported",
 			path:    "/work-requests/request-api-1",
-			body:    `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "work_type_name": "task", "work_type_id": "legacy-task"}]}`,
-			wantMsg: `works[0].work_type_id is not supported; use work_type_name`,
+			body:    `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "workTypeName": "task", "work_type_id": "legacy-task"}]}`,
+			wantMsg: `works[0].work_type_id is not supported; use workTypeName`,
 		},
 		{
 			name: "unknown_work_type",
 			path: "/work-requests/request-api-1",
-			body: `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "work_type_name": "unknown"}]}`,
+			body: `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "workTypeName": "unknown"}]}`,
 			factory: &testutil.MockFactory{
 				SubmitWorkRequestErr: errors.New(`work_request: works[0] ("draft") references unknown work type "unknown"`),
 			},
@@ -864,7 +893,7 @@ func TestUpsertWorkRequestValidationFailures(t *testing.T) {
 		{
 			name: "invalid_dependency_required_state",
 			path: "/work-requests/request-api-1",
-			body: `{"request_id": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "work_type_name": "task"}, {"name": "review", "work_type_name": "task"}], "relations": [{"type": "DEPENDS_ON", "source_work_name": "review", "target_work_name": "draft", "required_state": "queued"}]}`,
+			body: `{"requestId": "request-api-1", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "draft", "workTypeName": "task"}, {"name": "review", "workTypeName": "task"}], "relations": [{"type": "DEPENDS_ON", "sourceWorkName": "review", "targetWorkName": "draft", "requiredState": "queued"}]}`,
 			factory: &testutil.MockFactory{
 				Net: &state.Net{
 					WorkTypes: map[string]*state.WorkType{
@@ -878,7 +907,7 @@ func TestUpsertWorkRequestValidationFailures(t *testing.T) {
 					},
 				},
 			},
-			wantMsg: `work_request: relations[0] references unknown required_state "queued" for target work type name "task"`,
+			wantMsg: `work_request: relations[0] references unknown requiredState "queued" for target work type name "task"`,
 		},
 	}
 
@@ -916,8 +945,8 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 
 	submitBody := `{
 		"name": "Inventory story",
-		"work_type_name": "task",
-		"trace_id": "trace-inventory-1",
+		"workTypeName": "task",
+		"traceId": "trace-inventory-1",
 		"payload": {"title": "Document current API"},
 		"tags": {"branch": "api-standardization"}
 	}`

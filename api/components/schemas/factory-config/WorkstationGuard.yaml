@@ -1,0 +1,20 @@
+type: object
+description: Guard attached to a workstation as a whole before it is allowed to consume work.
+additionalProperties: false
+required:
+  - type
+properties:
+  type:
+    $ref: './WorkstationGuardType.yaml'
+    description: Guard condition to evaluate before this workstation is allowed to run.
+  workstation:
+    type: string
+    description: For `VISIT_COUNT` guards, the workstation whose visits are counted.
+  maxVisits:
+    type: integer
+    minimum: 1
+    description: For `VISIT_COUNT` guards, the visit threshold.
+  matchConfig:
+    $ref: './WorkstationGuardMatchConfig.yaml'
+    description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+

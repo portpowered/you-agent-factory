@@ -1,0 +1,22 @@
+type: object
+additionalProperties: false
+properties:
+  scriptRequestId:
+    type: string
+  attempt:
+    type: integer
+    minimum: 1
+  outcome:
+    type: string
+  stdout:
+    type: string
+  stderr:
+    type: string
+  durationMillis:
+    type: integer
+    format: int64
+    minimum: 0
+  exitCode:
+    type: integer
+  failureType:
+    type: string

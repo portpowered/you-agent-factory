@@ -1,0 +1,49 @@
+description: >-
+  A reusable worker definition that tells the factory how a workstation
+  should execute work, such as through a model-backed agent or a script.
+type: object
+additionalProperties: false
+required:
+  - name
+properties:
+  name:
+    type: string
+    description: Worker name referenced by Workstation.worker.
+  type:
+    $ref: './WorkerType.yaml'
+    description: Worker implementation family to instantiate for this definition.
+  model:
+    type: string
+    description: Model identifier to request from the configured model provider when this worker uses model execution.
+  modelProvider:
+    $ref: './WorkerModelProvider.yaml'
+    description: Canonical model-provider identifier used for model routing and provider diagnostics. Current built-in values are `claude` and `codex`, which match the executable provider command IDs.
+  executorProvider:
+    $ref: './WorkerProvider.yaml'
+    description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `script_wrap`.
+  command:
+    type: string
+    description: Command to execute when this worker runs through a command or script provider.
+  args:
+    type: array
+    description: Additional command arguments passed to the configured command.
+    items:
+      type: string
+  resources:
+    type: array
+    description: Resource capacity this worker requires before it can be dispatched.
+    items:
+      $ref: '..\shared\ResourceRequirement.yaml'
+  timeout:
+    type: string
+    description: Optional Go duration that caps one worker execution attempt.
+  stopToken:
+    type: string
+    description: Marker that tells model-oriented workers where to stop generated output when the provider supports it.
+  skipPermissions:
+    type: boolean
+    description: When true, bypasses permission checks for providers that support permission gating.
+  body:
+    type: string
+    description: Inline worker instructions or script body when the worker is authored directly in factory config.
+

@@ -55,8 +55,8 @@ The workflow currently executes these repository-owned commands in order:
 
 1. `cd ui && bun install --frozen-lockfile`
 2. `cd ui && bun run tsc`
-3. `make build`
-4. `make ui-build`
+3. `make ui-build`
+4. `make build`
 5. `make lint`
 6. `make api-smoke`
 7. `cd ui && bunx playwright install --with-deps chromium`
@@ -84,7 +84,7 @@ From a clean checkout, use this workflow after editing `api/openapi-main.yaml` o
 1. Validate the authored source tree from the repository root:
 
 ```bash
-cd api && node run-quiet-api-command.js validate:main ../api/openapi-main.yaml
+node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
 ```
 
 2. Rebundle the published contract from the authored source tree:
@@ -93,7 +93,7 @@ cd api && node run-quiet-api-command.js validate:main ../api/openapi-main.yaml
 make bundle-api
 ```
 
-This uses the repository-supported Redocly CLI from the root `api/` workspace and rewrites `api/openapi.yaml` from `api/openapi-main.yaml` without manual post-processing. The package-local targets intentionally execute from `api/` so Redocly picks up the repository-owned `api/redocly.yaml` configuration instead of falling back to CLI defaults.
+This uses the repository-supported Redocly CLI from the root `api/` workspace and rewrites `api/openapi.yaml` from `api/openapi-main.yaml` without manual post-processing. The package-local targets intentionally keep the command surface rooted at the checkout so the same workflow works in standard clones and nested worktrees.
 
 3. Regenerate the checked-in Go server interface, model types, and UI OpenAPI types from the bundled contract:
 
@@ -245,7 +245,7 @@ behavior explicit inside the test that needs it.
 - Keep record/replay side effects behind existing worker interfaces. Replay mode should install replay-aware providers and command runners through service wiring, not through runtime-specific shortcuts.
 - When retiring a public `Factory` config field from `api/openapi.yaml`, remove it from the generated/public `Factory` model, drop any orphaned OpenAPI component schemas that existed only for that field, reject the raw input at `FactoryConfigMapper.Expand` with migration guidance once the validation story lands, and migrate checked-in fixtures/examples to the supported replacement contract in the same change.
 - Guarded loop breakers authored as `type: LOGICAL_MOVE` plus `visit_count` guards stay normal scheduler-dispatched workstations when docs or tests need dispatcher-visible execution history; reserve `TransitionExhaustion` for legacy or system circuit-breaker paths such as retired `exhaustion_rules` and time-expiry consumption.
-- File watcher input handling should parse `FACTORY_REQUEST_BATCH` JSON as the only structured submit format, map public batch item `work_type_name` values into runtime work type IDs, fill missing batch item work types from the watched folder, wrap Markdown and non-batch JSON files as one-item `WorkRequest` batches with raw file content payloads, reject item work-type conflicts before submitting, and parse plus validate all preseed files before calling the factory so startup failures do not create partial work.
+- File watcher input handling should parse `FACTORY_REQUEST_BATCH` JSON as the only structured submit format, map public batch item `workTypeName` values into runtime work type IDs, fill missing batch item work types from the watched folder, wrap Markdown and non-batch JSON files as one-item `WorkRequest` batches with raw file content payloads, reject item work-type conflicts before submitting, and parse plus validate all preseed files before calling the factory so startup failures do not create partial work.
 - Deadcode findings are baseline-managed through `docs/development/deadcode-baseline.txt`. Remove confirmed stale symbols first, then update the baseline only for accepted remaining library or test-helper debt.
 
 ## Extending the Type System

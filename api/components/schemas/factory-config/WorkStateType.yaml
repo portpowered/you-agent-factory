@@ -1,0 +1,22 @@
+type: string
+x-enum-varnames:
+  - WorkStateTypeINITIAL
+  - WorkStateTypePROCESSING
+  - WorkStateTypeTERMINAL
+  - WorkStateTypeFAILED
+description: >-
+  Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes.
+  Initial: The work is waiting to be picked up by a workstation.
+  Processing: The work has been partially processed, and is continuing through its lifecycle.
+  Terminal: The work has completed successfully.
+  Failed: The work has failed.
+enum:
+  - INITIAL
+  - PROCESSING
+  - TERMINAL
+  - FAILED
+x-enum-descriptions:
+  - Work is newly submitted and waiting for its first processing step.
+  - Work is in progress and can continue through additional workstation steps.
+  - Work completed successfully and should not be scheduled for more processing.
+  - Work reached a failed terminal state.

@@ -1,0 +1,16 @@
+description: >-
+  Shared capacity that limits how much work the factory can run at once,
+  such as worker slots or external service quotas.
+type: object
+additionalProperties: false
+required:
+  - name
+  - capacity
+properties:
+  name:
+    type: string
+    description: Resource name referenced from worker requirements and workstation resourceUsage entries.
+  capacity:
+    type: integer
+    minimum: 1
+    description: Total units of this resource available to the factory at one time.

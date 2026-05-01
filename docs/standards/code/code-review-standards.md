@@ -57,18 +57,14 @@ A reviewer **MUST** verify that the change includes appropriate tests.
 
 Every review comment **MUST** explain the problem, the requested change, and why it matters.
 
-### 6. Be Kind and Constructive
-
-Review comments **MUST** be professional, respectful, and focused on the code rather than the person.
-
-### 7. Classify Comments as Blocking or Non-Blocking
+### 6. Classify Comments as Blocking or Non-Blocking
 
 Every review comment **MUST** be clearly classified as blocking or non-blocking.
 
-### 8. Know When to Approve and When to Request Changes
+### 7. Know When to Approve and When to Request Changes
 
 A reviewer **MUST** approve when the change is correct, well-tested, and conforms to standards, and **MUST** request changes for correctness issues, security issues, missing required tests, or standards violations.
 
-### 9. Apply Additional Scrutiny to AI-Generated Code
+### 8. Apply Additional Scrutiny to AI-Generated Code
 
 AI-generated code **MUST** receive the same or greater scrutiny as human-written code, especially for hallucinated APIs, stale patterns, hidden side effects, and subtle edge-case bugs.

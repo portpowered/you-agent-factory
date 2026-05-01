@@ -1,0 +1,43 @@
+type: object
+additionalProperties: false
+properties:
+  startedAt:
+    type: string
+  requestTime:
+    type: string
+  inputWorkItems:
+    type: array
+    items:
+      $ref: './FactoryWorldWorkItemRef.yaml'
+  inputWorkTypeIds:
+    type: array
+    items:
+      type: string
+  currentChainingTraceId:
+    type: string
+  previousChainingTraceIds:
+    type: array
+    items:
+      type: string
+  traceIds:
+    type: array
+    items:
+      type: string
+  consumedTokens:
+    type: array
+    items:
+      $ref: './FactoryWorldTokenView.yaml'
+  prompt:
+    type: string
+  workingDirectory:
+    type: string
+  worktree:
+    type: string
+  provider:
+    type: string
+  model:
+    type: string
+  requestMetadata:
+    $ref: '../shared/StringMap.yaml'
+  scriptRequest:
+    $ref: './FactoryWorldScriptRequestView.yaml'

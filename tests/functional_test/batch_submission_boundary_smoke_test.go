@@ -19,34 +19,34 @@ func TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTT
 	const requestID = "request-boundary-parity"
 
 	batchJSON := []byte(`{
-		"request_id": "request-boundary-parity",
+		"requestId": "request-boundary-parity",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
 			{
 				"name": "parent",
-				"work_id": "work-boundary-parent",
-				"work_type_name": "task",
+				"workId": "work-boundary-parent",
+				"workTypeName": "task",
 				"state": "processing",
-				"trace_id": "trace-boundary-parity",
+				"traceId": "trace-boundary-parity",
 				"payload": {"title": "Parent"}
 			},
 			{
 				"name": "prerequisite",
-				"work_id": "work-boundary-prerequisite",
-				"work_type_name": "task",
+				"workId": "work-boundary-prerequisite",
+				"workTypeName": "task",
 				"state": "processing",
 				"payload": {"title": "Prerequisite"}
 			},
 			{
 				"name": "child",
-				"work_id": "work-boundary-child",
-				"work_type_name": "task",
+				"workId": "work-boundary-child",
+				"workTypeName": "task",
 				"payload": {"title": "Child"}
 			}
 		],
 		"relations": [
-			{"type": "PARENT_CHILD", "source_work_name": "child", "target_work_name": "parent"},
-			{"type": "DEPENDS_ON", "source_work_name": "child", "target_work_name": "prerequisite"}
+			{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"},
+			{"type": "DEPENDS_ON", "sourceWorkName": "child", "targetWorkName": "prerequisite"}
 		]
 	}`)
 

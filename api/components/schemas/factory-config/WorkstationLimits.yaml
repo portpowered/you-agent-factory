@@ -1,0 +1,10 @@
+type: object
+description: Retry and execution ceilings applied to one workstation definition.
+additionalProperties: false
+properties:
+  maxRetries:
+    type: integer
+    description: Maximum number of retry attempts after a failed dispatch before the workstation gives up.
+  maxExecutionTime:
+    type: string
+    description: Go duration limit for one dispatch attempt before it times out.

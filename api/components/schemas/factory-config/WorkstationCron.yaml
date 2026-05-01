@@ -1,0 +1,19 @@
+type: object
+description: Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
+additionalProperties: false
+required:
+  - schedule
+properties:
+  schedule:
+    type: string
+    description: Standard five-field cron expression used to produce internal time work while the factory service is running.
+  triggerAtStart:
+    type: boolean
+    default: false
+    description: When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
+  jitter:
+    type: string
+    description: Non-negative Go duration used as the maximum deterministic delay added to scheduled time tokens. Defaults to "0s".
+  expiryWindow:
+    type: string
+    description: Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.

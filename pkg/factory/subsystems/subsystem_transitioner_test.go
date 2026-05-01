@@ -452,7 +452,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(
 	now := time.Date(2026, time.April, 16, 22, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
-	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","work_type_name":"child","tags":{"priority":"high"}},{"name":"review","work_type_name":"child"}],"relations":[{"type":"DEPENDS_ON","source_work_name":"review","target_work_name":"draft"}]}}`
+	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"child","tags":{"priority":"high"}},{"name":"review","workTypeName":"child"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"review","targetWorkName":"draft"}]}}`
 	result := executeWorkerBatchTransition(t, transitioner, workerBatchSnapshot(output))
 	batch, requestID := assertGeneratedWorkerBatchMetadata(t, result)
 	normalized := normalizeGeneratedWorkerBatch(t, batch)
@@ -600,7 +600,7 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 		{ID: "slot-out", PlaceID: "agent-slot:available"},
 	}
 	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
-	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"follow-up","work_type_name":"child"}]}}`
+	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"follow-up","workTypeName":"child"}]}}`
 	snapshot := workerBatchSnapshot(output)
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens, interfaces.Token{
 		ID:        "agent-slot:resource:0",
@@ -696,7 +696,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSour
 	now := time.Date(2026, time.April, 18, 0, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
-	output := `{"request":{"request_id":"metadata-request","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated","work_id":"work-generated","work_type_name":"child","payload":"generated"}]},"metadata":{"source":"generator:unit-test","parent_lineage":["request-parent","work-parent"]},"submissions":[{"name":"generated","work_id":"work-generated","target_state":"complete","execution_id":"exec-child","tags":{"runtime":"true"}}]}`
+	output := `{"request":{"requestId":"metadata-request","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated","workId":"work-generated","workTypeName":"child","payload":"generated"}]},"metadata":{"source":"generator:unit-test","parentLineage":["request-parent","work-parent"]},"submissions":[{"name":"generated","workId":"work-generated","targetState":"complete","executionId":"exec-child","tags":{"runtime":"true"}}]}`
 	snapshot := workerBatchSnapshot(output)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -743,7 +743,7 @@ func TestTransitioner_MalformedWorkerEmittedFactoryRequestBatchFailsDispatch(t *
 	now := time.Date(2026, time.April, 16, 22, 5, 0, 0, time.UTC)
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
-	snapshot := workerBatchSnapshot(`{"request":{"request_id":"bad-request","type":"FACTORY_REQUEST_BATCH","works":[]}}`)
+	snapshot := workerBatchSnapshot(`{"request":{"requestId":"bad-request","type":"FACTORY_REQUEST_BATCH","works":[]}}`)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
 	if err != nil {

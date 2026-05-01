@@ -1,0 +1,11 @@
+type: string
+description: Worker implementation families supported by the public factory-config contract.
+x-enum-varnames:
+  - WorkerTypeModelWorker
+  - WorkerTypeScriptWorker
+enum:
+  - MODEL_WORKER
+  - SCRIPT_WORKER
+x-enum-descriptions:
+  - Model-backed worker that renders prompts and dispatches through the configured model provider.
+  - Script-backed worker that executes a configured command instead of calling a model provider.

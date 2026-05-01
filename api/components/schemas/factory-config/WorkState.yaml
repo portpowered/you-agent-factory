@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+description: >-
+  A lifecycle state that a work item can occupy inside one work type.
+required:
+  - name
+  - type
+properties:
+  name:
+    type: string
+    description: Customer-authored state name referenced by workstation inputs and outputs.
+  type:
+    $ref: './WorkStateType.yaml'
+    description: Lifecycle category for this state, such as initial, processing, terminal, or failed.
+

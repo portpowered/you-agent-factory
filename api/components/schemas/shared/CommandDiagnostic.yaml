@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+properties:
+  command:
+    type: string
+  args:
+    type: array
+    items:
+      type: string
+  stdin:
+    type: string
+  env:
+    $ref: './StringMap.yaml'
+  stdout:
+    type: string
+  stderr:
+    type: string
+  exitCode:
+    type: integer
+  timedOut:
+    type: boolean
+  durationNanos:
+    type: integer
+    format: int64
+  workingDir:
+    type: string
+

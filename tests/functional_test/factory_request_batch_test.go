@@ -368,7 +368,7 @@ model: test-model
 Finish the input task.
 `)
 
-	generatedBatchOutput := `{"request":{"request_id":"request-e2e-generated-batch","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","work_id":"work-e2e-generated-alpha","work_type_name":"task","payload":"generated alpha"},{"name":"generated-beta","work_id":"work-e2e-generated-beta","work_type_name":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","source_work_name":"generated-beta","target_work_name":"generated-alpha"}]},"metadata":{"source":"generator:e2e-smoke","relation_context":[{"type":"DEPENDS_ON","source_work_name":"generated-beta","target_work_name":"generated-alpha","required_state":"complete"}],"parent_lineage":["request-e2e-batch-smoke","work-e2e-second"]},"submissions":[{"name":"generated-alpha","work_id":"work-e2e-generated-alpha","tags":{"runtime":"alpha"}},{"name":"generated-beta","work_id":"work-e2e-generated-beta","tags":{"runtime":"beta"}}]}`
+	generatedBatchOutput := `{"request":{"requestId":"request-e2e-generated-batch","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-e2e-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-e2e-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha"}]},"metadata":{"source":"generator:e2e-smoke","relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}],"parentLineage":["request-e2e-batch-smoke","work-e2e-second"]},"submissions":[{"name":"generated-alpha","workId":"work-e2e-generated-alpha","tags":{"runtime":"alpha"}},{"name":"generated-beta","workId":"work-e2e-generated-beta","tags":{"runtime":"beta"}}]}`
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {
 			{Content: "external first complete COMPLETE"},
@@ -540,27 +540,27 @@ func TestFactoryRequestBatch_InvalidStructureRejected(t *testing.T) {
 	}{
 		{
 			name:    "empty work array",
-			payload: `{"request_id": "invalid-1", "type": "FACTORY_REQUEST_BATCH", "works": []}`,
+			payload: `{"requestId": "invalid-1", "type": "FACTORY_REQUEST_BATCH", "works": []}`,
 			wantErr: "works array must contain at least one item",
 		},
 		{
 			name:    "missing name field",
-			payload: `{"request_id": "invalid-2", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task"}]}`,
+			payload: `{"requestId": "invalid-2", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task"}]}`,
 			wantErr: "missing required name",
 		},
 		{
 			name:    "missing work type field",
-			payload: `{"request_id": "invalid-3", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "foo"}]}`,
-			wantErr: "missing work_type_name",
+			payload: `{"requestId": "invalid-3", "type": "FACTORY_REQUEST_BATCH", "works": [{"name": "foo"}]}`,
+			wantErr: "missing workTypeName",
 		},
 		{
 			name:    "duplicate work names",
-			payload: `{"request_id": "invalid-4", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "dup"}, {"work_type_name": "task", "name": "dup"}]}`,
+			payload: `{"requestId": "invalid-4", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "dup"}, {"workTypeName": "task", "name": "dup"}]}`,
 			wantErr: "duplicate name",
 		},
 		{
 			name:    "unknown work type",
-			payload: `{"request_id": "invalid-5", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "nonexistent", "name": "foo"}]}`,
+			payload: `{"requestId": "invalid-5", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "nonexistent", "name": "foo"}]}`,
 			wantErr: "unknown work type",
 		},
 	} {
@@ -578,37 +578,37 @@ func TestFactoryRequestBatch_InvalidRelationsRejected(t *testing.T) {
 	}{
 		{
 			name:    "unknown source in relation",
-			payload: `{"request_id": "invalid-6", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "a"}], "relations": [{"type": "DEPENDS_ON", "source_work_name": "missing", "target_work_name": "a"}]}`,
-			wantErr: "unknown source_work_name",
+			payload: `{"requestId": "invalid-6", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "a"}], "relations": [{"type": "DEPENDS_ON", "sourceWorkName": "missing", "targetWorkName": "a"}]}`,
+			wantErr: "unknown sourceWorkName",
 		},
 		{
 			name:    "unknown target in relation",
-			payload: `{"request_id": "invalid-7", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "a"}], "relations": [{"type": "DEPENDS_ON", "source_work_name": "a", "target_work_name": "missing"}]}`,
-			wantErr: "unknown target_work_name",
+			payload: `{"requestId": "invalid-7", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "a"}], "relations": [{"type": "DEPENDS_ON", "sourceWorkName": "a", "targetWorkName": "missing"}]}`,
+			wantErr: "unknown targetWorkName",
 		},
 		{
 			name:    "self-referencing dependency",
-			payload: `{"request_id": "invalid-8", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "a"}], "relations": [{"type": "DEPENDS_ON", "source_work_name": "a", "target_work_name": "a"}]}`,
+			payload: `{"requestId": "invalid-8", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "a"}], "relations": [{"type": "DEPENDS_ON", "sourceWorkName": "a", "targetWorkName": "a"}]}`,
 			wantErr: "self-dependency",
 		},
 		{
 			name:    "self-parenting relation",
-			payload: `{"request_id": "invalid-9", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "a"}], "relations": [{"type": "PARENT_CHILD", "source_work_name": "a", "target_work_name": "a"}]}`,
+			payload: `{"requestId": "invalid-9", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "a"}], "relations": [{"type": "PARENT_CHILD", "sourceWorkName": "a", "targetWorkName": "a"}]}`,
 			wantErr: "self-parenting",
 		},
 		{
 			name:    "duplicate parent-child relation",
-			payload: `{"request_id": "invalid-10", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "parent"}, {"work_type_name": "task", "name": "child"}], "relations": [{"type": "PARENT_CHILD", "source_work_name": "child", "target_work_name": "parent"}, {"type": "PARENT_CHILD", "source_work_name": "child", "target_work_name": "parent"}]}`,
+			payload: `{"requestId": "invalid-10", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "parent"}, {"workTypeName": "task", "name": "child"}], "relations": [{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"}, {"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"}]}`,
 			wantErr: "duplicates relations[0]",
 		},
 		{
 			name:    "invalid dependency required_state",
-			payload: `{"request_id": "invalid-11", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "draft"}, {"work_type_name": "task", "name": "review"}], "relations": [{"type": "DEPENDS_ON", "source_work_name": "review", "target_work_name": "draft", "required_state": "queued"}]}`,
-			wantErr: "unknown required_state",
+			payload: `{"requestId": "invalid-11", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "draft"}, {"workTypeName": "task", "name": "review"}], "relations": [{"type": "DEPENDS_ON", "sourceWorkName": "review", "targetWorkName": "draft", "requiredState": "queued"}]}`,
+			wantErr: "unknown requiredState",
 		},
 		{
 			name:    "unsupported relation type",
-			payload: `{"request_id": "invalid-12", "type": "FACTORY_REQUEST_BATCH", "works": [{"work_type_name": "task", "name": "a"}, {"work_type_name": "task", "name": "b"}], "relations": [{"type": "INVALID", "source_work_name": "a", "target_work_name": "b"}]}`,
+			payload: `{"requestId": "invalid-12", "type": "FACTORY_REQUEST_BATCH", "works": [{"workTypeName": "task", "name": "a"}, {"workTypeName": "task", "name": "b"}], "relations": [{"type": "INVALID", "sourceWorkName": "a", "targetWorkName": "b"}]}`,
 			wantErr: "unsupported type",
 		},
 	} {

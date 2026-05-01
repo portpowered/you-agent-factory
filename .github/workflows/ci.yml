@@ -70,11 +70,11 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
-      - name: Build backend binary
-        run: make build
-
       - name: Build embedded dashboard assets
         run: make ui-build
+
+      - name: Build backend binary
+        run: make build
 
       - name: Run repository lint surface
         run: make lint

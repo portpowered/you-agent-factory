@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - type
+properties:
+  requestId:
+    type: string
+    description: Stable client-provided request identifier used for idempotent batch submission.
+  currentChainingTraceId:
+    type: string
+    description: Optional default chaining-trace identifier applied to submitted work items that omit it.
+  type: 
+    $ref: './WorkRequestType.yaml'
+  works: 
+    type: array
+    description: A batch of work items to be submitted together.
+    items:
+      $ref: './Work.yaml'
+  relations:
+    type: array
+    description: Relationships between various work items.
+    items:
+      $ref: './Relation.yaml'
+

@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+description: >-
+  Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure.
+required:
+  - name
+  - type
+properties:
+  name:
+    type: string
+    description: Input type name. The reserved name "default" is implicit.
+  type:
+    $ref: './InputKind.yaml'
+

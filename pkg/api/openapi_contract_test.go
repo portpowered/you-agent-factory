@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -229,22 +230,29 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.required is missing")
 	}
-	if !containsString(submitWorkRequestRequired, "work_type_name") {
-		t.Fatalf("components.schemas.SubmitWorkRequest.required is missing work_type_name")
+	if !containsString(submitWorkRequestRequired, "workTypeName") {
+		t.Fatalf("components.schemas.SubmitWorkRequest.required is missing workTypeName")
 	}
 	submitWorkRequestProperties, ok := submitWorkRequestSchema["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties is missing")
 	}
-	if _, ok := submitWorkRequestProperties["work_type_name"].(map[string]any); !ok {
-		t.Fatalf("components.schemas.SubmitWorkRequest.properties.work_type_name is missing")
+	if _, ok := submitWorkRequestProperties["workTypeName"].(map[string]any); !ok {
+		t.Fatalf("components.schemas.SubmitWorkRequest.properties.workTypeName is missing")
 	}
-	if _, ok := submitWorkRequestProperties["current_chaining_trace_id"].(map[string]any); !ok {
-		t.Fatalf("components.schemas.SubmitWorkRequest.properties.current_chaining_trace_id is missing")
+	if _, ok := submitWorkRequestProperties["currentChainingTraceId"].(map[string]any); !ok {
+		t.Fatalf("components.schemas.SubmitWorkRequest.properties.currentChainingTraceId is missing")
 	}
+	assertArrayItemRef(t, submitWorkRequestProperties, "relations", "#/components/schemas/SubmitRelation")
 	if _, ok := submitWorkRequestProperties["work_type_id"]; ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties.work_type_id must not be advertised for submitted work")
 	}
+
+	submitRelationSchema := schemaObject(t, schemas, "SubmitRelation")
+	assertRequiredFields(t, submitRelationSchema, "type", "targetWorkId")
+	submitRelationProperties := schemaProperties(t, submitRelationSchema, "SubmitRelation")
+	assertSchemaPropertiesPresent(t, submitRelationProperties, "SubmitRelation", "type", "targetWorkId")
+	assertPropertiesAbsent(t, submitRelationProperties, "SubmitRelation", "sourceWorkName", "targetWorkName")
 
 	workRequestSchema, ok := schemas["WorkRequest"].(map[string]any)
 	if !ok {
@@ -254,7 +262,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.WorkRequest.required is missing")
 	}
-	for _, field := range []string{"request_id", "type"} {
+	for _, field := range []string{"requestId", "type"} {
 		if !containsString(workRequestRequired, field) {
 			t.Fatalf("components.schemas.WorkRequest.required is missing %q", field)
 		}
@@ -263,11 +271,11 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.WorkRequest.properties is missing")
 	}
-	if _, ok := workRequestProperties["request_id"].(map[string]any); !ok {
-		t.Fatalf("components.schemas.WorkRequest.properties.request_id is missing")
+	if _, ok := workRequestProperties["requestId"].(map[string]any); !ok {
+		t.Fatalf("components.schemas.WorkRequest.properties.requestId is missing")
 	}
-	if _, ok := workRequestProperties["current_chaining_trace_id"].(map[string]any); !ok {
-		t.Fatalf("components.schemas.WorkRequest.properties.current_chaining_trace_id is missing")
+	if _, ok := workRequestProperties["currentChainingTraceId"].(map[string]any); !ok {
+		t.Fatalf("components.schemas.WorkRequest.properties.currentChainingTraceId is missing")
 	}
 	if _, ok := workRequestProperties["type"].(map[string]any); !ok {
 		t.Fatalf("components.schemas.WorkRequest.properties.type is missing")
@@ -290,7 +298,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.Work.properties is missing")
 	}
-	for _, field := range []string{"name", "work_id", "request_id", "work_type_name", "state", "current_chaining_trace_id", "previous_chaining_trace_ids", "trace_id", "payload", "tags"} {
+	for _, field := range []string{"name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "payload", "tags"} {
 		if _, ok := workProperties[field].(map[string]any); !ok {
 			t.Fatalf("components.schemas.Work.properties.%s is missing", field)
 		}
@@ -570,6 +578,40 @@ func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) 
 	assertWorkstationRequestScriptBoundarySchemas(t, schemas)
 }
 
+func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+
+	offenses := collectSnakeCaseComponentFields(t, schemas, []string{
+		"Relation",
+		"StatusResponse",
+		"SubmitWorkRequest",
+		"SubmitWorkResponse",
+		"TokenHistory",
+		"TokenResponse",
+		"UpsertWorkRequestResponse",
+		"Work",
+		"WorkRequest",
+		"FactoryWorldWorkstationRequestProjectionSlice",
+		"FactoryWorldRenderedPromptDiagnostic",
+		"FactoryWorldProviderDiagnostic",
+		"FactoryWorldWorkDiagnostics",
+		"FactoryWorldWorkItemRef",
+		"FactoryWorldTokenView",
+		"FactoryWorldMutationView",
+		"FactoryWorldScriptRequestView",
+		"FactoryWorldScriptResponseView",
+		"FactoryWorldWorkstationRequestCountView",
+		"FactoryWorldWorkstationRequestRequestView",
+		"FactoryWorldWorkstationRequestResponseView",
+		"FactoryWorldWorkstationRequestView",
+	})
+	if len(offenses) == 0 {
+		return
+	}
+
+	t.Fatalf("public runtime and factory-world schemas must use camelCase:\n- %s", strings.Join(offenses, "\n- "))
+}
+
 func loadBundledOpenAPIComponentSchemas(t *testing.T) map[string]any {
 	t.Helper()
 
@@ -591,6 +633,103 @@ func loadBundledOpenAPIComponentSchemas(t *testing.T) map[string]any {
 	assertWorkstationRequestWorkRefSchemas(t, schemas)
 	assertWorkstationRequestResponseSchema(t, schemas)
 	return schemas
+}
+
+func collectSnakeCaseComponentFields(t *testing.T, schemas map[string]any, rootSchemas []string) []string {
+	t.Helper()
+
+	visited := make(map[string]bool)
+	offenses := make(map[string]struct{})
+	for _, schemaName := range rootSchemas {
+		collectSnakeCaseFieldsFromComponent(t, schemas, schemaName, visited, offenses)
+	}
+
+	out := make([]string, 0, len(offenses))
+	for offense := range offenses {
+		out = append(out, offense)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func collectSnakeCaseFieldsFromComponent(
+	t *testing.T,
+	schemas map[string]any,
+	schemaName string,
+	visited map[string]bool,
+	offenses map[string]struct{},
+) {
+	t.Helper()
+
+	if visited[schemaName] {
+		return
+	}
+	visited[schemaName] = true
+	collectSnakeCaseFieldsFromSchema(t, schemas, schemaName, schemaObject(t, schemas, schemaName), visited, offenses)
+}
+
+func collectSnakeCaseFieldsFromSchema(
+	t *testing.T,
+	schemas map[string]any,
+	path string,
+	schema map[string]any,
+	visited map[string]bool,
+	offenses map[string]struct{},
+) {
+	t.Helper()
+
+	if properties, ok := schema["properties"].(map[string]any); ok {
+		for propertyName, propertyAny := range properties {
+			if strings.Contains(propertyName, "_") {
+				offenses[path+"."+propertyName] = struct{}{}
+			}
+			propertySchema, ok := propertyAny.(map[string]any)
+			if !ok {
+				continue
+			}
+			collectSnakeCaseFieldsFromSubSchema(t, schemas, propertySchema, visited, offenses)
+		}
+	}
+
+	if additionalProperties, ok := schema["additionalProperties"].(map[string]any); ok {
+		collectSnakeCaseFieldsFromSubSchema(t, schemas, additionalProperties, visited, offenses)
+	}
+}
+
+func collectSnakeCaseFieldsFromSubSchema(
+	t *testing.T,
+	schemas map[string]any,
+	schema map[string]any,
+	visited map[string]bool,
+	offenses map[string]struct{},
+) {
+	t.Helper()
+
+	if refName, ok := openAPISchemaNameFromRef(schema["$ref"]); ok {
+		collectSnakeCaseFieldsFromComponent(t, schemas, refName, visited, offenses)
+	}
+	if items, ok := schema["items"].(map[string]any); ok {
+		collectSnakeCaseFieldsFromSubSchema(t, schemas, items, visited, offenses)
+	}
+	for _, compositionKey := range []string{"allOf", "anyOf", "oneOf"} {
+		items, ok := schema[compositionKey].([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range items {
+			itemSchema, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			collectSnakeCaseFieldsFromSubSchema(t, schemas, itemSchema, visited, offenses)
+		}
+	}
+	if _, ok := schema["properties"].(map[string]any); ok {
+		collectSnakeCaseFieldsFromSchema(t, schemas, "<inline>", schema, visited, offenses)
+	}
+	if additionalProperties, ok := schema["additionalProperties"].(map[string]any); ok {
+		collectSnakeCaseFieldsFromSubSchema(t, schemas, additionalProperties, visited, offenses)
+	}
 }
 
 func assertWorkstationRequestProjectionSchemasPresent(t *testing.T, schemas map[string]any) {
@@ -622,21 +761,21 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 
 	requestPayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestRequestView")
 	requestPayloadProperties := schemaProperties(t, requestPayload, "FactoryWorldWorkstationRequestRequestView")
-	assertSchemaPropertiesPresent(t, requestPayloadProperties, "FactoryWorldWorkstationRequestRequestView", "started_at", "request_time", "prompt", "working_directory", "worktree", "provider", "model")
-	assertArrayItemRef(t, requestPayloadProperties, "input_work_items", "#/components/schemas/FactoryWorldWorkItemRef")
-	assertArrayItemRef(t, requestPayloadProperties, "consumed_tokens", "#/components/schemas/FactoryWorldTokenView")
-	assertPropertyRef(t, requestPayloadProperties, "request_metadata", "#/components/schemas/StringMap")
-	assertPropertyRef(t, requestPayloadProperties, "script_request", "#/components/schemas/FactoryWorldScriptRequestView")
+	assertSchemaPropertiesPresent(t, requestPayloadProperties, "FactoryWorldWorkstationRequestRequestView", "startedAt", "requestTime", "prompt", "workingDirectory", "worktree", "provider", "model")
+	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
+	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
+	assertPropertyRef(t, requestPayloadProperties, "requestMetadata", "#/components/schemas/StringMap")
+	assertPropertyRef(t, requestPayloadProperties, "scriptRequest", "#/components/schemas/FactoryWorldScriptRequestView")
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
-	assertPropertyRef(t, responsePayloadProperties, "provider_session", "#/components/schemas/ProviderSessionMetadata")
+	assertPropertyRef(t, responsePayloadProperties, "providerSession", "#/components/schemas/ProviderSessionMetadata")
 	assertPropertyRef(t, responsePayloadProperties, "diagnostics", "#/components/schemas/FactoryWorldWorkDiagnostics")
-	assertPropertyRef(t, responsePayloadProperties, "response_metadata", "#/components/schemas/StringMap")
-	assertPropertyRef(t, responsePayloadProperties, "script_response", "#/components/schemas/FactoryWorldScriptResponseView")
-	assertArrayItemRef(t, responsePayloadProperties, "output_work_items", "#/components/schemas/FactoryWorldWorkItemRef")
-	assertArrayItemRef(t, responsePayloadProperties, "output_mutations", "#/components/schemas/FactoryWorldMutationView")
-	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failure_reason", "failure_message", "response_text", "error_class", "end_time", "duration_millis")
+	assertPropertyRef(t, responsePayloadProperties, "responseMetadata", "#/components/schemas/StringMap")
+	assertPropertyRef(t, responsePayloadProperties, "scriptResponse", "#/components/schemas/FactoryWorldScriptResponseView")
+	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
+	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
+	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "responseText", "errorClass", "endTime", "durationMillis")
 }
 
 func assertWorkstationRequestScriptBoundarySchemas(t *testing.T, schemas map[string]any) {
@@ -644,7 +783,7 @@ func assertWorkstationRequestScriptBoundarySchemas(t *testing.T, schemas map[str
 
 	scriptRequestPayload := schemaObject(t, schemas, "FactoryWorldScriptRequestView")
 	scriptRequestPayloadProperties := schemaProperties(t, scriptRequestPayload, "FactoryWorldScriptRequestView")
-	for _, field := range []string{"script_request_id", "attempt", "command", "args"} {
+	for _, field := range []string{"scriptRequestId", "attempt", "command", "args"} {
 		if _, ok := scriptRequestPayloadProperties[field].(map[string]any); !ok {
 			t.Fatalf("FactoryWorldScriptRequestView.properties.%s is missing", field)
 		}
@@ -652,7 +791,7 @@ func assertWorkstationRequestScriptBoundarySchemas(t *testing.T, schemas map[str
 
 	scriptResponsePayload := schemaObject(t, schemas, "FactoryWorldScriptResponseView")
 	scriptResponsePayloadProperties := schemaProperties(t, scriptResponsePayload, "FactoryWorldScriptResponseView")
-	for _, field := range []string{"script_request_id", "attempt", "outcome", "stdout", "stderr", "duration_millis", "exit_code", "failure_type"} {
+	for _, field := range []string{"scriptRequestId", "attempt", "outcome", "stdout", "stderr", "durationMillis", "exitCode", "failureType"} {
 		if _, ok := scriptResponsePayloadProperties[field].(map[string]any); !ok {
 			t.Fatalf("FactoryWorldScriptResponseView.properties.%s is missing", field)
 		}
@@ -728,9 +867,19 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertPropertyRef(t, runResponseProperties, "state", "#/components/schemas/FactoryState")
 	assertPropertyRef(t, runResponseProperties, "wallClock", "#/components/schemas/WallClock")
 	assertPropertyRef(t, runResponseProperties, "diagnostics", "#/components/schemas/Diagnostics")
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("paths object is missing")
+	}
+	assertEventStreamSchemaRef(
+		t,
+		pathOperation(t, paths, "/events", "get"),
+		"#/components/schemas/FactoryEvent",
+	)
 }
 
-func TestOpenAPIAuthoring_EventPayloadSchemasUseDedicatedFragments(t *testing.T) {
+func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi-main.yaml")
 	if err != nil {
 		t.Fatalf("read authored openapi contract: %v", err)
@@ -743,6 +892,11 @@ func TestOpenAPIAuthoring_EventPayloadSchemasUseDedicatedFragments(t *testing.T)
 
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
+		"FactoryEvent":                          "./components/schemas/events/FactoryEvent.yaml",
+		"FactoryEventType":                      "./components/schemas/events/FactoryEventType.yaml",
+		"FactoryEventContext":                   "./components/schemas/events/FactoryEventContext.yaml",
+		"DispatchConsumedWorkRef":               "./components/schemas/events/DispatchConsumedWorkRef.yaml",
+		"DispatchRequestEventMetadata":          "./components/schemas/events/DispatchRequestEventMetadata.yaml",
 		"RunRequestEventPayload":                "./components/schemas/events/payloads/RunRequestEventPayload.yaml",
 		"InitialStructureRequestEventPayload":   "./components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml",
 		"WorkRequestEventPayload":               "./components/schemas/events/payloads/WorkRequestEventPayload.yaml",
@@ -755,12 +909,68 @@ func TestOpenAPIAuthoring_EventPayloadSchemasUseDedicatedFragments(t *testing.T)
 		"DispatchResponseEventPayload":          "./components/schemas/events/payloads/DispatchResponseEventPayload.yaml",
 		"FactoryStateResponseEventPayload":      "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
 		"RunResponseEventPayload":               "./components/schemas/events/payloads/RunResponseEventPayload.yaml",
+		"InferenceOutcome":                      "./components/schemas/events/InferenceOutcome.yaml",
+		"ScriptExecutionOutcome":                "./components/schemas/events/ScriptExecutionOutcome.yaml",
+		"ScriptFailureType":                     "./components/schemas/events/ScriptFailureType.yaml",
+		"FactoryState":                          "./components/schemas/events/FactoryState.yaml",
+		"WorkOutcome":                           "./components/schemas/events/WorkOutcome.yaml",
+		"ProviderFailureMetadata":               "./components/schemas/events/ProviderFailureMetadata.yaml",
+		"ProviderSessionMetadata":               "./components/schemas/events/ProviderSessionMetadata.yaml",
+		"WorkMetrics":                           "./components/schemas/events/WorkMetrics.yaml",
+		"WorkDiagnostics":                       "./components/schemas/events/WorkDiagnostics.yaml",
+		"RenderedPromptDiagnostic":              "./components/schemas/events/RenderedPromptDiagnostic.yaml",
+		"ProviderDiagnostic":                    "./components/schemas/events/ProviderDiagnostic.yaml",
+		"Diagnostics":                           "./components/schemas/events/Diagnostics.yaml",
+		"SafeWorkDiagnostics":                   "./components/schemas/events/SafeWorkDiagnostics.yaml",
+		"WallClock":                             "./components/schemas/events/WallClock.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)
 	}
 	if _, ok := schemas["payloads"]; ok {
 		t.Fatal("components.schemas.payloads must not be reintroduced as a monolithic event payload source")
+	}
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("paths object is missing")
+	}
+	assertEventStreamSchemaRef(
+		t,
+		pathOperation(t, paths, "/events", "get"),
+		"#/components/schemas/FactoryEvent",
+	)
+}
+
+func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T) {
+	data, err := os.ReadFile("../../api/openapi-main.yaml")
+	if err != nil {
+		t.Fatalf("read authored openapi contract: %v", err)
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse authored openapi contract: %v", err)
+	}
+
+	schemas := componentSchemas(t, doc)
+	expectedRefs := map[string]string{
+		"FactoryWorldWorkstationRequestProjectionSlice": "./components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml",
+		"FactoryWorldRenderedPromptDiagnostic":          "./components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml",
+		"FactoryWorldProviderDiagnostic":                "./components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml",
+		"FactoryWorldWorkDiagnostics":                   "./components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml",
+		"FactoryWorldWorkItemRef":                       "./components/schemas/factory-world/FactoryWorldWorkItemRef.yaml",
+		"FactoryWorldTokenView":                         "./components/schemas/factory-world/FactoryWorldTokenView.yaml",
+		"FactoryWorldMutationView":                      "./components/schemas/factory-world/FactoryWorldMutationView.yaml",
+		"FactoryWorldScriptRequestView":                 "./components/schemas/factory-world/FactoryWorldScriptRequestView.yaml",
+		"FactoryWorldScriptResponseView":                "./components/schemas/factory-world/FactoryWorldScriptResponseView.yaml",
+		"FactoryWorldWorkstationRequestCountView":       "./components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml",
+		"FactoryWorldWorkstationRequestRequestView":     "./components/schemas/factory-world/FactoryWorldWorkstationRequestRequestView.yaml",
+		"FactoryWorldWorkstationRequestResponseView":    "./components/schemas/factory-world/FactoryWorldWorkstationRequestResponseView.yaml",
+		"FactoryWorldWorkstationRequestView":            "./components/schemas/factory-world/FactoryWorldWorkstationRequestView.yaml",
+	}
+	for schemaName, wantRef := range expectedRefs {
+		assertSchemaRef(t, schemas, schemaName, wantRef)
 	}
 }
 
@@ -1780,13 +1990,13 @@ func assertWorkstationRequestProjectionSliceSchema(t *testing.T, schemas map[str
 
 	projectionSlice := schemaObject(t, schemas, "FactoryWorldWorkstationRequestProjectionSlice")
 	sliceProperties := schemaProperties(t, projectionSlice, "FactoryWorldWorkstationRequestProjectionSlice")
-	workstationRequestsByDispatchID, ok := sliceProperties["workstation_requests_by_dispatch_id"].(map[string]any)
+	workstationRequestsByDispatchID, ok := sliceProperties["workstationRequestsByDispatchId"].(map[string]any)
 	if !ok {
-		t.Fatalf("FactoryWorldWorkstationRequestProjectionSlice.properties.workstation_requests_by_dispatch_id is missing")
+		t.Fatalf("FactoryWorldWorkstationRequestProjectionSlice.properties.workstationRequestsByDispatchId is missing")
 	}
 	additionalProperties, ok := workstationRequestsByDispatchID["additionalProperties"].(map[string]any)
 	if !ok {
-		t.Fatalf("FactoryWorldWorkstationRequestProjectionSlice.properties.workstation_requests_by_dispatch_id.additionalProperties is missing")
+		t.Fatalf("FactoryWorldWorkstationRequestProjectionSlice.properties.workstationRequestsByDispatchId.additionalProperties is missing")
 	}
 	if got, ok := additionalProperties["$ref"].(string); !ok || got != "#/components/schemas/FactoryWorldWorkstationRequestView" {
 		t.Fatalf("FactoryWorldWorkstationRequestProjectionSlice workstation request map ref = %v, want %s", additionalProperties["$ref"], "#/components/schemas/FactoryWorldWorkstationRequestView")
@@ -1797,14 +2007,14 @@ func assertWorkstationRequestViewSchema(t *testing.T, schemas map[string]any) {
 	t.Helper()
 
 	requestView := schemaObject(t, schemas, "FactoryWorldWorkstationRequestView")
-	assertRequiredFields(t, requestView, "dispatch_id", "transition_id", "counts", "request")
+	assertRequiredFields(t, requestView, "dispatchId", "transitionId", "counts", "request")
 	requestViewProperties := schemaProperties(t, requestView, "FactoryWorldWorkstationRequestView")
 	assertPropertyRef(t, requestViewProperties, "counts", "#/components/schemas/FactoryWorldWorkstationRequestCountView")
 	assertPropertyRef(t, requestViewProperties, "request", "#/components/schemas/FactoryWorldWorkstationRequestRequestView")
 	assertPropertyRef(t, requestViewProperties, "response", "#/components/schemas/FactoryWorldWorkstationRequestResponseView")
 
 	countView := schemaObject(t, schemas, "FactoryWorldWorkstationRequestCountView")
-	assertRequiredFields(t, countView, "dispatched_count", "responded_count", "errored_count")
+	assertRequiredFields(t, countView, "dispatchedCount", "respondedCount", "erroredCount")
 }
 
 func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any) {
@@ -1813,23 +2023,23 @@ func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any)
 	requestPayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestRequestView")
 	requestPayloadProperties := schemaProperties(t, requestPayload, "FactoryWorldWorkstationRequestRequestView")
 	for _, field := range []string{
-		"started_at",
-		"request_time",
+		"startedAt",
+		"requestTime",
 		"prompt",
-		"working_directory",
+		"workingDirectory",
 		"worktree",
 		"provider",
 		"model",
-		"current_chaining_trace_id",
+		"currentChainingTraceId",
 	} {
 		if _, ok := requestPayloadProperties[field].(map[string]any); !ok {
 			t.Fatalf("FactoryWorldWorkstationRequestRequestView.properties.%s is missing", field)
 		}
 	}
-	assertStringArrayProperty(t, requestPayloadProperties, "previous_chaining_trace_ids")
-	assertArrayItemRef(t, requestPayloadProperties, "input_work_items", "#/components/schemas/FactoryWorldWorkItemRef")
-	assertArrayItemRef(t, requestPayloadProperties, "consumed_tokens", "#/components/schemas/FactoryWorldTokenView")
-	assertPropertyRef(t, requestPayloadProperties, "request_metadata", "#/components/schemas/StringMap")
+	assertStringArrayProperty(t, requestPayloadProperties, "previousChainingTraceIds")
+	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
+	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
+	assertPropertyRef(t, requestPayloadProperties, "requestMetadata", "#/components/schemas/StringMap")
 }
 
 func assertWorkstationRequestWorkRefSchemas(t *testing.T, schemas map[string]any) {
@@ -1837,21 +2047,21 @@ func assertWorkstationRequestWorkRefSchemas(t *testing.T, schemas map[string]any
 
 	workItemRef := schemaObject(t, schemas, "FactoryWorldWorkItemRef")
 	workItemRefProperties := schemaProperties(t, workItemRef, "FactoryWorldWorkItemRef")
-	for _, field := range []string{"work_id", "work_type_id", "display_name", "trace_id", "current_chaining_trace_id"} {
+	for _, field := range []string{"workId", "workTypeId", "displayName", "traceId", "currentChainingTraceId"} {
 		if _, ok := workItemRefProperties[field].(map[string]any); !ok {
 			t.Fatalf("FactoryWorldWorkItemRef.properties.%s is missing", field)
 		}
 	}
-	assertStringArrayProperty(t, workItemRefProperties, "previous_chaining_trace_ids")
+	assertStringArrayProperty(t, workItemRefProperties, "previousChainingTraceIds")
 
 	tokenView := schemaObject(t, schemas, "FactoryWorldTokenView")
 	tokenViewProperties := schemaProperties(t, tokenView, "FactoryWorldTokenView")
-	for _, field := range []string{"token_id", "place_id", "work_id", "work_type_id", "trace_id", "current_chaining_trace_id"} {
+	for _, field := range []string{"tokenId", "placeId", "workId", "workTypeId", "traceId", "currentChainingTraceId"} {
 		if _, ok := tokenViewProperties[field].(map[string]any); !ok {
 			t.Fatalf("FactoryWorldTokenView.properties.%s is missing", field)
 		}
 	}
-	assertStringArrayProperty(t, tokenViewProperties, "previous_chaining_trace_ids")
+	assertStringArrayProperty(t, tokenViewProperties, "previousChainingTraceIds")
 }
 
 func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any) {
@@ -1859,20 +2069,20 @@ func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
-	assertPropertyRef(t, responsePayloadProperties, "provider_session", "#/components/schemas/ProviderSessionMetadata")
+	assertPropertyRef(t, responsePayloadProperties, "providerSession", "#/components/schemas/ProviderSessionMetadata")
 	assertPropertyRef(t, responsePayloadProperties, "diagnostics", "#/components/schemas/FactoryWorldWorkDiagnostics")
-	assertPropertyRef(t, responsePayloadProperties, "response_metadata", "#/components/schemas/StringMap")
-	assertArrayItemRef(t, responsePayloadProperties, "output_work_items", "#/components/schemas/FactoryWorldWorkItemRef")
-	assertArrayItemRef(t, responsePayloadProperties, "output_mutations", "#/components/schemas/FactoryWorldMutationView")
+	assertPropertyRef(t, responsePayloadProperties, "responseMetadata", "#/components/schemas/StringMap")
+	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
+	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
 	for _, field := range []string{
 		"outcome",
 		"feedback",
-		"failure_reason",
-		"failure_message",
-		"response_text",
-		"error_class",
-		"end_time",
-		"duration_millis",
+		"failureReason",
+		"failureMessage",
+		"responseText",
+		"errorClass",
+		"endTime",
+		"durationMillis",
 	} {
 		if _, ok := responsePayloadProperties[field].(map[string]any); !ok {
 			t.Fatalf("FactoryWorldWorkstationRequestResponseView.properties.%s is missing", field)
@@ -1947,6 +2157,34 @@ func pathOperation(t *testing.T, paths map[string]any, path string, method strin
 		t.Fatalf("paths.%s.%s is missing", path, method)
 	}
 	return operation
+}
+
+func assertEventStreamSchemaRef(t *testing.T, operation map[string]any, wantRef string) {
+	t.Helper()
+
+	responses, ok := operation["responses"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses is missing")
+	}
+	response, ok := responses["200"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.responses.200 is missing")
+	}
+	content, ok := response["content"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.responses.200.content is missing")
+	}
+	eventStream, ok := content["text/event-stream"].(map[string]any)
+	if !ok {
+		t.Fatal("operation.responses.200.content.text/event-stream is missing")
+	}
+	xEventSchema, ok := eventStream["x-event-schema"].(string)
+	if !ok {
+		t.Fatal("operation.responses.200.content.text/event-stream.x-event-schema is missing")
+	}
+	if xEventSchema != wantRef {
+		t.Fatalf("operation.responses.200.content.text/event-stream.x-event-schema = %q, want %s", xEventSchema, wantRef)
+	}
 }
 
 func assertResponseSchemaRef(t *testing.T, operation map[string]any, status string, wantRef string) {

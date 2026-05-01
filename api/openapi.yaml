@@ -130,45 +130,7 @@ paths:
               schema:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
-              x-event-schema:
-                type: object
-                additionalProperties: false
-                description: Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.
-                required:
-                  - schemaVersion
-                  - id
-                  - type
-                  - context
-                  - payload
-                properties:
-                  schemaVersion:
-                    type: string
-                    description: Version of the factory event envelope schema.
-                    enum:
-                      - agent-factory.event.v1
-                    x-enum-descriptions:
-                      - Initial unified Agent Factory event schema.
-                  id:
-                    type: string
-                    description: Stable event identifier. Record/replay artifacts must preserve this value.
-                  type:
-                    $ref: '#/components/schemas/FactoryEventType'
-                  context:
-                    $ref: '#/components/schemas/FactoryEventContext'
-                  payload:
-                    oneOf:
-                      - $ref: '#/components/schemas/RunRequestEventPayload'
-                      - $ref: '#/components/schemas/InitialStructureRequestEventPayload'
-                      - $ref: '#/components/schemas/WorkRequestEventPayload'
-                      - $ref: '#/components/schemas/RelationshipChangeRequestEventPayload'
-                      - $ref: '#/components/schemas/DispatchRequestEventPayload'
-                      - $ref: '#/components/schemas/InferenceRequestEventPayload'
-                      - $ref: '#/components/schemas/InferenceResponseEventPayload'
-                      - $ref: '#/components/schemas/ScriptRequestEventPayload'
-                      - $ref: '#/components/schemas/ScriptResponseEventPayload'
-                      - $ref: '#/components/schemas/DispatchResponseEventPayload'
-                      - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
-                      - $ref: '#/components/schemas/RunResponseEventPayload'
+              x-event-schema: '#/components/schemas/FactoryEvent'
         '500':
           $ref: '#/components/responses/InternalError'
   /status:
@@ -331,45 +293,61 @@ components:
       type: object
       additionalProperties: false
       required:
-        - work_type_name
+        - workTypeName
       properties:
         name:
           type: string
-        work_type_name:
+        workTypeName:
           type: string
           description: Configured work type name from factory.json to submit to.
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
           description: Explicit chaining-trace identifier for the submitted work.
-        trace_id:
+        traceId:
           type: string
-          description: Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id.
+          description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
         payload:
           description: Opaque work payload forwarded as raw JSON.
         tags:
           $ref: '#/components/schemas/StringMap'
         relations:
           type: array
+          description: Optional token-level runtime relations preserved on the submitted work item.
           items:
-            $ref: '#/components/schemas/Relation'
+            $ref: '#/components/schemas/SubmitRelation'
+    SubmitRelation:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - targetWorkId
+      properties:
+        type:
+          $ref: '#/components/schemas/RelationType'
+        targetWorkId:
+          type: string
+          description: Target runtime work identifier for the relation.
+        requiredState:
+          type: string
+          description: Required target state before the dependency can proceed.
     SubmitWorkResponse:
       type: object
       additionalProperties: false
       required:
-        - trace_id
+        - traceId
       properties:
-        trace_id:
+        traceId:
           type: string
     UpsertWorkRequestResponse:
       type: object
       additionalProperties: false
       required:
-        - request_id
-        - trace_id
+        - requestId
+        - traceId
       properties:
-        request_id:
+        requestId:
           type: string
-        trace_id:
+        traceId:
           type: string
     ListWorkResponse:
       type: object
@@ -398,31 +376,31 @@ components:
       additionalProperties: false
       required:
         - id
-        - place_id
-        - work_id
-        - work_type
-        - trace_id
-        - created_at
-        - entered_at
+        - placeId
+        - workId
+        - workType
+        - traceId
+        - createdAt
+        - enteredAt
       properties:
         id:
           type: string
-        place_id:
+        placeId:
           type: string
         name:
           type: string
-        work_id:
+        workId:
           type: string
-        work_type:
+        workType:
           type: string
-        trace_id:
+        traceId:
           type: string
         tags:
           $ref: '#/components/schemas/StringMap'
-        created_at:
+        createdAt:
           type: string
           format: date-time
-        entered_at:
+        enteredAt:
           type: string
           format: date-time
         history:
@@ -431,13 +409,13 @@ components:
       type: object
       additionalProperties: false
       properties:
-        total_visits:
+        totalVisits:
           $ref: '#/components/schemas/IntegerMap'
-        consecutive_failures:
+        consecutiveFailures:
           $ref: '#/components/schemas/IntegerMap'
-        place_visits:
+        placeVisits:
           $ref: '#/components/schemas/IntegerMap'
-        last_error:
+        lastError:
           type: string
     ResourceUsage:
       type: object
@@ -487,17 +465,17 @@ components:
       additionalProperties: false
       required:
         - categories
-        - factory_state
-        - runtime_status
-        - total_tokens
+        - factoryState
+        - runtimeStatus
+        - totalTokens
       properties:
         categories:
           $ref: '#/components/schemas/StatusCategories'
-        factory_state:
+        factoryState:
           type: string
-        runtime_status:
+        runtimeStatus:
           type: string
-        total_tokens:
+        totalTokens:
           type: integer
         resources:
           type: array
@@ -610,7 +588,7 @@ components:
       additionalProperties: false
       description: Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints.
       properties:
-        workstation_requests_by_dispatch_id:
+        workstationRequestsByDispatchId:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/FactoryWorldWorkstationRequestView'
@@ -618,9 +596,9 @@ components:
       type: object
       additionalProperties: false
       properties:
-        system_prompt_hash:
+        systemPromptHash:
           type: string
-        user_message_hash:
+        userMessageHash:
           type: string
         variables:
           $ref: '#/components/schemas/StringMap'
@@ -632,15 +610,15 @@ components:
           type: string
         model:
           type: string
-        request_metadata:
+        requestMetadata:
           $ref: '#/components/schemas/StringMap'
-        response_metadata:
+        responseMetadata:
           $ref: '#/components/schemas/StringMap'
     FactoryWorldWorkDiagnostics:
       type: object
       additionalProperties: false
       properties:
-        rendered_prompt:
+        renderedPrompt:
           $ref: '#/components/schemas/FactoryWorldRenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/FactoryWorldProviderDiagnostic'
@@ -648,46 +626,46 @@ components:
       type: object
       additionalProperties: false
       required:
-        - work_id
+        - workId
       properties:
-        work_id:
+        workId:
           type: string
-        work_type_id:
+        workTypeId:
           type: string
-        display_name:
+        displayName:
           type: string
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
-        previous_chaining_trace_ids:
+        previousChainingTraceIds:
           type: array
           items:
             type: string
-        trace_id:
+        traceId:
           type: string
     FactoryWorldTokenView:
       type: object
       additionalProperties: false
       required:
-        - token_id
-        - place_id
+        - tokenId
+        - placeId
       properties:
-        token_id:
+        tokenId:
           type: string
-        place_id:
+        placeId:
           type: string
         name:
           type: string
-        work_id:
+        workId:
           type: string
-        work_type_id:
+        workTypeId:
           type: string
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
-        previous_chaining_trace_ids:
+        previousChainingTraceIds:
           type: array
           items:
             type: string
-        trace_id:
+        traceId:
           type: string
         tags:
           $ref: '#/components/schemas/StringMap'
@@ -696,15 +674,15 @@ components:
       additionalProperties: false
       required:
         - type
-        - token_id
+        - tokenId
       properties:
         type:
           type: string
-        token_id:
+        tokenId:
           type: string
-        from_place:
+        fromPlace:
           type: string
-        to_place:
+        toPlace:
           type: string
         reason:
           type: string
@@ -714,7 +692,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        script_request_id:
+        scriptRequestId:
           type: string
         attempt:
           type: integer
@@ -729,7 +707,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        script_request_id:
+        scriptRequestId:
           type: string
         attempt:
           type: integer
@@ -740,64 +718,64 @@ components:
           type: string
         stderr:
           type: string
-        duration_millis:
+        durationMillis:
           type: integer
           format: int64
           minimum: 0
-        exit_code:
+        exitCode:
           type: integer
-        failure_type:
+        failureType:
           type: string
     FactoryWorldWorkstationRequestCountView:
       type: object
       additionalProperties: false
       required:
-        - dispatched_count
-        - responded_count
-        - errored_count
+        - dispatchedCount
+        - respondedCount
+        - erroredCount
       properties:
-        dispatched_count:
+        dispatchedCount:
           type: integer
           minimum: 0
-        responded_count:
+        respondedCount:
           type: integer
           minimum: 0
-        errored_count:
+        erroredCount:
           type: integer
           minimum: 0
     FactoryWorldWorkstationRequestRequestView:
       type: object
       additionalProperties: false
       properties:
-        started_at:
+        startedAt:
           type: string
-        request_time:
+        requestTime:
           type: string
-        input_work_items:
+        inputWorkItems:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldWorkItemRef'
-        input_work_type_ids:
+        inputWorkTypeIds:
           type: array
           items:
             type: string
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
-        previous_chaining_trace_ids:
+        previousChainingTraceIds:
           type: array
           items:
             type: string
-        trace_ids:
+        traceIds:
           type: array
           items:
             type: string
-        consumed_tokens:
+        consumedTokens:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldTokenView'
         prompt:
           type: string
-        working_directory:
+        workingDirectory:
           type: string
         worktree:
           type: string
@@ -805,9 +783,9 @@ components:
           type: string
         model:
           type: string
-        request_metadata:
+        requestMetadata:
           $ref: '#/components/schemas/StringMap'
-        script_request:
+        scriptRequest:
           $ref: '#/components/schemas/FactoryWorldScriptRequestView'
     FactoryWorldWorkstationRequestResponseView:
       type: object
@@ -817,33 +795,33 @@ components:
           type: string
         feedback:
           type: string
-        failure_reason:
+        failureReason:
           type: string
-        failure_message:
+        failureMessage:
           type: string
-        response_text:
+        responseText:
           type: string
-        error_class:
+        errorClass:
           type: string
-        provider_session:
+        providerSession:
           $ref: '#/components/schemas/ProviderSessionMetadata'
         diagnostics:
           $ref: '#/components/schemas/FactoryWorldWorkDiagnostics'
-        response_metadata:
+        responseMetadata:
           $ref: '#/components/schemas/StringMap'
-        script_response:
+        scriptResponse:
           $ref: '#/components/schemas/FactoryWorldScriptResponseView'
-        end_time:
+        endTime:
           type: string
-        duration_millis:
+        durationMillis:
           type: integer
           format: int64
           minimum: 0
-        output_work_items:
+        outputWorkItems:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldWorkItemRef'
-        output_mutations:
+        outputMutations:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldMutationView'
@@ -851,16 +829,16 @@ components:
       type: object
       additionalProperties: false
       required:
-        - dispatch_id
-        - transition_id
+        - dispatchId
+        - transitionId
         - counts
         - request
       properties:
-        dispatch_id:
+        dispatchId:
           type: string
-        transition_id:
+        transitionId:
           type: string
-        workstation_name:
+        workstationName:
           type: string
         counts:
           $ref: '#/components/schemas/FactoryWorldWorkstationRequestCountView'
@@ -2142,13 +2120,13 @@ components:
       type: object
       additionalProperties: false
       required:
-        - request_id
+        - requestId
         - type
       properties:
-        request_id:
+        requestId:
           type: string
           description: Stable client-provided request identifier used for idempotent batch submission.
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
           description: Optional default chaining-trace identifier applied to submitted work items that omit it.
         type:
@@ -2182,29 +2160,29 @@ components:
         name:
           type: string
           description: A human readable name for the work, not unique
-        work_id:
+        workId:
           type: string
           description: Unique identifier for the work
-        request_id:
+        requestId:
           type: string
           description: Identifier for the original request that created this work, if applicable
-        work_type_name:
+        workTypeName:
           type: string
           description: Configured work type name from factory.json for this submitted work item.
         state:
           type: string
           description: Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
-        current_chaining_trace_id:
+        currentChainingTraceId:
           type: string
           description: Explicit chaining-trace identifier for this submitted work item.
-        previous_chaining_trace_ids:
+        previousChainingTraceIds:
           type: array
           description: Explicit predecessor chaining traces that directly caused this work item.
           items:
             type: string
-        trace_id:
+        traceId:
           type: string
-          description: Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id.
+          description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
         payload:
           description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else.
         tags:
@@ -2215,18 +2193,18 @@ components:
       additionalProperties: false
       required:
         - type
-        - source_work_name
-        - target_work_name
+        - sourceWorkName
+        - targetWorkName
       properties:
         type:
           $ref: '#/components/schemas/RelationType'
-        target_work_id:
+        targetWorkId:
           type: string
-        target_work_name:
+        targetWorkName:
           type: string
-        source_work_name:
+        sourceWorkName:
           type: string
-        required_state:
+        requiredState:
           type: string
     RelationType:
       type: string

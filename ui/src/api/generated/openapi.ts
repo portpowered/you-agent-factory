@@ -155,22 +155,30 @@ export interface components {
         SubmitWorkRequest: {
             name?: string;
             /** @description Configured work type name from factory.json to submit to. */
-            work_type_name: string;
+            workTypeName: string;
             /** @description Explicit chaining-trace identifier for the submitted work. */
-            current_chaining_trace_id?: string;
-            /** @description Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id. */
-            trace_id?: string;
+            currentChainingTraceId?: string;
+            /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
+            traceId?: string;
             /** @description Opaque work payload forwarded as raw JSON. */
             payload?: unknown;
             tags?: components["schemas"]["StringMap"];
-            relations?: components["schemas"]["Relation"][];
+            /** @description Optional token-level runtime relations preserved on the submitted work item. */
+            relations?: components["schemas"]["SubmitRelation"][];
+        };
+        SubmitRelation: {
+            type: components["schemas"]["RelationType"];
+            /** @description Target runtime work identifier for the relation. */
+            targetWorkId: string;
+            /** @description Required target state before the dependency can proceed. */
+            requiredState?: string;
         };
         SubmitWorkResponse: {
-            trace_id: string;
+            traceId: string;
         };
         UpsertWorkRequestResponse: {
-            request_id: string;
-            trace_id: string;
+            requestId: string;
+            traceId: string;
         };
         ListWorkResponse: {
             results: components["schemas"]["TokenResponse"][];
@@ -182,23 +190,23 @@ export interface components {
         };
         TokenResponse: {
             id: string;
-            place_id: string;
+            placeId: string;
             name?: string;
-            work_id: string;
-            work_type: string;
-            trace_id: string;
+            workId: string;
+            workType: string;
+            traceId: string;
             tags?: components["schemas"]["StringMap"];
             /** Format: date-time */
-            created_at: string;
+            createdAt: string;
             /** Format: date-time */
-            entered_at: string;
+            enteredAt: string;
             history?: components["schemas"]["TokenHistory"];
         };
         TokenHistory: {
-            total_visits?: components["schemas"]["IntegerMap"];
-            consecutive_failures?: components["schemas"]["IntegerMap"];
-            place_visits?: components["schemas"]["IntegerMap"];
-            last_error?: string;
+            totalVisits?: components["schemas"]["IntegerMap"];
+            consecutiveFailures?: components["schemas"]["IntegerMap"];
+            placeVisits?: components["schemas"]["IntegerMap"];
+            lastError?: string;
         };
         ResourceUsage: {
             name: string;
@@ -217,9 +225,9 @@ export interface components {
         };
         StatusResponse: {
             categories: components["schemas"]["StatusCategories"];
-            factory_state: string;
-            runtime_status: string;
-            total_tokens: number;
+            factoryState: string;
+            runtimeStatus: string;
+            totalTokens: number;
             resources?: components["schemas"]["ResourceUsage"][];
         };
         /**
@@ -305,112 +313,112 @@ export interface components {
         };
         /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
         FactoryWorldWorkstationRequestProjectionSlice: {
-            workstation_requests_by_dispatch_id?: {
+            workstationRequestsByDispatchId?: {
                 [key: string]: components["schemas"]["FactoryWorldWorkstationRequestView"];
             };
         };
         FactoryWorldRenderedPromptDiagnostic: {
-            system_prompt_hash?: string;
-            user_message_hash?: string;
+            systemPromptHash?: string;
+            userMessageHash?: string;
             variables?: components["schemas"]["StringMap"];
         };
         FactoryWorldProviderDiagnostic: {
             provider?: string;
             model?: string;
-            request_metadata?: components["schemas"]["StringMap"];
-            response_metadata?: components["schemas"]["StringMap"];
+            requestMetadata?: components["schemas"]["StringMap"];
+            responseMetadata?: components["schemas"]["StringMap"];
         };
         FactoryWorldWorkDiagnostics: {
-            rendered_prompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
+            renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
             provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
         };
         FactoryWorldWorkItemRef: {
-            work_id: string;
-            work_type_id?: string;
-            display_name?: string;
-            current_chaining_trace_id?: string;
-            previous_chaining_trace_ids?: string[];
-            trace_id?: string;
+            workId: string;
+            workTypeId?: string;
+            displayName?: string;
+            currentChainingTraceId?: string;
+            previousChainingTraceIds?: string[];
+            traceId?: string;
         };
         FactoryWorldTokenView: {
-            token_id: string;
-            place_id: string;
+            tokenId: string;
+            placeId: string;
             name?: string;
-            work_id?: string;
-            work_type_id?: string;
-            current_chaining_trace_id?: string;
-            previous_chaining_trace_ids?: string[];
-            trace_id?: string;
+            workId?: string;
+            workTypeId?: string;
+            currentChainingTraceId?: string;
+            previousChainingTraceIds?: string[];
+            traceId?: string;
             tags?: components["schemas"]["StringMap"];
         };
         FactoryWorldMutationView: {
             type: string;
-            token_id: string;
-            from_place?: string;
-            to_place?: string;
+            tokenId: string;
+            fromPlace?: string;
+            toPlace?: string;
             reason?: string;
             token?: components["schemas"]["FactoryWorldTokenView"];
         };
         FactoryWorldScriptRequestView: {
-            script_request_id?: string;
+            scriptRequestId?: string;
             attempt?: number;
             command?: string;
             args?: string[];
         };
         FactoryWorldScriptResponseView: {
-            script_request_id?: string;
+            scriptRequestId?: string;
             attempt?: number;
             outcome?: string;
             stdout?: string;
             stderr?: string;
             /** Format: int64 */
-            duration_millis?: number;
-            exit_code?: number;
-            failure_type?: string;
+            durationMillis?: number;
+            exitCode?: number;
+            failureType?: string;
         };
         FactoryWorldWorkstationRequestCountView: {
-            dispatched_count: number;
-            responded_count: number;
-            errored_count: number;
+            dispatchedCount: number;
+            respondedCount: number;
+            erroredCount: number;
         };
         FactoryWorldWorkstationRequestRequestView: {
-            started_at?: string;
-            request_time?: string;
-            input_work_items?: components["schemas"]["FactoryWorldWorkItemRef"][];
-            input_work_type_ids?: string[];
-            current_chaining_trace_id?: string;
-            previous_chaining_trace_ids?: string[];
-            trace_ids?: string[];
-            consumed_tokens?: components["schemas"]["FactoryWorldTokenView"][];
+            startedAt?: string;
+            requestTime?: string;
+            inputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
+            inputWorkTypeIds?: string[];
+            currentChainingTraceId?: string;
+            previousChainingTraceIds?: string[];
+            traceIds?: string[];
+            consumedTokens?: components["schemas"]["FactoryWorldTokenView"][];
             prompt?: string;
-            working_directory?: string;
+            workingDirectory?: string;
             worktree?: string;
             provider?: string;
             model?: string;
-            request_metadata?: components["schemas"]["StringMap"];
-            script_request?: components["schemas"]["FactoryWorldScriptRequestView"];
+            requestMetadata?: components["schemas"]["StringMap"];
+            scriptRequest?: components["schemas"]["FactoryWorldScriptRequestView"];
         };
         FactoryWorldWorkstationRequestResponseView: {
             outcome?: string;
             feedback?: string;
-            failure_reason?: string;
-            failure_message?: string;
-            response_text?: string;
-            error_class?: string;
-            provider_session?: components["schemas"]["ProviderSessionMetadata"];
+            failureReason?: string;
+            failureMessage?: string;
+            responseText?: string;
+            errorClass?: string;
+            providerSession?: components["schemas"]["ProviderSessionMetadata"];
             diagnostics?: components["schemas"]["FactoryWorldWorkDiagnostics"];
-            response_metadata?: components["schemas"]["StringMap"];
-            script_response?: components["schemas"]["FactoryWorldScriptResponseView"];
-            end_time?: string;
+            responseMetadata?: components["schemas"]["StringMap"];
+            scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
+            endTime?: string;
             /** Format: int64 */
-            duration_millis?: number;
-            output_work_items?: components["schemas"]["FactoryWorldWorkItemRef"][];
-            output_mutations?: components["schemas"]["FactoryWorldMutationView"][];
+            durationMillis?: number;
+            outputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
+            outputMutations?: components["schemas"]["FactoryWorldMutationView"][];
         };
         FactoryWorldWorkstationRequestView: {
-            dispatch_id: string;
-            transition_id: string;
-            workstation_name?: string;
+            dispatchId: string;
+            transitionId: string;
+            workstationName?: string;
             counts: components["schemas"]["FactoryWorldWorkstationRequestCountView"];
             request: components["schemas"]["FactoryWorldWorkstationRequestRequestView"];
             response?: components["schemas"]["FactoryWorldWorkstationRequestResponseView"];
@@ -1109,9 +1117,9 @@ export interface components {
         };
         WorkRequest: {
             /** @description Stable client-provided request identifier used for idempotent batch submission. */
-            request_id: string;
+            requestId: string;
             /** @description Optional default chaining-trace identifier applied to submitted work items that omit it. */
-            current_chaining_trace_id?: string;
+            currentChainingTraceId?: string;
             type: components["schemas"]["WorkRequestType"];
             /** @description A batch of work items to be submitted together. */
             works?: components["schemas"]["Work"][];
@@ -1128,19 +1136,19 @@ export interface components {
             /** @description A human readable name for the work, not unique */
             name: string;
             /** @description Unique identifier for the work */
-            work_id?: string;
+            workId?: string;
             /** @description Identifier for the original request that created this work, if applicable */
-            request_id?: string;
+            requestId?: string;
             /** @description Configured work type name from factory.json for this submitted work item. */
-            work_type_name?: string;
+            workTypeName?: string;
             /** @description Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type. */
             state?: string;
             /** @description Explicit chaining-trace identifier for this submitted work item. */
-            current_chaining_trace_id?: string;
+            currentChainingTraceId?: string;
             /** @description Explicit predecessor chaining traces that directly caused this work item. */
-            previous_chaining_trace_ids?: string[];
-            /** @description Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id. */
-            trace_id?: string;
+            previousChainingTraceIds?: string[];
+            /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
+            traceId?: string;
             /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
             payload?: unknown;
             /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
@@ -1148,10 +1156,10 @@ export interface components {
         };
         Relation: {
             type: components["schemas"]["RelationType"];
-            target_work_id?: string;
-            target_work_name: string;
-            source_work_name: string;
-            required_state?: string;
+            targetWorkId?: string;
+            targetWorkName: string;
+            sourceWorkName: string;
+            requiredState?: string;
         };
         /**
          * @description Relationship category between two pieces of work.

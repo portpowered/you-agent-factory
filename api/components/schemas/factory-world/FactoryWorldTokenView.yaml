@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required:
+  - tokenId
+  - placeId
+properties:
+  tokenId:
+    type: string
+  placeId:
+    type: string
+  name:
+    type: string
+  workId:
+    type: string
+  workTypeId:
+    type: string
+  currentChainingTraceId:
+    type: string
+  previousChainingTraceIds:
+    type: array
+    items:
+      type: string
+  traceId:
+    type: string
+  tags:
+    $ref: '../shared/StringMap.yaml'

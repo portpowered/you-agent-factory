@@ -14,26 +14,26 @@ prerequisites, and `PARENT_CHILD` relations for parent-aware fan-in.
 
 ```json
 {
-  "request_id": "release-story-set",
+  "requestId": "release-story-set",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
       "name": "story-set",
-      "work_type_name": "story-set",
+      "workTypeName": "story-set",
       "state": "waiting",
       "payload": { "title": "April release story set" }
     },
     {
       "name": "story-auth",
-      "work_type_name": "story",
+      "workTypeName": "story",
       "payload": { "title": "Harden auth session handling" }
     }
   ],
   "relations": [
     {
       "type": "PARENT_CHILD",
-      "source_work_name": "story-auth",
-      "target_work_name": "story-set"
+      "sourceWorkName": "story-auth",
+      "targetWorkName": "story-set"
     }
   ]
 }
@@ -43,15 +43,15 @@ prerequisites, and `PARENT_CHILD` relations for parent-aware fan-in.
 
 | Path | Use |
 |------|-----|
-| `factory/inputs/BATCH/default/<request_id>.json` | Mixed-work-type batches and canonical parent-child file input. |
-| `factory/inputs/<work_type>/default/<request_id>.json` | Single-work-type watched batches. |
+| `factory/inputs/BATCH/default/<requestId>.json` | Mixed-work-type batches and canonical parent-child file input. |
+| `factory/inputs/<work_type>/default/<requestId>.json` | Single-work-type watched batches. |
 | Any readable JSON path passed to `agent-factory run --work <path>` | Startup batch submission before runtime start. |
 
 ## Request Fields
 
 | Field | Description |
 |-------|-------------|
-| `request_id` | Stable idempotency key for the submission. |
+| `requestId` | Stable idempotency key for the submission. |
 | `type` | Must be `FACTORY_REQUEST_BATCH`. |
 | `works` | One or more work items. |
 | `relations` | Optional named relations between items in the same request. |
@@ -63,7 +63,7 @@ prerequisites, and `PARENT_CHILD` relations for parent-aware fan-in.
 | `DEPENDS_ON` | The source work waits for the target work to reach a required state. |
 | `PARENT_CHILD` | The source work becomes a child of the target work. |
 
-Use `work_type_name` in public batch payloads. Do not use the retired
+Use `workTypeName` in public batch payloads. Do not use the retired
 `work_type_id` alias.
 
 ## Related
