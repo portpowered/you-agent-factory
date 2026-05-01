@@ -7,7 +7,6 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/workers"
 )
 
 // fanoutParserExecutor dynamically spawns N page tokens with ParentID set
@@ -74,14 +73,6 @@ func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch interfaces.W
 		Outcome:      outcome,
 	}, nil
 }
-
-type panickingExecutor struct{}
-
-func (e *panickingExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	panic("intentional executor panic for testing")
-}
-
-var _ workers.WorkerExecutor = (*panickingExecutor)(nil)
 
 // tokenPlaces returns a map of place ID → token count for debugging.
 func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {

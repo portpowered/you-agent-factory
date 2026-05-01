@@ -1,11 +1,16 @@
 package guards_batch
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
+	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func writeAgentConfig(t *testing.T, dir, workerName, content string) {
@@ -52,3 +57,83 @@ func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.Provider
 	}
 	return entry
 }
+
+type fanoutParserExecutor struct {
+	mu         sync.Mutex
+	calls      int
+	childCount int
+}
+
+func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.mu.Lock()
+	e.calls++
+	e.mu.Unlock()
+
+	parentWorkID := ""
+	if len(dispatch.InputTokens) > 0 {
+		parentWorkID = support.FirstInputToken(dispatch.InputTokens).Color.WorkID
+	}
+
+	spawned := make([]interfaces.TokenColor, e.childCount)
+	for i := range spawned {
+		spawned[i] = interfaces.TokenColor{
+			WorkTypeID: "page",
+			WorkID:     fmt.Sprintf("page-%d", i+1),
+			ParentID:   parentWorkID,
+		}
+	}
+
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		SpawnedWork:  spawned,
+	}, nil
+}
+
+type multiChapterParserExecutor struct {
+	mu          sync.Mutex
+	calls       int
+	childCounts []int
+}
+
+func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.mu.Lock()
+	call := e.calls
+	e.calls++
+	e.mu.Unlock()
+
+	parentWorkID := ""
+	if len(dispatch.InputTokens) > 0 {
+		parentWorkID = support.FirstInputToken(dispatch.InputTokens).Color.WorkID
+	}
+
+	childCount := 0
+	if call < len(e.childCounts) {
+		childCount = e.childCounts[call]
+	}
+
+	spawned := make([]interfaces.TokenColor, childCount)
+	for i := range spawned {
+		spawned[i] = interfaces.TokenColor{
+			WorkTypeID: "page",
+			WorkID:     fmt.Sprintf("%s-page-%d", parentWorkID, i+1),
+			ParentID:   parentWorkID,
+		}
+	}
+
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		SpawnedWork:  spawned,
+	}, nil
+}
+
+type panickingExecutor struct{}
+
+func (e *panickingExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	panic("intentional executor panic for testing")
+}
+
+var _ workers.WorkerExecutor = (*panickingExecutor)(nil)

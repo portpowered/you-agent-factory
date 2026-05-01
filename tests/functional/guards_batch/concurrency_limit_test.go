@@ -1,4 +1,4 @@
-package functional_test
+package guards_batch
 
 import (
 	"errors"
@@ -7,20 +7,11 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-// TestConcurrencyLimit_BlocksExcessDispatches verifies that with resource
-// capacity=2, submitting 3 work items results in throttled processing. The
-// resource mechanism correctly constrains the total in-flight work: resource
-// tokens are consumed on dispatch and freed on completion.
-//
-// Concretely, this test verifies:
-//  1. All 3 items eventually complete (resources throttle but don't deadlock)
-//  2. The marking contains exactly 2 resource tokens in executor-slot:available
-//     after all work completes (proving resource tokens are properly managed)
-//  3. The processor is called exactly 3 times (once per item)
 func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "concurrency_limit_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "concurrency_limit_dir"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "item-1"}`))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "item-2"}`))
@@ -36,21 +27,17 @@ func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	// RunUntilComplete injects queued tokens and processes them to completion.
 	h.RunUntilComplete(t, 10*time.Second)
 
-	// All 3 items complete -- resource throttling didn't cause deadlock.
 	h.Assert().
 		PlaceTokenCount("task:complete", 3).
 		HasNoTokenInPlace("task:init").
 		HasNoTokenInPlace("task:failed")
 
-	// Processor called exactly 3 times (one per work item).
 	if provider.CallCount() != 3 {
 		t.Errorf("expected provider called 3 times, got %d", provider.CallCount())
 	}
 
-	// Both resource tokens returned to available (capacity=2 -> 2 tokens).
 	snap := h.Marking()
 	resourceTokens := snap.TokensInPlace("executor-slot:available")
 	if len(resourceTokens) != 2 {
@@ -58,12 +45,8 @@ func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
 	}
 }
 
-// TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing verifies that
-// the resource mechanism actually constrains dispatch by checking token
-// conservation. With 3 work tokens and 2 resource tokens, the total should
-// be exactly 5 after all work completes.
 func TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "concurrency_limit_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "concurrency_limit_dir"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "A"}`))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "B"}`))
@@ -79,11 +62,8 @@ func TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing(t *testing.T) {
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	// Run to completion.
 	h.RunUntilComplete(t, 100*time.Second)
 
-	// Final state: all work complete, all resources available.
-	// Token conservation: 3 work + 2 resource = 5 total tokens.
 	snap := h.Marking()
 	totalTokens := len(snap.Tokens)
 	if totalTokens != 5 {
@@ -95,11 +75,8 @@ func TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing(t *testing.T) {
 		PlaceTokenCount("executor-slot:available", 2)
 }
 
-// TestConcurrencyLimit_ResourceReleasedOnFailure validates that if we have
-// a failing worker, the resource is released.
 func TestConcurrencyLimit_ResourceReleasedOnFailure(t *testing.T) {
-	// Use the existing resource_contention directory fixture which has capacity=1.
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "resource_contention"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "X"}`))
 
 	provider := testutil.NewMockProviderWithErrors(
@@ -121,7 +98,6 @@ func TestConcurrencyLimit_ResourceReleasedOnFailure(t *testing.T) {
 		t.Errorf("expected provider called 1 time, got %d", provider.CallCount())
 	}
 
-	// Only 1 resource token should be available (capacity=1).
 	snap := h.Marking()
 	resourceTokens := snap.TokensInPlace("slot:available")
 	if len(resourceTokens) != 1 {
@@ -129,11 +105,8 @@ func TestConcurrencyLimit_ResourceReleasedOnFailure(t *testing.T) {
 	}
 }
 
-// This remains on the inline custom-executor seam to preserve legacy panic
-// recovery coverage for tick-time dispatch. The async companion below covers
-// the same panic-derived failed-token behavior through the worker pool.
 func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Inline(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "resource_contention"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "panic-inline"}`))
 
 	h := testutil.NewServiceTestHarness(t, dir)
@@ -160,12 +133,8 @@ func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Inline(t *testing.T) {
 	}
 }
 
-// This remains on the async custom-executor seam because it verifies panic
-// recovery around WorkerExecutor.Execute itself. Provider or command-runner
-// edge mocks can return errors, but they cannot exercise executor panic
-// recovery while preserving the panic-derived failed-token assertion.
 func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Async(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "resource_contention"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "panic-async"}`))
 
 	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
@@ -184,13 +153,8 @@ func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Async(t *testing.T) {
 	}
 }
 
-// TestConcurrencyLimit_ReducedCapacityStillCompletes verifies that even with
-// capacity=1 (modified at config level via a separate fixture), all items
-// still complete. This confirms the resource mechanism serializes without
-// blocking indefinitely.
 func TestConcurrencyLimit_ReducedCapacityStillCompletes(t *testing.T) {
-	// Use the existing resource_contention directory fixture which has capacity=1.
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "resource_contention"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "X"}`))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Y"}`))
@@ -216,7 +180,6 @@ func TestConcurrencyLimit_ReducedCapacityStillCompletes(t *testing.T) {
 		t.Errorf("expected provider called 3 times, got %d", provider.CallCount())
 	}
 
-	// Only 1 resource token should be available (capacity=1).
 	snap := h.Marking()
 	resourceTokens := snap.TokensInPlace("slot:available")
 	if len(resourceTokens) != 1 {
