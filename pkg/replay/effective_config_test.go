@@ -316,14 +316,14 @@ func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFact
 		"workstations": []map[string]any{{
 			"id":        "execute-story-id",
 			"name":      "execute-story",
-			"behavior":  string(interfaces.WorkstationKindStandard),
+			"behavior":  "STANDARD",
 			"worker":    "executor",
 			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
 			"onFailure": map[string]string{"workType": "story", "state": "failed"},
 			"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 			"guards": []map[string]any{{
-				"type":        string(interfaces.GuardTypeVisitCount),
+				"type":        "VISIT_COUNT",
 				"workstation": "execute-story",
 				"maxVisits":   3,
 			}},
@@ -439,7 +439,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t 
 		"workstations": []map[string]any{{
 			"id":      "retry-story-id",
 			"name":    "retry-story",
-			"behavior": "repeater",
+			"behavior": "REPEATER",
 			"worker":  "executor",
 			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
@@ -587,7 +587,7 @@ func writeGuardedLoopBreakerFactoryJSON(t *testing.T, factoryDir string) {
 				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs": []map[string]string{{"workType": "story", "state": "failed"}},
 				"guards": []map[string]any{{
-					"type":        "visit_count",
+					"type":        "VISIT_COUNT",
 					"workstation": "review-story",
 					"maxVisits":   3,
 				}},
@@ -885,7 +885,7 @@ func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 						"workType": "page",
 						"state":    "complete",
 						"guards": []map[string]string{{
-							"type":        string(interfaces.GuardTypeAllChildrenComplete),
+							"type":        "ALL_CHILDREN_COMPLETE",
 							"parentInput": "chapter",
 							"spawnedBy":   "parser",
 						}},
@@ -902,7 +902,7 @@ func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 						"workType": "page",
 						"state":    "failed",
 						"guards": []map[string]string{{
-							"type":        string(interfaces.GuardTypeAnyChildFailed),
+							"type":        "ANY_CHILD_FAILED",
 							"parentInput": "chapter",
 							"spawnedBy":   "parser",
 						}},

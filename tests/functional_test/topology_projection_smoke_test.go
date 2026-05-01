@@ -35,7 +35,7 @@ func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testi
 			"onFailure": map[string]string{"workType": "task", "state": "failed"},
 			"resources": []map[string]any{{"name": "executor-slot", "capacity": 1}},
 			"guards": []map[string]any{{
-				"type":        "visit_count",
+				"type":        "VISIT_COUNT",
 				"workstation": "process-task",
 				"maxVisits":   3,
 			}},

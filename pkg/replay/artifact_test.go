@@ -347,7 +347,7 @@ func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 			"promptTemplate":"Finish {{ .WorkID }}.",
 			"inputs":[
 				{"workType":"story","state":"init"},
-				{"workType":"page","state":"complete","guards":[{"type":"all_children_complete","parentInput":"story","spawnedBy":"chapter-parser"}]}
+				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"story","spawnedBy":"chapter-parser"}]}
 			],
 			"outputs":[{"workType":"story","state":"complete"}],
 			"resources":[{"name":"agent-slot","capacity":2}]
@@ -442,7 +442,7 @@ func TestLoad_RunStartedFactoryBoundaryRejectsRetiredCronIntervalField(t *testin
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"behavior":"cron",
+			"behavior":"CRON",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}

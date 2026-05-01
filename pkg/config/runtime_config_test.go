@@ -36,7 +36,7 @@ func TestLoadRuntimeConfig_LoadsEffectiveRuntimeConfig(t *testing.T) {
 			{
 				"id":      "execute-story",
 				"name":    "execute-story",
-				"behavior": "repeater",
+				"behavior": "REPEATER",
 				"worker":  "executor",
 				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
@@ -415,7 +415,7 @@ func TestLoadRuntimeConfig_AllowsTopologyOnlyLogicalMoveLoopBreakersWithoutSplit
 				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs": []map[string]string{{"workType": "story", "state": "failed"}},
 				"guards": []map[string]any{{
-					"type":        "visit_count",
+					"type":        "VISIT_COUNT",
 					"workstation": "execute-story",
 					"maxVisits":   3,
 				}},
@@ -536,7 +536,7 @@ func TestLoadRuntimeConfig_LoadsCronWorkstationConfig(t *testing.T) {
 			{
 				"id":     "daily-refresh",
 				"name":   "daily-refresh",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker": "cron-worker",
 				"cron": map[string]any{
 					"schedule":       "*/5 * * * *",
@@ -604,7 +604,7 @@ func TestLoadRuntimeConfig_DecodesOmittedTriggerAtStartAsFalse(t *testing.T) {
 		"workstations": []map[string]any{
 			{
 				"name":    "daily-refresh",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker":  "cron-worker",
 				"cron":    map[string]string{"schedule": "0 * * * *"},
 				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
@@ -651,7 +651,7 @@ func TestLoadRuntimeConfig_RejectsRetiredLegacyAliasesAtGeneratedBoundary(t *tes
 		"workstations": []map[string]any{
 			{
 				"name":   "scheduled-story",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker": "executor",
 				"cron": map[string]any{
 					"schedule":         "*/5 * * * *",
@@ -816,7 +816,7 @@ func TestLoadRuntimeConfig_RejectsRetiredCronIntervalAtGeneratedBoundary(t *test
 		"workstations": []map[string]any{
 			{
 				"name":    "daily-refresh",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker":  "executor",
 				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
 				"cron":    map[string]any{"interval": "5m"},
@@ -979,7 +979,7 @@ func TestLoadRuntimeConfig_NormalizesInlineWorkstationRuntimeFieldsIntoCanonical
 			{
 				"id":               "execute-story-id",
 				"name":             "execute-story",
-				"behavior":         "standard",
+				"behavior":         "STANDARD",
 				"worker":           "executor",
 				"inputs":           []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs":          []map[string]string{{"workType": "story", "state": "complete"}},
@@ -1191,7 +1191,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 			{
 				"id":     "execute-story-id",
 				"name":   "execute-story",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker": "executor",
 				"cron":   map[string]any{"schedule": "*/5 * * * *", "triggerAtStart": true, "jitter": "5s", "expiryWindow": "45s"},
 				"inputs": []map[string]any{
@@ -1203,7 +1203,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 						"workType": "story",
 						"state":    "init",
 						"guards": []map[string]string{{
-							"type":        "all_children_complete",
+							"type":        "ALL_CHILDREN_COMPLETE",
 							"parentInput": "parent",
 						}},
 					},
@@ -1212,7 +1212,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 				"onFailure": map[string]string{"workType": "story", "state": "failed"},
 				"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 				"guards": []map[string]any{
-					{"type": "visit_count", "workstation": "execute-story", "maxVisits": 3},
+					{"type": "VISIT_COUNT", "workstation": "execute-story", "maxVisits": 3},
 				},
 			},
 		},

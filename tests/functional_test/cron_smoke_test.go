@@ -290,7 +290,7 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 		"workstations": []map[string]any{
 			{
 				"name":   "startup-refresh",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker": "cron-worker",
 				"cron": map[string]any{
 					"schedule":       schedule,
@@ -301,14 +301,14 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 			},
 			{
 				"name":    "poll-for-work",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker":  "cron-worker",
 				"cron":    map[string]any{"schedule": schedule, "expiryWindow": "10s"},
 				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
 			},
 			{
 				"name":    "poll-with-input",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker":  "cron-worker",
 				"cron":    map[string]any{"schedule": schedule, "expiryWindow": "10s"},
 				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},
@@ -342,7 +342,7 @@ func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 		"workstations": []map[string]any{
 			{
 				"name":    "poll-terminal-output",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker":  "cron-worker",
 				"cron":    map[string]any{"schedule": schedule, "triggerAtStart": true},
 				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},

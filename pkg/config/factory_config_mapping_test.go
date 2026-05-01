@@ -176,7 +176,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredExhaustionRulesWithMigrationGui
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"execute-story",
-			"behavior":"repeater",
+			"behavior":"REPEATER",
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"init"}]
@@ -253,7 +253,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 
 	legacy := []byte(`{
 		"id": "analytics-platform",
-		"inputTypes": [{"name":"default","type":"default"}],
+		"inputTypes": [{"name":"default","type":"DEFAULT"}],
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{
@@ -279,10 +279,10 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 			"cron":{"schedule":"*/10 * * * *","triggerAtStart":true,"expiryWindow":"20s"},
 			"inputs":[
 				{"workType":"story","state":"init"},
-				{"workType":"story","state":"complete","guards":[{"type":"all_children_complete","parentInput":"story","spawnedBy":"fanout"}]}
+				{"workType":"story","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"story","spawnedBy":"fanout"}]}
 			],
 			"outputs":[{"workType":"story","state":"complete"}],
-			"guards":[{"type":"visit_count","workstation":"execute-story","maxVisits":3}]
+			"guards":[{"type":"VISIT_COUNT","workstation":"execute-story","maxVisits":3}]
 		}]
 	}`)
 
@@ -389,7 +389,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredNestedWorkstationCronAliases(t 
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"behavior":"cron",
+			"behavior":"CRON",
 			"worker":"executor",
 			"definition":{
 				"cron":{"trigger_at_start":true}
@@ -535,7 +535,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredCronIntervalField(t *testing.T)
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"behavior":"cron",
+			"behavior":"CRON",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}
@@ -595,7 +595,7 @@ func TestFactoryConfigMapper_ExpandPreservesPerInputGuard(t *testing.T) {
 			"worker":"collect-worker",
 			"inputs":[
 				{"workType":"request","state":"waiting"},
-				{"workType":"page","state":"complete","guards":[{"type":"all_children_complete","parentInput":"request","spawnedBy":"splitter"}]}
+				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"request","spawnedBy":"splitter"}]}
 			],
 			"outputs":[{"workType":"request","state":"complete"}]
 		}]
@@ -629,7 +629,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesSameNamePerInputGuard(t *t
 			"worker":"matcher",
 			"inputs":[
 				{"workType":"planItem","state":"ready"},
-				{"workType":"taskItem","state":"ready","guards":[{"type":"same_name","matchInput":"planItem"}]}
+				{"workType":"taskItem","state":"ready","guards":[{"type":"SAME_NAME","matchInput":"planItem"}]}
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
@@ -683,7 +683,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesMatchesFieldsWorkstationGu
 			"worker":"matcher",
 			"inputs":[{"workType":"asset","state":"ready"}],
 			"outputs":[{"workType":"asset","state":"matched"}],
-			"guards":[{"type":"matches_fields","matchConfig":{"inputKey":".Name"}}]
+			"guards":[{"type":"MATCHES_FIELDS","matchConfig":{"inputKey":".Name"}}]
 		}]
 	}`)
 
@@ -992,7 +992,7 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"behavior":"cron",
+			"behavior":"CRON",
 			"type":"MODEL_WORKSTATION",
 			"worker":"executor",
 			"inputs":[{"workType":"task","state":"ready"}],

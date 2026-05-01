@@ -29,16 +29,12 @@ const (
 
 var publicFactoryInputKindAliases = map[string]string{
 	"DEFAULT": publicFactoryInputKindDefault,
-	"default": publicFactoryInputKindDefault,
 }
 
 var publicFactoryWorkstationKindAliases = map[string]string{
 	publicFactoryWorkstationKindCron:     publicFactoryWorkstationKindCron,
 	publicFactoryWorkstationKindRepeater: publicFactoryWorkstationKindRepeater,
 	publicFactoryWorkstationKindStandard: publicFactoryWorkstationKindStandard,
-	"cron":                               publicFactoryWorkstationKindCron,
-	"repeater":                           publicFactoryWorkstationKindRepeater,
-	"standard":                           publicFactoryWorkstationKindStandard,
 }
 
 var publicFactoryGuardTypeAliases = map[string]string{
@@ -47,11 +43,6 @@ var publicFactoryGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
 	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
 	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
-	"visit_count":                             publicFactoryGuardTypeVisitCount,
-	"matches_fields":                          publicFactoryGuardTypeMatchesFields,
-	"all_children_complete":                   publicFactoryGuardTypeAllChildrenComplete,
-	"any_child_failed":                        publicFactoryGuardTypeAnyChildFailed,
-	"same_name":                               publicFactoryGuardTypeSameName,
 }
 
 func canonicalPublicFactoryEnumValue(value string, aliases map[string]string) string {
@@ -102,8 +93,9 @@ func publicFactoryInputKindFromInternal(kind interfaces.InputKind) factoryapi.In
 }
 
 func publicFactoryInputKindStringFromInternal(kind interfaces.InputKind) string {
-	if canonical := canonicalPublicFactoryEnumValue(string(kind), publicFactoryInputKindAliases); canonical != "" {
-		return canonical
+	switch strings.TrimSpace(string(kind)) {
+	case string(interfaces.InputKindDefault), publicFactoryInputKindDefault:
+		return publicFactoryInputKindDefault
 	}
 	return strings.TrimSpace(string(kind))
 }
@@ -199,8 +191,17 @@ func publicFactoryGuardTypeFromInternal(value interfaces.GuardType) factoryapi.G
 }
 
 func publicFactoryGuardTypeStringFromInternal(value interfaces.GuardType) string {
-	if canonical := canonicalPublicFactoryEnumValue(string(value), publicFactoryGuardTypeAliases); canonical != "" {
-		return canonical
+	switch strings.TrimSpace(string(value)) {
+	case string(interfaces.GuardTypeVisitCount), publicFactoryGuardTypeVisitCount:
+		return publicFactoryGuardTypeVisitCount
+	case string(interfaces.GuardTypeMatchesFields), publicFactoryGuardTypeMatchesFields:
+		return publicFactoryGuardTypeMatchesFields
+	case string(interfaces.GuardTypeAllChildrenComplete), publicFactoryGuardTypeAllChildrenComplete:
+		return publicFactoryGuardTypeAllChildrenComplete
+	case string(interfaces.GuardTypeAnyChildFailed), publicFactoryGuardTypeAnyChildFailed:
+		return publicFactoryGuardTypeAnyChildFailed
+	case string(interfaces.GuardTypeSameName), publicFactoryGuardTypeSameName:
+		return publicFactoryGuardTypeSameName
 	}
 	return strings.TrimSpace(string(value))
 }

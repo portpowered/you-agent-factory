@@ -1649,7 +1649,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 		t.Fatal("Worker.properties.modelProvider must be an object")
 	}
 	modelProviderDescription, _ := modelProviderProperty["description"].(string)
-	if !strings.Contains(modelProviderDescription, "claude") || !strings.Contains(modelProviderDescription, "codex") {
+	if !strings.Contains(modelProviderDescription, "CLAUDE") || !strings.Contains(modelProviderDescription, "CODEX") {
 		t.Fatalf("Worker.properties.modelProvider.description must document built-in values, got %q", modelProviderDescription)
 	}
 	executorProviderProperty, ok := workerProperties["executorProvider"].(map[string]any)
@@ -1657,7 +1657,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 		t.Fatal("Worker.properties.executorProvider must be an object")
 	}
 	executorProviderDescription, _ := executorProviderProperty["description"].(string)
-	if !strings.Contains(executorProviderDescription, "script_wrap") {
+	if !strings.Contains(executorProviderDescription, "SCRIPT_WRAP") {
 		t.Fatalf("Worker.properties.executorProvider.description must document the public built-in value, got %q", executorProviderDescription)
 	}
 

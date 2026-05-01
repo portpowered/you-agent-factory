@@ -976,7 +976,7 @@ func cronFactoryConfig(schedule string) map[string]any {
 		"workstations": []map[string]any{
 			{
 				"name":    "poll-for-work",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker":  "cron-worker",
 				"cron":    map[string]string{"schedule": schedule, "expiryWindow": "500ms"},
 				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
@@ -1066,7 +1066,7 @@ func requiredInputCronFactoryConfigWithExpiry(schedule, expiryWindow string) map
 		"workstations": []map[string]any{
 			{
 				"name":    "poll-with-input",
-				"behavior": "cron",
+				"behavior": "CRON",
 				"worker":  "cron-worker",
 				"cron":    cron,
 				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},

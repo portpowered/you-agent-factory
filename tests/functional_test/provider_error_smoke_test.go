@@ -902,7 +902,7 @@ func configureProviderErrorLoopBreaker(t *testing.T, dir string) {
 			},
 			"guards": []any{
 				map[string]any{
-					"type":        "visit_count",
+					"type":        "VISIT_COUNT",
 					"workstation": "process",
 					"maxVisits":   2,
 				},

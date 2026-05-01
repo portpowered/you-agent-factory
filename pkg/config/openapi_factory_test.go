@@ -160,7 +160,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 			"worker":"matcher",
 			"inputs":[
 				{"workType":"planItem","state":"ready"},
-				{"workType":"taskItem","state":"ready","guards":[{"type":"same_name","matchInput":"planItem"}]}
+				{"workType":"taskItem","state":"ready","guards":[{"type":"SAME_NAME","matchInput":"planItem"}]}
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
@@ -215,7 +215,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 			"worker":"matcher",
 			"inputs":[{"workType":"asset","state":"ready"}],
 			"outputs":[{"workType":"asset","state":"matched"}],
-			"guards":[{"type":"matches_fields","matchConfig":{"inputKey":".Tags[\"_last_output\"]"}}]
+			"guards":[{"type":"MATCHES_FIELDS","matchConfig":{"inputKey":".Tags[\"_last_output\"]"}}]
 		}]
 	}`)
 
@@ -310,7 +310,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredCronIntervalFieldAtBounda
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"behavior":"cron",
+			"behavior":"CRON",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}
@@ -361,6 +361,23 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 				"workstations": [{
 					"name":"execute-story",
 					"worker":"executor",
+					"type":"MODEL_WORKSTATION",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
+		{
+			name:      "workstation behavior",
+			fieldPath: "workstations[0].behavior",
+			value:     "cron",
+			payload: `{
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"behavior":"cron",
 					"type":"MODEL_WORKSTATION",
 					"inputs":[{"workType":"story","state":"init"}],
 					"outputs":[{"workType":"story","state":"complete"}]
@@ -649,7 +666,7 @@ func TestFactoryConfigFromOpenAPIJSON_PreservesMapKeysAndCurrentInputGuards(t *t
 			"worker":"executor",
 			"inputs":[
 				{"workType":"chapter","state":"init"},
-				{"workType":"page","state":"complete","guards":[{"type":"all_children_complete","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
+				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
 			],
 			"outputs":[{"workType":"chapter","state":"complete"}],
 			"env":{"TEAM":"{{ index .Tags \"team\" }}"}
