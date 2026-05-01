@@ -6,6 +6,10 @@
 - The checked-in meta control plane is `factory/logs/meta/asks.md`,
   `factory/logs/meta/view.md`, and `factory/logs/meta/progress.txt`; any other
   path should be treated as legacy or workspace-local until proven otherwise.
+- When the root artifact inventory changes, keep
+  `docs/development/root-factory-artifact-contract-inventory.md` and
+  `internal/testpath/artifact_contract.go` aligned in the same change or the
+  targeted artifact-contract test will fail immediately.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -23,3 +27,57 @@
 - Restored `factory/logs/meta/progress.txt`, updated `factory/logs/meta/view.md`
   to match `main`, and queued a narrow idea to retire the legacy tracked
   `progress.tsx` surface.
+
+## 2026-04-30 - meta progress-surface reassessment
+
+- Re-ran the repository state audit after `git pull --ff-only` and verified the
+  current branch is `main` at `2cb5578`, one local commit ahead of
+  `origin/main` at `39ecc4f`.
+- Rechecked the canonical backlog, replay artifacts, factory workflow docs,
+  recent merged pull requests, and the tracked `factory/inputs/**` surface
+  before choosing work.
+- Verified with `git ls-files factory/inputs/**` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels.
+- Verified that `factory/inputs/idea/default/api-clean.md` and
+  `factory/inputs/idea/default/ci-cd.md` are workspace-local residue rather
+  than tracked workflow requests.
+- Confirmed that both `factory/logs/meta/progress.tsx` and
+  `factory/logs/meta/progress.txt` are currently tracked on `HEAD`.
+- Confirmed the artifact-contract mismatch around the canonical progress
+  surface:
+  - the inventory doc classifies `factory/logs/meta/progress.txt` as
+    `checked_in`
+  - `internal/testpath/artifact_contract.go` omits that path
+  - `go test ./pkg/testutil -run TestArtifactContractInventory_DocumentationMatchesClassifications -count=1`
+    fails with `inventory doc entries = 42, want 41`
+- Updated `factory/logs/meta/view.md` to reflect the red control-plane state
+  and queued `factory/inputs/idea/default/retire-legacy-meta-progress-surface.md`
+  as the next narrow cleanup lane instead of starting a non-urgent customer ask.
+
+## 2026-04-30 - meta world-model refresh after main advanced
+
+- Ran `git pull` again and verified the workspace is now synced on `main` at
+  `6773b24`, with `origin/main` at the same commit.
+- Rechecked the canonical backlog, replay artifacts, workflow contract docs,
+  merged pull requests, tracked workflow inboxes, and the live meta progress
+  surfaces before choosing work.
+- Verified with `git ls-files factory/inputs/**` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels.
+- Verified again that `factory/inputs/idea/default/api-clean.md`,
+  `factory/inputs/idea/default/ci-cd.md`, and
+  `factory/inputs/idea/default/retire-legacy-meta-progress-surface.md` are
+  workspace-local residue rather than tracked workflow requests.
+- Confirmed the maintainer control plane is still inconsistent on `HEAD`:
+  - both `factory/logs/meta/progress.tsx` and
+    `factory/logs/meta/progress.txt` remain tracked
+  - `factory/logs/meta/progress.txt` is the documented canonical surface
+  - `factory/logs/meta/progress.tsx` still contains live status content rather
+    than a redirect-only stub
+  - `internal/testpath/artifact_contract.go` still omits
+    `factory/logs/meta/progress.txt`
+  - `go test ./pkg/testutil -run TestArtifactContractInventory_DocumentationMatchesClassifications -count=1`
+    still fails with `inventory doc entries = 42, want 41`
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the synced
+  remote state, and the narrower next move: remove the live duplicate progress
+  surface and align artifact-contract enforcement before taking on non-urgent
+  customer asks.
