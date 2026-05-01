@@ -224,3 +224,37 @@
   `pkg/factory/work_request_json.go`.
 - Updated `factory/logs/meta/view.md` to reflect the current `HEAD`, the open
   PR state, and the revised follow-up priority.
+
+## 2026-05-01 02:03 -07:00 - meta refresh after trace-normalization landed
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `c213e25`.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract docs,
+  recent merged/open PR history, and the tracked `factory/inputs/**` surface
+  before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the only tracked meta
+  control-plane files.
+- Verified that the workspace-local `factory/inputs/**` surface still has
+  ignored residue, so those files remain local context rather than checked-in
+  workflow truth.
+- Confirmed that the previous meta world view had drifted again:
+  - it still treated PR `#22` `align-process-review-loop-contract` as open
+  - it still treated the work-request trace normalization lane as a pending
+    follow-up even though PR `#23` is now merged
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#20`, `#16`, and `#4`
+  - merged PRs `#23`, `#22`, `#21`, `#19`, `#18`, and `#17`
+- Used a sidecar repository-inspection agent plus direct code inspection to
+  identify the next narrow cleanup candidate outside the open PR set:
+  - `pkg/config/public_factory_enums.go` and
+    `pkg/interfaces/public_factory_enums.go` both define overlapping
+    public-factory enum alias tables and canonicalization helpers
+  - `pkg/config/openapi_factory.go` consumes the config-local copies for strict
+    input normalization, while generated/public enum conversions consume the
+    interfaces-local copies
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/consolidate-public-factory-enum-alias-ownership.md`
+  for that duplicated enum-alias ownership seam.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged PR
+  state, the remaining customer-ask posture, and the revised next cleanup lane.
