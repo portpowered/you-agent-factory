@@ -1007,8 +1007,37 @@ func assertDashboardThrottlePausesMatchEngineState(
 	t.Helper()
 
 	pauses := sliceValue(dashboard.Runtime.ActiveThrottlePauses)
-	if len(pauses) > 0 && len(engineState.ActiveThrottlePauses) == 0 {
-		t.Fatalf("%s active throttle pauses = %#v, want none without engine pauses", label, pauses)
+	if len(pauses) != len(engineState.ActiveThrottlePauses) {
+		t.Fatalf(
+			"%s active throttle pause count = %d, want engine-state count %d",
+			label,
+			len(pauses),
+			len(engineState.ActiveThrottlePauses),
+		)
+	}
+	for i, pause := range pauses {
+		enginePause := engineState.ActiveThrottlePauses[i]
+		if pause.LaneId != enginePause.LaneID || pause.Provider != enginePause.Provider || pause.Model != enginePause.Model {
+			t.Fatalf("%s pause[%d] identity = %#v, want engine pause %#v", label, i, pause, enginePause)
+		}
+		if pause.PausedAt == nil || !pause.PausedAt.Equal(enginePause.PausedAt) {
+			t.Fatalf("%s pause[%d] PausedAt = %#v, want %s", label, i, pause.PausedAt, enginePause.PausedAt)
+		}
+		if !pause.PausedUntil.Equal(enginePause.PausedUntil) || !pause.RecoverAt.Equal(enginePause.PausedUntil) {
+			t.Fatalf("%s pause[%d] window = %#v, want paused-until/recover-at %s", label, i, pause, enginePause.PausedUntil)
+		}
+		if pause.AffectedTransitionIds == nil || len(*pause.AffectedTransitionIds) == 0 {
+			t.Fatalf("%s pause[%d] affected transitions = %#v, want non-empty projection", label, i, pause.AffectedTransitionIds)
+		}
+		if pause.AffectedWorkstationNames == nil || len(*pause.AffectedWorkstationNames) == 0 {
+			t.Fatalf("%s pause[%d] affected workstation names = %#v, want non-empty projection", label, i, pause.AffectedWorkstationNames)
+		}
+		if pause.AffectedWorkerTypes == nil || len(*pause.AffectedWorkerTypes) == 0 {
+			t.Fatalf("%s pause[%d] affected worker types = %#v, want non-empty projection", label, i, pause.AffectedWorkerTypes)
+		}
+		if pause.AffectedWorkTypeIds == nil || len(*pause.AffectedWorkTypeIds) == 0 {
+			t.Fatalf("%s pause[%d] affected work type IDs = %#v, want non-empty projection", label, i, pause.AffectedWorkTypeIds)
+		}
 	}
 }
 

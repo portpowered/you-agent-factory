@@ -1345,7 +1345,7 @@ func (fs *FactoryService) buildSimpleDashboardRenderInput(ctx context.Context, n
 	if err != nil {
 		return SimpleDashboardRenderInput{}, err
 	}
-	renderData, err := fs.simpleDashboardRenderData(ctx, es.TickCount)
+	renderData, err := fs.simpleDashboardRenderData(ctx, es.TickCount, es.ActiveThrottlePauses)
 	if err != nil {
 		return SimpleDashboardRenderInput{}, err
 	}
@@ -1359,6 +1359,7 @@ func (fs *FactoryService) buildSimpleDashboardRenderInput(ctx context.Context, n
 func (fs *FactoryService) simpleDashboardRenderData(
 	ctx context.Context,
 	selectedTick int,
+	activeThrottlePauses []interfaces.ActiveThrottlePause,
 ) (dashboardrender.SimpleDashboardRenderData, error) {
 	events, err := fs.GetFactoryEvents(ctx)
 	if err != nil {
@@ -1368,7 +1369,9 @@ func (fs *FactoryService) simpleDashboardRenderData(
 	if err != nil {
 		return dashboardrender.SimpleDashboardRenderData{}, err
 	}
-	return dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState), nil
+	renderData := dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState)
+	renderData.ActiveThrottlePauses = projections.ProjectActiveThrottlePauses(worldState.Topology, activeThrottlePauses)
+	return renderData, nil
 }
 
 // dirExists returns true if the path exists and is a directory.

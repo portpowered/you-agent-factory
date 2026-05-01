@@ -68,6 +68,68 @@ func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T)
 	}
 }
 
+func TestBuildFactoryWorldViewWithActiveThrottlePauses_ProjectsRuntimePauseMetadata(t *testing.T) {
+	view := BuildFactoryWorldViewWithActiveThrottlePauses(
+		interfaces.FactoryWorldState{
+			Topology: interfaces.InitialStructurePayload{
+				Workers: []interfaces.FactoryWorker{
+					{ID: "worker-claude", ModelProvider: "claude", Model: "claude-sonnet"},
+					{ID: "worker-codex", ModelProvider: "codex", Model: "gpt-5-codex"},
+				},
+				Workstations: []interfaces.FactoryWorkstation{
+					{
+						ID:            "t-claude",
+						Name:          "Claude Review",
+						WorkerID:      "worker-claude",
+						InputPlaceIDs: []string{"task:init", interfaces.SystemTimePendingPlaceID},
+					},
+					{
+						ID:            "t-codex",
+						Name:          "Codex Review",
+						WorkerID:      "worker-codex",
+						InputPlaceIDs: []string{"report:init"},
+					},
+				},
+				Places: []interfaces.FactoryPlace{
+					{ID: "task:init", TypeID: "task", Category: "INITIAL"},
+					{ID: "report:init", TypeID: "report", Category: "INITIAL"},
+					{ID: interfaces.SystemTimePendingPlaceID, TypeID: interfaces.SystemTimeWorkTypeID, Category: "PROCESSING"},
+				},
+			},
+		},
+		[]interfaces.ActiveThrottlePause{{
+			LaneID:      "claude/claude-sonnet",
+			Provider:    "claude",
+			Model:       "claude-sonnet",
+			PausedAt:    time.Date(2026, 4, 30, 10, 0, 0, 0, time.UTC),
+			PausedUntil: time.Date(2026, 4, 30, 10, 5, 0, 0, time.UTC),
+		}},
+	)
+
+	if len(view.Runtime.ActiveThrottlePauses) != 1 {
+		t.Fatalf("active throttle pauses = %d, want 1", len(view.Runtime.ActiveThrottlePauses))
+	}
+	pause := view.Runtime.ActiveThrottlePauses[0]
+	if pause.LaneID != "claude/claude-sonnet" || pause.Provider != "claude" || pause.Model != "claude-sonnet" {
+		t.Fatalf("pause identity = %#v, want claude/claude-sonnet lane", pause)
+	}
+	if !pause.RecoverAt.Equal(pause.PausedUntil) {
+		t.Fatalf("RecoverAt = %s, want PausedUntil %s", pause.RecoverAt, pause.PausedUntil)
+	}
+	if !reflect.DeepEqual(pause.AffectedTransitionIDs, []string{"t-claude"}) {
+		t.Fatalf("affected transition IDs = %#v, want [t-claude]", pause.AffectedTransitionIDs)
+	}
+	if !reflect.DeepEqual(pause.AffectedWorkstationNames, []string{"Claude Review"}) {
+		t.Fatalf("affected workstation names = %#v, want [Claude Review]", pause.AffectedWorkstationNames)
+	}
+	if !reflect.DeepEqual(pause.AffectedWorkerTypes, []string{"worker-claude"}) {
+		t.Fatalf("affected worker types = %#v, want [worker-claude]", pause.AffectedWorkerTypes)
+	}
+	if !reflect.DeepEqual(pause.AffectedWorkTypeIDs, []string{"task"}) {
+		t.Fatalf("affected work type IDs = %#v, want [task]", pause.AffectedWorkTypeIDs)
+	}
+}
+
 func TestBuildFactoryWorldView_ProjectsExplicitDispatchChainingLineage(t *testing.T) {
 	events := chainingTraceProjectionEvents()
 	activeState, err := ReconstructFactoryWorldState(events, 2)

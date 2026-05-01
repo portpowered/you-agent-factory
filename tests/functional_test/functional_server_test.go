@@ -128,7 +128,7 @@ func (fs *FunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	if err != nil {
 		t.Fatalf("reconstruct world state: %v", err)
 	}
-	worldView := projections.BuildFactoryWorldView(worldState)
+	worldView := projections.BuildFactoryWorldViewWithActiveThrottlePauses(worldState, snapshot.ActiveThrottlePauses)
 
 	_, resources := categorizeTokensForFunctionalState(&snapshot.Marking, snapshot.Topology)
 	payload := struct {
