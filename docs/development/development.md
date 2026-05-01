@@ -59,8 +59,9 @@ The workflow currently executes these repository-owned commands in order:
 4. `make ui-build`
 5. `make lint`
 6. `make api-smoke`
-7. `make ui-test`
-8. `make test`
+7. `cd ui && bunx playwright install chromium`
+8. `make ui-test`
+9. `make test`
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and Bun from the pinned `packageManager` contract in `ui/package.json`, so local reproduction should start from the repository root with the same checked-in toolchain expectations.
 

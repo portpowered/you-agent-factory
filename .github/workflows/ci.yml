@@ -104,6 +104,10 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
+      - name: Install Playwright browser for dashboard integration tests
+        working-directory: ui
+        run: bunx playwright install --with-deps chromium
+
       - name: Run repository website tests
         run: make ui-test
 
