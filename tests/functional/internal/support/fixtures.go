@@ -10,6 +10,33 @@ import (
 	"github.com/portpowered/agent-factory/pkg/testutil"
 )
 
+func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal factory config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	workstations, ok := cfg["workstations"].([]map[string]any)
+	if !ok {
+		return dir
+	}
+	for _, ws := range workstations {
+		name, _ := ws["name"].(string)
+		if name == "" {
+			continue
+		}
+		WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n")
+	}
+
+	return dir
+}
+
 func AgentFactoryPath(t *testing.T, rel string) string {
 	t.Helper()
 	return testutil.MustRepoPath(t, rel)

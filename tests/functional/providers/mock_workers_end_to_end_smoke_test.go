@@ -1,7 +1,9 @@
-package functional_test
+package providers
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,15 +15,19 @@ import (
 	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
 func TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow mock-workers end-to-end smoke")
-	dir := scaffoldFactory(t, mixedMockWorkersSmokeConfig())
-	writeAgentConfig(t, dir, "accept-agent", mockWorkersSmokeModelWorkerConfig())
-	writeAgentConfig(t, dir, "reject-agent", mockWorkersSmokeModelWorkerConfig())
-	writeAgentConfig(t, dir, "script-worker", `---
+	if testing.Short() {
+		t.Skip("slow mock-workers end-to-end smoke")
+	}
+
+	dir := support.ScaffoldFactory(t, mixedMockWorkersSmokeConfig())
+	support.WriteAgentConfig(t, dir, "accept-agent", mockWorkersSmokeModelWorkerConfig())
+	support.WriteAgentConfig(t, dir, "reject-agent", mockWorkersSmokeModelWorkerConfig())
+	support.WriteAgentConfig(t, dir, "script-worker", `---
 type: SCRIPT_WORKER
 command: echo
 args:
@@ -52,7 +58,7 @@ args:
 	mockWorkersPath := writeMixedMockWorkersSmokeConfig(t, sideEffectPath)
 	artifactPath := filepath.Join(t.TempDir(), "mixed-mock-workers.replay.json")
 
-	output, err := runRecordReplayCLIWithCapturedStdout(t, runcli.RunConfig{
+	output, err := runRecordReplayCLIWithCapturedStdoutForProviders(t, runcli.RunConfig{
 		Dir:                        dir,
 		Port:                       0,
 		MockWorkersEnabled:         true,
@@ -233,4 +239,39 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	if !strings.Contains(stringPointerValue(scriptResult.Output), "mock script helper wrote file") {
 		t.Fatalf("script-process output = %q, want helper output", stringPointerValue(scriptResult.Output))
 	}
+}
+
+func runRecordReplayCLIWithCapturedStdoutForProviders(t *testing.T, cfg runcli.RunConfig) (string, error) {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+
+	readCh := make(chan []byte, 1)
+	readErrCh := make(chan error, 1)
+	go func() {
+		data, readErr := io.ReadAll(readPipe)
+		readCh <- data
+		readErrCh <- readErr
+	}()
+
+	os.Stdout = writePipe
+	runErr := runcli.Run(context.Background(), cfg)
+	os.Stdout = oldStdout
+
+	if err := writePipe.Close(); err != nil {
+		t.Fatalf("close captured stdout writer: %v", err)
+	}
+	output := <-readCh
+	if err := <-readErrCh; err != nil {
+		t.Fatalf("read captured stdout: %v", err)
+	}
+	if err := readPipe.Close(); err != nil {
+		t.Fatalf("close captured stdout reader: %v", err)
+	}
+
+	return string(output), runErr
 }

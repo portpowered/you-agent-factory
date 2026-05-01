@@ -1,32 +1,11 @@
 package functional_test
 
 import (
-	"context"
-	"io"
-	"os"
 	"testing"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 )
-
-func replayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []factoryapi.DispatchResponseEventPayload {
-	t.Helper()
-
-	var out []factoryapi.DispatchResponseEventPayload
-	for _, event := range artifact.Events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch completed event %q: %v", event.Id, err)
-		}
-		out = append(out, payload)
-	}
-	return out
-}
 
 type recordedFactoryWorkRequestEvent struct {
 	RequestID string
@@ -135,39 +114,4 @@ func eventStringSlice(values *[]string) []string {
 		return nil
 	}
 	return *values
-}
-
-func runRecordReplayCLIWithCapturedStdout(t *testing.T, cfg runcli.RunConfig) (string, error) {
-	t.Helper()
-
-	oldStdout := os.Stdout
-	readPipe, writePipe, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe stdout: %v", err)
-	}
-
-	readCh := make(chan []byte, 1)
-	readErrCh := make(chan error, 1)
-	go func() {
-		data, readErr := io.ReadAll(readPipe)
-		readCh <- data
-		readErrCh <- readErr
-	}()
-
-	os.Stdout = writePipe
-	runErr := runcli.Run(context.Background(), cfg)
-	os.Stdout = oldStdout
-
-	if err := writePipe.Close(); err != nil {
-		t.Fatalf("close captured stdout writer: %v", err)
-	}
-	output := <-readCh
-	if err := <-readErrCh; err != nil {
-		t.Fatalf("read captured stdout: %v", err)
-	}
-	if err := readPipe.Close(); err != nil {
-		t.Fatalf("close captured stdout reader: %v", err)
-	}
-
-	return string(output), runErr
 }
