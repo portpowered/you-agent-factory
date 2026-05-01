@@ -18,8 +18,8 @@ const (
 )
 
 var readinessTargets = []string{
-	"typecheck",
 	"ui-deps",
+	"typecheck",
 	"ui-build",
 	"build",
 	"lint",
