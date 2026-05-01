@@ -59,27 +59,16 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 func executeDocsSmokeCommand(t *testing.T, workingDir string, args ...string) string {
 	t.Helper()
 
-	previousDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get working dir: %v", err)
-	}
-	if err := os.Chdir(workingDir); err != nil {
-		t.Fatalf("chdir %s: %v", workingDir, err)
-	}
-	defer func() {
-		if restoreErr := os.Chdir(previousDir); restoreErr != nil {
-			t.Fatalf("restore working dir %s: %v", previousDir, restoreErr)
-		}
-	}()
-
 	var out bytes.Buffer
-	root := agentcli.NewRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs(args)
+	withWorkingDirectory(t, workingDir, func() {
+		root := agentcli.NewRootCommand()
+		root.SetOut(&out)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute root command %v: %v", args, err)
-	}
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute root command %v: %v", args, err)
+		}
+	})
 	return out.String()
 }
