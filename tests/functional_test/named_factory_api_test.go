@@ -46,6 +46,7 @@ func TestNamedFactoryAPI_DefaultCurrentFactoryReadbackAndImportSwitch(t *testing
 	if rootSubmit.TraceId == "" {
 		t.Fatal("expected non-empty trace ID for default-runtime submission")
 	}
+	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
 
 	created := createNamedFactoryFromBody(t, server.httpSrv.URL, "beta", "beta-task")
 	if created.Name != factoryapi.FactoryName("beta") {
