@@ -1,10 +1,41 @@
-package functional_test
+package support
 
 import (
 	"testing"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 )
+
+func StringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+func FactoryWorksValue(value *[]factoryapi.Work) []factoryapi.Work {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func DispatchInputsIncludeWorkNameFromHistory(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	event factoryapi.FactoryEvent,
+	payload factoryapi.DispatchRequestEventPayload,
+	workName string,
+) bool {
+	t.Helper()
+
+	for _, work := range dispatchInputWorksFromHistory(t, events, event, payload) {
+		if work.Name == workName {
+			return true
+		}
+	}
+	return false
+}
 
 func dispatchInputWorksFromHistory(
 	t *testing.T,
@@ -16,7 +47,7 @@ func dispatchInputWorksFromHistory(
 
 	workByID := workRequestWorksByID(t, events)
 	ordered := make([]factoryapi.Work, 0, len(payload.Inputs))
-	for _, workID := range dispatchInputWorkIDsForTests(payload, event.Context) {
+	for _, workID := range dispatchInputWorkIDs(payload, event.Context) {
 		if work, ok := workByID[workID]; ok {
 			ordered = append(ordered, work)
 		}
@@ -36,8 +67,8 @@ func workRequestWorksByID(t *testing.T, events []factoryapi.FactoryEvent) map[st
 		if err != nil {
 			t.Fatalf("decode WORK_REQUEST payload %q: %v", event.Id, err)
 		}
-		for _, work := range workSliceForTests(payload.Works) {
-			if workID := eventString(work.WorkId); workID != "" {
+		for _, work := range FactoryWorksValue(payload.Works) {
+			if workID := StringPointerValue(work.WorkId); workID != "" {
 				workByID[workID] = work
 			}
 		}
@@ -45,7 +76,7 @@ func workRequestWorksByID(t *testing.T, events []factoryapi.FactoryEvent) map[st
 	return workByID
 }
 
-func dispatchInputWorkIDsForTests(
+func dispatchInputWorkIDs(
 	payload factoryapi.DispatchRequestEventPayload,
 	context factoryapi.FactoryEventContext,
 ) []string {
@@ -71,9 +102,9 @@ func appendUniqueDispatchWorkID(values []string, value string) []string {
 	return append(values, value)
 }
 
-func workSliceForTests(works *[]factoryapi.Work) []factoryapi.Work {
-	if works == nil {
+func eventStringSlice(values *[]string) []string {
+	if values == nil {
 		return nil
 	}
-	return *works
+	return *values
 }

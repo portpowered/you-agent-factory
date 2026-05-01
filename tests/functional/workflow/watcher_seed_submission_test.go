@@ -1,4 +1,4 @@
-package functional_test
+package workflow
 
 import (
 	"fmt"
@@ -8,12 +8,13 @@ import (
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // TestFileWatcherFlowSingle drops 1 seed file and verifies it is picked up
 // by preseed, processed through the service pipeline, and reaches the terminal state.
 func TestFileWatcherFlowSingle(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "filewatcher_flow"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "single item"}`))
 
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
@@ -38,7 +39,7 @@ func TestFileWatcherFlowSingle(t *testing.T) {
 // TestFileWatcherFlowSequential drops 3 seed files and verifies all 3
 // are picked up by preseed and reach terminal state.
 func TestFileWatcherFlowSequential(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "filewatcher_flow"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	for i := 1; i <= 3; i++ {
 		testutil.WriteSeedFile(t, dir, "task", fmt.Appendf(nil, `{"title": "sequential item %d"}`, i))
 	}
@@ -67,7 +68,7 @@ func TestFileWatcherFlowSequential(t *testing.T) {
 // TestFileWatcherFlowConcurrent drops 5 seed files simultaneously and verifies
 // all 5 are picked up by preseed and reach terminal state.
 func TestFileWatcherFlowConcurrent(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "filewatcher_flow"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	for i := 1; i <= 5; i++ {
 		testutil.WriteSeedFile(t, dir, "task", fmt.Appendf(nil, `{"title": "concurrent item %d"}`, i))
 	}
@@ -99,7 +100,7 @@ func TestFileWatcherFlowConcurrent(t *testing.T) {
 // of successful and failed work via seed files, no tokens remain in
 // non-terminal places.
 func TestFileWatcherFlowNoTokenLeaks(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "filewatcher_flow"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	for i := 1; i <= 5; i++ {
 		testutil.WriteSeedFile(t, dir, "task", fmt.Appendf(nil, `{"title": "item %d"}`, i))
 	}
@@ -119,7 +120,6 @@ func TestFileWatcherFlowNoTokenLeaks(t *testing.T) {
 
 	h.RunUntilComplete(t, 10*time.Second)
 
-	// Verify 3 completed, 2 failed — all terminal, no leaks.
 	h.Assert().
 		PlaceTokenCount("task:complete", 3).
 		PlaceTokenCount("task:failed", 2).

@@ -1,4 +1,4 @@
-package functional_test
+package guards_batch
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // TestFileWatcherParentChildBatch_SubmittedFanInSmoke proves the documented
@@ -30,7 +31,7 @@ func TestFileWatcherParentChildBatch_SubmittedFanInSmoke(t *testing.T) {
 func seedSubmittedParentChildBatch(t *testing.T) string {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "submitted_parent_child_filewatcher"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "submitted_parent_child_filewatcher"))
 	testutil.WriteSeedBatchFile(t, dir, interfaces.WorkRequest{
 		RequestID: "release-story-set",
 		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
@@ -135,7 +136,7 @@ func assertWatchedParentChildRequestRecorded(t *testing.T, events []factoryapi.F
 	for i, event := range events {
 		switch event.Type {
 		case factoryapi.FactoryEventTypeWorkRequest:
-			if stringPointerValue(event.Context.RequestId) != "release-story-set" {
+			if support.StringPointerValue(event.Context.RequestId) != "release-story-set" {
 				continue
 			}
 			payload, err := event.Payload.AsWorkRequestEventPayload()
@@ -147,16 +148,16 @@ func assertWatchedParentChildRequestRecorded(t *testing.T, events []factoryapi.F
 			if payload.Type != factoryapi.WorkRequestTypeFactoryRequestBatch {
 				t.Fatalf("request type = %q, want FACTORY_REQUEST_BATCH", payload.Type)
 			}
-			if stringPointerValue(payload.Source) != "external-submit" {
-				t.Fatalf("request source = %q, want external-submit", stringPointerValue(payload.Source))
+			if support.StringPointerValue(payload.Source) != "external-submit" {
+				t.Fatalf("request source = %q, want external-submit", support.StringPointerValue(payload.Source))
 			}
-			works := factoryWorksValue(payload.Works)
+			works := support.FactoryWorksValue(payload.Works)
 			if len(works) != 3 {
 				t.Fatalf("request work items = %d, want 3", len(works))
 			}
 			assertRequestIncludesParent(t, works)
 		case factoryapi.FactoryEventTypeRelationshipChangeRequest:
-			if stringPointerValue(event.Context.RequestId) != "release-story-set" {
+			if support.StringPointerValue(event.Context.RequestId) != "release-story-set" {
 				continue
 			}
 			payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
@@ -194,8 +195,8 @@ func assertRequestIncludesParent(t *testing.T, works []factoryapi.Work) {
 		if work.Name != "story-set" {
 			continue
 		}
-		if stringPointerValue(work.WorkTypeName) != "story-set" {
-			t.Fatalf("story-set work_type_name = %q, want story-set", stringPointerValue(work.WorkTypeName))
+		if support.StringPointerValue(work.WorkTypeName) != "story-set" {
+			t.Fatalf("story-set work_type_name = %q, want story-set", support.StringPointerValue(work.WorkTypeName))
 		}
 		return
 	}
@@ -221,7 +222,7 @@ func assertParentFailedOnlyAfterChildFailure(t *testing.T, events []factoryapi.F
 			switch {
 			case payload.TransitionId == "process-story" &&
 				payload.Outcome == factoryapi.WorkOutcomeFailed &&
-				stringPointerValue(event.Context.DispatchId) == childFailureDispatchID:
+				support.StringPointerValue(event.Context.DispatchId) == childFailureDispatchID:
 				childFailureIndex = i
 			case payload.TransitionId == "fail-story-set-from-child" &&
 				payload.Outcome == factoryapi.WorkOutcomeAccepted:
@@ -233,11 +234,11 @@ func assertParentFailedOnlyAfterChildFailure(t *testing.T, events []factoryapi.F
 				t.Fatalf("decode DISPATCH_CREATED event %q: %v", event.Id, err)
 			}
 			if payload.TransitionId == "process-story" &&
-				dispatchInputsIncludeWorkNameFromHistory(t, events, event, payload, "story-billing") {
-				childFailureDispatchID = stringPointerValue(event.Context.DispatchId)
+				support.DispatchInputsIncludeWorkNameFromHistory(t, events, event, payload, "story-billing") {
+				childFailureDispatchID = support.StringPointerValue(event.Context.DispatchId)
 			}
 			if payload.TransitionId == "fail-story-set-from-child" &&
-				dispatchInputsIncludeWorkNameFromHistory(t, events, event, payload, "story-set") {
+				support.DispatchInputsIncludeWorkNameFromHistory(t, events, event, payload, "story-set") {
 				parentFailureDispatchIndex = i
 			}
 		}
