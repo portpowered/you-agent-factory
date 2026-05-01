@@ -561,7 +561,7 @@ function expectSeparatedStateMarkerZones(label: string, count: number): void {
 const selectedTickTimelineEvents: FactoryEvent[] = [
   factoryEvent("timeline-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
     factory: {
-      work_types: [{
+      workTypes: [{
         name: "story",
         states: [
           { name: "new", type: "INITIAL" },
@@ -572,9 +572,9 @@ const selectedTickTimelineEvents: FactoryEvent[] = [
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          outputs: [{ state: "review", work_type: "story" }],
+          outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
       ],
@@ -602,9 +602,9 @@ const selectedTickTimelineEvents: FactoryEvent[] = [
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      outputs: [{ state: "review", work_type: "story" }],
+      outputs: [{ state: "review", workType: "story" }],
       worker: "reviewer",
     },
   }),
@@ -628,9 +628,9 @@ const selectedTickTimelineEvents: FactoryEvent[] = [
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      outputs: [{ state: "done", work_type: "story" }],
+      outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
   }),
@@ -647,17 +647,17 @@ selectedTickTimelineEvents[3].context.workIds = [eventTimelineWorkID];
 
 const traceFanInReviewWorkstation = {
   id: "review",
-  inputs: [{ state: "new", work_type: "story" }],
+  inputs: [{ state: "new", workType: "story" }],
   name: "Review",
-  outputs: [{ state: "review", work_type: "story" }],
+  outputs: [{ state: "review", workType: "story" }],
   worker: "reviewer",
 } as const;
 
 const traceFanInCompleteWorkstation = {
   id: "complete",
-  inputs: [{ state: "review", work_type: "story" }],
+  inputs: [{ state: "review", workType: "story" }],
   name: "Complete",
-  outputs: [{ state: "active", work_type: "story" }],
+  outputs: [{ state: "active", workType: "story" }],
   worker: "completer",
 } as const;
 
@@ -665,7 +665,7 @@ function buildTraceFanInTimelineEvents(): FactoryEvent[] {
   return [
     factoryEvent("trace-fan-in-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
       factory: {
-        work_types: [{
+        workTypes: [{
           name: "story",
           states: [
             { name: "new", type: "INITIAL" },
@@ -858,7 +858,7 @@ function buildLegacyTraceTimelineEvents(): FactoryEvent[] {
   return [
     factoryEvent("trace-legacy-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
       factory: {
-        work_types: [{
+        workTypes: [{
           name: "story",
           states: [
             { name: "new", type: "INITIAL" },
@@ -978,7 +978,7 @@ function buildLegacyTraceTimelineEvents(): FactoryEvent[] {
 const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
   factoryEvent("timeline-zero-1", 0, FACTORY_EVENT_TYPES.initialStructureRequest, {
     factory: {
-      work_types: [{
+      workTypes: [{
         name: "story",
         states: [
           { name: "new", type: "INITIAL" },
@@ -988,9 +988,9 @@ const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          outputs: [{ state: "review", work_type: "story" }],
+          outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
       ],
@@ -1003,16 +1003,16 @@ const exportTimelineEvents: FactoryEvent[] = [
   factory: {
       id: "semantic-workflow",
       name: "semantic-workflow",
-      source_directory: "/work/factories/semantic-workflow",
+      factoryDirectory: "/work/factories/semantic-workflow",
       workers: [
         {
-          model_provider: "CODEX",
+          modelProvider: "CODEX",
           name: "reviewer",
-          provider: "SCRIPT_WRAP",
+          executorProvider: "SCRIPT_WRAP",
           type: "MODEL_WORKER",
         },
       ],
-      work_types: [{
+      workTypes: [{
         name: "story",
         states: [
           { name: "new", type: "INITIAL" },
@@ -1022,10 +1022,10 @@ const exportTimelineEvents: FactoryEvent[] = [
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          on_failure: { state: "done", work_type: "story" },
-          outputs: [{ state: "done", work_type: "story" }],
+          onFailure: { state: "done", workType: "story" },
+          outputs: [{ state: "done", workType: "story" }],
           worker: "reviewer",
         },
       ],
