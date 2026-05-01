@@ -1,4 +1,4 @@
-package functional_test
+package providers
 
 import (
 	"context"
@@ -13,11 +13,12 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution(t *testing.T) {
 	skipSlowFunctionalSmokeInShort(t, "slow timeout cleanup smoke")
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	childPIDFile := filepath.Join(t.TempDir(), "descendant.pid")
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
@@ -97,7 +98,7 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 
 func TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt(t *testing.T) {
 	skipSlowFunctionalSmokeInShort(t, "slow timeout retry smoke")
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	attemptFile := filepath.Join(t.TempDir(), "timeout-attempts.txt")
 
 	workerAgentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")

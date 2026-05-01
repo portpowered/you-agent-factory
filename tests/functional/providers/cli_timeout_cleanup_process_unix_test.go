@@ -1,12 +1,11 @@
 //go:build !windows
 
-package functional_test
+package providers
 
 import "syscall"
 
 func timeoutCleanupProcessRunning(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM
+	return syscall.Kill(pid, 0) == nil
 }
 
 func timeoutCleanupTerminateProcess(pid int) {
