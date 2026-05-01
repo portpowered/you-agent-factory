@@ -105,6 +105,8 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"RUN_RESPONSE":                "RunResponseEventPayload",
 }
 
+const openAPISchemaRefPrefix = "#/components/schemas/"
+
 // portos:func-length-exception owner=agent-factory reason=openapi-contract-table review=2026-07-18 removal=split-operation-and-schema-assertions-before-next-openapi-surface-change
 func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi.yaml")
@@ -1883,6 +1885,14 @@ func componentSchemas(t *testing.T, doc map[string]any) map[string]any {
 		t.Fatalf("components.schemas object is missing")
 	}
 	return schemas
+}
+
+func openAPISchemaNameFromRef(ref any) (string, bool) {
+	refString, ok := ref.(string)
+	if !ok || !strings.HasPrefix(refString, openAPISchemaRefPrefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(refString, openAPISchemaRefPrefix), true
 }
 
 func schemaObject(t *testing.T, schemas map[string]any, schemaName string) map[string]any {

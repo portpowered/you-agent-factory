@@ -300,15 +300,11 @@ function normalizeFactoryPayload(
   parsedEnvelope: Record<string, unknown>,
 ): CanonicalFactoryDefinition {
   const canonicalPayload = parsedEnvelope.factory;
-  if (canonicalPayload !== undefined) {
-    return normalizeFactoryDefinition(canonicalPayload);
+  if (canonicalPayload === undefined) {
+    throw new Error("PNG metadata is missing the canonical factory payload.");
   }
 
-  const legacyPayload = { ...parsedEnvelope };
-  delete legacyPayload.factoryName;
-  delete legacyPayload.name;
-  delete legacyPayload.schemaVersion;
-  return normalizeFactoryDefinition(legacyPayload);
+  return normalizeFactoryDefinition(canonicalPayload);
 }
 
 function readFactoryEnvelopeName(parsedEnvelope: Record<string, unknown>): ImportStepResult<string> {
@@ -317,14 +313,6 @@ function readFactoryEnvelopeName(parsedEnvelope: Record<string, unknown>): Impor
     return {
       ok: true,
       value: canonicalEnvelopeName,
-    };
-  }
-
-  const legacyEnvelopeName = readLegacyPortOSFactoryPngEnvelopeName(parsedEnvelope);
-  if (legacyEnvelopeName !== null) {
-    return {
-      ok: true,
-      value: legacyEnvelopeName,
     };
   }
 
@@ -498,19 +486,11 @@ function decodeAscii(value: Uint8Array): string {
 }
 
 function readCanonicalPortOSFactoryPngEnvelopeName(value: Record<string, unknown>): string | null {
-  if (!isNonEmptyString(value.name) || !isOptionalString(value.factoryName)) {
+  if (!isNonEmptyString(value.name)) {
     return null;
   }
 
   return value.name.trim();
-}
-
-function readLegacyPortOSFactoryPngEnvelopeName(value: Record<string, unknown>): string | null {
-  if (!isNonEmptyString(value.factoryName) || value.name !== undefined) {
-    return null;
-  }
-
-  return value.factoryName.trim();
 }
 
 function isStringMap(value: unknown): value is Record<string, string> | undefined {
@@ -527,10 +507,6 @@ function isStringMap(value: unknown): value is Record<string, string> | undefine
 
 function isOptionalArray<T>(value: unknown, predicate: (entry: unknown) => boolean): value is T[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((entry) => predicate(entry)));
-}
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
 }
 
 function isNonEmptyString(value: unknown): value is string {

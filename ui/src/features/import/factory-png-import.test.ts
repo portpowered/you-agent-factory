@@ -78,7 +78,7 @@ describe("readFactoryImportPng", () => {
     expect(revokePreviewImageSrc).toHaveBeenCalledWith(previewUrl);
   });
 
-  it("accepts the legacy v1 factoryName envelope and normalizes it to name", async () => {
+  it("rejects the retired factoryName envelope fallback", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => "blob:legacy-preview",
       file: createLegacyFactoryPngFile({
@@ -89,21 +89,13 @@ describe("readFactoryImportPng", () => {
       validatePreviewImage: async () => {},
     });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      throw new Error("expected successful PNG import");
-    }
-
-    expect(result.value.envelope).toEqual({
-      factory: canonicalFactory,
-      name: "Legacy Factory Import",
-      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+    expect(result).toEqual({
+      error: {
+        code: "PNG_METADATA_INVALID",
+        message: "The Port OS factory metadata is missing the factory name.",
+      },
+      ok: false,
     });
-    expect(result.value.namedFactory).toEqual({
-      factory: canonicalFactory,
-      name: "Legacy Factory Import",
-    });
-    expect(result.value.factoryName).toBe("Legacy Factory Import");
   });
 
   it("rejects factory payloads that fall outside the generated contract", async () => {
@@ -120,6 +112,32 @@ describe("readFactoryImportPng", () => {
           },
           name: "Invalid Factory Import",
           schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+        }),
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        code: "FACTORY_PAYLOAD_INVALID",
+        message: "The Port OS factory metadata does not contain a valid factory payload.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects PNG metadata that falls back to the legacy top-level factory payload", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify({
+          name: "Legacy Factory Import",
+          schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+          workTypes: canonicalFactory.workTypes,
+          workers: canonicalFactory.workers,
+          workstations: canonicalFactory.workstations,
         }),
       ),
       validatePreviewImage: async () => {},

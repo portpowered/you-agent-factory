@@ -19,11 +19,10 @@ describe("normalizeFactoryDefinition", () => {
           {
             modelProvider: "CODEX",
             name: "writer",
-            session_id: "sess-123",
             type: "MODEL_WORKER",
           },
         ],
-        work_types: [
+        workTypes: [
           {
             name: "story",
             states: [{ name: "new", type: "INITIAL" }],
@@ -117,6 +116,39 @@ describe("normalizeFactoryDefinition", () => {
     ).toThrowError(
       new FactoryDefinitionAPIError(
         "factory.workstations[0].behavior must be one of CRON, REPEATER, STANDARD.",
+      ),
+    );
+  });
+
+  it("rejects retired legacy field aliases in the UI boundary", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workers: [
+          {
+            model_provider: "CODEX",
+            name: "writer",
+          },
+        ],
+        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workstations: [
+          {
+            definition: {
+              runtime_type: "MODEL_WORKSTATION",
+            },
+            inputs: [{ state: "new", work_type: "story" }],
+            name: "Draft",
+            on_failure: { state: "failed", work_type: "story" },
+            outputs: [{ state: "done", work_type: "story" }],
+            resource_usage: [{ capacity: 1, name: "slot" }],
+            stop_token: "DONE",
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workers[0].model_provider is not allowed by the generated factory contract.",
       ),
     );
   });
