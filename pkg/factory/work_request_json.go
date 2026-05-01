@@ -64,26 +64,12 @@ func RejectConflictingWorkRequestTraceFields(data []byte) error {
 		return fmt.Errorf("parse work request chaining traces: %w", err)
 	}
 	for i := range raw.Works {
-		currentRaw := raw.Works[i].CurrentChainingTraceID
-		if currentRaw == nil {
-			currentRaw = raw.Works[i].LegacyCurrentChaining
-		}
-		traceRaw := raw.Works[i].TraceID
-		if traceRaw == nil {
-			traceRaw = raw.Works[i].LegacyTraceID
-		}
-		if currentRaw == nil || traceRaw == nil {
-			continue
-		}
-		var current string
-		if err := json.Unmarshal(currentRaw, &current); err != nil {
-			return fmt.Errorf("parse work request works[%d] current chaining trace: %w", i, err)
-		}
-		var legacy string
-		if err := json.Unmarshal(traceRaw, &legacy); err != nil {
-			return fmt.Errorf("parse work request works[%d] traceId: %w", i, err)
-		}
-		if err := ValidateWorkRequestTraceFields(current, legacy); err != nil {
+		if err := ValidateWorkRequestTraceFieldAliases(
+			raw.Works[i].CurrentChainingTraceID,
+			raw.Works[i].LegacyCurrentChaining,
+			raw.Works[i].TraceID,
+			raw.Works[i].LegacyTraceID,
+		); err != nil {
 			return fmt.Errorf("work request batch works[%d] %w", i, err)
 		}
 	}

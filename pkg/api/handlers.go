@@ -732,27 +732,12 @@ func rejectPublicBatchWorkAliases(fields map[string]json.RawMessage, prefix stri
 }
 
 func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, prefix string) error {
-	currentRaw, hasCurrent := fields[currentChainingTraceIDField]
-	legacyRaw, hasLegacy := fields[traceIDField]
-	if !hasCurrent {
-		currentRaw, hasCurrent = fields[legacyCurrentChainingTraceIDField]
-	}
-	if !hasLegacy {
-		legacyRaw, hasLegacy = fields[legacyTraceIDField]
-	}
-	if !hasCurrent || !hasLegacy {
-		return nil
-	}
-
-	var current string
-	if err := json.Unmarshal(currentRaw, &current); err != nil {
-		return err
-	}
-	var legacy string
-	if err := json.Unmarshal(legacyRaw, &legacy); err != nil {
-		return err
-	}
-	if err := factorypkg.ValidateWorkRequestTraceFields(current, legacy); err != nil {
+	if err := factorypkg.ValidateWorkRequestTraceFieldAliases(
+		fields[currentChainingTraceIDField],
+		fields[legacyCurrentChainingTraceIDField],
+		fields[traceIDField],
+		fields[legacyTraceIDField],
+	); err != nil {
 		return requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
 	}
 	return nil

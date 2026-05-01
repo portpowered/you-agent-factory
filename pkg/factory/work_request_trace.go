@@ -1,6 +1,10 @@
 package factory
 
-import "errors"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+)
 
 var errConflictingWorkRequestTraceFields = errors.New("currentChainingTraceId and traceId must match when both are provided")
 
@@ -20,4 +24,28 @@ func ValidateWorkRequestTraceFields(current string, legacy string) error {
 		return errConflictingWorkRequestTraceFields
 	}
 	return nil
+}
+
+// ValidateWorkRequestTraceFieldAliases resolves supported trace field aliases
+// and rejects mismatched currentChainingTraceId versus traceId values.
+func ValidateWorkRequestTraceFieldAliases(currentRaw json.RawMessage, legacyCurrentRaw json.RawMessage, traceRaw json.RawMessage, legacyTraceRaw json.RawMessage) error {
+	if currentRaw == nil {
+		currentRaw = legacyCurrentRaw
+	}
+	if traceRaw == nil {
+		traceRaw = legacyTraceRaw
+	}
+	if currentRaw == nil || traceRaw == nil {
+		return nil
+	}
+
+	var current string
+	if err := json.Unmarshal(currentRaw, &current); err != nil {
+		return fmt.Errorf("parse currentChainingTraceId: %w", err)
+	}
+	var legacy string
+	if err := json.Unmarshal(traceRaw, &legacy); err != nil {
+		return fmt.Errorf("parse traceId: %w", err)
+	}
+	return ValidateWorkRequestTraceFields(current, legacy)
 }
