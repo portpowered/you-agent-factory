@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 
 	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
@@ -202,12 +201,10 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	}
 	sort.Slice(tokens, func(i, j int) bool { return tokens[i].ID < tokens[j].ID })
 
-	// Parse pagination parameters.
+	// Consume canonical parsed params; the handwritten /work route owns tolerant query parsing.
 	maxResults := defaultMaxResults
 	if params.MaxResults != nil && *params.MaxResults > 0 {
 		maxResults = *params.MaxResults
-	} else if v := r.URL.Query().Get("maxResults"); v != "" {
-		maxResults = positiveAtoiOrDefault(v, defaultMaxResults)
 	}
 
 	startIdx := 0
@@ -491,14 +488,6 @@ func (s *Server) writeSSEDataJSON(w http.ResponseWriter, v any) error {
 	}
 	_, err = fmt.Fprintf(w, "data: %s\n\n", payload)
 	return err
-}
-
-func positiveAtoiOrDefault(value string, fallback int) int {
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-	return parsed
 }
 
 func errorFamilyForStatus(status int) factoryapi.ErrorFamily {

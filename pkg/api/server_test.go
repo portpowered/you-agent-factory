@@ -87,6 +87,30 @@ func assertJSONError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	}
 }
 
+func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*interfaces.Token {
+	tokens := make(map[string]*interfaces.Token, count)
+	for i := 1; i <= count; i++ {
+		suffix := string(rune('0' + i))
+		id := "tok-" + prefix + "-" + suffix
+		tokens[id] = &interfaces.Token{
+			ID:      id,
+			PlaceID: prefix + ":init",
+			Color: interfaces.TokenColor{
+				WorkID:     "work-" + prefix + "-" + suffix,
+				WorkTypeID: prefix,
+			},
+			CreatedAt: now,
+			EnteredAt: now,
+			History: interfaces.TokenHistory{
+				TotalVisits:         make(map[string]int),
+				ConsecutiveFailures: make(map[string]int),
+				PlaceVisits:         make(map[string]int),
+			},
+		}
+	}
+	return tokens
+}
+
 func TestSubmitWork(t *testing.T) {
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
@@ -1574,25 +1598,7 @@ func TestDashboardSnapshotRoutes_RemovedFromRouter(t *testing.T) {
 
 func TestListWork(t *testing.T) {
 	now := time.Now()
-	tokens := make(map[string]*interfaces.Token)
-	for i := 1; i <= 3; i++ {
-		id := "tok-prd-" + string(rune('0'+i))
-		tokens[id] = &interfaces.Token{
-			ID:      id,
-			PlaceID: "prd:init",
-			Color: interfaces.TokenColor{
-				WorkID:     "work-prd-" + string(rune('0'+i)),
-				WorkTypeID: "prd",
-			},
-			CreatedAt: now,
-			EnteredAt: now,
-			History: interfaces.TokenHistory{
-				TotalVisits:         make(map[string]int),
-				ConsecutiveFailures: make(map[string]int),
-				PlaceVisits:         make(map[string]int),
-			},
-		}
-	}
+	tokens := makeListWorkTokens("prd", 3, now)
 
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{Tokens: tokens},
@@ -1608,7 +1614,9 @@ func TestListWork(t *testing.T) {
 	}
 
 	var resp factoryapi.ListWorkResponse
-	json.NewDecoder(rec.Body).Decode(&resp)
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 	if len(resp.Results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(resp.Results))
 	}
@@ -1622,25 +1630,7 @@ func TestListWork(t *testing.T) {
 
 func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 	now := time.Now()
-	tokens := make(map[string]*interfaces.Token)
-	for i := 1; i <= 3; i++ {
-		id := "tok-legacy-" + string(rune('0'+i))
-		tokens[id] = &interfaces.Token{
-			ID:      id,
-			PlaceID: "legacy:init",
-			Color: interfaces.TokenColor{
-				WorkID:     "work-legacy-" + string(rune('0'+i)),
-				WorkTypeID: "legacy",
-			},
-			CreatedAt: now,
-			EnteredAt: now,
-			History: interfaces.TokenHistory{
-				TotalVisits:         make(map[string]int),
-				ConsecutiveFailures: make(map[string]int),
-				PlaceVisits:         make(map[string]int),
-			},
-		}
-	}
+	tokens := makeListWorkTokens("legacy", 3, now)
 
 	srv := newTestServer(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{Tokens: tokens},
@@ -1650,6 +1640,8 @@ func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 		name string
 		path string
 	}{
+		{name: "absent", path: "/work"},
+		{name: "empty", path: "/work?maxResults="},
 		{name: "invalid", path: "/work?maxResults=abc"},
 		{name: "non_positive", path: "/work?maxResults=0"},
 	} {
@@ -1673,6 +1665,62 @@ func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 				t.Fatalf("expected no pagination context when maxResults defaults to %d, got %#v", defaultMaxResults, resp.PaginationContext)
 			}
 		})
+	}
+}
+
+func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: makeListWorkTokens("cursor", 3, time.Now())},
+	})
+
+	firstReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2", nil)
+	firstRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(firstRec, firstReq)
+
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("first page status = %d, want %d", firstRec.Code, http.StatusOK)
+	}
+
+	var firstResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(firstRec.Body).Decode(&firstResp); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(firstResp.Results) != 2 {
+		t.Fatalf("first page results = %d, want 2", len(firstResp.Results))
+	}
+	if firstResp.PaginationContext == nil {
+		t.Fatal("expected first page pagination context")
+	}
+
+	nextToken := stringValue(firstResp.PaginationContext.NextToken)
+	if nextToken == "" {
+		t.Fatal("expected first page nextToken")
+	}
+
+	secondReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2&nextToken="+nextToken, nil)
+	secondRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(secondRec, secondReq)
+
+	if secondRec.Code != http.StatusOK {
+		t.Fatalf("second page status = %d, want %d", secondRec.Code, http.StatusOK)
+	}
+
+	var secondResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(secondRec.Body).Decode(&secondResp); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(secondResp.Results) != 1 {
+		t.Fatalf("second page results = %d, want 1", len(secondResp.Results))
+	}
+	if secondResp.PaginationContext != nil {
+		t.Fatalf("expected final page to omit pagination context, got %#v", secondResp.PaginationContext)
+	}
+	if firstResp.Results[0].WorkId != "work-cursor-1" ||
+		firstResp.Results[1].WorkId != "work-cursor-2" {
+		t.Fatalf("unexpected first page work ids: %#v", firstResp.Results)
+	}
+	if secondResp.Results[0].WorkId != "work-cursor-3" {
+		t.Fatalf("unexpected continued work id %q", secondResp.Results[0].WorkId)
 	}
 }
 
