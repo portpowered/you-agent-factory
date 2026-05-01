@@ -1,4 +1,4 @@
-package functional_test
+package providers
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/agent-factory/pkg/logging"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 const runtimeLoggingSmokeEnvKey = "AGENT_FACTORY_RUNTIME_LOGGING_SMOKE_ENV"
@@ -118,7 +119,7 @@ type runtimeLoggingSmokeResult struct {
 func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingConfig logging.RuntimeLogConfig) runtimeLoggingSmokeResult {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "script_executor_dir"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		RequestID:  "request-runtime-logging-smoke",
 		WorkID:     "work-runtime-logging-smoke",
@@ -206,8 +207,24 @@ func requireRecordedCompletion(t *testing.T, artifact *interfaces.ReplayArtifact
 	if len(completions) != 1 {
 		t.Fatalf("recorded completions = %d, want 1", len(completions))
 	}
-	completion := completions[0]
-	return completion
+	return completions[0]
+}
+
+func replayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []factoryapi.DispatchResponseEventPayload {
+	t.Helper()
+
+	events := make([]factoryapi.DispatchResponseEventPayload, 0)
+	for _, event := range artifact.Events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode DISPATCH_RESPONSE event %q: %v", event.Id, err)
+		}
+		events = append(events, payload)
+	}
+	return events
 }
 
 func assertRuntimeRecordsDoNotDuplicateEnvDiagnostics(t *testing.T, records []map[string]any) {
@@ -257,4 +274,11 @@ func assertRuntimeStartupRollingPolicy(t *testing.T, records []map[string]any, l
 	if startup["record_command_diagnostics"] != "preserved" {
 		t.Fatalf("record_command_diagnostics = %#v, want preserved in record %#v", startup["record_command_diagnostics"], startup)
 	}
+}
+
+func stringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
