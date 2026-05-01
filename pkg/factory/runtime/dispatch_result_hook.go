@@ -17,7 +17,6 @@ type workerPoolDispatchResultHook struct {
 	net           *state.Net
 	pool          *workers.WorkerPool
 	executors     map[string]workers.WorkerExecutor
-	syncDispatch  bool
 	logger        logging.Logger
 	waitCh        chan struct{}
 	results       []interfaces.WorkResult
@@ -51,7 +50,6 @@ func newWorkerPoolDispatchResultHook(
 		net:           net,
 		pool:          pool,
 		executors:     executors,
-		syncDispatch:  planner != nil,
 		logger:        logging.EnsureLogger(logger),
 		waitCh:        make(chan struct{}, buffer),
 		deliveryTicks: make(map[string]int),
@@ -80,7 +78,7 @@ func (h *workerPoolDispatchResultHook) SubmitDispatch(_ context.Context, dispatc
 		h.deliveryTicks[dispatch.DispatchID] = deliveryTick
 		h.mu.Unlock()
 	}
-	if h.syncDispatch {
+	if h.planner != nil {
 		result := executeDispatchSynchronously(dispatch, runnerKey, h.executors)
 		if provider, ok := h.planner.(plannedCompletionResultProvider); ok {
 			planned, hasPlanned, err := provider.PlannedResultForDispatch(dispatch)
