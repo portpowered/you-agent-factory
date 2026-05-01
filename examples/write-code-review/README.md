@@ -74,7 +74,7 @@ When a `FACTORY_REQUEST_BATCH` PRD request is submitted (see `inputs/sample-prd.
 
 ### 2. Repeater Workstation (`execute-story`)
 
-The executor uses `"kind": "repeater"` so it re-fires on every non-terminal (REJECTED) result. The agent keeps iterating until quality checks pass and it outputs `<result>ACCEPTED</result>`. The `executor-loop-breaker` guarded `LOGICAL_MOVE` workstation caps iterations at 50.
+The executor uses `"behavior": "REPEATER"` so it re-fires on every non-terminal (REJECTED) result. The agent keeps iterating until quality checks pass and it outputs `<result>ACCEPTED</result>`. The `executor-loop-breaker` guarded `LOGICAL_MOVE` workstation caps iterations at 50.
 
 ### 3. Guarded Loop Breakers
 

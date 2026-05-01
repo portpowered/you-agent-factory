@@ -36,7 +36,7 @@
           "workType": "task"
         }
       ],
-      "behavior": "repeater",
+      "behavior": "REPEATER",
       "name": "executor",
       "onFailure": {
         "state": "failed",
@@ -84,7 +84,7 @@
       "guards": [
         {
           "maxVisits": 5,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "executor"
         }
       ],

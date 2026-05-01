@@ -186,7 +186,7 @@
           "workType": "task"
         }
       ],
-      "behavior": "repeater",
+      "behavior": "REPEATER",
       "name": "process",
       "onFailure": {
         "state": "failed",
@@ -246,7 +246,7 @@
       "guards": [
         {
           "maxVisits": 5,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "process"
         }
       ],
@@ -270,7 +270,7 @@
       "guards": [
         {
           "maxVisits": 2,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review"
         }
       ],

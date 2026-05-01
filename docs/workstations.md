@@ -45,7 +45,7 @@ execute:
 ```json
 {
   "name": "review-story",
-  "kind": "standard",
+  "behavior": "STANDARD",
   "worker": "reviewer",
   "inputs": [{ "workType": "story", "state": "in-review" }],
   "outputs": [{ "workType": "story", "state": "complete" }],
@@ -57,7 +57,7 @@ execute:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Stable workstation name. This is also the transition ID in runtime events. |
-| `kind` | No | Scheduling kind. Use `standard`, `repeater`, or `cron`. Defaults to `standard`. |
+| `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, or `CRON`. Defaults to `STANDARD`. |
 | `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch and cron workstations. |
 | `inputs` | Usually | IO places that enable the workstation. |
 | `outputs` | Usually | IO places produced when the worker returns accepted. |
@@ -66,27 +66,27 @@ execute:
 | `onFailure` | Recommended | IO place produced when execution fails or times out. |
 | `resources` | No | Resource capacity consumed while the workstation runs. |
 | `guards` | No | Workstation-level visit-count guard. |
-| `cron` | Cron only | Schedule for `kind: "cron"`. |
+| `CRON` | Cron only | Schedule for `behavior: "CRON"`. |
 
-Use `kind` for scheduling behavior. Use `type` only for the runtime
+Use `behavior` for scheduling behavior. Use `type` only for the runtime
 implementation, such as `MODEL_WORKSTATION` or `LOGICAL_MOVE`.
 
 ## Workstation Kinds
 
 | Kind | Behavior |
 |------|----------|
-| `standard` | Default fire-once scheduling. Inputs are consumed, the worker runs, and output routing follows the worker outcome. |
-| `repeater` | Re-fires after continue results. Use for agent loops that should keep working until accepted or failed, while reserving rejection for true negative outcomes. |
-| `cron` | Creates internal time work in service mode and dispatches when the schedule and any configured inputs are ready. |
+| `STANDARD` | Default fire-once scheduling. Inputs are consumed, the worker runs, and output routing follows the worker outcome. |
+| `REPEATER` | Re-fires after continue results. Use for agent loops that should keep working until accepted or failed, while reserving rejection for true negative outcomes. |
+| `CRON` | Creates internal time work in service mode and dispatches when the schedule and any configured inputs are ready. |
 
 ### Standard Kind
 
-Use `standard` for normal pipeline stages:
+Use `STANDARD` for normal pipeline stages:
 
 ```json
 {
   "name": "process",
-  "kind": "standard",
+  "behavior": "STANDARD",
   "worker": "processor",
   "inputs": [{ "workType": "task", "state": "init" }],
   "outputs": [{ "workType": "task", "state": "complete" }],
@@ -94,17 +94,17 @@ Use `standard` for normal pipeline stages:
 }
 ```
 
-Omitting `kind` has the same runtime behavior as `"kind": "standard"`.
+Omitting `behavior` has the same runtime behavior as `"behavior": "STANDARD"`.
 
 ### Repeater Kind
 
-Use `repeater` when ordinary partial progress should continue iterating without
+Use `REPEATER` when ordinary partial progress should continue iterating without
 being treated as rejection:
 
 ```json
 {
   "name": "execute-story",
-  "kind": "repeater",
+  "behavior": "REPEATER",
   "worker": "executor",
   "inputs": [{ "workType": "story", "state": "init" }],
   "outputs": [{ "workType": "story", "state": "in-review" }],
@@ -122,7 +122,7 @@ Pair repeaters with a guarded loop-breaker workstation:
 {
   "name": "executor-loop-breaker",
   "type": "LOGICAL_MOVE",
-  "guards": [{ "type": "visit_count", "workstation": "execute-story", "maxVisits": 50 }],
+  "guards": [{ "type": "VISIT_COUNT", "workstation": "execute-story", "maxVisits": 50 }],
   "inputs": [{ "workType": "story", "state": "init" }],
   "outputs": [{ "workType": "story", "state": "failed" }]
 }
@@ -134,13 +134,13 @@ loop-breaker route.
 
 ### Cron Kind
 
-Use `cron` when a workstation should run on a schedule while the factory is in
+Use `CRON` when a workstation should run on a schedule while the factory is in
 service mode:
 
 ```json
 {
   "name": "daily-refresh",
-  "kind": "cron",
+  "behavior": "CRON",
   "worker": "refresh-worker",
   "cron": {
     "schedule": "*/5 * * * *",
@@ -153,12 +153,12 @@ service mode:
 
 Cron workstations require:
 
-- `kind: "cron"`
+- `behavior: "CRON"`
 - a `worker`
 - a `cron.schedule`
 - at least one `outputs` entry
 
-The `cron` object supports:
+The `CRON` object supports:
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -349,8 +349,8 @@ model-routing and executor-adapter settings:
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 1h
 skipPermissions: true
 ---
@@ -378,7 +378,7 @@ Worker fields:
 |-------|------------|-------------|
 | `type` | All | `MODEL_WORKER` or `SCRIPT_WORKER`. |
 | `model` | Model | Provider model name. |
-| `modelProvider` | Model | Model-provider identifier used for model routing and provider diagnostics. Built-in values are `claude` and `codex`. |
+| `modelProvider` | Model | Model-provider identifier used for model routing and provider diagnostics. Built-in values are `CLAUDE` and `CODEX`. |
 | `executorProvider` | Model | Executor adapter identifier used to select the worker execution wrapper. This is distinct from `modelProvider`. |
 | `command` | Script | Executable name. |
 | `args` | Script | Arguments. Values support template rendering. |
@@ -389,8 +389,8 @@ Worker fields:
 
 The canonical source of truth for worker-contract values is the `Worker` schema
 in [`api/openapi.yaml`](../api/openapi.yaml). Current built-in
-`modelProvider` values are `claude` and `codex`, and the current public
-`executorProvider` value is `script_wrap`.
+`modelProvider` values are `CLAUDE` and `CODEX`, and the current public
+`executorProvider` value is `SCRIPT_WRAP`.
 
 ## Templates
 
@@ -435,14 +435,14 @@ workstation should wait for those children. Keep parent-aware fan-in on
 retired.
 
 See [Parent-Aware Fan-In](guides/parent-aware-fan-in.md) for the full
-authoring guide, including `all_children_complete`, `any_child_failed`,
+authoring guide, including `ALL_CHILDREN_COMPLETE`, `ANY_CHILD_FAILED`,
 `parentInput`, and `spawnedBy`.
 
 ## Same-Name Input Guards
 
 Use per-input guards for same-name joins when one workstation should consume
 two normal inputs only if their authored work names match exactly. Keep this on
-`workstations[].inputs[].guards[]`, attach `type: "same_name"` to one input,
+`workstations[].inputs[].guards[]`, attach `type: "SAME_NAME"` to one input,
 and set `matchInput` to the peer input's `workType` name on the same
 workstation.
 
@@ -455,7 +455,7 @@ workstation-level guards.
 
 ## Workstation-Level Guards
 
-Workstation-level guards support `visit_count` and `matches_fields`. They gate
+Workstation-level guards support `VISIT_COUNT` and `MATCHES_FIELDS`. They gate
 whether a workstation may fire; they do not create a failure or terminal route.
 Prefer a guarded `LOGICAL_MOVE` workstation for common loop-breaking routes
 because it states the source and target places explicitly.
@@ -491,7 +491,7 @@ for the full comparison.
   "workstations": [
     {
       "name": "execute-story",
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
@@ -518,7 +518,7 @@ for the full comparison.
       "type": "LOGICAL_MOVE",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "failed" }],
-      "guards": [{ "type": "visit_count", "workstation": "execute-story", "maxVisits": 50 }]
+      "guards": [{ "type": "VISIT_COUNT", "workstation": "execute-story", "maxVisits": 50 }]
     }
   ]
 }
@@ -550,8 +550,8 @@ Branch: {{ index (index .Inputs 0).Tags "branch" }}
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 1h
 skipPermissions: true
 ---
@@ -562,7 +562,7 @@ verification, and report the result.
 
 ## Authoring Checklist
 
-- `kind` is one of `standard`, `repeater`, or `cron`.
+- `behavior` is one of `STANDARD`, `REPEATER`, or `CRON`.
 - Runtime workstation `type` is `MODEL_WORKSTATION` or `LOGICAL_MOVE`.
 - Worker `type` is `MODEL_WORKER` or `SCRIPT_WORKER`.
 - Every non-logical workstation names a declared worker.

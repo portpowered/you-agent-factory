@@ -7,7 +7,7 @@ doc-id: agent-factory/guides/workstation-guards-and-guarded-loop-breakers
 # Workstation Guards And Guarded Loop Breakers
 
 Use this guide when deciding whether a workflow needs a workstation-level
-`visit_count` guard, a guarded `LOGICAL_MOVE` loop breaker, a same-name input
+`VISIT_COUNT` guard, a guarded `LOGICAL_MOVE` loop breaker, a same-name input
 guard, parent-aware fan-in guards, resource limits, or runtime timeouts.
 
 The public authoring pattern for visit-count loop breaking is a guarded
@@ -18,10 +18,10 @@ workstation, and visit threshold explicit in normal workstation topology.
 
 | Need | Use |
 |------|-----|
-| Stop a retry or review loop and move work to a failed or terminal state | A guarded `LOGICAL_MOVE` workstation with a `visit_count` guard |
-| Allow a workstation only after another workstation has visited the token enough times | `workstations[].guards[]` with `type: "visit_count"` |
-| Require all grouped workstation inputs to resolve the same field value before dispatch | `workstations[].guards[]` with `type: "matches_fields"` and `matchConfig.inputKey` |
-| Join two normal workstation inputs only when their authored work names match | `workstations[].inputs[].guards[]` with `type: "same_name"` and `matchInput` |
+| Stop a retry or review loop and move work to a failed or terminal state | A guarded `LOGICAL_MOVE` workstation with a `VISIT_COUNT` guard |
+| Allow a workstation only after another workstation has visited the token enough times | `workstations[].guards[]` with `type: "VISIT_COUNT"` |
+| Require all grouped workstation inputs to resolve the same field value before dispatch | `workstations[].guards[]` with `type: "MATCHES_FIELDS"` and `matchConfig.inputKey` |
+| Join two normal workstation inputs only when their authored work names match | `workstations[].inputs[].guards[]` with `type: "SAME_NAME"` and `matchInput` |
 | Wait for spawned children to complete or fail | `workstations[].inputs[].guards[]` with the parent-aware child guard type |
 | Limit concurrent dispatches | `resources[]` plus `workstations[].resources[]` |
 | Limit one dispatch's runtime duration | workstation `limits.maxExecutionTime` |
@@ -46,7 +46,7 @@ Attach the guard to one input and point `matchInput` at the peer input's
       "state": "ready",
       "guards": [
         {
-          "type": "same_name",
+          "type": "SAME_NAME",
           "matchInput": "planItem"
         }
       ]
@@ -59,7 +59,7 @@ Attach the guard to one input and point `matchInput` at the peer input's
 In this workstation shape:
 
 - `matchInput: "planItem"` names the peer input on the same workstation.
-- The `same_name` guard compares the guarded `taskItem` token's authored work
+- The `SAME_NAME` guard compares the guarded `taskItem` token's authored work
   name to the bound `planItem` token's authored work name.
 - The workstation stays disabled when the names differ or when either token
   does not have a usable authored work name.
@@ -81,7 +81,7 @@ until the watched workstation has been visited enough times:
   "outputs": [{ "workType": "story", "state": "complete" }],
   "guards": [
     {
-      "type": "visit_count",
+      "type": "VISIT_COUNT",
       "workstation": "execute-story",
       "maxVisits": 2
     }
@@ -98,7 +98,7 @@ Important behavior:
   source-to-target route.
 - If the guard is false, the token stays in its current place until another
   workstation can consume it.
-- Workstation-level `guards[]` support `visit_count` and `matches_fields`.
+- Workstation-level `guards[]` support `VISIT_COUNT` and `MATCHES_FIELDS`.
 - Parent-aware child guards stay on `workstations[].inputs[].guards[]`, not on
   workstation-level `guards[]`.
 
@@ -116,7 +116,7 @@ its visit threshold:
   "outputs": [{ "workType": "story", "state": "failed" }],
   "guards": [
     {
-      "type": "visit_count",
+      "type": "VISIT_COUNT",
       "workstation": "review-story",
       "maxVisits": 3
     }
@@ -129,7 +129,7 @@ This loop breaker fires only when both conditions are true:
 - The token is waiting in `story:init` after `review-story` rejected it there.
 - The token's visit count for `review-story` is greater than or equal to `3`.
 
-`visit_count` passes when the watched workstation's visits are greater than or
+`VISIT_COUNT` passes when the watched workstation's visits are greater than or
 equal to `maxVisits`. The threshold is inclusive.
 
 ## Match Inputs By Resolved Field
@@ -148,7 +148,7 @@ candidate input sets whose resolved selector values all match.
   "outputs": [{ "workType": "asset", "state": "matched" }],
   "guards": [
     {
-      "type": "matches_fields",
+      "type": "MATCHES_FIELDS",
       "matchConfig": { "inputKey": ".Name" }
     }
   ]
@@ -161,7 +161,7 @@ The same matcher contract also supports nested tag selectors:
 {
   "guards": [
     {
-      "type": "matches_fields",
+      "type": "MATCHES_FIELDS",
       "matchConfig": { "inputKey": ".Tags[\"_last_output\"]" }
     }
   ]
@@ -201,7 +201,7 @@ loops:
   "workstations": [
     {
       "name": "execute-story",
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
@@ -222,7 +222,7 @@ loops:
       "outputs": [{ "workType": "story", "state": "failed" }],
       "guards": [
         {
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "execute-story",
           "maxVisits": 50
         }
@@ -235,7 +235,7 @@ loops:
       "outputs": [{ "workType": "story", "state": "failed" }],
       "guards": [
         {
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review-story",
           "maxVisits": 3
         }
@@ -248,7 +248,7 @@ loops:
 ## What Guarded Loop Breakers Are Not
 
 Guarded loop breakers are not same-name joins. Use
-`workstations[].inputs[].guards[]` with `type: "same_name"` and `matchInput`
+`workstations[].inputs[].guards[]` with `type: "SAME_NAME"` and `matchInput`
 when two normal inputs should match by authored work name.
 
 Guarded loop breakers are not resource limits. Use `resources[]` and
@@ -258,8 +258,8 @@ Guarded loop breakers are not dispatch timeouts. Use workstation
 `limits.maxExecutionTime` for the maximum duration of one execution.
 
 Guarded loop breakers are not parent-aware child guards. Use
-`workstations[].inputs[].guards[]` for `all_children_complete` and
-`any_child_failed`.
+`workstations[].inputs[].guards[]` for `ALL_CHILDREN_COMPLETE` and
+`ANY_CHILD_FAILED`.
 
 `limits.maxRetries` is a runtime retry or failure limit. It is not a
 substitute for a visible workflow route to a named failed or terminal state.
@@ -271,12 +271,12 @@ substitute for a visible workflow route to a named failed or terminal state.
 - Keep same-name matching on `workstations[].inputs[].guards[]`, not on
   workstation-level `guards[]`.
 - Every same-name guard names a different peer input with `matchInput`.
-- Use `workstations[].guards[]` only for workstation-level `visit_count` or
-  `matches_fields` gating.
+- Use `workstations[].guards[]` only for workstation-level `VISIT_COUNT` or
+  `MATCHES_FIELDS` gating.
 - Keep parent-aware child guards on `workstations[].inputs[].guards[]`.
-- Every `visit_count` workstation guard has `type`, `workstation`, and
+- Every `VISIT_COUNT` workstation guard has `type`, `workstation`, and
   positive `maxVisits`.
-- Every `matches_fields` workstation guard has `type` and non-empty
+- Every `MATCHES_FIELDS` workstation guard has `type` and non-empty
   `matchConfig.inputKey`.
 - Every guarded loop breaker has one explicit source input and target output.
 - Loop-breaker source and target states reference real work types and states.

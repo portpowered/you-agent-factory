@@ -107,7 +107,7 @@ camelCase config fields.
   "workstations": [
     {
       "name": "execute-story",
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
@@ -127,7 +127,7 @@ camelCase config fields.
     {
       "name": "review-loop-breaker",
       "type": "LOGICAL_MOVE",
-      "guards": [{ "type": "visit_count", "workstation": "review-story", "maxVisits": 3 }],
+      "guards": [{ "type": "VISIT_COUNT", "workstation": "review-story", "maxVisits": 3 }],
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "failed" }]
     }
@@ -205,8 +205,8 @@ checks or bundled helper files that should travel with the factory contract.
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 1h
 skipPermissions: true
 ---
@@ -221,8 +221,8 @@ verification before finishing.
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 30m
 skipPermissions: true
 ---

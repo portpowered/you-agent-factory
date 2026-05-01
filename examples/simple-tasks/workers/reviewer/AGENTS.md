@@ -1,8 +1,8 @@
 ---
 type: MODEL_WORKER
 model: claude-sonnet-4-6
-modelProvider: claude
-executorProvider: script_wrap
+modelProvider: CLAUDE
+executorProvider: SCRIPT_WRAP
 resources:
   - name: agent-slot
     capacity: 1

@@ -70,7 +70,7 @@ limits, and executor settings.
 
 - Use camelCase public fields such as `workTypes`, `modelProvider`,
   `executorProvider`, `stopWords`, and `maxExecutionTime`.
-- Use `kind` for workstation scheduling behavior and `type` for runtime
+- Use `behavior` for workstation scheduling behavior and `type` for runtime
   implementation details.
 - Keep guarded `LOGICAL_MOVE` workstations explicit instead of relying on
   retired top-level loop-breaking fields.

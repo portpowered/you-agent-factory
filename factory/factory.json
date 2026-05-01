@@ -135,7 +135,7 @@
       "outputs": [{ "workType": "task", "state": "failed" }],
       "guards": [
         {
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "process",
           "maxVisits": 50
         }
@@ -148,7 +148,7 @@
       "outputs": [{ "workType": "task", "state": "failed" }],
       "guards": [
         {
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review",
           "maxVisits": 10
         }

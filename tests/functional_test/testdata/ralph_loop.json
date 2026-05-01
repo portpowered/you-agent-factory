@@ -38,7 +38,7 @@
           "workType": "story"
         }
       ],
-      "behavior": "repeater",
+      "behavior": "REPEATER",
       "name": "executor",
       "onFailure": {
         "state": "failed",
@@ -86,7 +86,7 @@
       "guards": [
         {
           "maxVisits": 3,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "reviewer"
         }
       ],

@@ -170,8 +170,8 @@ func writeFlattenCommandFixture(t *testing.T, factoryDir string) {
 	writeRootTestFile(t, filepath.Join(factoryDir, "workers", "executor", "AGENTS.md"), `---
 type: MODEL_WORKER
 model: claude-sonnet-4-6
-modelProvider: claude
-executorProvider: script_wrap
+modelProvider: CLAUDE
+executorProvider: SCRIPT_WRAP
 stopToken: COMPLETE
 ---
 

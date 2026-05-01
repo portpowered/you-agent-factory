@@ -52,8 +52,8 @@ An LLM-backed worker. The markdown body is the **system prompt** sent to the mod
 ---
 type: MODEL_WORKER
 model: claude-sonnet-4-20250514
-modelProvider: claude
-executorProvider: script_wrap
+modelProvider: CLAUDE
+executorProvider: SCRIPT_WRAP
 resources:
   - name: agent-slot
     capacity: 1
@@ -87,15 +87,15 @@ Deployment worker. Runs the staging deploy script.
 | `type` | string | yes | all | `MODEL_WORKER` or `SCRIPT_WORKER` |
 | `model` | string | no | MODEL_WORKER | LLM model identifier (e.g., `claude-sonnet-4-20250514`) |
 | `modelProvider` | string | no | MODEL_WORKER | Model-provider identifier used for model routing and provider diagnostics (for example `claude`) |
-| `executorProvider` | string | no | MODEL_WORKER | Executor adapter identifier used to select the worker execution wrapper (for example `script_wrap`) |
+| `executorProvider` | string | no | MODEL_WORKER | Executor adapter identifier used to select the worker execution wrapper (for example `SCRIPT_WRAP`) |
 | `command` | string | no | SCRIPT_WORKER | Shell command to execute |
 | `args` | string[] | no | SCRIPT_WORKER | Command arguments (supports Go template syntax) |
 | `resources` | `{name, capacity}[]` | no | all | Resource requirements this worker declares (e.g., `[{ name: "agent-slot", capacity: 1 }]`) |
 | `timeout` | duration | no | all | Max execution time (e.g., `1h`, `30m`, `5m`) |
 | `stopToken` | string | no | MODEL_WORKER | Token that signals task completion in model output |
 
-Current built-in `modelProvider` values are `claude` and `codex`. The current
-public `executorProvider` value is `script_wrap`. The canonical source of truth
+Current built-in `modelProvider` values are `CLAUDE` and `CODEX`. The current
+public `executorProvider` value is `SCRIPT_WRAP`. The canonical source of truth
 for these worker-contract values is the `Worker` schema in
 [`api/openapi.yaml`](../api/openapi.yaml).
 

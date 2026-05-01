@@ -48,7 +48,7 @@
           "workType": "story"
         }
       ],
-      "behavior": "repeater",
+      "behavior": "REPEATER",
       "name": "execute-story",
       "onFailure": {
         "state": "failed",
@@ -81,7 +81,7 @@
           "workType": "story"
         }
       ],
-      "behavior": "standard",
+      "behavior": "STANDARD",
       "name": "review-story",
       "onFailure": {
         "state": "failed",
@@ -110,7 +110,7 @@
       "guards": [
         {
           "maxVisits": 50,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "execute-story"
         }
       ],
@@ -134,7 +134,7 @@
       "guards": [
         {
           "maxVisits": 3,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review-story"
         }
       ],

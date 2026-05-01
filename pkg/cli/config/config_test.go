@@ -80,8 +80,8 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 		t.Fatalf("expected worker AGENTS.md to be loadable MODEL_WORKER, got:\n%s", string(workerAgents))
 	}
 	assertExpandedAgentsFrontmatterUsesCamelCase(t, string(workerAgents), []string{
-		"modelProvider: claude",
-		"executorProvider: script_wrap",
+		"modelProvider: CLAUDE",
+		"executorProvider: SCRIPT_WRAP",
 		"stopToken: COMPLETE",
 		"skipPermissions: true",
 	}, []string{

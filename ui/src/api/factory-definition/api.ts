@@ -21,15 +21,9 @@ const GUARD_TYPE_ALIASES: Record<string, string> = {
   ALL_CHILDREN_COMPLETE: "ALL_CHILDREN_COMPLETE",
   ANY_CHILD_FAILED: "ANY_CHILD_FAILED",
   SAME_NAME: "SAME_NAME",
-  visit_count: "VISIT_COUNT",
-  matches_fields: "MATCHES_FIELDS",
-  all_children_complete: "ALL_CHILDREN_COMPLETE",
-  any_child_failed: "ANY_CHILD_FAILED",
-  same_name: "SAME_NAME",
 };
 const INPUT_KIND_ALIASES: Record<string, FactoryInputType["type"]> = {
   DEFAULT: "DEFAULT",
-  default: "DEFAULT",
 };
 const WORKER_MODEL_PROVIDER_ALIASES: Record<
   string,
@@ -48,9 +42,6 @@ const WORKSTATION_BEHAVIOR_ALIASES: Record<
   CRON: "CRON",
   REPEATER: "REPEATER",
   STANDARD: "STANDARD",
-  cron: "CRON",
-  repeater: "REPEATER",
-  standard: "STANDARD",
 };
 const FACTORY_KEYS = new Set([
   "factoryDirectory",

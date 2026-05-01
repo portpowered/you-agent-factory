@@ -5,13 +5,13 @@ import {
 } from "./api";
 
 describe("normalizeFactoryDefinition", () => {
-  it("normalizes supported public shape aliases into the generated factory contract", () => {
+  it("accepts canonical generated factory payloads", () => {
     expect(
       normalizeFactoryDefinition({
-        input_types: [{ name: "default", type: "DEFAULT" }],
+        inputTypes: [{ name: "default", type: "DEFAULT" }],
         id: "agent-factory",
         name: "agent-factory",
-        source_directory: "/tmp/legacy-factory",
+        sourceDirectory: "/tmp/canonical-factory",
         supportingFiles: {
           requiredTools: [{ command: "python", name: "python" }],
         },
@@ -33,22 +33,22 @@ describe("normalizeFactoryDefinition", () => {
           {
             guards: [
               {
-                max_visits: 3,
+                maxVisits: 3,
                 type: "VISIT_COUNT",
                 workstation: "Draft",
               },
             ],
             inputs: [
               {
-                guards: [{ match_input: "planItem", type: "SAME_NAME" }],
+                guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
                 state: "new",
-                work_type: "story",
+                workType: "story",
               },
             ],
             behavior: "STANDARD",
             name: "Draft",
-            on_failure: { state: "failed", work_type: "story" },
-            outputs: [{ state: "done", work_type: "story" }],
+            onFailure: { state: "failed", workType: "story" },
+            outputs: [{ state: "done", workType: "story" }],
             worker: "writer",
           },
         ],
@@ -57,7 +57,7 @@ describe("normalizeFactoryDefinition", () => {
       name: "agent-factory",
       inputTypes: [{ name: "default", type: "DEFAULT" }],
       id: "agent-factory",
-      sourceDirectory: "/tmp/legacy-factory",
+      sourceDirectory: "/tmp/canonical-factory",
       supportingFiles: {
         requiredTools: [{ command: "python", name: "python" }],
       },
@@ -98,6 +98,27 @@ describe("normalizeFactoryDefinition", () => {
         },
       ],
     });
+  });
+
+  it("rejects retired lowercase public enum aliases", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workstations: [
+          {
+            behavior: "repeater",
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workstations[0].behavior must be one of CRON, REPEATER, STANDARD.",
+      ),
+    );
   });
 
   it("rejects fields outside the generated contract", () => {

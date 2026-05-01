@@ -260,8 +260,8 @@ single-file configs:
 | `name` | Yes | Worker identity referenced by `workstations[].worker`. |
 | `type` | Split or inline runtime config | `MODEL_WORKER` or `SCRIPT_WORKER`. Required in inline worker config or worker `AGENTS.md`. |
 | `model` | Model workers | Provider model name. |
-| `modelProvider` | Model workers | Model-provider identifier used in diagnostics and model routing. Built-in values are `claude` and `codex`. |
-| `executorProvider` | Model workers | Executor adapter identifier used to choose the worker execution wrapper, for example `script_wrap` in local default scaffolds. |
+| `modelProvider` | Model workers | Model-provider identifier used in diagnostics and model routing. Built-in values are `CLAUDE` and `CODEX`. |
+| `executorProvider` | Model workers | Executor adapter identifier used to choose the worker execution wrapper, for example `SCRIPT_WRAP` in local default scaffolds. |
 | `command` | Script workers | Executable name for `SCRIPT_WORKER`. |
 | `args` | Script workers | Command arguments. Values can use prompt-template variables. |
 | `timeout` | No | Go duration such as `10m` or `1h`. |
@@ -272,8 +272,8 @@ Prefer split `AGENTS.md` files for long model instructions. Prefer inline
 worker fields for generated, recorded, or single-file factory configs.
 The canonical source of truth for worker-contract values is the `Worker` schema
 in [`api/openapi.yaml`](../api/openapi.yaml). Current built-in
-`modelProvider` values are `claude` and `codex`, and the current public
-`executorProvider` value is `script_wrap`.
+`modelProvider` values are `CLAUDE` and `CODEX`, and the current public
+`executorProvider` value is `SCRIPT_WRAP`.
 
 ## Workstations
 
@@ -282,7 +282,7 @@ A workstation is the step that connects topology to execution:
 ```json
 {
   "name": "execute-story",
-  "kind": "repeater",
+  "behavior": "REPEATER",
   "worker": "executor",
   "inputs": [{ "workType": "story", "state": "init" }],
   "outputs": [{ "workType": "story", "state": "in-review" }],
@@ -294,7 +294,7 @@ A workstation is the step that connects topology to execution:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Stable workstation and transition name. |
-| `kind` | No | Scheduling kind: `standard`, `repeater`, or `cron`. Defaults to `standard`. |
+| `behavior` | No | Scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`. Defaults to `STANDARD`. |
 | `worker` | Usually | Worker name. Required for model or script dispatch and for cron workstations. Omit only for `LOGICAL_MOVE` runtime workstations. |
 | `inputs` | Usually | Work or resource places that enable the workstation. Cron workstations may omit customer inputs but still consume internal time work. |
 | `outputs` | Usually | Places produced when the worker accepts. Cron workstations require at least one output. |
@@ -302,8 +302,8 @@ A workstation is the step that connects topology to execution:
 | `onFailure` | Recommended | Place produced when the worker fails or times out. |
 | `resources` | No | Resource capacity consumed while this workstation runs. |
 | `copyReferencedScripts` | No | When `true`, `agent-factory config expand` copies supported referenced script files for this workstation's bound `SCRIPT_WORKER`. Omit it or set `false` to keep script references external. |
-| `guards` | No | Workstation-level `visit_count` guards. Parent fan-in belongs on per-input guards. |
-| `cron` | Cron only | Trigger timing for `kind: "cron"`. |
+| `guards` | No | Workstation-level `VISIT_COUNT` guards. Parent fan-in belongs on per-input guards. |
+| `CRON` | Cron only | Trigger timing for `behavior: "CRON"`. |
 
 Runtime fields such as `type`, `promptFile`, `promptTemplate`,
 `limits.maxExecutionTime`, `stopWords`, `workingDirectory`, `worktree`, and
@@ -425,7 +425,7 @@ Use an explicit guarded `LOGICAL_MOVE` workstation to cap loops:
     {
       "name": "review-loop-breaker",
       "type": "LOGICAL_MOVE",
-      "guards": [{ "type": "visit_count", "workstation": "review-story", "maxVisits": 3 }],
+      "guards": [{ "type": "VISIT_COUNT", "workstation": "review-story", "maxVisits": 3 }],
       "inputs": [{ "workType": "story", "state": "in-review" }],
       "outputs": [{ "workType": "story", "state": "failed" }]
     }
@@ -436,13 +436,13 @@ Use an explicit guarded `LOGICAL_MOVE` workstation to cap loops:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `type` | Yes | Must be `LOGICAL_MOVE` for a no-worker loop-breaker route. |
-| `guards[].type` | Yes | Use `visit_count` to gate the loop-breaker route. |
+| `guards[].type` | Yes | Use `VISIT_COUNT` to gate the loop-breaker route. |
 | `guards[].workstation` | Yes | Workstation whose visits are counted. |
 | `guards[].maxVisits` | Yes | Positive visit threshold. |
 | `inputs` | Yes | Place to consume from when the threshold is exceeded. |
 | `outputs` | Yes | Place to move work into. |
 
-Pair `repeater` workstations and review loops with a guarded `LOGICAL_MOVE`
+Pair `REPEATER` workstations and review loops with a guarded `LOGICAL_MOVE`
 workstation so work cannot cycle forever.
 
 ## Complete Example
@@ -476,7 +476,7 @@ feedback to route the story back for another execution pass. Guarded
   "workstations": [
     {
       "name": "execute-story",
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
@@ -495,14 +495,14 @@ feedback to route the story back for another execution pass. Guarded
     {
       "name": "executor-loop-breaker",
       "type": "LOGICAL_MOVE",
-      "guards": [{ "type": "visit_count", "workstation": "execute-story", "maxVisits": 50 }],
+      "guards": [{ "type": "VISIT_COUNT", "workstation": "execute-story", "maxVisits": 50 }],
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "failed" }]
     },
     {
       "name": "review-loop-breaker",
       "type": "LOGICAL_MOVE",
-      "guards": [{ "type": "visit_count", "workstation": "review-story", "maxVisits": 3 }],
+      "guards": [{ "type": "VISIT_COUNT", "workstation": "review-story", "maxVisits": 3 }],
       "inputs": [{ "workType": "story", "state": "in-review" }],
       "outputs": [{ "workType": "story", "state": "failed" }]
     }
@@ -529,7 +529,7 @@ At runtime:
 - Rejection routes intentionally go backward or to a review state.
 - Repeater and review-loop paths have a guarded `LOGICAL_MOVE` loop breaker.
 - Runtime `resources` entries reference declared resources and use positive capacity.
-- New configs use `kind` for scheduling and `type` only for runtime worker or workstation implementation.
+- New configs use `behavior` for scheduling and `type` only for runtime worker or workstation implementation.
 - New configs do not depend on ignored stale fields such as `global_limits` or `worktree_cleanup`.
 
 ## Related

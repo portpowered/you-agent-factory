@@ -1063,11 +1063,19 @@ type guardFrontmatter struct {
 }
 
 func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatter {
+	modelProvider := def.ModelProvider
+	if def.ModelProvider != "" {
+		modelProvider = string(publicFactoryWorkerModelProviderFromInternal(def.ModelProvider))
+	}
+	executorProvider := def.ExecutorProvider
+	if def.ExecutorProvider != "" {
+		executorProvider = string(publicFactoryWorkerProviderFromInternal(def.ExecutorProvider))
+	}
 	return workerFrontmatter{
 		Type:             def.Type,
 		Model:            def.Model,
-		ModelProvider:    def.ModelProvider,
-		ExecutorProvider: def.ExecutorProvider,
+		ModelProvider:    modelProvider,
+		ExecutorProvider: executorProvider,
 		Command:          def.Command,
 		Args:             append([]string(nil), def.Args...),
 		Resources:        append([]interfaces.ResourceConfig(nil), def.Resources...),
@@ -1078,10 +1086,14 @@ func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatte
 }
 
 func workstationFrontmatterForExpansion(def interfaces.FactoryWorkstationConfig) workstationFrontmatter {
+	behavior := def.Kind
+	if def.Kind != "" {
+		behavior = interfaces.WorkstationKind(publicFactoryWorkstationKindFromInternal(def.Kind))
+	}
 	rendered := workstationFrontmatter{
 		ID:               def.ID,
 		Name:             def.Name,
-		Kind:             def.Kind,
+		Kind:             behavior,
 		Type:             def.Type,
 		Worker:           def.WorkerTypeName,
 		PromptFile:       def.PromptFile,
@@ -1141,7 +1153,7 @@ func inputGuardFrontmatterPtr(cfg *interfaces.InputGuardConfig) *inputGuardFront
 		return nil
 	}
 	return &inputGuardFrontmatter{
-		Type:        cfg.Type,
+		Type:        interfaces.GuardType(publicFactoryGuardTypeStringFromInternal(cfg.Type)),
 		MatchInput:  cfg.MatchInput,
 		ParentInput: cfg.ParentInput,
 		SpawnedBy:   cfg.SpawnedBy,
@@ -1155,7 +1167,7 @@ func guardFrontmatterSlice(configs []interfaces.GuardConfig) []guardFrontmatter 
 	out := make([]guardFrontmatter, len(configs))
 	for i := range configs {
 		out[i] = guardFrontmatter{
-			Type:        configs[i].Type,
+			Type:        interfaces.GuardType(publicFactoryGuardTypeStringFromInternal(configs[i].Type)),
 			Workstation: configs[i].Workstation,
 			MaxVisits:   configs[i].MaxVisits,
 			MatchConfig: cloneGuardMatchConfigPtr(configs[i].MatchConfig),

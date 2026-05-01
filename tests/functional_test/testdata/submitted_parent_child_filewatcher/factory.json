@@ -90,7 +90,7 @@
           "guards": [
             {
               "parentInput": "story-set",
-              "type": "any_child_failed"
+              "type": "ANY_CHILD_FAILED"
             }
           ],
           "state": "failed",
