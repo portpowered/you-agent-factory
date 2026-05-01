@@ -498,12 +498,7 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 			},
 		},
 	}
-	sched := &mockScheduler{
-		decisions: []interfaces.FiringDecision{
-			{TransitionID: "t-a", ConsumeTokens: []string{"tok-a"}, WorkerType: "worker-a"},
-			{TransitionID: "t-b", ConsumeTokens: []string{"tok-b"}, WorkerType: "worker-b"},
-		},
-	}
+	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
 	dispatcher := NewDispatcher(
 		n,
@@ -545,6 +540,12 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 	if result == nil {
 		t.Fatal("expected dispatch result")
 	}
+	if len(sched.received) != 1 {
+		t.Fatalf("expected scheduler to receive only the healthy lane, got %d enabled transitions", len(sched.received))
+	}
+	if sched.received[0].TransitionID != "t-b" {
+		t.Fatalf("expected scheduler to receive only healthy transition t-b, got %s", sched.received[0].TransitionID)
+	}
 	if len(result.Dispatches) != 1 {
 		t.Fatalf("expected 1 dispatch after pause filtering, got %d", len(result.Dispatches))
 	}
@@ -554,19 +555,8 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 	if !result.ThrottlePausesObserved {
 		t.Fatal("expected dispatcher to report observed throttle pauses")
 	}
-	if len(result.ActiveThrottlePauses) != 1 {
-		t.Fatalf("active throttle pauses = %d, want 1", len(result.ActiveThrottlePauses))
-	}
-	pause := result.ActiveThrottlePauses[0]
-	if pause.Provider != "claude" || pause.Model != "claude-sonnet" || pause.LaneID != "claude/claude-sonnet" {
-		t.Fatalf("unexpected active throttle pause lane: %#v", pause)
-	}
-	if !pause.PausedAt.Equal(now) {
-		t.Fatalf("PausedAt = %s, want %s", pause.PausedAt, now)
-	}
-	if want := now.Add(30 * time.Minute); !pause.PausedUntil.Equal(want) {
-		t.Fatalf("PausedUntil = %s, want %s", pause.PausedUntil, want)
-	}
+	pause := assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
+	assertThrottlePauseWindow(t, pause, now, now.Add(30*time.Minute))
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-throttle-fixture review=2026-07-18 removal=split-pause-expiry-fixture-before-next-dispatcher-throttle-change
@@ -637,9 +627,7 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 	if len(result.Dispatches) != 0 {
 		t.Fatalf("expected no dispatch while lane is paused, got %+v", result.Dispatches)
 	}
-	if len(result.ActiveThrottlePauses) != 1 {
-		t.Fatalf("active throttle pauses while paused = %d, want 1", len(result.ActiveThrottlePauses))
-	}
+	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 
 	currentTime = currentTime.Add(11 * time.Minute)
 	resumedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -721,13 +709,7 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 	if !result.ThrottlePausesObserved {
 		t.Fatal("expected dispatcher to report observed throttle pause from service-owned transition")
 	}
-	if len(result.ActiveThrottlePauses) != 1 {
-		t.Fatalf("active throttle pauses = %d, want 1", len(result.ActiveThrottlePauses))
-	}
-	pause := result.ActiveThrottlePauses[0]
-	if pause.Provider != "claude" || pause.Model != "claude-sonnet" || pause.LaneID != "claude/claude-sonnet" {
-		t.Fatalf("unexpected active throttle pause lane: %#v", pause)
-	}
+	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 }
 
 // portos:func-length-exception owner=agent-factory reason=cron-dispatch-fixture review=2026-07-18 removal=split-cron-dispatch-fixture-before-next-cron-dispatch-change
@@ -875,9 +857,7 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 	if err != nil {
 		t.Fatalf("unexpected error while creating pause: %v", err)
 	}
-	if result == nil || len(result.ActiveThrottlePauses) != 1 {
-		t.Fatalf("expected active throttle pause before expiry, got %+v", result)
-	}
+	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 
 	currentTime = currentTime.Add(11 * time.Minute)
 	expiredSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -988,6 +968,10 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 	if result.Dispatches[0].Dispatch.TransitionID != "t-b" {
 		t.Fatalf("expected healthy transition t-b to dispatch, got %s", result.Dispatches[0].Dispatch.TransitionID)
 	}
+	if !result.ThrottlePausesObserved {
+		t.Fatal("expected dispatcher to keep reporting the paused lane in throttle pause observability")
+	}
+	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-dispatcher-determinism-fixture review=2026-07-18 removal=split-determinism-fixture-before-next-dispatcher-determinism-change
@@ -1199,4 +1183,29 @@ func dispatchSequences(dispatches []interfaces.DispatchRecord) ([]string, []stri
 	}
 
 	return transitionIDs, workTokenIDs, resourceTokenIDs
+}
+
+func assertSingleActiveThrottlePause(t *testing.T, result *interfaces.TickResult, provider string, model string, laneID string) interfaces.ActiveThrottlePause {
+	t.Helper()
+	if result == nil {
+		t.Fatal("expected non-nil tick result")
+	}
+	if len(result.ActiveThrottlePauses) != 1 {
+		t.Fatalf("active throttle pauses = %d, want 1", len(result.ActiveThrottlePauses))
+	}
+	pause := result.ActiveThrottlePauses[0]
+	if pause.Provider != provider || pause.Model != model || pause.LaneID != laneID {
+		t.Fatalf("unexpected active throttle pause lane: %#v", pause)
+	}
+	return pause
+}
+
+func assertThrottlePauseWindow(t *testing.T, pause interfaces.ActiveThrottlePause, pausedAt time.Time, pausedUntil time.Time) {
+	t.Helper()
+	if !pause.PausedAt.Equal(pausedAt) {
+		t.Fatalf("PausedAt = %s, want %s", pause.PausedAt, pausedAt)
+	}
+	if !pause.PausedUntil.Equal(pausedUntil) {
+		t.Fatalf("PausedUntil = %s, want %s", pause.PausedUntil, pausedUntil)
+	}
 }

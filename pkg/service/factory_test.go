@@ -3635,6 +3635,13 @@ func serviceStringPtr(value string) *string {
 	return &value
 }
 
+func serviceEnumPtr[T ~string](value T) *T {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
 func serviceIntPtr(value int) *int {
 	if value == 0 {
 		return nil
@@ -4136,6 +4143,13 @@ func TestFactoryService_BuildSimpleDashboardRenderInputProjectsSelectedTickFromE
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		Topology:      topology,
 		TickCount:     2,
+		ActiveThrottlePauses: []interfaces.ActiveThrottlePause{{
+			LaneID:      "codex/gpt-5-codex",
+			Provider:    "codex",
+			Model:       "gpt-5-codex",
+			PausedAt:    time.Date(2026, 4, 30, 10, 0, 0, 0, time.UTC),
+			PausedUntil: time.Date(2026, 4, 30, 10, 5, 0, 0, time.UTC),
+		}},
 	}
 	dispatch := dashboardProjectionDispatchForTest()
 	mock := &aggregateSnapshotFactory{
@@ -4169,6 +4183,16 @@ func TestFactoryService_BuildSimpleDashboardRenderInputProjectsSelectedTickFromE
 	}
 	if got := len(input.RenderData.Session.DispatchHistory); got != 0 {
 		t.Fatalf("dispatch history length = %d, want selected tick to exclude future completion", got)
+	}
+	if len(input.RenderData.ActiveThrottlePauses) != 1 {
+		t.Fatalf("active throttle pauses = %d, want 1", len(input.RenderData.ActiveThrottlePauses))
+	}
+	pause := input.RenderData.ActiveThrottlePauses[0]
+	if pause.LaneID != "codex/gpt-5-codex" || pause.Provider != "codex" || pause.Model != "gpt-5-codex" {
+		t.Fatalf("active throttle pause = %#v, want codex/gpt-5-codex lane", pause)
+	}
+	if len(pause.AffectedTransitionIDs) != 1 || pause.AffectedTransitionIDs[0] != dispatch.TransitionID {
+		t.Fatalf("affected transition IDs = %#v, want [%s]", pause.AffectedTransitionIDs, dispatch.TransitionID)
 	}
 }
 
@@ -4257,7 +4281,11 @@ func dashboardInitialStructureEventForTest(t *testing.T) factoryapi.FactoryEvent
 					{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
 				},
 			}},
-			Workers: &[]factoryapi.Worker{{Name: "worker-a"}},
+			Workers: &[]factoryapi.Worker{{
+				Name:          "worker-a",
+				ModelProvider: serviceEnumPtr(factoryapi.WorkerModelProviderCodex),
+				Model:         serviceStringPtr("gpt-5-codex"),
+			}},
 			Workstations: &[]factoryapi.Workstation{{
 				Id:      serviceStringPtr("process"),
 				Name:    "process",

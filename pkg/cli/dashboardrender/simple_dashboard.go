@@ -12,6 +12,7 @@ import (
 type SimpleDashboardRenderData struct {
 	InFlightDispatchCount            int
 	ActiveExecutionsByDispatchID     map[string]SimpleDashboardActiveExecution
+	ActiveThrottlePauses             []interfaces.FactoryWorldThrottlePause
 	PlaceTokenCounts                 map[string]int
 	CurrentWorkItemsByPlaceID        map[string][]interfaces.FactoryWorldWorkItemRef
 	PlaceOccupancyWorkItemsByPlaceID map[string][]interfaces.FactoryWorldWorkItemRef

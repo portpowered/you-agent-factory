@@ -139,7 +139,7 @@ func buildFunctionalWorldView(t *testing.T, h *testutil.ServiceTestHarness) inte
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
-	return projections.BuildFactoryWorldView(worldState)
+	return projections.BuildFactoryWorldViewWithActiveThrottlePauses(worldState, es.ActiveThrottlePauses)
 }
 
 func assertFunctionalWorldViewActive(t *testing.T, view interfaces.FactoryWorldView, workID string) {

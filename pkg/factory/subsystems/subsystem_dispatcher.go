@@ -130,11 +130,6 @@ func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.
 		d.logger.Debug("dispatcher: no decisions")
 		return d.throttlePauseSnapshotResult(observedThrottlePauses), nil
 	}
-	decisions = d.filterPausedDecisions(decisions)
-	if len(decisions) == 0 {
-		d.logger.Debug("dispatcher: all decisions paused by provider/model throttle state")
-		return d.throttlePauseSnapshotResult(observedThrottlePauses), nil
-	}
 
 	d.logger.Debug("dispatcher: firing transitions",
 		"enabled", len(enabled), "decisions", len(decisions))
@@ -303,33 +298,6 @@ func (d *DispatcherSubsystem) reconcileThrottlePauses(snapshot *interfaces.Engin
 		observed = true
 	}
 	return observed
-}
-
-func (d *DispatcherSubsystem) filterPausedDecisions(decisions []interfaces.FiringDecision) []interfaces.FiringDecision {
-	if len(decisions) == 0 || len(d.throttlePauses) == 0 {
-		return decisions
-	}
-	now := d.now()
-	filtered := make([]interfaces.FiringDecision, 0, len(decisions))
-	for _, decision := range decisions {
-		key, ok := d.providerModelKeyForWorker(decision.WorkerType)
-		if !ok {
-			filtered = append(filtered, decision)
-			continue
-		}
-		if pause, paused := d.throttlePauses[key]; paused && pause.pausedUntil.After(now) {
-			d.logger.Info("dispatcher: skipping paused provider/model lane",
-				"transitionID", decision.TransitionID,
-				"workerType", decision.WorkerType,
-				"model_provider", key.provider,
-				"model", key.model,
-				"paused_until", pause.pausedUntil,
-			)
-			continue
-		}
-		filtered = append(filtered, decision)
-	}
-	return filtered
 }
 
 func (d *DispatcherSubsystem) filterPausedEnabledTransitions(enabled []interfaces.EnabledTransition) []interfaces.EnabledTransition {
