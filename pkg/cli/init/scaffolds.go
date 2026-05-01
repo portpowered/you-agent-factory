@@ -152,7 +152,7 @@ completes one story per execution iteration until the plan is done.
    - ` + "`prd.json`" + `
    - ` + "`progress.txt`" + `
 2. ` + "`execute-story`" + ` reads those artifacts and completes one incomplete story per iteration.
-3. ` + "`execute-story-loop-breaker`" + ` is an internal guarded failure path for repeated rejected iterations.
+3. ` + "`execute-story-loop-breaker`" + ` is an internal guarded failure path for repeated execution iterations.
 
 This scaffold intentionally excludes reviewer, thoughts or ideation, and cron stages.
 
@@ -221,7 +221,7 @@ The executor keeps those artifacts aligned and returns ` + "`<COMPLETE>`" + ` on
       "workingDirectory": ".",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "complete" }],
-      "onRejection": { "workType": "story", "state": "init" },
+      "onContinue": { "workType": "story", "state": "init" },
       "onFailure": { "workType": "story", "state": "failed" }
     },
     {
@@ -255,7 +255,7 @@ The Ralph scaffold keeps two customer-facing stages:
 1. plan-request turns an incoming request into aligned prd.md, prd.json, and progress.txt artifacts.
 2. execute-story reads those artifacts and completes one incomplete story iteration at a time.
 
-An internal guarded loop-breaker routes exhausted story work to failed after repeated rejected executions.
+An internal guarded loop-breaker routes exhausted story work to failed after repeated execution passes.
 The scaffold intentionally excludes reviewer, ideation, and cron stages.
 `,
 			factoryInputsDirName + "/README.md": `# Inputs

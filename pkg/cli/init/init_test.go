@@ -286,7 +286,7 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 		`"name": "execute-story"`,
 		`"name": "execute-story-loop-breaker"`,
 		`"workingDirectory":`,
-		`"onRejection"`,
+		`"onContinue"`,
 		`"maxVisits": 8`,
 	} {
 		if !strings.Contains(factoryJSON, expected) {
@@ -348,8 +348,8 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	if executor.WorkingDirectory != "." {
 		t.Fatalf("execute-story workingDirectory = %q, want %q", executor.WorkingDirectory, ".")
 	}
-	if executor.OnRejection == nil || executor.OnRejection.WorkTypeName != "story" || executor.OnRejection.StateName != "init" {
-		t.Fatalf("execute-story onRejection = %#v, want story:init", executor.OnRejection)
+	if executor.OnContinue == nil || executor.OnContinue.WorkTypeName != "story" || executor.OnContinue.StateName != "init" {
+		t.Fatalf("execute-story onContinue = %#v, want story:init", executor.OnContinue)
 	}
 
 	loopBreaker, ok := loaded.Workstation("execute-story-loop-breaker")
