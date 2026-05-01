@@ -1,0 +1,11 @@
+type: string
+description: Runtime workstation implementation types supported by the public factory-config contract.
+x-enum-varnames:
+  - WorkstationTypeModelWorkstation
+  - WorkstationTypeLogicalMove
+enum:
+  - MODEL_WORKSTATION
+  - LOGICAL_MOVE
+x-enum-descriptions:
+  - Model-backed workstation that renders prompts and dispatches work through the configured worker.
+  - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.

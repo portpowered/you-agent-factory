@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+required:
+  - initial
+  - processing
+  - terminal
+  - failed
+properties:
+  initial:
+    type: integer
+  processing:
+    type: integer
+  terminal:
+    type: integer
+  failed:
+    type: integer

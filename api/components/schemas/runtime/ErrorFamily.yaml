@@ -1,0 +1,17 @@
+type: string
+description: Stable machine-readable error family for broader client grouping.
+enum:
+  - BAD_REQUEST
+  - CONFLICT
+  - NOT_FOUND
+  - INTERNAL_SERVER_ERROR
+x-enum-varnames:
+  - ErrorFamilyBadRequest
+  - ErrorFamilyConflict
+  - ErrorFamilyNotFound
+  - ErrorFamilyInternalServerError
+x-enum-descriptions:
+  - Request payload or parameter validation failed.
+  - The request conflicts with current resource state.
+  - The requested resource does not exist.
+  - The server failed while handling an otherwise valid request.

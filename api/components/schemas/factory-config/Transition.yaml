@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - from
+  - to
+properties:
+  from:
+    type: string
+    description: Source workstation name.
+  to:
+    type: string
+    description: Destination workstation name.
+    # ==== Raw data types here =======

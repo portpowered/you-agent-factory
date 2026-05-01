@@ -1,0 +1,8 @@
+description: Kind of work request accepted by the factory.
+type: string
+x-enum-varnames:
+  - WorkRequestTypeFactoryRequestBatch
+enum:
+  - FACTORY_REQUEST_BATCH
+x-enum-descriptions:
+  - Normalized request containing one or more work items and their relationships.

@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+required:
+  - work_type_name
+properties:
+  name:
+    type: string
+  work_type_name:
+    type: string
+    description: Configured work type name from factory.json to submit to.
+  current_chaining_trace_id:
+    type: string
+    description: Explicit chaining-trace identifier for the submitted work.
+  trace_id:
+    type: string
+    description: Legacy trace identifier retained for compatibility; prefer current_chaining_trace_id.
+  payload:
+    description: Opaque work payload forwarded as raw JSON.
+  tags:
+    $ref: '..\shared\StringMap.yaml'
+  relations:
+    type: array
+    items:
+      $ref: './Relation.yaml'
+

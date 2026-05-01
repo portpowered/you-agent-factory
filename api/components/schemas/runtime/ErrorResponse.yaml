@@ -1,0 +1,31 @@
+type: object
+additionalProperties: false
+required:
+  - message
+  - family
+  - code
+properties:
+  message:
+    type: string
+  family:
+    $ref: './ErrorFamily.yaml'
+  code:
+    type: string
+    description: Stable machine-readable error code.
+    enum:
+      - BAD_REQUEST
+      - INVALID_FACTORY_NAME
+      - FACTORY_ALREADY_EXISTS
+      - INVALID_FACTORY
+      - FACTORY_NOT_IDLE
+      - NOT_FOUND
+      - INTERNAL_ERROR
+    x-enum-descriptions:
+      - Request payload or parameter validation failed.
+      - Named factory name validation failed.
+      - Submitted named factory already exists.
+      - Submitted named factory payload failed validation.
+      - Current factory runtime is not idle and cannot activate a new named factory.
+      - The requested resource does not exist.
+      - The server failed while handling an otherwise valid request.
+

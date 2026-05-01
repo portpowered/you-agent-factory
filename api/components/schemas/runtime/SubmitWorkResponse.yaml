@@ -1,0 +1,7 @@
+type: object
+additionalProperties: false
+required:
+  - trace_id
+properties:
+  trace_id:
+    type: string

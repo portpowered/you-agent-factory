@@ -1,0 +1,11 @@
+type: string
+description: Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
+x-enum-varnames:
+  - WorkstationGuardTypeVisitCount
+  - WorkstationGuardTypeMatchesFields
+enum:
+  - VISIT_COUNT
+  - MATCHES_FIELDS
+x-enum-descriptions:
+  - Allows or blocks work based on how many times a workstation has already handled it.
+  - Requires all candidate workstation inputs to resolve the same configured field value.

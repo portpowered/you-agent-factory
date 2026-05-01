@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - categories
+  - factory_state
+  - runtime_status
+  - total_tokens
+properties:
+  categories:
+    $ref: './StatusCategories.yaml'
+  factory_state:
+    type: string
+  runtime_status:
+    type: string
+  total_tokens:
+    type: integer
+  resources:
+    type: array
+    items:
+      $ref: '..\shared\ResourceUsage.yaml'
+

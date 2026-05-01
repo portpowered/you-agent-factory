@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - type
+  - source_work_name
+  - target_work_name
+properties:
+  type:
+    $ref: './RelationType.yaml'
+  target_work_id:
+    type: string
+  target_work_name:
+    type: string
+  source_work_name:
+    type: string
+  required_state:
+    type: string
+

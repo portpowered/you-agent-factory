@@ -1,0 +1,135 @@
+type: object
+description: >-
+  Top-level factory.json contract. Declare the work types, resources,
+  portability resources, workers, and workstations that make up one
+  authored factory here.
+  Guarded loop breakers should be authored as guarded LOGICAL_MOVE
+  workstations using VISIT_COUNT guards instead of a top-level
+  exhaustion-rules field.
+additionalProperties: false
+example:
+  inputTypes:
+    - name: brief
+      type: DEFAULT
+  workTypes:
+    - name: story
+      states:
+        - name: init
+          type: INITIAL
+        - name: inReview
+          type: PROCESSING
+        - name: failed
+          type: FAILED
+        - name: complete
+          type: TERMINAL
+  resourceManifest:
+    requiredTools:
+      - name: python
+        command: python
+        purpose: Runs bundled translation scripts
+        versionArgs:
+          - --version
+    bundledFiles:
+      - type: ROOT_HELPER
+        targetPath: Makefile
+        content:
+          encoding: utf-8
+          inline: "test:\n\tgo test ./...\n"
+      - type: SCRIPT
+        targetPath: factory/scripts/setup-workspace.py
+        content:
+          encoding: utf-8
+          inline: |
+            print("portable")
+      - type: DOC
+        targetPath: factory/docs/usage.md
+        content:
+          encoding: utf-8
+          inline: |
+            # Usage
+  workers:
+    - name: reviewer
+      type: MODEL_WORKER
+      executorProvider: script_wrap
+      modelProvider: claude
+      model: claude-sonnet-4-20250514
+    - name: review-loop-breaker
+      type: MODEL_WORKER
+      executorProvider: script_wrap
+      modelProvider: claude
+      model: claude-sonnet-4-20250514
+  workstations:
+    - name: review-story
+      kind: REPEATER
+      type: MODEL_WORKSTATION
+      worker: reviewer
+      inputs:
+        - workType: story
+          state: init
+      outputs:
+        - workType: story
+          state: inReview
+      onRejection:
+        workType: story
+        state: init
+      onFailure:
+        workType: story
+        state: failed
+    - name: review-loop-breaker
+      worker: review-loop-breaker
+      type: LOGICAL_MOVE
+      guards:
+        - type: VISIT_COUNT
+          workstation: review-story
+          maxVisits: 3
+      inputs:
+        - workType: story
+          state: init
+      outputs:
+        - workType: story
+          state: failed
+properties:
+  project:
+    type: string
+    description: Project identifier used as the factory-level template context fallback.
+  factoryDir:
+    type: string
+    description: Directory that contained the factory.json used for this serialized runtime config.
+  sourceDirectory:
+    type: string
+    description: Original source directory for record/replay and drift diagnostics.
+  workflowId:
+    type: string
+    description: Optional workflow identity associated with this serialized runtime config.
+  metadata:
+    $ref: '..\shared\StringMap.yaml'
+    description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
+  inputTypes:
+    type: array
+    description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
+    items:
+      $ref: './InputType.yaml'
+  workTypes:
+    type: array
+    description: Customer-authored work item categories and the lifecycle states each one can occupy.
+    items:
+      $ref: './WorkType.yaml'
+  resources:
+    type: array
+    description: Shared capacity pools that workers or workstations can consume while work is executing.
+    items:
+      $ref: './Resource.yaml'
+  resourceManifest:
+    $ref: './ResourceManifest.yaml'
+    description: Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources.
+  workers:
+    type: array
+    description: Reusable worker definitions that workstations reference by name when dispatching work.
+    items:
+      $ref: './Worker.yaml'
+  workstations:
+    type: array
+    description: Processing steps that consume work, invoke workers, and emit the next work states.
+    items:
+      $ref: './Workstation.yaml'
+

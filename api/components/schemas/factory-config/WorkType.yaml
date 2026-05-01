@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+description: >-
+  A named category of work that can move through the factory. Each work
+  type declares the lifecycle states its work items can occupy.
+required:
+  - name
+  - states
+properties:
+  name:
+    type: string
+    description: Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
+  states:
+    type: array
+    description: Lifecycle states available for work items of this type.
+    items:
+      $ref: './WorkState.yaml'
+

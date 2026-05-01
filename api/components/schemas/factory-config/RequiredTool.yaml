@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - command
+description: One declarative external tool dependency for a portable factory.
+properties:
+  name:
+    type: string
+    description: Human-readable tool name used in manifests and validation output.
+  command:
+    type: string
+    description: Executable lookup token that must resolve on PATH.
+  purpose:
+    type: string
+    description: Optional explanation of why the portable factory requires this tool.
+  versionArgs:
+    type: array
+    description: Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token.
+    items:
+      type: string

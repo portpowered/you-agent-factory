@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+required:
+  - inputKey
+properties:
+  inputKey:
+    type: string
+    minLength: 1
+    description: Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.

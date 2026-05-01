@@ -7,6 +7,9 @@ This inventory records the checked-in files and directories that the maintainer 
 | `go.mod` | Repository-root marker | Maintainer commands and worktree-aware tests should treat the directory containing `go.mod` as the canonical repository root. |
 | `Makefile` | Root command surface | The development guide should describe quality and generation commands as root-level invocations instead of teaching a nested package workflow. |
 | `api/` | Authored API contract workspace | OpenAPI validation and bundling start from the repository root, then shell into `api/` only where the documented workflow requires it. |
+| `api/components/schemas/shared/` | Shared OpenAPI fragment family | Cross-surface helper schemas such as maps and diagnostics live here and referenced fragments must use file-relative `$ref`s. |
+| `api/components/schemas/runtime/` | Runtime OpenAPI fragment family | Request, response, status, and work-submission contract fragments are authored here one schema per file. |
+| `api/components/schemas/factory-config/` | Factory-config OpenAPI fragment family | Public named-factory and factory-topology schemas are authored here and should stay split from `api/openapi-main.yaml`. |
 | `cmd/factory/` | CLI entrypoint | Root-level build and smoke commands compile or execute the `factory` binary from this source tree. |
 | `docs/development/*-closeout.md` | Cleanup verification artifacts | Narrow cleanup lanes record the exact root-level validation bundle here when maintainers need durable proof beyond `progress.txt`. |
 | `docs/development/openapi-schema-standardization-inventory.md` | OpenAPI cleanup inventory | Records the authored fragment layout, remaining inline schemas, and the canonical bundle and generation verification surfaces for schema-standardization work. |
