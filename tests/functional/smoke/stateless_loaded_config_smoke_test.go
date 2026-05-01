@@ -1,4 +1,4 @@
-package functional_test
+package smoke
 
 import (
 	"os"
@@ -9,10 +9,11 @@ import (
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
-func TestStatelessExecution_IntegrationSmoke_LoadedConfigDrivesExecution(t *testing.T) {
-	originalDir := testutil.CopyFixtureDir(t, fixtureDir(t, "stateless_collector"))
+func TestStatelessExecutionSmoke_LoadedConfigDrivesExecution(t *testing.T) {
+	originalDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, originalDir, "task", []byte(`{"item":"original-config"}`))
 
 	originalProvider := testutil.NewMockProvider(
@@ -38,15 +39,15 @@ func TestStatelessExecution_IntegrationSmoke_LoadedConfigDrivesExecution(t *test
 		t.Fatalf("expected original step2 prompt, got %q", originalCalls[1].UserMessage)
 	}
 
-	updatedDir := testutil.CopyFixtureDir(t, fixtureDir(t, "stateless_collector"))
-	writeTestFile(t, filepath.Join(updatedDir, "workers", "agent", "AGENTS.md"), `---
+	updatedDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
+	writeSmokeTestFile(t, filepath.Join(updatedDir, "workers", "agent", "AGENTS.md"), `---
 type: MODEL_WORKER
 model: test-model
 stopToken: APPROVED
 ---
 Process the work item.
 `)
-	writeTestFile(t, filepath.Join(updatedDir, "workstations", "step2", "AGENTS.md"), `---
+	writeSmokeTestFile(t, filepath.Join(updatedDir, "workstations", "step2", "AGENTS.md"), `---
 type: MODEL_WORKSTATION
 ---
 Updated Step 2 workstation.
@@ -80,7 +81,7 @@ Updated Step 2 workstation.
 	}
 }
 
-func writeTestFile(t *testing.T, path string, contents string) {
+func writeSmokeTestFile(t *testing.T, path string, contents string) {
 	t.Helper()
 
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {

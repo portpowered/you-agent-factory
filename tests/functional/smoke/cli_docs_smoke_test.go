@@ -1,4 +1,4 @@
-package functional_test
+package smoke
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	agentcli "github.com/portpowered/agent-factory/pkg/cli"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 type docsSmokeTopic struct {
@@ -26,7 +27,7 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "text/template"}},
 }
 
-func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {
+func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {
 	workingDir := t.TempDir()
 	missingDocsTree := filepath.Join(workingDir, "docs")
 	if _, err := os.Stat(missingDocsTree); !os.IsNotExist(err) {
@@ -60,7 +61,7 @@ func executeDocsSmokeCommand(t *testing.T, workingDir string, args ...string) st
 	t.Helper()
 
 	var out bytes.Buffer
-	withWorkingDirectory(t, workingDir, func() {
+	runInWorkingDirectory(t, workingDir, func() {
 		root := agentcli.NewRootCommand()
 		root.SetOut(&out)
 		root.SetErr(io.Discard)
@@ -71,4 +72,10 @@ func executeDocsSmokeCommand(t *testing.T, workingDir string, args ...string) st
 		}
 	})
 	return out.String()
+}
+
+func runInWorkingDirectory(t *testing.T, dir string, fn func()) {
+	t.Helper()
+
+	support.WithWorkingDirectory(t, dir, fn)
 }
