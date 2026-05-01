@@ -351,13 +351,6 @@ func setWorkingDirectory(t *testing.T, dir string) {
 	})
 }
 
-func withWorkingDirectory(t *testing.T, dir string, run func()) {
-	t.Helper()
-
-	setWorkingDirectory(t, dir)
-	run()
-}
-
 // TestServiceHarness_HappyPath validates that the ServiceTestHarness can
 // build a factory from a directory fixture, inject a mock Provider, and
 // drive a two-stage pipeline to completion through the full service layer:
