@@ -62,7 +62,7 @@ generate-go-server-api:
 	$(GO) generate -tags=interfaces ./pkg/api
 
 generate-go-client-api:
-	$(GO) generate -tags=interfaces ./pkg/api/generatedclient
+	$(GO) generate -tags=interfaces ./pkg/generatedclient
 
 generate-ui-api:
 	cd ui && $(BUN) run generate-api
@@ -71,7 +71,7 @@ api-smoke:
 	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
 	$(MAKE) generate-api
 	$(MAKE) generate-api
-	git diff --exit-code -- api/openapi.yaml pkg/api/generated/server.gen.go pkg/api/generatedclient/client.gen.go ui/src/api/generated/openapi.ts
+	git diff --exit-code -- api/openapi.yaml pkg/api/generated/server.gen.go pkg/generatedclient/client.gen.go ui/src/api/generated/openapi.ts
 	$(GO) test ./pkg/api -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional_test -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1
 

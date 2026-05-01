@@ -106,7 +106,7 @@ This uses the repository-supported Redocly CLI from the root `api/` workspace an
 make generate-api
 ```
 
-`make generate-api` rebundles `api/openapi.yaml`, then runs `go generate -tags=interfaces ./pkg/api`, which uses `api/codegen_config/server.yaml` and writes `pkg/api/generated/server.gen.go`. It also runs `go generate -tags=interfaces ./pkg/api/generatedclient`, which uses `api/codegen_config/client.yaml` and writes `pkg/api/generatedclient/client.gen.go`, and then runs the dashboard UI OpenAPI generator to refresh `ui/src/api/generated/openapi.ts`.
+`make generate-api` rebundles `api/openapi.yaml`, then runs `go generate -tags=interfaces ./pkg/api`, which uses `api/codegen_config/server.yaml` and writes `pkg/api/generated/server.gen.go`. It also runs `go generate -tags=interfaces ./pkg/generatedclient`, which uses `api/codegen_config/client.yaml` and writes `pkg/generatedclient/client.gen.go`, and then runs the dashboard UI OpenAPI generator to refresh `ui/src/api/generated/openapi.ts`.
 
 4. Prove regeneration is stable when the authored sources are unchanged:
 
@@ -114,7 +114,7 @@ make generate-api
 make api-smoke
 ```
 
-`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/api/generatedclient/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
+`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
 
 5. Run the focused API and package checks that cover the contract boundary:
 

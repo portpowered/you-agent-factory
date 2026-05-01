@@ -17,11 +17,13 @@ func TestShouldSkipDir_BroadHandwrittenSourceGuardsShareCloseoutContract(t *test
 		"repo-root": {
 			{relativePath: ".claude/worktrees/stale", wantSkip: true},
 			{relativePath: "pkg/api/generated", wantSkip: true},
+			{relativePath: "pkg/generatedclient", wantSkip: true},
 			{relativePath: "pkg/petri", wantSkip: false},
 		},
 		"pkg": {
 			{relativePath: ".cache", wantSkip: true},
 			{relativePath: "api/generated", wantSkip: true},
+			{relativePath: "generatedclient", wantSkip: true},
 			{relativePath: "interfaces", wantSkip: false},
 		},
 	}
