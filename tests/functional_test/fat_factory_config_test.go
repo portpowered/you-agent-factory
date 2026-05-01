@@ -36,7 +36,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
       	"name": "executor",
 		"type": "MODEL_WORKER",
 		"model": "claude-sonnet-4-20250514",
-		"modelProvider": "claude",
+		"modelProvider": "CLAUDE",
 		"resources": [{ "name": "agent-slot", "capacity": 1 }],
 		"stopToken": "COMPLETE",
 		"body": "You are the portable factory executor."
@@ -234,7 +234,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
       "name": "executor",
         "type": "MODEL_WORKER",
         "model": "claude-sonnet-4-20250514",
-        "modelProvider": "claude",
+        "modelProvider": "CLAUDE",
         "stopToken": "COMPLETE",
         "body": "You are the standalone factory executor."
     }
@@ -296,7 +296,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
     {
       "name": "executor",
 	"type": "MODEL_WORKER",
-	"modelProvider": "claude",
+	"modelProvider": "CLAUDE",
 	"stopToken": "COMPLETE",
 	"body": "You are loaded through the shared mapper."
 

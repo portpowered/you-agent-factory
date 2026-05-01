@@ -44,8 +44,8 @@ func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testi
 	})
 	writeAgentConfig(t, dir, "executor", `---
 type: MODEL_WORKER
-executorProvider: codex-cli
-modelProvider: openai
+executorProvider: script_wrap
+modelProvider: codex
 model: gpt-5.4
 timeout: 30m
 stopToken: COMPLETE
@@ -84,8 +84,8 @@ Process {{ (index .Inputs 0).WorkID }}.
 	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{
 		ID:            "executor",
 		Name:          "executor",
-		Provider:      "script_wrap",
-		ModelProvider: "codex",
+		Provider:      "SCRIPT_WRAP",
+		ModelProvider: "CODEX",
 		Model:         "gpt-5.4",
 		Config:        map[string]string{"type": interfaces.WorkerTypeModel},
 	})

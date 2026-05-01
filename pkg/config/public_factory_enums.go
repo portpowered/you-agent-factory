@@ -12,9 +12,9 @@ const (
 	publicFactoryInputKindDefault                  = "DEFAULT"
 	publicFactoryWorkerTypeModel                   = "MODEL_WORKER"
 	publicFactoryWorkerTypeScript                  = "SCRIPT_WORKER"
-	publicFactoryWorkerModelProviderClaude         = "claude"
-	publicFactoryWorkerModelProviderCodex          = "codex"
-	publicFactoryWorkerProviderScriptWrap          = "script_wrap"
+	publicFactoryWorkerModelProviderClaude         = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex          = "CODEX"
+	publicFactoryWorkerProviderScriptWrap          = "SCRIPT_WRAP"
 	publicFactoryWorkstationKindStandard           = "STANDARD"
 	publicFactoryWorkstationKindRepeater           = "REPEATER"
 	publicFactoryWorkstationKindCron               = "CRON"
@@ -139,7 +139,7 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 	if value == nil {
 		return ""
 	}
-	switch interfaces.PermissivePublicFactoryWorkerModelProvider(string(*value)) {
+	switch interfaces.StrictPublicFactoryWorkerModelProvider(string(*value)) {
 	case publicFactoryWorkerModelProviderClaude:
 		return string(factoryapiToInternalModelProviderClaude())
 	case publicFactoryWorkerModelProviderCodex:
@@ -157,8 +157,8 @@ func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) s
 	if value == nil {
 		return ""
 	}
-	if canonical := interfaces.PermissivePublicFactoryWorkerProvider(string(*value)); canonical != "" {
-		return canonical
+	if canonical := interfaces.StrictPublicFactoryWorkerProvider(string(*value)); canonical != "" {
+		return strings.ToLower(canonical)
 	}
 	return strings.TrimSpace(string(*value))
 }

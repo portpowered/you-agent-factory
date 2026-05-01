@@ -101,9 +101,9 @@
           ],
           "workers": [
             {
-              "modelProvider": "codex",
+              "modelProvider": "CODEX",
               "name": "processor",
-              "executorProvider": "script_wrap",
+              "executorProvider": "SCRIPT_WRAP",
               "skipPermissions": true,
               "stopToken": "<COMPLETE>",
               "type": "MODEL_WORKER"

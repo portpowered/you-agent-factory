@@ -337,11 +337,11 @@ func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 			{"name":"page","states":[{"name":"complete","type":"TERMINAL"}]}
 		],
 		"resources": [{"name":"agent-slot","capacity":2}],
-		"workers": [{"name":"executor","type":"MODEL_WORKER","modelProvider":"claude","stopToken":"COMPLETE"}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER","modelProvider":"CLAUDE","stopToken":"COMPLETE"}],
 		"workstations": [{
 			"id":"execute-story-id",
 			"name":"execute-story",
-			"kind":"repeater",
+			"kind":"REPEATER",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
 			"promptTemplate":"Finish {{ .WorkID }}.",

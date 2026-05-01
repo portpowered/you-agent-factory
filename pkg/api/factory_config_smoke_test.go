@@ -81,7 +81,7 @@ func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBound
 			name: "rejects mis-cased worker model provider",
 			payload: strings.Replace(
 				factoryConfigSmokeCanonicalJSON(),
-				`"modelProvider":"claude"`,
+				`"modelProvider":"CLAUDE"`,
 				`"modelProvider":"Claude"`,
 				1,
 			),
@@ -526,10 +526,10 @@ func assertFactoryConfigSmokeGeneratedBoundary(t *testing.T, factory factoryapi.
 		t.Fatalf("generated boundary workers = %#v, want one worker", factory.Workers)
 	}
 	if (*factory.Workers)[0].ModelProvider == nil || *(*factory.Workers)[0].ModelProvider != factoryapi.WorkerModelProviderClaude {
-		t.Fatalf("generated boundary worker modelProvider = %#v, want claude", (*factory.Workers)[0].ModelProvider)
+		t.Fatalf("generated boundary worker modelProvider = %#v, want CLAUDE", (*factory.Workers)[0].ModelProvider)
 	}
 	if (*factory.Workers)[0].ExecutorProvider == nil || *(*factory.Workers)[0].ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
-		t.Fatalf("generated boundary worker executorProvider = %#v, want script_wrap", (*factory.Workers)[0].ExecutorProvider)
+		t.Fatalf("generated boundary worker executorProvider = %#v, want SCRIPT_WRAP", (*factory.Workers)[0].ExecutorProvider)
 	}
 
 	if factory.Workstations == nil || len(*factory.Workstations) < 1 {
@@ -591,8 +591,8 @@ func factoryConfigSmokeCanonicalJSON() string {
   "workers": [{
     "name":"executor",
     "type":"MODEL_WORKER",
-    "executorProvider":"script_wrap",
-    "modelProvider":"claude",
+    "executorProvider":"SCRIPT_WRAP",
+    "modelProvider":"CLAUDE",
     "resources":[{"name":"agent-slot","capacity":1}],
     "stopToken":"COMPLETE",
     "skipPermissions":true,

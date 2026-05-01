@@ -157,8 +157,8 @@ func functionalNamedFactoryPayloadJSON(project, workType string) string {
 		"workers":[{
 			"name":"planner",
 			"type":"MODEL_WORKER",
-			"modelProvider":"claude",
-			"executorProvider":"script_wrap",
+			"modelProvider":"CLAUDE",
+			"executorProvider":"SCRIPT_WRAP",
 			"model":"claude-sonnet-4-20250514"
 		}],
 		"workstations":[{

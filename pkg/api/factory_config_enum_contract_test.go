@@ -73,10 +73,10 @@ func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedField
 		t.Fatalf("canonical worker type = %#v, want MODEL_WORKER", worker.Type)
 	}
 	if worker.ModelProvider == nil || *worker.ModelProvider != generated.WorkerModelProviderClaude {
-		t.Fatalf("canonical worker modelProvider = %#v, want claude", worker.ModelProvider)
+		t.Fatalf("canonical worker modelProvider = %#v, want CLAUDE", worker.ModelProvider)
 	}
 	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != generated.WorkerProviderScriptWrap {
-		t.Fatalf("canonical worker executorProvider = %#v, want script_wrap", worker.ExecutorProvider)
+		t.Fatalf("canonical worker executorProvider = %#v, want SCRIPT_WRAP", worker.ExecutorProvider)
 	}
 
 	if factory.Workstations == nil || len(*factory.Workstations) != 3 {

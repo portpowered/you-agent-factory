@@ -404,14 +404,14 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 	}
 }
 
-func TestGeneratedFactoryFromOpenAPIJSON_CanonicalizesSupportedSharedEnumAliasesAtBoundary(t *testing.T) {
+func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
 			"type":"MODEL_WORKER",
-			"modelProvider":"OPENAI",
-			"executorProvider":"local-claude"
+			"modelProvider":"CODEX",
+			"executorProvider":"SCRIPT_WRAP"
 		}],
 		"workstations": [{
 			"name":"execute-story",
@@ -432,10 +432,10 @@ func TestGeneratedFactoryFromOpenAPIJSON_CanonicalizesSupportedSharedEnumAliases
 	}
 	worker := (*generated.Workers)[0]
 	if worker.ModelProvider == nil || *worker.ModelProvider != factoryapi.WorkerModelProviderCodex {
-		t.Fatalf("expected generated worker modelProvider codex, got %#v", worker.ModelProvider)
+		t.Fatalf("expected generated worker modelProvider CODEX, got %#v", worker.ModelProvider)
 	}
 	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
-		t.Fatalf("expected generated worker executorProvider script_wrap, got %#v", worker.ExecutorProvider)
+		t.Fatalf("expected generated worker executorProvider SCRIPT_WRAP, got %#v", worker.ExecutorProvider)
 	}
 
 	cfg, err := FactoryConfigFromOpenAPI(generated)

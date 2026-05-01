@@ -722,15 +722,15 @@ export interface components {
          *         {
          *           "name": "reviewer",
          *           "type": "MODEL_WORKER",
-         *           "executorProvider": "script_wrap",
-         *           "modelProvider": "claude",
+         *           "executorProvider": "SCRIPT_WRAP",
+         *           "modelProvider": "CLAUDE",
          *           "model": "claude-sonnet-4-20250514"
          *         },
          *         {
          *           "name": "review-loop-breaker",
          *           "type": "MODEL_WORKER",
-         *           "executorProvider": "script_wrap",
-         *           "modelProvider": "claude",
+         *           "executorProvider": "SCRIPT_WRAP",
+         *           "modelProvider": "CLAUDE",
          *           "model": "claude-sonnet-4-20250514"
          *         }
          *       ],
@@ -923,12 +923,12 @@ export interface components {
          * @description Canonical model-provider identifiers supported by model workers in factory config.
          * @enum {string}
          */
-        WorkerModelProvider: "claude" | "codex";
+        WorkerModelProvider: "CLAUDE" | "CODEX";
         /**
          * @description Concrete worker-provider wrappers supported by the public factory-config contract.
          * @enum {string}
          */
-        WorkerProvider: "script_wrap";
+        WorkerProvider: "SCRIPT_WRAP";
         /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
         Workstation: {
             /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */

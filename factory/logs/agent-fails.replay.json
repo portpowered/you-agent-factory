@@ -118,8 +118,8 @@
           ],
           "workers": [
             {
-              "executorProvider": "script_wrap",
-              "modelProvider": "codex",
+              "executorProvider": "SCRIPT_WRAP",
+              "modelProvider": "CODEX",
               "name": "processor",
               "skipPermissions": true,
               "stopToken": "<COMPLETE>",

@@ -53,13 +53,13 @@ example:
   workers:
     - name: reviewer
       type: MODEL_WORKER
-      executorProvider: script_wrap
-      modelProvider: claude
+      executorProvider: SCRIPT_WRAP
+      modelProvider: CLAUDE
       model: claude-sonnet-4-20250514
     - name: review-loop-breaker
       type: MODEL_WORKER
-      executorProvider: script_wrap
-      modelProvider: claude
+      executorProvider: SCRIPT_WRAP
+      modelProvider: CLAUDE
       model: claude-sonnet-4-20250514
   workstations:
     - name: review-story

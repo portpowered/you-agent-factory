@@ -913,8 +913,8 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 		t.Fatalf("Workers = %#v, want one runtime worker", payload.Factory.Workers)
 	}
 	worker := (*payload.Factory.Workers)[0]
-	if worker.Name != "mock" || stringValueForRuntimeTest(worker.ExecutorProvider) != "script_wrap" ||
-		stringValueForRuntimeTest(worker.ModelProvider) != "codex" ||
+	if worker.Name != "mock" || stringValueForRuntimeTest(worker.ExecutorProvider) != "SCRIPT_WRAP" ||
+		stringValueForRuntimeTest(worker.ModelProvider) != "CODEX" ||
 		stringValueForRuntimeTest(worker.Model) != "gpt-5.4" {
 		t.Fatalf("worker metadata = %#v, want runtime config provider/model metadata", worker)
 	}

@@ -332,8 +332,8 @@ func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFact
 	})
 	writeAgentsMD(t, filepath.Join(factoryDir, "workers", "executor"), `---
 type: MODEL_WORKER
-executorProvider: codex-cli
-modelProvider: openai
+executorProvider: script_wrap
+modelProvider: codex
 model: gpt-5.4
 timeout: 30m
 ---

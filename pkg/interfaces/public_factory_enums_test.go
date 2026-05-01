@@ -25,17 +25,17 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 		},
 		{
 			name:       "worker model provider",
-			alias:      "OPENAI",
+			alias:      "CODEX",
 			unknown:    "mystery-provider",
-			want:       "codex",
+			want:       "CODEX",
 			permissive: PermissivePublicFactoryWorkerModelProvider,
 			strict:     StrictPublicFactoryWorkerModelProvider,
 		},
 		{
 			name:       "worker provider",
-			alias:      "local-claude",
+			alias:      "SCRIPT_WRAP",
 			unknown:    "custom-executor",
-			want:       "script_wrap",
+			want:       "SCRIPT_WRAP",
 			permissive: PermissivePublicFactoryWorkerProvider,
 			strict:     StrictPublicFactoryWorkerProvider,
 		},
@@ -70,6 +70,12 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	if got := GeneratedPublicFactoryWorkerType("  CUSTOM_WORKER  "); got != factoryapi.WorkerType("CUSTOM_WORKER") {
 		t.Fatalf("worker type = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryWorkerModelProvider("  openai  "); got != factoryapi.WorkerModelProvider("CODEX") {
+		t.Fatalf("worker model provider = %q, want CODEX from internal openai alias", got)
+	}
+	if got := GeneratedPublicFactoryWorkerProvider("  local-claude  "); got != factoryapi.WorkerProvider("SCRIPT_WRAP") {
+		t.Fatalf("worker provider = %q, want SCRIPT_WRAP from internal local-claude alias", got)
 	}
 	if got := GeneratedPublicFactoryWorkerModelProvider("  mystery-provider  "); got != factoryapi.WorkerModelProvider("mystery-provider") {
 		t.Fatalf("worker model provider = %q, want trimmed unknown to round-trip", got)

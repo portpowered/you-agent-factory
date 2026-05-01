@@ -18,9 +18,9 @@ describe("generated named-factory OpenAPI types", () => {
         ],
         workers: [
           {
-            executorProvider: "script_wrap",
+            executorProvider: "SCRIPT_WRAP",
             model: "claude-sonnet-4-20250514",
-            modelProvider: "claude",
+            modelProvider: "CLAUDE",
             name: "planner",
             type: "MODEL_WORKER",
           },

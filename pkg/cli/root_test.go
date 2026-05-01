@@ -242,10 +242,10 @@ func assertCanonicalFlattenPayload(t *testing.T, payload map[string]any) {
 	if !ok {
 		t.Fatalf("expected flattened worker to include inline definition, got %#v", workerPayload)
 	}
-	if workerPayload["model"] != "claude-sonnet-4-6" || workerPayload["modelProvider"] != "claude" {
+	if workerPayload["model"] != "claude-sonnet-4-6" || workerPayload["modelProvider"] != "CLAUDE" {
 		t.Fatalf("expected flattened worker definition to preserve model/provider, got %#v", workerPayload)
 	}
-	if workerPayload["executorProvider"] != "script_wrap" {
+	if workerPayload["executorProvider"] != "SCRIPT_WRAP" {
 		t.Fatalf("expected flattened worker definition to preserve canonical executorProvider, got %#v", workerPayload)
 	}
 	for _, retired := range []string{"provider", "sessionId", "concurrency"} {

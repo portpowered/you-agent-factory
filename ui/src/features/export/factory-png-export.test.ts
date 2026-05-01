@@ -24,9 +24,9 @@ const canonicalFactory: FactorySchemas["Factory"] = {
   ],
   workers: [
     {
-      executorProvider: "script_wrap",
+      executorProvider: "SCRIPT_WRAP",
       model: "codex-mini",
-      modelProvider: "codex",
+      modelProvider: "CODEX",
       name: "writer",
       type: "MODEL_WORKER",
     },

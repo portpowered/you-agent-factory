@@ -767,7 +767,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 			"name":"executor",
 			"type":"MODEL_WORKER",
 			"model":"claude-sonnet-4-20250514",
-			"modelProvider":"claude",
+			"modelProvider":"CLAUDE",
 			"stopToken":"COMPLETE",
 			"body":"You are the executor."
 		}],

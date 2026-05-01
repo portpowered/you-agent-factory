@@ -136,13 +136,13 @@ const (
 
 // Defines values for WorkerModelProvider.
 const (
-	WorkerModelProviderClaude WorkerModelProvider = "claude"
-	WorkerModelProviderCodex  WorkerModelProvider = "codex"
+	WorkerModelProviderClaude WorkerModelProvider = "CLAUDE"
+	WorkerModelProviderCodex  WorkerModelProvider = "CODEX"
 )
 
 // Defines values for WorkerProvider.
 const (
-	WorkerProviderScriptWrap WorkerProvider = "script_wrap"
+	WorkerProviderScriptWrap WorkerProvider = "SCRIPT_WRAP"
 )
 
 // Defines values for WorkerType.

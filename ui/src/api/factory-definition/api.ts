@@ -36,37 +36,11 @@ const WORKER_MODEL_PROVIDER_ALIASES: Record<
   string,
   NonNullable<FactoryWorker["modelProvider"]>
 > = {
-  ANTHROPIC: "claude",
-  CLAUDE: "claude",
-  CODEX: "codex",
-  OPENAI: "codex",
-  anthropic: "claude",
-  claude: "claude",
-  codex: "codex",
-  openai: "codex",
+  CLAUDE: "CLAUDE",
+  CODEX: "CODEX",
 };
 const WORKER_PROVIDER_ALIASES: Record<string, NonNullable<FactoryWorker["executorProvider"]>> = {
-  ANTHROPIC: "script_wrap",
-  CLAUDE: "script_wrap",
-  CLAUDE_CLI: "script_wrap",
-  CODEX_CLI: "script_wrap",
-  LOCAL: "script_wrap",
-  SCRIPT: "script_wrap",
-  SCRIPTWRAP: "script_wrap",
-  SCRIPT_WRAP: "script_wrap",
-  anthropic: "script_wrap",
-  claude: "script_wrap",
-  "claude-cli": "script_wrap",
-  claude_cli: "script_wrap",
-  "codex-cli": "script_wrap",
-  codex_cli: "script_wrap",
-  local: "script_wrap",
-  "local-claude": "script_wrap",
-  local_claude: "script_wrap",
-  script: "script_wrap",
-  "script-wrap": "script_wrap",
-  script_wrap: "script_wrap",
-  scriptwrap: "script_wrap",
+  SCRIPT_WRAP: "SCRIPT_WRAP",
 };
 const WORKSTATION_KIND_ALIASES: Record<string, NonNullable<FactoryWorkstation["kind"]>> = {
   CRON: "CRON",
@@ -154,11 +128,11 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
   "SCRIPT_WORKER",
 ]);
 const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelProvider"]>>([
-  "claude",
-  "codex",
+  "CLAUDE",
+  "CODEX",
 ]);
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
-  "script_wrap",
+  "SCRIPT_WRAP",
 ]);
 const WORKSTATION_KIND_VALUES = new Set<NonNullable<FactoryWorkstation["kind"]>>([
   "CRON",

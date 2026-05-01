@@ -1497,8 +1497,8 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 			"workers": []any{map[string]any{
 				"name":             "executor",
 				"type":             "MODEL_WORKER",
-				"modelProvider":    "claude",
-				"executorProvider": "script_wrap",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
 				"stopToken":        "<COMPLETE>",
 				"skipPermissions":  true,
 				"command":          "echo",

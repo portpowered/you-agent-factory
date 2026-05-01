@@ -5,10 +5,10 @@ import {
 } from "./api";
 
 describe("normalizeFactoryDefinition", () => {
-  it("normalizes public and legacy aliases into the generated factory contract", () => {
+  it("normalizes supported public shape aliases into the generated factory contract", () => {
     expect(
       normalizeFactoryDefinition({
-        input_types: [{ name: "default", type: "default" }],
+        input_types: [{ name: "default", type: "DEFAULT" }],
         id: "agent-factory",
         name: "agent-factory",
         source_directory: "/tmp/legacy-factory",
@@ -17,9 +17,8 @@ describe("normalizeFactoryDefinition", () => {
         },
         workers: [
           {
-            model_provider: "OPENAI",
+            modelProvider: "CODEX",
             name: "writer",
-            provider: "local-claude",
             session_id: "sess-123",
             type: "MODEL_WORKER",
           },
@@ -35,18 +34,18 @@ describe("normalizeFactoryDefinition", () => {
             guards: [
               {
                 max_visits: 3,
-                type: "visit_count",
+                type: "VISIT_COUNT",
                 workstation: "Draft",
               },
             ],
             inputs: [
               {
-                guards: [{ match_input: "planItem", type: "same_name" }],
+                guards: [{ match_input: "planItem", type: "SAME_NAME" }],
                 state: "new",
                 work_type: "story",
               },
             ],
-            kind: "standard",
+            kind: "STANDARD",
             name: "Draft",
             on_failure: { state: "failed", work_type: "story" },
             outputs: [{ state: "done", work_type: "story" }],
@@ -64,8 +63,7 @@ describe("normalizeFactoryDefinition", () => {
       },
       workers: [
         {
-          executorProvider: "script_wrap",
-          modelProvider: "codex",
+          modelProvider: "CODEX",
           name: "writer",
           type: "MODEL_WORKER",
         },

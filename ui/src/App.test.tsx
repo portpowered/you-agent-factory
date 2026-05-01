@@ -1006,9 +1006,9 @@ const exportTimelineEvents: FactoryEvent[] = [
       source_directory: "/work/factories/semantic-workflow",
       workers: [
         {
-          model_provider: "codex",
+          model_provider: "CODEX",
           name: "reviewer",
-          provider: "script_wrap",
+          provider: "SCRIPT_WRAP",
           type: "MODEL_WORKER",
         },
       ],
@@ -1042,8 +1042,8 @@ const currentNamedFactoryExportResponse = {
     name: "authored-current-factory",
     workers: [
       {
-        executorProvider: "script_wrap",
-        modelProvider: "codex",
+        executorProvider: "SCRIPT_WRAP",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },

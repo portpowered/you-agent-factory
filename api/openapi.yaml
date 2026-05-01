@@ -1509,13 +1509,13 @@ components:
         workers:
           - name: reviewer
             type: MODEL_WORKER
-            executorProvider: script_wrap
-            modelProvider: claude
+            executorProvider: SCRIPT_WRAP
+            modelProvider: CLAUDE
             model: claude-sonnet-4-20250514
           - name: review-loop-breaker
             type: MODEL_WORKER
-            executorProvider: script_wrap
-            modelProvider: claude
+            executorProvider: SCRIPT_WRAP
+            modelProvider: CLAUDE
             model: claude-sonnet-4-20250514
         workstations:
           - name: review-story
@@ -1815,8 +1815,8 @@ components:
         - WorkerModelProviderClaude
         - WorkerModelProviderCodex
       enum:
-        - claude
-        - codex
+        - CLAUDE
+        - CODEX
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
@@ -1826,7 +1826,7 @@ components:
       x-enum-varnames:
         - WorkerProviderScriptWrap
       enum:
-        - script_wrap
+        - SCRIPT_WRAP
       x-enum-descriptions:
         - Public worker executor adapter that shells out through the configured worker command path.
     Workstation:

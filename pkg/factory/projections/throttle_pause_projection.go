@@ -1,6 +1,10 @@
 package projections
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import (
+	"strings"
+
+	"github.com/portpowered/agent-factory/pkg/interfaces"
+)
 
 // ProjectActiveThrottlePauses converts dispatcher-owned runtime pause windows
 // into the world-view/dashboard pause shape using authored topology metadata.
@@ -135,6 +139,6 @@ func workstationMatchesPause(
 	if !ok {
 		return false
 	}
-	provider := firstNonEmpty(worker.Provider, worker.ModelProvider)
-	return provider == pause.Provider && worker.Model == pause.Model
+	provider := firstNonEmpty(worker.ModelProvider, worker.Provider)
+	return strings.EqualFold(provider, pause.Provider) && worker.Model == pause.Model
 }
