@@ -8,9 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/testutil"
 	"github.com/portpowered/agent-factory/pkg/workers"
 	"github.com/portpowered/agent-factory/tests/functional/internal/support"
@@ -209,65 +207,6 @@ func assertProviderRequeueOutcome(
 	}
 	if len(outcome.EngineState.ActiveThrottlePauses) != 0 {
 		t.Fatalf("active throttle pauses = %d, want 0", len(outcome.EngineState.ActiveThrottlePauses))
-	}
-}
-
-func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.ProviderErrorCorpusEntry {
-	t.Helper()
-
-	corpus, err := workers.LoadProviderErrorCorpus()
-	if err != nil {
-		t.Fatalf("workers.LoadProviderErrorCorpus() error = %v", err)
-	}
-	entry, ok := corpus.Entry(name)
-	if !ok {
-		t.Fatalf("provider error corpus entry %q not found", name)
-	}
-	return entry
-}
-
-func assertProviderCommandMatchesLane(t *testing.T, req workers.CommandRequest, provider workers.ModelProvider, workName, model string) {
-	t.Helper()
-
-	if req.Command != string(provider) {
-		t.Fatalf("provider command = %q, want %q", req.Command, provider)
-	}
-	support.AssertArgsContainSequence(t, req.Args, []string{"--model", model})
-
-	switch provider {
-	case workers.ModelProviderClaude:
-		support.AssertArgsContainSequence(t, req.Args, []string{"--worktree", workName})
-		if len(req.Stdin) != 0 {
-			t.Fatalf("expected claude prompt in args, got stdin %q", string(req.Stdin))
-		}
-	case workers.ModelProviderCodex:
-		if got := req.Args[len(req.Args)-1]; got != "-" {
-			t.Fatalf("expected codex stdin placeholder '-', got %q", got)
-		}
-		if len(req.Stdin) == 0 {
-			t.Fatal("expected codex prompt over stdin")
-		}
-	default:
-		t.Fatalf("unsupported provider %q", provider)
-	}
-}
-
-func assertDispatchHistoryMatchesWork(t *testing.T, dispatch interfaces.CompletedDispatch, work testutil.ProviderErrorSmokeWork) {
-	t.Helper()
-
-	if len(dispatch.ConsumedTokens) == 0 {
-		t.Fatal("dispatch consumed no tokens")
-	}
-
-	consumed := dispatch.ConsumedTokens[0]
-	if consumed.Color.WorkID != work.WorkID {
-		t.Fatalf("dispatch consumed WorkID = %q, want %q", consumed.Color.WorkID, work.WorkID)
-	}
-	if consumed.Color.TraceID != work.TraceID {
-		t.Fatalf("dispatch consumed TraceID = %q, want %q", consumed.Color.TraceID, work.TraceID)
-	}
-	if consumed.Color.Name != work.Name {
-		t.Fatalf("dispatch consumed Name = %q, want %q", consumed.Color.Name, work.Name)
 	}
 }
 
