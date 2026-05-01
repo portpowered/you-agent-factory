@@ -1,0 +1,39 @@
+type: object
+description: >- 
+  A piece of work.
+additionalProperties: false
+required:
+  - name
+properties: 
+  name:
+    type: string
+    description: A human readable name for the work, not unique
+  workId:
+    type: string
+    description: Unique identifier for the work
+  requestId:
+    type: string
+    description: Identifier for the original request that created this work, if applicable
+  workTypeName:
+    type: string
+    description: Configured work type name from factory.json for this submitted work item.
+  state:
+    type: string
+    description: Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
+  currentChainingTraceId:
+    type: string
+    description: Explicit chaining-trace identifier for this submitted work item.
+  previousChainingTraceIds:
+    type: array
+    description: Explicit predecessor chaining traces that directly caused this work item.
+    items:
+      type: string
+  traceId:
+    type: string
+    description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+  payload:
+    description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. 
+  tags:
+    $ref: '..\shared\StringMap.yaml'
+    description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.
+

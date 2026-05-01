@@ -1,0 +1,89 @@
+description: >-
+  A processing step in the factory graph. Workstations consume authored
+  work states, run a worker or logical move, and emit the next work
+  states.
+type: object
+additionalProperties: false
+required:
+  - name
+  - worker
+  - inputs
+  - outputs
+properties:
+  id:
+    type: string
+    description: Optional stable identifier for this workstation in serialized runtime and replay payloads.
+  name:
+    type: string
+    description: Customer-authored workstation name used by guards, diagnostics, and authored references.
+  kind:
+    $ref: './WorkstationKind.yaml'
+    description: Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
+  type:
+    $ref: './WorkstationType.yaml'
+    description: Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
+  worker:
+    type: string
+    description: Name of a worker declared in the workers list.
+  promptFile:
+    type: string
+    description: Path to a prompt template file loaded for model-oriented workstation execution.
+  outputSchema:
+    type: string
+    description: JSON schema string used to validate or parse structured model output when configured.
+  limits:
+    $ref: './WorkstationLimits.yaml'
+    description: Retry and execution ceilings applied to this workstation.
+  body:
+    type: string
+    description: Inline workstation instructions or script body when authored directly in factory config.
+  promptTemplate:
+    type: string
+    description: Inline Go template rendered into the prompt for model-oriented workstation execution.
+  cron:
+    $ref: './WorkstationCron.yaml'
+    description: Cron trigger configuration for workstations whose kind is cron.
+  inputs:
+    type: array
+    description: Work states this workstation can consume before it dispatches.
+    items:
+      $ref: './WorkstationIO.yaml'
+  outputs:
+    type: array
+    description: Work states emitted after this workstation succeeds.
+    items:
+      $ref: './WorkstationIO.yaml'
+  onRejection:
+    $ref: './WorkstationIO.yaml'
+    description: Optional destination emitted when the worker rejects the current work without a hard failure.
+  onFailure:
+    $ref: './WorkstationIO.yaml'
+    description: Optional destination emitted when the workstation fails permanently.
+  resources:
+    type: array
+    description: Resource capacity this workstation consumes while one dispatch is in flight.
+    items:
+      $ref: '..\shared\ResourceRequirement.yaml'
+  copyReferencedScripts:
+    type: boolean
+    description: Copy supported referenced script files into the expanded workstation layout when config expand runs.
+  guards:
+    type: array
+    description: Guarded loop breakers should use `visit_count` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
+    items:
+      $ref: './WorkstationGuard.yaml'
+  stopWords:
+    type: array
+    description: Stop words authored on the topology entry for model-oriented dispatches.
+    items:
+      type: string
+  workingDirectory:
+    type: string
+    description: Go template resolved from token tags at dispatch time.
+  worktree:
+    type: string
+    description: Go template resolved and passed as the worktree path to CLI dispatchers.
+  env:
+    $ref: '..\shared\StringMap.yaml'
+    description: Environment variables added to the workstation execution context.
+

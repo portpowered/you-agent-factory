@@ -1,0 +1,7 @@
+type: object
+additionalProperties: false
+properties:
+  renderedPrompt:
+    $ref: './FactoryWorldRenderedPromptDiagnostic.yaml'
+  provider:
+    $ref: './FactoryWorldProviderDiagnostic.yaml'

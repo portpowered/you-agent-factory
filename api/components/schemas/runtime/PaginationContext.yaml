@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+required:
+  - maxResults
+properties:
+  maxResults:
+    type: integer
+  nextToken:
+    type: string

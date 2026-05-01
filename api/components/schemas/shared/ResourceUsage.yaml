@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - available
+  - total
+properties:
+  name:
+    type: string
+  available:
+    type: integer
+  total:
+    type: integer

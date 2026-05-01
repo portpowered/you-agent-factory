@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - capacity
+properties:
+  name:
+    type: string
+  capacity:
+    type: integer
+    minimum: 1

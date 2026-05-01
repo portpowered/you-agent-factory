@@ -130,11 +130,11 @@ func TestWorkRequestAndRelationshipPayloads_SerializeContractFields(t *testing.T
 	assertJSONField(t, relationshipPayload, "trace_id", "trace-1")
 	relation := assertJSONObject(t, relationshipPayload, "relation")
 	assertJSONField(t, relation, "type", "DEPENDS_ON")
-	assertJSONField(t, relation, "source_work_id", "work-2")
-	assertJSONField(t, relation, "source_work_name", "second")
-	assertJSONField(t, relation, "target_work_id", "work-1")
-	assertJSONField(t, relation, "target_work_name", "first")
-	assertJSONField(t, relation, "required_state", "complete")
+	assertJSONField(t, relation, "sourceWorkId", "work-2")
+	assertJSONField(t, relation, "sourceWorkName", "second")
+	assertJSONField(t, relation, "targetWorkId", "work-1")
+	assertJSONField(t, relation, "targetWorkName", "first")
+	assertJSONField(t, relation, "requiredState", "complete")
 }
 
 func marshalPayloadObject(t *testing.T, payload any) map[string]any {

@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+required:
+  - dispatchedCount
+  - respondedCount
+  - erroredCount
+properties:
+  dispatchedCount:
+    type: integer
+    minimum: 0
+  respondedCount:
+    type: integer
+    minimum: 0
+  erroredCount:
+    type: integer
+    minimum: 0

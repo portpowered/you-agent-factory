@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+required:
+  - results
+properties:
+  results:
+    type: array
+    items:
+      $ref: './TokenResponse.yaml'
+  paginationContext:
+    $ref: './PaginationContext.yaml'
+

@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - workId
+properties:
+  workId:
+    type: string
+  workTypeId:
+    type: string
+  displayName:
+    type: string
+  currentChainingTraceId:
+    type: string
+  previousChainingTraceIds:
+    type: array
+    items:
+      type: string
+  traceId:
+    type: string

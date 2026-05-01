@@ -44,9 +44,9 @@
       "works": [
         {
           "name": "draft release notes",
-          "work_id": "work-1",
-          "request_id": "request-1",
-          "work_type_name": "task"
+          "workId": "work-1",
+          "requestId": "request-1",
+          "workTypeName": "task"
         }
       ]
     }
@@ -68,8 +68,8 @@
     "payload": {
       "relation": {
         "type": "DEPENDS_ON",
-        "source_work_name": "publish release notes",
-        "target_work_name": "draft release notes"
+        "sourceWorkName": "publish release notes",
+        "targetWorkName": "draft release notes"
       }
     }
   },

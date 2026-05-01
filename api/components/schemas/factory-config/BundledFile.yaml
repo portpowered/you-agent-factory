@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - type
+  - targetPath
+  - content
+description: One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile.
+properties:
+  type:
+    type: string
+    enum:
+      - SCRIPT
+      - DOC
+      - ROOT_HELPER
+    description: Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
+  targetPath:
+    type: string
+    description: Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected.
+  content:
+    $ref: './BundledFileContent.yaml'
+

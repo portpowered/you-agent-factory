@@ -1,0 +1,7 @@
+type: object
+additionalProperties: false
+properties:
+  message:
+    type: string
+  stack:
+    type: string

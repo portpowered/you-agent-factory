@@ -1,0 +1,19 @@
+type: object
+description: One authored work-state reference consumed or emitted by a workstation.
+additionalProperties: false
+required:
+  - workType
+  - state
+properties:
+  workType:
+    type: string
+    description: Name of the work type consumed or emitted at this edge of the workstation.
+  state:
+    type: string
+    description: Name of the work state consumed or emitted for the referenced work type.
+  guards:
+    type: array
+    description: Per-input guards that must pass before this specific input can be used.
+    items:
+      $ref: './InputGuard.yaml'
+

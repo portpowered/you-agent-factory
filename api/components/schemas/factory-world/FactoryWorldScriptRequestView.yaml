@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+properties:
+  scriptRequestId:
+    type: string
+  attempt:
+    type: integer
+    minimum: 1
+  command:
+    type: string
+  args:
+    type: array
+    items:
+      type: string

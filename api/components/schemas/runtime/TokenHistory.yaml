@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+properties:
+  totalVisits:
+    $ref: '..\shared\IntegerMap.yaml'
+  consecutiveFailures:
+    $ref: '..\shared\IntegerMap.yaml'
+  placeVisits:
+    $ref: '..\shared\IntegerMap.yaml'
+  lastError:
+    type: string
+

@@ -670,14 +670,14 @@ func TestFactoryEventHistory_BatchRequestAndRelationshipReplay(t *testing.T) {
 
 	var request interfaces.WorkRequest
 	if err := json.Unmarshal([]byte(`{
-		"request_id": "request-batch-events",
+		"requestId": "request-batch-events",
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
-			{"name": "first", "work_id": "work-first", "work_type_name": "task", "trace_id": "trace-batch"},
-			{"name": "second", "work_id": "work-second", "work_type_name": "task"}
+			{"name": "first", "workId": "work-first", "workTypeName": "task", "traceId": "trace-batch"},
+			{"name": "second", "workId": "work-second", "workTypeName": "task"}
 		],
 		"relations": [
-			{"type": "DEPENDS_ON", "source_work_name": "second", "target_work_name": "first", "required_state": "done"}
+			{"type": "DEPENDS_ON", "sourceWorkName": "second", "targetWorkName": "first", "requiredState": "done"}
 		]
 	}`), &request); err != nil {
 		t.Fatalf("Unmarshal WorkRequest: %v", err)

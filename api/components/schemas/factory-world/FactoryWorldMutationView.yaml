@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - type
+  - tokenId
+properties:
+  type:
+    type: string
+  tokenId:
+    type: string
+  fromPlace:
+    type: string
+  toPlace:
+    type: string
+  reason:
+    type: string
+  token:
+    $ref: './FactoryWorldTokenView.yaml'

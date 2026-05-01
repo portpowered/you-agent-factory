@@ -126,17 +126,17 @@ func WriteSeedBatchFile(t *testing.T, dir string, request interfaces.WorkRequest
 }
 
 type seedWorkRequest struct {
-	RequestID string     `json:"request_id,omitempty"`
+	RequestID string     `json:"requestId,omitempty"`
 	Type      string     `json:"type"`
 	Works     []seedWork `json:"works"`
 }
 
 type seedWork struct {
 	Name             string                `json:"name"`
-	WorkID           string                `json:"work_id,omitempty"`
-	WorkTypeID       string                `json:"work_type_name"`
+	WorkID           string                `json:"workId,omitempty"`
+	WorkTypeID       string                `json:"workTypeName"`
 	State            string                `json:"state,omitempty"`
-	TraceID          string                `json:"trace_id,omitempty"`
+	TraceID          string                `json:"traceId,omitempty"`
 	Payload          any                   `json:"payload,omitempty"`
 	Tags             map[string]string     `json:"tags,omitempty"`
 	ExecutionID      string                `json:"execution_id,omitempty"`

@@ -40,6 +40,12 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	var submitRequest factoryapi.SubmitWorkRequest
 	submitRequest.WorkTypeName = "task"
 	submitRequest.CurrentChainingTraceId = stringPtr("chain-submit-1")
+	submitRelationState := "complete"
+	submitRequest.Relations = &[]factoryapi.SubmitRelation{{
+		Type:          factoryapi.RelationTypeDependsOn,
+		TargetWorkId:  "work-1",
+		RequiredState: &submitRelationState,
+	}}
 
 	workID := "work-1"
 	requestID := "request-1"
@@ -104,6 +110,13 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	}
 	if submitRequest.CurrentChainingTraceId == nil || *submitRequest.CurrentChainingTraceId != "chain-submit-1" {
 		t.Fatal("generated submit request should expose current chaining trace ID")
+	}
+	submitRequestJSON, err := json.Marshal(submitRequest)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	if !strings.Contains(string(submitRequestJSON), `"relations"`) || !strings.Contains(string(submitRequestJSON), `"targetWorkId":"work-1"`) {
+		t.Fatalf("generated submit request JSON must preserve token-level relations: %s", submitRequestJSON)
 	}
 	if workRequest.Relations == nil || len(*workRequest.Relations) != 2 || (*workRequest.Relations)[1].Type != factoryapi.RelationTypeParentChild {
 		t.Fatal("generated work request relations should advertise parent-child support")
@@ -671,10 +684,10 @@ func TestGeneratedFactoryEventJSONRoundTripPreservesWorkRequestContextAndWorks(t
 			"works": [
 				{
 					"name": "draft release notes",
-					"work_id": "work-1",
-					"request_id": "request-1",
-					"work_type_name": "task",
-					"trace_id": "trace-1",
+					"workId": "work-1",
+					"requestId": "request-1",
+					"workTypeName": "task",
+					"traceId": "trace-1",
 					"payload": {"title": "event log"},
 					"tags": {"priority": "high"}
 				}
@@ -682,8 +695,8 @@ func TestGeneratedFactoryEventJSONRoundTripPreservesWorkRequestContextAndWorks(t
 			"relations": [
 				{
 					"type": "DEPENDS_ON",
-					"source_work_name": "publish",
-					"target_work_name": "draft release notes"
+					"sourceWorkName": "publish",
+					"targetWorkName": "draft release notes"
 				}
 			],
 			"source": "api",

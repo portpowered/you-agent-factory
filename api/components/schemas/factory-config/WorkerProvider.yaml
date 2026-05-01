@@ -1,0 +1,8 @@
+type: string
+description: Concrete worker-provider wrappers supported by the public factory-config contract.
+x-enum-varnames:
+  - WorkerProviderScriptWrap
+enum:
+  - script_wrap
+x-enum-descriptions:
+  - Public worker executor adapter that shells out through the configured worker command path.

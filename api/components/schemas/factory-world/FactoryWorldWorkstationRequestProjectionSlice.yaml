@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+description: >-
+  Additive dashboard read-model contract slice that publishes
+  workstation-request projections keyed by dispatch ID without
+  reintroducing removed `/dashboard` endpoints.
+properties:
+  workstationRequestsByDispatchId:
+    type: object
+    additionalProperties:
+      $ref: './FactoryWorldWorkstationRequestView.yaml'

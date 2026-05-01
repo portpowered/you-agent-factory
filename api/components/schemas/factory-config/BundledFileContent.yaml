@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required:
+  - encoding
+  - inline
+description: Inline content payload for a portable bundled file.
+properties:
+  encoding:
+    type: string
+    enum:
+      - utf-8
+    description: Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
+  inline:
+    type: string
+    description: Inline bundled file content carried in the manifest. Files under factory/scripts/, factory/docs/, and supported root helper paths are only bundled when they appear in bundledFiles.

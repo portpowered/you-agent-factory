@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+description: Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
+properties:
+  requiredTools:
+    type: array
+    description: Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed.
+    items:
+      $ref: './RequiredTool.yaml'
+  bundledFiles:
+    type: array
+    description: Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script or docs roots for SCRIPT or DOC entries, or match the supported root-helper allowlist for ROOT_HELPER entries.
+    items:
+      $ref: './BundledFile.yaml'
+

@@ -236,10 +236,10 @@ func validateBatchWork(req interfaces.WorkRequest, opts interfaces.WorkRequestNo
 			workTypeID = opts.DefaultWorkTypeID
 		}
 		if workTypeID == "" {
-			return nil, fmt.Errorf("work_request: works[%d] (%q) is missing work_type_name", i, work.Name)
+			return nil, fmt.Errorf("work_request: works[%d] (%q) is missing workTypeName", i, work.Name)
 		}
 		if work.WorkTypeID != "" && opts.DefaultWorkTypeID != "" && work.WorkTypeID != opts.DefaultWorkTypeID {
-			return nil, fmt.Errorf("work_request: works[%d] (%q) work_type_name %q conflicts with context work type %q", i, work.Name, work.WorkTypeID, opts.DefaultWorkTypeID)
+			return nil, fmt.Errorf("work_request: works[%d] (%q) workTypeName %q conflicts with context work type %q", i, work.Name, work.WorkTypeID, opts.DefaultWorkTypeID)
 		}
 		if opts.ValidWorkTypes != nil && !opts.ValidWorkTypes[workTypeID] {
 			return nil, fmt.Errorf("work_request: works[%d] (%q) references unknown work type %q", i, work.Name, workTypeID)
@@ -296,17 +296,17 @@ func validateAndIndexBatchRelations(req interfaces.WorkRequest, workIndex map[st
 
 func validateBatchRelationEndpoints(i int, rel interfaces.WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
 	if strings.TrimSpace(rel.SourceWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing source_work_name", i)
+		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing sourceWorkName", i)
 	}
 	if strings.TrimSpace(rel.TargetWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing target_work_name", i)
+		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing targetWorkName", i)
 	}
 	if _, ok := workIndex[rel.SourceWorkName]; !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown source_work_name %q", i, rel.SourceWorkName)
+		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown sourceWorkName %q", i, rel.SourceWorkName)
 	}
 	targetWork, ok := workIndex[rel.TargetWorkName]
 	if !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown target_work_name %q", i, rel.TargetWorkName)
+		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown targetWorkName %q", i, rel.TargetWorkName)
 	}
 	return targetWork, nil
 }
@@ -332,7 +332,7 @@ func normalizeDependsOnRelation(i int, rel interfaces.WorkRelation, targetWork n
 	}
 	if opts.ValidStatesByType != nil && !opts.ValidStatesByType[targetWork.workTypeID][requiredState] {
 		return interfaces.Relation{}, "", fmt.Errorf(
-			"work_request: relations[%d] references unknown required_state %q for target work type %q",
+			"work_request: relations[%d] references unknown requiredState %q for target work type %q",
 			i,
 			requiredState,
 			targetWork.workTypeID,
@@ -350,7 +350,7 @@ func normalizeParentChildRelation(i int, rel interfaces.WorkRelation, targetWork
 		return interfaces.Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-parenting on %q", i, rel.SourceWorkName)
 	}
 	if rel.RequiredState != "" {
-		return interfaces.Relation{}, "", fmt.Errorf("work_request: relations[%d] must not set required_state for PARENT_CHILD", i)
+		return interfaces.Relation{}, "", fmt.Errorf("work_request: relations[%d] must not set requiredState for PARENT_CHILD", i)
 	}
 	return interfaces.Relation{
 		Type:         interfaces.RelationParentChild,
@@ -365,7 +365,7 @@ func rejectDuplicateBatchRelation(i int, rel interfaces.WorkRelation, requiredSt
 	}
 	if rel.Type == interfaces.WorkRelationDependsOn {
 		return fmt.Errorf(
-			"work_request: relations[%d] duplicates relations[%d] (%q %q -> %q with required_state %q)",
+			"work_request: relations[%d] duplicates relations[%d] (%q %q -> %q with requiredState %q)",
 			i,
 			original,
 			rel.Type,

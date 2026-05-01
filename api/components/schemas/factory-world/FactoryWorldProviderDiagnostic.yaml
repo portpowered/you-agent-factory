@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+properties:
+  provider:
+    type: string
+  model:
+    type: string
+  requestMetadata:
+    $ref: '../shared/StringMap.yaml'
+  responseMetadata:
+    $ref: '../shared/StringMap.yaml'

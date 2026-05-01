@@ -1,0 +1,19 @@
+type: string
+default: STANDARD
+description: >-
+  Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it.
+  Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time. 
+  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place.
+  Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+x-enum-varnames:
+  - WorkstationKindStandard
+  - WorkstationKindRepeater
+  - WorkstationKindCron
+enum:
+  - STANDARD
+  - REPEATER
+  - CRON
+x-enum-descriptions:
+  - Schedules when its inputs are ready and emits configured outputs.
+  - Re-runs when observed inputs change and can loop rejected work back to an earlier state.
+  - Produces internal time work from a cron schedule and dispatches through the normal worker path when inputs are ready.
