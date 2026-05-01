@@ -263,8 +263,8 @@ func TestNormalizeWorkRequest_RejectsUnknownDependencyRequiredState(t *testing.T
 		ValidWorkTypes:    map[string]bool{"task": true},
 		ValidStatesByType: map[string]map[string]bool{"task": {"init": true, "complete": true}},
 	})
-	if err == nil || !strings.Contains(err.Error(), `references unknown required_state "queued"`) {
-		t.Fatalf("expected required_state validation error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), `references unknown requiredState "queued"`) {
+		t.Fatalf("expected requiredState validation error, got %v", err)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures(t *testing.T) {
 					TargetWorkName: "first",
 				}},
 			},
-			wantErr: "missing source_work_name",
+			wantErr: "missing sourceWorkName",
 		},
 		{
 			name: "blank source endpoint",
@@ -346,7 +346,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures(t *testing.T) {
 					TargetWorkName: "first",
 				}},
 			},
-			wantErr: "missing source_work_name",
+			wantErr: "missing sourceWorkName",
 		},
 		{
 			name: "missing target endpoint",
@@ -359,7 +359,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures(t *testing.T) {
 					SourceWorkName: "first",
 				}},
 			},
-			wantErr: "missing target_work_name",
+			wantErr: "missing targetWorkName",
 		},
 		{
 			name: "unknown source endpoint",
@@ -373,7 +373,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures(t *testing.T) {
 					TargetWorkName: "first",
 				}},
 			},
-			wantErr: "unknown source_work_name",
+			wantErr: "unknown sourceWorkName",
 		},
 		{
 			name: "unknown target endpoint",
@@ -387,7 +387,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures(t *testing.T) {
 					TargetWorkName: "missing",
 				}},
 			},
-			wantErr: "unknown target_work_name",
+			wantErr: "unknown targetWorkName",
 		},
 		{
 			name: "self dependency",
@@ -449,7 +449,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures(t *testing.T) {
 					RequiredState:  "complete",
 				}},
 			},
-			wantErr: "must not set required_state",
+			wantErr: "must not set requiredState",
 		},
 		{
 			name: "unknown work type",

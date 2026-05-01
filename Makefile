@@ -63,7 +63,7 @@ generate-ui-api:
 	cd ui && $(BUN) run generate-api
 
 api-smoke:
-	cd ../../api && node run-quiet-api-command.js validate:main ../libraries/agent-factory/api/openapi-main.yaml
+	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
 	$(MAKE) generate-api
 	$(MAKE) generate-api
 	git diff --exit-code -- api/openapi.yaml pkg/api/generated/server.gen.go ui/src/api/generated/openapi.ts

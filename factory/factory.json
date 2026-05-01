@@ -81,7 +81,7 @@
             "matchInput": "task"
             }]
         }, 
-        { "workType": "task", "state": "to-complete" }
+        { "workType": "task", "state": "complete" }
       ],
       "outputs": [{ "workType": "idea", "state": "complete" }, { "workType": "task", "state": "complete" }]
     },
@@ -109,7 +109,7 @@
       "name": "review",
       "worker": "processor",
       "inputs":  [{ "workType": "task", "state": "in-review" }],
-      "outputs": [{ "workType": "task", "state": "to-complete" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
       "onRejection": { "workType": "task", "state": "init" },
       "onFailure": { "workType": "task", "state": "failed" },
       "resources": [{ "name": "executor-slot", "capacity": 1 }],

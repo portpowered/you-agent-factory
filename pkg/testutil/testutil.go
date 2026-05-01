@@ -139,8 +139,8 @@ type seedWork struct {
 	TraceID          string                `json:"traceId,omitempty"`
 	Payload          any                   `json:"payload,omitempty"`
 	Tags             map[string]string     `json:"tags,omitempty"`
-	ExecutionID      string                `json:"executionId,omitempty"`
-	RuntimeRelations []interfaces.Relation `json:"runtimeRelations,omitempty"`
+	ExecutionID      string                `json:"execution_id,omitempty"`
+	RuntimeRelations []interfaces.Relation `json:"runtime_relations,omitempty"`
 }
 
 func seedWorkRequestFromSubmitRequest(req interfaces.SubmitRequest) seedWorkRequest {

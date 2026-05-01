@@ -13,7 +13,9 @@ This inventory records the checked-in files and directories that the maintainer 
 | `cmd/factory/` | CLI entrypoint | Root-level build and smoke commands compile or execute the `factory` binary from this source tree. |
 | `docs/development/*-closeout.md` | Cleanup verification artifacts | Narrow cleanup lanes record the exact root-level validation bundle here when maintainers need durable proof beyond `progress.txt`. |
 | `docs/development/openapi-schema-standardization-inventory.md` | OpenAPI cleanup inventory | Records the authored fragment layout, remaining inline schemas, and the canonical bundle and generation verification surfaces for schema-standardization work. |
+| `docs/development/root-factory-artifact-contract-inventory.md` | Root artifact contract inventory doc | The checked-in root artifact table must stay in lockstep with the enforced entries in `internal/testpath/artifact_contract.go`. |
 | `docs/development/development.md` | Active maintainer guide | Must describe the real repository-root layout used in this checkout and avoid stale `libraries/agent-factory` instructions. |
+| `internal/testpath/artifact_contract.go` | Enforced root artifact contract | Root-level factory artifact additions, removals, and redirect stubs are test-enforced here and must stay synchronized with the inventory doc. |
 | `factory/` | Maintainer workflow surface | Contains checked-in operator guidance and active inbox directories that the development guide may reference for workflow-related tasks. |
 | `pkg/api/openapi_contract_test.go` | OpenAPI contract guard surface | Focused authored-versus-bundled contract assertions live here, including fragment-layout and `/events` schema wiring checks. |
 | `pkg/api/testdata/canonical-event-vocabulary-stream.json` | OpenAPI vocabulary fixture | Canonical bundled-contract fixtures for event payload validation live here and must be updated alongside public schema field renames. |
@@ -28,6 +30,7 @@ This inventory records the checked-in files and directories that the maintainer 
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When a cleanup lane closes with path or contract-alignment work, record the exact root-level verification commands in a `docs/development/*-closeout.md` artifact so the proof survives beyond `progress.txt`.
 - Use `pkg/api/openapi_contract_test.go` for narrow OpenAPI contract guards when the work is about authored schema structure or bundled route/schema alignment rather than handler runtime behavior.
+- Keep `docs/development/root-factory-artifact-contract-inventory.md` and `internal/testpath/artifact_contract.go` synchronized; the doc is not descriptive-only, it is a checked-in contract surface with order-sensitive tests.
 - When public OpenAPI field names change, update `pkg/api/testdata/canonical-event-vocabulary-stream.json` together with the contract guards so fixture validation keeps exercising the current bundled vocabulary.
 - When public request-batch field names change, update `pkg/interfaces/factory_runtime.go`, `pkg/factory/work_request_json.go`, and watched-file/worker batch fixtures together; those handwritten JSON boundaries are not generated and will drift silently if only `api/openapi.yaml` and generated clients are regenerated.
 - For Redocly-bundled vendor extensions that must keep a schema pointer in `api/openapi.yaml`, store the extension value as a string JSON Pointer; nested `$ref` objects under `x-*` fields are inlined during bundling.
