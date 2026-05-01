@@ -48,6 +48,58 @@ Use this sequence for every CLI release:
 6. Confirm the GitHub release contains the expected archives and checksums for
    Windows, Linux, and macOS.
 
+## Installation Surfaces Published By Release
+
+The release workflow publishes one set of GitHub release archives and reuses
+that output for every supported installation path:
+
+- GoReleaser builds the tagged `agent-factory` archives and checksum file from
+  `.goreleaser.yml`.
+- The same GoReleaser run updates the `portpowered/cask` tap on `main` by
+  writing the generated cask file to `Casks/agent-factory.rb`.
+- The publish workflow then uploads the repo-owned `install.sh` from the tagged
+  commit as a GitHub release asset, so the hosted installer URL becomes:
+
+```text
+https://github.com/portpowered/infinite-you/releases/download/vX.Y.Z/install.sh
+```
+
+For consumers, the expected Homebrew install command remains:
+
+```bash
+brew install --cask portpowered/cask/agent-factory
+```
+
+The latest-release fallback installer path remains:
+
+```bash
+curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh
+```
+
+Those install surfaces must keep pointing at the same tagged GitHub release.
+Do not publish a separate Homebrew-only build, a hand-edited cask, or a
+different installer artifact path.
+
+## Homebrew Tap Setup
+
+Before the first automated cask publication can succeed, maintainers must
+prepare the tap and credentials expected by `.goreleaser.yml` and
+`.github/workflows/release.yml`:
+
+- The Homebrew tap repository is `portpowered/cask`.
+- The generated cask is committed on the tap's `main` branch under
+  `Casks/agent-factory.rb`.
+- GitHub Actions needs a `HOMEBREW_TAP_GITHUB_TOKEN` secret with permission to
+  push to `portpowered/cask`.
+- The token must be available to the release publish workflow because
+  GoReleaser reads it from the `HOMEBREW_TAP_GITHUB_TOKEN` environment variable
+  declared in `.goreleaser.yml`.
+
+If the tap repository layout, branch, or secret name changes, update both the
+GoReleaser config and the release workflow in the same review. The maintainer
+guide, workflow, and config must continue to describe one identical tap
+publication contract.
+
 ## Supported `go install` Path
 
 The release process must preserve `cmd/factory` as the stable installable Go
@@ -91,6 +143,33 @@ After the push:
 - The release workflow should ignore non-semver branch pushes for publication.
 - Maintainers should monitor the workflow until the release assets and checksums
   are available on the GitHub release page.
+- Homebrew consumers should be able to install the published cask through
+  `brew install --cask portpowered/cask/agent-factory`.
+- The hosted installer should be reachable from the tag-specific release asset
+  URL and the latest-download URL after the asset upload step completes.
 - Release verification should keep one repo-owned `go install ./cmd/factory`
   smoke step so the stable CLI entrypoint remains buildable into a clean
   `GOBIN` before maintainers rely on the documented public command.
+
+## Release Failure Triage
+
+Interpret post-publish failures by the job that reported them:
+
+- `Publish GitHub Release` failures usually mean GoReleaser could not build or
+  upload the tagged archives, checksums, or Homebrew cask update. Check the
+  GoReleaser logs first, then confirm the tag points at the intended commit and
+  that `HOMEBREW_TAP_GITHUB_TOKEN` is present with push access to
+  `portpowered/cask`.
+- `Verify Homebrew Cask Publication` failures mean the tap checkout or the
+  generated `tap/Casks/agent-factory.rb` content is wrong for the tagged
+  release. Confirm the cask version, asset URL, checksum, and install behavior
+  match the published release artifacts.
+- `Smoke Hosted install.sh` failures mean the uploaded `install.sh` asset or
+  its runtime archive-selection and checksum logic is wrong. Verify the release
+  contains the expected `install.sh` asset, that the installer URL resolves,
+  and that the referenced archive and checksum files exist for the target
+  platform.
+- `Verify Go Install Surface` failures mean the source-install contract for
+  `cmd/factory` regressed. Reproduce with the focused `tests/release`
+  `go install ./cmd/factory` smoke test before changing consumer docs or the
+  release workflow.
