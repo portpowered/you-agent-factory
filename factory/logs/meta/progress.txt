@@ -696,3 +696,41 @@
 - Updated `factory/logs/meta/view.md` to reflect the new upstream baseline, the
   current merged/open PR state, the narrowed blocker set, and the revised
   next-lane recommendation.
+
+## 2026-05-01 16:14 -07:00 - meta refresh after chaining-trace landed on main
+
+- Ran `git pull` and verified the workspace is synced on `main` at `f6e5ac6`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, workflow contract docs, replay samples,
+  tracked workflow-input surfaces, ignored local workflow residue, and live
+  GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `7aa73c7`
+  - it still treated PR `#39` `chaining-trace-ids` as open even though it
+    merged on May 1, 2026
+  - it did not account for the newly landed chaining-trace changes in
+    `pkg/factory/event_history.go`, `pkg/factory/projections/world_state.go`,
+    `pkg/replay/event_reducer.go`, and `ui/src/state/factoryTimelineStore.ts`
+- Revalidated the existing local replay cleanup idea against the current live
+  PR file sets:
+  - open PRs `#40`, `#38`, `#37`, `#33`, and `#30` do not touch
+    `pkg/replay/event_artifact.go`, `pkg/replay/artifact_test.go`, or
+    `pkg/replay/event_artifact_test.go`
+  - the duplicate merge-helper seam in `mergeGeneratedWorkers` and
+    `mergeGeneratedWorkstations` remains behavior-safe and conflict-light
+- Used a sidecar repository explorer to check for an even smaller cleanup seam:
+  - the explorer found a single-use `replayMetadataValue` wrapper in
+    `pkg/replay/event_reducer.go`
+  - rejected that lane for now because PR `#39` just landed in the same file,
+    while the replay artifact helper dedupe remains both conflict-light and
+    untouched by the latest merge
+- Refreshed the ignored local idea file
+  `factory/inputs/idea/default/dedupe-replay-factory-merge-helpers.md` so its
+  queue context matches the current `main` baseline instead of the earlier open
+  PR map.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  `#39` state, the current blockers, and the still-valid replay cleanup lane.
