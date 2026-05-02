@@ -37,6 +37,10 @@
   merged PR list as well as open PR file sets; fast-moving `main` can land the
   exact seam while the ignored workflow-input residue still suggests it is only
   queued.
+- Before treating tracked sibling `copy` scripts under `ui/scripts/` as live
+  tooling, confirm the canonical entrypoints in `ui/package.json` and the
+  checked-in development docs; duplicate script copies can be dead residue even
+  when they sit beside actively used files.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -858,4 +862,49 @@
   cleanup.
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
   `#43` state, the unchanged throttle posture, and the revised next-lane
+  recommendation.
+
+## 2026-05-01 19:35 -07:00 - meta refresh after batch-relation cleanup landed
+
+- Ran `git pull` and verified the workspace is synced on `main` at `368d182`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, live GitHub PR state, and the relevant upstream
+  `#44` merge before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels and that the extra idea/plan
+  files under `factory/inputs/**` remain ignored workspace-local residue.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `23729cb`
+  - it did not include merged PR `#44`
+  - it still treated the batch-relation duplicate-helper cleanup as merely
+    queueable even though that seam is now merged on `main`
+  - it did not account for the newly validated dead-code seam in
+    `ui/scripts/`
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#33` and `#30`
+  - merged PR `#44` `inline-batch-relation-duplicate-rejection`
+- Revalidated that stale ignored workflow residue must not drive the world
+  model:
+  - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
+    still exists locally even though PR `#36` already removed the `syncDispatch`
+    cache from `pkg/factory/runtime/dispatch_result_hook.go`
+- Used a sidecar repository-inspection agent plus direct local validation to
+  identify one new narrow cleanup candidate outside the open PR file sets:
+  - `ui/scripts/normalize-dist-output copy.mjs` and
+    `ui/scripts/write-replay-coverage-report copy.ts` are still tracked
+    duplicate script copies
+  - `ui/package.json` and
+    `docs/processes/development-guide-relevant-files.md` reference only the
+    canonical `ui/scripts/normalize-dist-output.mjs` and
+    `ui/scripts/write-replay-coverage-report.ts` entrypoints
+  - deleting the tracked `copy` files is a dead-code cleanup lane entirely
+    outside `#33` API/config/public-contract work and `#30`
+    `tests/functional/**` decomposition
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/retire-duplicate-ui-script-copies.md` as the
+  next narrow lane instead of re-queuing already-landed backend cleanup.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, merged `#44`,
+  the stale ignored-residue findings, and the revised next-lane
   recommendation.

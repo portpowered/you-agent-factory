@@ -2,8 +2,8 @@
 
 ## world state
 
-- after `git pull --ff-only`, repository `main` and `origin/main` are both at
-  `23729cb` on May 1, 2026 in the local maintainer workspace
+- after `git pull`, repository `main` and `origin/main` are both at
+  `368d182` on May 1, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -29,12 +29,14 @@
   - `factory/inputs/idea/default/prd-current-factory-default-runtime-support.md`
   - `factory/inputs/idea/default/prd-functional-test-suite-decomposition.md`
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
+  - `factory/inputs/idea/default/retire-duplicate-ui-script-copies.md`
   - `factory/inputs/idea/default/retire-dispatcher-throttle-pause-map.md`
   - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
 - the current GitHub lane state changed again after the previous checked-in
   world model:
   - open PR `#33` `prd-api-model-contract-cleanup`
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#44` `inline-batch-relation-duplicate-rejection`
   - merged PR `#43` `collapse-dashboard-fallback-work-item-collectors`
   - merged PR `#42` `retire-dispatcher-throttle-pause-map`
   - merged PR `#41` `dedupe-replay-factory-merge-helpers`
@@ -60,17 +62,19 @@
 - the previous next cleanup lane has already landed on `main`:
   - `pkg/cli/dashboard/dashboard.go` no longer owns separate completed and
     failed fallback wrapper helpers after merged PR `#43`
+  - `pkg/factory/work_request.go` no longer owns the standalone
+    `rejectDuplicateBatchRelation` helper after merged PR `#44`
 - one new narrow cleanup seam is queueable outside the remaining open PR file
   sets:
-  - `pkg/factory/work_request.go` still owns
-    `rejectDuplicateBatchRelation`, a private single-caller helper used only by
-    `validateAndIndexBatchRelations`
-  - the helper only formats one of two duplicate-relation errors and keeps no
-    independent state
-  - that lane can stay inside `pkg/factory/work_request.go` and surrounding
-    batch-normalization tests if needed, so it stays off the current `#33`
-    API/config/public-contract lane and the `#30`
-    `tests/functional/**` decomposition lane
+  - `ui/scripts/normalize-dist-output copy.mjs` and
+    `ui/scripts/write-replay-coverage-report copy.ts` are still tracked beside
+    the canonical scripts used by `ui/package.json`
+  - the checked-in docs and package scripts reference only the canonical
+    `ui/scripts/normalize-dist-output.mjs` and
+    `ui/scripts/write-replay-coverage-report.ts` paths
+  - deleting the tracked `copy` files is a dead-code cleanup lane entirely
+    outside `#33` API/config/public-contract work and `#30`
+    `tests/functional/**` reorganization
 
 ## current blockers
 
@@ -82,12 +86,15 @@
 3. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new cleanup work should avoid functional test file moves for now
 4. the previous checked-in world model is now stale in four important ways:
-   - it still described upstream `HEAD` as `bd240ae`
-   - it did not account for merged PR `#43`
-   - it still treated the dashboard fallback collector cleanup as the next
-     queueable lane even though that seam has already landed
-   - it did not describe the newly validated `pkg/factory/work_request.go`
-     duplicate-relation helper seam
+   - it still described upstream `HEAD` as `23729cb`
+   - it did not account for merged PR `#44`
+   - it still treated the batch-relation duplicate-helper cleanup as only
+     queueable even though that seam has already landed on `main`
+   - it did not account for the now-validated dead-code seam in `ui/scripts/`
+5. workspace-local ignored residue can drift independently of `main`:
+   - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
+     still exists locally even though PR `#36` already removed the
+     `syncDispatch` cache from `pkg/factory/runtime/dispatch_result_hook.go`
 
 ## theory of mind
 
@@ -101,32 +108,34 @@
     `main`
   - the remaining work is a later `factory.guards` /
     `INFERENCE_THROTTLE_GUARD` lane
-- with PR `#43` merged, the best available cleanup work is no longer in the
-  CLI dashboard fallback path; that seam is already complete on `main`
+- with PRs `#43` and `#44` merged, the best available cleanup work is no
+  longer in the CLI dashboard fallback path or batch-relation validation path;
+  both seams are already complete on `main`
 - the remaining live collision surface is still narrow:
   - `#33` owns API/config/public guard contract cleanup
   - `#30` owns functional test package decomposition
-- because those open PRs stay out of `pkg/factory/work_request.go`, the best
-  available queueable follow-up is now a low-risk batch-normalization cleanup
-  that removes a single-caller duplicate-relation error helper without
-  changing public contracts
+- because those open PRs stay out of `ui/scripts/**`, the best available
+  queueable follow-up is now a dead-code cleanup that removes tracked duplicate
+  `copy` scripts without changing package-owned workflow entrypoints
 - when a cleanup lane already exists as ignored local residue under
   `factory/inputs/**`, it may already be merged on `main`; the maintainer loop
   should refresh the world model instead of re-queuing recently landed work
+- package script wiring and checked-in docs are a strong source of truth for
+  canonical UI tooling entrypoints; tracked sibling `copy` files should be
+  treated as suspect dead code until proven otherwise
 
 ## next best move
 
 - update the checked-in meta world model and progress log now
 - leave `factory/logs/meta/asks.md` unchanged; the priority order is still
   correct
-- do not re-queue already-landed lanes such as `#43`, `#42`, `#41`, `#40`,
-  `#38`, `#37`, `#36`, or `#35`
-- queue one new ignored cleanup idea for the batch-relation duplicate helper
-  seam:
-  - preserve duplicate-relation validation behavior and current error text
-  - fold `rejectDuplicateBatchRelation` back into
-    `validateAndIndexBatchRelations`
-  - avoid API/config/public-contract and `tests/functional/**` surfaces
+- do not re-queue already-landed lanes such as `#44`, `#43`, `#42`, `#41`,
+  `#40`, `#38`, `#37`, `#36`, or `#35`
+- queue one new ignored cleanup idea for the duplicate UI script seam:
+  - delete `ui/scripts/normalize-dist-output copy.mjs`
+  - delete `ui/scripts/write-replay-coverage-report copy.ts`
+  - preserve `ui/package.json` script wiring and checked-in doc references to
+    the canonical script paths
 
 ## customer asks
 
@@ -135,7 +144,8 @@
 - the throttling ask is still the most important architecture-level customer
   ask, but its remaining work is now clearly factory-level config/lowering
   rather than dispatcher-local duplicate state cleanup
-- the quality and website-quality asks remain broader follow-on programs
-  rather than the next narrow cleanup lane
+- the quality and website-quality asks remain broader follow-on programs, but
+  removing tracked dead UI tooling copies is still aligned with their
+  simplification goals
 - the next throttle follow-up should stay decomposed and should not overlap the
   already-open API/config contract lane in `#33`
