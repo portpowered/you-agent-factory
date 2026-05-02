@@ -125,6 +125,9 @@ func TestApplyConsume(t *testing.T) {
 	if len(marking.TokensInPlace("wt:done")) != 0 {
 		t.Error("expected no tokens in wt:done")
 	}
+	if _, ok := marking.PlaceTokens["wt:done"]; ok {
+		t.Error("expected wt:done place index to be removed after consume")
+	}
 }
 
 func TestApplyMoveNonExistentToken(t *testing.T) {

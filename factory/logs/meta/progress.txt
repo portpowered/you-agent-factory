@@ -51,6 +51,10 @@
 - When a customer ask is already represented by an open PR, do not queue a
   second overlapping idea in the same file set; update the world model first,
   then keep parallel cleanup work confined to non-colliding seams.
+- When a deprecated config field is already normalized away at the load
+  boundary, prefer retiring any second in-memory runtime fallback for that
+  alias instead of preserving duplicate compatibility in execution paths and
+  test fixtures.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -1076,3 +1080,123 @@
 - Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
   matches `HEAD` `9bb148e`, merged PRs `#46` and `#47`, and the new
   post-merge throttle follow-up priority.
+
+## 2026-05-02 01:03:24 -07:00 - meta refresh after throttle fallback PR opened
+
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `45cefd2`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, live GitHub PR state, and the current throttle code
+  before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `9bb148e`
+  - it still treated the remaining throttle fallback cleanup as queueable
+    backlog instead of an active PR lane
+  - it did not include open PR `#48`
+- Revalidated the live customer throttle posture through direct PR inspection,
+  code inspection, and a sidecar explorer:
+  - open PR `#48` `retire-legacy-throttle-fallback-after-authored-guard` now
+    owns the exact remaining customer follow-up in
+    `pkg/factory/options.go`,
+    `pkg/factory/runtime/factory.go`, and
+    `pkg/factory/subsystems/subsystem_dispatcher.go`
+  - the live `main` branch still retains that fallback until `#48` merges
+  - `#48` adds focused regression proof in package/runtime-owned tests and
+    `tests/functional_test/provider_error_smoke_test.go`, which stays outside
+    the still-open `tests/functional/**` decomposition lane in PR `#30`
+- Avoided re-queuing the throttle ask while `#48` is open.
+- Used a second sidecar explorer to identify the next non-colliding reserve
+  cleanup seam:
+  - `pkg/interfaces/runtime_lookup.go` duplicates the same first-non-nil loop
+    in `FirstRuntimeDefinitionLookup` and
+    `FirstRuntimeWorkstationLookup`
+  - the seam stays outside both open PR file sets and does not require
+    `tests/functional/**`
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/retire-runtime-lookup-helper-duplication.md`
+  instead of creating another competing throttle request.
+- Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
+  matches `HEAD` `45cefd2`, open PRs `#48` and `#30`, and the new reserve
+  cleanup posture.
+
+## 2026-05-02 02:04:34 -07:00 - meta refresh after main advanced past runtime-lookup cleanup
+
+- Ran `git pull --ff-only origin main` and verified the workspace is synced on
+  `main` at `12c56e2`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, live GitHub PR state, and the current reserve cleanup
+  seams before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `45cefd2`
+  - it still treated the runtime-lookup reserve seam as queueable even though
+    merged PR `#49` already landed it on `main`
+  - it did not capture that the local ignored
+    `dedupe-list-work-legacy-pagination-fallback` idea is stale because
+    `pkg/api/handlers.go` no longer re-parses raw `maxResults`
+- Revalidated the live customer throttle posture through current PR inspection:
+  - open PR `#48` still owns the only remaining throttle simplification lane
+  - open PR `#30` still occupies `tests/functional/**`
+- Used a sidecar explorer plus direct code inspection to validate the next
+  non-colliding reserve cleanup seam:
+  - `pkg/petri/marking.go` and
+    `pkg/factory/projections/world_state.go` both own token-removal bookkeeping
+    that deletes the token and cleans empty place indexes
+  - the seam stays outside open PR file sets `#48` and `#30`
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/unify-token-removal-bookkeeping.md`
+  instead of re-queueing stale solved residue.
+- Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
+  matches `HEAD` `12c56e2`, merged PR `#49`, the stale ignored-residue map,
+  and the new reserve cleanup posture.
+
+## 2026-05-02 03:11:00 -07:00 - meta refresh after token-removal cleanup landed
+
+- Ran `git pull` and verified the workspace is synced on `main` at `d028000`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, open PR file sets, and the newly landed runtime-state
+  cleanup before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels and that the extra files
+  under `factory/inputs/**` remain ignored workspace-local residue.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `12c56e2`
+  - it still treated the token-removal reserve seam as queueable even though
+    merged PR `#50` already landed it on `main`
+  - it did not capture the next reserve cleanup seam in legacy workstation
+    timeout alias fallback handling
+- Confirmed the current GitHub PR shape on May 2, 2026 is:
+  - open PRs `#48` and `#30`
+  - merged PR `#50` `unify-token-removal-bookkeeping`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state:
+  - `factory/inputs/idea/default/unify-token-removal-bookkeeping.md` is now
+    solved residue rather than pending work
+- Used a sidecar explorer plus direct code inspection to validate the next
+  non-colliding reserve cleanup seam:
+  - `pkg/config/workstation_execution_limits.go` still keeps a direct-struct
+    legacy top-level workstation `timeout` fallback inside
+    `WorkstationExecutionTimeout(...)`
+  - `pkg/workers/workstation_executor.go` consumes that helper for live
+    execution deadlines
+  - `pkg/workers/workstation_executor_test.go` still proves the retired alias
+    path through `legacy_timeout_alias_zero`
+  - docs already describe top-level workstation `timeout` as a load-boundary
+    alias that is normalized away
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/retire-legacy-workstation-timeout-alias-fallback.md`
+  instead of re-queueing the merged token-removal lane.
+- Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
+  matches `HEAD` `d028000`, merged PR `#50`, the stale ignored-residue map,
+  and the new reserve cleanup posture.
