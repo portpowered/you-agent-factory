@@ -104,7 +104,7 @@ func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.
 	d.logger.Debug("dispatcher: dispatching work based on current snapshot", "snapshot", snapshot)
 	activeThrottlePauses := d.activeThrottlePauses(snapshot)
 	observedThrottlePauses := d.throttlePausesObserved(snapshot, activeThrottlePauses)
-	enabled := d.evaluator.FindEnabledTransitionsWithSnapshot(ctx, d.state, snapshot)
+	enabled := d.evaluator.FindEnabledTransitionsWithSnapshot(ctx, d.state, d.schedulerSnapshot(snapshot))
 	if len(enabled) == 0 {
 		d.logger.Debug("dispatcher: no enabled transitions")
 		return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil

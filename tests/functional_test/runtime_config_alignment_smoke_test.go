@@ -467,8 +467,6 @@ func waitForRuntimeConfigAlignmentExecution(
 	waitForRuntimeConfigAlignmentStopWordDispatch(t, server)
 	waitForRuntimeConfigAlignmentInFlightResourceConsumption(t, server, scriptRunner)
 	waitForRuntimeConfigAlignmentTimeoutAndRequeue(t, server, scriptRunner)
-
-	close(scriptRunner.releaseSecondAttempt)
 	server.WaitForCompleted(t, runtimeConfigAlignmentCompletionTimeout)
 }
 
@@ -1034,6 +1032,7 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 	if !runner.waitForFirstTimeout(runtimeConfigAlignmentSignalTimeout) {
 		t.Fatalf("timed out waiting for %s to hit limits.maxExecutionTime", runtimeConfigAlignmentExecuteWorkstation)
 	}
+	close(runner.releaseSecondAttempt)
 
 	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
 	for time.Now().Before(deadline) {

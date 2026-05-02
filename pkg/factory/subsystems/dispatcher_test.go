@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -1171,6 +1172,73 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 	}
 	if !result.ThrottlePausesObserved {
 		t.Fatal("expected dispatcher to keep reporting the paused lane in throttle pause observability")
+	}
+	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
+}
+
+func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnapshot(t *testing.T) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init-a": {ID: "p-init-a"},
+			"p-init-b": {ID: "p-init-b"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t-a": {
+				ID:         "t-a",
+				Name:       "step-a",
+				WorkerType: "worker-a",
+				InputArcs: []petri.Arc{
+					{ID: "a-in", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a", "t-b")},
+				},
+			},
+			"t-b": {
+				ID:         "t-b",
+				Name:       "step-b",
+				WorkerType: "worker-b",
+				InputArcs: []petri.Arc{
+					{ID: "b-in", Name: "work", PlaceID: "p-init-b", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a", "t-b")},
+				},
+			},
+		},
+	}
+	sched := &recordingScheduler{}
+	now := time.Date(2026, time.May, 2, 5, 0, 0, 0, time.UTC)
+	dispatcher := NewDispatcher(
+		n,
+		sched,
+		nil,
+		nil,
+		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+				"worker-b": {Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
+			},
+		}),
+	)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok-a": {ID: "tok-a", PlaceID: "p-init-a"},
+			"tok-b": {ID: "tok-b", PlaceID: "p-init-b"},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", now),
+		},
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sched.received) != 0 {
+		t.Fatalf("scheduler received enabled transitions from a paused sibling lane: %#v", sched.received)
+	}
+	if result == nil {
+		t.Fatal("expected throttle pause result when sibling transition is blocked")
+	}
+	if len(result.Dispatches) != 0 {
+		t.Fatalf("dispatches = %#v, want none while sibling lane is throttled", result.Dispatches)
 	}
 	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 }
