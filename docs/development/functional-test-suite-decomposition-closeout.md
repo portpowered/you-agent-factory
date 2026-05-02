@@ -8,11 +8,14 @@ evidence for the functional suite decomposition PRD.
 - Default non-long functional lane: `make test-functional`
 - Opt-in long functional lane: `make test-functional-long`
 
-The default lane runs `go test -p 2 -short ./tests/functional/...` through the
-repository-owned `make test-functional` target, so the full behavior tree still
-uses package discovery without a hard-coded package list while avoiding the
-slow Windows cross-package parallel scheduling path. The long lane runs the
-full behavior tree plus any `functionallong`-tagged files.
+The default lane runs one repository-owned package-discovery command through
+`make test-functional`: it uses `go list ./tests/functional/...` to discover
+the behavior packages, excludes `tests/functional/internal/support`, and then
+executes one explicit `go test -p 2 -short ...` command over that discovered
+package list. That keeps the full behavior tree on package discovery without a
+hard-coded package list while avoiding the slow Windows wildcard
+`./tests/functional/...` path. The long lane runs the full behavior tree plus
+any `functionallong`-tagged files.
 
 This final runtime slice moved a few richer overlapping scenarios behind the
 explicit long lane while keeping narrower short-lane assertions in place for
@@ -27,19 +30,17 @@ the same feature areas:
 - The branch previously tried a representative-only `1.76s` run, but that
   contract was reverted because it did not execute all non-long short-mode
   functional behavior.
-- Later Windows worktree validation showed that the default `go test -short
-  ./tests/functional/...` invocation could regress badly because Go's
-  cross-package parallel scheduling reported multi-dozen-second wall-clock
-  totals even after the broad sweeps moved behind `functionallong`.
-- On 2026-05-02 in this Windows worktree, `Measure-Command { go test -p 2
-  -short ./tests/functional/... -count=1 -timeout 300s *> $null }` measured
-  about `4.31s`.
-- On 2026-05-02 in this Windows worktree, `make test-functional` measured
-  about `4.20s` after repointing the target to that `-p 2` invocation.
-- On 2026-05-02 after the final long-lane split for overlapping provider,
-  workflow, and smoke variants, isolated reruns of
-  `Measure-Command { make test-functional *> $null }` measured about `4.63s`
-  and `4.67s`.
+- Later Windows worktree validation showed that the wildcard default command
+  surface `go test -short ./tests/functional/...` could regress badly because
+  that wildcard path reported multi-dozen-second wall-clock totals even after
+  the broad sweeps moved behind `functionallong`.
+- On 2026-05-02 in this Windows worktree, the equivalent explicit discovered
+  package command
+  `go test -p 2 -short ./tests/functional/bootstrap_portability ./tests/functional/guards_batch ./tests/functional/providers ./tests/functional/replay_contracts ./tests/functional/runtime_api ./tests/functional/smoke ./tests/functional/workflow -count=1 -timeout 300s`
+  completed in about `4.2s`.
+- On 2026-05-02 in this Windows worktree, `make test-functional` completed in
+  about `4.8s` after repointing the target to the repository-owned discovery
+  command that runs that explicit package list.
 - The runtime target is therefore met for the documented default command while
   the explicit long lane remains `make test-functional-long`.
 
