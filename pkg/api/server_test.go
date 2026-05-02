@@ -157,6 +157,126 @@ func TestSubmitWork(t *testing.T) {
 
 }
 
+func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
+	eventTime := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+	currentFactoryID := "beta"
+	liveEvents := make(chan factoryapi.FactoryEvent, 1)
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: map[string]*interfaces.Token{
+				"tok-api-surface-1": {
+					ID:      "tok-api-surface-1",
+					PlaceID: "task:init",
+					Color: interfaces.TokenColor{
+						WorkID:     "work-api-surface-1",
+						WorkTypeID: "task",
+					},
+					CreatedAt: eventTime,
+					EnteredAt: eventTime,
+					History: interfaces.TokenHistory{
+						TotalVisits:         make(map[string]int),
+						ConsecutiveFailures: make(map[string]int),
+						PlaceVisits:         make(map[string]int),
+					},
+				},
+			},
+		},
+		FactoryEventStream: &interfaces.FactoryEventStream{
+			History: []factoryapi.FactoryEvent{
+				testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/api-surface-history", factoryapi.FactoryEventContext{
+					Tick:      1,
+					EventTime: eventTime,
+					RequestId: stringPointerForAPITest("request-api-surface"),
+				}, factoryapi.WorkRequestEventPayload{Type: factoryapi.WorkRequestTypeFactoryRequestBatch}),
+			},
+			Events: liveEvents,
+		},
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: "beta",
+			Id:   &currentFactoryID,
+		},
+	}
+
+	server := httptest.NewServer(newTestServer(mf).Handler())
+	defer server.Close()
+
+	submitResp, err := http.Post(server.URL+"/work", "application/json", bytes.NewBufferString(`{"workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer submitResp.Body.Close()
+	if submitResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(submitResp.Body)
+		t.Fatalf("POST /work status = %d, want 201: %s", submitResp.StatusCode, string(body))
+	}
+	var submitBody factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(submitResp.Body).Decode(&submitBody); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+	if submitBody.TraceId != "trace-api-surface-smoke" {
+		t.Fatalf("submit trace_id = %q, want trace-api-surface-smoke", submitBody.TraceId)
+	}
+	if len(mf.WorkRequests) != 1 {
+		t.Fatalf("submitted work requests = %d, want 1", len(mf.WorkRequests))
+	}
+
+	listResp, err := http.Get(server.URL + "/work")
+	if err != nil {
+		t.Fatalf("GET /work: %v", err)
+	}
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("GET /work status = %d, want 200: %s", listResp.StatusCode, string(body))
+	}
+	var listBody factoryapi.ListWorkResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listBody); err != nil {
+		t.Fatalf("decode list work response: %v", err)
+	}
+	if len(listBody.Results) != 1 || listBody.Results[0].Id != "tok-api-surface-1" {
+		t.Fatalf("GET /work results = %#v, want tok-api-surface-1", listBody.Results)
+	}
+	if mf.EngineStateSnapshotCalls == 0 {
+		t.Fatal("expected GET /work to read engine state snapshot through the embedded API factory contract")
+	}
+
+	currentResp, err := http.Get(server.URL + "/factory/~current")
+	if err != nil {
+		t.Fatalf("GET /factory/~current: %v", err)
+	}
+	defer currentResp.Body.Close()
+	if currentResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(currentResp.Body)
+		t.Fatalf("GET /factory/~current status = %d, want 200: %s", currentResp.StatusCode, string(body))
+	}
+	var currentBody factoryapi.Factory
+	if err := json.NewDecoder(currentResp.Body).Decode(&currentBody); err != nil {
+		t.Fatalf("decode current factory response: %v", err)
+	}
+	if currentBody.Name != "beta" {
+		t.Fatalf("current factory name = %q, want beta", currentBody.Name)
+	}
+
+	eventsReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/events", nil)
+	if err != nil {
+		t.Fatalf("new /events request: %v", err)
+	}
+	eventsResp, err := http.DefaultClient.Do(eventsReq)
+	if err != nil {
+		t.Fatalf("GET /events: %v", err)
+	}
+	defer eventsResp.Body.Close()
+	if eventsResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(eventsResp.Body)
+		t.Fatalf("GET /events status = %d, want 200: %s", eventsResp.StatusCode, string(body))
+	}
+
+	streamed := readSSEFactoryEvent(t, bufio.NewReader(eventsResp.Body))
+	if streamed.Id != "factory-event/work-request/api-surface-history" {
+		t.Fatalf("streamed event id = %q, want factory-event/work-request/api-surface-history", streamed.Id)
+	}
+}
+
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{

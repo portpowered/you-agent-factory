@@ -112,6 +112,7 @@ type FactoryService struct {
 	logSink        *logging.RuntimeLogSink
 }
 
+var _ factory.APIFactory = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
 
 // FactoryServiceConfig holds all parameters needed to build and run a factory.
