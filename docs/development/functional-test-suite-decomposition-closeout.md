@@ -14,6 +14,14 @@ uses package discovery without a hard-coded package list while avoiding the
 slow Windows cross-package parallel scheduling path. The long lane runs the
 full behavior tree plus any `functionallong`-tagged files.
 
+This final runtime slice moved a few richer overlapping scenarios behind the
+explicit long lane while keeping narrower short-lane assertions in place for
+the same feature areas:
+
+- provider timeout companion and loaded-config timeout retry variants
+- Ralph per-iteration template propagation
+- guarded loop-breaker end-to-end rejection routing
+
 ## Measured Runtime
 
 - The branch previously tried a representative-only `1.76s` run, but that
@@ -28,6 +36,10 @@ full behavior tree plus any `functionallong`-tagged files.
   about `4.31s`.
 - On 2026-05-02 in this Windows worktree, `make test-functional` measured
   about `4.20s` after repointing the target to that `-p 2` invocation.
+- On 2026-05-02 after the final long-lane split for overlapping provider,
+  workflow, and smoke variants, isolated reruns of
+  `Measure-Command { make test-functional *> $null }` measured about `4.63s`
+  and `4.67s`.
 - The runtime target is therefore met for the documented default command while
   the explicit long lane remains `make test-functional-long`.
 

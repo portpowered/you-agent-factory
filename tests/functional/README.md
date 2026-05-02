@@ -55,7 +55,7 @@ scenarios stay available without widening the default feedback loop.
   test belongs in the slow lane, gate it behind
   `tests/functional/internal/support.SkipLongFunctional(...)` or the
   `functionallong` build tag so `make test-functional` can keep running the
-  full short-mode behavior package set through `go test -p 1 -short
+  full short-mode behavior package set through `go test -p 2 -short
   ./tests/functional/...` without ad hoc package or test arguments at
   invocation time.
 - When a slow test is gated behind `functionallong`, name the file

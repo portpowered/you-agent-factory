@@ -1,3 +1,5 @@
+//go:build functionallong
+
 package providers
 
 import (
