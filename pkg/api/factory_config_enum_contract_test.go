@@ -22,6 +22,9 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 
 	schemas := componentSchemas(t, doc)
 	assertSchemaPropertyRef(t, schemas, "InputType", "type", "#/components/schemas/InputKind")
+	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "type", "#/components/schemas/GuardType")
+	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "modelProvider", "#/components/schemas/WorkerModelProvider")
+	assertSchemaArrayItemRef(t, schemas, "Factory", "guards", "#/components/schemas/FactoryGuard")
 	assertSchemaPropertyRef(t, schemas, "WorkState", "type", "#/components/schemas/WorkStateType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "type", "#/components/schemas/WorkerType")
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelProvider", "#/components/schemas/WorkerModelProvider")
@@ -33,6 +36,9 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 
 func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedConfigFields(t *testing.T) {
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.InputType{}), "Type", reflect.TypeOf(generated.InputKind("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Factory{}), "Guards", reflect.TypeOf((*[]generated.FactoryGuard)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.FactoryGuard{}), "Type", reflect.TypeOf(generated.GuardType("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.FactoryGuard{}), "ModelProvider", reflect.TypeOf(generated.WorkerModelProvider("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.WorkState{}), "Type", reflect.TypeOf(generated.WorkStateType("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "Type", reflect.TypeOf((*generated.WorkerType)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "ModelProvider", reflect.TypeOf((*generated.WorkerModelProvider)(nil)))
@@ -50,6 +56,15 @@ func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedField
 	}
 	if (*factory.InputTypes)[0].Type != generated.InputKindDefault {
 		t.Fatalf("canonical factory input type = %q, want DEFAULT", (*factory.InputTypes)[0].Type)
+	}
+	if factory.Guards == nil || len(*factory.Guards) != 1 {
+		t.Fatalf("canonical factory guards = %#v, want one enum-backed factory guard", factory.Guards)
+	}
+	if (*factory.Guards)[0].Type != generated.GuardTypeInferenceThrottle {
+		t.Fatalf("canonical factory guard type = %q, want INFERENCE_THROTTLE_GUARD", (*factory.Guards)[0].Type)
+	}
+	if (*factory.Guards)[0].ModelProvider != generated.WorkerModelProviderClaude {
+		t.Fatalf("canonical factory guard modelProvider = %#v, want CLAUDE", (*factory.Guards)[0].ModelProvider)
 	}
 
 	if factory.WorkTypes == nil || len(*factory.WorkTypes) != 2 {
@@ -105,6 +120,22 @@ func assertSchemaPropertyRef(t *testing.T, schemas map[string]any, schemaName st
 	t.Helper()
 
 	assertPropertyRef(t, schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName), propertyName, wantRef)
+}
+
+func assertSchemaArrayItemRef(t *testing.T, schemas map[string]any, schemaName string, propertyName string, wantRef string) {
+	t.Helper()
+
+	property, ok := schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName)[propertyName].(map[string]any)
+	if !ok {
+		t.Fatalf("properties.%s is missing", propertyName)
+	}
+	items, ok := property["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("properties.%s.items must be an object", propertyName)
+	}
+	if got, ok := items["$ref"].(string); !ok || got != wantRef {
+		t.Fatalf("properties.%s.items.$ref = %v, want %s", propertyName, items["$ref"], wantRef)
+	}
 }
 
 func assertGeneratedFieldType(t *testing.T, structType reflect.Type, fieldName string, wantType reflect.Type) {

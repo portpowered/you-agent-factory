@@ -78,6 +78,7 @@ const (
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
 	GuardTypeAnyChildFailed      GuardType = "ANY_CHILD_FAILED"
+	GuardTypeInferenceThrottle   GuardType = "INFERENCE_THROTTLE_GUARD"
 	GuardTypeMatchesFields       GuardType = "MATCHES_FIELDS"
 	GuardTypeSameName            GuardType = "SAME_NAME"
 	GuardTypeVisitCount          GuardType = "VISIT_COUNT"
@@ -291,6 +292,9 @@ type Factory struct {
 	// FactoryDirectory Directory that contained the factory.json used for this serialized runtime config.
 	FactoryDirectory *string `json:"factoryDirectory,omitempty"`
 
+	// Guards Root-level guards that apply across the factory instead of one specific workstation or input.
+	Guards *[]FactoryGuard `json:"guards,omitempty"`
+
 	// Id Factory identifier used as the factory-level template context fallback.
 	Id *string `json:"id,omitempty"`
 
@@ -378,6 +382,21 @@ type FactoryEventContext struct {
 
 // FactoryEventType Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
 type FactoryEventType string
+
+// FactoryGuard Factory-level guard attached at the root factory definition.
+type FactoryGuard struct {
+	// Model Optional model name to scope throttling more narrowly than the provider-level window.
+	Model *string `json:"model,omitempty"`
+
+	// ModelProvider Provider whose inference-throttle history controls this factory-level guard.
+	ModelProvider WorkerModelProvider `json:"modelProvider"`
+
+	// RefreshWindow Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again.
+	RefreshWindow string `json:"refreshWindow"`
+
+	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
+	Type GuardType `json:"type"`
+}
 
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string

@@ -5,11 +5,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
-// FailureRecord is the normalized runtime history input consumed by the
-// throttle-window derivation seam that later guard work can reuse directly.
 type FailureRecord struct {
 	Provider        string
 	Model           string
@@ -24,9 +21,6 @@ type laneKey struct {
 
 // DeriveActiveThrottlePauses reduces normalized failure history into the set
 // of currently active provider/model throttle windows for an explicit clock.
-// Dispatcher code still owns the live pause-state map in this lane; this
-// helper is the pure internal primitive that later event-history-backed guard
-// work can reuse without depending on dispatcher mutation paths.
 func DeriveActiveThrottlePauses(history []FailureRecord, pauseDuration time.Duration, now time.Time) []interfaces.ActiveThrottlePause {
 	if len(history) == 0 || pauseDuration <= 0 {
 		return nil
@@ -47,7 +41,7 @@ func DeriveActiveThrottlePauses(history []FailureRecord, pauseDuration time.Dura
 		if record.Provider == "" {
 			continue
 		}
-		if !workers.ProviderFailureDecisionFromMetadata(record.ProviderFailure).TriggersThrottlePause {
+		if !triggersThrottlePause(record.ProviderFailure) {
 			continue
 		}
 		key := laneKey{provider: record.Provider, model: record.Model}
@@ -93,4 +87,8 @@ func laneID(key laneKey) string {
 		return key.provider
 	}
 	return key.provider + "/" + key.model
+}
+
+func triggersThrottlePause(failure *interfaces.ProviderFailureMetadata) bool {
+	return failure != nil && failure.Family == interfaces.ProviderErrorFamilyThrottle
 }

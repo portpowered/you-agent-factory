@@ -450,6 +450,8 @@ components:
     # ==== Raw data schemas for a factor =======
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    FactoryGuard:
+      $ref: './components/schemas/data-models/FactoryGuard.yaml'
     ResourceManifest:
       $ref: './components/schemas/data-models/ResourceManifest.yaml'
     RequiredTool:

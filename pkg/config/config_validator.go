@@ -6,6 +6,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/timework"
@@ -128,6 +129,7 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 	cv.rules = []validationRule{
 		ruleInputTypes,
 		rulePlaceReferences,
+		ruleFactoryGuards,
 		ruleGuards,
 		ruleWorkstationKind,
 		ruleCronWorkstations,
@@ -297,6 +299,56 @@ func rulePlaceReferences(cfg *interfaces.FactoryConfig) []Finding {
 }
 
 // --- Rule: guard validation ---
+
+func ruleFactoryGuards(cfg *interfaces.FactoryConfig) []Finding {
+	var findings []Finding
+
+	for gi, g := range cfg.Guards {
+		basePath := fmt.Sprintf("guards[%d](%s)", gi, g.Type)
+		switch g.Type {
+		case interfaces.GuardTypeInferenceThrottle:
+			modelProvider := strings.TrimSpace(g.ModelProvider)
+			if modelProvider == "" {
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".modelProvider",
+					Message:  "factory guard requires non-empty 'modelProvider'",
+					Rule:     "factory-guard-inference-throttle-model-provider",
+				})
+			}
+
+			refreshWindow := strings.TrimSpace(g.RefreshWindow)
+			switch {
+			case refreshWindow == "":
+				findings = append(findings, Finding{
+					Severity: SeverityError,
+					Path:     basePath + ".refreshWindow",
+					Message:  "factory guard requires non-empty 'refreshWindow'",
+					Rule:     "factory-guard-inference-throttle-refresh-window",
+				})
+			default:
+				duration, err := time.ParseDuration(refreshWindow)
+				if err != nil || duration <= 0 {
+					findings = append(findings, Finding{
+						Severity: SeverityError,
+						Path:     basePath + ".refreshWindow",
+						Message:  fmt.Sprintf("refreshWindow must be a positive duration, got %q", g.RefreshWindow),
+						Rule:     "factory-guard-inference-throttle-refresh-window",
+					})
+				}
+			}
+		default:
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath,
+				Message:  fmt.Sprintf("unsupported factory guard type %q (factory guards support: inference_throttle_guard)", g.Type),
+				Rule:     "factory-guard-unknown-type",
+			})
+		}
+	}
+
+	return findings
+}
 
 func ruleGuards(cfg *interfaces.FactoryConfig) []Finding {
 	var findings []Finding

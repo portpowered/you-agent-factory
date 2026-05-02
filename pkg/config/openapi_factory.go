@@ -157,6 +157,9 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if !ok {
 		return v, nil
 	}
+	if err := normalizeFactoryGuardEntries(root); err != nil {
+		return nil, err
+	}
 	if err := normalizeFactoryInputTypeEntries(root); err != nil {
 		return nil, err
 	}
@@ -167,6 +170,40 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 		return nil, err
 	}
 	return v, nil
+}
+
+func normalizeFactoryGuardEntries(root map[string]any) error {
+	guards, ok := root["guards"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range guards {
+		guard, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("guards[%d].type", i), publicFactoryRootGuardTypeAliases); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(guard, "modelProvider", fmt.Sprintf("guards[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
+			return err
+		}
+		if err := rejectUnsupportedFactoryGuardBoundaryFields(guard, fmt.Sprintf("guards[%d]", i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rejectUnsupportedFactoryGuardBoundaryFields(guard map[string]any, path string) error {
+	return rejectRetiredBoundaryFields(guard, path, []retiredBoundaryField{
+		{key: "workstation", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{key: "maxVisits", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{key: "matchConfig", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{key: "matchInput", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{key: "parentInput", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{key: "spawnedBy", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+	})
 }
 
 func normalizeFactoryInputTypeEntries(root map[string]any) error {
@@ -249,7 +286,7 @@ func normalizeFactoryWorkstationGuardEntries(workstation map[string]any, worksta
 		if !ok {
 			continue
 		}
-		if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].guards[%d].type", workstationIndex, guardIndex), publicFactoryGuardTypeAliases); err != nil {
+		if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].guards[%d].type", workstationIndex, guardIndex), publicFactoryWorkstationGuardTypeAliases); err != nil {
 			return err
 		}
 	}
@@ -275,7 +312,7 @@ func normalizeFactoryWorkstationInputGuardEntries(workstation map[string]any, wo
 			if !ok {
 				continue
 			}
-			if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].inputs[%d].guards[%d].type", workstationIndex, inputIndex, guardIndex), publicFactoryGuardTypeAliases); err != nil {
+			if err := normalizeFactoryEnumObjectField(guard, "type", fmt.Sprintf("workstations[%d].inputs[%d].guards[%d].type", workstationIndex, inputIndex, guardIndex), publicFactoryInputGuardTypeAliases); err != nil {
 				return err
 			}
 		}

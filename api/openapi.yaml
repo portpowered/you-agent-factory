@@ -1509,6 +1509,11 @@ components:
         inputTypes:
           - name: brief
             type: DEFAULT
+        guards:
+          - type: INFERENCE_THROTTLE_GUARD
+            modelProvider: CLAUDE
+            model: claude-sonnet-4-20250514
+            refreshWindow: 15m
         workTypes:
           - name: story
             states:
@@ -1606,6 +1611,11 @@ components:
           description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
           items:
             $ref: '#/components/schemas/InputType'
+        guards:
+          type: array
+          description: Root-level guards that apply across the factory instead of one specific workstation or input.
+          items:
+            $ref: '#/components/schemas/FactoryGuard'
         workTypes:
           type: array
           description: Customer-authored work item categories and the lifecycle states each one can occupy.
@@ -1629,6 +1639,29 @@ components:
           description: Processing steps that consume work, invoke workers, and emit the next work states.
           items:
             $ref: '#/components/schemas/Workstation'
+    FactoryGuard:
+      type: object
+      description: Factory-level guard attached at the root factory definition.
+      additionalProperties: false
+      required:
+        - type
+        - modelProvider
+        - refreshWindow
+      properties:
+        type:
+          allOf:
+            - $ref: '#/components/schemas/GuardType'
+          description: Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
+        modelProvider:
+          allOf:
+            - $ref: '#/components/schemas/WorkerModelProvider'
+          description: Provider whose inference-throttle history controls this factory-level guard.
+        model:
+          type: string
+          description: Optional model name to scope throttling more narrowly than the provider-level window.
+        refreshWindow:
+          type: string
+          description: Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again.
     ResourceManifest:
       type: object
       additionalProperties: false
@@ -2025,18 +2058,21 @@ components:
         - GuardTypeAllChildrenComplete
         - GuardTypeAnyChildFailed
         - GuardTypeSameName
+        - GuardTypeInferenceThrottle
       enum:
         - VISIT_COUNT
         - MATCHES_FIELDS
         - ALL_CHILDREN_COMPLETE
         - ANY_CHILD_FAILED
         - SAME_NAME
+        - INFERENCE_THROTTLE_GUARD
       x-enum-descriptions:
         - Allows or blocks work based on how many times a workstation has already handled it.
         - Requires all candidate workstation inputs to resolve the same configured field value.
         - This input is available only after all matching child work completes.
         - This input is available when any matching child work fails.
         - This input is available only when its token name exactly matches the bound token name from another input.
+        - Blocks factory dispatch when provider or model throttle history still falls inside the authored refresh window.
     Guard:
       type: object
       description: Shared guard attached either to a workstation as a whole or to one specific workstation input.

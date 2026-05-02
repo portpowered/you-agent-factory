@@ -9,22 +9,23 @@ import (
 )
 
 const (
-	publicFactoryInputKindDefault                  = "DEFAULT"
-	publicFactoryWorkerTypeModel                   = "MODEL_WORKER"
-	publicFactoryWorkerTypeScript                  = "SCRIPT_WORKER"
-	publicFactoryWorkerModelProviderClaude         = "CLAUDE"
-	publicFactoryWorkerModelProviderCodex          = "CODEX"
-	publicFactoryWorkerProviderScriptWrap          = "SCRIPT_WRAP"
-	publicFactoryWorkstationKindStandard           = "STANDARD"
-	publicFactoryWorkstationKindRepeater           = "REPEATER"
-	publicFactoryWorkstationKindCron               = "CRON"
-	publicFactoryWorkstationTypeModel              = "MODEL_WORKSTATION"
-	publicFactoryWorkstationTypeLogical            = "LOGICAL_MOVE"
+	publicFactoryInputKindDefault             = "DEFAULT"
+	publicFactoryWorkerTypeModel              = "MODEL_WORKER"
+	publicFactoryWorkerTypeScript             = "SCRIPT_WORKER"
+	publicFactoryWorkerModelProviderClaude    = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex     = "CODEX"
+	publicFactoryWorkerProviderScriptWrap     = "SCRIPT_WRAP"
+	publicFactoryWorkstationKindStandard      = "STANDARD"
+	publicFactoryWorkstationKindRepeater      = "REPEATER"
+	publicFactoryWorkstationKindCron          = "CRON"
+	publicFactoryWorkstationTypeModel         = "MODEL_WORKSTATION"
+	publicFactoryWorkstationTypeLogical       = "LOGICAL_MOVE"
 	publicFactoryGuardTypeVisitCount          = "VISIT_COUNT"
 	publicFactoryGuardTypeMatchesFields       = "MATCHES_FIELDS"
 	publicFactoryGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
 	publicFactoryGuardTypeAnyChildFailed      = "ANY_CHILD_FAILED"
 	publicFactoryGuardTypeSameName            = "SAME_NAME"
+	publicFactoryGuardTypeInferenceThrottle   = "INFERENCE_THROTTLE_GUARD"
 )
 
 var publicFactoryInputKindAliases = map[string]string{
@@ -40,6 +41,23 @@ var publicFactoryWorkstationKindAliases = map[string]string{
 var publicFactoryGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeVisitCount:          publicFactoryGuardTypeVisitCount,
 	publicFactoryGuardTypeMatchesFields:       publicFactoryGuardTypeMatchesFields,
+	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
+	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
+	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
+	publicFactoryGuardTypeInferenceThrottle:   publicFactoryGuardTypeInferenceThrottle,
+}
+
+var publicFactoryRootGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeInferenceThrottle: publicFactoryGuardTypeInferenceThrottle,
+}
+
+var publicFactoryWorkstationGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeVisitCount:    publicFactoryGuardTypeVisitCount,
+	publicFactoryGuardTypeMatchesFields: publicFactoryGuardTypeMatchesFields,
+}
+
+var publicFactoryInputGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeVisitCount:          publicFactoryGuardTypeVisitCount,
 	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
 	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
 	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
@@ -202,6 +220,8 @@ func publicFactoryGuardTypeStringFromInternal(value interfaces.GuardType) string
 		return publicFactoryGuardTypeAnyChildFailed
 	case string(interfaces.GuardTypeSameName), publicFactoryGuardTypeSameName:
 		return publicFactoryGuardTypeSameName
+	case string(interfaces.GuardTypeInferenceThrottle), publicFactoryGuardTypeInferenceThrottle:
+		return publicFactoryGuardTypeInferenceThrottle
 	}
 	return strings.TrimSpace(string(value))
 }
@@ -218,6 +238,8 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 		return interfaces.GuardTypeAnyChildFailed
 	case publicFactoryGuardTypeSameName:
 		return interfaces.GuardTypeSameName
+	case publicFactoryGuardTypeInferenceThrottle:
+		return interfaces.GuardTypeInferenceThrottle
 	default:
 		return interfaces.GuardType(strings.TrimSpace(string(value)))
 	}

@@ -672,6 +672,14 @@ export interface components {
          *           "type": "DEFAULT"
          *         }
          *       ],
+         *       "guards": [
+         *         {
+         *           "type": "INFERENCE_THROTTLE_GUARD",
+         *           "modelProvider": "CLAUDE",
+         *           "model": "claude-sonnet-4-20250514",
+         *           "refreshWindow": "15m"
+         *         }
+         *       ],
          *       "workTypes": [
          *         {
          *           "name": "story",
@@ -815,6 +823,8 @@ export interface components {
             metadata?: components["schemas"]["StringMap"];
             /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
             inputTypes?: components["schemas"]["InputType"][];
+            /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
+            guards?: components["schemas"]["FactoryGuard"][];
             /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
             workTypes?: components["schemas"]["WorkType"][];
             /** @description Shared capacity pools that workers or workstations can consume while work is executing. */
@@ -825,6 +835,17 @@ export interface components {
             workers?: components["schemas"]["Worker"][];
             /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
             workstations?: components["schemas"]["Workstation"][];
+        };
+        /** @description Factory-level guard attached at the root factory definition. */
+        FactoryGuard: {
+            /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
+            type: components["schemas"]["GuardType"];
+            /** @description Provider whose inference-throttle history controls this factory-level guard. */
+            modelProvider: components["schemas"]["WorkerModelProvider"];
+            /** @description Optional model name to scope throttling more narrowly than the provider-level window. */
+            model?: string;
+            /** @description Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again. */
+            refreshWindow: string;
         };
         /** @description Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary. */
         ResourceManifest: {
@@ -1029,7 +1050,7 @@ export interface components {
          * @description Guard condition attached to a workstation or one of its specific inputs.
          * @enum {string}
          */
-        GuardType: "VISIT_COUNT" | "MATCHES_FIELDS" | "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME";
+        GuardType: "VISIT_COUNT" | "MATCHES_FIELDS" | "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME" | "INFERENCE_THROTTLE_GUARD";
         /** @description Shared guard attached either to a workstation as a whole or to one specific workstation input. */
         Guard: {
             /** @description Guard condition to evaluate for this workstation-level or input-level attachment. */

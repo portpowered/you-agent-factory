@@ -3,6 +3,7 @@ import type { components } from "../generated/openapi";
 export type CanonicalFactoryDefinition = components["schemas"]["Factory"];
 
 type FactorySchemas = components["schemas"];
+type FactoryRootGuard = FactorySchemas["FactoryGuard"];
 type FactoryGuard = FactorySchemas["Guard"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
@@ -16,6 +17,7 @@ type FactoryWorkstationLimits = FactorySchemas["WorkstationLimits"];
 type FactoryWorkType = FactorySchemas["WorkType"];
 const FACTORY_KEYS = new Set([
   "factoryDirectory",
+  "guards",
   "id",
   "inputTypes",
   "metadata",
@@ -27,6 +29,7 @@ const FACTORY_KEYS = new Set([
   "workTypes",
   "workstations",
 ]);
+const FACTORY_GUARD_KEYS = new Set(["model", "modelProvider", "refreshWindow", "type"]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set(["name", "states"]);
 const WORK_STATE_KEYS = new Set(["name", "type"]);
@@ -116,9 +119,15 @@ const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>
   "LOGICAL_MOVE",
   "MODEL_WORKSTATION",
 ]);
-const GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
+  "INFERENCE_THROTTLE_GUARD",
+]);
+const WORKSTATION_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
   "VISIT_COUNT",
   "MATCHES_FIELDS",
+]);
+const INPUT_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+  "VISIT_COUNT",
   "ALL_CHILDREN_COMPLETE",
   "ANY_CHILD_FAILED",
   "SAME_NAME",
@@ -166,6 +175,7 @@ function decodeFactoryDefinition(
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);
   const metadata = readOptionalStringMap(value, "metadata", path);
   const inputTypes = readOptionalArray(value, "inputTypes", path, decodeInputType);
+  const guards = readOptionalArray(value, "guards", path, decodeFactoryGuard);
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
   const supportingFiles = readOptionalObject(value, "supportingFiles", path, expectObject);
@@ -189,6 +199,9 @@ function decodeFactoryDefinition(
   }
   if (inputTypes !== undefined) {
     factory.inputTypes = inputTypes;
+  }
+  if (guards !== undefined) {
+    factory.guards = guards;
   }
   if (workTypes !== undefined) {
     factory.workTypes = workTypes;
@@ -409,12 +422,28 @@ function decodeWorkstationIO(value: unknown, path: string): FactoryWorkstationIO
   return io;
 }
 
+function decodeFactoryGuard(value: unknown, path: string): FactoryRootGuard {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, FACTORY_GUARD_KEYS, path);
+
+  const guard: FactoryRootGuard = {
+    type: readRequiredEnum(record, "type", path, FACTORY_ROOT_GUARD_TYPE_VALUES),
+    modelProvider: readRequiredEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES),
+    refreshWindow: readRequiredString(record, "refreshWindow", path),
+  };
+  const model = readOptionalString(record, "model", path);
+  if (model !== undefined) {
+    guard.model = model;
+  }
+  return guard;
+}
+
 function decodeWorkstationGuard(value: unknown, path: string): FactoryGuard {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, GUARD_KEYS, path);
 
   const guard: FactoryGuard = {
-    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
+    type: readRequiredEnum(record, "type", path, WORKSTATION_GUARD_TYPE_VALUES),
   };
   const matchConfig = readOptionalGuardMatchConfig(record, path);
   const workstation = readOptionalString(record, "workstation", path);
@@ -436,7 +465,7 @@ function decodeInputGuard(value: unknown, path: string): FactoryGuard {
   rejectUnknownKeys(record, GUARD_KEYS, path);
 
   const guard: FactoryGuard = {
-    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
+    type: readRequiredEnum(record, "type", path, INPUT_GUARD_TYPE_VALUES),
   };
   const matchInput = readOptionalString(record, "matchInput", path);
   const parentInput = readOptionalString(record, "parentInput", path);

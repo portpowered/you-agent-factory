@@ -252,6 +252,147 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_DecodesFactoryInferenceThrottleGuard(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"factory-throttle-guard-factory",
+		"guards":[{"type":"INFERENCE_THROTTLE_GUARD","modelProvider":"CLAUDE","model":"claude-sonnet-4-20250514","refreshWindow":"15m"}],
+		"workTypes": [
+			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-assets",
+			"worker":"matcher",
+			"inputs":[{"workType":"asset","state":"ready"}],
+			"outputs":[{"workType":"asset","state":"matched"}]
+		}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Guards == nil || len(*generated.Guards) != 1 {
+		t.Fatalf("expected generated factory guard to survive boundary decode, got %#v", generated.Guards)
+	}
+	guard := (*generated.Guards)[0]
+	if guard.Type != factoryapi.GuardTypeInferenceThrottle {
+		t.Fatalf("expected generated guard type INFERENCE_THROTTLE_GUARD, got %#v", guard.Type)
+	}
+	if guard.ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("expected generated guard modelProvider CLAUDE, got %#v", guard.ModelProvider)
+	}
+	if guard.Model == nil || *guard.Model != "claude-sonnet-4-20250514" {
+		t.Fatalf("expected generated guard model, got %#v", guard.Model)
+	}
+	if guard.RefreshWindow != "15m" {
+		t.Fatalf("expected generated guard refreshWindow, got %#v", guard.RefreshWindow)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	if len(cfg.Guards) != 1 {
+		t.Fatalf("expected runtime factory guard to survive generated mapping, got %#v", cfg.Guards)
+	}
+	runtimeGuard := cfg.Guards[0]
+	if runtimeGuard.Type != interfaces.GuardTypeInferenceThrottle {
+		t.Fatalf("expected runtime guard type inference_throttle_guard, got %#v", runtimeGuard)
+	}
+	if runtimeGuard.ModelProvider != "claude" || runtimeGuard.Model != "claude-sonnet-4-20250514" || runtimeGuard.RefreshWindow != "15m" {
+		t.Fatalf("expected runtime factory guard fields to match generated boundary, got %#v", runtimeGuard)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsFactoryInferenceThrottleGuardWithWorkstationGuardFields(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"factory-throttle-guard-invalid-fields-factory",
+		"guards":[{
+			"type":"INFERENCE_THROTTLE_GUARD",
+			"modelProvider":"CLAUDE",
+			"refreshWindow":"15m",
+			"workstation":"processor"
+		}],
+		"workTypes": [
+			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-assets",
+			"worker":"matcher",
+			"inputs":[{"workType":"asset","state":"ready"}],
+			"outputs":[{"workType":"asset","state":"matched"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected workstation-only guard fields on factory guard to fail at generated boundary")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "guards[0].workstation is not supported") {
+		t.Fatalf("expected factory guard field path in error, got %v", err)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsInferenceThrottleGuardOnWorkstation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"workstation-throttle-guard-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer"}],
+		"workstations": [{
+			"name":"draft-story",
+			"worker":"writer",
+			"guards":[{"type":"INFERENCE_THROTTLE_GUARD"}],
+			"inputs":[{"workType":"story","state":"ready"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected root-only inference throttle guard to fail on workstation guards")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].guards[0].type") {
+		t.Fatalf("expected workstation guard field path in error, got %v", err)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsInferenceThrottleGuardOnInput(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"input-throttle-guard-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer"}],
+		"workstations": [{
+			"name":"draft-story",
+			"worker":"writer",
+			"inputs":[{
+				"workType":"story",
+				"state":"ready",
+				"guards":[{"type":"INFERENCE_THROTTLE_GUARD"}]
+			}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected root-only inference throttle guard to fail on input guards")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].inputs[0].guards[0].type") {
+		t.Fatalf("expected input guard field path in error, got %v", err)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"retired-fan-in-factory",
