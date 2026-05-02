@@ -89,3 +89,30 @@ func TestCloneFactoryConfig_ClonesMatchesFieldsGuardMatchConfig(t *testing.T) {
 		t.Fatalf("expected cloned matchConfig to be independent of source mutations, got %#v", cloned.Workstations[0].Guards[0].MatchConfig)
 	}
 }
+
+func TestCloneFactoryConfig_PreservesFactoryGuards(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		Guards: []interfaces.FactoryGuardConfig{{
+			Type:          interfaces.GuardTypeInferenceThrottle,
+			ModelProvider: "claude",
+			Model:         "claude-sonnet",
+			RefreshWindow: "15m",
+		}},
+	}
+
+	cloned, err := CloneFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("CloneFactoryConfig: %v", err)
+	}
+	if len(cloned.Guards) != 1 {
+		t.Fatalf("expected cloned factory guard, got %#v", cloned.Guards)
+	}
+	if cloned.Guards[0] != cfg.Guards[0] {
+		t.Fatalf("cloned factory guard = %#v, want %#v", cloned.Guards[0], cfg.Guards[0])
+	}
+
+	cfg.Guards[0].ModelProvider = "codex"
+	if cloned.Guards[0].ModelProvider != "claude" {
+		t.Fatalf("expected cloned factory guard to be independent of source mutations, got %#v", cloned.Guards[0])
+	}
+}

@@ -96,6 +96,36 @@ func TestInferenceThrottleGuard_EvaluateRuntimeBlocksOnlyWhilePauseWindowIsActiv
 	}
 }
 
+func TestInferenceThrottleGuard_FallsBackToWatchedTransitionIDsWhenRuntimeLookupMisses(t *testing.T) {
+	pausedAt := time.Date(2026, time.May, 2, 15, 0, 0, 0, time.UTC)
+	guard := &InferenceThrottleGuard{
+		Provider:      "claude",
+		Model:         "claude-sonnet",
+		RefreshWindow: 5 * time.Minute,
+		WatchedTransitionIDs: map[string]struct{}{
+			"t-claude": {},
+		},
+	}
+	candidates := []interfaces.Token{{ID: "tok-1"}}
+
+	matched, ok := guard.EvaluateRuntime(RuntimeGuardContext{
+		Now:                 pausedAt.Add(2 * time.Minute),
+		CurrentTransitionID: "t-claude",
+		DispatchHistory: []interfaces.CompletedDispatch{
+			completedThrottleFailure("dispatch-match", "t-claude", pausedAt),
+		},
+		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workers: map[string]*interfaces.WorkerConfig{},
+		},
+		TransitionWorkers: map[string]string{
+			"t-claude": "missing-worker",
+		},
+	}, candidates, nil, nil)
+	if ok || matched != nil {
+		t.Fatalf("fallback pause evaluation = (%v, %t), want (nil, false)", matched, ok)
+	}
+}
+
 func completedThrottleFailure(dispatchID, transitionID string, endedAt time.Time) interfaces.CompletedDispatch {
 	return interfaces.CompletedDispatch{
 		DispatchID:   dispatchID,
