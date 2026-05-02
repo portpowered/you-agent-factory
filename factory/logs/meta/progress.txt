@@ -1,5 +1,9 @@
 ## Codebase Patterns
 
+- When the selected work-item UI already has dispatch-history cards with
+  request/response/failure detail, treat that list as the single owner for
+  current-run inspection; do not keep a second `Inference attempts` section
+  for the same selected run.
 - When dashboard summary totals look wrong, compare the backend simple-dashboard
   projection and the UI timeline snapshot together; `failed_count`,
   `completed_count`, and `*_by_work_type` must share the same customer-scoped
@@ -1627,3 +1631,41 @@
 - Queued one new ignored customer-ask-aligned idea at
   `factory/inputs/idea/default/align-dashboard-work-summary-count-semantics.md`
   instead of re-queueing the already-open shared-action-primitives lane.
+
+## 2026-05-02 15:18:00 -07:00 - meta refresh after dashboard summary fix landed
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `c6f37eb`.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, live GitHub PR state, and the current selected-work UI
+  surfaces before choosing work.
+- Verified with `git status --short` that the workspace is still locally dirty
+  only because:
+  - `factory/logs/meta/asks.md` has the existing local wording edit
+  - `factory/logs/weird-number-summary.jsonl` remains untracked local evidence
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `abcb964`
+  - it did not include merged PR `#62`
+    `align-dashboard-work-summary-count-semantics`
+  - it still treated the dashboard failed-summary mismatch as a live next step
+    even though that lane is already merged on `main`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state:
+  - `factory/inputs/idea/default/align-dashboard-work-summary-count-semantics.md`
+    is now solved residue rather than pending work
+- Confirmed the next distinct customer-ask-aligned website bug outside open PR
+  `#61` is the selected-work current-inference duplication:
+  - `ui/src/features/current-selection/execution-details.tsx` still renders a
+    separate `Inference attempts` region
+  - `ui/src/features/current-selection/selected-work-dispatch-history.tsx`
+    already renders the dispatch-history surface that should own the current
+    dispatch details
+  - `ui/src/features/current-selection/work-item-card.test.tsx`,
+    `ui/src/App.test.tsx`, and `ui/src/App.stories.tsx` still codify the
+    duplicate section
+- Used a sidecar explorer to cross-check merged/open PR state and a possible
+  stale-doc seam, but kept the next queued move on the higher-priority
+  customer-facing website bug instead of a docs-only refresh.
+- Queued one new ignored customer-ask-aligned idea at
+  `factory/inputs/idea/default/retire-current-selection-inference-duplication.md`
+  instead of re-queueing the already-landed dashboard-summary lane.
