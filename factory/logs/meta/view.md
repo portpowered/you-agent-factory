@@ -3,7 +3,7 @@
 ## world state
 
 - after `git pull --ff-only`, repository `main` and `origin/main` are both at
-  `f9c2cf0` on May 2, 2026 in the local maintainer workspace
+  `5736135` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -42,6 +42,7 @@
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#53` `dedupe-api-surface-factory-contract`
   - merged PR `#52` `inline-workstation-request-projection-fallback-helpers`
   - merged PR `#51` `retire-legacy-workstation-timeout-alias-fallback`
   - merged PR `#50` `unify-token-removal-bookkeeping`
@@ -56,22 +57,23 @@
 - the broad throttle customer ask is fully implemented on `main` through
   merged PRs `#46` and `#48`; it should remain treated as solved rather than
   live backlog
-- the previously recommended workstation-request reserve seam is now solved:
-  - merged PR `#52` removed the single-caller fallback helpers from
-    `pkg/api/workstation_request_projection.go`
+- the previously recommended API/service reserve seam is now solved:
+  - merged PR `#53` made `pkg/apisurface/contract.go` embed
+    `factory.APIFactory` instead of re-declaring the shared runtime methods
   - the ignored local idea
-    `factory/inputs/idea/default/inline-workstation-request-projection-fallback-helpers.md`
+    `factory/inputs/idea/default/dedupe-api-surface-factory-contract.md`
     is now solved residue rather than pending work
-- direct code inspection plus two sidecar explorers found the next smaller
-  non-colliding reserve cleanup seam in API/service contract ownership:
-  - `pkg/factory/interfaces.go` defines `APIFactory` with
-    `SubmitWorkRequest(...)`, `SubscribeFactoryEvents(...)`, and
-    `GetEngineStateSnapshot(...)`
-  - `pkg/apisurface/contract.go` repeats those same three methods verbatim in
-    `APISurface` before adding named-factory operations
-  - the duplication is exact, package-local to API/service seams, and can be
-    reduced by letting `apisurface.APISurface` embed `factory.APIFactory`
-    while preserving its named-factory methods
+- direct code inspection plus a sidecar explorer found the next smaller
+  non-colliding reserve cleanup seam in generated config-boundary alias
+  rejection:
+  - `pkg/config/factory_config_mapping.go` still walks worker and workstation
+    objects twice, once at the top-level object and again for nested
+    `definition` objects, while applying the same retired-field inventories
+  - the duplication is narrow, entirely inside `pkg/config`, and aligned with
+    the checked-in development-guide rule to keep one retired-field inventory
+    per boundary type and vary only the caller-owned path text
+  - focused proof already exists in `pkg/config/factory_config_mapping_test.go`
+    for top-level, nested `definition`, and nested cron alias rejection
   - this seam stays outside the open `tests/functional/**` reorganization lane
     in PR `#30`
 
@@ -80,14 +82,17 @@
 1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid that tree until it merges
 2. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `913f007`
-   - it did not include merged PR `#52`
-   - it still treated the workstation-request fallback seam as queueable even
-     though `#52` already landed it on `main`
+   - it still described `HEAD` as `f9c2cf0`
+   - it did not include merged PR `#53`
+   - it still treated the API/service contract seam as queueable even though
+     `#53` already landed it on `main`
    - it did not capture the next reserve seam in
-     `pkg/factory/interfaces.go` and `pkg/apisurface/contract.go`
+     `pkg/config/factory_config_mapping.go`
 3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
+4. the codebase-memory graph is useful for discovery but can lag immediately
+   after a fresh merge, so recent seam validation still needs live file reads
+   before the maintainer loop queues work
 
 ## theory of mind
 
@@ -99,12 +104,12 @@
   correct maintainer posture is to stop treating throttle cleanup as live
   backlog and to avoid creating new overlapping throttle requests from stale
   local residue
-- with PR `#52` merged, the next highest-confidence cleanup is no longer in
-  workstation request projection; it is exact interface duplication at the
-  API/service boundary
-- when one runtime-facing interface is a strict superset of another, the
-  preferred cleanup direction is interface embedding rather than repeating the
-  shared method set in two packages
+- with PR `#53` merged, the next highest-confidence cleanup is no longer at
+  the API/service interface seam; it is duplicated retired-field rejection
+  plumbing at the generated config boundary
+- when the same retirement policy applies to both a top-level object and its
+  nested `definition`, the preferred cleanup direction is to keep one field
+  inventory per boundary type and vary only the caller-owned path text
 - the only live broad collision surface is still PR `#30` in
   `tests/functional/**`, so safe parallel cleanup should stay package-local
   and outside that tree
@@ -119,10 +124,11 @@
 - update the checked-in meta world model and progress log now
 - leave `factory/logs/meta/asks.md` unchanged; the checked-in priority order
   is still correct
-- do not re-queue the already-landed workstation-request fallback cleanup from
-  ignored local residue
-- queue one new ignored reserve cleanup idea for deduplicating the shared
-  `APIFactory` / `APISurface` method contract
+- do not re-queue the already-landed API/service contract cleanup from ignored
+  local residue
+- queue one new ignored reserve cleanup idea for deduplicating the generated
+  config-boundary retired-field rejection path in
+  `pkg/config/factory_config_mapping.go`
 - keep any new reserve work out of `tests/functional/**` while PR `#30`
   remains open
 
