@@ -62,7 +62,7 @@ func TestMatchesFieldsGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 			}
 
 			guard := (*workstation.Guards)[0]
-			if guard.Type != factoryapi.WorkstationGuardTypeMatchesFields {
+			if guard.Type != factoryapi.GuardTypeMatchesFields {
 				t.Fatalf("generated guard type = %q, want MATCHES_FIELDS", guard.Type)
 			}
 			if guard.MatchConfig == nil || guard.MatchConfig.InputKey != tt.inputKey {
@@ -343,7 +343,7 @@ func assertMatchesFieldsPairFixtureContract(t *testing.T, dir string) {
 	if guard == nil || len(*guard) != 1 {
 		t.Fatalf("generated workstation guards = %#v, want one guard", guard)
 	}
-	if (*guard)[0].Type != factoryapi.WorkstationGuardTypeMatchesFields {
+	if (*guard)[0].Type != factoryapi.GuardTypeMatchesFields {
 		t.Fatalf("generated guard type = %q, want MATCHES_FIELDS", (*guard)[0].Type)
 	}
 	if (*guard)[0].MatchConfig == nil || (*guard)[0].MatchConfig.InputKey != `.Tags["flavor"]` {

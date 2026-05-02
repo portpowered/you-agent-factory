@@ -133,8 +133,9 @@ func functionalNamedFactoryBody(name, workType string) string {
 func functionalNamedFactoryPayloadJSON(name, workType string) string {
 	return `{
 		"name":"` + name + `",
+		"id":"` + name + `",
 		"workTypes":[{"name":"` + workType + `","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
-		"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"claude","executorProvider":"script_wrap","model":"claude-sonnet-4-20250514"}],
+		"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],
 		"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"done"}]}]
 	}`
 }

@@ -140,6 +140,7 @@ func workInProgressPriorityFixture(t *testing.T) string {
 
 	dir := support.ScaffoldFactory(t, map[string]any{})
 	factoryJSON := `{
+  "name": "work-in-progress-priority-factory",
   "workTypes": [
     {
       "name": "task",
@@ -158,6 +159,7 @@ func workInProgressPriorityFixture(t *testing.T) string {
   "workstations": [
     {
       "name": "aaa-process",
+      "behavior": "STANDARD",
       "worker": "processor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "processing" }],
@@ -165,6 +167,7 @@ func workInProgressPriorityFixture(t *testing.T) string {
     },
     {
       "name": "zzz-finish",
+      "behavior": "STANDARD",
       "worker": "finisher",
       "inputs": [{ "workType": "task", "state": "processing" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
@@ -213,6 +216,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 		"workstations": []map[string]any{
 			{
 				"name":      "aaa-start-initial",
+				"behavior":  "STANDARD",
 				"worker":    "starter",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
@@ -220,6 +224,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 			},
 			{
 				"name":      "bbb-finish-processing",
+				"behavior":  "STANDARD",
 				"worker":    "finisher",
 				"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
@@ -227,7 +232,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 			},
 			{
 				"name":      "zzz-cron-initial",
-				"kind":      "cron",
+				"behavior":  "CRON",
 				"worker":    "cron-worker",
 				"cron":      map[string]string{"schedule": "0 * * * *", "expiryWindow": "2h"},
 				"inputs":    []map[string]string{{"workType": "scheduled", "state": "init"}},

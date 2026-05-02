@@ -23,12 +23,13 @@ func TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution(t *t
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
 		cfg["workstations"] = append(cfg["workstations"].([]any), map[string]any{
-			"name":    "timeout-cleanup-loop-breaker",
-			"type":    "LOGICAL_MOVE",
-			"inputs":  []map[string]any{{"workType": "task", "state": "init"}},
-			"outputs": []map[string]any{{"workType": "task", "state": "failed"}},
+			"name":     "timeout-cleanup-loop-breaker",
+			"behavior": "STANDARD",
+			"type":     "LOGICAL_MOVE",
+			"inputs":   []map[string]any{{"workType": "task", "state": "init"}},
+			"outputs":  []map[string]any{{"workType": "task", "state": "failed"}},
 			"guards": []map[string]any{{
-				"type":        "visit_count",
+				"type":        "VISIT_COUNT",
 				"workstation": "run-script",
 				"maxVisits":   float64(1),
 			}},

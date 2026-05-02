@@ -105,8 +105,9 @@ func configureProviderErrorLoopBreaker(t *testing.T, dir string) {
 			t.Fatalf("factory.json workstations = %T, want []any", cfg["workstations"])
 		}
 		cfg["workstations"] = append(workstations, map[string]any{
-			"name": "provider-error-loop-breaker",
-			"type": "LOGICAL_MOVE",
+			"name":     "provider-error-loop-breaker",
+			"behavior": "STANDARD",
+			"type":     "LOGICAL_MOVE",
 			"inputs": []any{
 				map[string]any{
 					"workType": "task",
@@ -121,7 +122,7 @@ func configureProviderErrorLoopBreaker(t *testing.T, dir string) {
 			},
 			"guards": []any{
 				map[string]any{
-					"type":        "visit_count",
+					"type":        "VISIT_COUNT",
 					"workstation": "process",
 					"maxVisits":   2,
 				},

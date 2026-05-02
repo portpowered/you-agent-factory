@@ -30,7 +30,7 @@ func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testi
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": map[string]string{"workType": "task", "state": "failed"},
 			"resources": []map[string]any{{"name": "executor-slot", "capacity": 1}},
-			"guards":    []map[string]any{{"type": "visit_count", "workstation": "process-task", "maxVisits": 3}},
+			"guards":    []map[string]any{{"type": "VISIT_COUNT", "workstation": "process-task", "maxVisits": 3}},
 			"stopWords": []string{"BLOCKED"},
 		}},
 	})
@@ -73,7 +73,7 @@ Process {{ (index .Inputs 0).WorkID }}.
 
 	replayProjection := projectReplayInitialStructureFromEmbeddedConfig(t, dir)
 
-	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "script_wrap", ModelProvider: "codex", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
+	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "SCRIPT_WRAP", ModelProvider: "CODEX", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
 	assertTopologyWorkstation(t, liveProjection, "process-task", "executor")
 	assertTopologyResource(t, liveProjection, "executor-slot", 2)
 	assertTopologyWorker(t, replayProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "script_wrap", ModelProvider: "codex", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})

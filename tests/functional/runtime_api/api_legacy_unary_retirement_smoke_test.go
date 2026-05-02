@@ -169,11 +169,11 @@ func retiredUnaryCronFactoryConfig(schedule string) map[string]any {
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":    "poll-for-work",
-				"kind":    "cron",
-				"worker":  "cron-worker",
-				"cron":    map[string]any{"schedule": schedule, "expiryWindow": "10s"},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"name":     "poll-for-work",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "expiryWindow": "10s"},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 		},
 	}

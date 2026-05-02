@@ -24,6 +24,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 	support.SkipLongFunctional(t, "slow config-portability expand-flatten sweep")
 	dir := t.TempDir()
 	original := []byte(`{
+  "name": "portable-expand-factory",
   "workTypes": [
     {
       "name": "task",
@@ -40,7 +41,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
       	"name": "executor",
 		"type": "MODEL_WORKER",
 		"model": "claude-sonnet-4-20250514",
-		"modelProvider": "claude",
+		"modelProvider": "CLAUDE",
 		"resources": [{ "name": "agent-slot", "capacity": 1 }],
 		"stopToken": "COMPLETE",
 		"body": "You are the portable factory executor."
@@ -50,6 +51,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
     {
       "id": "execute-task-id",
       "name": "execute-task",
+      "behavior": "STANDARD",
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
@@ -138,6 +140,7 @@ func TestFactoryConfigPortability_FlattenSplitLayoutExecutesStandalone(t *testin
 	support.SkipLongFunctional(t, "slow config-portability split-layout sweep")
 	splitDir := t.TempDir()
 	writeFatFactoryJSON(t, splitDir, `{
+  "name": "portable-split-layout-factory",
   "workTypes": [
     {
       "name": "task",
@@ -153,6 +156,7 @@ func TestFactoryConfigPortability_FlattenSplitLayoutExecutesStandalone(t *testin
   "workstations": [
     {
       "name": "execute-task",
+      "behavior": "STANDARD",
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
@@ -224,6 +228,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
 	support.SkipLongFunctional(t, "slow fat-factory standalone-execution sweep")
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
+  "name": "portable-standalone-factory",
   "workTypes": [
     {
       "name": "task",
@@ -240,7 +245,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
       "name": "executor",
         "type": "MODEL_WORKER",
         "model": "claude-sonnet-4-20250514",
-        "modelProvider": "claude",
+        "modelProvider": "CLAUDE",
         "stopToken": "COMPLETE",
         "body": "You are the standalone factory executor."
     }
@@ -248,6 +253,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
   "workstations": [
     {
       "name": "execute-task",
+      "behavior": "STANDARD",
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
@@ -288,6 +294,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
 	support.SkipLongFunctional(t, "slow fat-factory shared-mapping sweep")
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
+  "name": "portable-load-only-factory",
   "workTypes": [
     {
       "name": "task",
@@ -303,7 +310,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
     {
       "name": "executor",
 	"type": "MODEL_WORKER",
-	"modelProvider": "claude",
+	"modelProvider": "CLAUDE",
 	"stopToken": "COMPLETE",
 	"body": "You are loaded through the shared mapper."
 
@@ -312,6 +319,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
   "workstations": [
     {
       "name": "execute-task",
+      "behavior": "STANDARD",
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
@@ -374,6 +382,7 @@ func writeInlineScriptBackedFactoryFixture(t *testing.T) string {
 
 	authoredDir := t.TempDir()
 	writeFatFactoryJSON(t, authoredDir, `{
+  "name": "portable-inline-script-factory",
   "workTypes": [
     {
       "name": "task",
@@ -389,6 +398,7 @@ func writeInlineScriptBackedFactoryFixture(t *testing.T) string {
   "workstations": [
     {
       "name": "execute-story",
+      "behavior": "STANDARD",
       "worker": "executor",
       "copyReferencedScripts": true,
       "inputs": [{ "workType": "task", "state": "init" }],
