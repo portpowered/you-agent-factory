@@ -39,8 +39,11 @@ func (m *Marking) RemoveToken(tokenID string) {
 		return
 	}
 
-	// Remove from place index
-	placeID := token.PlaceID
+	m.removeTokenFromPlaceIndex(token.PlaceID, tokenID)
+	delete(m.Tokens, tokenID)
+}
+
+func (m *Marking) removeTokenFromPlaceIndex(placeID, tokenID string) {
 	ids := m.PlaceTokens[placeID]
 	for i, id := range ids {
 		if id == tokenID {
@@ -51,8 +54,6 @@ func (m *Marking) RemoveToken(tokenID string) {
 	if len(m.PlaceTokens[placeID]) == 0 {
 		delete(m.PlaceTokens, placeID)
 	}
-
-	delete(m.Tokens, tokenID)
 }
 
 // TokensInPlace returns all tokens currently in the given place.
