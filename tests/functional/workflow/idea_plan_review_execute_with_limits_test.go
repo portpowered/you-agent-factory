@@ -14,6 +14,7 @@ import (
 
 // Here we create an idea, we expect it to fail and have 5 resources in place of the resource positions.
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-plan-review-execute script-failure sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
@@ -48,6 +49,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution(t *testing.T) {
 
 // Here we create an idea, we expect it to fail and have 5 resources in place of the resource positions.
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnIdeation(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-plan-review-execute ideation-failure sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
@@ -82,6 +84,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnIdeation(t *testing.T) {
 
 // Here we create an idea, we expect it to fail and have 5 resources in place of the resource positions.
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-plan-review-execute repeat-failure sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
@@ -119,6 +122,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch(t *
 }
 
 func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-plan-review-execute full-pass sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",

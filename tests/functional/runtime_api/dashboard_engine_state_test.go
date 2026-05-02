@@ -17,6 +17,7 @@ import (
 )
 
 func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow dashboard engine-state sweep")
 	dir := scaffoldDashboardWorldViewFunctionalDir(t)
 	provider := newFunctionalWorldViewProvider()
 	h := testutil.NewServiceTestHarness(t, dir,

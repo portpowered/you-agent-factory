@@ -13,6 +13,7 @@ import (
 )
 
 func TestStatelessExecutionSmoke_LoadedConfigDrivesExecution(t *testing.T) {
+	support.SkipLongFunctional(t, "slow stateless-loaded-config sweep")
 	originalDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, originalDir, "task", []byte(`{"item":"original-config"}`))
 

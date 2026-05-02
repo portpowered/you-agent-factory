@@ -19,6 +19,7 @@ import (
 )
 
 func TestGeneratedSchemaDeserializationSmoke_FileHTTPAndReplayTransportsStayAligned(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow generated-schema transport-alignment sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	recordDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "generated-schema-deserialization.replay.json")
@@ -162,6 +163,7 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 }
 
 func TestGeneratedSchemaDeserializationSmoke_FileAndRecordedTransportRejectRetiredFieldsAtSameBoundaryStage(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow generated-schema retired-field sweep")
 	dir := t.TempDir()
 	factoryJSON := []byte(`{
 		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],

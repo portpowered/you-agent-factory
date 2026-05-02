@@ -271,6 +271,7 @@ func TestProviderErrorSmoke_CodexTemporaryServerErrorsRequeueWithoutThrottlePaus
 }
 
 func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRetryableProviderFailureMetadata(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow codex windows-exit provider smoke")
 	entry := providerErrorCorpusEntryForTest(t, "codex_windows_exit_code_4294967295")
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,

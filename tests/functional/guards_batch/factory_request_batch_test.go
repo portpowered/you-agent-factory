@@ -19,6 +19,7 @@ import (
 // TestFactoryRequestBatch_CreatesOneTokenPerWorkItem validates that a
 // FACTORY_REQUEST_BATCH request creates one token per work item.
 func TestFactoryRequestBatch_CreatesOneTokenPerWorkItem(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch token-creation sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
 	request := interfaces.WorkRequest{
@@ -51,6 +52,7 @@ func TestFactoryRequestBatch_CreatesOneTokenPerWorkItem(t *testing.T) {
 // the request batch are carried on each token and accessible during
 // dispatch (which is how they reach prompt rendering).
 func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch tag-propagation sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 
 	h := testutil.NewServiceTestHarness(t, dir)
@@ -107,6 +109,7 @@ func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
 // verifies explicit factory project context wins over a token project tag in
 // rendered dispatch context while per-token project data stays available.
 func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderContext(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch provider-context precedence sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 	support.SetWorkingDirectory(t, dir)
 
@@ -173,6 +176,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 // factory-level project config reaches provider-time template context when the
 // submitted request does not include a project tag override.
 func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch provider-context flow sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 	support.SetWorkingDirectory(t, dir)
 
@@ -241,6 +245,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 // relations prevent dependent tokens from dispatching before their
 // predecessors reach the required terminal state.
 func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch dependency sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
 	request := interfaces.WorkRequest{
@@ -285,6 +290,7 @@ func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
 // service-level tests can submit canonical batches and inspect normalized work
 // through GetEngineStateSnapshot instead of runtime internals.
 func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch snapshot sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
 	request := interfaces.WorkRequest{
@@ -355,6 +361,7 @@ func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T)
 // dependency enforcement, canonical history, idempotent retries, and
 // worker-emitted fanout together through the service harness.
 func TestFactoryRequestBatch_EndToEndSmoke(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch end-to-end sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	support.WriteAgentConfig(t, dir, "processor", `---
 type: MODEL_WORKER
@@ -416,6 +423,7 @@ Finish the input task.
 }
 
 func TestFactoryRequestBatch_ChainingTraceFanIn_EndToEndSmoke(t *testing.T) {
+	support.SkipLongFunctional(t, "slow request-batch chaining-trace fan-in sweep")
 	h, provider := newChainingTraceFanInHarness(t)
 	submitChainingTraceFanInWork(t, h)
 	assertChainingTraceFanInHarnessState(t, h, provider)

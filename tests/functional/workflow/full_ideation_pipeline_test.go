@@ -13,6 +13,7 @@ import (
 // idea (FileWatcher) -> plan-idea (planner) -> prd -> convert-prd (logical-move) ->
 // story -> execute-story (executor) -> in-review -> review-story (reviewer) -> complete.
 func TestFullIdeationPipeline_HappyPath(t *testing.T) {
+	support.SkipLongFunctional(t, "slow ideation happy-path sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 
 	originTraceID := "trace-idea-lineage-001"
@@ -55,6 +56,7 @@ func TestFullIdeationPipeline_HappyPath(t *testing.T) {
 // TestFullIdeationPipeline_RejectionLoop verifies that reviewer rejections
 // loop the token back through execution and review multiple times.
 func TestFullIdeationPipeline_RejectionLoop(t *testing.T) {
+	support.SkipLongFunctional(t, "slow ideation rejection-loop sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 
 	originTraceID := "trace-rejection-loop-001"
@@ -102,6 +104,7 @@ func TestFullIdeationPipeline_RejectionLoop(t *testing.T) {
 // transition across work type boundaries (idea -> prd -> story) with TraceID
 // lineage preserved through to the final state.
 func TestFullIdeationPipeline_CrossWorkTypeLineage(t *testing.T) {
+	support.SkipLongFunctional(t, "slow ideation cross-work-type lineage sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 
 	originTraceID := "trace-cross-wt-lineage-001"

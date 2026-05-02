@@ -31,6 +31,7 @@ func singleStagePipelineConfig() *interfaces.FactoryConfig {
 }
 
 func TestDashboard_SingleWorkItemSnapshot(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow dashboard single-work snapshot sweep")
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
 
 	var snapshotMu sync.Mutex
@@ -135,6 +136,7 @@ func (e *snapshotCapturingExecutor) Execute(_ context.Context, d interfaces.Work
 }
 
 func TestDashboard_ParallelWorkItemsSnapshot(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow dashboard parallel snapshot sweep")
 	cfg := singleStagePipelineConfig()
 	dir := testutil.ScaffoldFactoryDir(t, cfg)
 

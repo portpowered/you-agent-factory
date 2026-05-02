@@ -14,10 +14,12 @@ import (
 	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-config-portability-fixture review=2026-07-18 removal=split-expand-flatten-fixture-builders-before-next-portability-change
 func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *testing.T) {
+	support.SkipLongFunctional(t, "slow config-portability expand-flatten sweep")
 	dir := t.TempDir()
 	original := []byte(`{
   "workTypes": [
@@ -131,6 +133,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 
 // portos:func-length-exception owner=agent-factory reason=legacy-config-portability-fixture review=2026-07-18 removal=split-split-layout-execution-fixture-before-next-portability-change
 func TestFactoryConfigPortability_FlattenSplitLayoutExecutesStandalone(t *testing.T) {
+	support.SkipLongFunctional(t, "slow config-portability split-layout sweep")
 	splitDir := t.TempDir()
 	writeFatFactoryJSON(t, splitDir, `{
   "workTypes": [
@@ -216,6 +219,7 @@ Complete {{ (index .Inputs 0).WorkID }} from split config.`)
 }
 
 func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *testing.T) {
+	support.SkipLongFunctional(t, "slow fat-factory standalone-execution sweep")
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
   "workTypes": [
@@ -279,6 +283,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
 }
 
 func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
+	support.SkipLongFunctional(t, "slow fat-factory shared-mapping sweep")
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
   "workTypes": [
@@ -352,6 +357,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
 }
 
 func TestFactoryConfigPortability_FlattenInlineScriptBackedFactoryExecutesStandalone(t *testing.T) {
+	support.SkipLongFunctional(t, "slow config-portability inline-script sweep")
 	authoredDir := writeInlineScriptBackedFactoryFixture(t)
 	flattened := flattenFactoryDir(t, authoredDir)
 	assertFlattenedInlineScriptBackedConfig(t, flattened)

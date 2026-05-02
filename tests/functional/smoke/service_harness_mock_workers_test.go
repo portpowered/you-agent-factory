@@ -17,6 +17,7 @@ func (f executorFunc) Execute(ctx context.Context, d interfaces.WorkDispatch) (i
 }
 
 func TestServiceHarness_MockWorker(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness mock-worker sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "mock worker test"}`))
 
@@ -46,6 +47,7 @@ func TestServiceHarness_MockWorker(t *testing.T) {
 }
 
 func TestServiceHarness_MockWorker_Idempotent(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness mock-worker idempotency sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 
 	h := testutil.NewServiceTestHarness(t, dir)
@@ -59,6 +61,7 @@ func TestServiceHarness_MockWorker_Idempotent(t *testing.T) {
 }
 
 func TestServiceHarness_SetCustomExecutor(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness custom-executor sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "custom executor test"}`))
 
@@ -91,6 +94,7 @@ func TestServiceHarness_SetCustomExecutor(t *testing.T) {
 }
 
 func TestServiceHarness_CustomExecutor_Precedence(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness custom-executor precedence sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "precedence test"}`))
 

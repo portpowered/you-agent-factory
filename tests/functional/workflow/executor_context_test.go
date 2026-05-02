@@ -13,6 +13,7 @@ import (
 // TestExecutorContext_InputTokenColors verifies that the dispatched work keeps
 // the original payload, tags, and work type on the executor input token.
 func TestExecutorContext_InputTokenColors(t *testing.T) {
+	support.SkipLongFunctional(t, "slow executor-context token-color sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	payload := []byte(`{"feature": "dark mode", "priority": "high"}`)
@@ -61,6 +62,7 @@ func TestExecutorContext_InputTokenColors(t *testing.T) {
 // TestExecutorContext_RejectionFeedback verifies that reviewer feedback is
 // attached to the next executor dispatch through the input token tags.
 func TestExecutorContext_RejectionFeedback(t *testing.T) {
+	support.SkipLongFunctional(t, "slow executor-context rejection-feedback sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
@@ -104,6 +106,7 @@ func TestExecutorContext_RejectionFeedback(t *testing.T) {
 // TestExecutorContext_ParentLineage verifies that parent-child and depends-on
 // relations survive onto the executor dispatch token for workflow lineage.
 func TestExecutorContext_ParentLineage(t *testing.T) {
+	support.SkipLongFunctional(t, "slow executor-context parent-lineage sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

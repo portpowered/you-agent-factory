@@ -13,6 +13,7 @@ import (
 )
 
 func TestLogicalMove_Success(t *testing.T) {
+	support.SkipLongFunctional(t, "slow logical-move success sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("my-payload"))
 	h := testutil.NewServiceTestHarness(t, dir)
@@ -35,6 +36,7 @@ func TestLogicalMove_Success(t *testing.T) {
 }
 
 func TestLogicalMove_PreservesTokenColor(t *testing.T) {
+	support.SkipLongFunctional(t, "slow logical-move color sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_pipeline_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("preserved-payload"))
 	h := testutil.NewServiceTestHarness(t, dir)

@@ -16,6 +16,7 @@ import (
 )
 
 func TestMatchesFieldsGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
+	support.SkipLongFunctional(t, "slow matches-fields fixture-boundary sweep")
 	t.Parallel()
 
 	tests := []struct {
@@ -99,6 +100,7 @@ func TestMatchesFieldsGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 }
 
 func TestMatchesFieldsGuard_SingleInputResolvedNameCompletes(t *testing.T) {
+	support.SkipLongFunctional(t, "slow matches-fields single-input sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_single_input_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "single COMPLETE"})
 
@@ -134,6 +136,7 @@ func TestMatchesFieldsGuard_SingleInputResolvedNameCompletes(t *testing.T) {
 }
 
 func TestMatchesFieldsGuard_TwoInputMatchingTagsCompletesJoin(t *testing.T) {
+	support.SkipLongFunctional(t, "slow matches-fields matching-tags sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
 
@@ -178,6 +181,7 @@ func TestMatchesFieldsGuard_TwoInputMatchingTagsCompletesJoin(t *testing.T) {
 }
 
 func TestMatchesFieldsGuard_TwoInputMismatchedTagsStayBlocked(t *testing.T) {
+	support.SkipLongFunctional(t, "slow matches-fields mismatched-tags sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
 
@@ -202,6 +206,7 @@ func TestMatchesFieldsGuard_TwoInputMismatchedTagsStayBlocked(t *testing.T) {
 }
 
 func TestMatchesFieldsGuard_ThreeInputNestedTagMismatchRejectsCandidateSet(t *testing.T) {
+	support.SkipLongFunctional(t, "slow matches-fields nested-tag mismatch sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_triple_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "triple COMPLETE"})
 
@@ -232,6 +237,7 @@ func TestMatchesFieldsGuard_ThreeInputNestedTagMismatchRejectsCandidateSet(t *te
 }
 
 func TestMatchesFieldsGuard_IntegrationSmoke_GroupedExecution(t *testing.T) {
+	support.SkipLongFunctional(t, "slow matches-fields grouped-execution sweep")
 	t.Run("matching pair dispatches through normal path", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
 		assertMatchesFieldsPairFixtureContract(t, dir)

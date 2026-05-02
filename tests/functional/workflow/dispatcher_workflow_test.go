@@ -14,6 +14,7 @@ import (
 )
 
 func TestDispatcherWorkflow_SingleSeedFile(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatcher single-seed sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
 	originTraceID := "trace-single-seed"
@@ -53,6 +54,7 @@ func TestDispatcherWorkflow_SingleSeedFile(t *testing.T) {
 }
 
 func TestDispatcherWorkflow_TwoSeedFiles(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatcher two-seed sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -88,6 +90,7 @@ func TestDispatcherWorkflow_TwoSeedFiles(t *testing.T) {
 }
 
 func TestDispatcherWorkflow_MultipleSeedFiles(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatcher multi-seed sweep")
 	const n = 5
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
@@ -117,6 +120,7 @@ func TestDispatcherWorkflow_MultipleSeedFiles(t *testing.T) {
 }
 
 func TestDispatcherWorkflow_ExecutionPoolIsolation(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatcher pool-isolation sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

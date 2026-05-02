@@ -18,6 +18,7 @@ import (
 )
 
 func TestServiceLifecycle_InitInputCompletesThroughFactoryService(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-lifecycle init-input sweep")
 	dir := support.ScaffoldFactory(t, simpleServicePipelineConfig())
 
 	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
@@ -49,6 +50,7 @@ func TestServiceLifecycle_InitInputCompletesThroughFactoryService(t *testing.T) 
 }
 
 func TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-lifecycle work-file sweep")
 	dir := support.ScaffoldFactory(t, twoStageServicePipelineConfig())
 
 	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
@@ -81,6 +83,7 @@ func TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline(t *testing
 }
 
 func TestServiceLifecycle_PreseededWorkCompletesOnStartup(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-lifecycle preseeded-startup sweep")
 	dir := support.ScaffoldFactory(t, simpleServicePipelineConfig())
 
 	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
@@ -112,6 +115,7 @@ func TestServiceLifecycle_PreseededWorkCompletesOnStartup(t *testing.T) {
 }
 
 func TestServiceLifecycle_EmptyPreseedDirectoryCompletesImmediately(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-lifecycle empty-preseed sweep")
 	dir := support.ScaffoldFactory(t, simpleServicePipelineConfig())
 
 	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
@@ -140,6 +144,7 @@ func TestServiceLifecycle_EmptyPreseedDirectoryCompletesImmediately(t *testing.T
 }
 
 func TestServiceLifecycle_WaitToCompleteSignalsForSeededWatcherInput(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-lifecycle wait-to-complete sweep")
 	dir := support.ScaffoldFactory(t, simpleServicePipelineConfig())
 
 	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
@@ -183,6 +188,7 @@ func TestServiceLifecycle_WaitToCompleteSignalsForSeededWatcherInput(t *testing.
 }
 
 func TestServiceLifecycle_CopyFixtureDirParallelCopiesStayIsolated(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-lifecycle fixture-copy isolation sweep")
 	srcDir := createParallelIsolationSourceFixture(t)
 
 	for _, tc := range []struct {

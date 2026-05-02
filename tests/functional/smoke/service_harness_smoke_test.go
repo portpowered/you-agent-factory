@@ -10,6 +10,7 @@ import (
 )
 
 func TestServiceHarness_HappyPath(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness happy-path sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "service harness happy path"}`))
 
@@ -46,6 +47,7 @@ func TestServiceHarness_HappyPath(t *testing.T) {
 }
 
 func TestServiceHarness_NoopFallback(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness noop sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "noop_pipeline"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "noop fallback test"}`))
 
@@ -63,6 +65,7 @@ func TestServiceHarness_NoopFallback(t *testing.T) {
 }
 
 func TestServiceHarness_MultipleWorkItems(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness multi-item sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "queued-1"}`))

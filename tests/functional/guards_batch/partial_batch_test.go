@@ -12,6 +12,7 @@ import (
 )
 
 func TestPartialBatch_SomeTokensFail(t *testing.T) {
+	support.SkipLongFunctional(t, "slow partial-batch failure sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "partial_failure"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-a"}`))
@@ -37,6 +38,7 @@ func TestPartialBatch_SomeTokensFail(t *testing.T) {
 }
 
 func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
+	support.SkipLongFunctional(t, "slow partial-batch rejection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "partial_rejection"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-accepted"}`))
@@ -63,6 +65,7 @@ func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
 }
 
 func TestPartialBatch_TemplateResolvesFromTags(t *testing.T) {
+	support.SkipLongFunctional(t, "slow partial-batch template sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_parameterized_success"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -112,6 +115,7 @@ Process the task input.
 }
 
 func TestPartialBatch_ProviderExitFailureRoutesTokenToFailedWithContext(t *testing.T) {
+	support.SkipLongFunctional(t, "slow partial-batch provider-exit sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -170,6 +174,7 @@ Process the input task.
 }
 
 func TestPartialBatch_RetryableProviderFailuresRetryThroughScriptWrapPath(t *testing.T) {
+	support.SkipLongFunctional(t, "slow partial-batch retryable-provider sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -217,6 +222,7 @@ Process the input task.
 }
 
 func TestPartialBatch_ThrottledProviderFailureRequeuesToPreTransitionPlace(t *testing.T) {
+	support.SkipLongFunctional(t, "slow partial-batch throttled-provider sweep")
 	h, runner := throttledProviderFailureHarness(t)
 	runHarnessInBackground(t, h)
 

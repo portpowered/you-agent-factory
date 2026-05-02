@@ -11,6 +11,7 @@ import (
 )
 
 func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
+	support.SkipLongFunctional(t, "slow concurrency-limit blocking sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "concurrency_limit_dir"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "item-1"}`))
@@ -46,6 +47,7 @@ func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
 }
 
 func TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing(t *testing.T) {
+	support.SkipLongFunctional(t, "slow concurrency-limit resource-consumption sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "concurrency_limit_dir"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "A"}`))
@@ -76,6 +78,7 @@ func TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing(t *testing.T) {
 }
 
 func TestConcurrencyLimit_ResourceReleasedOnFailure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow concurrency-limit failure-release sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "X"}`))
 
@@ -106,6 +109,7 @@ func TestConcurrencyLimit_ResourceReleasedOnFailure(t *testing.T) {
 }
 
 func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Inline(t *testing.T) {
+	support.SkipLongFunctional(t, "slow concurrency-limit inline-panic sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "panic-inline"}`))
 
@@ -134,6 +138,7 @@ func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Inline(t *testing.T) {
 }
 
 func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Async(t *testing.T) {
+	support.SkipLongFunctional(t, "slow concurrency-limit async-panic sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "panic-async"}`))
 
@@ -154,6 +159,7 @@ func TestConcurrencyLimit_ResourceReleasedOnExecutorPanic_Async(t *testing.T) {
 }
 
 func TestConcurrencyLimit_ReducedCapacityStillCompletes(t *testing.T) {
+	support.SkipLongFunctional(t, "slow concurrency-limit reduced-capacity sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "X"}`))

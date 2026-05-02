@@ -11,6 +11,7 @@ import (
 )
 
 func TestFailedImmutability_CannotBeReDispatched(t *testing.T) {
+	support.SkipLongFunctional(t, "slow failed-immutability redispatch sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "broken"}`))
 	provider := testutil.NewMockProviderWithErrors(
@@ -40,6 +41,7 @@ func TestFailedImmutability_CannotBeReDispatched(t *testing.T) {
 }
 
 func TestFailedImmutability_ReviewerFailure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow failed-immutability reviewer-failure sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "risky-change"}`))
 	provider := testutil.NewMockProviderWithErrors(
@@ -69,6 +71,7 @@ func TestFailedImmutability_ReviewerFailure(t *testing.T) {
 }
 
 func TestFailedImmutability_NoDuplicateTokens(t *testing.T) {
+	support.SkipLongFunctional(t, "slow failed-immutability duplicate sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "a"}`))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "b"}`))

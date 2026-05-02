@@ -13,6 +13,7 @@ import (
 // TestIdeaToPRD_CrossWorkTypeOutput verifies that a planner workstation
 // consumes an idea token and produces a prd token as cross-work-type output.
 func TestIdeaToPRD_CrossWorkTypeOutput(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-to-prd cross-work-type sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 
 	originTraceID := "trace-idea-to-prd-test"
@@ -46,6 +47,7 @@ func TestIdeaToPRD_CrossWorkTypeOutput(t *testing.T) {
 // TestIdeaToPRD_PlannerFailure verifies that when the planner fails, the idea
 // token moves to failed state and no prd token is created.
 func TestIdeaToPRD_PlannerFailure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-to-prd planner-failure sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 
 	testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title": "broken idea"}`))
@@ -69,6 +71,7 @@ func TestIdeaToPRD_PlannerFailure(t *testing.T) {
 // TestIdeaToPRD_MultipleIdeas verifies that multiple idea tokens each produce
 // their own prd token with independent lineage.
 func TestIdeaToPRD_MultipleIdeas(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-to-prd multi-idea sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 
 	trace1 := "trace-idea-multi-1"

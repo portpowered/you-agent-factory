@@ -14,6 +14,7 @@ import (
 // stage1 -> done, proving results flow through the full service layer
 // with MockProvider driving stop-token evaluation.
 func TestStatelessCollector_TwoStagePipeline(t *testing.T) {
+	support.SkipLongFunctional(t, "slow stateless-collector pipeline sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item": "w1"}`))
 
@@ -41,6 +42,7 @@ func TestStatelessCollector_TwoStagePipeline(t *testing.T) {
 // TestStatelessCollector_MultipleWorkItems validates that multiple work items
 // all flow through the pipeline independently.
 func TestStatelessCollector_MultipleWorkItems(t *testing.T) {
+	support.SkipLongFunctional(t, "slow stateless-collector multi-item sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item": "w1"}`))
 

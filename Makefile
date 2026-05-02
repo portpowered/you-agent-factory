@@ -5,7 +5,6 @@ BUN         ?= bun
 GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
-FUNCTIONAL_DEFAULT_TEST_PATTERN := ^(TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent|TestCascadingFailure_DirectChild|TestScriptExecutor_Success|TestReplayAdhocWorkInQueueScheduler_PrioritizesInitializedTraceProgressOverFIFO|TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion|TestArchiveTerminal_NoFurtherFiring|TestSerialIdeationPipeline_ConcurrencyLimit1)$
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion
@@ -88,7 +87,7 @@ test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
 
 test-functional:
-	$(GO) test -short $(FUNCTIONAL_DEFAULT_PACKAGES) -run "$(FUNCTIONAL_DEFAULT_TEST_PATTERN)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short $(FUNCTIONAL_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)

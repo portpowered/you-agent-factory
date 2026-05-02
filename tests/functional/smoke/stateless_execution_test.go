@@ -42,6 +42,7 @@ func (r *dispatchRecorder) Dispatches() []interfaces.WorkDispatch {
 }
 
 func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testing.T) {
+	support.SkipLongFunctional(t, "slow stateless-execution shared-executor sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"shared-executor"}`))
 
@@ -126,6 +127,7 @@ func TestStatelessExecution_ThinDispatchCarriesLookupReferencesOnly(t *testing.T
 }
 
 func TestStatelessExecution_DifferentWorkstationsResolveDifferentWorkers(t *testing.T) {
+	support.SkipLongFunctional(t, "slow stateless-execution workstation-resolution sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"different-workers"}`))
 

@@ -21,6 +21,7 @@ import (
 )
 
 func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow inference-event artifact sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	recordPath := filepath.Join(t.TempDir(), "inference-events.replay.json")
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -52,6 +53,7 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 }
 
 func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow inference-event script-worker sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkID:     "work-script-no-inference",
@@ -81,6 +83,7 @@ func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
 }
 
 func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow inference-event stream-projection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	provider := testutil.NewMockProviderWithErrors(
 		[]interfaces.InferenceResponse{
@@ -126,6 +129,7 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 }
 
 func TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow inference-event thin-event sweep")
 	smoke := newThinEventSmokeHarness(t)
 
 	runCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
