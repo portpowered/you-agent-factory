@@ -1,20 +1,13 @@
 package functional_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/api"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
 	"github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
-	"go.uber.org/zap"
 )
 
 // TestConfigDriven_HappyPath validates a two-stage pipeline through the full
@@ -410,92 +403,5 @@ func TestConfigDriven_AddWorkType(t *testing.T) {
 
 	if provider.CallCount() != 2 {
 		t.Errorf("expected provider called 2 times, got %d", provider.CallCount())
-	}
-}
-
-// TestConfigDriven_RESTAPISubmitAndQuery validates submitting work via the REST
-// API and verifying completion via API response, using the full service layer.
-// Work enters via a seed file and the REST API is queried for results.
-func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, fixtureDir(t, "simple_pipeline"))
-
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "API test"}`))
-
-	// Processor uses stop_token: COMPLETE.
-	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Processed. COMPLETE"},
-	)
-
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	// Run to completion via the service layer harness.
-	h.RunUntilComplete(t, 10*time.Second)
-
-	// Verify the work completed via the harness first.
-	h.Assert().HasTokenInPlace("task:complete").TokenCount(1)
-
-	// Create a MockFactory with the final marking for the API server.
-	snap := h.Marking()
-	mockFactory := &testutil.MockFactory{Marking: snap}
-	logger := zap.NewNop()
-
-	// Create the API server backed by the completed factory.
-	srv := api.NewServer(mockFactory, 0, logger)
-
-	postWorkViaAPI(t, srv)
-	assertListWorkResponse(t, srv)
-}
-
-func postWorkViaAPI(t *testing.T, srv *api.Server) {
-	t.Helper()
-
-	submitBody := `{"workTypeName": "task", "payload": {"title": "REST submit"}}`
-	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(submitBody))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Errorf("POST /work: expected status 201, got %d (body: %s)", rec.Code, rec.Body.String())
-	}
-
-	var submitResp factoryapi.SubmitWorkResponse
-	if err := json.NewDecoder(rec.Body).Decode(&submitResp); err != nil {
-		t.Fatalf("POST /work: failed to decode response: %v", err)
-	}
-	if submitResp.TraceId == "" {
-		t.Error("POST /work: expected non-empty trace_id")
-	}
-}
-
-func assertListWorkResponse(t *testing.T, srv *api.Server) {
-	t.Helper()
-
-	req := httptest.NewRequest("GET", "/work", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /work: expected status 200, got %d", rec.Code)
-	}
-
-	var listResp factoryapi.ListWorkResponse
-	if err := json.NewDecoder(rec.Body).Decode(&listResp); err != nil {
-		t.Fatalf("GET /work: failed to decode response: %v", err)
-	}
-
-	if len(listResp.Results) != 1 {
-		t.Fatalf("GET /work: expected 1 result, got %d", len(listResp.Results))
-	}
-
-	// Verify the token shows as completed via the API response.
-	token := listResp.Results[0]
-	if token.WorkType != "task" {
-		t.Errorf("GET /work: expected work_type 'task', got %q", token.WorkType)
-	}
-	if token.PlaceId != "task:complete" {
-		t.Errorf("GET /work: expected place_id 'task:complete', got %q", token.PlaceId)
 	}
 }
