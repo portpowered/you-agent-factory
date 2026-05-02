@@ -1660,9 +1660,11 @@ function recordFailedCompletion(
   completion: WorldCompletion,
 ): void {
   const workItems =
-    completion.terminalWork !== undefined
-      ? [workRef(completion.terminalWork.work_item)]
-      : completion.workItems;
+    completion.outputItems.length > 0
+      ? completion.outputItems
+      : completion.terminalWork !== undefined
+        ? [workRef(completion.terminalWork.work_item)]
+        : completion.workItems;
   for (const item of workItems) {
     const existing =
       state.workItemsByID[item.work_id] ?? completion.terminalWork?.work_item;

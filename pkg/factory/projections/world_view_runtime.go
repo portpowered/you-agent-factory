@@ -224,12 +224,13 @@ func countCompletedDispatches(state interfaces.FactoryWorldState) int {
 	return count
 }
 
-func countFailedDispatches(state interfaces.FactoryWorldState) int {
+func countFailedWorkItems(failed map[string]interfaces.FactoryWorkItem) int {
 	count := 0
-	for _, dispatch := range state.FailedDispatches {
-		if dispatchHasCustomerWork(dispatch.WorkItemIDs, state.WorkItemsByID) {
-			count++
+	for _, work := range failed {
+		if interfaces.IsSystemTimeWorkType(work.WorkTypeID) {
+			continue
 		}
+		count++
 	}
 	return count
 }

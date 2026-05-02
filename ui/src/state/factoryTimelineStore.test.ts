@@ -1938,6 +1938,138 @@ describe("factory timeline reconstruction", () => {
     });
   });
 
+  it("counts failed work items for failed_count and failed_by_work_type in fixed timeline reconstruction", () => {
+    const failedBatchWorkInput = event(
+      "event-failed-batch-1",
+      2,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "Blocked Story",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-1",
+            work_type_id: "story",
+          },
+          {
+            name: "Rejected Story",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-2",
+            work_type_id: "story",
+          },
+          {
+            name: "Reworked Story",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-3",
+            work_type_id: "story",
+          },
+        ],
+      },
+    );
+    failedBatchWorkInput.context.requestId = "request-work-failed-batch";
+    failedBatchWorkInput.context.traceIds = ["trace-failed-batch"];
+    failedBatchWorkInput.context.workIds = [
+      "work-failed-batch-1",
+      "work-failed-batch-2",
+      "work-failed-batch-3",
+    ];
+
+    const failedBatchRequest = event(
+      "event-failed-batch-2",
+      3,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        dispatchId: "dispatch-failed-batch",
+        inputs: [
+          { workId: "work-failed-batch-1" },
+          { workId: "work-failed-batch-2" },
+          { workId: "work-failed-batch-3" },
+        ],
+        transitionId: "review",
+      },
+    );
+    failedBatchRequest.context.dispatchId = "dispatch-failed-batch";
+    failedBatchRequest.context.traceIds = ["trace-failed-batch"];
+    failedBatchRequest.context.workIds = [
+      "work-failed-batch-1",
+      "work-failed-batch-2",
+      "work-failed-batch-3",
+    ];
+
+    const failedBatchResponse = event(
+      "event-failed-batch-3",
+      4,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        dispatchId: "dispatch-failed-batch",
+        durationMillis: 600,
+        failureMessage: "Provider rate limit exceeded.",
+        failureReason: "throttled",
+        outcome: "FAILED",
+        outputWork: [
+          {
+            name: "Blocked Story",
+            state: "failed",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-1",
+            work_type_id: "story",
+          },
+          {
+            name: "Rejected Story",
+            state: "failed",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-2",
+            work_type_id: "story",
+          },
+          {
+            name: "Reworked Story",
+            state: "failed",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-3",
+            work_type_id: "story",
+          },
+        ],
+        transitionId: "review",
+        workstation: {
+          id: "review",
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Review",
+          onFailure: { state: "failed", workType: "story" },
+          outputs: [{ state: "done", workType: "story" }],
+          worker: "reviewer",
+        },
+      },
+    );
+    failedBatchResponse.context.dispatchId = "dispatch-failed-batch";
+    failedBatchResponse.context.traceIds = ["trace-failed-batch"];
+    failedBatchResponse.context.workIds = [
+      "work-failed-batch-1",
+      "work-failed-batch-2",
+      "work-failed-batch-3",
+    ];
+
+    const failedTick = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        failedBatchWorkInput,
+        failedBatchRequest,
+        failedBatchResponse,
+      ],
+      4,
+    );
+
+    expect(failedTick.dashboard.runtime.session.failed_count).toBe(3);
+    expect(failedTick.dashboard.runtime.session.failed_by_work_type).toEqual({
+      story: 3,
+    });
+    expect(failedTick.dashboard.runtime.session.failed_work_labels).toEqual([
+      "Blocked Story",
+      "Rejected Story",
+      "Reworked Story",
+    ]);
+  });
+
   it("reduces inference request and response events into dispatch-keyed attempt details", () => {
     const events = [
       initialStructureRequest,

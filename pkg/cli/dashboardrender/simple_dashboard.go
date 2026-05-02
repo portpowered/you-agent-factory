@@ -86,10 +86,11 @@ func SimpleDashboardRenderDataFromWorldState(worldState interfaces.FactoryWorldS
 		WorkstationActivityByNodeID:      buildWorkstationActivityByNodeID(worldState, activeDispatchIDs),
 		PlaceCategoriesByID:              placeCategoriesFromTopology(worldState.Topology),
 		Session: SimpleDashboardSessionData{
-			HasData:              len(activeDispatchIDs) > 0 || len(completedHistory) > 0 || hasCustomerWorkItems(worldState.WorkItemsByID),
-			DispatchedCount:      len(activeDispatchIDs) + countCustomerCompletedDispatches(worldState),
-			CompletedCount:       countCompletedDispatches(worldState),
-			FailedCount:          countFailedDispatches(worldState),
+			HasData:         len(activeDispatchIDs) > 0 || len(completedHistory) > 0 || hasCustomerWorkItems(worldState.WorkItemsByID),
+			DispatchedCount: len(activeDispatchIDs) + countCustomerCompletedDispatches(worldState),
+			CompletedCount:  countCompletedDispatches(worldState),
+			// Customer-visible failed summaries count failed work items, matching failed_by_work_type.
+			FailedCount:          countFailedWorkItems(worldState.FailedWorkItemsByID),
 			DispatchedByWorkType: countDispatchedByWorkType(worldState),
 			CompletedByWorkType:  countTerminalByWorkType(worldState.TerminalWorkByID),
 			FailedByWorkType:     countFailedByWorkType(worldState.FailedWorkItemsByID),
@@ -332,12 +333,13 @@ func countCompletedDispatches(state interfaces.FactoryWorldState) int {
 	return count
 }
 
-func countFailedDispatches(state interfaces.FactoryWorldState) int {
+func countFailedWorkItems(failed map[string]interfaces.FactoryWorkItem) int {
 	count := 0
-	for _, dispatch := range state.FailedDispatches {
-		if dispatchHasCustomerWork(dispatch.WorkItemIDs, state.WorkItemsByID) {
-			count++
+	for _, work := range failed {
+		if interfaces.IsSystemTimeWorkType(work.WorkTypeID) {
+			continue
 		}
+		count++
 	}
 	return count
 }
