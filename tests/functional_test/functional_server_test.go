@@ -85,19 +85,6 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	return result.TraceId
 }
 
-// SubmitRuntimeWork submits work directly to the running factory and returns
-// the normalized requests so tests can assert the assigned trace IDs.
-func (fs *FunctionalServer) SubmitRuntimeWork(t *testing.T, requests ...interfaces.SubmitRequest) []interfaces.SubmitRequest {
-	t.Helper()
-
-	normalized := normalizeSubmitRequestsForFunctionalTest(requests)
-	workRequest := workRequestFromSubmitRequests(normalized)
-	if _, err := fs.factory.SubmitWorkRequest(context.Background(), workRequest); err != nil {
-		t.Fatalf("factory.SubmitWorkRequest: %v", err)
-	}
-	return normalized
-}
-
 // GetState fetches the service engine snapshot and maps it into the legacy
 // compatibility response shape.
 func (fs *FunctionalServer) GetState(t *testing.T) StateResponse {
@@ -703,11 +690,6 @@ func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 		t.Fatalf("decode list work response: %v", err)
 	}
 	return work
-}
-
-// URL returns the base URL of the functional HTTP server.
-func (fs *FunctionalServer) URL() string {
-	return fs.httpSrv.URL
 }
 
 // OpenDashboardStream opens GET /events and projects each canonical event into

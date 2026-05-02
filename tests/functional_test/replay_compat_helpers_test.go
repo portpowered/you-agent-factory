@@ -14,24 +14,3 @@ func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.
 	}
 	return count
 }
-
-func stringPointerValue[T ~string](value *T) string {
-	if value == nil {
-		return ""
-	}
-	return string(*value)
-}
-
-func eventString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func eventStringSlice(values *[]string) []string {
-	if values == nil {
-		return nil
-	}
-	return *values
-}

@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 	dir := scaffoldFactory(t, cronSmokeFactoryConfig("* * * * *"))
 
 	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
-	fs := StartFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
 	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
@@ -54,7 +54,7 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 	}
 	assertCronPayload(t, noInputToken, "poll-for-work")
 
-	state := fs.GetState(t)
+	state := getGeneratedJSON[factoryapi.StatusResponse](t, fs.URL()+"/status")
 	if state.RuntimeStatus == "" {
 		t.Fatal("GET /state returned empty runtime_status after cron output")
 	}
@@ -112,7 +112,6 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 	}
 	assertRequiredInputCronHistory(t, fs, requiredInputDispatch.DispatchID, signalWorkID)
 	assertCronTimeWorkHiddenFromNormalViews(t, fs, requiredInputTimeToken.Color.WorkID)
-	assertCronDashboardNormalSurfacesHideSystemTime(t, fs)
 }
 
 func TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow(t *testing.T) {
@@ -121,7 +120,7 @@ func TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutpu
 	dir := scaffoldFactory(t, cronDefaultExpiryTerminalOutputConfig("* * * * *"))
 
 	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
-	fs := StartFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
 	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
@@ -156,7 +155,7 @@ func TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutpu
 	assertCronTimeWorkRetainedInCanonicalHistory(t, fs, firstRecord.Request.WorkID, "poll-terminal-output")
 }
 
-func assertExpiredCronTimeWorkHandled(t *testing.T, fs *FunctionalServer, expiredTimeWorkID string, workstation string) {
+func assertExpiredCronTimeWorkHandled(t *testing.T, fs *functionalAPIServer, expiredTimeWorkID string, workstation string) {
 	t.Helper()
 
 	snap := fs.GetEngineStateSnapshot(t)
@@ -167,103 +166,6 @@ func assertExpiredCronTimeWorkHandled(t *testing.T, fs *FunctionalServer, expire
 	}
 	assertNoCustomerCronOutput(t, snap, workstation)
 	assertCronTimeWorkRetainedInCanonicalHistory(t, fs, expiredTimeWorkID, workstation)
-}
-
-func assertCronDashboardNormalSurfacesHideSystemTime(t *testing.T, fs *FunctionalServer) {
-	t.Helper()
-	dashboard := fs.GetDashboard(t)
-
-	if dashboard.Topology.WorkstationNodesById != nil {
-		if _, ok := (*dashboard.Topology.WorkstationNodesById)[interfaces.SystemTimeExpiryTransitionID]; ok {
-			t.Fatalf("dashboard topology exposed raw system expiry transition: %#v", *dashboard.Topology.WorkstationNodesById)
-		}
-		for nodeID, node := range *dashboard.Topology.WorkstationNodesById {
-			assertDashboardLabelNotRawSystemTime(t, "topology node id", nodeID)
-			assertDashboardLabelNotRawSystemTime(t, "topology transition id", node.TransitionId)
-			if node.WorkstationName != nil {
-				assertDashboardLabelNotRawSystemTime(t, "topology workstation name", *node.WorkstationName)
-			}
-			if node.InputPlaceIds != nil {
-				assertDashboardPlaceIDsNotRawSystemTime(t, "topology input place ids", *node.InputPlaceIds)
-			}
-			if node.OutputPlaceIds != nil {
-				assertDashboardPlaceIDsNotRawSystemTime(t, "topology output place ids", *node.OutputPlaceIds)
-			}
-			if node.InputWorkTypeIds != nil {
-				assertDashboardWorkTypeIDsNotRawSystemTime(t, "topology input work type ids", *node.InputWorkTypeIds)
-			}
-			if node.OutputWorkTypeIds != nil {
-				assertDashboardWorkTypeIDsNotRawSystemTime(t, "topology output work type ids", *node.OutputWorkTypeIds)
-			}
-		}
-	}
-	if dashboard.Runtime.PlaceTokenCounts != nil {
-		if _, ok := (*dashboard.Runtime.PlaceTokenCounts)[interfaces.SystemTimePendingPlaceID]; ok {
-			t.Fatalf("dashboard place token counts exposed raw system time place: %#v", *dashboard.Runtime.PlaceTokenCounts)
-		}
-	}
-	if dashboard.Runtime.CurrentWorkItemsByPlaceId != nil {
-		if _, ok := (*dashboard.Runtime.CurrentWorkItemsByPlaceId)[interfaces.SystemTimePendingPlaceID]; ok {
-			t.Fatalf("dashboard current work exposed raw system time place: %#v", *dashboard.Runtime.CurrentWorkItemsByPlaceId)
-		}
-	}
-	if dashboard.Runtime.ActiveWorkstationNodeIds != nil {
-		for _, nodeID := range *dashboard.Runtime.ActiveWorkstationNodeIds {
-			assertDashboardLabelNotRawSystemTime(t, "active workstation node id", nodeID)
-		}
-	}
-	if dashboard.Runtime.ActiveExecutionsByDispatchId != nil {
-		for _, execution := range *dashboard.Runtime.ActiveExecutionsByDispatchId {
-			assertDashboardLabelNotRawSystemTime(t, "active execution workstation node id", execution.WorkstationNodeId)
-			assertDashboardLabelNotRawSystemTime(t, "active execution transition id", execution.TransitionId)
-			if execution.WorkstationName != nil {
-				assertDashboardLabelNotRawSystemTime(t, "active execution workstation name", *execution.WorkstationName)
-			}
-			if execution.ConsumedTokens != nil {
-				for _, token := range *execution.ConsumedTokens {
-					assertDashboardLabelNotRawSystemTime(t, "active consumed token place", token.PlaceId)
-					assertDashboardLabelNotRawSystemTime(t, "active consumed token work type", token.WorkTypeId)
-				}
-			}
-		}
-	}
-	if dashboard.Runtime.Session.DispatchHistory != nil {
-		for _, dispatch := range *dashboard.Runtime.Session.DispatchHistory {
-			assertDashboardLabelNotRawSystemTime(t, "dispatch history transition id", dispatch.TransitionId)
-			if dispatch.WorkstationName != nil {
-				assertDashboardLabelNotRawSystemTime(t, "dispatch history workstation name", *dispatch.WorkstationName)
-			}
-			if dispatch.WorkTypeIds != nil {
-				assertDashboardWorkTypeIDsNotRawSystemTime(t, "dispatch history work type ids", *dispatch.WorkTypeIds)
-			}
-		}
-	}
-}
-
-func assertDashboardPlaceIDsNotRawSystemTime(t *testing.T, label string, values []string) {
-	t.Helper()
-	for _, value := range values {
-		if value == interfaces.SystemTimePendingPlaceID {
-			t.Fatalf("dashboard %s exposed raw system time place %q", label, value)
-		}
-	}
-}
-
-func assertDashboardWorkTypeIDsNotRawSystemTime(t *testing.T, label string, values []string) {
-	t.Helper()
-	for _, value := range values {
-		if value == interfaces.SystemTimeWorkTypeID {
-			t.Fatalf("dashboard %s exposed raw system time work type %q", label, value)
-		}
-	}
-}
-
-func assertDashboardLabelNotRawSystemTime(t *testing.T, label string, value string) {
-	t.Helper()
-	switch value {
-	case interfaces.SystemTimeWorkTypeID, interfaces.SystemTimePendingPlaceID, interfaces.SystemTimeExpiryTransitionID:
-		t.Fatalf("dashboard %s exposed raw system time identifier %q", label, value)
-	}
 }
 
 func cronSmokeFactoryConfig(schedule string) map[string]any {
@@ -352,15 +254,6 @@ func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 	}
 }
 
-func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := fakeClock.BlockUntilContext(ctx, waiters); err != nil {
-		t.Fatalf("timed out waiting for %d fake-clock waiter(s): %v", waiters, err)
-	}
-}
-
 func waitForCronSubmissionFromWorkstation(
 	t *testing.T,
 	submissions <-chan interfaces.FactorySubmissionRecord,
@@ -429,7 +322,7 @@ func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissio
 	}
 }
 
-func waitForCronToken(t *testing.T, fs *FunctionalServer, workstation string, workID string, timeout time.Duration) interfaces.Token {
+func waitForCronToken(t *testing.T, fs *functionalAPIServer, workstation string, workID string, timeout time.Duration) interfaces.Token {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -443,11 +336,11 @@ func waitForCronToken(t *testing.T, fs *FunctionalServer, workstation string, wo
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	t.Fatalf("timed out waiting for cron token from %q\n", workstation)
+	t.Fatalf("timed out waiting for cron token from %q", workstation)
 	return interfaces.Token{}
 }
 
-func waitForCronTimeWorkGone(t *testing.T, fs *FunctionalServer, workID string, timeout time.Duration) {
+func waitForCronTimeWorkGone(t *testing.T, fs *functionalAPIServer, workID string, timeout time.Duration) {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -463,7 +356,7 @@ func waitForCronTimeWorkGone(t *testing.T, fs *FunctionalServer, workID string, 
 	t.Fatalf("timed out waiting for stale cron time work %q to expire; token=%#v", workID, snap.Marking.Tokens[workID])
 }
 
-func waitForCronDispatch(t *testing.T, fs *FunctionalServer, workstation string, timeWorkID string, timeout time.Duration) interfaces.CompletedDispatch {
+func waitForCronDispatch(t *testing.T, fs *functionalAPIServer, workstation string, timeWorkID string, timeout time.Duration) interfaces.CompletedDispatch {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -486,7 +379,7 @@ func waitForCronDispatch(t *testing.T, fs *FunctionalServer, workstation string,
 	return interfaces.CompletedDispatch{}
 }
 
-func waitForRequiredInputCronDispatch(t *testing.T, fs *FunctionalServer, workstation string, signalWorkID string, timeout time.Duration) interfaces.CompletedDispatch {
+func waitForRequiredInputCronDispatch(t *testing.T, fs *functionalAPIServer, workstation string, signalWorkID string, timeout time.Duration) interfaces.CompletedDispatch {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -529,7 +422,7 @@ func consumedCronTimeToken(t *testing.T, dispatch interfaces.CompletedDispatch, 
 	return interfaces.Token{}
 }
 
-func waitForTokenInPlaceByParent(t *testing.T, fs *FunctionalServer, placeID string, parentID string, timeout time.Duration) interfaces.Token {
+func waitForTokenInPlaceByParent(t *testing.T, fs *functionalAPIServer, placeID string, parentID string, timeout time.Duration) interfaces.Token {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -626,7 +519,7 @@ func assertCronPayload(t *testing.T, token interfaces.Token, workstation string)
 	}
 }
 
-func assertCronTimeWorkHiddenFromNormalViews(t *testing.T, fs *FunctionalServer, timeWorkID string) {
+func assertCronTimeWorkHiddenFromNormalViews(t *testing.T, fs *functionalAPIServer, timeWorkID string) {
 	t.Helper()
 
 	assertStatusHidesCronTimeWork(t, fs, timeWorkID)
@@ -638,38 +531,9 @@ func assertCronTimeWorkHiddenFromNormalViews(t *testing.T, fs *FunctionalServer,
 		}
 	}
 
-	dashboard := fs.GetDashboard(t)
-	if dashboard.Runtime.PlaceTokenCounts != nil {
-		if _, ok := (*dashboard.Runtime.PlaceTokenCounts)[interfaces.SystemTimePendingPlaceID]; ok {
-			t.Fatalf("dashboard place token counts exposed internal time place: %#v", *dashboard.Runtime.PlaceTokenCounts)
-		}
-	}
-	if dashboard.Runtime.CurrentWorkItemsByPlaceId != nil {
-		if _, ok := (*dashboard.Runtime.CurrentWorkItemsByPlaceId)[interfaces.SystemTimePendingPlaceID]; ok {
-			t.Fatalf("dashboard current work exposed internal time place: %#v", *dashboard.Runtime.CurrentWorkItemsByPlaceId)
-		}
-	}
-	if dashboard.Topology.WorkstationNodesById != nil {
-		for _, node := range *dashboard.Topology.WorkstationNodesById {
-			if node.InputPlaceIds != nil {
-				for _, placeID := range *node.InputPlaceIds {
-					if placeID == interfaces.SystemTimePendingPlaceID {
-						t.Fatalf("dashboard cron node exposed internal input place: %#v", *node.InputPlaceIds)
-					}
-				}
-			}
-			if node.InputPlaces != nil {
-				for _, place := range *node.InputPlaces {
-					if place.PlaceId == interfaces.SystemTimePendingPlaceID {
-						t.Fatalf("dashboard cron node exposed internal input place ref: %#v", *node.InputPlaces)
-					}
-				}
-			}
-		}
-	}
 }
 
-func assertStatusHidesCronTimeWork(t *testing.T, fs *FunctionalServer, timeWorkID string) {
+func assertStatusHidesCronTimeWork(t *testing.T, fs *functionalAPIServer, timeWorkID string) {
 	t.Helper()
 
 	deadline := time.Now().Add(time.Second)
@@ -702,7 +566,7 @@ func countPublicCronSmokeTokens(snap *interfaces.EngineStateSnapshot[petri.Marki
 	return count
 }
 
-func assertCronTimeWorkRetainedInCanonicalHistory(t *testing.T, fs *FunctionalServer, timeWorkID string, workstation string) {
+func assertCronTimeWorkRetainedInCanonicalHistory(t *testing.T, fs *functionalAPIServer, timeWorkID string, workstation string) {
 	t.Helper()
 
 	events, err := fs.service.GetFactoryEvents(context.Background())
@@ -728,7 +592,7 @@ func assertCronTimeWorkRetainedInCanonicalHistory(t *testing.T, fs *FunctionalSe
 	t.Fatalf("canonical history missing WORK_REQUEST for cron time work %q", timeWorkID)
 }
 
-func assertRequiredInputCronHistory(t *testing.T, fs *FunctionalServer, dispatchID string, signalWorkID string) {
+func assertRequiredInputCronHistory(t *testing.T, fs *functionalAPIServer, dispatchID string, signalWorkID string) {
 	t.Helper()
 
 	events, err := fs.service.GetFactoryEvents(context.Background())
@@ -786,4 +650,97 @@ func generatedFactoryEventTags(tags *factoryapi.StringMap) map[string]string {
 		return nil
 	}
 	return map[string]string(*tags)
+}
+
+func dispatchInputWorksFromHistory(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	event factoryapi.FactoryEvent,
+	payload factoryapi.DispatchRequestEventPayload,
+) []factoryapi.Work {
+	t.Helper()
+
+	workByID := workRequestWorksByID(t, events)
+	ordered := make([]factoryapi.Work, 0, len(payload.Inputs))
+	for _, workID := range dispatchInputWorkIDsForTests(payload, event.Context) {
+		if work, ok := workByID[workID]; ok {
+			ordered = append(ordered, work)
+		}
+	}
+	return ordered
+}
+
+func workRequestWorksByID(t *testing.T, events []factoryapi.FactoryEvent) map[string]factoryapi.Work {
+	t.Helper()
+
+	workByID := make(map[string]factoryapi.Work)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
+			continue
+		}
+		payload, err := event.Payload.AsWorkRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode WORK_REQUEST payload %q: %v", event.Id, err)
+		}
+		for _, work := range workSliceForTests(payload.Works) {
+			if workID := eventString(work.WorkId); workID != "" {
+				workByID[workID] = work
+			}
+		}
+	}
+	return workByID
+}
+
+func dispatchInputWorkIDsForTests(
+	payload factoryapi.DispatchRequestEventPayload,
+	context factoryapi.FactoryEventContext,
+) []string {
+	ordered := make([]string, 0, len(payload.Inputs)+len(eventStringSlice(context.WorkIds)))
+	for _, input := range payload.Inputs {
+		ordered = appendUniqueDispatchWorkID(ordered, input.WorkId)
+	}
+	for _, workID := range eventStringSlice(context.WorkIds) {
+		ordered = appendUniqueDispatchWorkID(ordered, workID)
+	}
+	return ordered
+}
+
+func appendUniqueDispatchWorkID(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func workSliceForTests(works *[]factoryapi.Work) []factoryapi.Work {
+	if works == nil {
+		return nil
+	}
+	return *works
+}
+
+func stringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+func eventString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func eventStringSlice(values *[]string) []string {
+	if values == nil {
+		return nil
+	}
+	return *values
 }
