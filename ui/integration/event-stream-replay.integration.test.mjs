@@ -286,6 +286,31 @@ async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
   }
 }
 
+async function exerciseTimelineSlider(page, finalTick) {
+  const slider = page.getByRole("slider", { name: "Timeline tick" });
+  const currentButton = page.getByRole("button", { exact: true, name: "Current" });
+  const previousTick = finalTick - 1;
+
+  expect(previousTick).toBeGreaterThan(0);
+
+  await slider.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+  await currentButton.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+  expect(await slider.inputValue()).toBe(String(finalTick));
+
+  await slider.focus();
+  await slider.press("ArrowLeft");
+  await page.getByText(`Tick ${previousTick} of ${finalTick}`).waitFor({
+    timeout: uiInteractionTimeoutMs,
+  });
+  expect(await slider.inputValue()).toBe(String(previousTick));
+
+  await slider.press("ArrowRight");
+  await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
+    timeout: uiInteractionTimeoutMs,
+  });
+  expect(await slider.inputValue()).toBe(String(finalTick));
+}
+
 async function assertReplayScenarioRenders({
   browserIntegration,
   fileName,
@@ -332,6 +357,7 @@ async function assertReplayScenarioRenders({
     await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
       timeout: uiInteractionTimeoutMs,
     });
+    await exerciseTimelineSlider(page, finalTick);
     await page
       .locator('[aria-label="dashboard summary"]')
       .getByText("RUNNING", { exact: true })
