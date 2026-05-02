@@ -752,15 +752,20 @@ func (r *factoryWorldReducer) removeToken(tokenID string) {
 		return
 	}
 	placeID := r.tokenPlaces[tokenID]
-	if placeID != "" {
-		delete(r.placeTokens[placeID], tokenID)
-		if len(r.placeTokens[placeID]) == 0 {
-			delete(r.placeTokens, placeID)
-		}
-	}
+	r.removeTokenFromPlaceIndex(placeID, tokenID)
 	delete(r.tokenPlaces, tokenID)
 	delete(r.tokenKinds, tokenID)
 	delete(r.tokenWorkIDs, tokenID)
+}
+
+func (r *factoryWorldReducer) removeTokenFromPlaceIndex(placeID string, tokenID string) {
+	if placeID == "" {
+		return
+	}
+	delete(r.placeTokens[placeID], tokenID)
+	if len(r.placeTokens[placeID]) == 0 {
+		delete(r.placeTokens, placeID)
+	}
 }
 
 func (r *factoryWorldReducer) seedResourceTokens(resource interfaces.FactoryResource) {
