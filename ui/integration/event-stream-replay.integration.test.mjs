@@ -35,6 +35,8 @@ let previewPort = 0;
 let previewProcess = null;
 let previewURL = "";
 let replayCompleted = Promise.resolve();
+let replayPaused = Promise.resolve();
+let releaseReplayStream = () => {};
 const replayFixtures = listBrowserIntegrationReplayScenarios();
 
 function createBunEnv(extraEnv = {}, options = {}) {
@@ -170,11 +172,32 @@ async function waitForURL(url, timeoutMs = readyTimeoutMs) {
   throw new Error(`Timed out waiting for ${url}.`);
 }
 
-async function startReplayServer(lines) {
+async function startReplayServer(lines, options = {}) {
+  const { pauseBeforeTick = null } = options;
   let resolveReplayCompleted = () => {};
   replayCompleted = new Promise((resolve) => {
     resolveReplayCompleted = resolve;
   });
+  let resolveReplayPaused = () => {};
+  replayPaused = pauseBeforeTick === null
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+      resolveReplayPaused = resolve;
+    });
+  let pauseReleased = false;
+  let resumeReplayStream = () => {};
+  releaseReplayStream = () => {
+    if (pauseReleased) {
+      return;
+    }
+    pauseReleased = true;
+    resumeReplayStream();
+  };
+  const replayPauseReleased = pauseBeforeTick === null
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+      resumeReplayStream = resolve;
+    });
 
   apiServer = http.createServer((request, response) => {
     if (request.url !== "/events") {
@@ -192,6 +215,7 @@ async function startReplayServer(lines) {
     response.flushHeaders?.();
 
     let closed = false;
+    let pauseReached = false;
     request.on("close", () => {
       closed = true;
     });
@@ -201,8 +225,22 @@ async function startReplayServer(lines) {
         if (closed) {
           return;
         }
+        if (pauseBeforeTick !== null && !pauseReached) {
+          const eventTick = JSON.parse(line).context?.tick;
+          if (typeof eventTick === "number" && eventTick > pauseBeforeTick) {
+            pauseReached = true;
+            resolveReplayPaused();
+            await replayPauseReleased;
+            if (closed) {
+              return;
+            }
+          }
+        }
         response.write(`data: ${line}\n\n`);
         await delay(replayDelayMs);
+      }
+      if (pauseBeforeTick !== null && !pauseReached) {
+        resolveReplayPaused();
       }
       if (!closed) {
         response.write(": replay-complete\n\n");
@@ -294,14 +332,38 @@ async function countButtons(page, buttonName) {
   return await page.getByRole("button", { name: buttonName }).count();
 }
 
+async function waitForTickLabel(page, label) {
+  try {
+    await page.getByText(label).waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+  } catch (error) {
+    const sliderValue = await page.getByRole("slider", { name: "Timeline tick" }).inputValue();
+    const statusTexts = await page.locator("span").evaluateAll((elements) =>
+      elements.map((element) => element.textContent?.trim() ?? "").filter((text) => /^Tick \d+ of \d+$/.test(text))
+    );
+    throw new Error(
+      `Timed out waiting for ${label}; slider=${sliderValue}; visibleTicks=${statusTexts.join(", ") || "<none>"}`,
+      { cause: error },
+    );
+  }
+}
+
 async function exerciseHistoricalTimelineView(page, options) {
   const {
     finalTick,
     historicalHiddenButtonName,
+    inFlightSelectionTick,
   } = options;
   const slider = page.getByRole("slider", { name: "Timeline tick" });
   const currentButton = page.getByRole("button", { exact: true, name: "Current" });
-  const previousTick = finalTick - 1;
+  const liveTick = inFlightSelectionTick ?? finalTick;
+  const previousTick = liveTick - 1;
+  const liveTickLabel = `Tick ${liveTick} of ${liveTick}`;
+  const historicalTickLabel = `Tick ${previousTick} of ${liveTick}`;
+  const pinnedHistoricalTickLabel = `Tick ${previousTick} of ${finalTick}`;
+  const finalTickLabel = `Tick ${finalTick} of ${finalTick}`;
 
   expect(previousTick).toBeGreaterThan(0);
 
@@ -310,41 +372,58 @@ async function exerciseHistoricalTimelineView(page, options) {
     state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
-  expect(await slider.inputValue()).toBe(String(finalTick));
+  if (inFlightSelectionTick) {
+    await replayPaused;
+  }
+  await waitForTickLabel(page, liveTickLabel);
+  expect(await slider.inputValue()).toBe(String(liveTick));
   expect(await currentButton.isDisabled()).toBe(true);
-  let latestButtonCount = null;
+  let liveButtonCount = null;
   if (historicalHiddenButtonName) {
-    latestButtonCount = await countButtons(page, historicalHiddenButtonName);
-    expect(latestButtonCount).toBeGreaterThan(0);
+    liveButtonCount = await countButtons(page, historicalHiddenButtonName);
+    expect(liveButtonCount).toBeGreaterThan(0);
   }
 
   await slider.focus();
   await slider.press("ArrowLeft");
-  await page.getByText(`Tick ${previousTick} of ${finalTick}`).waitFor({
-    timeout: uiInteractionTimeoutMs,
-  });
+  await waitForTickLabel(page, historicalTickLabel);
+  expect(await slider.inputValue()).toBe(String(previousTick));
+  expect(await currentButton.isDisabled()).toBe(false);
+  let historicalButtonCount = null;
+  if (historicalHiddenButtonName) {
+    historicalButtonCount = await countButtons(page, historicalHiddenButtonName);
+    if (!inFlightSelectionTick) {
+      expect(historicalButtonCount).toBeLessThan(liveButtonCount);
+    }
+  }
+
+  if (inFlightSelectionTick) {
+    releaseReplayStream();
+    await replayCompleted;
+  } else {
+    await delay(250);
+  }
+  await waitForTickLabel(
+    page,
+    inFlightSelectionTick ? pinnedHistoricalTickLabel : historicalTickLabel,
+  );
   expect(await slider.inputValue()).toBe(String(previousTick));
   expect(await currentButton.isDisabled()).toBe(false);
   if (historicalHiddenButtonName) {
-    expect(await countButtons(page, historicalHiddenButtonName)).toBeLessThan(latestButtonCount);
+    expect(await countButtons(page, historicalHiddenButtonName)).toBe(historicalButtonCount);
   }
 
-  await delay(250);
-  await page.getByText(`Tick ${previousTick} of ${finalTick}`).waitFor({
-    state: "visible",
-    timeout: uiInteractionTimeoutMs,
-  });
-  expect(await slider.inputValue()).toBe(String(previousTick));
-  expect(await currentButton.isDisabled()).toBe(false);
-
   await currentButton.click();
-  await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
-    timeout: uiInteractionTimeoutMs,
-  });
+  await waitForTickLabel(page, finalTickLabel);
   expect(await slider.inputValue()).toBe(String(finalTick));
   expect(await currentButton.isDisabled()).toBe(true);
   if (historicalHiddenButtonName) {
-    expect(await countButtons(page, historicalHiddenButtonName)).toBe(latestButtonCount);
+    const currentButtonCount = await countButtons(page, historicalHiddenButtonName);
+    if (inFlightSelectionTick) {
+      expect(currentButtonCount).toBeGreaterThan(historicalButtonCount);
+    } else {
+      expect(currentButtonCount).toBe(liveButtonCount);
+    }
   }
 }
 
@@ -357,11 +436,14 @@ async function assertReplayScenarioRenders({
     finalTick,
     headingName,
     historicalHiddenButtonName,
+    inFlightSelectionTick,
     requiresWorkItemSelection,
     selectedWorkText,
     workstationName,
   } = browserIntegration;
-  await startReplayServer(await loadReplayLines(fileName));
+  await startReplayServer(await loadReplayLines(fileName), {
+    pauseBeforeTick: inFlightSelectionTick ?? null,
+  });
   const replayCoverageReport = buildReplayCoverageReport();
   const coverageScenario = replayCoverageReport.scenarios.find((scenario) => scenario.id === id);
   const replayCoverageMarkdown = formatReplayCoverageReportMarkdown(replayCoverageReport);
@@ -391,13 +473,16 @@ async function assertReplayScenarioRenders({
     expect(consoleErrors).toEqual([]);
     await page.getByRole("heading", { name: headingName }).waitFor();
     await page.getByRole("button", { name: workstationName }).waitFor();
-    await replayCompleted;
-    await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
-      timeout: uiInteractionTimeoutMs,
-    });
+    if (!inFlightSelectionTick) {
+      await replayCompleted;
+      await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
+        timeout: uiInteractionTimeoutMs,
+      });
+    }
     await exerciseTimelineSlider(page, {
       finalTick,
       historicalHiddenButtonName,
+      inFlightSelectionTick,
     });
     await page
       .locator('[aria-label="dashboard summary"]')
