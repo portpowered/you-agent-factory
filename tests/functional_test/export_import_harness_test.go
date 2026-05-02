@@ -1,7 +1,6 @@
 package functional_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"path/filepath"
@@ -209,45 +208,6 @@ func (r exportImportSmokeHarnessResult) AssertDashboardActivationSuccess(
 			filepath.Join(r.RootDir, string(r.ImportRequest.Name)),
 		)
 	}
-}
-
-func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.NamedFactory) factoryapi.NamedFactory {
-	t.Helper()
-
-	body, err := json.Marshal(namedFactory)
-	if err != nil {
-		t.Fatalf("marshal create factory request: %v", err)
-	}
-
-	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST /factory: %v", err)
-	}
-	if resp.StatusCode != http.StatusCreated {
-		resp.Body.Close()
-		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
-	}
-
-	var created factoryapi.NamedFactory
-	decodeJSONResponse(t, resp, &created, "decode create factory response")
-	return created
-}
-
-func getCurrentNamedFactory(t *testing.T, serverURL string) factoryapi.NamedFactory {
-	t.Helper()
-
-	resp, err := http.Get(serverURL + "/factory/~current")
-	if err != nil {
-		t.Fatalf("GET /factory/~current: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
-	}
-
-	var current factoryapi.NamedFactory
-	decodeJSONResponse(t, resp, &current, "decode current factory response")
-	return current
 }
 
 func decodeJSONResponse(t *testing.T, resp *http.Response, target any, message string) {

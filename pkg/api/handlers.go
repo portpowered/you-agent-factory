@@ -134,8 +134,8 @@ func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	if err := factoryconfig.ValidateNamedFactoryName(string(req.Name)); err != nil {
-		s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators.", "INVALID_FACTORY_NAME")
+	if err := apisurface.ValidateWritableNamedFactoryName(req.Name); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME")
 		return
 	}
 
@@ -146,7 +146,7 @@ func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
-			s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators.", "INVALID_FACTORY_NAME")
+			s.writeError(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME")
 			return
 		case errors.Is(err, apisurface.ErrInvalidNamedFactory):
 			s.writeError(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY")
