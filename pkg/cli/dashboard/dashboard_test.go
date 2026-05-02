@@ -335,7 +335,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
 
-	view := dashboardSessionViewFromRenderData(dashboardrender.SimpleDashboardRenderData{
+	renderData := dashboardrender.SimpleDashboardRenderData{
 		Session: dashboardrender.SimpleDashboardSessionData{
 			HasData:              true,
 			DispatchedCount:      5,
@@ -428,7 +428,8 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 				},
 			},
 		},
-	})
+	}
+	view := dashboardSessionViewFromRenderData(renderData)
 
 	if got, want := view.CompletedWorkLabels, []string{"Published draft", "Review ready"}; !equalStrings(got, want) {
 		t.Fatalf("CompletedWorkLabels = %v, want %v", got, want)
@@ -469,6 +470,35 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 		retryLater.FailureReason != "expired" ||
 		retryLater.FailureMessage != "" {
 		t.Fatalf("Retry later detail = %+v", retryLater)
+	}
+
+	output := FormatSimpleDashboardWithRenderData(
+		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+			Topology:      buildTestTopology(),
+			Uptime:        5 * time.Minute,
+		},
+		renderData,
+		now,
+	)
+
+	for _, want := range []string{
+		"Failed work: 3",
+		"Expired artifact [failed-output-and-input-fallback] time:expire expired",
+		"Publish blocked [failed-terminal] Publisher throttled - provider unavailable",
+		"Retry later [failed-output-and-input-fallback] time:expire expired",
+		"Completed work: 2",
+		"Published draft",
+		"Review ready",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "should skip failed terminal") {
+		t.Fatalf("output should not contain failed terminal completed label:\n%s", output)
 	}
 }
 
