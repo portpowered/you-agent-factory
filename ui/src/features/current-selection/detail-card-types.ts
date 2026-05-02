@@ -53,6 +53,7 @@ export interface ExecutionDetailsSectionProps {
   details: SelectedWorkItemExecutionDetails;
   now: number;
   onSelectTraceID?: (traceID: string) => void;
+  showInferenceAttempts?: boolean;
   traceTargetId: string;
 }
 
@@ -130,6 +131,7 @@ export interface WorkstationSummaryItemProps {
 
 export interface ProviderSessionAttemptsProps {
   attempts: DashboardProviderSessionAttempt[];
+  currentDispatchID?: string | null;
   emptyMessage: string;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
@@ -156,6 +158,7 @@ export type SelectedWorkRequestHistoryItem =
 
 export interface SelectedWorkDispatchHistorySectionProps {
   activeTraceID?: string | null;
+  currentDispatchID?: string | null;
   fallbackProviderSessions: DashboardProviderSessionAttempt[];
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;

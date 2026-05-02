@@ -1,22 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import { dashboardWorkstationRequestFixtures } from "../../components/dashboard/fixtures";
-import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/dashboard/typography";
 import { selectWorkItemExecutionDetails } from "../../state/executionDetails";
 import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
-import {
-  INFERENCE_REQUEST_PROMPT_LABEL,
-  INFERENCE_RESPONSE_LABEL,
-  WORKSTATION_RESPONSE_TEXT_LABEL,
-} from "./detail-card-shared";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
   inferenceAttempt,
-  renderSelectedWorkItemWithInferenceAttempts,
   workstationRequest,
 } from "./detail-card-test-helpers";
 import { WorkItemDetailCard } from "./work-item-card";
@@ -171,6 +160,7 @@ describe("WorkItemDetailCard", () => {
     ).toBeTruthy();
     expect(screen.getAllByText(dispatchID).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review").length).toBeGreaterThan(0);
+    expect(screen.getByText("Current dispatch")).toBeTruthy();
     expect(executionDetails.getByText("trace-active-story")).toBeTruthy();
     expect(screen.getByText(/Source:/)).toBeTruthy();
     expect(screen.getByText("factory-renderer")).toBeTruthy();
@@ -180,11 +170,63 @@ describe("WorkItemDetailCard", () => {
     expect(executionDetails.getByText("codex")).toBeTruthy();
     expect(executionDetails.getByText("Model")).toBeTruthy();
     expect(executionDetails.getByText("gpt-5.4")).toBeTruthy();
-    expect(within(currentSelection).getByText("No inference events are available for this selected work item.")).toBeTruthy();
+    expect(
+      within(currentSelection).queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
     expect(screen.queryByText("Never expose this raw system prompt.")).toBeNull();
     expect(screen.getAllByText("Workstation dispatches").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Workstation dispatches" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Work session runs list" })).toBeNull();
+  });
+
+  it("marks only the selected work item's active dispatch inside dispatch history", () => {
+    const { dispatchID, execution, selectedNode, workItem } = getSelectedWorkItemFixture();
+    const historicalDispatchID = "dispatch-review-old";
+
+    render(
+      <WorkItemDetailCard
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        dispatchAttempts={[]}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(historicalDispatchID, {
+            outcome: "REJECTED",
+            prompt: "Historical review request.",
+            request_id: "request-review-old",
+            started_at: "2026-04-08T12:00:02Z",
+          }),
+          workstationRequest(dispatchID, {
+            prompt: "Active review request.",
+            request_id: "request-review-active",
+            started_at: "2026-04-08T12:00:03Z",
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", { name: "Workstation dispatches" });
+    const activeCard = within(dispatchHistory).getByText(dispatchID).closest("article");
+    const historicalCard = within(dispatchHistory).getByText(historicalDispatchID).closest("article");
+
+    if (!(activeCard instanceof HTMLElement) || !(historicalCard instanceof HTMLElement)) {
+      throw new Error("expected active and historical dispatch cards");
+    }
+
+    expect(within(activeCard).getByText("Current dispatch")).toBeTruthy();
+    expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
   });
 
   it("renders unavailable execution details with clear operator copy", () => {
@@ -243,6 +285,47 @@ describe("WorkItemDetailCard", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Open trace" })).toBeNull();
+  });
+
+  it("does not render a separate inference attempts section for selected work items", () => {
+    const { dispatchID, execution, selectedNode, workItem } = getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          inferenceAttemptsByDispatchID: {
+            [dispatchID]: {
+              [`${dispatchID}/inference-request/1`]: inferenceAttempt(dispatchID, {
+                inference_request_id: `${dispatchID}/inference-request/1`,
+                outcome: "FAILED",
+              }),
+            },
+          },
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    expect(
+      within(currentSelection).queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
+    expect(within(currentSelection).queryByRole("region", { name: "Inference attempts" })).toBeNull();
+    expect(within(currentSelection).getByRole("heading", { name: "Workstation dispatches" })).toBeTruthy();
   });
 
   it("renders a pending dispatch without provider-session metadata as a workstation dispatch", () => {
@@ -355,43 +438,6 @@ describe("WorkItemDetailCard", () => {
     expect(within(currentSelection).getByText("trace-active-story")).toBeTruthy();
     expect(within(currentSelection).getByText("factory-renderer")).toBeTruthy();
     expect(within(currentSelection).getByText("sha256:system-runtime")).toBeTruthy();
-  });
-
-  it("renders pending inference request details for an active selected work item", () => {
-    const promptText = "Review the active story and return a concise result.";
-    const { dispatchID } = renderSelectedWorkItemWithInferenceAttempts({
-      [`${getSelectedWorkItemFixture().dispatchID}/inference-request/1`]: inferenceAttempt(
-        getSelectedWorkItemFixture().dispatchID,
-        {
-          inference_request_id: "dispatch-review-active/inference-request/1",
-        },
-      ),
-    });
-
-    const inferenceSection = screen.getByRole("region", { name: "Inference attempts" });
-    const pendingAttempt = within(inferenceSection).getByRole("article", {
-      name: "Inference attempt 1",
-    });
-    expect(within(pendingAttempt).getByText("Attempt 1")).toBeTruthy();
-    expect(within(pendingAttempt).getByText("PENDING")).toBeTruthy();
-    expect(within(pendingAttempt).queryByText("inference ID")).toBeNull();
-    expect(within(pendingAttempt).queryByText("working directory")).toBeNull();
-    const promptBlock = within(pendingAttempt).getByRole("region", {
-      name: INFERENCE_REQUEST_PROMPT_LABEL,
-    });
-    expect(within(promptBlock).getByText(INFERENCE_REQUEST_PROMPT_LABEL)).toBeTruthy();
-    expect(within(promptBlock).getByText(promptText)).toBeTruthy();
-    expect(promptBlock.querySelector("pre")?.className).toContain("min-h-[20rem]");
-    expect(
-      within(pendingAttempt).queryByRole("region", { name: INFERENCE_RESPONSE_LABEL }),
-    ).toBeNull();
-    expect(within(pendingAttempt).getByText("inferenceRequestId")).toBeTruthy();
-    expect(within(pendingAttempt).getByText(`${dispatchID}/inference-request/1`)).toBeTruthy();
-    expect(within(pendingAttempt).getByText("workingDirectory")).toBeTruthy();
-    expect(within(pendingAttempt).getByText("C:\\work\\portos")).toBeTruthy();
-    expect(within(pendingAttempt).getByText("requestTime")).toBeTruthy();
-    expect(within(pendingAttempt).getByText("2026-04-08T12:00:01Z")).toBeTruthy();
-    expect(within(pendingAttempt).getByText("Awaiting provider response.")).toBeTruthy();
   });
 
   it("renders a unified pending dispatch-history row with request details and no-response-yet copy", () => {
@@ -750,138 +796,4 @@ describe("WorkItemDetailCard", () => {
     expect(within(dispatchCard).queryByText("No response yet for this dispatch.")).toBeNull();
   });
 
-  it("renders succeeded inference response details for a completed attempt", () => {
-    const { dispatchID } = getSelectedWorkItemFixture();
-    const promptText = "Review the active story and return a concise result.";
-    const responseText = "The active story is ready for the next workstation.";
-
-    renderSelectedWorkItemWithInferenceAttempts({
-      "dispatch-review-active/inference-request/1": inferenceAttempt(dispatchID, {
-        duration_millis: 875,
-        inference_request_id: "dispatch-review-active/inference-request/1",
-        outcome: "SUCCEEDED",
-        response: responseText,
-        response_time: "2026-04-08T12:00:02Z",
-      }),
-    });
-
-    const attempt = within(screen.getByRole("region", { name: "Inference attempts" })).getByRole(
-      "article",
-      { name: "Inference attempt 1" },
-    );
-    expect(within(attempt).getAllByText("SUCCEEDED").length).toBeGreaterThan(0);
-    const promptBlock = within(attempt).getByRole("region", {
-      name: INFERENCE_REQUEST_PROMPT_LABEL,
-    });
-    expect(within(promptBlock).getByText(INFERENCE_REQUEST_PROMPT_LABEL)).toBeTruthy();
-    expect(within(promptBlock).getByText(promptText)).toBeTruthy();
-    expect(promptBlock.querySelector("pre")?.className).toContain("min-h-[20rem]");
-    expect(within(promptBlock).queryByText(responseText)).toBeNull();
-    const responseBlock = within(attempt).getByRole("region", {
-      name: INFERENCE_RESPONSE_LABEL,
-    });
-    expect(within(responseBlock).getByText(INFERENCE_RESPONSE_LABEL)).toBeTruthy();
-    expect(within(responseBlock).getByText(responseText)).toBeTruthy();
-    expect(responseBlock.querySelector("pre")?.className).toContain("min-h-[20rem]");
-    expect(within(responseBlock).queryByText(promptText)).toBeNull();
-    expect(within(attempt).getByText("durationMillis")).toBeTruthy();
-    expect(within(attempt).getByText("875")).toBeTruthy();
-    expect(within(attempt).getByText("responseTime")).toBeTruthy();
-    expect(within(attempt).getByText("2026-04-08T12:00:02Z")).toBeTruthy();
-  });
-
-  it("renders failed inference response details when provider metadata is present", () => {
-    const { dispatchID } = getSelectedWorkItemFixture();
-    const promptText = "Review the active story and return a concise result.";
-
-    renderSelectedWorkItemWithInferenceAttempts({
-      "dispatch-review-active/inference-request/1": inferenceAttempt(dispatchID, {
-        duration_millis: 420,
-        error_class: "provider_rate_limit",
-        exit_code: 137,
-        inference_request_id: "dispatch-review-active/inference-request/1",
-        outcome: "FAILED",
-        response_time: "2026-04-08T12:00:02Z",
-      }),
-    });
-
-    const attempt = within(screen.getByRole("region", { name: "Inference attempts" })).getByRole(
-      "article",
-      { name: "Inference attempt 1" },
-    );
-    expect(within(attempt).getAllByText("FAILED").length).toBeGreaterThan(0);
-    expect(within(attempt).getByText("exitCode")).toBeTruthy();
-    expect(within(attempt).getByText("137")).toBeTruthy();
-    expect(within(attempt).getByText("errorClass")).toBeTruthy();
-    expect(within(attempt).getByText("provider_rate_limit")).toBeTruthy();
-    const promptBlock = within(attempt).getByRole("region", {
-      name: INFERENCE_REQUEST_PROMPT_LABEL,
-    });
-    expect(within(promptBlock).getByText(INFERENCE_REQUEST_PROMPT_LABEL)).toBeTruthy();
-    expect(within(promptBlock).getByText(promptText)).toBeTruthy();
-    expect(within(attempt).queryByRole("region", { name: INFERENCE_RESPONSE_LABEL })).toBeNull();
-    expect(
-      within(attempt).getByText("Provider response text is not available for this inference attempt."),
-    ).toBeTruthy();
-  });
-
-  it("renders retry inference attempts in attempt order with correlated request ids", () => {
-    const { dispatchID } = getSelectedWorkItemFixture();
-
-    renderSelectedWorkItemWithInferenceAttempts({
-      "dispatch-review-active/inference-request/2": inferenceAttempt(dispatchID, {
-        attempt: 2,
-        duration_millis: 640,
-        inference_request_id: "dispatch-review-active/inference-request/2",
-        outcome: "SUCCEEDED",
-        prompt: "Retry the active story review after provider recovery.",
-        response: "Retry succeeded.",
-        response_time: "2026-04-08T12:00:04Z",
-      }),
-      "dispatch-review-active/inference-request/1": inferenceAttempt(dispatchID, {
-        attempt: 1,
-        error_class: "provider_rate_limit",
-        inference_request_id: "dispatch-review-active/inference-request/1",
-        outcome: "FAILED",
-        prompt: "Review the active story before retry.",
-        response_time: "2026-04-08T12:00:02Z",
-      }),
-    });
-
-    const attempts = within(screen.getByRole("region", { name: "Inference attempts" })).getAllByRole(
-      "article",
-    );
-    expect(within(attempts[0]).getByText("Attempt 1")).toBeTruthy();
-    expect(within(attempts[1]).getByText("Attempt 2")).toBeTruthy();
-    expect(within(attempts[1]).getByText("Retry succeeded.")).toBeTruthy();
-    expect(within(attempts[0]).getByText("dispatch-review-active/inference-request/1")).toBeTruthy();
-    expect(within(attempts[1]).getByText("dispatch-review-active/inference-request/2")).toBeTruthy();
-  });
-
-  it("applies shared typography helpers to inference diagnostic labels and code", () => {
-    const { dispatchID } = getSelectedWorkItemFixture();
-
-    renderSelectedWorkItemWithInferenceAttempts({
-      "dispatch-review-active/inference-request/1": inferenceAttempt(dispatchID, {
-        duration_millis: 420,
-        error_class: "provider_rate_limit",
-        inference_request_id: "dispatch-review-active/inference-request/1",
-        outcome: "FAILED",
-        response_time: "2026-04-08T12:00:02Z",
-      }),
-    });
-
-    const attempt = within(screen.getByRole("region", { name: "Inference attempts" })).getByRole(
-      "article",
-      { name: "Inference attempt 1" },
-    );
-    const promptLabel = within(attempt).getByText(INFERENCE_REQUEST_PROMPT_LABEL);
-    expect(promptLabel.className).toContain(DASHBOARD_SUPPORTING_LABEL_CLASS);
-    expect(within(attempt).getByText(`${dispatchID}/inference-request/1`).className).toContain(
-      DASHBOARD_BODY_CODE_CLASS,
-    );
-    expect(within(attempt).getByText("provider_rate_limit").className).toContain(
-      DASHBOARD_BODY_CODE_CLASS,
-    );
-  });
 });

@@ -81,6 +81,7 @@ export function WorkItemDetailCard({
         details={executionDetails}
         now={now}
         onSelectTraceID={onSelectTraceID}
+        showInferenceAttempts={false}
         traceTargetId={traceTargetId}
       />
       <WorkRelationshipsSection
@@ -89,6 +90,7 @@ export function WorkItemDetailCard({
       />
       <SelectedWorkDispatchHistorySection
         activeTraceID={activeTraceID}
+        currentDispatchID={selection.dispatchId}
         fallbackProviderSessions={dispatchAttempts}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}

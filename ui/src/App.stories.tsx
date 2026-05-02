@@ -14,10 +14,6 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "./components/dashboard";
 import {
-  INFERENCE_REQUEST_PROMPT_LABEL,
-  INFERENCE_RESPONSE_LABEL,
-} from "./features/current-selection/current-selection-cards";
-import {
   dashboardWorkstationRequestFixtures,
   failureAnalysisTimelineEvents,
   resourceCountTimelineEvents,
@@ -447,13 +443,23 @@ function workstationRequestWithStartedAt(
 }
 
 function selectedWorkDispatchHistoryStoryParameters() {
+  const active = workstationRequestWithStartedAt(
+    {
+      ...dashboardWorkstationRequestFixtures.noResponse,
+      dispatch_id: "dispatch-review-active",
+      request_id: "request-active-story",
+      request_view: {
+        ...dashboardWorkstationRequestFixtures.noResponse.request_view,
+        request_time: "2026-04-08T12:00:06Z",
+        started_at: "2026-04-08T12:00:06Z",
+      },
+      started_at: "2026-04-08T12:00:06Z",
+    },
+    "2026-04-08T12:00:06Z",
+  );
   const errored = workstationRequestWithStartedAt(
     dashboardWorkstationRequestFixtures.errored,
     "2026-04-08T12:00:05Z",
-  );
-  const noResponse = workstationRequestWithStartedAt(
-    dashboardWorkstationRequestFixtures.noResponse,
-    "2026-04-08T12:00:04Z",
   );
   const rejected = workstationRequestWithStartedAt(
     dashboardWorkstationRequestFixtures.rejected,
@@ -463,6 +469,14 @@ function selectedWorkDispatchHistoryStoryParameters() {
     dashboardWorkstationRequestFixtures.ready,
     "2026-04-08T12:00:02Z",
   );
+  const scriptSuccess = workstationRequestWithStartedAt(
+    dashboardWorkstationRequestFixtures.scriptSuccess,
+    "2026-04-08T12:00:01Z",
+  );
+  const scriptFailed = workstationRequestWithStartedAt(
+    dashboardWorkstationRequestFixtures.scriptFailed,
+    "2026-04-08T12:00:00Z",
+  );
 
   return {
     dashboardApi: {
@@ -471,10 +485,12 @@ function selectedWorkDispatchHistoryStoryParameters() {
         "work-active-story": activeStoryTrace,
       },
       workstationRequestsByDispatchID: {
+        [active.dispatch_id]: active,
         [errored.dispatch_id]: errored,
-        [noResponse.dispatch_id]: noResponse,
         [rejected.dispatch_id]: rejected,
         [ready.dispatch_id]: ready,
+        [scriptSuccess.dispatch_id]: scriptSuccess,
+        [scriptFailed.dispatch_id]: scriptFailed,
       },
     },
   };
@@ -959,25 +975,25 @@ export const SelectedWorkDispatchHistorySmoke = {
 
     await expect(currentSelection.getByRole("heading", { name: "Workstation dispatches" })).toBeVisible();
     expect(currentSelection.queryByRole("heading", { name: "Work session runs list" })).toBeNull();
-    await expect(within(dispatchHistory).getByText("4 dispatches")).toBeVisible();
-    expect(
-      within(dispatchHistory).getAllByText(/^dispatch-review-/).map((badge) => badge.textContent),
-    ).toEqual([
+    await expect(within(dispatchHistory).getByText("6 dispatches")).toBeVisible();
+    [
+      "dispatch-review-active",
       dashboardWorkstationRequestFixtures.errored.dispatch_id,
-      dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
       dashboardWorkstationRequestFixtures.rejected.dispatch_id,
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
-    ]);
+      dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
+      dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
+    ].forEach((dispatchId) => {
+      expect(dispatchHistoryCard(dispatchHistory, dispatchId)).toBeTruthy();
+    });
 
-    const pendingCard = dispatchHistoryCard(
-      dispatchHistory,
-      dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
-    );
+    const activeCard = dispatchHistoryCard(dispatchHistory, "dispatch-review-active");
+    await expect(within(activeCard).getByText("Current dispatch")).toBeVisible();
     await expect(
-      within(pendingCard).getByText("No response yet for this dispatch."),
+      within(activeCard).getByText("No response yet for this dispatch."),
     ).toBeVisible();
     await expect(
-      within(pendingCard).getByRole("button", { name: "Select work item Active Story" }),
+      within(activeCard).getByRole("button", { name: "Select work item Active Story" }),
     ).toBeVisible();
 
     const erroredCard = dispatchHistoryCard(
@@ -987,12 +1003,30 @@ export const SelectedWorkDispatchHistorySmoke = {
     await expect(
       within(erroredCard).getByText("Provider rate limit exceeded while reviewing the story."),
     ).toBeVisible();
+    expect(within(erroredCard).queryByText("Current dispatch")).toBeNull();
 
     const traceLink = within(erroredCard).getByRole("link", {
       name: /^trace-active-story/,
     });
     await expect(traceLink).toBeVisible();
     expect(traceLink.getAttribute("href")).toBe("#trace");
+
+    const scriptSuccessCard = dispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
+    );
+    await expect(within(scriptSuccessCard).getByText("script-tool")).toBeVisible();
+    await expect(within(scriptSuccessCard).getByText("script success stdout")).toBeVisible();
+    expect(within(scriptSuccessCard).queryByText("Current dispatch")).toBeNull();
+
+    const scriptFailedCard = dispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
+    );
+    expect(within(scriptFailedCard).getAllByText("TIMEOUT").length).toBeGreaterThan(0);
+    await expect(within(scriptFailedCard).getByText("script timed out")).toBeVisible();
+    expect(within(scriptFailedCard).queryByText("Current dispatch")).toBeNull();
+
     await expect(canvas.getByRole("article", { name: "Trace drill-down" })).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
@@ -1143,15 +1177,14 @@ export const InferenceCurrentSelectionDetails = {
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const failedPromptText = "Review Active Story and return a decision.";
-    const retryPromptText = "Retry Active Story after provider recovery.";
-    const retryResponseText = "Active Story is ready for the next workstation.";
 
     await userEvent.click((await canvas.findAllByRole("button", { name: /Active Story/ }))[0]);
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    await expect(currentSelection.getByRole("heading", { name: "Inference attempts" }))
+    expect(currentSelection.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
+    await expect(currentSelection.getByRole("heading", { name: "Workstation dispatches" }))
       .toBeVisible();
+    await expect(currentSelection.getByText("Current dispatch")).toBeVisible();
     expect(currentSelection.getAllByText(/codex/).length).toBeGreaterThan(0);
     expect(currentSelection.getAllByText(/factory-renderer/).length).toBeGreaterThan(0);
     expect(currentSelection.getAllByText(/sha256:system-runtime/).length).toBeGreaterThan(0);
@@ -1159,34 +1192,6 @@ export const InferenceCurrentSelectionDetails = {
       currentSelection.queryByText(/Model details are not available for this selected run/),
     ).toBeNull();
     expect(currentSelection.queryByText("sha256:user-runtime")).toBeNull();
-    const attempts = currentSelection.getAllByRole("article", { name: /Inference attempt/ });
-    await expect(within(attempts[0]).getByText("provider_rate_limit")).toBeVisible();
-    await expect(
-      within(attempts[0]).getByRole("region", { name: INFERENCE_REQUEST_PROMPT_LABEL }),
-    ).toBeVisible();
-    await expect(
-      within(attempts[0]).getByText(failedPromptText),
-    ).toBeVisible();
-    expect(
-      within(attempts[0]).queryByRole("region", { name: INFERENCE_RESPONSE_LABEL }),
-    ).toBeNull();
-    await expect(
-      within(attempts[0]).getByText(
-        "Provider response text is not available for this inference attempt.",
-      ),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByRole("region", { name: INFERENCE_REQUEST_PROMPT_LABEL }),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByText(retryPromptText),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByRole("region", { name: INFERENCE_RESPONSE_LABEL }),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByText(retryResponseText),
-    ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };

@@ -142,9 +142,11 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", { name: "Current selection" });
     expect(within(currentSelection).getByText(workItem.work_id)).toBeTruthy();
     expect(within(currentSelection).getByRole("heading", { name: "Execution details" })).toBeTruthy();
+    expect(within(currentSelection).queryByRole("heading", { name: "Inference attempts" })).toBeNull();
     expect(
       within(currentSelection).getByRole("heading", { name: "Workstation dispatches" }),
     ).toBeTruthy();
+    expect(within(currentSelection).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(currentSelection).queryByRole("heading", { name: "Work session runs list" }),
     ).toBeNull();
@@ -180,9 +182,11 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", { name: "Current selection" });
     expect(within(currentSelection).getByText(workItem.work_id)).toBeTruthy();
     expect(within(currentSelection).getByRole("heading", { name: "Execution details" })).toBeTruthy();
+    expect(within(currentSelection).queryByRole("heading", { name: "Inference attempts" })).toBeNull();
     expect(
       within(currentSelection).getByRole("heading", { name: "Workstation dispatches" }),
     ).toBeTruthy();
+    expect(within(currentSelection).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(currentSelection).queryByRole("heading", { name: "Work session runs list" }),
     ).toBeNull();

@@ -1,15 +1,12 @@
-import { render } from "@testing-library/react";
 import {
   buildDashboardInferenceAttemptFixture,
   buildDashboardWorkstationRequestFixture,
 } from "../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { selectWorkItemExecutionDetails } from "../../state/executionDetails";
 import type {
   DashboardInferenceAttempt,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
-import { WorkItemDetailCard } from "./work-item-card";
 
 export const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -29,44 +26,6 @@ export function getSelectedWorkItemFixture() {
     execution,
     selectedNode,
     snapshot,
-    workItem,
-  };
-}
-
-export function renderSelectedWorkItemWithInferenceAttempts(
-  attemptsByRequestID: Record<string, DashboardInferenceAttempt>,
-) {
-  const { dispatchID, execution, selectedNode, workItem } = getSelectedWorkItemFixture();
-
-  render(
-    <WorkItemDetailCard
-      dispatchAttempts={[]}
-      executionDetails={selectWorkItemExecutionDetails({
-        activeExecution: execution,
-        dispatchID,
-        inferenceAttemptsByDispatchID: {
-          [dispatchID]: attemptsByRequestID,
-        },
-        selectedNode,
-        workItem,
-      })}
-      now={DETAIL_CARD_NOW}
-      selectedNode={selectedNode}
-      selection={{
-        dispatchId: dispatchID,
-        execution,
-        kind: "work-item",
-        nodeId: selectedNode.node_id,
-        workItem,
-      }}
-      workstationRequests={[]}
-    />,
-  );
-
-  return {
-    dispatchID,
-    execution,
-    selectedNode,
     workItem,
   };
 }

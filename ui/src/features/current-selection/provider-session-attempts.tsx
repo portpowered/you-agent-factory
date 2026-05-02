@@ -31,6 +31,7 @@ import type {
 
 export function CollapsibleProviderSessionAttempts({
   attempts,
+  currentDispatchID,
   emptyMessage,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -75,6 +76,7 @@ export function CollapsibleProviderSessionAttempts({
         <div id={historyID}>
           <ProviderSessionAttemptList
             attempts={attempts}
+            currentDispatchID={currentDispatchID}
             emptyMessage={emptyMessage}
             onSelectWorkID={onSelectWorkID}
             onSelectWorkstationRequest={onSelectWorkstationRequest}
@@ -92,6 +94,7 @@ export function CollapsibleProviderSessionAttempts({
 
 export function ProviderSessionAttempts({
   attempts,
+  currentDispatchID,
   emptyMessage,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -107,6 +110,7 @@ export function ProviderSessionAttempts({
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{title}</h4>
       <ProviderSessionAttemptList
         attempts={attempts}
+        currentDispatchID={currentDispatchID}
         emptyMessage={emptyMessage}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
@@ -122,6 +126,7 @@ export function ProviderSessionAttempts({
 
 function ProviderSessionAttemptList({
   attempts,
+  currentDispatchID,
   emptyMessage,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -139,12 +144,16 @@ function ProviderSessionAttemptList({
     <div className="grid gap-[0.8rem]">
       {attempts.map((attempt) => {
         const outcome = formatWorkstationRunOutcome(attempt.outcome, { workstationKind });
+        const isCurrentDispatch = currentDispatchID === attempt.dispatch_id;
         const request = workstationRequestsByDispatchID?.[attempt.dispatch_id];
         const requestSelected = selectedRequestDispatchID === attempt.dispatch_id;
 
         return (
           <article
-            className={PROVIDER_SESSION_CARD_CLASS}
+            className={cx(
+              PROVIDER_SESSION_CARD_CLASS,
+              isCurrentDispatch && "border-af-accent/30 bg-af-accent/6",
+            )}
             key={`${attempt.dispatch_id}-${attempt.provider_session?.id}`}
           >
             <div className="flex items-start justify-between gap-[0.8rem]">
@@ -152,9 +161,21 @@ function ProviderSessionAttemptList({
               <span className={EXECUTION_PILL_CLASS}>{attempt.dispatch_id}</span>
             </div>
             <div className="mt-[0.45rem] grid gap-[0.18rem]">
-              <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-                {outcome.label}
-              </p>
+              <div className="flex flex-wrap items-center gap-[0.45rem]">
+                <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+                  {outcome.label}
+                </p>
+                {isCurrentDispatch ? (
+                  <span
+                    className={cx(
+                      "inline-flex rounded-full border border-af-accent/35 bg-af-accent/10 px-2 py-[0.18rem] text-af-accent",
+                      DASHBOARD_SUPPORTING_TEXT_CLASS,
+                    )}
+                  >
+                    Current dispatch
+                  </span>
+                ) : null}
+              </div>
               {outcome.rawOutcomeLabel ? (
                 <p className={cx("m-0 text-af-code-ink/72", DASHBOARD_SUPPORTING_CODE_CLASS)}>
                   {outcome.rawOutcomeLabel}

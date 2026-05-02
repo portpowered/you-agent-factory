@@ -31,6 +31,7 @@ export function ExecutionDetailsSection({
   details,
   now,
   onSelectTraceID,
+  showInferenceAttempts = true,
   traceTargetId,
 }: ExecutionDetailsSectionProps) {
   const hasTraceIDs = details.traceIDs.length > 0;
@@ -146,7 +147,7 @@ export function ExecutionDetailsSection({
         <p className={DETAIL_COPY_CLASS}>Trace details are not available for this selected run.</p>
       )}
       <WorkstationRequestProjectionSection details={details} />
-      <InferenceAttemptsSection attempts={details.inferenceAttempts} />
+      {showInferenceAttempts ? <InferenceAttemptsSection attempts={details.inferenceAttempts} /> : null}
     </section>
   );
 }
