@@ -443,13 +443,23 @@ function workstationRequestWithStartedAt(
 }
 
 function selectedWorkDispatchHistoryStoryParameters() {
+  const active = workstationRequestWithStartedAt(
+    {
+      ...dashboardWorkstationRequestFixtures.noResponse,
+      dispatch_id: "dispatch-review-active",
+      request_id: "request-active-story",
+      request_view: {
+        ...dashboardWorkstationRequestFixtures.noResponse.request_view,
+        request_time: "2026-04-08T12:00:06Z",
+        started_at: "2026-04-08T12:00:06Z",
+      },
+      started_at: "2026-04-08T12:00:06Z",
+    },
+    "2026-04-08T12:00:06Z",
+  );
   const errored = workstationRequestWithStartedAt(
     dashboardWorkstationRequestFixtures.errored,
     "2026-04-08T12:00:05Z",
-  );
-  const noResponse = workstationRequestWithStartedAt(
-    dashboardWorkstationRequestFixtures.noResponse,
-    "2026-04-08T12:00:04Z",
   );
   const rejected = workstationRequestWithStartedAt(
     dashboardWorkstationRequestFixtures.rejected,
@@ -467,8 +477,8 @@ function selectedWorkDispatchHistoryStoryParameters() {
         "work-active-story": activeStoryTrace,
       },
       workstationRequestsByDispatchID: {
+        [active.dispatch_id]: active,
         [errored.dispatch_id]: errored,
-        [noResponse.dispatch_id]: noResponse,
         [rejected.dispatch_id]: rejected,
         [ready.dispatch_id]: ready,
       },
@@ -959,21 +969,19 @@ export const SelectedWorkDispatchHistorySmoke = {
     expect(
       within(dispatchHistory).getAllByText(/^dispatch-review-/).map((badge) => badge.textContent),
     ).toEqual([
+      "dispatch-review-active",
       dashboardWorkstationRequestFixtures.errored.dispatch_id,
-      dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
       dashboardWorkstationRequestFixtures.rejected.dispatch_id,
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
     ]);
 
-    const pendingCard = dispatchHistoryCard(
-      dispatchHistory,
-      dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
-    );
+    const activeCard = dispatchHistoryCard(dispatchHistory, "dispatch-review-active");
+    await expect(within(activeCard).getByText("Current dispatch")).toBeVisible();
     await expect(
-      within(pendingCard).getByText("No response yet for this dispatch."),
+      within(activeCard).getByText("No response yet for this dispatch."),
     ).toBeVisible();
     await expect(
-      within(pendingCard).getByRole("button", { name: "Select work item Active Story" }),
+      within(activeCard).getByRole("button", { name: "Select work item Active Story" }),
     ).toBeVisible();
 
     const erroredCard = dispatchHistoryCard(
@@ -983,6 +991,7 @@ export const SelectedWorkDispatchHistorySmoke = {
     await expect(
       within(erroredCard).getByText("Provider rate limit exceeded while reviewing the story."),
     ).toBeVisible();
+    expect(within(erroredCard).queryByText("Current dispatch")).toBeNull();
 
     const traceLink = within(erroredCard).getByRole("link", {
       name: /^trace-active-story/,
@@ -1146,6 +1155,7 @@ export const InferenceCurrentSelectionDetails = {
     expect(currentSelection.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
     await expect(currentSelection.getByRole("heading", { name: "Workstation dispatches" }))
       .toBeVisible();
+    await expect(currentSelection.getByText("Current dispatch")).toBeVisible();
     expect(currentSelection.getAllByText(/codex/).length).toBeGreaterThan(0);
     expect(currentSelection.getAllByText(/factory-renderer/).length).toBeGreaterThan(0);
     expect(currentSelection.getAllByText(/sha256:system-runtime/).length).toBeGreaterThan(0);

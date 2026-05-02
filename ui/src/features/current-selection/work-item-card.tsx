@@ -90,6 +90,7 @@ export function WorkItemDetailCard({
       />
       <SelectedWorkDispatchHistorySection
         activeTraceID={activeTraceID}
+        currentDispatchID={selection.dispatchId}
         fallbackProviderSessions={dispatchAttempts}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}

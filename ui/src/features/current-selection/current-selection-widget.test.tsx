@@ -146,6 +146,7 @@ describe("CurrentSelectionWidget", () => {
     expect(
       within(currentSelection).getByRole("heading", { name: "Workstation dispatches" }),
     ).toBeTruthy();
+    expect(within(currentSelection).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(currentSelection).queryByRole("heading", { name: "Work session runs list" }),
     ).toBeNull();
@@ -185,6 +186,7 @@ describe("CurrentSelectionWidget", () => {
     expect(
       within(currentSelection).getByRole("heading", { name: "Workstation dispatches" }),
     ).toBeTruthy();
+    expect(within(currentSelection).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(currentSelection).queryByRole("heading", { name: "Work session runs list" }),
     ).toBeNull();

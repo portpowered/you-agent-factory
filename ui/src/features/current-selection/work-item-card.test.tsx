@@ -160,6 +160,7 @@ describe("WorkItemDetailCard", () => {
     ).toBeTruthy();
     expect(screen.getAllByText(dispatchID).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review").length).toBeGreaterThan(0);
+    expect(screen.getByText("Current dispatch")).toBeTruthy();
     expect(executionDetails.getByText("trace-active-story")).toBeTruthy();
     expect(screen.getByText(/Source:/)).toBeTruthy();
     expect(screen.getByText("factory-renderer")).toBeTruthy();
@@ -176,6 +177,56 @@ describe("WorkItemDetailCard", () => {
     expect(screen.getAllByText("Workstation dispatches").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Workstation dispatches" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Work session runs list" })).toBeNull();
+  });
+
+  it("marks only the selected work item's active dispatch inside dispatch history", () => {
+    const { dispatchID, execution, selectedNode, workItem } = getSelectedWorkItemFixture();
+    const historicalDispatchID = "dispatch-review-old";
+
+    render(
+      <WorkItemDetailCard
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        dispatchAttempts={[]}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(historicalDispatchID, {
+            outcome: "REJECTED",
+            prompt: "Historical review request.",
+            request_id: "request-review-old",
+            started_at: "2026-04-08T12:00:02Z",
+          }),
+          workstationRequest(dispatchID, {
+            prompt: "Active review request.",
+            request_id: "request-review-active",
+            started_at: "2026-04-08T12:00:03Z",
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", { name: "Workstation dispatches" });
+    const activeCard = within(dispatchHistory).getByText(dispatchID).closest("article");
+    const historicalCard = within(dispatchHistory).getByText(historicalDispatchID).closest("article");
+
+    if (!(activeCard instanceof HTMLElement) || !(historicalCard instanceof HTMLElement)) {
+      throw new Error("expected active and historical dispatch cards");
+    }
+
+    expect(within(activeCard).getByText("Current dispatch")).toBeTruthy();
+    expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
   });
 
   it("renders unavailable execution details with clear operator copy", () => {

@@ -33,6 +33,7 @@ import { ProviderSessionAttempts } from "./provider-session-attempts";
 
 export function SelectedWorkDispatchHistorySection({
   activeTraceID,
+  currentDispatchID,
   fallbackProviderSessions,
   onSelectTraceID,
   onSelectWorkID,
@@ -45,6 +46,7 @@ export function SelectedWorkDispatchHistorySection({
     return (
       <ProviderSessionAttempts
         attempts={fallbackProviderSessions}
+        currentDispatchID={currentDispatchID}
         emptyMessage="No workstation dispatch has been recorded yet for this work item."
         onSelectWorkID={onSelectWorkID}
         renderHeading={(attempt) => attempt.workstation_name || attempt.transition_id}
@@ -76,6 +78,7 @@ export function SelectedWorkDispatchHistorySection({
           {requests.map((request) => (
             <DispatchHistoryCard
               activeTraceID={activeTraceID}
+              currentDispatchID={currentDispatchID}
               key={request.dispatch_id}
               onSelectTraceID={onSelectTraceID}
               onSelectWorkID={onSelectWorkID}
@@ -96,6 +99,7 @@ export function SelectedWorkDispatchHistorySection({
 
 function DispatchHistoryCard({
   activeTraceID,
+  currentDispatchID,
   onSelectTraceID,
   onSelectWorkID,
   request,
@@ -103,6 +107,7 @@ function DispatchHistoryCard({
   traceTargetId,
 }: {
   activeTraceID?: string | null;
+  currentDispatchID?: string | null;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   request: SelectedWorkRequestHistoryItem;
@@ -129,6 +134,7 @@ function DispatchHistoryCard({
     providerSession,
     requestStartedAt(request),
   );
+  const isCurrentDispatch = currentDispatchID === request.dispatch_id;
   const outcome = requestOutcome(request);
   const durationMillis = requestDurationMillis(request);
   const responseUnavailableCopy = responseText
@@ -140,15 +146,32 @@ function DispatchHistoryCard({
         : "No response yet for this dispatch.";
 
   return (
-    <article className={PROVIDER_SESSION_CARD_CLASS}>
+    <article
+      className={cx(
+        PROVIDER_SESSION_CARD_CLASS,
+        isCurrentDispatch && "border-af-accent/30 bg-af-accent/6",
+      )}
+    >
       <div className="flex items-start justify-between gap-[0.8rem]">
         <div className="grid min-w-0 gap-[0.18rem]">
           <strong className="min-w-0 [overflow-wrap:anywhere]">
             {request.workstation_name || request.transition_id}
           </strong>
-          <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-            {outcome ?? "PENDING"}
-          </p>
+          <div className="flex flex-wrap items-center gap-[0.45rem]">
+            <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+              {outcome ?? "PENDING"}
+            </p>
+            {isCurrentDispatch ? (
+              <span
+                className={cx(
+                  "inline-flex rounded-full border border-af-accent/35 bg-af-accent/10 px-2 py-[0.18rem] text-af-accent",
+                  DASHBOARD_SUPPORTING_TEXT_CLASS,
+                )}
+              >
+                Current dispatch
+              </span>
+            ) : null}
+          </div>
         </div>
         <span className={EXECUTION_PILL_CLASS}>{request.dispatch_id}</span>
       </div>
