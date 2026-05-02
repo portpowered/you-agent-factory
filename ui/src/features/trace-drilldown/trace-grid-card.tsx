@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { AgentBentoCard } from "../../components/dashboard/bento";
 import { cx } from "../../components/dashboard/classnames";
 import {
   formatDurationMillis,
@@ -21,6 +20,7 @@ import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
 } from "../../components/dashboard/widget-board";
+import { AgentBentoCard } from "../../components/ui";
 import { Button } from "../../components/ui/button";
 import {
   Collapsible,

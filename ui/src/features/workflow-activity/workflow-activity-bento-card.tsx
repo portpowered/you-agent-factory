@@ -3,7 +3,7 @@ import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
-import { AgentBentoCard } from "../../components/dashboard/bento";
+import { AgentBentoCard } from "../../components/ui";
 import type { DashboardSelection } from "../current-selection";
 import {
   ReactFlowCurrentActivityCard,

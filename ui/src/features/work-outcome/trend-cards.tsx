@@ -26,8 +26,8 @@ import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
   WIDGET_SUBTITLE_CLASS,
-  DashboardWidgetFrame,
 } from "../../components/dashboard/widget-board";
+import { DashboardWidgetFrame } from "../../components/ui";
 
 interface FailureTrendCardProps {
   className?: string;

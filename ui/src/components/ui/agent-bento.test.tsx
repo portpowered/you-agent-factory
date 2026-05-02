@@ -1,6 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { AgentBentoCard, AgentBentoLayout, type AgentBentoLayoutItem } from "./bento";
+import { NoSelectionDetailCard } from "../../features/current-selection/no-selection-detail-card";
+import { WorkTotalsCard } from "../../features/work-totals/work-totals-card";
+import {
+  AgentBentoCard,
+  AgentBentoLayout,
+  type AgentBentoLayoutItem,
+} from "./agent-bento";
 
 const defaultLayout: AgentBentoLayoutItem[] = [
   { id: "activity", x: 0, y: 0, w: 6, h: 2 },
@@ -163,5 +169,59 @@ describe("AgentBentoLayout", () => {
       expect(activityItem.getAttribute("style")).not.toBe(initialStyle);
       expect(onLayoutChange).toHaveBeenCalled();
     });
+  });
+
+  it("renders real dashboard feature cards through the shared bento seam", () => {
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "work-totals",
+            children: (
+              <WorkTotalsCard
+                completedCount={3}
+                dispatchedCount={5}
+                failedCount={1}
+                inFlightDispatchCount={2}
+              />
+            ),
+          },
+          {
+            id: "current-selection",
+            children: <NoSelectionDetailCard />,
+          },
+        ]}
+        initialWidth={1180}
+        layout={[
+          { id: "work-totals", x: 0, y: 0, w: 4, h: 2 },
+          { id: "current-selection", x: 4, y: 0, w: 8, h: 4 },
+        ]}
+      />,
+    );
+
+    const board = screen.getByRole("region", { name: "Agent Factory bento board" });
+    const workTotals = screen.getByRole("article", { name: "Work totals" });
+    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+
+    expect(board).toBeTruthy();
+    expect(within(workTotals).getByLabelText("work totals")).toBeTruthy();
+    expect(within(workTotals).getByText("In progress")).toBeTruthy();
+    expect(within(workTotals).getByText("Completed")).toBeTruthy();
+    expect(currentSelection.className).toContain("rounded-2xl");
+    expect(within(currentSelection).getByRole("button", { name: "Undo selection" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(within(currentSelection).getByRole("button", { name: "Redo selection" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(
+      within(currentSelection).getByText(
+        "Select a workstation, work item, or state node to inspect live details.",
+      ),
+    ).toBeTruthy();
+    expect(getGridItem("Work totals").dataset.bentoCardId).toBe("work-totals");
+    expect(getGridItem("Current selection").dataset.bentoCardId).toBe("current-selection");
   });
 });

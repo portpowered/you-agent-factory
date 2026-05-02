@@ -2,14 +2,14 @@ import "./styles.css";
 
 import { useCallback, useEffect, useState } from "react";
 
-import { cx } from "./components/dashboard/classnames";
+import { TickSliderControl } from "./components/dashboard";
+import { AgentBentoLayout } from "./components/ui";
+import { cx } from "./components/ui/classnames";
 import {
-  AgentBentoLayout,
-  TickSliderControl,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "./components/dashboard";
+} from "./components/ui/dashboard-typography";
 import {
   CurrentSelectionWidget,
   useCurrentSelection,
