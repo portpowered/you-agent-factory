@@ -18,10 +18,10 @@ import {
   type NamedFactoryAPIError,
 } from "../../api/named-factory";
 import {
-  DashboardButton,
   DashboardMessagePanel,
   DashboardMutationDialog,
 } from "../../components/dashboard";
+import { Button } from "../../components/ui/button";
 import { cx } from "../../components/dashboard/classnames";
 import { EMPTY_STATE_CLASS } from "../../components/dashboard/widget-board";
 import {
@@ -407,9 +407,9 @@ function GraphImportErrorPanel({
   return (
     <DashboardMessagePanel
       action={
-        <DashboardButton onClick={onDismiss} tone="secondary" type="button">
+        <Button onClick={onDismiss} tone="secondary" type="button">
           Dismiss
-        </DashboardButton>
+        </Button>
       }
       ariaLive="assertive"
       className="mt-4 min-h-0 px-5 py-4"
@@ -457,22 +457,22 @@ function FactoryImportPreviewDialog({
       }
       footer={
         <>
-          <DashboardButton
+          <Button
             disabled={isSubmitting}
             onClick={onCancel}
             tone="secondary"
             type="button"
           >
             Cancel import
-          </DashboardButton>
-          <DashboardButton
-            busy={isSubmitting}
+          </Button>
+          <Button
+            aria-busy={isSubmitting ? "true" : undefined}
             disabled={isSubmitting}
             onClick={onConfirm}
             type="button"
           >
             {isSubmitting ? "Activating factory..." : "Activate factory"}
-          </DashboardButton>
+          </Button>
         </>
       }
       media={

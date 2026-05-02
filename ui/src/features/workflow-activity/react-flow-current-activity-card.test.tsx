@@ -566,8 +566,14 @@ describe("ReactFlowCurrentActivityCard", () => {
   it("activates the dropped factory, closes the preview, and requests an active-view refresh", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
+    let resolveActivation: ((value: FactoryValue) => void) | null = null;
     const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
-      .mockResolvedValue(importValue.factory);
+      .mockImplementation(
+        () =>
+          new Promise<FactoryValue>((resolve) => {
+            resolveActivation = resolve;
+          }),
+      );
     const onFactoryActivated = vi.fn<() => void>();
     const readFactoryImportFile = vi.fn<ReadFactoryImportFile>().mockResolvedValue({
       ok: true,
@@ -592,6 +598,19 @@ describe("ReactFlowCurrentActivityCard", () => {
     await waitFor(() => {
       expect(activateFactory).toHaveBeenCalledWith(importValue.factory);
     });
+    const activateButton = within(previewDialog).getByRole<HTMLButtonElement>("button", {
+      name: "Activating factory...",
+    });
+    const cancelButton = within(previewDialog).getByRole<HTMLButtonElement>("button", {
+      name: "Cancel import",
+    });
+
+    expect(activateButton.getAttribute("aria-busy")).toBe("true");
+    expect(activateButton.disabled).toBe(true);
+    expect(cancelButton.disabled).toBe(true);
+
+    resolveActivation?.(importValue.factory);
+
     await waitFor(() => {
       expect(onFactoryActivated).toHaveBeenCalledTimes(1);
     });
