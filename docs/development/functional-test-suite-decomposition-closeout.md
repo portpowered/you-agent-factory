@@ -8,21 +8,25 @@ evidence for the functional suite decomposition PRD.
 - Default non-long functional lane: `make test-functional`
 - Opt-in long functional lane: `make test-functional-long`
 
-The default lane runs `go test -short ./tests/functional/...` through package
-discovery in short mode. The long lane runs the full behavior tree plus any
-`functionallong`-tagged files.
+The default lane runs the repository-owned `cmd/functionallane` helper, which
+discovers the behavior packages under `tests/functional/` and runs them in
+short mode without a hard-coded package list. The long lane runs the full
+behavior tree plus any `functionallong`-tagged files.
 
 ## Measured Runtime
 
 - The branch previously tried a representative-only `1.76s` run, but that
   contract was reverted because it did not execute all non-long short-mode
   functional behavior.
-- The repository-owned default command is again `make test-functional`, which
-  runs `go test -short ./tests/functional/...` over the full short-mode tree.
-- On 2026-05-01 in this Windows worktree, a sequential
-  `go test -short ./tests/functional/... -count=1` measured about `8.07s`.
-- On 2026-05-01 in this Windows worktree, a sequential
-  `make test-functional` measured about `8.09s`.
+- After later Windows worktree validation showed the single-invocation
+  `go test -short ./tests/functional/...` command regressed far above the
+  target again, the repository-owned default command moved to
+  `go run ./cmd/functionallane -short -count=1 -jobs 2 -timeout 300s` via
+  `make test-functional`.
+- On 2026-05-02 in this Windows worktree, `go run ./cmd/functionallane -short
+  -count=1 -jobs 3 -timeout 300s` completed in about `8.1s`.
+- On 2026-05-02 in this Windows worktree, `make test-functional` measured
+  about `7.07s`.
 - The runtime target is therefore met for the documented default command while
   the explicit long lane remains `make test-functional-long`.
 
