@@ -469,6 +469,14 @@ function selectedWorkDispatchHistoryStoryParameters() {
     dashboardWorkstationRequestFixtures.ready,
     "2026-04-08T12:00:02Z",
   );
+  const scriptSuccess = workstationRequestWithStartedAt(
+    dashboardWorkstationRequestFixtures.scriptSuccess,
+    "2026-04-08T12:00:01Z",
+  );
+  const scriptFailed = workstationRequestWithStartedAt(
+    dashboardWorkstationRequestFixtures.scriptFailed,
+    "2026-04-08T12:00:00Z",
+  );
 
   return {
     dashboardApi: {
@@ -481,6 +489,8 @@ function selectedWorkDispatchHistoryStoryParameters() {
         [errored.dispatch_id]: errored,
         [rejected.dispatch_id]: rejected,
         [ready.dispatch_id]: ready,
+        [scriptSuccess.dispatch_id]: scriptSuccess,
+        [scriptFailed.dispatch_id]: scriptFailed,
       },
     },
   };
@@ -965,15 +975,17 @@ export const SelectedWorkDispatchHistorySmoke = {
 
     await expect(currentSelection.getByRole("heading", { name: "Workstation dispatches" })).toBeVisible();
     expect(currentSelection.queryByRole("heading", { name: "Work session runs list" })).toBeNull();
-    await expect(within(dispatchHistory).getByText("4 dispatches")).toBeVisible();
-    expect(
-      within(dispatchHistory).getAllByText(/^dispatch-review-/).map((badge) => badge.textContent),
-    ).toEqual([
+    await expect(within(dispatchHistory).getByText("6 dispatches")).toBeVisible();
+    [
       "dispatch-review-active",
       dashboardWorkstationRequestFixtures.errored.dispatch_id,
       dashboardWorkstationRequestFixtures.rejected.dispatch_id,
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
-    ]);
+      dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
+      dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
+    ].forEach((dispatchId) => {
+      expect(dispatchHistoryCard(dispatchHistory, dispatchId)).toBeTruthy();
+    });
 
     const activeCard = dispatchHistoryCard(dispatchHistory, "dispatch-review-active");
     await expect(within(activeCard).getByText("Current dispatch")).toBeVisible();
@@ -998,6 +1010,23 @@ export const SelectedWorkDispatchHistorySmoke = {
     });
     await expect(traceLink).toBeVisible();
     expect(traceLink.getAttribute("href")).toBe("#trace");
+
+    const scriptSuccessCard = dispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
+    );
+    await expect(within(scriptSuccessCard).getByText("script-tool")).toBeVisible();
+    await expect(within(scriptSuccessCard).getByText("script success stdout")).toBeVisible();
+    expect(within(scriptSuccessCard).queryByText("Current dispatch")).toBeNull();
+
+    const scriptFailedCard = dispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
+    );
+    expect(within(scriptFailedCard).getAllByText("TIMEOUT").length).toBeGreaterThan(0);
+    await expect(within(scriptFailedCard).getByText("script timed out")).toBeVisible();
+    expect(within(scriptFailedCard).queryByText("Current dispatch")).toBeNull();
+
     await expect(canvas.getByRole("article", { name: "Trace drill-down" })).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },

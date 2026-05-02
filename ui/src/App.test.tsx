@@ -2850,7 +2850,7 @@ describe("App", () => {
     expect(within(traceCard).queryByText("Output mutations")).toBeNull();
   });
 
-  it("renders one selected-work dispatch history list with active, accepted, rejected, and failed rows", async () => {
+  it("renders one selected-work dispatch history list with mixed inference and script-backed rows", async () => {
     renderApp({
       snapshot: activeSnapshot,
       traceFixtures: {
@@ -2865,6 +2865,10 @@ describe("App", () => {
           dashboardWorkstationRequestFixtures.rejected,
         [dashboardWorkstationRequestFixtures.errored.dispatch_id]:
           dashboardWorkstationRequestFixtures.errored,
+        [dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id]:
+          dashboardWorkstationRequestFixtures.scriptSuccess,
+        [dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id]:
+          dashboardWorkstationRequestFixtures.scriptFailed,
       },
     });
 
@@ -2877,7 +2881,7 @@ describe("App", () => {
 
     expect(within(currentSelection).getByRole("heading", { name: "Workstation dispatches" })).toBeTruthy();
     expect(within(currentSelection).queryByRole("heading", { name: "Work session runs list" })).toBeNull();
-    expect(within(dispatchHistory).getByText("4 dispatches")).toBeTruthy();
+    expect(within(dispatchHistory).getByText("6 dispatches")).toBeTruthy();
 
     const pendingCard = getDispatchHistoryCard(
       dispatchHistory,
@@ -2927,6 +2931,26 @@ describe("App", () => {
     expect(
       within(erroredCard).getByText(
         "Response text is unavailable because this dispatch ended with an error.",
+      ),
+    ).toBeTruthy();
+
+    const scriptSuccessCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
+    );
+    expect(within(scriptSuccessCard).getByText("script-tool")).toBeTruthy();
+    expect(within(scriptSuccessCard).getByText("script success stdout")).toBeTruthy();
+    expect(within(scriptSuccessCard).getAllByText("SUCCEEDED").length).toBeGreaterThan(0);
+
+    const scriptFailedCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
+    );
+    expect(within(scriptFailedCard).getAllByText("TIMEOUT").length).toBeGreaterThan(0);
+    expect(within(scriptFailedCard).getByText("script timed out")).toBeTruthy();
+    expect(
+      within(scriptFailedCard).getByText(
+        "Prompt details are not applicable to this script-backed dispatch.",
       ),
     ).toBeTruthy();
   });
