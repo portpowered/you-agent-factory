@@ -954,3 +954,46 @@
 - Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
   matches the merged PR state, the remaining open collision surface, and the
   next customer-ask implementation lane.
+
+## 2026-05-01 22:04 -07:00 - meta refresh after main advanced again
+
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `9efe9ca`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `7b006fe`
+  - it did not list the local ignored
+    `factory/inputs/idea/default/factory-level-inference-throttle-guard.md`
+    residue now present in this workspace
+  - it did not capture the exact current file set for the first throttle-guard
+    authoring lane
+- Revalidated the customer throttle ask directly against current code plus a
+  sidecar explorer:
+  - `pkg/interfaces/factory_config.go` still has no top-level `Guards` field,
+    no `INFERENCE_THROTTLE_GUARD`, and no
+    `InferenceThrottleGuardConfig`
+  - `api/components/schemas/data-models/Factory.yaml` and generated OpenAPI
+    output still expose no root `guards` property on `Factory`
+  - `pkg/config/factory_config_mapping.go`, `pkg/config/openapi_factory.go`,
+    `pkg/config/layout.go`, and `pkg/config/config_validator.go` are the
+    smallest accurate first-lane authoring and round-trip seams
+  - `pkg/config/config_mapper.go` remains the next required seam if the lane
+    carries the guard all the way into runtime transition lowering
+- Used a second sidecar explorer to confirm the fallback dead-code seam still
+  exists:
+  - `pkg/logging.VerboseLogger` has no callers outside
+    `pkg/logging/logger.go`
+  - the seam remains a clean reserve cleanup, but it is still lower priority
+    than the customer throttle ask
+- Refreshed the ignored local idea file
+  `factory/inputs/idea/default/factory-level-inference-throttle-guard.md`
+  instead of creating a duplicate request for the same lane.
+- Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
+  matches `HEAD` `9efe9ca`, the current ignored-residue map, and the exact
+  scoped file set for the first throttle-guard implementation lane.
