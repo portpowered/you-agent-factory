@@ -26,3 +26,4 @@ coverage-report commands, use the canonical maintainer guide:
 - `failure-analysis-replay.jsonl` — failure-path replay covering queued work, failed selection rendering, and fixed-tick history navigation.
 - `graph-state-smoke-replay.jsonl` — dashboard-shell replay covering graph markers, terminal selection, and tick rewinds.
 - `runtime-details-replay.jsonl` — request-detail replay covering pending, successful, and failed runtime workstation projections.
+- `weird-number-summary-replay.jsonl` — focused failed-summary replay covering the one-dispatch/three-failed-work-items regression.

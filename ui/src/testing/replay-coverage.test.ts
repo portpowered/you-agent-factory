@@ -16,12 +16,10 @@ describe("replay coverage reporting", () => {
     expect(report.scenarioCount).toBe(
       Object.keys(replayFixtureCatalog).length + Object.keys(supplementalReplayCoverageCatalog).length,
     );
-    expect(report.coveredSurfaceCount).toBe(13);
-    expect(report.gapSurfaceCount).toBe(3);
+    expect(report.coveredSurfaceCount).toBe(15);
+    expect(report.gapSurfaceCount).toBe(1);
     expect(report.surfaces.filter((surface) => surface.status === "gap").map((surface) => surface.id)).toEqual([
-      "terminal-summary",
       "script-request-history",
-      "resource-counts",
     ]);
   });
 
@@ -31,7 +29,8 @@ describe("replay coverage reporting", () => {
     expect(markdown).toContain("## Baseline");
     expect(markdown).toContain("| `baseline` | `event-stream-replay.jsonl` | app-smoke, browser-integration | dashboard-shell, selected-work, trace-drilldown |");
     expect(markdown).toContain("| `pngRoundTrip` | `graph-state-smoke-replay.jsonl` | browser-integration, jsdom, unit | png-export, png-import-preview, png-import-activation |");
-    expect(markdown).toContain("| `resource-counts` | gap | none yet | Replay-driven resource-count assertions against backend world-view counts. |");
+    expect(markdown).toContain("| `weirdNumberSummary` | `weird-number-summary-replay.jsonl` | app-smoke, projection-helper | failure-rendering, resource-counts, terminal-summary |");
+    expect(markdown).toContain("| `resource-counts` | covered | `weirdNumberSummary` | Replay-driven resource-count assertions against backend world-view counts. |");
   });
 
   it("reuses the replay coverage catalog for browser integration scenarios", () => {
