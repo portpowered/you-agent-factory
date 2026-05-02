@@ -52,8 +52,8 @@
   - merged PR `#33` `prd-api-model-contract-cleanup`
 - the worktree is currently clean even though ignored local workflow-input
   residue remains under `factory/inputs/**`
-- the broad throttle customer ask remains the highest-value architecture ask,
-  and the first authored-guard lane is now merged on `main`:
+- the broad throttle customer ask has now been implemented through the
+  authored-guard path, and the follow-up cleanup lane is on this branch:
   - merged PR `#46` added the root authored contract in
     `api/components/schemas/data-models/Factory.yaml`,
     `api/components/schemas/data-models/FactoryGuard.yaml`,
@@ -73,17 +73,14 @@
     `pkg/factory/subsystems/subsystem_dispatcher.go`
   - merged PR `#46` verified the lane with targeted package/API/UI tests while
     still avoiding `tests/functional/**`
-  - the highest-value remaining gap is now explicit post-merge follow-up:
-    runtime still keeps a legacy implicit throttle-policy fallback for
-    factories that do not author `factory.guards`
-  - that fallback still lives in:
-    - `pkg/factory/options.go` via `WithProviderThrottlePauseDuration`
-    - `pkg/factory/runtime/factory.go` via dispatcher wiring from
-      `ProviderThrottlePauseDuration`
-    - `pkg/factory/subsystems/subsystem_dispatcher.go` via the
-      `activeThrottlePauses` branch that falls back to
-      `factorythrottle.DeriveActiveThrottlePauses(...)` when no authored
-      inference-throttle guard exists
+  - this branch retires the old implicit fallback so authored
+    `INFERENCE_THROTTLE_GUARD` definitions are the only supported
+    throttle-policy path
+  - the branch removes the old runtime seam from `pkg/factory/options.go`
+    and `pkg/factory/runtime/factory.go`, removes the dispatcher no-guard
+    fallback in `pkg/factory/subsystems/subsystem_dispatcher.go`, and adds
+    focused package-owned regression coverage in `pkg/factory/...` and
+    `pkg/petri/...`
 - the previously queued dead-surface fallback cleanup is now already complete:
   - merged PR `#47` retired the exported `pkg/logging.VerboseLogger` surface
 - sidecar exploration found a smaller non-colliding helper cleanup in
@@ -100,7 +97,8 @@
      implementation
    - it still treated the exported `VerboseLogger` seam as queueable even
      though merged PR `#47` already removed it
-   - it did not capture that only the legacy throttle fallback remains live
+  - it did not capture that the authored-guard-only cleanup is now in
+    progress on its own branch
 3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 
@@ -110,14 +108,13 @@
   checked-in meta view and ignored `factory/inputs/**` residue; this
   repository changes quickly enough that the checked-in world model drifts
   within hours
-- after merged PR `#46`, the customer throttle ask is no longer "introduce an
-  authored guard contract"; it is "finish the simplification" by retiring the
-  implicit fallback path that still applies provider/model throttle pauses even
-  when a factory has not authored `INFERENCE_THROTTLE_GUARD`
+- after merged PR `#46`, the customer throttle ask moved from "introduce an
+  authored guard contract" to "finish the simplification" by retiring the
+  implicit fallback path; this branch is that follow-up lane
 - the customer explicitly asked to replace the separate global-throttle logic
-  with a factory-level guard and reduce special abstractions, so the highest
-  value follow-up is now removing the remaining runtime option and dispatcher
-  fallback that preserve the old policy shape
+  with a factory-level guard and reduce special abstractions, so the current
+  branch should converge on authored guards as the only supported throttle
+  policy without leaving compatibility seams behind
 - a safe cleanup lane must still stay outside `tests/functional/**` while
   PR `#30` is open, which makes focused package/runtime coverage the right
   first follow-up proof shape
@@ -132,10 +129,8 @@
 - leave `factory/logs/meta/asks.md` unchanged; the priority order is still
   correct
 - do not re-queue the already-merged authored throttle-guard lane
-- queue one new ignored cleanup idea to retire the remaining legacy throttle
-  fallback path in `pkg/factory/options.go`,
-  `pkg/factory/runtime/factory.go`, and
-  `pkg/factory/subsystems/subsystem_dispatcher.go`
+- do not queue a new cleanup idea for the legacy throttle fallback path;
+  that work is already in progress on this branch
 - keep that follow-up out of `tests/functional/**` while PR `#30` remains open
 - treat the tiny `pkg/factory/workstationconfig/runtime_lookup.go` helper seam
   as reserve hygiene only if the throttle cleanup becomes blocked
@@ -149,6 +144,6 @@
   `main`
 - the quality and website-quality asks remain broader follow-on programs, but
   they are still subordinate to the throttling outage-prevention ask
-- the next throttle follow-up should now target removal of the legacy fallback
-  abstraction while continuing to avoid the still-open functional-test
-  decomposition lane in `#30`
+- the next throttle follow-up after this branch should focus on any residual
+  observability or test-decomposition cleanup rather than reintroducing
+  implicit fallback abstractions
