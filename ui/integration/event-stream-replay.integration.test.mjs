@@ -18,10 +18,6 @@ import {
   formatReplayCoverageReportMarkdown,
   listBrowserIntegrationReplayScenarios,
 } from "../src/testing/replay-fixture-catalog";
-import {
-  PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
-  readFactoryImportPng,
-} from "../src/features/import/factory-png-import";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
@@ -233,6 +229,8 @@ async function waitForURL(url, timeoutMs = readyTimeoutMs) {
 
 async function startReplayServer(lines, options = {}) {
   const {
+    activateFactory = null,
+    activationResponseFactory = null,
     currentFactory = null,
     pauseBeforeTick = null,
   } = options;
@@ -262,6 +260,16 @@ async function startReplayServer(lines, options = {}) {
     });
 
   apiServer = http.createServer((request, response) => {
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, {
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Origin": "*",
+      });
+      response.end();
+      return;
+    }
+
     if (request.url === "/factory/~current" && request.method === "GET") {
       if (currentFactory === null) {
         response.writeHead(404, {
@@ -280,6 +288,27 @@ async function startReplayServer(lines, options = {}) {
         "Content-Type": "application/json",
       });
       response.end(JSON.stringify(currentFactory));
+      return;
+    }
+
+    if (request.url === "/factory" && request.method === "POST") {
+      let requestBody = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        requestBody += chunk;
+      });
+      request.on("end", async () => {
+        const body = requestBody.length === 0 ? null : JSON.parse(requestBody);
+        if (activateFactory) {
+          await activateFactory(body);
+        }
+
+        response.writeHead(200, {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        });
+        response.end(JSON.stringify(activationResponseFactory ?? body));
+      });
       return;
     }
 
@@ -592,6 +621,7 @@ async function assertFactoryExportRoundTrip() {
   const pageErrors = [];
   const consoleErrors = [];
   const downloadDirectory = await mkdtemp(path.join(os.tmpdir(), "agent-factory-export-"));
+  const activationRequests = [];
 
   await page.addInitScript(() => {
     window.__agentFactoryCapturedDownloads = [];
@@ -630,7 +660,12 @@ async function assertFactoryExportRoundTrip() {
   try {
     await startReplayServer(
       await loadReplayLines("graph-state-smoke-replay.jsonl"),
-      { currentFactory: exportFactoryDefinition },
+      {
+        activateFactory: async (value) => {
+          activationRequests.push(value);
+        },
+        currentFactory: exportFactoryDefinition,
+      },
     );
     await page.goto(previewURL, { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Agent Factory" }).waitFor({
@@ -696,23 +731,50 @@ async function assertFactoryExportRoundTrip() {
     expect(exportedBytes.subarray(0, 8)).toEqual(
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     );
-
-    const importResult = await readFactoryImportPng({
-      createPreviewImageSrc: () => "blob:test-preview",
-      file: new Blob([exportedBytes], { type: "image/png" }),
-      revokePreviewImageSrc: () => {},
-      validatePreviewImage: async () => {},
+    const viewport = page.getByRole("region", { name: "Work graph viewport" });
+    const importDataTransfer = await page.evaluateHandle(({ bytes, fileName }) => {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(
+        new File([new Uint8Array(bytes)], fileName, { type: "image/png" }),
+      );
+      return dataTransfer;
+    }, {
+      bytes: Array.from(exportedBytes),
+      fileName: download.filename,
     });
 
-    expect(importResult.ok).toBe(true);
-    if (!importResult.ok) {
-      throw new Error(importResult.error.message);
-    }
-    expect(importResult.value.factory).toEqual({
-      ...exportFactoryDefinition,
-      name: exportName,
+    await viewport.dispatchEvent("dragover", { dataTransfer: importDataTransfer });
+    await page.getByText("Import factory PNG").waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
     });
-    expect(importResult.value.schemaVersion).toBe(PORT_OS_FACTORY_PNG_SCHEMA_VERSION);
+    await viewport.dispatchEvent("drop", { dataTransfer: importDataTransfer });
+
+    const importDialog = page.getByRole("dialog", { name: "Review factory import" });
+    await importDialog.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    await importDialog.getByRole("img", { name: `${exportName} preview image` }).waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    expect(await importDialog.textContent()).toContain(exportName);
+    expect(await importDialog.textContent()).toContain(download.filename);
+
+    await importDialog.getByRole("button", { name: "Activate factory" }).click();
+    await importDialog.waitFor({
+      state: "hidden",
+      timeout: uiInteractionTimeoutMs,
+    });
+    expect(activationRequests).toEqual([
+      {
+        ...exportFactoryDefinition,
+        name: exportName,
+      },
+    ]);
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
   } finally {
     await rm(downloadDirectory, { force: true, recursive: true });
     await page.close();
