@@ -622,6 +622,16 @@ async function assertFactoryExportRoundTrip() {
   const consoleErrors = [];
   const downloadDirectory = await mkdtemp(path.join(os.tmpdir(), "agent-factory-export-"));
   const activationRequests = [];
+  const replayCoverageReport = buildReplayCoverageReport();
+  const pngCoverageScenario = replayCoverageReport.scenarios.find((scenario) => scenario.id === "pngRoundTrip");
+
+  expect(pngCoverageScenario).toEqual({
+    description: "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
+    fileName: "graph-state-smoke-replay.jsonl",
+    id: "pngRoundTrip",
+    surfaces: ["png-export", "png-import-preview", "png-import-activation"],
+    verificationLayers: ["browser-integration", "jsdom", "unit"],
+  });
 
   await page.addInitScript(() => {
     window.__agentFactoryCapturedDownloads = [];
