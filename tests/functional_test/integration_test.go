@@ -43,33 +43,6 @@ func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 	return dir
 }
 
-func simplePipelineConfig() map[string]any {
-	return map[string]any{
-		"workTypes": []map[string]any{
-			{
-				"name": "task",
-				"states": []map[string]string{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
-			},
-		},
-		"workers": []map[string]string{
-			{"name": "worker-a"},
-		},
-		"workstations": []map[string]any{
-			{
-				"name":      "process",
-				"worker":    "worker-a",
-				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
-			},
-		},
-	}
-}
-
 func twoStagePipelineConfig() map[string]any {
 	return map[string]any{
 		"workTypes": []map[string]any{
