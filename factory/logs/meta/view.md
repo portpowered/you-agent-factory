@@ -3,7 +3,7 @@
 ## world state
 
 - after `git pull --ff-only`, repository `main` and `origin/main` are both at
-  `c929979` on May 2, 2026 in the local maintainer workspace
+  `c1dffe4` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -16,6 +16,7 @@
 - the workspace-local `factory/inputs/**` surface still has ignored residue
   beyond the tracked sentinels, so those files remain local context only and
   not checked-in workflow truth:
+  - `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
   - `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
   - `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
   - `factory/inputs/idea/default/dedupe-api-surface-factory-contract.md`
@@ -47,6 +48,7 @@
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#59` `browser-integration-timeline-tick-controls`
   - merged PR `#58` `dedupe-loaded-runtime-definition-lookups`
   - merged PR `#57` `dedupe-portable-bundled-path-containment-validation`
   - merged PR `#56` `inline-workstation-runtime-lookup-key-fallback`
@@ -84,6 +86,10 @@
     `main`, so
     `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
     is solved residue
+  - merged PR `#59` landed browser replay coverage for moving the timeline
+    slider and resetting back to `Current`, so
+    `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
+    is solved residue
   - `pkg/cli/dashboard/dashboard.go` now routes both completed and failed
     fallback collection through `worldViewFallbackWorkItems(...)`, so both
     `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
@@ -101,24 +107,28 @@
     target
   - there is no checked-in `golangci-lint` configuration or CI lane yet, so
     broader backend lint automation remains a live follow-up quality seam
-  - the more immediate narrow website-quality gap is browser-level tick-control
-    coverage: `ui/src/App.test.tsx` and
-    `ui/src/state/factoryTimelineStore.test.ts` already cover slider semantics
-    in jsdom and store tests, but
-    `ui/integration/event-stream-replay.integration.test.mjs` still does not
-    move the timeline slider or verify the `Current` reset path in the browser
-  - this tick-control lane stays outside open PR `#30` because it remains
-    entirely under `ui/**` and avoids `tests/functional/**`
+  - merged PR `#59` closed the earlier browser-level tick-control gap by
+    updating `ui/integration/event-stream-replay.integration.test.mjs` and
+    `ui/src/testing/replay-fixture-catalog.ts`
+  - the next narrow website-quality gap is browser-level PNG export/import
+    coverage: `ui/src/App.test.tsx`, `ui/src/features/export/*.test.tsx`,
+    `ui/src/features/import/*.test.ts(x)`, and
+    `ui/src/features/workflow-activity/react-flow-current-activity-card.test.tsx`
+    already cover the PNG flows heavily in jsdom, but there is still no
+    built-app browser smoke for the actual export/download plus import preview
+    and activation path
+  - this PNG browser lane stays outside open PR `#30` because it can remain
+    entirely under `ui/**` and avoid `tests/functional/**`
 
 ## current blockers
 
 1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid that tree until it merges
 2. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `8a1c002`
-   - it did not include merged PR `#58`
-   - it still treated the runtime-lookup cleanup seam as the next move even
-     though `#58` already landed it on `main`
+   - it still described `HEAD` as `c929979`
+   - it did not include merged PR `#59`
+   - it still treated browser tick-control coverage as the next move even
+     though `#59` already landed it on `main`
 3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 4. many ignored local idea and plan files now correspond either to merged PRs
@@ -146,10 +156,11 @@
   still the only live broad collision surface
 - the next customer-ask-aligned move is not "introduce website testing from
   zero"; the repository already has strong jsdom coverage for PNG import/export
-  and timeline state, so the live UI gap is browser-level replay interaction
-  coverage for the tick slider rather than another unit-style test
+  and timeline state, so the live UI gap has shifted from replay tick controls
+  to a browser-level PNG export/import roundtrip smoke rather than another
+  unit-style test
 - broader lint automation is still a real quality seam, but it is now the
-  secondary follow-up behind the narrower website-quality lane
+  secondary follow-up behind the narrower PNG browser lane
 
 ## next best move
 
@@ -159,7 +170,7 @@
 - do not re-queue solved or code-stale cleanup residue from ignored
   `factory/inputs/**`
 - queue one new ignored customer-ask-aligned idea for browser integration
-  coverage of timeline tick controls
+  coverage of PNG export/import flows
 - keep any new reserve or quality work out of `tests/functional/**` while PR
   `#30` remains open
 
@@ -172,4 +183,5 @@
   pass is no longer throttle-related
 - the website-quality ask remains live at a broader design-system and
   consistency level, and its clearest narrow unchecked subproblem is
-  browser-level tick-control replay coverage rather than PNG import/export
+  browser-level PNG export/import coverage now that tick-control replay
+  coverage is merged on `main`
