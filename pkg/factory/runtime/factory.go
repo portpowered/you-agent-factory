@@ -110,7 +110,6 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 		logger,
 		subsystems.WithDispatcherRuntimeConfig(cfg.RuntimeConfig),
 		subsystems.WithDispatcherClock(cfg.Clock.Now),
-		subsystems.WithDispatcherThrottlePauseDuration(cfg.ProviderThrottlePauseDuration),
 	)
 
 	circuitBreaker := subsystems.NewCircuitBreakerWithClock(

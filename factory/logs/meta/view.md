@@ -2,9 +2,8 @@
 
 ## world state
 
-- after `git pull`, repository `main` and
-  `origin/main` are both at `d028000` on May 2, 2026 in the local maintainer
-  workspace
+- after `git pull --ff-only`, repository `main` and `origin/main` are both at
+  `c1dffe4` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -17,15 +16,23 @@
 - the workspace-local `factory/inputs/**` surface still has ignored residue
   beyond the tracked sentinels, so those files remain local context only and
   not checked-in workflow truth:
+  - `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
   - `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
   - `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
+  - `factory/inputs/idea/default/dedupe-api-surface-factory-contract.md`
+  - `factory/inputs/idea/default/dedupe-factory-config-boundary-alias-rejection.md`
+  - `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
   - `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+  - `factory/inputs/idea/default/dedupe-loaded-runtime-definition-lookups.md`
+  - `factory/inputs/idea/default/dedupe-portable-bundled-path-containment-validation.md`
   - `factory/inputs/idea/default/dedupe-replay-factory-merge-helpers.md`
   - `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
   - `factory/inputs/idea/default/derive-throttle-windows-from-completed-dispatch-history.md`
   - `factory/inputs/idea/default/derive-throttle-windows-from-event-history.md`
   - `factory/inputs/idea/default/factory-level-inference-throttle-guard.md`
   - `factory/inputs/idea/default/inline-batch-relation-duplicate-rejection.md`
+  - `factory/inputs/idea/default/inline-workstation-request-projection-fallback-helpers.md`
+  - `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
   - `factory/inputs/idea/default/prd-cli-consumer-installation.md`
   - `factory/inputs/idea/default/prd-current-factory-default-runtime-support.md`
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
@@ -40,164 +47,141 @@
   - `factory/inputs/task/default/prd-api-model-contract-cleanup.md`
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
-  - open PR `#48` `retire-legacy-throttle-fallback-after-authored-guard`
   - open PR `#30` `prd-functional-test-suite-decomposition`
-  - merged PR `#49` `retire-runtime-lookup-helper-duplication`
+  - merged PR `#59` `browser-integration-timeline-tick-controls`
+  - merged PR `#58` `dedupe-loaded-runtime-definition-lookups`
+  - merged PR `#57` `dedupe-portable-bundled-path-containment-validation`
+  - merged PR `#56` `inline-workstation-runtime-lookup-key-fallback`
+  - merged PR `#55` `dedupe-generated-public-enum-pointer-helpers`
+  - merged PR `#54` `dedupe-factory-config-boundary-alias-rejection`
+  - merged PR `#53` `dedupe-api-surface-factory-contract`
+  - merged PR `#52` `inline-workstation-request-projection-fallback-helpers`
+  - merged PR `#51` `retire-legacy-workstation-timeout-alias-fallback`
   - merged PR `#50` `unify-token-removal-bookkeeping`
+  - merged PR `#49` `retire-runtime-lookup-helper-duplication`
+  - merged PR `#48` `retire-legacy-throttle-fallback-after-authored-guard`
   - merged PR `#47` `retire-verbose-logger-export`
   - merged PR `#46` `factory-level-inference-throttle-guard`
   - merged PR `#45` `retire-duplicate-ui-script-copies`
   - merged PR `#44` `inline-batch-relation-duplicate-rejection`
-  - merged PR `#43` `collapse-dashboard-fallback-work-item-collectors`
-  - merged PR `#42` `retire-dispatcher-throttle-pause-map`
-  - merged PR `#41` `dedupe-replay-factory-merge-helpers`
-  - merged PR `#40` `dedupe-worker-event-exit-code-extraction`
-  - merged PR `#39` `chaining-trace-ids`
-  - merged PR `#38` `prd-current-factory-default-runtime-support`
-  - merged PR `#37` `prd-cli-consumer-installation`
-  - merged PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
-  - merged PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
-  - merged PR `#33` `prd-api-model-contract-cleanup`
 - the worktree is currently clean even though ignored local workflow-input
   residue remains under `factory/inputs/**`
-- the broad throttle customer ask remains the highest-value architecture ask,
-  and is now represented by an active cleanup lane plus the already-merged
-  authored-guard implementation:
-  - merged PR `#46` added the root authored contract in
-    `api/components/schemas/data-models/Factory.yaml`,
-    `api/components/schemas/data-models/FactoryGuard.yaml`,
-    `api/components/schemas/data-models/GuardType.yaml`,
-    `api/openapi.yaml`, and generated API/UI client output
-  - merged PR `#46` added the factory-level config/mapping/validation lane
-    through `pkg/interfaces/factory_config.go`,
-    `pkg/config/factory_config_mapping.go`,
-    `pkg/config/openapi_factory.go`,
-    `pkg/config/config_validator.go`,
-    `pkg/config/public_factory_enums.go`, and
-    `pkg/config/config_mapper.go`
-  - merged PR `#46` lowered the authored guard into ordinary runtime guard
-    evaluation through `pkg/petri/guard.go`,
-    `pkg/petri/inference_throttle_guard.go`,
-    `pkg/factory/scheduler/enablement.go`, and
-    `pkg/factory/subsystems/subsystem_dispatcher.go`
-  - merged PR `#46` verified the lane with targeted package/API/UI tests while
-    still avoiding `tests/functional/**`
-  - open PR `#48` now owns the explicit post-merge simplification follow-up:
-    retire the legacy implicit throttle-policy fallback for factories that do
-    not author `factory.guards`
-  - the live fallback on `main` still lives in:
-    - `pkg/factory/options.go` via `WithProviderThrottlePauseDuration`
-    - `pkg/factory/runtime/factory.go` via dispatcher wiring from
-      `ProviderThrottlePauseDuration`
-    - `pkg/factory/subsystems/subsystem_dispatcher.go` via the
-      `activeThrottlePauses` branch that falls back to
-      `factorythrottle.DeriveActiveThrottlePauses(...)` when no authored
-      inference-throttle guard exists
-  - PR `#48` covers those files plus focused regression proof in
-    `pkg/factory/subsystems/dispatcher_test.go`,
-    `pkg/petri/inference_throttle_guard_test.go`,
-    `pkg/testutil/testutil.go`, and
-    `tests/functional_test/provider_error_smoke_test.go`; that last file sits
-    outside the still-open `tests/functional/**` reorganization lane in `#30`
-- the previously queued reserve cleanup changed again while `main` advanced:
-  - merged PR `#49` already retired the duplicated first-non-nil helper loops
-    in `pkg/interfaces/runtime_lookup.go`
-  - the ignored local idea
-    `factory/inputs/idea/default/retire-runtime-lookup-helper-duplication.md`
-    is now solved residue rather than pending work
-- direct code inspection also invalidated another ignored local reserve idea:
-  - `pkg/api/server.go` still owns the handwritten tolerant `/work` wrapper
-  - `pkg/api/handlers.go` on `main` no longer re-parses raw `maxResults`
-    query text inside `ListWork`
-  - the ignored local idea
+- the broad throttle customer ask is fully implemented on `main` through
+  merged PRs `#46` and `#48`; it should remain treated as solved rather than
+  live backlog
+- direct `HEAD` inspection confirmed that more ignored local workflow-input
+  residue is now stale rather than queueable:
+  - merged PR `#58` landed the runtime lookup ownership cleanup on `main`, so
+    `factory/inputs/idea/default/dedupe-loaded-runtime-definition-lookups.md`
+    is solved residue
+  - merged PR `#57` landed the portable bundled-file containment cleanup on
+    `main`, so
+    `factory/inputs/idea/default/dedupe-portable-bundled-path-containment-validation.md`
+    is solved residue
+  - merged PR `#56` landed the workstation runtime lookup-key fallback cleanup
+    on `main`, so
+    `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
+    is solved residue
+  - merged PR `#55` landed the generated enum pointer-helper cleanup on
+    `main`, so
+    `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
+    is solved residue
+  - merged PR `#59` landed browser replay coverage for moving the timeline
+    slider and resetting back to `Current`, so
+    `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
+    is solved residue
+  - `pkg/cli/dashboard/dashboard.go` now routes both completed and failed
+    fallback collection through `worldViewFallbackWorkItems(...)`, so both
+    `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
+    and
+    `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
+    no longer match live code
+  - `pkg/api/handlers.go` no longer re-parses raw `maxResults`, so
     `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
-    is stale because its problem statement is no longer true on `main`
-- direct code inspection plus current PR validation found the next smaller
-  non-colliding reserve cleanup in legacy workstation timeout handling:
-  - `pkg/config/workstation_execution_limits.go` still normalizes
-    workstation-level `timeout` into `limits.maxExecutionTime` and also keeps a
-    second direct-struct legacy fallback in `WorkstationExecutionTimeout(...)`
-  - `pkg/workers/workstation_executor.go` still consumes that helper for live
-    dispatch deadlines
-  - `pkg/workers/workstation_executor_test.go` still proves the legacy
-    top-level timeout alias path with `legacy_timeout_alias_zero`
-  - docs already describe top-level workstation `timeout` as a load-boundary
-    alias that is normalized away, so the remaining in-memory fallback is the
-    smaller cleanup seam
-  - this seam stays outside open PR `#48` and open PR `#30`
+    is also stale residue
+- direct code inspection against `Makefile`, `.github/workflows/ci.yml`, the
+  standards docs, and the current UI integration harness refined the next
+  customer-ask-aligned quality seams:
+  - the current checked-in lint surface is real but narrow: `make lint` runs
+    `go vet ./...` plus `go run ./cmd/deadcodecheck`, and CI invokes that same
+    target
+  - there is no checked-in `golangci-lint` configuration or CI lane yet, so
+    broader backend lint automation remains a live follow-up quality seam
+  - merged PR `#59` closed the earlier browser-level tick-control gap by
+    updating `ui/integration/event-stream-replay.integration.test.mjs` and
+    `ui/src/testing/replay-fixture-catalog.ts`
+  - the next narrow website-quality gap is browser-level PNG export/import
+    coverage: `ui/src/App.test.tsx`, `ui/src/features/export/*.test.tsx`,
+    `ui/src/features/import/*.test.ts(x)`, and
+    `ui/src/features/workflow-activity/react-flow-current-activity-card.test.tsx`
+    already cover the PNG flows heavily in jsdom, but there is still no
+    built-app browser smoke for the actual export/download plus import preview
+    and activation path
+  - this PNG browser lane stays outside open PR `#30` because it can remain
+    entirely under `ui/**` and avoid `tests/functional/**`
 
 ## current blockers
 
-1. open PR `#48` occupies the exact remaining customer throttle cleanup lane,
-   so that ask should not be re-queued while review is pending
-2. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
-   new work should avoid those paths until that lane merges
-3. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `12c56e2`
-   - it still treated the token-removal reserve seam as queueable even though
-     merged PR `#50` already landed it on `main`
-   - it did not capture the next reserve seam in legacy workstation-timeout
-     alias fallback handling
-4. workspace-local ignored residue can drift independently of `main` and must
+1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
+   new work should avoid that tree until it merges
+2. the previous checked-in world model was stale again:
+   - it still described `HEAD` as `c929979`
+   - it did not include merged PR `#59`
+   - it still treated browser tick-control coverage as the next move even
+     though `#59` already landed it on `main`
+3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
+4. many ignored local idea and plan files now correspond either to merged PRs
+   or to already-simplified code on `HEAD`, so the local workflow-input
+   surface is increasingly a stale mix rather than an actionable queue
+5. the quality and linting customer asks remain broad, so they only become
+   actionable when decomposed into small checked-in or ignored idea files with
+   explicit file scope and observable acceptance criteria
 
 ## theory of mind
 
-- merged PR history and live open PR file sets must keep winning over both the
+- merged PR history and live `HEAD` file reads must keep winning over both the
   checked-in meta view and ignored `factory/inputs/**` residue; this
   repository changes quickly enough that the checked-in world model drifts
   within hours
-- after merged PR `#46`, the customer throttle ask became "finish the
-  simplification" by retiring the implicit fallback path that still applies
-  provider/model throttle pauses even when a factory has not authored
-  `INFERENCE_THROTTLE_GUARD`; open PR `#48` is now the active embodiment of
-  that follow-up
-- the customer explicitly asked to replace the separate global-throttle logic
-  with a factory-level guard and reduce special abstractions, so the correct
-  maintainer action today is to track `#48` as the active lane rather than
-  queueing another competing throttle request
-- a safe parallel cleanup lane must still stay outside both `#48` and
-  `tests/functional/**` while PR `#30` is open
-- ignored local idea files are even less trustworthy than their filenames
-  suggest; they can be stale because the seam already landed or because later
-  mainline cleanup removed the underlying duplication before the idea was ever
-  dispatched
-- when a deprecated config field is already normalized away at the load
-  boundary, the next simplification step is usually retiring any second
-  in-memory fallback path that still preserves that alias for tests or manual
-  struct assembly
-- the smallest currently validated reserve hygiene lane is retiring the
-  legacy workstation timeout alias fallback across
-  `pkg/config/workstation_execution_limits.go` and
-  `pkg/workers/workstation_executor_test.go`; it is still lower value than the
-  active customer-owned throttle follow-up but remains safe background work
+- the customer throttle outage-prevention ask is complete on `main`; the
+  correct maintainer posture is to stop treating throttle cleanup as live
+  backlog and to avoid creating new overlapping throttle requests from stale
+  local residue
+- the local workflow-input surface is now stale in two different ways:
+  merged lanes remain as ignored idea residue, and some older ideas no longer
+  match live code because later cleanups already simplified the targeted seam
+- the safest non-colliding cleanup posture remains small, package-local or
+  root-quality-lane work outside `tests/functional/**`, because PR `#30` is
+  still the only live broad collision surface
+- the next customer-ask-aligned move is not "introduce website testing from
+  zero"; the repository already has strong jsdom coverage for PNG import/export
+  and timeline state, so the live UI gap has shifted from replay tick controls
+  to a browser-level PNG export/import roundtrip smoke rather than another
+  unit-style test
+- broader lint automation is still a real quality seam, but it is now the
+  secondary follow-up behind the narrower PNG browser lane
 
 ## next best move
 
 - update the checked-in meta world model and progress log now
-- leave `factory/logs/meta/asks.md` unchanged; the priority order is still
-  correct
-- do not re-queue the already-open throttle fallback cleanup lane in `#48`
-- queue one new ignored reserve cleanup idea for retiring the legacy
-  workstation timeout alias fallback from
-  `pkg/config/workstation_execution_limits.go` and
-  `pkg/workers/workstation_executor_test.go`
-- keep any new reserve work out of both the `#48` file set and
-  `tests/functional/**` while PR `#30` remains open
-- treat the active customer throttle follow-up as review/merge work now, not
-  as a fresh backlog item
+- leave `factory/logs/meta/asks.md` unchanged; the checked-in priority order is
+  still correct
+- do not re-queue solved or code-stale cleanup residue from ignored
+  `factory/inputs/**`
+- queue one new ignored customer-ask-aligned idea for browser integration
+  coverage of PNG export/import flows
+- keep any new reserve or quality work out of `tests/functional/**` while PR
+  `#30` remains open
 
 ## customer asks
 
 - `factory/logs/meta/asks.md` remains the only checked-in backlog surface
 - no ask is marked urgent as of May 2, 2026 in the maintainer workspace
-- the throttling ask is still the most important architecture-level customer
-  ask, with authored-guard support merged on `main` and the remaining fallback
-  retirement now active in open PR `#48`
-- the quality and website-quality asks remain broader follow-on programs, but
-  they are still subordinate to the throttling outage-prevention ask
-- the next maintainer action on that ask is to review and merge `#48` rather
-  than creating another throttle request, while reserve hygiene can continue in
-  non-colliding seams such as retiring the legacy workstation timeout alias
-  fallback in `pkg/config/workstation_execution_limits.go` and
-  `pkg/workers/workstation_executor_test.go`
+- the throttling ask is satisfied on `main` through merged PRs `#46` and `#48`
+- the quality and linting asks remain live, but the next best slice after this
+  pass is no longer throttle-related
+- the website-quality ask remains live at a broader design-system and
+  consistency level, and its clearest narrow unchecked subproblem is
+  browser-level PNG export/import coverage now that tick-control replay
+  coverage is merged on `main`

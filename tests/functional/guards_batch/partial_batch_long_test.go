@@ -3,7 +3,6 @@
 package guards_batch
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -223,24 +222,21 @@ Process the input task.
 	assertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
 }
 
-func TestPartialBatch_ThrottledProviderFailureRequeuesToPreTransitionPlace(t *testing.T) {
-	support.SkipLongFunctional(t, "slow partial-batch throttled-provider sweep")
+func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails(t *testing.T) {
+	support.SkipLongFunctional(t, "slow partial-batch throttled-provider failure sweep")
 	h, runner := throttledProviderFailureHarness(t)
-	runHarnessInBackground(t, h)
-
-	waitForThrottleRequeue(t, h, 5*time.Second)
+	h.RunUntilComplete(t, 5*time.Second)
 
 	h.Assert().
-		PlaceTokenCount("task:init", 1).
-		HasNoTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:failed")
+		PlaceTokenCount("task:failed", 1).
+		HasNoTokenInPlace("task:init").
+		HasNoTokenInPlace("task:complete")
 
-	if runner.CallCount() != 3 {
-		t.Fatalf("expected provider runner called 3 times, got %d", runner.CallCount())
+	if runner.CallCount() != 4 {
+		t.Fatalf("expected provider runner called 4 times, got %d", runner.CallCount())
 	}
 
-	assertThrottledWorkRequeued(t, h)
-	assertThrottledDispatchFailed(t, h)
+	assertThrottledWorkFailedAfterRetries(t, h)
 }
 
 func throttledProviderFailureHarness(t *testing.T) (*testutil.ServiceTestHarness, *testutil.ProviderCommandRunner) {
@@ -276,69 +272,33 @@ Process the input task.
 	return h, runner
 }
 
-func runHarnessInBackground(t *testing.T, h *testutil.ServiceTestHarness) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	errCh := h.RunInBackground(ctx)
-	t.Cleanup(func() {
-		cancel()
-		<-errCh
-	})
-}
-
-func assertThrottledWorkRequeued(t *testing.T, h *testutil.ServiceTestHarness) {
+func assertThrottledWorkFailedAfterRetries(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
 
 	snap := h.Marking()
-	var requeued *interfaces.Token
+	var failed *interfaces.Token
 	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:init" && tok.Color.WorkID == "work-provider-throttle-requeue" {
-			requeued = tok
+		if tok.PlaceID == "task:failed" && tok.Color.WorkID == "work-provider-throttle-requeue" {
+			failed = tok
 			break
 		}
 	}
-	if requeued == nil {
-		t.Fatal("expected requeued token in task:init")
+	if failed == nil {
+		t.Fatal("expected failed token in task:failed")
 	}
-	if got := requeued.History.TotalVisits["process"]; got != 1 {
-		t.Fatalf("TotalVisits[process] = %d, want 1", got)
+	if failed.Color.WorkID != "work-provider-throttle-requeue" {
+		t.Fatalf("failed token work id = %q, want %q", failed.Color.WorkID, "work-provider-throttle-requeue")
 	}
-	if got := requeued.History.ConsecutiveFailures["process"]; got != 1 {
-		t.Fatalf("ConsecutiveFailures[process] = %d, want 1", got)
-	}
-	if len(requeued.History.FailureLog) != 1 {
-		t.Fatalf("FailureLog length = %d, want 1", len(requeued.History.FailureLog))
-	}
-}
-
-func assertThrottledDispatchFailed(t *testing.T, h *testutil.ServiceTestHarness) {
-	t.Helper()
 
 	engineState, err := h.GetEngineStateSnapshot()
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
 	}
-	if len(engineState.DispatchHistory) != 1 {
-		t.Fatalf("DispatchHistory length = %d, want 1", len(engineState.DispatchHistory))
+	if len(engineState.DispatchHistory) == 0 {
+		t.Fatal("expected failed throttle path to record dispatch history")
 	}
-	if engineState.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
+	last := engineState.DispatchHistory[len(engineState.DispatchHistory)-1]
+	if last.TransitionID != "process" {
+		t.Fatalf("last dispatch transition = %q, want %q", last.TransitionID, "process")
 	}
-}
-
-func waitForThrottleRequeue(t *testing.T, h *testutil.ServiceTestHarness, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snap := h.Marking()
-		for _, tok := range snap.Tokens {
-			if tok.PlaceID == "task:init" && tok.History.TotalVisits["process"] == 1 && len(tok.History.FailureLog) == 1 {
-				return
-			}
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	snap := h.Marking()
-	t.Fatalf("timed out waiting for throttled work to requeue to task:init; marking=%+v", snap.PlaceTokens)
 }

@@ -231,15 +231,15 @@ func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryC
 
 	resolvedWrites := make([]portableBundledFileWrite, 0, len(bundledFiles))
 	for _, bundledFile := range bundledFiles {
-		targetPath, err := portableBundledTargetPath(validationRoot.targetDir, bundledFile.TargetPath)
+		target, err := portableBundledTargetPath(validationRoot.targetDir, bundledFile.TargetPath)
 		if err != nil {
 			return nil, fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
 		}
-		if err := validatePortableBundledFilesystemPath(validationRoot, bundledFile.TargetPath, targetPath); err != nil {
+		if err := validatePortableBundledFilesystemPath(validationRoot, bundledFile.TargetPath, target); err != nil {
 			return nil, fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
 		}
 		resolvedWrites = append(resolvedWrites, portableBundledFileWrite{
-			targetPath: targetPath,
+			targetPath: target.path,
 			content:    bundledFile.Content.Inline,
 			mode:       portableBundledFileMode(bundledFile),
 		})
@@ -251,6 +251,11 @@ type portableBundledFileWrite struct {
 	targetPath string
 	content    string
 	mode       fs.FileMode
+}
+
+type portableBundledResolvedTarget struct {
+	path     string
+	segments []string
 }
 
 func portableBundledFileMode(bundledFile interfaces.BundledFileConfig) fs.FileMode {
@@ -265,22 +270,22 @@ type portableBundledValidationRoot struct {
 	resolvedRoot string
 }
 
-func portableBundledTargetPath(targetDir, targetLocation string) (string, error) {
+func portableBundledTargetPath(targetDir, targetLocation string) (portableBundledResolvedTarget, error) {
 	trimmed := strings.TrimSpace(targetLocation)
 	if trimmed == "" {
-		return "", fmt.Errorf("target location is required")
+		return portableBundledResolvedTarget{}, fmt.Errorf("target location is required")
 	}
 
 	normalized := strings.ReplaceAll(trimmed, `\`, "/")
 	cleaned := path.Clean(normalized)
 	if cleaned == "" || cleaned == "." {
-		return "", fmt.Errorf("target location is required")
+		return portableBundledResolvedTarget{}, fmt.Errorf("target location is required")
 	}
 	if strings.HasPrefix(normalized, "/") || strings.HasPrefix(normalized, `\`) || filepath.IsAbs(trimmed) || filepath.VolumeName(trimmed) != "" {
-		return "", fmt.Errorf("target location %q must be relative to the expand target", targetLocation)
+		return portableBundledResolvedTarget{}, fmt.Errorf("target location %q must be relative to the expand target", targetLocation)
 	}
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", fmt.Errorf("target location %q cannot escape the expand target", targetLocation)
+		return portableBundledResolvedTarget{}, fmt.Errorf("target location %q cannot escape the expand target", targetLocation)
 	}
 
 	materializedPath := cleaned
@@ -288,15 +293,19 @@ func portableBundledTargetPath(targetDir, targetLocation string) (string, error)
 		materializedPath = strings.TrimPrefix(materializedPath, portableFactoryDirName+"/")
 	}
 
-	targetPath := filepath.Join(targetDir, filepath.FromSlash(materializedPath))
+	filesystemPath := filepath.FromSlash(materializedPath)
+	targetPath := filepath.Join(targetDir, filesystemPath)
 	relativePath, err := filepath.Rel(targetDir, targetPath)
 	if err != nil {
-		return "", fmt.Errorf("resolve bundled file path for %q: %w", targetLocation, err)
+		return portableBundledResolvedTarget{}, fmt.Errorf("resolve bundled file path for %q: %w", targetLocation, err)
 	}
 	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
-		return "", fmt.Errorf("target location %q cannot escape the expand target", targetLocation)
+		return portableBundledResolvedTarget{}, fmt.Errorf("target location %q cannot escape the expand target", targetLocation)
 	}
-	return targetPath, nil
+	return portableBundledResolvedTarget{
+		path:     targetPath,
+		segments: strings.Split(filesystemPath, string(filepath.Separator)),
+	}, nil
 }
 
 func preparePortableBundledValidationRoot(targetDir string) (portableBundledValidationRoot, error) {
@@ -321,14 +330,9 @@ func preparePortableBundledValidationRoot(targetDir string) (portableBundledVali
 	}, nil
 }
 
-func validatePortableBundledFilesystemPath(root portableBundledValidationRoot, targetLocation, targetPath string) error {
-	relativePath, err := filepath.Rel(root.targetDir, targetPath)
-	if err != nil {
-		return fmt.Errorf("resolve bundled file path for %q: %w", targetLocation, err)
-	}
-
+func validatePortableBundledFilesystemPath(root portableBundledValidationRoot, targetLocation string, target portableBundledResolvedTarget) error {
 	currentPath := root.targetDir
-	for _, segment := range strings.Split(relativePath, string(filepath.Separator)) {
+	for _, segment := range target.segments {
 		if segment == "" || segment == "." {
 			continue
 		}
@@ -340,6 +344,8 @@ func validatePortableBundledFilesystemPath(root portableBundledValidationRoot, t
 			}
 			return fmt.Errorf("inspect bundled file path %q: %w", targetLocation, err)
 		}
+		// Lexical containment is already owned by portableBundledTargetPath.
+		// This walk only rejects existing filesystem links that resolve outside the expand root.
 		resolvedPath, isLink, err := portableBundledResolvedLinkPath(currentPath, info)
 		if err != nil {
 			return fmt.Errorf("resolve filesystem link for %q: %w", targetLocation, err)

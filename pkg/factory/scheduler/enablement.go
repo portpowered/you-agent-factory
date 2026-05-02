@@ -142,10 +142,11 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		arc := &tr.InputArcs[idx]
 		candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
 		guardMatched, ok := e.evaluateGuard(arc.Guard, petri.RuntimeGuardContext{
-			Now:               e.now(),
-			DispatchHistory:   snapshot.DispatchHistory,
-			RuntimeConfig:     e.runtimeConfig,
-			TransitionWorkers: transitionWorkerTypes(snapshot.Topology, tr),
+			Now:                 e.now(),
+			CurrentTransitionID: tr.ID,
+			DispatchHistory:     snapshot.DispatchHistory,
+			RuntimeConfig:       e.runtimeConfig,
+			TransitionWorkers:   transitionWorkerTypes(snapshot.Topology, tr),
 		}, candidates, guardBindings, marking)
 		if !ok {
 			e.logger.Debug("enablement: transition disabled",

@@ -681,6 +681,25 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 			}`,
 	},
 	{
+		name:        "nested worker definition provider alias",
+		field:       "workers[0].definition.provider",
+		replacement: "use executorProvider",
+		payload: `{
+				"name":"nested-worker-definition-provider-alias-factory",
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{
+					"name":"executor",
+					"definition":{"type":"MODEL_WORKER","provider":"script_wrap"}
+				}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+	},
+	{
 		name:        "workstation resource usage alias",
 		field:       "workstations[0].resource_usage",
 		replacement: "use resources",
@@ -732,7 +751,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 			}`,
 	},
 	{
-		name:        "definition alias",
+		name:        "nested workstation definition alias",
 		field:       "workstations[0].definition.runtime_type",
 		replacement: "use type",
 		payload: `{
@@ -749,6 +768,25 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 				}]
 			}`,
 	},
+	{
+		name:        "nested workstation definition cron alias",
+		field:       "workstations[0].definition.cron.trigger_at_start",
+		replacement: "use triggerAtStart",
+		payload: `{
+				"name":"nested-definition-cron-alias-factory",
+				"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor"}],
+				"workstations": [{
+					"name":"scheduled-story",
+					"behavior":"CRON",
+					"worker":"executor",
+					"outputs":[{"workType":"story","state":"complete"}],
+					"definition":{
+						"cron":{"schedule":"*/5 * * * *","trigger_at_start":true}
+					}
+				}]
+			}`,
+	},
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredRenamedFieldAliasesAtBoundary(t *testing.T) {
@@ -757,6 +795,31 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredRenamedFieldAliasesAtBoun
 		t.Run(tc.name, func(t *testing.T) {
 			assertGeneratedFactoryRejectsRetiredRenamedFieldAlias(t, tc)
 		})
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_AllowsDeeperNestedDefinitionAliasesOutsideBoundaryScope(t *testing.T) {
+	payload := []byte(`{
+		"name":"deep-definition-alias-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{
+			"name":"executor",
+			"definition":{
+				"type":"MODEL_WORKER",
+				"definition":{"provider":"script_wrap"}
+			}
+		}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(payload)
+	if err != nil && strings.Contains(err.Error(), "workers[0].definition.definition.provider") {
+		t.Fatalf("expected deeper nested definition alias to stay outside generated boundary rejection scope, got %v", err)
 	}
 }
 

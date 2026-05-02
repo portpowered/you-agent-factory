@@ -10,6 +10,7 @@ import (
 
 type RuntimeGuardContext struct {
 	Now               time.Time
+	CurrentTransitionID string
 	DispatchHistory   []interfaces.CompletedDispatch
 	RuntimeConfig     interfaces.RuntimeDefinitionLookup
 	TransitionWorkers map[string]string
@@ -75,7 +76,14 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 }
 
 func (g *InferenceThrottleGuard) appliesToCurrentTransition(ctx RuntimeGuardContext) bool {
-	if g == nil || g.WorkerName == "" || ctx.RuntimeConfig == nil {
+	if g == nil {
+		return false
+	}
+	if ctx.CurrentTransitionID != "" && len(g.WatchedTransitionIDs) > 0 {
+		_, ok := g.WatchedTransitionIDs[ctx.CurrentTransitionID]
+		return ok
+	}
+	if g.WorkerName == "" || ctx.RuntimeConfig == nil {
 		return true
 	}
 	worker, ok := ctx.RuntimeConfig.Worker(g.WorkerName)
@@ -91,14 +99,12 @@ func (g *InferenceThrottleGuard) historyDispatchMatchesLane(ctx RuntimeGuardCont
 	}
 	if ctx.RuntimeConfig != nil && len(ctx.TransitionWorkers) > 0 {
 		workerName, ok := ctx.TransitionWorkers[transitionID]
-		if !ok || workerName == "" {
-			return false
+		if ok && workerName != "" {
+			worker, ok := ctx.RuntimeConfig.Worker(workerName)
+			if ok && worker != nil {
+				return strings.EqualFold(worker.ModelProvider, g.Provider) && (g.Model == "" || worker.Model == g.Model)
+			}
 		}
-		worker, ok := ctx.RuntimeConfig.Worker(workerName)
-		if !ok || worker == nil {
-			return false
-		}
-		return strings.EqualFold(worker.ModelProvider, g.Provider) && (g.Model == "" || worker.Model == g.Model)
 	}
 	if len(g.WatchedTransitionIDs) == 0 {
 		return false

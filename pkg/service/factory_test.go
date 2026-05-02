@@ -1867,6 +1867,44 @@ func TestFactoryService_CronTickTimeoutFailureIsClassifiedAndBounded(t *testing.
 	}
 }
 
+func TestFactoryService_CronExecutionTimeoutUsesCanonicalWorkstationLimit(t *testing.T) {
+	svc := &FactoryService{}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:   "poll-for-work",
+			Limits: interfaces.WorkstationLimits{MaxExecutionTime: "75ms"},
+		}},
+	}, nil, nil)
+
+	timeout, err := svc.cronExecutionTimeout(runtimeCfg, cronWorkstationConfigForTest("poll-for-work"))
+	if err != nil {
+		t.Fatalf("cronExecutionTimeout: %v", err)
+	}
+	if timeout != 75*time.Millisecond {
+		t.Fatalf("timeout = %v, want %v", timeout, 75*time.Millisecond)
+	}
+}
+
+func TestFactoryService_CronExecutionTimeoutReturnsCanonicalLimitError(t *testing.T) {
+	svc := &FactoryService{}
+	runtimeCfg := serviceTestRuntimeConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"poll-for-work": {
+				Name:   "poll-for-work",
+				Limits: interfaces.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
+			},
+		},
+	}
+
+	_, err := svc.cronExecutionTimeout(runtimeCfg, cronWorkstationConfigForTest("poll-for-work"))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if got, want := err.Error(), `cron workstation "poll-for-work": invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+}
+
 func TestFactoryService_CronTickRetryableFailureRetriesBeforeSuccess(t *testing.T) {
 	retryErr := errors.New("temporary submission ingress failure")
 	mock := &aggregateSnapshotFactory{}
@@ -4272,6 +4310,99 @@ func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	assertDashboardRenderDataFailed(t, failed.RenderData, "dashboard-world-failed")
 	assertSimpleDashboardTerminalOutput(t, failed)
 	assertSimpleDashboardSessionRowsMatchRenderData(t, failed)
+}
+
+func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	type starterObservation struct {
+		submitResult interfaces.WorkRequestSubmitResult
+		submitErr    error
+		stream       *interfaces.FactoryEventStream
+		streamErr    error
+		snapshot     *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+		snapshotErr  error
+		current      factoryapi.Factory
+		currentErr   error
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+
+	observedCh := make(chan starterObservation, 1)
+	svc, err := BuildFactoryService(runCtx, &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Port:              9999,
+		Logger:            zap.NewNop(),
+		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, port int, l *zap.Logger) error {
+			observation := starterObservation{}
+			workRequest := submission.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+				Name:       "starter-task",
+				WorkTypeID: "task",
+				TraceID:    "trace-api-surface-starter",
+				Payload:    json.RawMessage(`{"title":"Starter task"}`),
+			}})
+			observation.submitResult, observation.submitErr = runtime.SubmitWorkRequest(ctx, workRequest)
+			observation.stream, observation.streamErr = runtime.SubscribeFactoryEvents(ctx)
+			observation.snapshot, observation.snapshotErr = runtime.GetEngineStateSnapshot(ctx)
+			observation.current, observation.currentErr = runtime.GetCurrentNamedFactory(ctx)
+			observedCh <- observation
+			cancelRun()
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	observation := <-observedCh
+	if observation.submitErr != nil {
+		t.Fatalf("APIServerStarter runtime.SubmitWorkRequest: %v", observation.submitErr)
+	}
+	if !observation.submitResult.Accepted {
+		t.Fatal("APIServerStarter submit accepted = false, want true")
+	}
+	if observation.submitResult.TraceID != "trace-api-surface-starter" {
+		t.Fatalf("APIServerStarter submit trace_id = %q, want trace-api-surface-starter", observation.submitResult.TraceID)
+	}
+	if observation.streamErr != nil {
+		t.Fatalf("APIServerStarter runtime.SubscribeFactoryEvents: %v", observation.streamErr)
+	}
+	if observation.stream == nil || observation.stream.Events == nil {
+		t.Fatalf("APIServerStarter stream = %#v, want live event stream", observation.stream)
+	}
+	if observation.snapshotErr != nil {
+		t.Fatalf("APIServerStarter runtime.GetEngineStateSnapshot: %v", observation.snapshotErr)
+	}
+	if observation.snapshot == nil || observation.snapshot.Topology == nil {
+		t.Fatalf("APIServerStarter snapshot = %#v, want topology-backed snapshot", observation.snapshot)
+	}
+	if _, ok := observation.snapshot.Topology.WorkTypes["task"]; !ok {
+		t.Fatalf("APIServerStarter snapshot work types = %#v, want task", observation.snapshot.Topology.WorkTypes)
+	}
+	if observation.currentErr != nil {
+		t.Fatalf("APIServerStarter runtime.GetCurrentNamedFactory: %v", observation.currentErr)
+	}
+	if observation.current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("APIServerStarter current factory name = %q, want %q", observation.current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
 }
 
 func TestFactoryService_BuildSimpleDashboardRenderInputProjectsSelectedTickFromEvents(t *testing.T) {

@@ -51,6 +51,18 @@ export const replayCoverageSurfaceCatalog = [
     description: "Replay-driven resource-count assertions against backend world-view counts.",
     id: "resource-counts",
   },
+  {
+    description: "Browser-visible factory PNG export flow with a real downloadable artifact.",
+    id: "png-export",
+  },
+  {
+    description: "Browser-visible factory PNG import preview and validation through the drop surface.",
+    id: "png-import-preview",
+  },
+  {
+    description: "Browser-visible factory PNG activation after previewing an imported PNG.",
+    id: "png-import-activation",
+  },
 ] as const;
 
 export type ReplayCoverageSurfaceID = (typeof replayCoverageSurfaceCatalog)[number]["id"];
@@ -58,6 +70,8 @@ export type ReplayCoverageSurfaceID = (typeof replayCoverageSurfaceCatalog)[numb
 export interface BrowserIntegrationReplayMetadata {
   finalTick: number;
   headingName: string;
+  historicalHiddenButtonName?: RegExp;
+  inFlightSelectionTick?: number;
   name: string;
   requiresWorkItemSelection: boolean;
   selectedWorkText?: string;
@@ -73,11 +87,20 @@ export interface ReplayFixtureScenarioDefinition {
   verificationLayers: readonly string[];
 }
 
+export interface SupplementalReplayCoverageScenarioDefinition {
+  description: string;
+  fileName: string;
+  id: string;
+  surfaces: readonly ReplayCoverageSurfaceID[];
+  verificationLayers: readonly string[];
+}
+
 export const replayFixtureCatalog = {
   baseline: {
     browserIntegration: {
       finalTick: 2,
       headingName: "Agent Factory",
+      historicalHiddenButtonName: /^work-1/i,
       name: "baseline replay",
       requiresWorkItemSelection: true,
       workstationName: /^Select plan workstation$/i,
@@ -106,6 +129,8 @@ export const replayFixtureCatalog = {
     browserIntegration: {
       finalTick: 8,
       headingName: "Agent Factory",
+      historicalHiddenButtonName: /^work-1/i,
+      inFlightSelectionTick: 7,
       name: "captured replay 2",
       requiresWorkItemSelection: false,
       workstationName: /^Select process workstation$/i,
@@ -128,9 +153,25 @@ export const replayFixtureCatalog = {
   ReplayFixtureScenarioDefinition
 >;
 
+export const supplementalReplayCoverageCatalog = {
+  pngRoundTrip: {
+    description: "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
+    fileName: "graph-state-smoke-replay.jsonl",
+    id: "pngRoundTrip",
+    surfaces: ["png-export", "png-import-preview", "png-import-activation"],
+    verificationLayers: ["browser-integration", "jsdom", "unit"],
+  },
+} as const satisfies Record<string, SupplementalReplayCoverageScenarioDefinition>;
+
 export type ReplayFixtureCatalog = typeof replayFixtureCatalog;
 export type ReplayFixtureID = keyof ReplayFixtureCatalog;
 export type ReplayFixtureDefinition = ReplayFixtureCatalog[ReplayFixtureID];
+export type ReplayCoverageScenarioID =
+  | ReplayFixtureID
+  | keyof typeof supplementalReplayCoverageCatalog;
+export type ReplayCoverageScenarioDefinition =
+  | ReplayFixtureDefinition
+  | (typeof supplementalReplayCoverageCatalog)[keyof typeof supplementalReplayCoverageCatalog];
 
 export type BrowserIntegrationReplayScenario = ReplayFixtureDefinition & {
   browserIntegration: BrowserIntegrationReplayMetadata;
@@ -139,14 +180,14 @@ export type BrowserIntegrationReplayScenario = ReplayFixtureDefinition & {
 export interface ReplayCoverageSurfaceReport {
   description: string;
   id: ReplayCoverageSurfaceID;
-  scenarios: ReplayFixtureID[];
+  scenarios: ReplayCoverageScenarioID[];
   status: "covered" | "gap";
 }
 
 export interface ReplayCoverageScenarioReport {
   description: string;
   fileName: string;
-  id: ReplayFixtureID;
+  id: ReplayCoverageScenarioID;
   surfaces: readonly ReplayCoverageSurfaceID[];
   verificationLayers: readonly string[];
 }
@@ -170,8 +211,15 @@ export function listBrowserIntegrationReplayScenarios(): BrowserIntegrationRepla
   return Object.values(replayFixtureCatalog).filter(hasBrowserIntegration);
 }
 
+function listReplayCoverageScenarios(): ReplayCoverageScenarioDefinition[] {
+  return [
+    ...Object.values(replayFixtureCatalog),
+    ...Object.values(supplementalReplayCoverageCatalog),
+  ];
+}
+
 export function buildReplayCoverageReport(): ReplayCoverageReport {
-  const scenarios: ReplayCoverageScenarioReport[] = Object.values(replayFixtureCatalog).map(
+  const scenarios: ReplayCoverageScenarioReport[] = listReplayCoverageScenarios().map(
     (scenario) => ({
       description: scenario.description,
       fileName: scenario.fileName,

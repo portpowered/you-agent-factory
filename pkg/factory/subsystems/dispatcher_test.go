@@ -122,7 +122,7 @@ func TestDispatcher_ActiveThrottlePauses_UsesLoweredInferenceThrottleGuards(t *t
 	}
 }
 
-func TestDispatcher_ActiveThrottlePauses_IgnoresNonThrottleHistoryAndMissingLoweredGuards(t *testing.T) {
+func TestDispatcher_ActiveThrottlePauses_ReturnsEmptyWithoutAuthoredInferenceThrottleGuard(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
 	n := &state.Net{
 		Transitions: map[string]*petri.Transition{
@@ -134,7 +134,6 @@ func TestDispatcher_ActiveThrottlePauses_IgnoresNonThrottleHistoryAndMissingLowe
 					PlaceID:     "p-init-a",
 					Direction:   petri.ArcInput,
 					Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
-					Guard:       inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a"),
 				}},
 			},
 		},
@@ -143,21 +142,12 @@ func TestDispatcher_ActiveThrottlePauses_IgnoresNonThrottleHistoryAndMissingLowe
 
 	active := dispatcher.activeThrottlePauses(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
-			{
-				DispatchID:   "retryable",
-				TransitionID: "t-a",
-				ProviderFailure: &interfaces.ProviderFailureMetadata{
-					Family: interfaces.ProviderErrorFamilyRetryable,
-					Type:   interfaces.ProviderErrorTypeInternalServerError,
-				},
-				EndTime: now,
-			},
-			throttledCompletedDispatch("unknown-transition", "t-missing", now.Add(time.Minute)),
+			throttledCompletedDispatch("dispatch-a", "t-a", now),
 		},
 	})
 
 	if len(active) != 0 {
-		t.Fatalf("active pauses = %#v, want empty after filtering", active)
+		t.Fatalf("active pauses = %#v, want empty without authored inference throttle guards", active)
 	}
 }
 
@@ -625,6 +615,89 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 	}
 	pause := assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 	assertThrottlePauseWindow(t, pause, now, now.Add(30*time.Minute))
+}
+
+func TestDispatcher_ThrottleHistoryWithoutAuthoredGuardDoesNotFilterEnabledTransitions(t *testing.T) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init-a": {ID: "p-init-a"},
+			"p-init-b": {ID: "p-init-b"},
+			"p-done":   {ID: "p-done"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t-a": {
+				ID:         "t-a",
+				Name:       "step-a",
+				WorkerType: "worker-a",
+				InputArcs: []petri.Arc{
+					{ID: "a-in-a", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "a-out-a", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
+				},
+			},
+			"t-b": {
+				ID:         "t-b",
+				Name:       "step-b",
+				WorkerType: "worker-b",
+				InputArcs: []petri.Arc{
+					{ID: "a-in-b", Name: "work", PlaceID: "p-init-b", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "a-out-b", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
+				},
+			},
+		},
+	}
+	sched := &recordingScheduler{}
+	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
+	dispatcher := NewDispatcher(
+		n,
+		sched,
+		nil,
+		nil,
+		WithDispatcherClock(func() time.Time { return now }),
+	)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok-a": {ID: "tok-a", PlaceID: "p-init-a"},
+			"tok-b": {ID: "tok-b", PlaceID: "p-init-b"},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", now),
+		},
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected dispatch result")
+	}
+	received := make([]string, 0, len(sched.received))
+	for _, transition := range sched.received {
+		received = append(received, transition.TransitionID)
+	}
+	sort.Strings(received)
+	if strings.Join(received, ",") != "t-a,t-b" {
+		t.Fatalf("scheduler received transitions %v, want both unguarded lanes", received)
+	}
+	dispatched := make([]string, 0, len(result.Dispatches))
+	for _, record := range result.Dispatches {
+		dispatched = append(dispatched, record.Dispatch.TransitionID)
+	}
+	sort.Strings(dispatched)
+	if strings.Join(dispatched, ",") != "t-a,t-b" {
+		t.Fatalf("dispatch transitions = %v, want both unguarded lanes", dispatched)
+	}
+	if result.ThrottlePausesObserved {
+		t.Fatal("expected no authored throttle pause observability without authored guards")
+	}
+	if len(result.ActiveThrottlePauses) != 0 {
+		t.Fatalf("active pauses = %#v, want none without authored guards", result.ActiveThrottlePauses)
+	}
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-throttle-fixture review=2026-07-18 removal=split-pause-expiry-fixture-before-next-dispatcher-throttle-change

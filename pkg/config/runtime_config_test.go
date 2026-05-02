@@ -103,6 +103,62 @@ Implement {{ .WorkID }}.
 	}
 }
 
+func TestLoadRuntimeConfig_PreservesFactoryInferenceThrottleGuards(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"guards": []map[string]any{{
+			"type":          "INFERENCE_THROTTLE_GUARD",
+			"modelProvider": "CLAUDE",
+			"model":         "claude-sonnet-4-5-20250514",
+			"refreshWindow": "3s",
+		}},
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "claude-worker",
+		}},
+		"workstations": []map[string]any{{
+			"name":    "process-claude",
+			"worker":  "claude-worker",
+			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "claude-worker", `---
+type: MODEL_WORKER
+model: claude-sonnet-4-5-20250514
+modelProvider: claude
+stopToken: COMPLETE
+---
+Claude worker.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "process-claude", `---
+type: MODEL_WORKSTATION
+worker: claude-worker
+---
+Process.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	if len(loaded.FactoryConfig().Guards) != 1 {
+		t.Fatalf("expected one preserved factory guard, got %#v", loaded.FactoryConfig().Guards)
+	}
+	guard := loaded.FactoryConfig().Guards[0]
+	if guard.Type != interfaces.GuardTypeInferenceThrottle || guard.ModelProvider != "claude" || guard.Model != "claude-sonnet-4-5-20250514" || guard.RefreshWindow != "3s" {
+		t.Fatalf("preserved factory guard = %#v", guard)
+	}
+}
+
 func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -1387,6 +1443,7 @@ func TestNewLoadedFactoryConfig_LoadsCanonicalConfigWithoutRuntimeConfig(t *test
 	assertCanonicalRuntimeConfigLookupFactoryDir(t, loaded, "factory-dir")
 	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, loaded, "factory-dir")
 	assertCanonicalRuntimeDefinitionLookupByName(t, loaded, "executor", "review")
+	assertRuntimeDefinitionLookupMissesByName(t, loaded, "missing-worker", "missing-workstation")
 	assertCanonicalMergeWorkstation(t, loaded)
 }
 
@@ -1419,6 +1476,79 @@ func TestLoadedFactoryConfig_SetRuntimeBaseDirNilReceiverNoops(t *testing.T) {
 	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, loaded, "")
 }
 
+func TestLoadedFactoryConfig_RuntimeLookupNilReceiverReturnsMisses(t *testing.T) {
+	var loaded *LoadedFactoryConfig
+
+	assertRuntimeDefinitionLookupMissesByName(t, loaded, "executor", "review")
+}
+
+func TestLoadRuntimeConfig_ExposesEffectiveRuntimeDefinitionsThroughCanonicalLookup(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "executor",
+		}},
+		"workstations": []map[string]any{{
+			"name":    "execute-story",
+			"worker":  "executor",
+			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "executor", `---
+type: SCRIPT_WORKER
+command: go
+args: ["test", "./..."]
+---
+Run tests.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+stopWords: ["DONE"]
+---
+Runtime prompt.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	worker, ok := loaded.Worker("executor")
+	if !ok || worker == nil {
+		t.Fatalf("Worker(executor) = %#v ok=%v, want runtime worker hit", worker, ok)
+	}
+	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "go" {
+		t.Fatalf("effective worker lookup = %#v, want runtime-applied script worker", worker)
+	}
+	if loaded.FactoryConfig().Workers[0].Type != worker.Type || loaded.FactoryConfig().Workers[0].Command != worker.Command {
+		t.Fatalf("factory worker = %#v, want canonical lookup worker %#v", loaded.FactoryConfig().Workers[0], worker)
+	}
+
+	workstation, ok := loaded.Workstation("execute-story")
+	if !ok || workstation == nil {
+		t.Fatalf("Workstation(execute-story) = %#v ok=%v, want runtime workstation hit", workstation, ok)
+	}
+	if workstation.PromptTemplate != "Runtime prompt." {
+		t.Fatalf("effective workstation lookup prompt = %q, want runtime prompt", workstation.PromptTemplate)
+	}
+	if loaded.FactoryConfig().Workstations[0].PromptTemplate != workstation.PromptTemplate {
+		t.Fatalf("factory workstation = %#v, want canonical lookup workstation %#v", loaded.FactoryConfig().Workstations[0], workstation)
+	}
+
+	assertRuntimeDefinitionLookupMissesByName(t, loaded, "missing-worker", "missing-workstation")
+}
+
 func assertCanonicalRuntimeConfigLookupFactoryDir(t *testing.T, lookup interfaces.RuntimeConfigLookup, want string) {
 	t.Helper()
 	if lookup.FactoryDir() != want {
@@ -1442,6 +1572,18 @@ func assertCanonicalRuntimeDefinitionLookupByName(t *testing.T, lookup interface
 	workstation, ok := lookup.Workstation(workstationName)
 	if !ok || workstation == nil {
 		t.Fatalf("canonical workstation lookup %q = %#v ok=%v, want workstation", workstationName, workstation, ok)
+	}
+}
+
+func assertRuntimeDefinitionLookupMissesByName(t *testing.T, lookup interfaces.RuntimeDefinitionLookup, workerName string, workstationName string) {
+	t.Helper()
+	worker, ok := lookup.Worker(workerName)
+	if ok || worker != nil {
+		t.Fatalf("worker miss %q = %#v ok=%v, want nil false", workerName, worker, ok)
+	}
+	workstation, ok := lookup.Workstation(workstationName)
+	if ok || workstation != nil {
+		t.Fatalf("workstation miss %q = %#v ok=%v, want nil false", workstationName, workstation, ok)
 	}
 }
 
@@ -1545,7 +1687,7 @@ func assertCanonicalInlineWorkstation(t *testing.T, loaded *LoadedFactoryConfig)
 	if !ok {
 		t.Fatal("expected execute-story workstation definition")
 	}
-	if loaded.workstations["execute-story"] != workstation {
+	if loaded.WorkstationConfigs()["execute-story"] != workstation {
 		t.Fatal("expected runtime lookup to return the canonical workstation map entry")
 	}
 	if workstation.ID != "execute-story-id" || workstation.Kind != interfaces.WorkstationKindStandard {

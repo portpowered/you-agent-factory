@@ -36,9 +36,7 @@ func GeneratedPublicWorkstationKind(kind WorkstationKind) factoryapi.Workstation
 
 // GeneratedPublicWorkstationKindPtr returns the generated workstation kind enum when non-empty.
 func GeneratedPublicWorkstationKindPtr(kind WorkstationKind) *factoryapi.WorkstationKind {
-	if strings.TrimSpace(string(kind)) == "" {
-		return nil
-	}
-	enumValue := GeneratedPublicWorkstationKind(kind)
-	return &enumValue
+	return generatedPublicFactoryEnumPtr(string(kind), func(value string) factoryapi.WorkstationKind {
+		return GeneratedPublicWorkstationKind(WorkstationKind(value))
+	})
 }
