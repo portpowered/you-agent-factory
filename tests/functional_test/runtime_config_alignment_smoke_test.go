@@ -467,6 +467,7 @@ func waitForRuntimeConfigAlignmentExecution(
 	waitForRuntimeConfigAlignmentStopWordDispatch(t, server)
 	waitForRuntimeConfigAlignmentInFlightResourceConsumption(t, server, scriptRunner)
 	waitForRuntimeConfigAlignmentTimeoutAndRequeue(t, server, scriptRunner)
+
 	close(scriptRunner.releaseSecondAttempt)
 	server.WaitForCompleted(t, runtimeConfigAlignmentCompletionTimeout)
 }
