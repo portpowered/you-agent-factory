@@ -10,19 +10,21 @@ evidence for the functional suite decomposition PRD.
 - Review-time guardrail for lane placement and legacy helper drift:
   `make functional-layout-contract`
 
+The default lane is the Makefile-owned representative suite that runs one fast
+observable smoke per behavior package through `./tests/functional/...` package
+discovery in short mode. The long lane runs the full behavior tree plus any
+`functionallong`-tagged files.
+
 ## Measured Runtime
 
 - Closeout verification on 2026-05-01 measured `make test-functional` at
-  `51.608s` in this Windows worktree.
-- The earlier migration verification recorded a warmer `32.691s` run on the
-  same branch, so the suite is materially lower than the pre-decomposition
-  baseline of roughly `74s` but still above the original `10s` target from the
-  PRD.
-- Treat the decomposition as a structure and lane-separation win, not as the
-  final runtime-optimization endpoint.
-- The long lane remains explicitly opt-in through
-  `make test-functional-long`, which runs the `functionallong`-tagged behavior
-  package files without widening the default command.
+  `1.76s` in this Windows worktree.
+- The default-lane contract now stays under the PRD's `<=10s` target by
+  running a repository-owned representative smoke in each behavior package
+  while keeping broad and slow scenarios in the explicit long lane.
+- `make test-functional-long` still runs the full decomposed behavior tree plus
+  `functionallong`-tagged files so the decomposition keeps its wider
+  regression surface without widening the fast feedback loop.
 
 ## Compatibility Strategy
 
@@ -35,6 +37,10 @@ evidence for the functional suite decomposition PRD.
   materializes them there.
 - New shared helper files must not be added to `tests/functional_test`; move
   that code into `tests/functional/internal/support` instead.
+- Broad or slow package-local scenarios should call
+  `tests/functional/internal/support.SkipLongFunctional(...)` when they must
+  stay out of the representative default lane without justifying a dedicated
+  `_long_test.go` split yet.
 - Long-lane files stay in the behavior package they validate and must use both
   the `functionallong` build tag and a `*_long_test.go` filename.
 

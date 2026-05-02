@@ -158,6 +158,8 @@ func TestDispatcherWorkflow_ExecutionPoolIsolation(t *testing.T) {
 }
 
 func TestDispatcherWorkflow_ReviewFailurePerItem(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatcher per-item review failure sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

@@ -86,6 +86,8 @@ func TestDispatcherLifecycle_PlannerFailure(t *testing.T) {
 // TestDispatcherLifecycle_ExecutorFailure verifies that when the executor fails,
 // the prd token moves to failed state and no code-change tokens are created.
 func TestDispatcherLifecycle_ExecutorFailure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatcher lifecycle failure smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
 
 	testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title": "failing executor"}`))

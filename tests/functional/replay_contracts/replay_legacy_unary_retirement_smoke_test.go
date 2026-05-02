@@ -12,6 +12,8 @@ import (
 )
 
 func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay legacy-unary retirement smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "retired-unary-smoke.replay.json")
 	provider := testutil.NewMockProvider(

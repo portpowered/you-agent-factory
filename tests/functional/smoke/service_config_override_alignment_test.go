@@ -13,6 +13,8 @@ import (
 )
 
 func TestServiceConfigOverrideAlignment_ServiceHarnessProviderCommandRunner(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness provider override alignment smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider harness alignment"}`))
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))

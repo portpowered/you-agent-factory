@@ -33,6 +33,8 @@ const (
 )
 
 func TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow runtime config boundary alignment sweep")
+
 	for _, tc := range []struct {
 		name string
 		run  func(*testing.T)

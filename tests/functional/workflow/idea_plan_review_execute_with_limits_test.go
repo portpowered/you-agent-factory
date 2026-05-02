@@ -161,6 +161,8 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass(t *testing.T) {
 // single seed trace survives the full worker-pool/file-watcher path and can be
 // reconstructed from the resulting terminal tokens alone.
 func TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes(t *testing.T) {
+	support.SkipLongFunctional(t, "slow idea-plan-execute-review lineage sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 
 	originTraceID := "trace-idea-plan-review-limits-001"

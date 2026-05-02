@@ -14,10 +14,13 @@ import (
 	"github.com/portpowered/agent-factory/pkg/replay"
 	"github.com/portpowered/agent-factory/pkg/service"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
 func TestReplayEventStreamArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay artifact conversion smoke")
+
 	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
 

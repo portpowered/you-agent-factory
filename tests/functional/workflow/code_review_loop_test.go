@@ -10,6 +10,8 @@ import (
 )
 
 func TestCodeReviewLoop(t *testing.T) {
+	support.SkipLongFunctional(t, "slow code-review retry loop smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedFile(t, dir, "code-change", []byte("implement feature X"))

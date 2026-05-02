@@ -7,9 +7,22 @@
 - Default non-long lane: `make test-functional`
 - Opt-in long lane: `make test-functional-long`
 
-The default lane runs `go test ./tests/functional/...` without manual package
-lists. The long lane reserves the `functionallong` build tag for slow or broad
-coverage that should not join the default command.
+The default lane is a Makefile-owned short-mode representative suite that runs
+through `./tests/functional/...` package discovery without manual package
+lists. The current representative contract keeps one fast observable smoke in
+each behavior package:
+
+- `bootstrap_portability`: exported-factory authored-layout interpolation
+- `guards_batch`: direct cascading-failure routing
+- `providers`: script executor success path
+- `replay_contracts`: replay scheduler prioritization over FIFO
+- `runtime_api`: `/status` remains queryable across API completion
+- `smoke`: archive-terminal completion
+- `workflow`: serial ideation happy path
+
+The long lane runs the full behavior tree plus any `functionallong`-tagged
+files, so broad or slow scenarios stay available without widening the default
+feedback loop.
 
 ## Package Taxonomy
 
@@ -49,9 +62,10 @@ coverage that should not join the default command.
   `tests/functional/internal/support` when it is reused across behavior
   packages.
 - Keep long-running or broad-sweep coverage out of the default lane. When a
-  test belongs in the slow lane, gate it behind the `functionallong` tag so
-  `make test-functional` stays package-discovery-only and does not need manual
-  excludes.
+  test belongs in the slow lane, gate it behind
+  `tests/functional/internal/support.SkipLongFunctional(...)` or the
+  `functionallong` build tag so `make test-functional` stays repository-owned
+  and does not need ad hoc package or test arguments at invocation time.
 - When a slow test is gated behind `functionallong`, name the file
   `*_long_test.go` so review-time scanning and guardrails can spot the lane
   boundary immediately.
@@ -63,7 +77,9 @@ coverage that should not join the default command.
   broad provider normalization sweep lives in
   `tests/functional/providers/cli_provider_error_long_test.go` behind the
   `functionallong` tag instead of widening `make test-functional` or reviving
-  the legacy mixed bucket.
+  the legacy mixed bucket, while broad-but-still-package-local sweeps can use
+  `support.SkipLongFunctional(...)` when they do not justify a dedicated
+  `_long_test.go` split yet.
 
 ## Migration Compatibility
 

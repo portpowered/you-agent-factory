@@ -47,6 +47,8 @@ func TestColdStart_PreSeededTokensProcessed(t *testing.T) {
 }
 
 func TestColdStart_SingleTokenReachesTerminal(t *testing.T) {
+	support.SkipLongFunctional(t, "slow cold-start single-token workflow smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "fix-bug"}`))
 

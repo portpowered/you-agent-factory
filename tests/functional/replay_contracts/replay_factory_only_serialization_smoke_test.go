@@ -18,6 +18,8 @@ import (
 )
 
 func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay record/serialization smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_resource"))
 	artifactPath := filepath.Join(t.TempDir(), "factory-only-serialization.replay.json")
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

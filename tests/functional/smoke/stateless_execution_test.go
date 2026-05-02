@@ -85,6 +85,8 @@ func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testi
 }
 
 func TestStatelessExecution_ThinDispatchCarriesLookupReferencesOnly(t *testing.T) {
+	support.SkipLongFunctional(t, "slow thin-dispatch lookup-reference smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"thin-dispatch"}`))
 

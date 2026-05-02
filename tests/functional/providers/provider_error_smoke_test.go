@@ -16,6 +16,8 @@ import (
 
 // portos:func-length-exception owner=agent-factory reason=provider-throttle-isolation-smoke review=2026-07-19 removal=split-pause-harness-setup-submissions-and-lane-assertions-before-next-provider-error-smoke-change
 func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow provider throttle-pause isolation sweep")
+
 	pauseHarness := testutil.NewProviderErrorSmokePauseIsolationHarness(
 		t,
 		testutil.ProviderErrorSmokeLane{

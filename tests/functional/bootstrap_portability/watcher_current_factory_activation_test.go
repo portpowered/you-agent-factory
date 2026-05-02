@@ -23,6 +23,8 @@ import (
 )
 
 func TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory(t *testing.T) {
+	support.SkipLongFunctional(t, "slow current-factory activation persistence smoke")
+
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", functionalNamedFactoryPayload(t, "alpha")); err != nil {
@@ -82,6 +84,8 @@ func TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResol
 }
 
 func TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory(t *testing.T) {
+	support.SkipLongFunctional(t, "slow current-factory watcher activation smoke")
+
 	rootDir := t.TempDir()
 	alphaDir := copyCurrentFactoryFixture(t, rootDir, "alpha")
 	betaDir := copyCurrentFactoryFixture(t, rootDir, "beta")
@@ -132,6 +136,8 @@ func TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFac
 }
 
 func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *testing.T) {
+	support.SkipLongFunctional(t, "slow current-factory live API activation smoke")
+
 	rootDir := t.TempDir()
 
 	if _, err := config.PersistNamedFactory(rootDir, "alpha", functionalNamedFactoryPayloadWithTerminalState(t, "alpha", "alpha-complete")); err != nil {

@@ -55,6 +55,8 @@ func TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates(t *test
 }
 
 func TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates(t *testing.T) {
+	support.SkipLongFunctional(t, "slow provider prompt-template sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	configureResourceGatedTemplateWorkstation(t, dir)
 	writeNamedWorkstationPromptTemplate(t, dir, "process", strings.Join([]string{
@@ -163,6 +165,8 @@ func TestTemplateTests_ScriptWrapOrdersMultipleInputsByWorkstationConfigWithReso
 }
 
 func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation execution-template provider smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)
@@ -195,6 +199,8 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 }
 
 func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *testing.T) {
+	support.SkipLongFunctional(t, "slow codex execution-template provider smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)

@@ -29,6 +29,8 @@ const recordReplayProviderSecretEnv = "ANTHROPIC_API_KEY"
 const recordReplayProviderSecretValue = "raw-provider-replay-secret-value"
 
 func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *testing.T) {
+	support.SkipLongFunctional(t, "slow record/replay CLI end-to-end smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	helperPath := writeRecordReplayScriptHelper(t)
 	writeRecordReplayScriptWorker(t, dir, helperPath)
@@ -97,6 +99,8 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 
 // portos:func-length-exception owner=agent-factory reason=record-replay-e2e-fixture review=2026-07-18 removal=split-record-run-replay-run-and-artifact-assertions-before-next-record-replay-change
 func TestRecordReplayEndToEnd_FactoryRequestBatchAndWorkerGeneratedBatchReplayDeterministically(t *testing.T) {
+	support.SkipLongFunctional(t, "slow record/replay generated-batch determinism smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	artifactPath := filepath.Join(t.TempDir(), "batch-recording.replay.json")
 
@@ -187,6 +191,8 @@ Finish the input task.
 }
 
 func TestRecordReplayEndToEnd_ProviderCommandDiagnosticsPersistRedactedEnv(t *testing.T) {
+	support.SkipLongFunctional(t, "slow record/replay provider diagnostics smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "provider-recording.replay.json")
 	t.Setenv(recordReplayProviderSecretEnv, recordReplayProviderSecretValue)

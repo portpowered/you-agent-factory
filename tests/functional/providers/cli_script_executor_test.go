@@ -471,6 +471,8 @@ func TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOn
 }
 
 func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow async worker-pool template fallback sweep")
+
 	t.Run("SingleFileInputWithTemplateAndPayload_Completes", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 		writeWorkstationPromptTemplate(t, dir, "payload: {{ (index .Inputs 0).Payload }}")

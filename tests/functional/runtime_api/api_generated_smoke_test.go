@@ -20,6 +20,8 @@ import (
 )
 
 func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow generated API and live runtime alignment smoke")
+
 	dir := scaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
@@ -66,6 +68,8 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 }
 
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow CLI submit generated API smoke")
+
 	dir := scaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
@@ -89,6 +93,8 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 }
 
 func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow batch generated API normalization smoke")
+
 	dir := scaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 

@@ -11,6 +11,8 @@ import (
 )
 
 func TestConfigDriven_DynamicFanout_ThreeChildren(t *testing.T) {
+	support.SkipLongFunctional(t, "slow broad dynamic fanout sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dynamic_fanout"))
 
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Config-driven fanout"}`))
@@ -48,6 +50,8 @@ func TestConfigDriven_DynamicFanout_ThreeChildren(t *testing.T) {
 }
 
 func TestConfigDriven_DynamicFanout_AnyChildFailedRoutesParent(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dynamic fanout failure-routing sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dynamic_fanout"))
 
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Child failure fan-in"}`))
@@ -155,6 +159,8 @@ func TestConfigDriven_DynamicFanout_ZeroChildren(t *testing.T) {
 }
 
 func TestConfigDriven_DynamicFanout_ParentCompletes(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dynamic fanout parent-completion sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dynamic_fanout"))
 
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Parent completion check"}`))

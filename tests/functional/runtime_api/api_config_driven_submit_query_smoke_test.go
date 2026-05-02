@@ -17,6 +17,8 @@ import (
 )
 
 func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
+	skipSlowFunctionalSmokeInShort(t, "slow config-driven runtime API submit/query smoke")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "API test"}`))
