@@ -10,6 +10,8 @@ import (
 )
 
 func TestMultiOutput_WithStopWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output stop-word workflow sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output with stop word"}`))
 
@@ -32,6 +34,8 @@ func TestMultiOutput_WithStopWord(t *testing.T) {
 }
 
 func TestMultiOutput_WithoutStopWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output failure routing sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output without stop word"}`))
 
@@ -53,6 +57,8 @@ func TestMultiOutput_WithoutStopWord(t *testing.T) {
 }
 
 func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output no-stopword harness sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_no_stopwords_dir"))
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output no stop words"}`))
 
@@ -76,6 +82,8 @@ func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
 }
 
 func TestMultiOutput_SecondStopWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output alternate stop-word sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Second stop word"}`))
 
@@ -96,6 +104,8 @@ func TestMultiOutput_SecondStopWord(t *testing.T) {
 }
 
 func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output lineage propagation sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_dir"))
 
 	inputTraceID := "trace-lineage-test"

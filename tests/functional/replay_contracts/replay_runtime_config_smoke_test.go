@@ -17,6 +17,8 @@ import (
 )
 
 func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t *testing.T) {
+	support.SkipLongFunctional(t, "slow canonical runtime-config replay sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "canonical-workstations.replay.json")
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

@@ -20,6 +20,8 @@ import (
 )
 
 func TestRuntimeState_ThreeStagePipeline(t *testing.T) {
+	support.SkipLongFunctional(t, "slow runtime-state three-stage pipeline sweep")
+
 	cfg := threeStageConfig()
 	dir := testutil.ScaffoldFactoryDir(t, cfg)
 
@@ -120,6 +122,8 @@ func TestRuntimeState_FailureRouting(t *testing.T) {
 }
 
 func TestRuntimeState_MidExecutionConsistency(t *testing.T) {
+	support.SkipLongFunctional(t, "slow runtime-state mid-execution consistency sweep")
+
 	dir := testutil.ScaffoldFactoryDir(t, midExecutionConsistencyConfig())
 	blockExec, releaseCh := newMidExecutionBlockingExecutor()
 	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())

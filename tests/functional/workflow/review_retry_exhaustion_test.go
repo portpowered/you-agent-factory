@@ -10,6 +10,8 @@ import (
 )
 
 func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
+	support.SkipLongFunctional(t, "slow review-retry exhaustion sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "review_retry_exhaustion"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
 	provider := testutil.NewMockProvider(
@@ -48,6 +50,8 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 }
 
 func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
+	support.SkipLongFunctional(t, "slow review-retry feedback propagation sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "review_retry_exhaustion"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
 	h := testutil.NewServiceTestHarness(t, dir)
@@ -88,6 +92,8 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 }
 
 func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
+	support.SkipLongFunctional(t, "slow review-retry success-before-limit sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "review_retry_exhaustion"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "login"}`))
 	provider := testutil.NewMockProvider(

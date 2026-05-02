@@ -42,6 +42,8 @@ func TestReplayEventStreamArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testi
 }
 
 func TestReplayEventStreamArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay artifact root-factory mirroring sweep")
+
 	adhocFactoryDir := testutil.MustRepoPath(t, "tests/adhoc/factory")
 	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
@@ -73,6 +75,8 @@ func TestReplayEventStreamArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t
 }
 
 func TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay checked-in sample artifact sweep")
+
 	copiedFactoryDir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/adhoc/factory"))
 	artifactPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.replay.json", testutil.ArtifactCheckedIn)
 

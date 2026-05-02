@@ -11,6 +11,8 @@ import (
 )
 
 func TestMultiChannelFileWatcher_DefaultSubmission(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-channel file-watcher default submission sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "default item"}`))
 
@@ -28,6 +30,8 @@ func TestMultiChannelFileWatcher_DefaultSubmission(t *testing.T) {
 }
 
 func TestMultiChannelFileWatcher_ExecutionIDSubmission(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-channel file-watcher execution-id sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 
 	execDir := filepath.Join(dir, "inputs", "task", "exec-123")
@@ -51,6 +55,8 @@ func TestMultiChannelFileWatcher_ExecutionIDSubmission(t *testing.T) {
 }
 
 func TestMultiChannelFileWatcher_DynamicExecDir(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-channel file-watcher dynamic-exec-dir sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "default work"}`))

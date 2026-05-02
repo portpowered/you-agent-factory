@@ -10,6 +10,8 @@ import (
 )
 
 func TestWorkstationStopWords_FactoryJSON_Success(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word factory-json success sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_factory_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "factory stop word success"}`))
 
@@ -29,6 +31,8 @@ func TestWorkstationStopWords_FactoryJSON_Success(t *testing.T) {
 }
 
 func TestWorkstationStopWords_FactoryJSON_SecondWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word factory-json alternate token sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_factory_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "factory stop word second"}`))
 
@@ -48,6 +52,8 @@ func TestWorkstationStopWords_FactoryJSON_SecondWord(t *testing.T) {
 }
 
 func TestWorkstationStopWords_FactoryJSON_Failure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word factory-json failure sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_factory_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "factory stop word failure"}`))
 
@@ -67,6 +73,8 @@ func TestWorkstationStopWords_FactoryJSON_Failure(t *testing.T) {
 }
 
 func TestWorkstationStopWords_Frontmatter_Success(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word frontmatter success sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_frontmatter_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "frontmatter stop word success"}`))
 
@@ -86,6 +94,8 @@ func TestWorkstationStopWords_Frontmatter_Success(t *testing.T) {
 }
 
 func TestWorkstationStopWords_Frontmatter_SecondWord(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word frontmatter alternate token sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_frontmatter_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "frontmatter stop word second"}`))
 
@@ -105,6 +115,8 @@ func TestWorkstationStopWords_Frontmatter_SecondWord(t *testing.T) {
 }
 
 func TestWorkstationStopWords_Frontmatter_Failure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word frontmatter failure sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_frontmatter_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "frontmatter stop word failure"}`))
 
@@ -124,6 +136,8 @@ func TestWorkstationStopWords_Frontmatter_Failure(t *testing.T) {
 }
 
 func TestWorkstationStopWords_Override_StationAcceptsWorkerRejects(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word override station-accepts sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_override_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "station overrides worker"}`))
 
@@ -143,6 +157,8 @@ func TestWorkstationStopWords_Override_StationAcceptsWorkerRejects(t *testing.T)
 }
 
 func TestWorkstationStopWords_Override_StationRejectsWorkerAccepts(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word override station-rejects sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_override_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "station rejects worker accepts"}`))
 
@@ -162,6 +178,8 @@ func TestWorkstationStopWords_Override_StationRejectsWorkerAccepts(t *testing.T)
 }
 
 func TestWorkstationStopWords_Override_BothMatch(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word override both-match sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_override_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "both match"}`))
 
@@ -180,6 +198,8 @@ func TestWorkstationStopWords_Override_BothMatch(t *testing.T) {
 }
 
 func TestWorkstationStopWords_Override_NeitherMatch(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workstation stop-word override neither-match sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workstation_stopwords_override_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "neither match"}`))
 

@@ -15,6 +15,8 @@ import (
 )
 
 func TestNamePropagation_InPromptTemplate(t *testing.T) {
+	support.SkipLongFunctional(t, "slow prompt-template name propagation sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -46,6 +48,8 @@ func TestNamePropagation_InPromptTemplate(t *testing.T) {
 }
 
 func TestNamePropagation_MarkdownFile(t *testing.T) {
+	support.SkipLongFunctional(t, "slow markdown name propagation sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 
 	testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
@@ -129,6 +133,8 @@ func (s *spawningExecutor) getCalls() []interfaces.WorkDispatch {
 }
 
 func TestNamePropagation_SpawnedChildWork(t *testing.T) {
+	support.SkipLongFunctional(t, "slow spawned-child name propagation sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

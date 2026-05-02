@@ -6,9 +6,12 @@ import (
 	"time"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestAdhocProcessReviewContract_ProcessContinueUsesContinuePath(t *testing.T) {
+	support.SkipLongFunctional(t, "slow process/review continue-loop sweep")
+
 	_, provider, harness := newAdhocProcessReviewHarness(t, []interfaces.InferenceResponse{
 		{Content: "<CONTINUE>\n"},
 		{Content: "<COMPLETE>\n"},
@@ -61,6 +64,8 @@ func TestAdhocProcessReviewContract_ProcessContinueUsesContinuePath(t *testing.T
 }
 
 func TestAdhocProcessReviewContract_ReviewRejectionRoutesBackWithFeedback(t *testing.T) {
+	support.SkipLongFunctional(t, "slow process/review rejection feedback sweep")
+
 	_, provider, harness := newAdhocProcessReviewHarness(t, []interfaces.InferenceResponse{
 		{Content: "<COMPLETE>\n"},
 		{Content: "missing tests"},
@@ -109,6 +114,8 @@ func TestAdhocProcessReviewContract_ReviewRejectionRoutesBackWithFeedback(t *tes
 }
 
 func TestAdhocProcessReviewContract_ReviewLoopBreakerTripsAfterTrueRejections(t *testing.T) {
+	support.SkipLongFunctional(t, "slow process/review loop-breaker rejection sweep")
+
 	responses := make([]interfaces.InferenceResponse, 0, 21)
 	for i := 0; i < 10; i++ {
 		responses = append(responses,

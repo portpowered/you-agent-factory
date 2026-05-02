@@ -10,6 +10,8 @@ import (
 )
 
 func TestMultiOutputColorPropagation(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output cross-type color propagation sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
@@ -135,6 +137,8 @@ func TestNtoN_TypeMatching(t *testing.T) {
 }
 
 func TestMultiOutputColorPropagation_NameAvailableDownstream(t *testing.T) {
+	support.SkipLongFunctional(t, "slow multi-output downstream-name propagation sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{

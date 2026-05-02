@@ -8,9 +8,12 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
+	support.SkipLongFunctional(t, "slow OOTB API simple pipeline sweep")
+
 	dir := scaffoldFactory(t, simplePipelineConfig())
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
@@ -46,6 +49,8 @@ func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 }
 
 func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
+	support.SkipLongFunctional(t, "slow OOTB API two-stage pipeline sweep")
+
 	dir := scaffoldFactory(t, ootbTwoStagePipelineConfig())
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
@@ -73,6 +78,8 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 }
 
 func TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion(t *testing.T) {
+	support.SkipLongFunctional(t, "slow OOTB API status-across-completion sweep")
+
 	dir := scaffoldFactory(t, simplePipelineConfig())
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",

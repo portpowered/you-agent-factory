@@ -15,6 +15,8 @@ import (
 )
 
 func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay work-dispatch canonical request sweep")
+
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "canonical dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
@@ -48,6 +50,8 @@ func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t 
 }
 
 func TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayload(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay work-dispatch legacy adapter sweep")
+
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "legacy dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
@@ -81,6 +85,8 @@ func TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayl
 }
 
 func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay work-dispatch record/replay correlation sweep")
+
 	run := runRecordedWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "recorded dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {

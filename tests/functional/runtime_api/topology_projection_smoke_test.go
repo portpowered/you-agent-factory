@@ -12,9 +12,12 @@ import (
 	"github.com/portpowered/agent-factory/pkg/factory/projections"
 	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/replay"
+	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
 
 func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testing.T) {
+	support.SkipLongFunctional(t, "slow topology projection live-vs-replay sweep")
+
 	dir := scaffoldFactory(t, map[string]any{
 		"workTypes": []map[string]any{{"name": "task", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}, {"name": "failed", "type": "FAILED"}}}},
 		"resources": []map[string]any{{"name": "executor-slot", "capacity": 2}},

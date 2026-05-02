@@ -14,6 +14,8 @@ import (
 // TestFileWatcherFlowSingle drops 1 seed file and verifies it is picked up
 // by preseed, processed through the service pipeline, and reaches the terminal state.
 func TestFileWatcherFlowSingle(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher single submission sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "single item"}`))
 
@@ -39,6 +41,8 @@ func TestFileWatcherFlowSingle(t *testing.T) {
 // TestFileWatcherFlowSequential drops 3 seed files and verifies all 3
 // are picked up by preseed and reach terminal state.
 func TestFileWatcherFlowSequential(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher sequential submission sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	for i := 1; i <= 3; i++ {
 		testutil.WriteSeedFile(t, dir, "task", fmt.Appendf(nil, `{"title": "sequential item %d"}`, i))
@@ -68,6 +72,8 @@ func TestFileWatcherFlowSequential(t *testing.T) {
 // TestFileWatcherFlowConcurrent drops 5 seed files simultaneously and verifies
 // all 5 are picked up by preseed and reach terminal state.
 func TestFileWatcherFlowConcurrent(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher concurrent submission sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	for i := 1; i <= 5; i++ {
 		testutil.WriteSeedFile(t, dir, "task", fmt.Appendf(nil, `{"title": "concurrent item %d"}`, i))
@@ -100,6 +106,8 @@ func TestFileWatcherFlowConcurrent(t *testing.T) {
 // of successful and failed work via seed files, no tokens remain in
 // non-terminal places.
 func TestFileWatcherFlowNoTokenLeaks(t *testing.T) {
+	support.SkipLongFunctional(t, "slow file-watcher token-leak sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "filewatcher_flow"))
 	for i := 1; i <= 5; i++ {
 		testutil.WriteSeedFile(t, dir, "task", fmt.Appendf(nil, `{"title": "item %d"}`, i))

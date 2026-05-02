@@ -13,6 +13,8 @@ import (
 )
 
 func TestReplayRegressionHarness_LoadsArtifactAndAssertsSuccessfulReplay(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay regression harness success sweep")
+
 	artifactPath := recordReplayHarnessFixtureArtifact(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
@@ -32,6 +34,8 @@ func TestReplayRegressionHarness_LoadsArtifactAndAssertsSuccessfulReplay(t *test
 }
 
 func TestReplayRegressionHarness_AssertsExpectedDivergence(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay regression harness divergence sweep")
+
 	artifactPath := recordReplayHarnessFixtureArtifact(t)
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	if replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest) == 0 {

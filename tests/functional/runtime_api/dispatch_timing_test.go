@@ -14,6 +14,8 @@ import (
 // completes, the RuntimeState.DispatchHistory contains an entry with a
 // Duration >= the executor's processing time.
 func TestDispatchTiming_HistoryRecordsDuration(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatch-timing duration history sweep")
+
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
 
 	// sleepyExecutor sleeps for a fixed duration before returning ACCEPTED.
@@ -66,6 +68,8 @@ func TestDispatchTiming_HistoryRecordsDuration(t *testing.T) {
 // TestDispatchTiming_InFlightStartTime validates that during execution,
 // EngineStateSnapshot.Dispatches has an active dispatch with StartTime before now.
 func TestDispatchTiming_InFlightStartTime(t *testing.T) {
+	support.SkipLongFunctional(t, "slow dispatch-timing inflight snapshot sweep")
+
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
 
 	releaseCh := make(chan struct{})

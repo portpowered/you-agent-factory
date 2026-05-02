@@ -16,6 +16,8 @@ import (
 // watched-file BATCH input path accepts a canonical submitted PARENT_CHILD
 // batch and drives the expected parent-aware failure route.
 func TestFileWatcherParentChildBatch_SubmittedFanInSmoke(t *testing.T) {
+	support.SkipLongFunctional(t, "slow watcher parent-child submitted fan-in sweep")
+
 	dir := seedSubmittedParentChildBatch(t)
 	provider := newSubmittedParentChildProvider()
 

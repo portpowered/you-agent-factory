@@ -89,6 +89,8 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 //	When:  approver rejects once, then accepts
 //	Then:  token completes after one rejection loop
 func TestWorkflowModificationRejectionLoop(t *testing.T) {
+	support.SkipLongFunctional(t, "slow workflow-modification rejection-loop sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v2_rejection_dir"))
 	testutil.WriteSeedFile(t, dir, "doc", []byte("needs-revision draft"))
 	h := testutil.NewServiceTestHarness(t, dir)

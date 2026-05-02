@@ -17,6 +17,8 @@ import (
 )
 
 func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate(t *testing.T) {
+	support.SkipLongFunctional(t, "slow worker public-contract replay sweep")
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	support.WriteAgentConfig(t, dir, "worker-a", workerPublicContractSmokeWorkerConfig())
 	support.WriteAgentConfig(t, dir, "worker-b", workerPublicContractSmokeWorkerConfig())
