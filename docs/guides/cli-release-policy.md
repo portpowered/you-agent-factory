@@ -147,9 +147,11 @@ After the push:
   `brew install --cask portpowered/cask/agent-factory`.
 - The hosted installer should be reachable from the tag-specific release asset
   URL and the latest-download URL after the asset upload step completes.
-- Release verification should keep one repo-owned `go install ./cmd/factory`
-  smoke step so the stable CLI entrypoint remains buildable into a clean
-  `GOBIN` before maintainers rely on the documented public command.
+- Release verification should keep both a repo-owned `go install ./cmd/factory`
+  smoke step and an outside-the-repo public-module smoke of
+  `go install github.com/portpowered/infinite-you/cmd/factory@latest` so the
+  stable entrypoint stays buildable locally and the documented consumer command
+  is exercised against the published module path on release.
 
 ## Release Failure Triage
 
@@ -170,6 +172,8 @@ Interpret post-publish failures by the job that reported them:
   and that the referenced archive and checksum files exist for the target
   platform.
 - `Verify Go Install Surface` failures mean the source-install contract for
-  `cmd/factory` regressed. Reproduce with the focused `tests/release`
-  `go install ./cmd/factory` smoke test before changing consumer docs or the
-  release workflow.
+  `cmd/factory` regressed. Reproduce first with the focused repo-owned
+  `tests/release` `go install ./cmd/factory` smoke, then confirm the public
+  `go install github.com/portpowered/infinite-you/cmd/factory@latest` path
+  still works against the published module when the release workflow reports a
+  post-publish failure.

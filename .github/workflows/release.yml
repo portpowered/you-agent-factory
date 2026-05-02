@@ -231,6 +231,15 @@ jobs:
           set -euo pipefail
           go test ./tests/release -run TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN -count=1
 
+      - name: Smoke published go install command
+        shell: bash
+        env:
+          AGENT_FACTORY_RELEASE_PUBLIC_GO_INSTALL_SMOKE: "1"
+          GOPROXY: direct
+        run: |
+          set -euo pipefail
+          go test ./tests/release -run TestGoInstallSmoke_InstallsPublishedModulePathIntoCleanGOBIN -count=1
+
   smoke-released-artifacts:
     name: Smoke Released Artifacts (${{ matrix.asset_id }})
     needs:
