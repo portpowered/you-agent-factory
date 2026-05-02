@@ -8,14 +8,15 @@
 - Opt-in long lane: `make test-functional-long`
 
 The default lane runs one repository-owned package-discovery command through
-`make test-functional`: it uses `go list ./tests/functional/...` to discover
-the behavior packages, excludes `tests/functional/internal/support`, and then
-executes one explicit `go test -p 2 -short ...` command over that discovered
-package list. That keeps the full behavior tree on package discovery without
-hard-coded package names while avoiding the slow Windows wildcard
-`./tests/functional/...` path. The long lane runs the full behavior tree plus
-any `functionallong`-tagged files, so broad or slow scenarios stay available
-without widening the default feedback loop.
+`make test-functional`: `go run ./cmd/functionallane` uses
+`go list ./tests/functional/...` to discover the behavior packages, excludes
+`tests/functional/internal/support`, and then executes one explicit
+`go test -p 2 -short ...` command over that discovered package list. That
+keeps the full behavior tree on package discovery without hard-coded package
+names, stays portable across environments, and avoids the slow Windows
+wildcard `./tests/functional/...` path. The long lane runs the full behavior
+tree plus any `functionallong`-tagged files, so broad or slow scenarios stay
+available without widening the default feedback loop.
 
 ## Package Taxonomy
 

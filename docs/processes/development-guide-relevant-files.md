@@ -7,6 +7,7 @@ This inventory records the checked-in files and directories that the maintainer 
 | `go.mod` | Repository-root marker | Maintainer commands and worktree-aware tests should treat the directory containing `go.mod` as the canonical repository root. |
 | `Makefile` | Root command surface | The development guide should describe quality and generation commands as root-level invocations instead of teaching a nested package workflow; maintainers also rely on this file to preserve repo-owned `typecheck`, `release`, functional-lane, and API generation or verification commands. |
 | `cmd/releaseprep/` | Release-preparation entrypoint | The maintainer `make release VERSION=vX.Y.Z` flow shells through this command so git guardrails and readiness sequencing stay cross-platform and testable instead of being duplicated in shell-only Makefile logic. |
+| `cmd/functionallane/` | Default functional-lane entrypoint | The repository-owned `make test-functional` command should stay cross-platform by delegating package discovery and short-lane execution to this Go helper instead of embedding platform-specific shell pipelines in `Makefile`. |
 | `internal/releaseprep/` | Release-preparation policy logic | Branch, clean-tree, semver-tag, local/remote tag, and readiness-target enforcement lives here and should stay aligned with the maintainer release policy guide. |
 | `cmd/releasetagcheck/` | Workflow-facing release-tag entrypoint | GitHub Actions should call this command when validating an explicit release tag or resolving the one semver tag that points at a verified commit. |
 | `internal/releasetag/` | Shared release-tag policy helpers | Keep semver tag validation and filtering here so maintainer commands, workflows, and tests enforce one release-tag contract. |
@@ -80,6 +81,7 @@ This inventory records the checked-in files and directories that the maintainer 
 ## Reusable Rules
 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
+- Keep cross-platform maintainer command logic in repo-owned Go entrypoints such as `cmd/functionallane/` or `cmd/releaseprep/` instead of embedding platform-specific shell discovery pipelines directly in `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
 - When feature work touches the root `Makefile`, preserve the existing maintainer command surface unless the same change intentionally updates the corresponding docs and workflows; `typecheck`, `release`, and `api-smoke` still own UI typecheck, release prep, and generated client or server verification at the repository boundary.

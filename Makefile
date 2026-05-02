@@ -93,7 +93,7 @@ test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
 
 test-functional:
-	powershell -NoProfile -Command "$$pkgs = & '$(GO)' list $(FUNCTIONAL_DEFAULT_PACKAGES) | Where-Object { $$_ -notmatch '/internal/support$$' }; if (-not $$pkgs) { throw 'no functional packages discovered under tests/functional' }; & '$(GO)' test -p $(FUNCTIONAL_DEFAULT_JOBS) -short $$pkgs -count=1 -timeout $(GO_TEST_TIMEOUT)"
+	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
