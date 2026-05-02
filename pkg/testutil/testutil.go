@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // seedFileCounter provides unique filenames across concurrent test invocations.

@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	factoryboundary "github.com/portpowered/agent-factory/pkg/api"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // TestFactoryRequestBatch_CreatesOneTokenPerWorkItem validates that a

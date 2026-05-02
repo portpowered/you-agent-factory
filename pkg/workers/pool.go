@@ -3,8 +3,8 @@ package workers
 import (
 	"sync"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 // WorkerPool manages WorkerRunners by worker type, providing a shared resultCh

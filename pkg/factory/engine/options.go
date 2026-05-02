@@ -1,11 +1,11 @@
 package engine
 
 import (
-	"github.com/portpowered/agent-factory/pkg/buffers"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/token_transformer"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/buffers"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 // Option configures a FactoryEngine.

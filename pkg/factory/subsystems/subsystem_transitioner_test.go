@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/factory/token_transformer"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 func TestCalculateArcs(t *testing.T) {

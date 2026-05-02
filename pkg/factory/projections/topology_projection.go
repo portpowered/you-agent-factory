@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/factory/workstationconfig"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // ProjectInitialStructure projects the static net topology into the canonical

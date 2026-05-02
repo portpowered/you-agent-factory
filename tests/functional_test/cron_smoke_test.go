@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 // portos:func-length-exception owner=agent-factory reason=cron-end-to-end-smoke review=2026-07-18 removal=split-smoke-helpers-before-next-cron-e2e-expansion

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 // AgentExecutor implements WorkstationRequestExecutor for MODEL_WORKER types.

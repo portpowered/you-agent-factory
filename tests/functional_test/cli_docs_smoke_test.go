@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	agentcli "github.com/portpowered/agent-factory/pkg/cli"
+	agentcli "github.com/portpowered/infinite-you/pkg/cli"
 )
 
 type docsSmokeTopic struct {

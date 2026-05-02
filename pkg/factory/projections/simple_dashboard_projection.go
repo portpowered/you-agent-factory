@@ -1,6 +1,6 @@
 package projections
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 // SimpleDashboardProjection contains the selected-tick data shared by the
 // broad world-view projection and the simple dashboard boundary seam.

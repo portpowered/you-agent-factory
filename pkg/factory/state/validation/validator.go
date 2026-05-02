@@ -1,7 +1,7 @@
 package validation
 
 import (
-	"github.com/portpowered/agent-factory/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 )
 
 // ViolationLevel indicates the severity of a validation violation.

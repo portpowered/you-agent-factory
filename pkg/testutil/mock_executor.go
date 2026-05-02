@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // MockExecutor returns predetermined WorkResults in sequence.

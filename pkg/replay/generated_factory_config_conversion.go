@@ -1,9 +1,9 @@
 package replay
 
 import (
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {

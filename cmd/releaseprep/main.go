@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/portpowered/agent-factory/internal/releaseprep"
+	"github.com/portpowered/infinite-you/internal/releaseprep"
 )
 
 func main() {

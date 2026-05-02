@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // portos:func-length-exception owner=agent-factory reason=replay-artifact-roundtrip-fixture review=2026-07-18 removal=split-artifact-fixture-event-builders-and-storage-assertions-before-next-replay-artifact-change

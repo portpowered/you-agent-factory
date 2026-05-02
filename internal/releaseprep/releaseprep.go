@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/portpowered/agent-factory/internal/releasetag"
+	"github.com/portpowered/infinite-you/internal/releasetag"
 )
 
 const (

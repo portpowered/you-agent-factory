@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 type workerPoolDispatchResultHook struct {

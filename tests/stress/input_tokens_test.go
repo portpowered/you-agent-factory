@@ -1,6 +1,6 @@
 package stress_test
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 func firstInputToken(rawTokens any) interfaces.Token {
 	switch tokens := rawTokens.(type) {

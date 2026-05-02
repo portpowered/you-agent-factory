@@ -3,10 +3,10 @@ package factory
 import (
 	"context"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // APIFactory is the factory boundary required by the HTTP API server.

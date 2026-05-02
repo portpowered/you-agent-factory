@@ -1,6 +1,6 @@
 package projections
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 // ProjectActiveThrottlePauses converts dispatcher-owned runtime pause windows
 // into the world-view/dashboard pause shape using authored topology metadata.

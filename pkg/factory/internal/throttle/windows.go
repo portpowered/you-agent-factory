@@ -4,8 +4,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // FailureRecord is the normalized runtime history input consumed by the

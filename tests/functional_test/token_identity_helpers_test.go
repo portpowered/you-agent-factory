@@ -1,6 +1,6 @@
 package functional_test
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 type tokenIdentitySet struct {
 	WorkIDs    []string

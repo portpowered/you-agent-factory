@@ -3,10 +3,10 @@ package engine
 import (
 	"maps"
 
-	"github.com/portpowered/agent-factory/pkg/buffers"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/buffers"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // RuntimeState is the unified mutable state container for the engine loop.

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 )
 

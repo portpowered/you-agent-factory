@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // singleStagePipelineConfig returns a 1-stage pipeline (init → complete)
@@ -62,12 +62,13 @@ func TestDashboard_SingleWorkItemSnapshot(t *testing.T) {
 	// Provide the harness reference so the executor can call GetEngineStateSnapshot.
 	snapshotExec.harness = h
 
+	// Seed work before starting the async run loop so the engine cannot
+	// terminate on an empty queue before the test submits work.
+	h.SubmitWork("task", []byte(`{"item": "snapshot-test"}`))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
-
-	// Submit one work item.
-	h.SubmitWork("task", []byte(`{"item": "snapshot-test"}`))
 
 	// Wait for at least one dispatch to capture a snapshot.
 	deadline := time.After(5 * time.Second)
@@ -201,14 +202,15 @@ func TestDashboard_ParallelWorkItemsSnapshot(t *testing.T) {
 	h.SetCustomExecutor("step-worker", barrier)
 	barrier.harness = h
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	// Submit multiple work items.
+	// Seed all work items before starting the async run loop so the engine
+	// cannot terminate on an empty queue before dispatch begins.
 	for i := 0; i < numItems; i++ {
 		h.SubmitWork("task", []byte(`{"item": "parallel-test"}`))
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
 
 	// Wait for the barrier to capture a snapshot.
 	deadline := time.After(10 * time.Second)

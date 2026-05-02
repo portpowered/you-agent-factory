@@ -1,6 +1,6 @@
 package workers
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 // PostResultAction determines what the engine should do after processing a work result.
 type PostResultAction string

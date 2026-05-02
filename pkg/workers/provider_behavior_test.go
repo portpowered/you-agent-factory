@@ -3,8 +3,8 @@ package workers
 import (
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {

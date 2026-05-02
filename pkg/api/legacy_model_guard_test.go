@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
+	"github.com/portpowered/infinite-you/internal/handwrittensourceguard"
 )
 
 func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 	moduleRoot := filepath.Clean(filepath.Join("..", ".."))
 	generatedImportPaths := map[string]struct{}{
-		"github.com/portpowered/agent-factory/pkg/api/generated": {},
+		"github.com/portpowered/infinite-you/pkg/api/generated": {},
 		"pkg/api/generated": {},
 	}
 	deletedTypeNames := map[string]struct{}{

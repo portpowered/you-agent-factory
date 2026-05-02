@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // WorkerExecutor is the side-effect interface — what actually happens when

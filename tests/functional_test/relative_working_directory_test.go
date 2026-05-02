@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // portos:func-length-exception owner=agent-factory reason=branch-carried functional fixture review=2026-07-22 removal=split setup and command assertions on next relative-working-directory test change

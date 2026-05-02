@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestFlattenFactoryConfig_CollectsSupportedPortableBundledFiles(t *testing.T) {

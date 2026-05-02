@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/factory/subsystems"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/internal/submission"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/internal/submission"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // mockSubsystem records calls and returns configured results.

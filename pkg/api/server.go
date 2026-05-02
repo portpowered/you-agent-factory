@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/apisurface"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"go.uber.org/zap"
 )
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/contractguard"
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 var retiredFactoryBoundaryMirrorNames = []string{

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func writeWorkRequestFileForFunctionalTest(t *testing.T, path string, request interfaces.SubmitRequest) {

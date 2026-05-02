@@ -3,7 +3,7 @@ package projections
 import (
 	"sort"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // BuildFactoryWorldView projects generic reconstructed world state into a thin

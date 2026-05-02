@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const portableFactoryDirName = "factory"

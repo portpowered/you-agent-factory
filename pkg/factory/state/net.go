@@ -3,7 +3,7 @@ package state
 import (
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // Net is the complete CPN definition — places, transitions, arcs.

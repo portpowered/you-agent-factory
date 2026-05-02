@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-runtime-config-fixture review=2026-07-18 removal=split-runtime-config-fixture-before-next-runtime-config-change

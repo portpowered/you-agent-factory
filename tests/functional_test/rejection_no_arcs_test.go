@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // TestRejection_NoRejectionArcs_FailsToken verifies that when an executor

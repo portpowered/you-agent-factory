@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // The logic of the flow goes (take an input idea, convert it to a plan, run a script, convert it to a task, execute teht ask, review the task):

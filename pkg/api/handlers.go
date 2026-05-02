@@ -11,14 +11,14 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/apisurface"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	factorypkg "github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/internal/submission"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorypkg "github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/internal/submission"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"go.uber.org/zap"
 )
 

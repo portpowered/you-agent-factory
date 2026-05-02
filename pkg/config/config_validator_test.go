@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type stubRequiredToolChecker map[string]RequiredToolCheckResult

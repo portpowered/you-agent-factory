@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // TestDispatcherLifecycle_IdeaToArchive exercises the full dispatcher lifecycle:
