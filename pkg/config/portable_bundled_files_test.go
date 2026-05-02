@@ -96,6 +96,44 @@ func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.
 	}
 }
 
+func TestPortableBundledTargetPath_MaterializesSupportedPortablePaths(t *testing.T) {
+	targetDir := t.TempDir()
+
+	tests := []struct {
+		name         string
+		targetPath   string
+		wantRelative string
+	}{
+		{
+			name:         "script under factory root",
+			targetPath:   "factory/scripts/execute-story.ps1",
+			wantRelative: filepath.Join("scripts", "execute-story.ps1"),
+		},
+		{
+			name:         "doc under factory root",
+			targetPath:   "factory/docs/README.md",
+			wantRelative: filepath.Join("docs", "README.md"),
+		},
+		{
+			name:         "root helper",
+			targetPath:   "Makefile",
+			wantRelative: "Makefile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target, err := portableBundledTargetPath(targetDir, tt.targetPath)
+			if err != nil {
+				t.Fatalf("portableBundledTargetPath(%q): %v", tt.targetPath, err)
+			}
+			if target.path != filepath.Join(targetDir, tt.wantRelative) {
+				t.Fatalf("target.path = %q, want %q", target.path, filepath.Join(targetDir, tt.wantRelative))
+			}
+		})
+	}
+}
+
 func TestWriteExpandedFactoryLayout_RejectsUnsafePortableBundledFileTargetsBeforeWriting(t *testing.T) {
 	tests := []struct {
 		name       string

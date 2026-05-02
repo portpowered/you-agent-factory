@@ -3,7 +3,6 @@ package config_test
 import (
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -145,60 +144,62 @@ func assertPortableBundledLoadedWorker(t *testing.T, loaded *factoryconfig.Loade
 }
 
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {
-	portableDir := t.TempDir()
-	escapeTarget := "..\\outside.ps1"
-	outsidePath := filepath.Join(portableDir, "outside.ps1")
-
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+	tests := []struct {
+		name            string
+		targetPath      func(t *testing.T, portableDir string) string
+		outsidePath     func(portableDir, unsafeTarget string) string
+		wantErrContains string
+	}{
+		{
+			name: "absolute target location",
+			targetPath: func(t *testing.T, _ string) string {
+				return filepath.Join(t.TempDir(), "outside.ps1")
 			},
-		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name:           "execute-story",
-			WorkerTypeName: "executor",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			OnFailure:      &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
-		}},
-		ResourceManifest: &interfaces.PortableResourceManifestConfig{
-			BundledFiles: []interfaces.BundledFileConfig{
-				portableBundledFileFixture(interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n"),
-				portableBundledFileFixture(interfaces.BundledFileTypeScript, escapeTarget, "Write-Output 'unsafe'\n"),
+			outsidePath: func(_ string, unsafeTarget string) string {
+				return unsafeTarget
 			},
+			wantErrContains: "must be factory-relative, not absolute",
+		},
+		{
+			name: "escaping target location",
+			targetPath: func(_ *testing.T, _ string) string {
+				return "../outside.ps1"
+			},
+			outsidePath: func(portableDir, _ string) string {
+				return filepath.Join(filepath.Dir(portableDir), "outside.ps1")
+			},
+			wantErrContains: "cannot escape the factory root",
 		},
 	}
 
-	mapper := factoryconfig.NewFactoryConfigMapper()
-	canonical, err := mapper.Flatten(cfg)
-	if err != nil {
-		t.Fatalf("Flatten: %v", err)
-	}
-	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
-	if err := os.WriteFile(portablePath, canonical, 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", portablePath, err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			portableDir := t.TempDir()
+			unsafeTarget := tt.targetPath(t, portableDir)
+			outsidePath := tt.outsidePath(portableDir, unsafeTarget)
 
-	_, err = factoryconfig.ExpandFactoryConfigLayout(portablePath)
-	if err == nil {
-		t.Fatal("expected ExpandFactoryConfigLayout to reject unsafe bundled file target")
-	}
-	if !strings.Contains(err.Error(), "must use forward slashes") {
-		t.Fatalf("error = %q, want forward-slash validation message", err.Error())
-	}
-	if !strings.Contains(err.Error(), path.Base(strings.ReplaceAll(escapeTarget, `\`, `/`))) {
-		t.Fatalf("error = %q, want offending target file %q", err.Error(), path.Base(strings.ReplaceAll(escapeTarget, `\`, `/`)))
-	}
-	if _, statErr := os.Stat(outsidePath); !os.IsNotExist(statErr) {
-		t.Fatalf("expected no escaped bundled file write at %s, stat err = %v", outsidePath, statErr)
-	}
-	if _, statErr := os.Stat(filepath.Join(portableDir, "factory", "scripts", "execute-story.ps1")); !os.IsNotExist(statErr) {
-		t.Fatalf("expected no bundled script write before validation fails, stat err = %v", statErr)
+			writePortableBundledRuntimeFixture(t, portableDir, []interfaces.BundledFileConfig{
+				portableBundledFileFixture(interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n"),
+				portableBundledFileFixture(interfaces.BundledFileTypeScript, unsafeTarget, "Write-Output 'unsafe'\n"),
+			})
+
+			_, err := factoryconfig.ExpandFactoryConfigLayout(filepath.Join(portableDir, interfaces.FactoryConfigFile))
+			if err == nil {
+				t.Fatal("expected ExpandFactoryConfigLayout to reject unsafe bundled file target")
+			}
+			if !strings.Contains(err.Error(), tt.wantErrContains) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), tt.wantErrContains)
+			}
+			if !strings.Contains(err.Error(), filepath.Base(unsafeTarget)) {
+				t.Fatalf("error = %q, want offending target file %q", err.Error(), filepath.Base(unsafeTarget))
+			}
+			if _, statErr := os.Stat(outsidePath); !os.IsNotExist(statErr) {
+				t.Fatalf("expected no escaped bundled file write at %s, stat err = %v", outsidePath, statErr)
+			}
+			if _, statErr := os.Stat(filepath.Join(portableDir, "factory", "scripts", "execute-story.ps1")); !os.IsNotExist(statErr) {
+				t.Fatalf("expected no bundled script write before validation fails, stat err = %v", statErr)
+			}
+		})
 	}
 }
 
@@ -320,6 +321,42 @@ func portableBundledFileFixture(fileType, targetPath, inline string) interfaces.
 			Encoding: interfaces.BundledFileEncodingUTF8,
 			Inline:   inline,
 		},
+	}
+}
+
+func writePortableBundledRuntimeFixture(t *testing.T, portableDir string, bundledFiles []interfaces.BundledFileConfig) {
+	t.Helper()
+
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
+			OnFailure:      &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+		}},
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: bundledFiles,
+		},
+	}
+
+	mapper := factoryconfig.NewFactoryConfigMapper()
+	canonical, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("Flatten: %v", err)
+	}
+	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(portablePath, canonical, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", portablePath, err)
 	}
 }
 
