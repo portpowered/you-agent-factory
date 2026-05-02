@@ -7,33 +7,27 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestServiceConfigOverrideAlignment_ServiceHarnessProviderCommandRunner(t *testing.T) {
-	support.SkipLongFunctional(t, "slow service-harness provider override alignment smoke")
+func TestServiceConfigOverrideAlignment_ServiceHarnessScriptCommandRunner(t *testing.T) {
+	support.SkipLongFunctional(t, "slow service-harness script command-runner alignment sweep")
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider harness alignment"}`))
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
-	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5-codex"))
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("script harness alignment"))
 
-	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("step one complete. COMPLETE")},
-		workers.CommandResult{Stdout: []byte("step two complete. COMPLETE")},
-	)
+	runner := support.NewRecordingCommandRunner("script alignment output")
 	harness := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProviderCommandRunner(runner),
+		testutil.WithCommandRunner(runner),
 	)
 
 	harness.RunUntilComplete(t, 10*time.Second)
 
 	harness.Assert().
-		HasTokenInPlace("task:complete").
+		HasTokenInPlace("task:done").
 		HasNoTokenInPlace("task:failed")
-	if got := runner.CallCount(); got != 2 {
-		t.Fatalf("provider command runner calls = %d, want 2", got)
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("script command runner calls = %d, want 1", got)
 	}
 }

@@ -7,10 +7,11 @@
 - Default non-long lane: `make test-functional`
 - Opt-in long lane: `make test-functional-long`
 
-The default lane runs the repository-owned `cmd/functionallane` helper, which
-discovers the behavior packages under `tests/functional/` and runs each one in
-short mode without hard-coded package lists. The long lane runs the full
-behavior tree plus any `functionallong`-tagged files, so broad or slow
+The default lane runs `go test -p 1 -short ./tests/functional/...` through the
+repository-owned `make test-functional` target, so the full behavior tree still
+runs through package discovery without hard-coded package lists while avoiding
+the slow Windows cross-package parallel scheduling path. The long lane runs the
+full behavior tree plus any `functionallong`-tagged files, so broad or slow
 scenarios stay available without widening the default feedback loop.
 
 ## Package Taxonomy
@@ -54,8 +55,9 @@ scenarios stay available without widening the default feedback loop.
   test belongs in the slow lane, gate it behind
   `tests/functional/internal/support.SkipLongFunctional(...)` or the
   `functionallong` build tag so `make test-functional` can keep running the
-  full short-mode behavior package set discovered by `cmd/functionallane`
-  without ad hoc package or test arguments at invocation time.
+  full short-mode behavior package set through `go test -p 1 -short
+  ./tests/functional/...` without ad hoc package or test arguments at
+  invocation time.
 - When a slow test is gated behind `functionallong`, name the file
   `*_long_test.go` so review-time checks can spot the lane boundary
   immediately.

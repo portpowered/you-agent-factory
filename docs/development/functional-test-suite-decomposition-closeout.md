@@ -8,25 +8,25 @@ evidence for the functional suite decomposition PRD.
 - Default non-long functional lane: `make test-functional`
 - Opt-in long functional lane: `make test-functional-long`
 
-The default lane runs the repository-owned `cmd/functionallane` helper, which
-discovers the behavior packages under `tests/functional/` and runs them in
-short mode without a hard-coded package list. The long lane runs the full
-behavior tree plus any `functionallong`-tagged files.
+The default lane runs `go test -p 1 -short ./tests/functional/...` through the
+repository-owned `make test-functional` target, so the full behavior tree still
+uses package discovery without a hard-coded package list while avoiding the
+slow Windows cross-package parallel scheduling path. The long lane runs the
+full behavior tree plus any `functionallong`-tagged files.
 
 ## Measured Runtime
 
 - The branch previously tried a representative-only `1.76s` run, but that
   contract was reverted because it did not execute all non-long short-mode
   functional behavior.
-- After later Windows worktree validation showed the single-invocation
-  `go test -short ./tests/functional/...` command regressed far above the
-  target again, the repository-owned default command moved to
-  `go run ./cmd/functionallane -short -count=1 -jobs 2 -timeout 300s` via
-  `make test-functional`.
-- On 2026-05-02 in this Windows worktree, `go run ./cmd/functionallane -short
-  -count=1 -jobs 3 -timeout 300s` completed in about `8.1s`.
+- Later Windows worktree validation showed that the default `go test -short
+  ./tests/functional/...` invocation could regress badly because Go's
+  cross-package parallel scheduling reported multi-dozen-second wall-clock
+  totals even after the broad sweeps moved behind `functionallong`.
+- On 2026-05-02 in this Windows worktree, `go test -p 1 -short
+  ./tests/functional/... -count=1 -timeout 300s` measured about `6.32s`.
 - On 2026-05-02 in this Windows worktree, `make test-functional` measured
-  about `7.07s`.
+  about `6.3s` after repointing the target to that `-p 1` invocation.
 - The runtime target is therefore met for the documented default command while
   the explicit long lane remains `make test-functional-long`.
 
