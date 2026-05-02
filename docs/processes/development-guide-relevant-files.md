@@ -75,6 +75,7 @@ This inventory records the checked-in files and directories that the maintainer 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
+- When a backend cleanup narrows an exported seam without changing caller behavior, keep regression coverage at the owning package's public helper boundary and assert observable forwarding or no-op behavior instead of symbol-name, reflection, or source-inventory checks.
 - When the CLI docs command surface changes, update `README.md` in the same pass and keep its command examples aligned with the guard assertions in `pkg/cli/root_test.go`.
 - When contributor docs mention the repository CI workflow, mirror the exact root-level command sequence and its stated scope from `.github/workflows/ci.yml` so local reproduction and review expectations do not drift.
 - When the repository adds or changes release automation, keep the workflow trigger model and maintainer commands aligned with `docs/guides/cli-release-policy.md` so tags, documentation, and GitHub Actions do not describe conflicting release paths.
