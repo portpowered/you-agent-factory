@@ -5,9 +5,7 @@ import (
 	"errors"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/factory"
 )
 
 // APISurface is the runtime seam consumed by the Agent Factory API server.
@@ -15,9 +13,7 @@ import (
 // can swap the active runtime without leaving API reads pinned to startup
 // state.
 type APISurface interface {
-	SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
-	SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error)
-	GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+	factory.APIFactory
 	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error)
 	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
 }
