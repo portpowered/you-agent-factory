@@ -13,13 +13,13 @@ import (
 	"strings"
 	"testing"
 
-	docscli "github.com/portpowered/agent-factory/pkg/cli/docs"
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
-	submitcli "github.com/portpowered/agent-factory/pkg/cli/submit"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 func TestNewRootCommand_HasSubcommands(t *testing.T) {
@@ -440,9 +440,9 @@ func TestReadmeQuickstartDocumentsInitStarterOptions(t *testing.T) {
 
 	contents := string(readme)
 	for _, want := range []string{
-		"infinite-you\n```",
-		"infinite-you init\n",
-		"infinite-you init --executor claude --dir my-factory",
+		"agent-factory\n```",
+		"agent-factory init\n",
+		"agent-factory init --executor claude --dir my-factory",
 		"Supported starter scaffold options are `codex` and `claude`.",
 	} {
 		if !strings.Contains(contents, want) {
@@ -458,12 +458,12 @@ func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 
 	contents := string(readme)
 	for _, want := range []string{
-		"infinite-you docs",
-		"infinite-you docs workstation",
+		"agent-factory docs",
+		"agent-factory docs workstation",
 		"Supported docs topics are `config`, `workstation`, `workers`, `resources`,",
 		"`batch-work`, and `templates`.",
-		"infinite-you docs batch-work",
-		"infinite-you docs config",
+		"agent-factory docs batch-work",
+		"agent-factory docs config",
 	} {
 		if !strings.Contains(contents, want) {
 			t.Fatalf("README missing %q:\n%s", want, contents)

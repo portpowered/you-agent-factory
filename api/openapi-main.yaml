@@ -155,7 +155,7 @@ paths:
         - Factory
       operationId: createFactory
       summary: Create factory
-      description: Stores one factory definition and activates it as the current factory when the runtime is idle.
+      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
       requestBody:
         required: true
         content:
@@ -181,14 +181,43 @@ paths:
         - Factory
       operationId: getCurrentFactory
       summary: Get current factory
-      description: Returns the active factory from the durable current-factory pointer and canonical flattened factory payload.
+      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
       responses:
         '200':
-          description: Current active factory.
+          description: Current active factory or the active default root runtime when no current-factory pointer exists yet.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Factory'
+              examples:
+                defaultRootRuntime:
+                  summary: Default root runtime is active.
+                  value:
+                    name: UNDEFINED
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers:
+                      - name: planner
+                        type: MODEL_WORKER
+                        modelProvider: CLAUDE
+                        executorProvider: SCRIPT_WRAP
+                        model: claude-sonnet-4-20250514
+                    workstations:
+                      - name: plan-task
+                        behavior: STANDARD
+                        type: MODEL_WORKSTATION
+                        worker: planner
+                        inputs:
+                          - workType: task
+                            state: init
+                        outputs:
+                          - workType: task
+                            state: done
         '404':
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':

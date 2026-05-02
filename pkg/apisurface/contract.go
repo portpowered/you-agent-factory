@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // APISurface is the runtime seam consumed by the Agent Factory API server.
@@ -37,3 +37,8 @@ var ErrInvalidNamedFactory = errors.New("invalid named factory")
 // ErrCurrentNamedFactoryNotFound reports that no durable current-factory
 // pointer could be resolved for named-factory readback.
 var ErrCurrentNamedFactoryNotFound = errors.New("current named factory not found")
+
+// DefaultCurrentFactoryName is the reserved current-factory identifier used
+// when the active runtime is the root factory and no named-factory pointer
+// exists.
+const DefaultCurrentFactoryName factoryapi.FactoryName = "UNDEFINED"

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/agent-factory/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/api/generated"
 	"gopkg.in/yaml.v3"
 )
 

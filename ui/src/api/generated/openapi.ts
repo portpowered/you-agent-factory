@@ -119,7 +119,7 @@ export interface paths {
         put?: never;
         /**
          * Create factory
-         * @description Stores one factory definition and activates it as the current factory when the runtime is idle.
+         * @description Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
          */
         post: operations["createFactory"];
         delete?: never;
@@ -137,7 +137,7 @@ export interface paths {
         };
         /**
          * Get current factory
-         * @description Returns the active factory from the durable current-factory pointer and canonical flattened factory payload.
+         * @description Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
          */
         get: operations["getCurrentFactory"];
         put?: never;
@@ -251,7 +251,7 @@ export interface components {
             [key: string]: number;
         };
         /**
-         * @description Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
+         * @description Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
          * @example customer-support-triage
          */
         FactoryName: string;
@@ -1372,7 +1372,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current active factory. */
+            /** @description Current active factory or the active default root runtime when no current-factory pointer exists yet. */
             200: {
                 headers: {
                     [name: string]: unknown;

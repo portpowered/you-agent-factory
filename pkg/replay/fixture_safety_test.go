@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/testpath"
+	"github.com/portpowered/infinite-you/internal/testpath"
 )
 
 func TestCheckedInReplayEventFixturesUseSafeFactoryEvents(t *testing.T) {

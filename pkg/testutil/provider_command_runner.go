@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // ProviderCommandRunner is a test double for ScriptWrapProvider's shared command seam.

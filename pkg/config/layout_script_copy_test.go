@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestWriteExpandedFactoryLayout_CopiesReferencedScriptForOptedInScriptWorkstation(t *testing.T) {

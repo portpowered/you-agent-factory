@@ -1,6 +1,6 @@
 package functional_test
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 // persistTestPipelineConfig returns a simple 2-stage pipeline config.
 func persistTestPipelineConfig() *interfaces.FactoryConfig {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-config-roundtrip-fixture review=2026-07-18 removal=split-roundtrip-assertions-before-next-config-schema-change

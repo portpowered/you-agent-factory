@@ -5,8 +5,8 @@ import (
 	"maps"
 	"strconv"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // WorkRequestFromSubmitRequests wraps internal normalized submit records in the

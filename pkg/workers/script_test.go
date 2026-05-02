@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type capturingCommandRunner struct {
@@ -402,6 +402,17 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			name: "process error",
 			runner: commandRunnerFunc(func(_ context.Context, _ CommandRequest) (CommandResult, error) {
 				return CommandResult{Stderr: []byte("exec failed")}, errors.New("exec: file not found")
+			}),
+			wantOutcome:   factoryapi.ScriptExecutionOutcomeProcessError,
+			wantFailure:   &processError,
+			wantStderr:    "exec failed",
+			wantResult:    interfaces.OutcomeFailed,
+			wantErrorText: "execution cancelled: exec: file not found",
+		},
+		{
+			name: "process error omits zero exit code diagnostics",
+			runner: commandRunnerFunc(func(_ context.Context, _ CommandRequest) (CommandResult, error) {
+				return CommandResult{Stderr: []byte("exec failed"), ExitCode: 0}, errors.New("exec: file not found")
 			}),
 			wantOutcome:   factoryapi.ScriptExecutionOutcomeProcessError,
 			wantFailure:   &processError,

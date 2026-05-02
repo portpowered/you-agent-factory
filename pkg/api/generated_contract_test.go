@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
@@ -137,6 +137,7 @@ func TestGeneratedFactoryContractsCompileAndRoundTrip(t *testing.T) {
 
 	assertGeneratedNamedFactoryContracts(t, namedFactory)
 	assertGeneratedNamedFactoryJSONRoundTrip(t, namedFactory)
+	assertGeneratedReservedCurrentFactoryJSONRoundTrip(t, namedFactory)
 	assertGeneratedCurrentFactoryNotFoundJSON(t)
 }
 
@@ -222,6 +223,27 @@ func assertGeneratedNamedFactoryJSONRoundTrip(t *testing.T, namedFactory factory
 	}
 	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)
+	}
+}
+
+func assertGeneratedReservedCurrentFactoryJSONRoundTrip(t *testing.T, namedFactory factoryapi.Factory) {
+	t.Helper()
+
+	namedFactory.Name = "UNDEFINED"
+	encoded, err := json.Marshal(namedFactory)
+	if err != nil {
+		t.Fatalf("marshal generated current Factory: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"name":"UNDEFINED"`) {
+		t.Fatalf("generated current Factory JSON missing reserved current-factory name: %s", encoded)
+	}
+
+	var roundTripped factoryapi.Factory
+	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatalf("unmarshal generated current Factory: %v", err)
+	}
+	if roundTripped.Name != "UNDEFINED" {
+		t.Fatalf("round-tripped current factory name = %q, want %q", roundTripped.Name, "UNDEFINED")
 	}
 }
 

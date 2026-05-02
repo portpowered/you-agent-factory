@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 )
 
 // FactoryConfigFlattenConfig holds parameters for the config flatten command.

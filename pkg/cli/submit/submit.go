@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 // SubmitConfig holds parameters for the submit command.

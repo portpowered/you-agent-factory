@@ -7,26 +7,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/apisurface"
-	"github.com/portpowered/agent-factory/pkg/cli/dashboardrender"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/factory/runtime"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/listeners"
-	"github.com/portpowered/agent-factory/pkg/logging"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/replay"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/listeners"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/workers"
 
 	"go.uber.org/zap"
 )
@@ -1142,8 +1143,8 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 	if rootDir == "" && fs.cfg != nil {
 		rootDir = fs.cfg.Dir
 	}
-	if err := factoryconfig.ValidateNamedFactoryName(string(namedFactory.Name)); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactoryName, err)
+	if err := apisurface.ValidateWritableNamedFactoryName(namedFactory.Name); err != nil {
+		return factoryapi.Factory{}, err
 	}
 
 	payload, err := json.Marshal(namedFactory)
@@ -1209,6 +1210,10 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	name, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			currentRuntime := fs.currentRuntimeConfig()
+			if currentRuntime != nil && sameFactoryDir(currentRuntime.FactoryDir(), rootDir) {
+				return fs.serializeCurrentNamedFactory(apisurface.DefaultCurrentFactoryName, currentRuntime)
+			}
 			return factoryapi.Factory{}, ErrCurrentNamedFactoryNotFound
 		}
 		return factoryapi.Factory{}, fmt.Errorf("read current factory pointer: %w", err)
@@ -1226,6 +1231,13 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 		return factoryapi.Factory{}, fmt.Errorf("load current named factory %q: %w", name, err)
 	}
 
+	return fs.serializeCurrentNamedFactory(factoryapi.FactoryName(name), current)
+}
+
+func (fs *FactoryService) serializeCurrentNamedFactory(
+	name factoryapi.FactoryName,
+	current *factoryconfig.LoadedFactoryConfig,
+) (factoryapi.Factory, error) {
 	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
 		current.FactoryDir(),
 		current.FactoryConfig(),
@@ -1238,6 +1250,13 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	}
 	generatedFactory.Name = factoryapi.FactoryName(name)
 	return generatedFactory, nil
+}
+
+func sameFactoryDir(left, right string) bool {
+	if strings.TrimSpace(left) == "" || strings.TrimSpace(right) == "" {
+		return false
+	}
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 // Pause pauses the current runtime instance.

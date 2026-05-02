@@ -33,6 +33,14 @@
   file sets again after any sidecar exploration; open lanes can advance during
   the same maintainer pass and make an initially valid idea stale before it is
   queued.
+- Before re-queuing a local cleanup idea, compare it against the most recent
+  merged PR list as well as open PR file sets; fast-moving `main` can land the
+  exact seam while the ignored workflow-input residue still suggests it is only
+  queued.
+- Before treating tracked sibling `copy` scripts under `ui/scripts/` as live
+  tooling, confirm the canonical entrypoints in `ui/package.json` and the
+  checked-in development docs; duplicate script copies can be dead residue even
+  when they sit beside actively used files.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -734,3 +742,169 @@
   PR map.
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
   `#39` state, the current blockers, and the still-valid replay cleanup lane.
+
+## 2026-05-01 17:20 -07:00 - meta refresh after replay and worker cleanup landed
+
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `f7efd5f`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay samples, standards index, factory
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, current open PR file sets, and the current throttle code
+  ownership before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels and that the extra idea/plan
+  files under `factory/inputs/**` remain ignored workspace-local residue.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `f6e5ac6`
+  - it still treated PR `#40` as open even though it merged on May 1, 2026
+  - it did not include merged PR `#41`
+  - it still treated the replay merge-helper cleanup as the next queueable lane
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#38`, `#37`, `#33`, and `#30`
+  - merged PRs `#41`, `#40`, `#39`, `#36`, `#35`, `#34`, `#32`, and `#31`
+- Reconfirmed through direct code inspection plus a sidecar explorer that the
+  P0 throttle ask is still only partially landed:
+  - `pkg/factory/internal/throttle/windows.go` owns pure event-time throttle
+    window derivation
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` still owns the mutable
+    `throttlePauses` map and still gates scheduling through that dispatcher
+    state
+  - there is still no checked-in `factory.guards` / `INFERENCE_THROTTLE_GUARD`
+    lowering path in `pkg/`, `api/`, or the public guard enums
+- Confirmed that the broad guard-lowering ask still overlaps the current open
+  public/config/service/functional lanes, but the internal dispatcher state
+  cleanup remains decomposable outside those file sets.
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/retire-dispatcher-throttle-pause-map.md` for
+  the next narrow throttle follow-up:
+  - preserve current `TickResult`, snapshot, and observability payload shape
+  - stop storing mutable throttle pause windows on the dispatcher
+  - derive current active pauses directly from completed dispatch history plus
+    the pure throttle-window helper
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  PR state, the current throttle ownership split, and the revised next-lane
+  recommendation.
+
+## 2026-05-01 18:02 -07:00 - meta refresh after dispatcher throttle cleanup landed
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `bd240ae`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `f7efd5f`
+  - it still treated PRs `#38` and `#37` as open even though both are now
+    merged
+  - it did not include merged PR `#42`
+  - it still treated the dispatcher throttle pause-map cleanup as the next
+    queueable lane even though that seam is already merged on `main`
+- Reconfirmed through direct code inspection that the throttle ask posture has
+  narrowed again on `main`:
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` no longer stores a
+    mutable `throttlePauses` map
+  - active provider/model pause windows are now derived from
+    `snapshot.DispatchHistory` and the pure helper in
+    `pkg/factory/internal/throttle/windows.go`
+  - the remaining ask is now factory-level `INFERENCE_THROTTLE_GUARD`
+    config/lowering rather than dispatcher-local duplicate state cleanup
+- Used a sidecar repository-inspection agent plus direct local validation to
+  identify one new narrow cleanup candidate outside open PRs `#33` and `#30`:
+  - `pkg/cli/dashboard/dashboard.go` still owns
+    `worldViewFallbackCompletedWorkItems` and
+    `worldViewFallbackFailedWorkItems`
+  - both helpers already share the same collector path and differ only in
+    terminal-work inclusion and missing-input fallback rules
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
+  as the next narrow lane instead of re-queuing the already-landed throttle
+  cleanup.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  `#42` state, the narrowed throttle ask posture, and the revised next-lane
+  recommendation.
+
+## 2026-05-01 19:03 -07:00 - meta refresh after dashboard fallback cleanup landed
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `23729cb`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `bd240ae`
+  - it did not include merged PR `#43`
+  - it still treated the dashboard fallback collector cleanup as the next
+    queueable lane even though that seam is already merged on `main`
+- Reconfirmed through direct code inspection that the throttle ask posture is
+  unchanged after the dashboard cleanup:
+  - `pkg/factory/internal/throttle/windows.go` still owns pure active-window
+    derivation
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` still derives live pauses
+    from dispatch history rather than storing a mutable pause map
+  - there is still no checked-in `factory.guards` /
+    `INFERENCE_THROTTLE_GUARD` lowering path
+- Used a sidecar repository-inspection agent plus direct local validation to
+  identify one new narrow cleanup candidate outside open PRs `#33` and `#30`:
+  - `pkg/factory/work_request.go` still owns the private
+    `rejectDuplicateBatchRelation` helper
+  - that helper has a single caller, `validateAndIndexBatchRelations`
+  - it only formats one of two duplicate-relation errors, so it is a safe
+    inline simplification seam
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/inline-batch-relation-duplicate-rejection.md`
+  as the next narrow lane instead of re-queuing the already-landed dashboard
+  cleanup.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  `#43` state, the unchanged throttle posture, and the revised next-lane
+  recommendation.
+
+## 2026-05-01 19:35 -07:00 - meta refresh after batch-relation cleanup landed
+
+- Ran `git pull` and verified the workspace is synced on `main` at `368d182`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, live GitHub PR state, and the relevant upstream
+  `#44` merge before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels and that the extra idea/plan
+  files under `factory/inputs/**` remain ignored workspace-local residue.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `23729cb`
+  - it did not include merged PR `#44`
+  - it still treated the batch-relation duplicate-helper cleanup as merely
+    queueable even though that seam is now merged on `main`
+  - it did not account for the newly validated dead-code seam in
+    `ui/scripts/`
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#33` and `#30`
+  - merged PR `#44` `inline-batch-relation-duplicate-rejection`
+- Revalidated that stale ignored workflow residue must not drive the world
+  model:
+  - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
+    still exists locally even though PR `#36` already removed the `syncDispatch`
+    cache from `pkg/factory/runtime/dispatch_result_hook.go`
+- Used a sidecar repository-inspection agent plus direct local validation to
+  identify one new narrow cleanup candidate outside the open PR file sets:
+  - `ui/scripts/normalize-dist-output copy.mjs` and
+    `ui/scripts/write-replay-coverage-report copy.ts` are still tracked
+    duplicate script copies
+  - `ui/package.json` and
+    `docs/processes/development-guide-relevant-files.md` reference only the
+    canonical `ui/scripts/normalize-dist-output.mjs` and
+    `ui/scripts/write-replay-coverage-report.ts` entrypoints
+  - deleting the tracked `copy` files is a dead-code cleanup lane entirely
+    outside `#33` API/config/public-contract work and `#30`
+    `tests/functional/**` decomposition
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/retire-duplicate-ui-script-copies.md` as the
+  next narrow lane instead of re-queuing already-landed backend cleanup.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, merged `#44`,
+  the stale ignored-residue findings, and the revised next-lane
+  recommendation.

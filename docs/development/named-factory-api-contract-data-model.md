@@ -35,8 +35,8 @@ documents own the durable contract rules.
 | Name | Kind | Meaning | Canonical owner | Evidence |
 | --- | --- | --- | --- | --- |
 | named factory | public API resource | One customer-named factory definition paired with the canonical flattened `Factory` payload. | `libraries/agent-factory/api/openapi-main.yaml` `NamedFactory` schema | bundled as `#/components/schemas/NamedFactory`, guarded in `pkg/api/openapi_contract_test.go` |
-| factory name | public identifier | Customer-facing identifier used to address one stored named factory. | `libraries/agent-factory/api/openapi-main.yaml` `FactoryName` schema | bundled as `#/components/schemas/FactoryName` |
-| current factory | public runtime view | The active named factory resolved from the durable `.current-factory` pointer. | `libraries/agent-factory/api/openapi-main.yaml` route contract | handler and service regression coverage in `pkg/api/server_test.go` and `pkg/service/factory_test.go` |
+| factory name | public identifier | Customer-facing identifier used to address one stored named factory, with `UNDEFINED` reserved for current-factory readback while the default root runtime is active. | `libraries/agent-factory/api/openapi-main.yaml` `FactoryName` schema | bundled as `#/components/schemas/FactoryName` |
+| current factory | public runtime view | The active named factory resolved from the durable `.current-factory` pointer, or the active default root runtime when no pointer exists yet. | `libraries/agent-factory/api/openapi-main.yaml` route contract | handler and service regression coverage in `pkg/api/server_test.go` and `pkg/service/factory_test.go` |
 | sharing payload | public authored contract | The exact authored `NamedFactory` payload that must survive export and import without dashboard-side reshaping. | `NamedFactory` schema plus the UI named-factory API wrapper | export/import roundtrip coverage in `ui/src/features/import/use-factory-import-activation.test.tsx` |
 | PNG envelope | browser transport wrapper | The PNG metadata wrapper that adds `schemaVersion` to the canonical `NamedFactory` payload and nothing else. | `ui/src/features/export/factory-png-export.ts` and `ui/src/features/import/factory-png-import.ts` `PortOSFactoryPngEnvelope` | focused PNG export/import tests under `ui/src/features/export/` and `ui/src/features/import/` |
 
@@ -57,6 +57,7 @@ documents own the durable contract rules.
 | Shape | Owner | Required fields | Defaults | Consumers | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | `NamedFactory` | `libraries/agent-factory/api/openapi-main.yaml` | `name`, `factory` | none | bundled contract reviewers, generated Go/UI artifacts, handler boundary | `pkg/api/openapi_contract_test.go` named-factory schema guard |
+| `FactoryName` | `libraries/agent-factory/api/openapi-main.yaml` | canonical lowercase-hyphen customer names plus reserved `UNDEFINED` current-factory readback | none | generated Go/UI artifacts, named-factory handler validation, current-factory readers | `pkg/api/openapi_contract_test.go` factory-name schema guard |
 | `Factory` | existing public config schema | canonical flattened factory payload | existing optional-field defaults | nested inside `NamedFactory.factory` | `NamedFactory.factory -> #/components/schemas/Factory` |
 | `PortOSFactoryPngEnvelope` | `libraries/agent-factory/ui` sharing boundary | `schemaVersion`, `name`, `factory` | `schemaVersion` fixed to the current PNG format version | browser export, browser import, dashboard activation preview | `factory-png-export.test.ts`, `factory-png-import.test.ts` |
 | `ErrorResponse` with named-factory codes | shared API error schema | `message`, `code` | none | all JSON clients | `ErrorResponse.code` enum plus route-specific response examples |
@@ -86,7 +87,9 @@ The canonical sharing payload is the generated OpenAPI `NamedFactory` schema:
 Every public sharing boundary reuses that payload:
 
 1. `GET /factory/~current` returns the authored `NamedFactory` payload for the
-   current factory.
+   current factory. When the active runtime is still the default root runtime
+   and no durable pointer exists yet, the response uses `name: "UNDEFINED"` as
+   the reserved canonical identifier.
 2. Browser PNG export embeds that same payload inside
    `PortOSFactoryPngEnvelope`, which adds only `schemaVersion`.
 3. Browser PNG import reads `PortOSFactoryPngEnvelope`, validates
@@ -98,6 +101,10 @@ The dashboard must not rebuild sharing payloads from `/events`, runtime-only
 views, or export-specific field aliases such as `factoryName`. The public
 contract boundary stays authoring-first: runtime projections may support
 inspection, but they do not define the export or import payload.
+
+`UNDEFINED` is reserved for current-factory readback only. `POST /factory`
+continues to require a customer-safe named-factory identifier and should reject
+attempts to activate a named factory with the reserved default-runtime name.
 
 ## Shared Package Or Package-Local Decision
 

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/config"
-	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/config"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 // AgentContext is the merged execution context assembled from

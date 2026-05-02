@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 var retiredInitFactoryContractFields = []string{`"work_types"`, `"work_type"`, `"on_failure"`}

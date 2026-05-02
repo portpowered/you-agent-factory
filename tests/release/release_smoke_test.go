@@ -3,6 +3,7 @@ package release_test
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -10,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/internal/releasesmoke"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/releasesmoke"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T) {
@@ -98,19 +99,107 @@ func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructur
 	}
 }
 
+func TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN(t *testing.T) {
+	t.Parallel()
+
+	binaryPath := runGoInstallSmoke(t, "./cmd/factory", testutil.MustRepoRoot(t))
+	assertInstalledDocsSmoke(t, binaryPath)
+}
+
+func TestGoInstallSmoke_InstallsPublishedModulePathIntoCleanGOBIN(t *testing.T) {
+	t.Parallel()
+
+	if os.Getenv("AGENT_FACTORY_RELEASE_PUBLIC_GO_INSTALL_SMOKE") != "1" {
+		t.Skip("set AGENT_FACTORY_RELEASE_PUBLIC_GO_INSTALL_SMOKE=1 to run the published-module go install smoke")
+	}
+
+	binaryPath := runGoInstallSmoke(t, "github.com/portpowered/infinite-you/cmd/factory@latest", "")
+	assertInstalledDocsSmoke(t, binaryPath)
+}
+
 func buildReleaseSmokeBinary(t *testing.T) string {
 	t.Helper()
 
-	binaryName := "agent-factory"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	binaryPath := filepath.Join(t.TempDir(), releaseSmokeBinaryName())
 	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
 	build.Dir = testutil.MustRepoRoot(t)
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build release smoke binary: %v\n%s", err, string(output))
 	}
 	return binaryPath
+}
+
+func releaseSmokeBinaryName() string {
+	binaryName := "agent-factory"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	return binaryName
+}
+
+func goInstallBinaryName() string {
+	binaryName := "factory"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	return binaryName
+}
+
+func runGoInstallSmoke(t *testing.T, installTarget string, installDir string) string {
+	t.Helper()
+
+	tempRoot := t.TempDir()
+	binaryDir := filepath.Join(tempRoot, "bin")
+	goCacheDir := filepath.Join(tempRoot, "gocache")
+	smokeDir := filepath.Join(tempRoot, "outside-repo")
+	for _, dir := range []string{binaryDir, goCacheDir, smokeDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create temp dir %q: %v", dir, err)
+		}
+	}
+
+	install := exec.Command("go", "install", installTarget)
+	if installDir != "" {
+		install.Dir = installDir
+	} else {
+		install.Dir = smokeDir
+	}
+	install.Env = append(os.Environ(),
+		"GOBIN="+binaryDir,
+		"GOCACHE="+goCacheDir,
+		"GOWORK=off",
+	)
+	if output, err := install.CombinedOutput(); err != nil {
+		t.Fatalf("go install %s: %v\n%s", installTarget, err, string(output))
+	}
+
+	binaryPath := filepath.Join(binaryDir, goInstallBinaryName())
+	if _, err := os.Stat(binaryPath); err != nil {
+		t.Fatalf("installed binary missing at %q: %v", binaryPath, err)
+	}
+
+	return binaryPath
+}
+
+func assertInstalledDocsSmoke(t *testing.T, binaryPath string) {
+	t.Helper()
+
+	smokeDir := filepath.Join(t.TempDir(), "outside-repo")
+	if err := os.MkdirAll(smokeDir, 0o755); err != nil {
+		t.Fatalf("create smoke working dir %q: %v", smokeDir, err)
+	}
+
+	smoke := exec.Command(binaryPath, "docs", "config")
+	smoke.Dir = smokeDir
+	output, err := smoke.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run installed binary docs smoke: %v\n%s", err, string(output))
+	}
+
+	rendered := string(output)
+	for _, want := range []string{"# Config", "factory.json", "workTypes"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("installed docs output missing %q:\n%s", want, rendered)
+		}
+	}
 }

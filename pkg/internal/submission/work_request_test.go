@@ -3,7 +3,7 @@ package submission
 import (
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestWorkRequestFromSubmitRequests_UsesSharedTraceFallback(t *testing.T) {

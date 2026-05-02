@@ -1,7 +1,7 @@
 package handwrittensourceguard
 
 import (
-	"github.com/portpowered/agent-factory/internal/contractguard"
+	"github.com/portpowered/infinite-you/internal/contractguard"
 	"path/filepath"
 	"strings"
 )

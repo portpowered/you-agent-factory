@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 func TestWorkIDGenerator_Next(t *testing.T) {

@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	"github.com/portpowered/agent-factory/internal/testpath"
+	"github.com/portpowered/infinite-you/internal/testpath"
 	"os"
 	"path/filepath"
 	"runtime"

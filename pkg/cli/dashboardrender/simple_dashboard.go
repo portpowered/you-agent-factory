@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // SimpleDashboardRenderData carries only the event-first data the simple

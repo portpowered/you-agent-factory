@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/replay"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload(t *testing.T) {

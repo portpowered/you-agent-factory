@@ -4,14 +4,77 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
+	"reflect"
 	"testing"
+	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
+
+func TestNamedFactoryAPI_DefaultCurrentFactoryReadbackAndImportSwitch(t *testing.T) {
+	fixture := newExportImportFixture(t)
+	rootDir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	server := startNamedFactoryTestServer(t, rootDir)
+
+	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
+
+	current := getNamedFactoryCurrent(t, server.httpSrv.URL)
+	if current.Name != factoryapi.FactoryName("UNDEFINED") {
+		t.Fatalf("default current factory name = %q, want UNDEFINED", current.Name)
+	}
+	wantCurrent := fixture.GeneratedExportFactor
+	wantCurrent.Name = factoryapi.FactoryName("UNDEFINED")
+	if !reflect.DeepEqual(
+		comparableExportImportFactory(current),
+		comparableExportImportFactory(wantCurrent),
+	) {
+		t.Fatalf(
+			"default current factory payload drifted from the root runtime contract\ngot:  %#v\nwant: %#v",
+			comparableExportImportFactory(current),
+			comparableExportImportFactory(wantCurrent),
+		)
+	}
+
+	rootResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "task", "default-runtime", http.StatusCreated)
+	var rootSubmit factoryapi.SubmitWorkResponse
+	decodeNamedFactoryJSONResponse(t, rootResp, &rootSubmit, "decode default-runtime submit response")
+	if rootSubmit.TraceId == "" {
+		t.Fatal("expected non-empty trace ID for default-runtime submission")
+	}
+	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
+
+	created := createNamedFactoryFromBody(t, server.httpSrv.URL, "beta", "beta-task")
+	if created.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("created factory name = %q, want beta", created.Name)
+	}
+	assertNamedFactoryCurrentPointer(t, rootDir, "beta")
+
+	current = getNamedFactoryCurrent(t, server.httpSrv.URL)
+	if current.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("current factory name after import = %q, want beta", current.Name)
+	}
+
+	betaResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "beta-task", "beta", http.StatusCreated)
+	var betaSubmit factoryapi.SubmitWorkResponse
+	decodeNamedFactoryJSONResponse(t, betaResp, &betaSubmit, "decode beta-task submit response")
+	if betaSubmit.TraceId == "" {
+		t.Fatal("expected non-empty trace ID for activated beta-task submission")
+	}
+
+	legacyResp := submitWorkAndExpectStatus(t, server.httpSrv.URL, "task", "default-runtime", http.StatusBadRequest)
+	var legacyErr factoryapi.ErrorResponse
+	decodeNamedFactoryJSONResponse(t, legacyResp, &legacyErr, "decode default-runtime error response")
+	if legacyErr.Code != factoryapi.BADREQUEST {
+		t.Fatalf("default-runtime error code after import = %q, want BAD_REQUEST", legacyErr.Code)
+	}
+}
 
 func TestNamedFactoryAPI_PersistsActivatesAndSwitchesWorkSurface(t *testing.T) {
 	rootDir := t.TempDir()
@@ -45,6 +108,29 @@ func TestNamedFactoryAPI_PersistsActivatesAndSwitchesWorkSurface(t *testing.T) {
 	}
 }
 
+func TestNamedFactoryAPI_RejectsReservedCurrentFactoryNameOnCreate(t *testing.T) {
+	rootDir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
+	server := startNamedFactoryTestServer(t, rootDir)
+
+	request := convertViaJSON[factoryapi.Factory](t, json.RawMessage(functionalNamedFactoryPayloadJSON("reserved-name", "reserved-task")))
+	request.Name = apisurface.DefaultCurrentFactoryName
+	resp := createNamedFactoryExpectBadRequest(t, server.httpSrv.URL, request)
+	if string(resp.Code) != "INVALID_FACTORY_NAME" {
+		t.Fatalf("CreateFactoryWithResponse error code = %q, want INVALID_FACTORY_NAME", resp.Code)
+	}
+	if resp.Message != "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier." {
+		t.Fatalf("CreateFactoryWithResponse error message = %q", resp.Message)
+	}
+
+	current := getNamedFactoryCurrent(t, server.httpSrv.URL)
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name after reserved-name rejection = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if _, err := config.ReadCurrentFactoryPointer(rootDir); !os.IsNotExist(err) {
+		t.Fatalf("ReadCurrentFactoryPointer after reserved-name create rejection error = %v, want not-exist", err)
+	}
+}
+
 func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	t.Helper()
 
@@ -68,35 +154,16 @@ func startNamedFactoryTestServer(t *testing.T, rootDir string) *FunctionalServer
 func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.Factory {
 	t.Helper()
 
-	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewBufferString(functionalNamedFactoryBody(name, workType)))
-	if err != nil {
-		t.Fatalf("POST /factory: %v", err)
+	var request factoryapi.Factory
+	if err := json.Unmarshal([]byte(functionalNamedFactoryBody(name, workType)), &request); err != nil {
+		t.Fatalf("unmarshal named factory request: %v", err)
 	}
-	if resp.StatusCode != http.StatusCreated {
-		resp.Body.Close()
-		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
-	}
-
-	var created factoryapi.Factory
-	decodeNamedFactoryJSONResponse(t, resp, &created, "decode create factory response")
-	return created
+	return createNamedFactory(t, serverURL, request)
 }
 
 func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
-
-	resp, err := http.Get(serverURL + "/factory/~current")
-	if err != nil {
-		t.Fatalf("GET /factory/~current: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
-	}
-
-	var current factoryapi.Factory
-	decodeNamedFactoryJSONResponse(t, resp, &current, "decode current factory response")
-	return current
+	return getCurrentNamedFactory(t, serverURL)
 }
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {

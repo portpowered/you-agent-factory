@@ -2,8 +2,8 @@
 package defaultcmd
 
 import (
-	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 const (

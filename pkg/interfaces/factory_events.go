@@ -1,6 +1,6 @@
 package interfaces
 
-import factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
+import factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 
 // FactoryEventStream carries replayed history and then live canonical events.
 type FactoryEventStream struct {

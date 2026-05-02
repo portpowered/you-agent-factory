@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/apisurface"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
 
@@ -363,6 +363,35 @@ func TestGetCurrentFactory_ReturnsFactoryShape(t *testing.T) {
 	}
 }
 
+func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
+	mf := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: apisurface.DefaultCurrentFactoryName,
+			Id:   stringPointerForAPITest("root-runtime"),
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var current factoryapi.Factory
+	if err := json.NewDecoder(rec.Body).Decode(&current); err != nil {
+		t.Fatalf("decode current factory response: %v", err)
+	}
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if current.Id == nil || *current.Id != "root-runtime" {
+		t.Fatalf("current factory id = %#v, want root-runtime", current.Id)
+	}
+}
+
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CreateNamedFactoryErr: factoryconfig.ErrNamedFactoryAlreadyExists,
@@ -384,7 +413,18 @@ func TestCreateFactory_RejectsInvalidFactoryName(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators.")
+	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.")
+}
+
+func TestCreateFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody(string(apisurface.DefaultCurrentFactoryName), "task")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.")
 }
 
 func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {

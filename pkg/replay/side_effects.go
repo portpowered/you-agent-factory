@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // SideEffects replays recorded provider and script-command behavior through

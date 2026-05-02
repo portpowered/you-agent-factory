@@ -15,20 +15,20 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/apisurface"
-	"github.com/portpowered/agent-factory/pkg/cli/dashboard"
-	"github.com/portpowered/agent-factory/pkg/cli/dashboardrender"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/internal/submission"
-	"github.com/portpowered/agent-factory/pkg/logging"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/replay"
-	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/internal/submission"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -406,6 +406,99 @@ func TestFactoryService_ActivateNamedFactory_RollsBackCurrentPointerWhenReplacem
 	}
 }
 
+func TestFactoryService_CreateNamedFactory_ActivatesPersistedFactoryFromDefaultRuntime(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	created, err := svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContract(t, "beta"))
+	if err != nil {
+		t.Fatalf("CreateNamedFactory(beta): %v", err)
+	}
+	if created.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("created factory name = %q, want beta", created.Name)
+	}
+	assertCurrentFactoryPointer(t, rootDir, "beta", "after create from default runtime")
+	assertServiceCurrentNamedFactory(t, svc, "beta", "after create from default runtime")
+	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryDir() != filepath.Join(rootDir, "beta") {
+		t.Fatalf("service runtime dir after create = %q, want %q", svc.runtimeCfg.FactoryDir(), filepath.Join(rootDir, "beta"))
+	}
+}
+
+func TestFactoryService_CreateNamedFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	_, err = svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContract(t, string(apisurface.DefaultCurrentFactoryName)))
+	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
+		t.Fatalf("CreateNamedFactory(%q) error = %v, want %v", apisurface.DefaultCurrentFactoryName, err, apisurface.ErrInvalidNamedFactoryName)
+	}
+	assertCurrentFactoryPointerMissing(t, rootDir, "after reserved-name rejection")
+}
+
+func TestFactoryService_ActivateNamedFactory_FromDefaultRuntimeLeavesRootReadableWhenReplacementBuildFails(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+	if _, err := config.PersistNamedFactory(rootDir, "beta", serviceNamedFactoryPayload(t, "beta")); err != nil {
+		t.Fatalf("PersistNamedFactory(beta): %v", err)
+	}
+	corruptNamedFactoryConfig(t, rootDir, "beta")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	if err := svc.ActivateNamedFactory(context.Background(), "beta"); err == nil {
+		t.Fatal("expected replacement build failure")
+	}
+
+	assertCurrentFactoryPointerMissing(t, rootDir, "after failed activation from default runtime")
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory after failed activation from default runtime: %v", err)
+	}
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name after failed activation = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if current.Id == nil || *current.Id != "root-runtime" {
+		t.Fatalf("current factory id after failed activation = %#v, want root-runtime", current.Id)
+	}
+	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryDir() != rootDir {
+		t.Fatalf("service runtime dir after failed activation = %q, want %q", svc.runtimeCfg.FactoryDir(), rootDir)
+	}
+}
+
 func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPayload(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -443,6 +536,37 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	}
 	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryConfig().Project != "beta" {
 		t.Fatalf("service runtime project = %q, want unchanged beta runtime", svc.runtimeCfg.FactoryConfig().Project)
+	}
+}
+
+func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
+	}
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if current.Id == nil || *current.Id != "root-runtime" {
+		t.Fatalf("current factory id = %#v, want root-runtime", current.Id)
+	}
+	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryDir() != rootDir {
+		t.Fatalf("service runtime dir = %q, want %q", svc.runtimeCfg.FactoryDir(), rootDir)
 	}
 }
 
@@ -642,6 +766,14 @@ func assertCurrentFactoryPointer(t *testing.T, rootDir, want, contextLabel strin
 	}
 	if got != want {
 		t.Fatalf("current factory pointer %s = %q, want %q", contextLabel, got, want)
+	}
+}
+
+func assertCurrentFactoryPointerMissing(t *testing.T, rootDir, contextLabel string) {
+	t.Helper()
+
+	if _, err := config.ReadCurrentFactoryPointer(rootDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ReadCurrentFactoryPointer %s err = %v, want %v", contextLabel, err, os.ErrNotExist)
 	}
 }
 

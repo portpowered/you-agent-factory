@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (
@@ -221,11 +221,11 @@ func providerErrorExitCode(err error) *int {
 	if !errors.As(err, &providerErr) || providerErr.Diagnostics == nil || providerErr.Diagnostics.Command == nil {
 		return nil
 	}
-	exitCode := providerErr.Diagnostics.Command.ExitCode
-	if exitCode == 0 {
-		return nil
-	}
-	return &exitCode
+	return workerEventExitCode(
+		providerErr.Diagnostics.Command.ExitCode,
+		true,
+		omitZeroWorkerEventExitCode,
+	)
 }
 
 func inferenceRequestFactoryEventPayload(payload factoryapi.InferenceRequestEventPayload) factoryapi.FactoryEvent_Payload {

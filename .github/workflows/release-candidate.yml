@@ -138,13 +138,7 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
-      - name: Install Playwright browser on Linux
-        if: runner.os == 'Linux'
-        working-directory: ui
-        run: bunx playwright install --with-deps chromium
-
-      - name: Install Playwright browser on non-Linux runners
-        if: runner.os != 'Linux'
+      - name: Install Playwright browser
         working-directory: ui
         run: bunx playwright install chromium
 

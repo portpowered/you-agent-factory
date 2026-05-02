@@ -6,8 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // TestDashboard_InFlightDispatches validates that the runtime state shows
@@ -33,21 +35,30 @@ func TestDashboard_InFlightDispatches(t *testing.T) {
 	)
 	h.SetCustomExecutor("step-worker", blockExec)
 
+	// Seed the work queue before starting the async run loop so the factory
+	// cannot exit early on an empty queue before this test submits work.
+	h.SubmitWork("task", []byte(`{"item": "inflight-test"}`))
+
 	// Start the factory in the background.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	// Submit one work item.
-	h.SubmitWork("task", []byte(`{"item": "inflight-test"}`))
-
-	// Wait a short time for the dispatcher to fire and the executor to block.
-	time.Sleep(200 * time.Millisecond)
-
-	// Take a canonical engine snapshot while the executor is blocking.
-	rt, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot failed: %v", err)
+	var rt *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		snapshot, err := h.GetEngineStateSnapshot()
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot failed: %v", err)
+		}
+		if len(snapshot.Dispatches) > 0 {
+			rt = snapshot
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for an in-flight dispatch (marking tokens: %d, state: %s)", len(snapshot.Marking.Tokens), snapshot.FactoryState)
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 
 	// Verify in-flight dispatches.

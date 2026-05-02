@@ -99,7 +99,146 @@ jobs:
       - name: Publish GitHub release assets from the tagged commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
         run: go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --clean -f .goreleaser.yml
+
+      - name: Upload hosted install.sh release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.resolve-release-tag.outputs.release_tag }}" \
+            --repo "${{ github.event.workflow_run.repository.full_name }}" \
+            --clobber \
+            install.sh
+
+  verify-homebrew-cask:
+    name: Verify Homebrew Cask Publication
+    needs:
+      - resolve-release-tag
+      - publish-release
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: portpowered/cask
+          ref: main
+          path: tap
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Verify published cask metadata matches the tagged release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_version="${{ needs.resolve-release-tag.outputs.release_version }}"
+          release_tag="${{ needs.resolve-release-tag.outputs.release_tag }}"
+          cask_path="$(pwd)/tap/Casks/agent-factory.rb"
+          metadata_dir="$(pwd)/release-metadata"
+          checksum_name="agent-factory_${release_version}_checksums.txt"
+          intel_archive="agent-factory_${release_version}_darwin_amd64.tar.gz"
+          arm_archive="agent-factory_${release_version}_darwin_arm64.tar.gz"
+
+          mkdir -p "$metadata_dir"
+          gh release download "$release_tag" \
+            --repo "${{ github.event.workflow_run.repository.full_name }}" \
+            --pattern "$checksum_name" \
+            --dir "$metadata_dir"
+
+          checksum_path="$metadata_dir/$checksum_name"
+          intel_sha="$(awk -v name="$intel_archive" '$2 == name { print $1; exit }' "$checksum_path")"
+          arm_sha="$(awk -v name="$arm_archive" '$2 == name { print $1; exit }' "$checksum_path")"
+
+          test -n "$intel_sha"
+          test -n "$arm_sha"
+          grep -F "version \"${release_version}\"" "$cask_path"
+          grep -F "$intel_archive" "$cask_path"
+          grep -F "$arm_archive" "$cask_path"
+          grep -F "$intel_sha" "$cask_path"
+          grep -F "$arm_sha" "$cask_path"
+
+      - name: Install published Homebrew cask from tap
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install --cask "$(pwd)/tap/Casks/agent-factory.rb"
+
+      - name: Verify installed Homebrew binary starts successfully
+        shell: bash
+        run: |
+          set -euo pipefail
+          agent-factory --help >/dev/null
+
+  smoke-hosted-installer:
+    name: Smoke Hosted install.sh (${{ matrix.os_id }})
+    needs:
+      - resolve-release-tag
+      - publish-release
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_id: linux
+            runner: ubuntu-latest
+          - os_id: macos
+            runner: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Smoke hosted install.sh against the published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_url="https://github.com/${{ github.event.workflow_run.repository.full_name }}/releases/download/${{ needs.resolve-release-tag.outputs.release_tag }}/install.sh"
+          sh ./scripts/release/smoke-install.sh \
+            "$install_url" \
+            "${{ needs.resolve-release-tag.outputs.release_version }}" \
+            "$(pwd)/installed-bin"
+
+  verify-go-install:
+    name: Verify Go Install Surface
+    needs:
+      - resolve-release-tag
+      - publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Smoke go install verification contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./tests/release -run TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN -count=1
+
+      - name: Smoke published go install command
+        shell: bash
+        env:
+          AGENT_FACTORY_RELEASE_PUBLIC_GO_INSTALL_SMOKE: "1"
+          GOPROXY: direct
+        run: |
+          set -euo pipefail
+          go test ./tests/release -run TestGoInstallSmoke_InstallsPublishedModulePathIntoCleanGOBIN -count=1
 
   smoke-released-artifacts:
     name: Smoke Released Artifacts (${{ matrix.asset_id }})
@@ -168,13 +307,7 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
-      - name: Install Playwright browser on Linux
-        if: runner.os == 'Linux'
-        working-directory: ui
-        run: bunx playwright install --with-deps chromium
-
-      - name: Install Playwright browser on non-Linux runners
-        if: runner.os != 'Linux'
+      - name: Install Playwright browser
         working-directory: ui
         run: bunx playwright install chromium
 
