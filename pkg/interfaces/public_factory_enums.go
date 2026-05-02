@@ -81,6 +81,14 @@ func normalizePublicFactoryEnumValue(value string, aliases map[string]string, pr
 	return ""
 }
 
+func generatedPublicFactoryEnumPtr[T ~string](value string, convert func(string) T) *T {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	enumValue := convert(value)
+	return &enumValue
+}
+
 // PermissivePublicFactoryWorkerType canonicalizes supported public worker types and preserves unknown values.
 func PermissivePublicFactoryWorkerType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerTypeAliases, true)
@@ -128,11 +136,7 @@ func GeneratedPublicFactoryWorkerType(value string) factoryapi.WorkerType {
 
 // GeneratedPublicFactoryWorkerTypePtr returns the generated worker type enum when non-empty.
 func GeneratedPublicFactoryWorkerTypePtr(value string) *factoryapi.WorkerType {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := GeneratedPublicFactoryWorkerType(value)
-	return &enumValue
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerType)
 }
 
 // GeneratedPublicFactoryWorkerModelProvider returns the generated worker model provider enum.
@@ -142,11 +146,7 @@ func GeneratedPublicFactoryWorkerModelProvider(value string) factoryapi.WorkerMo
 
 // GeneratedPublicFactoryWorkerModelProviderPtr returns the generated worker model provider enum when non-empty.
 func GeneratedPublicFactoryWorkerModelProviderPtr(value string) *factoryapi.WorkerModelProvider {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := GeneratedPublicFactoryWorkerModelProvider(value)
-	return &enumValue
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerModelProvider)
 }
 
 // GeneratedPublicFactoryWorkerProvider returns the generated worker provider enum.
@@ -156,11 +156,7 @@ func GeneratedPublicFactoryWorkerProvider(value string) factoryapi.WorkerProvide
 
 // GeneratedPublicFactoryWorkerProviderPtr returns the generated worker provider enum when non-empty.
 func GeneratedPublicFactoryWorkerProviderPtr(value string) *factoryapi.WorkerProvider {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := GeneratedPublicFactoryWorkerProvider(value)
-	return &enumValue
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerProvider)
 }
 
 // GeneratedPublicFactoryWorkstationType returns the generated workstation type enum.
@@ -170,9 +166,5 @@ func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationT
 
 // GeneratedPublicFactoryWorkstationTypePtr returns the generated workstation type enum when non-empty.
 func GeneratedPublicFactoryWorkstationTypePtr(value string) *factoryapi.WorkstationType {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := GeneratedPublicFactoryWorkstationType(value)
-	return &enumValue
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkstationType)
 }

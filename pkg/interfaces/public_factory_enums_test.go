@@ -87,3 +87,80 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 		t.Fatalf("workstation type = %q, want trimmed unknown to round-trip", got)
 	}
 }
+
+func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+		ptr   func(string) *string
+	}{
+		{
+			name:  "worker type",
+			input: "  MODEL_WORKER  ",
+			want:  "MODEL_WORKER",
+			ptr: func(value string) *string {
+				converted := GeneratedPublicFactoryWorkerTypePtr(value)
+				if converted == nil {
+					return nil
+				}
+				out := string(*converted)
+				return &out
+			},
+		},
+		{
+			name:  "worker model provider",
+			input: "  openai  ",
+			want:  "CODEX",
+			ptr: func(value string) *string {
+				converted := GeneratedPublicFactoryWorkerModelProviderPtr(value)
+				if converted == nil {
+					return nil
+				}
+				out := string(*converted)
+				return &out
+			},
+		},
+		{
+			name:  "worker provider",
+			input: "  local-claude  ",
+			want:  "SCRIPT_WRAP",
+			ptr: func(value string) *string {
+				converted := GeneratedPublicFactoryWorkerProviderPtr(value)
+				if converted == nil {
+					return nil
+				}
+				out := string(*converted)
+				return &out
+			},
+		},
+		{
+			name:  "workstation type",
+			input: "  CUSTOM_WORKSTATION  ",
+			want:  "CUSTOM_WORKSTATION",
+			ptr: func(value string) *string {
+				converted := GeneratedPublicFactoryWorkstationTypePtr(value)
+				if converted == nil {
+					return nil
+				}
+				out := string(*converted)
+				return &out
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.ptr("   "); got != nil {
+				t.Fatalf("expected nil pointer for whitespace-only input")
+			}
+			got := tt.ptr(tt.input)
+			if got == nil {
+				t.Fatalf("pointer helper(%q) returned nil", tt.input)
+			}
+			if *got != tt.want {
+				t.Fatalf("pointer helper(%q) = %q, want %q", tt.input, *got, tt.want)
+			}
+		})
+	}
+}
