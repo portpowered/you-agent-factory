@@ -547,6 +547,45 @@ func TestBuildFactoryWorldView_CountsMultiTokenProviderDispatchOnce(t *testing.T
 	}
 }
 
+func TestBuildFactoryWorldView_CountsFailedWorkItemsForCustomerSummary(t *testing.T) {
+	failedDispatch := interfaces.FactoryWorldDispatchCompletion{
+		DispatchID:   "dispatch-1",
+		TransitionID: "review",
+		WorkItemIDs:  []string{"work-1", "work-2", "work-3"},
+		Workstation:  interfaces.FactoryWorkstationRef{Name: "Review"},
+		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed)},
+	}
+	state := interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
+			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
+			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{failedDispatch},
+		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
+			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
+			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},
+		},
+		FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{failedDispatch},
+	}
+
+	view := BuildFactoryWorldView(state)
+
+	if view.Runtime.Session.DispatchedCount != 1 {
+		t.Fatalf("DispatchedCount = %d, want 1 failed dispatch", view.Runtime.Session.DispatchedCount)
+	}
+	if view.Runtime.Session.CompletedCount != 0 {
+		t.Fatalf("CompletedCount = %d, want 0 accepted completions", view.Runtime.Session.CompletedCount)
+	}
+	if view.Runtime.Session.FailedCount != 3 {
+		t.Fatalf("FailedCount = %d, want 3 failed work items", view.Runtime.Session.FailedCount)
+	}
+	if got := view.Runtime.Session.FailedByWorkType["story"]; got != 3 {
+		t.Fatalf("FailedByWorkType[story] = %d, want 3", got)
+	}
+}
+
 func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *testing.T) {
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
@@ -1235,12 +1274,12 @@ func systemTimeInitialStructureEvent(eventTime time.Time) factoryapi.FactoryEven
 			},
 			Workstations: &[]factoryapi.Workstation{
 				{
-					Id:      stringPtrForProjectionTest("daily-refresh"),
-					Name:    "Daily refresh",
+					Id:       stringPtrForProjectionTest("daily-refresh"),
+					Name:     "Daily refresh",
 					Behavior: workstationKindPtrForWorldViewTest(factoryapi.WorkstationKindCron),
-					Worker:  "refresh-worker",
-					Inputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}, {WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
-					Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "done"}},
+					Worker:   "refresh-worker",
+					Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}, {WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
+					Outputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "done"}},
 				},
 				{
 					Id:      stringPtrForProjectionTest(interfaces.SystemTimeExpiryTransitionID),

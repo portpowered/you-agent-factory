@@ -148,6 +148,13 @@ export const replayFixtureCatalog = {
     surfaces: ["current-selection", "failure-rendering", "runtime-request-details"],
     verificationLayers: ["app-smoke"],
   },
+  weirdNumberSummary: {
+    description: "Focused replay fixture for one failed dispatch that produces three failed work-item summaries.",
+    fileName: "weird-number-summary-replay.jsonl",
+    id: "weirdNumberSummary",
+    surfaces: ["failure-rendering", "resource-counts", "terminal-summary"],
+    verificationLayers: ["app-smoke", "projection-helper"],
+  },
 } as const satisfies Record<
   string,
   ReplayFixtureScenarioDefinition

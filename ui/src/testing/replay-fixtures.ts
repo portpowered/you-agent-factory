@@ -3,6 +3,7 @@ import failureAnalysisReplayFixtureText from "../../integration/fixtures/failure
 import graphStateReplayFixtureText from "../../integration/fixtures/graph-state-smoke-replay.jsonl?raw";
 import runtimeConfigReplayFixtureText from "../../integration/fixtures/event-stream-replay-2.jsonl?raw";
 import runtimeDetailsReplayFixtureText from "../../integration/fixtures/runtime-details-replay.jsonl?raw";
+import weirdNumberSummaryReplayFixtureText from "../../integration/fixtures/weird-number-summary-replay.jsonl?raw";
 
 import type { FactoryEvent } from "../api/events";
 import {
@@ -21,6 +22,7 @@ const replayFixtureTexts: Record<ReplayFixtureID, string> = {
   graphStateSmoke: graphStateReplayFixtureText,
   runtimeConfigInterfaceConsolidation: runtimeConfigReplayFixtureText,
   runtimeDetails: runtimeDetailsReplayFixtureText,
+  weirdNumberSummary: weirdNumberSummaryReplayFixtureText,
 };
 
 export function parseReplayFixtureEvents(fixtureText: string): FactoryEvent[] {

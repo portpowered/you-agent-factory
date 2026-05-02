@@ -15,6 +15,9 @@ describe("replay fixture helpers", () => {
     expect(replayFixtureCatalog.runtimeDetails.fileName).toBe("runtime-details-replay.jsonl");
     expect(replayFixtureCatalog.failureAnalysis.surfaces).toContain("failure-rendering");
     expect(replayFixtureCatalog.graphStateSmoke.surfaces).toContain("graph-state");
+    expect(replayFixtureCatalog.weirdNumberSummary.fileName).toBe(
+      "weird-number-summary-replay.jsonl",
+    );
     expect(REPLAY_FIXTURE_DIRECTORY).toBe("integration/fixtures");
     expect(events[0]?.type).toBe(FACTORY_EVENT_TYPES.initialStructureRequest);
     expect(events.every((event) => typeof event.id === "string")).toBe(true);
@@ -46,5 +49,21 @@ describe("replay fixture helpers", () => {
     expect(
       snapshot.dashboard.topology.workstation_nodes_by_id.process?.workstation_kind,
     ).toBe("REPEATER");
+  });
+
+  it("replays the weird-number-summary regression through the canonical timeline seam", () => {
+    const snapshot = buildReplayFixtureTimelineSnapshot("weirdNumberSummary", 4);
+
+    expect(snapshot.dashboard.runtime.session.dispatched_count).toBe(1);
+    expect(snapshot.dashboard.runtime.session.completed_count).toBe(0);
+    expect(snapshot.dashboard.runtime.session.failed_count).toBe(3);
+    expect(snapshot.dashboard.runtime.session.failed_by_work_type).toEqual({
+      story: 3,
+    });
+    expect(snapshot.dashboard.runtime.session.failed_work_labels).toEqual([
+      "Blocked Story",
+      "Rejected Story",
+      "Reworked Story",
+    ]);
   });
 });

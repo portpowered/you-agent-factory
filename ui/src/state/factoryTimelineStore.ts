@@ -1660,9 +1660,11 @@ function recordFailedCompletion(
   completion: WorldCompletion,
 ): void {
   const workItems =
-    completion.terminalWork !== undefined
-      ? [workRef(completion.terminalWork.work_item)]
-      : completion.workItems;
+    completion.outputItems.length > 0
+      ? completion.outputItems
+      : completion.terminalWork !== undefined
+        ? [workRef(completion.terminalWork.work_item)]
+        : completion.workItems;
   for (const item of workItems) {
     const existing =
       state.workItemsByID[item.work_id] ?? completion.terminalWork?.work_item;
@@ -2401,7 +2403,7 @@ function projectRuntime(state: WorldState): DashboardSnapshot["runtime"] {
       dispatched_count:
         activeDispatchIDs.length + customerCompletedDispatches.length,
       failed_by_work_type: countFailedByWorkType(state.failedWorkItemsByID),
-      failed_count: Object.keys(state.failedWorkItemsByID).length,
+      failed_count: countFailedWorkItems(state.failedWorkItemsByID),
       failed_work_details_by_work_id: cloneFailedWorkDetailsByWorkID(
         state.failedWorkDetailsByWorkID,
       ),
@@ -3000,6 +3002,17 @@ function countFailedByWorkType(
     counts[item.work_type_id] = (counts[item.work_type_id] ?? 0) + 1;
   }
   return Object.keys(counts).length > 0 ? counts : undefined;
+}
+
+function countFailedWorkItems(values: Record<string, FactoryWorkItem>): number {
+  let count = 0;
+  for (const item of Object.values(values)) {
+    if (isSystemTimeWorkItem(item)) {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
 }
 
 function sortInferenceAttempts(

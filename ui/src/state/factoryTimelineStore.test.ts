@@ -1938,6 +1938,332 @@ describe("factory timeline reconstruction", () => {
     });
   });
 
+  it("counts failed work items for failed_count and failed_by_work_type in fixed timeline reconstruction", () => {
+    const failedBatchWorkInput = event(
+      "event-failed-batch-1",
+      2,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "Blocked Story",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-1",
+            work_type_id: "story",
+          },
+          {
+            name: "Rejected Story",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-2",
+            work_type_id: "story",
+          },
+          {
+            name: "Reworked Story",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-3",
+            work_type_id: "story",
+          },
+        ],
+      },
+    );
+    failedBatchWorkInput.context.requestId = "request-work-failed-batch";
+    failedBatchWorkInput.context.traceIds = ["trace-failed-batch"];
+    failedBatchWorkInput.context.workIds = [
+      "work-failed-batch-1",
+      "work-failed-batch-2",
+      "work-failed-batch-3",
+    ];
+
+    const failedBatchRequest = event(
+      "event-failed-batch-2",
+      3,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        dispatchId: "dispatch-failed-batch",
+        inputs: [
+          { workId: "work-failed-batch-1" },
+          { workId: "work-failed-batch-2" },
+          { workId: "work-failed-batch-3" },
+        ],
+        transitionId: "review",
+      },
+    );
+    failedBatchRequest.context.dispatchId = "dispatch-failed-batch";
+    failedBatchRequest.context.traceIds = ["trace-failed-batch"];
+    failedBatchRequest.context.workIds = [
+      "work-failed-batch-1",
+      "work-failed-batch-2",
+      "work-failed-batch-3",
+    ];
+
+    const failedBatchResponse = event(
+      "event-failed-batch-3",
+      4,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        dispatchId: "dispatch-failed-batch",
+        durationMillis: 600,
+        failureMessage: "Provider rate limit exceeded.",
+        failureReason: "throttled",
+        outcome: "FAILED",
+        outputWork: [
+          {
+            name: "Blocked Story",
+            state: "failed",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-1",
+            work_type_id: "story",
+          },
+          {
+            name: "Rejected Story",
+            state: "failed",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-2",
+            work_type_id: "story",
+          },
+          {
+            name: "Reworked Story",
+            state: "failed",
+            trace_id: "trace-failed-batch",
+            work_id: "work-failed-batch-3",
+            work_type_id: "story",
+          },
+        ],
+        transitionId: "review",
+        workstation: {
+          id: "review",
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Review",
+          onFailure: { state: "failed", workType: "story" },
+          outputs: [{ state: "done", workType: "story" }],
+          worker: "reviewer",
+        },
+      },
+    );
+    failedBatchResponse.context.dispatchId = "dispatch-failed-batch";
+    failedBatchResponse.context.traceIds = ["trace-failed-batch"];
+    failedBatchResponse.context.workIds = [
+      "work-failed-batch-1",
+      "work-failed-batch-2",
+      "work-failed-batch-3",
+    ];
+
+    const failedTick = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        failedBatchWorkInput,
+        failedBatchRequest,
+        failedBatchResponse,
+      ],
+      4,
+    );
+
+    expect(failedTick.dashboard.runtime.session.dispatched_count).toBe(1);
+    expect(failedTick.dashboard.runtime.session.completed_count).toBe(0);
+    expect(failedTick.dashboard.runtime.session.failed_count).toBe(3);
+    expect(failedTick.dashboard.runtime.session.failed_by_work_type).toEqual({
+      story: 3,
+    });
+    expect(failedTick.dashboard.runtime.session.failed_work_labels).toEqual([
+      "Blocked Story",
+      "Rejected Story",
+      "Reworked Story",
+    ]);
+  });
+
+  it("excludes system-time failures from replay failed_count while preserving customer failures", () => {
+    const rawSystemTime = "__system_time";
+    const systemTimeStructure = event(
+      "event-system-time-failed-1",
+      1,
+      FACTORY_EVENT_TYPES.initialStructureRequest,
+      {
+        factory: {
+          workers: [
+            {
+              model: "gpt-5.4",
+              modelProvider: "openai",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+          workTypes: [
+            {
+              name: "story",
+              states: [
+                { name: "new", type: "INITIAL" },
+                { name: "failed", type: "FAILED" },
+              ],
+            },
+            {
+              name: rawSystemTime,
+              states: [{ name: "pending", type: "PROCESSING" }],
+            },
+          ],
+          workstations: [
+            {
+              id: "review",
+              inputs: [{ state: "new", workType: "story" }],
+              name: "Review",
+              onFailure: { state: "failed", workType: "story" },
+              outputs: [{ state: "done", workType: "story" }],
+              worker: "reviewer",
+            },
+            {
+              id: `${rawSystemTime}:expire`,
+              inputs: [{ state: "pending", workType: rawSystemTime }],
+              name: `${rawSystemTime}:expire`,
+              outputs: [],
+              worker: "reviewer",
+            },
+          ],
+        },
+      },
+    );
+    const customerFailedWorkInput = event(
+      "event-system-time-failed-2",
+      2,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "Customer Story",
+            trace_id: "trace-customer-failed",
+            work_id: "work-customer-failed",
+            work_type_id: "story",
+          },
+        ],
+      },
+    );
+    customerFailedWorkInput.context.requestId = "request-customer-failed";
+    customerFailedWorkInput.context.traceIds = ["trace-customer-failed"];
+    customerFailedWorkInput.context.workIds = ["work-customer-failed"];
+    const customerFailedRequest = event(
+      "event-system-time-failed-3",
+      3,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        dispatchId: "dispatch-customer-failed",
+        inputs: [{ workId: "work-customer-failed" }],
+        transitionId: "review",
+      },
+    );
+    customerFailedRequest.context.dispatchId = "dispatch-customer-failed";
+    customerFailedRequest.context.traceIds = ["trace-customer-failed"];
+    customerFailedRequest.context.workIds = ["work-customer-failed"];
+    const customerFailedResponse = event(
+      "event-system-time-failed-4",
+      4,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        dispatchId: "dispatch-customer-failed",
+        durationMillis: 100,
+        failureMessage: "Customer work failed.",
+        failureReason: "validation_error",
+        outcome: "FAILED",
+        outputWork: [
+          {
+            name: "Customer Story",
+            state: "failed",
+            trace_id: "trace-customer-failed",
+            work_id: "work-customer-failed",
+            work_type_id: "story",
+          },
+        ],
+        transitionId: "review",
+      },
+    );
+    customerFailedResponse.context.dispatchId = "dispatch-customer-failed";
+    customerFailedResponse.context.traceIds = ["trace-customer-failed"];
+    customerFailedResponse.context.workIds = ["work-customer-failed"];
+    const systemTimeWorkInput = event(
+      "event-system-time-failed-5",
+      5,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "expiry tick",
+            trace_id: "trace-system-time-failed",
+            work_id: "work-system-time-failed",
+            work_type_id: rawSystemTime,
+          },
+        ],
+      },
+    );
+    systemTimeWorkInput.context.requestId = "request-system-time-failed";
+    systemTimeWorkInput.context.traceIds = ["trace-system-time-failed"];
+    systemTimeWorkInput.context.workIds = ["work-system-time-failed"];
+    const systemTimeFailedRequest = event(
+      "event-system-time-failed-6",
+      6,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        dispatchId: "dispatch-system-time-failed",
+        inputs: [
+          {
+            name: "expiry tick",
+            trace_id: "trace-system-time-failed",
+            work_id: "work-system-time-failed",
+            work_type_id: rawSystemTime,
+          },
+        ],
+        transitionId: `${rawSystemTime}:expire`,
+      },
+    );
+    systemTimeFailedRequest.context.dispatchId = "dispatch-system-time-failed";
+    systemTimeFailedRequest.context.traceIds = ["trace-system-time-failed"];
+    systemTimeFailedRequest.context.workIds = ["work-system-time-failed"];
+    const systemTimeFailedResponse = event(
+      "event-system-time-failed-7",
+      7,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        dispatchId: "dispatch-system-time-failed",
+        durationMillis: 20,
+        failureMessage: "System timer expired.",
+        failureReason: "timeout",
+        outcome: "FAILED",
+        outputWork: [
+          {
+            name: "expiry tick",
+            state: "failed",
+            trace_id: "trace-system-time-failed",
+            work_id: "work-system-time-failed",
+            work_type_id: rawSystemTime,
+          },
+        ],
+        transitionId: `${rawSystemTime}:expire`,
+      },
+    );
+    systemTimeFailedResponse.context.dispatchId = "dispatch-system-time-failed";
+    systemTimeFailedResponse.context.traceIds = ["trace-system-time-failed"];
+    systemTimeFailedResponse.context.workIds = ["work-system-time-failed"];
+
+    const failedTick = buildFactoryTimelineSnapshot(
+      [
+        systemTimeStructure,
+        customerFailedWorkInput,
+        customerFailedRequest,
+        customerFailedResponse,
+        systemTimeWorkInput,
+        systemTimeFailedRequest,
+        systemTimeFailedResponse,
+      ],
+      7,
+    );
+
+    expect(failedTick.dashboard.runtime.session.dispatched_count).toBe(1);
+    expect(failedTick.dashboard.runtime.session.completed_count).toBe(0);
+    expect(failedTick.dashboard.runtime.session.failed_count).toBe(1);
+    expect(failedTick.dashboard.runtime.session.failed_by_work_type).toEqual({
+      story: 1,
+    });
+  });
+
   it("reduces inference request and response events into dispatch-keyed attempt details", () => {
     const events = [
       initialStructureRequest,
