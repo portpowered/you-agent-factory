@@ -1601,7 +1601,7 @@ func assertCanonicalInlineWorkstation(t *testing.T, loaded *LoadedFactoryConfig)
 	if !ok {
 		t.Fatal("expected execute-story workstation definition")
 	}
-	if loaded.workstations["execute-story"] != workstation {
+	if loaded.WorkstationConfigs()["execute-story"] != workstation {
 		t.Fatal("expected runtime lookup to return the canonical workstation map entry")
 	}
 	if workstation.ID != "execute-story-id" || workstation.Kind != interfaces.WorkstationKindStandard {
