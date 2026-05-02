@@ -90,15 +90,19 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 
 func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
-		ptr   func(string) *string
+		name          string
+		supported     string
+		wantSupported string
+		unknown       string
+		wantUnknown   string
+		ptr           func(string) *string
 	}{
 		{
-			name:  "worker type",
-			input: "  MODEL_WORKER  ",
-			want:  "MODEL_WORKER",
+			name:          "worker type",
+			supported:     "  MODEL_WORKER  ",
+			wantSupported: "MODEL_WORKER",
+			unknown:       "  CUSTOM_WORKER  ",
+			wantUnknown:   "CUSTOM_WORKER",
 			ptr: func(value string) *string {
 				converted := GeneratedPublicFactoryWorkerTypePtr(value)
 				if converted == nil {
@@ -109,9 +113,11 @@ func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
 			},
 		},
 		{
-			name:  "worker model provider",
-			input: "  openai  ",
-			want:  "CODEX",
+			name:          "worker model provider",
+			supported:     "  openai  ",
+			wantSupported: "CODEX",
+			unknown:       "  mystery-provider  ",
+			wantUnknown:   "mystery-provider",
 			ptr: func(value string) *string {
 				converted := GeneratedPublicFactoryWorkerModelProviderPtr(value)
 				if converted == nil {
@@ -122,9 +128,11 @@ func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
 			},
 		},
 		{
-			name:  "worker provider",
-			input: "  local-claude  ",
-			want:  "SCRIPT_WRAP",
+			name:          "worker provider",
+			supported:     "  local-claude  ",
+			wantSupported: "SCRIPT_WRAP",
+			unknown:       "  custom-executor  ",
+			wantUnknown:   "custom-executor",
 			ptr: func(value string) *string {
 				converted := GeneratedPublicFactoryWorkerProviderPtr(value)
 				if converted == nil {
@@ -135,9 +143,11 @@ func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
 			},
 		},
 		{
-			name:  "workstation type",
-			input: "  CUSTOM_WORKSTATION  ",
-			want:  "CUSTOM_WORKSTATION",
+			name:          "workstation type",
+			supported:     "  LOGICAL_MOVE  ",
+			wantSupported: "LOGICAL_MOVE",
+			unknown:       "  CUSTOM_WORKSTATION  ",
+			wantUnknown:   "CUSTOM_WORKSTATION",
 			ptr: func(value string) *string {
 				converted := GeneratedPublicFactoryWorkstationTypePtr(value)
 				if converted == nil {
@@ -154,12 +164,19 @@ func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
 			if got := tt.ptr("   "); got != nil {
 				t.Fatalf("expected nil pointer for whitespace-only input")
 			}
-			got := tt.ptr(tt.input)
+			got := tt.ptr(tt.supported)
 			if got == nil {
-				t.Fatalf("pointer helper(%q) returned nil", tt.input)
+				t.Fatalf("pointer helper(%q) returned nil", tt.supported)
 			}
-			if *got != tt.want {
-				t.Fatalf("pointer helper(%q) = %q, want %q", tt.input, *got, tt.want)
+			if *got != tt.wantSupported {
+				t.Fatalf("pointer helper(%q) = %q, want %q", tt.supported, *got, tt.wantSupported)
+			}
+			got = tt.ptr(tt.unknown)
+			if got == nil {
+				t.Fatalf("pointer helper(%q) returned nil", tt.unknown)
+			}
+			if *got != tt.wantUnknown {
+				t.Fatalf("pointer helper(%q) = %q, want %q", tt.unknown, *got, tt.wantUnknown)
 			}
 		})
 	}

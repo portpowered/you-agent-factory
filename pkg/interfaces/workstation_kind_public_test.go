@@ -48,11 +48,32 @@ func TestGeneratedPublicWorkstationKindPtr(t *testing.T) {
 		t.Fatalf("GeneratedPublicWorkstationKindPtr returned %#v, want nil for whitespace-only input", got)
 	}
 
-	got := GeneratedPublicWorkstationKindPtr(WorkstationKind("  REPEATER  "))
-	if got == nil {
-		t.Fatal("GeneratedPublicWorkstationKindPtr returned nil for non-empty input")
+	tests := []struct {
+		name  string
+		input WorkstationKind
+		want  factoryapi.WorkstationKind
+	}{
+		{
+			name:  "supported kind",
+			input: WorkstationKind("  REPEATER  "),
+			want:  factoryapi.WorkstationKindRepeater,
+		},
+		{
+			name:  "unknown trimmed kind",
+			input: WorkstationKind("  custom-kind  "),
+			want:  factoryapi.WorkstationKind("custom-kind"),
+		},
 	}
-	if *got != factoryapi.WorkstationKindRepeater {
-		t.Fatalf("GeneratedPublicWorkstationKindPtr returned %q, want %q", *got, factoryapi.WorkstationKindRepeater)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GeneratedPublicWorkstationKindPtr(tt.input)
+			if got == nil {
+				t.Fatal("GeneratedPublicWorkstationKindPtr returned nil for non-empty input")
+			}
+			if *got != tt.want {
+				t.Fatalf("GeneratedPublicWorkstationKindPtr(%q) returned %q, want %q", tt.input, *got, tt.want)
+			}
+		})
 	}
 }

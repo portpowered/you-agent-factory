@@ -127,6 +127,68 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 	}
 }
 
+func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnumPointerValues(t *testing.T) {
+	runtimeConfig := eventHistoryRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"builder": {
+				Type:             "  MODEL_WORKER  ",
+				ExecutorProvider: "  local-claude  ",
+				ModelProvider:    "  openai  ",
+				Model:            "gpt-5.4",
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"build": {
+				Name:           "Build",
+				Kind:           interfaces.WorkstationKind("  REPEATER  "),
+				Type:           "  LOGICAL_MOVE  ",
+				WorkerTypeName: "builder",
+			},
+		},
+	}
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+		runtimeConfig,
+	)
+
+	history.RecordInitialStructure()
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsInitialStructureRequestEventPayload()
+	if err != nil {
+		t.Fatalf("initial structure payload: %v", err)
+	}
+	if payload.Factory.Workers == nil || len(*payload.Factory.Workers) != 1 {
+		t.Fatalf("workers = %#v, want one generated worker", payload.Factory.Workers)
+	}
+	if payload.Factory.Workstations == nil || len(*payload.Factory.Workstations) != 1 {
+		t.Fatalf("workstations = %#v, want one generated workstation", payload.Factory.Workstations)
+	}
+
+	worker := (*payload.Factory.Workers)[0]
+	if got, want := stringValueForEventHistoryTest(worker.ExecutorProvider), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerProviderPtr(runtimeConfig.Workers["builder"].ExecutorProvider)); got != want {
+		t.Fatalf("worker executor provider = %q, want %q", got, want)
+	}
+	if got, want := stringValueForEventHistoryTest(worker.ModelProvider), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerModelProviderPtr(runtimeConfig.Workers["builder"].ModelProvider)); got != want {
+		t.Fatalf("worker model provider = %q, want %q", got, want)
+	}
+	if got, want := stringValueForEventHistoryTest(worker.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerTypePtr(runtimeConfig.Workers["builder"].Type)); got != want {
+		t.Fatalf("worker type = %q, want %q", got, want)
+	}
+
+	workstation := (*payload.Factory.Workstations)[0]
+	if got, want := stringValueForEventHistoryTest(workstation.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkstationTypePtr(runtimeConfig.Workstations["build"].Type)); got != want {
+		t.Fatalf("workstation type = %q, want %q", got, want)
+	}
+	if got, want := stringValueForEventHistoryTest(workstation.Behavior), stringValueForEventHistoryTest(interfaces.GeneratedPublicWorkstationKindPtr(runtimeConfig.Workstations["build"].Kind)); got != want {
+		t.Fatalf("workstation behavior = %q, want %q", got, want)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
