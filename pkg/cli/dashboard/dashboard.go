@@ -414,7 +414,10 @@ func dashboardSessionViewFromRenderData(renderData dashboardrender.SimpleDashboa
 		"TERMINAL",
 	)
 	if len(completedWorkItems) == 0 {
-		completedWorkItems = worldViewFallbackCompletedWorkItems(session.DispatchHistory)
+		completedWorkItems = worldViewFallbackWorkItems(
+			session.DispatchHistory,
+			worldViewFallbackCompletedWorkItemLane,
+		)
 	}
 	failedWorkItems := worldViewWorkItemsForPlaceCategory(
 		renderData.PlaceOccupancyWorkItemsByPlaceID,
@@ -422,7 +425,10 @@ func dashboardSessionViewFromRenderData(renderData dashboardrender.SimpleDashboa
 		"FAILED",
 	)
 	if len(failedWorkItems) == 0 {
-		failedWorkItems = worldViewFallbackFailedWorkItems(session.DispatchHistory)
+		failedWorkItems = worldViewFallbackWorkItems(
+			session.DispatchHistory,
+			worldViewFallbackFailedWorkItemLane,
+		)
 	}
 	return dashboardSessionView{
 		HasData:              session.HasData,
@@ -478,39 +484,48 @@ func worldViewWorkItemsForPlaceCategory(
 	return workItems
 }
 
-func worldViewFallbackCompletedWorkItems(
-	completions []interfaces.FactoryWorldDispatchCompletion,
-) []interfaces.FactoryWorldWorkItemRef {
-	return collectWorldViewFallbackWorkItems(
-		completions,
-		interfaces.OutcomeAccepted,
-		func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
-			if collector.addTerminalWork(completion.TerminalWork, func(status string) bool {
-				return status != "FAILED"
-			}) {
-				return
-			}
-			collector.addWorkItems(completion.OutputWorkItems)
-		},
-	)
-}
+type worldViewFallbackWorkItemLane string
 
-func worldViewFallbackFailedWorkItems(
+const (
+	worldViewFallbackCompletedWorkItemLane worldViewFallbackWorkItemLane = "completed"
+	worldViewFallbackFailedWorkItemLane    worldViewFallbackWorkItemLane = "failed"
+)
+
+func worldViewFallbackWorkItems(
 	completions []interfaces.FactoryWorldDispatchCompletion,
+	lane worldViewFallbackWorkItemLane,
 ) []interfaces.FactoryWorldWorkItemRef {
-	return collectWorldViewFallbackWorkItems(
-		completions,
-		interfaces.OutcomeFailed,
-		func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
-			if collector.addTerminalWork(completion.TerminalWork, func(status string) bool {
-				return true
-			}) {
-				return
-			}
-			collector.addWorkItems(completion.OutputWorkItems)
-			collector.addMissingWorkItems(completion.InputWorkItems)
-		},
-	)
+	switch lane {
+	case worldViewFallbackCompletedWorkItemLane:
+		return collectWorldViewFallbackWorkItems(
+			completions,
+			interfaces.OutcomeAccepted,
+			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
+				if collector.addTerminalWork(completion.TerminalWork, func(status string) bool {
+					return status != "FAILED"
+				}) {
+					return
+				}
+				collector.addWorkItems(completion.OutputWorkItems)
+			},
+		)
+	case worldViewFallbackFailedWorkItemLane:
+		return collectWorldViewFallbackWorkItems(
+			completions,
+			interfaces.OutcomeFailed,
+			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
+				if collector.addTerminalWork(completion.TerminalWork, func(string) bool {
+					return true
+				}) {
+					return
+				}
+				collector.addWorkItems(completion.OutputWorkItems)
+				collector.addMissingWorkItems(completion.InputWorkItems)
+			},
+		)
+	default:
+		return nil
+	}
 }
 
 type worldViewFallbackWorkItemCollector struct {
