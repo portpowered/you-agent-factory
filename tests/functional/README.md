@@ -58,6 +58,9 @@ available without widening the default feedback loop.
 - When a slow test is gated behind `functionallong`, name the file
   `*_long_test.go` so review-time scanning and guardrails can spot the lane
   boundary immediately.
+- When every test in a file belongs to the long lane, move the whole file into
+  a `*_long_test.go` unit instead of leaving short-mode builds to compile a
+  file that only calls `support.SkipLongFunctional(...)` at runtime.
 - When a legacy fixture-directory smoke loop mixes unrelated behaviors, replace
   it with package-owned tests that assert the user-visible outcome for each
   behavior instead of keeping one umbrella "loads every fixture" check in the
