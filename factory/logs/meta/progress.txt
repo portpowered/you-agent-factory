@@ -33,6 +33,10 @@
   file sets again after any sidecar exploration; open lanes can advance during
   the same maintainer pass and make an initially valid idea stale before it is
   queued.
+- Before re-queuing a local cleanup idea, compare it against the most recent
+  merged PR list as well as open PR file sets; fast-moving `main` can land the
+  exact seam while the ignored workflow-input residue still suggests it is only
+  queued.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -734,3 +738,45 @@
   PR map.
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
   `#39` state, the current blockers, and the still-valid replay cleanup lane.
+
+## 2026-05-01 17:20 -07:00 - meta refresh after replay and worker cleanup landed
+
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `f7efd5f`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay samples, standards index, factory
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, current open PR file sets, and the current throttle code
+  ownership before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels and that the extra idea/plan
+  files under `factory/inputs/**` remain ignored workspace-local residue.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `f6e5ac6`
+  - it still treated PR `#40` as open even though it merged on May 1, 2026
+  - it did not include merged PR `#41`
+  - it still treated the replay merge-helper cleanup as the next queueable lane
+- Confirmed the current GitHub PR shape on May 1, 2026 is:
+  - open PRs `#38`, `#37`, `#33`, and `#30`
+  - merged PRs `#41`, `#40`, `#39`, `#36`, `#35`, `#34`, `#32`, and `#31`
+- Reconfirmed through direct code inspection plus a sidecar explorer that the
+  P0 throttle ask is still only partially landed:
+  - `pkg/factory/internal/throttle/windows.go` owns pure event-time throttle
+    window derivation
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` still owns the mutable
+    `throttlePauses` map and still gates scheduling through that dispatcher
+    state
+  - there is still no checked-in `factory.guards` / `INFERENCE_THROTTLE_GUARD`
+    lowering path in `pkg/`, `api/`, or the public guard enums
+- Confirmed that the broad guard-lowering ask still overlaps the current open
+  public/config/service/functional lanes, but the internal dispatcher state
+  cleanup remains decomposable outside those file sets.
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/retire-dispatcher-throttle-pause-map.md` for
+  the next narrow throttle follow-up:
+  - preserve current `TickResult`, snapshot, and observability payload shape
+  - stop storing mutable throttle pause windows on the dispatcher
+  - derive current active pauses directly from completed dispatch history plus
+    the pure throttle-window helper
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  PR state, the current throttle ownership split, and the revised next-lane
+  recommendation.
