@@ -2,7 +2,8 @@
 
 This inventory classifies the root-level artifact assumptions that currently
 matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
-`tests/adhoc`, and `tests/functional_test`.
+`tests/adhoc`, `tests/functional/bootstrap_portability`,
+`tests/functional/runtime_api`, and `tests/functional/replay_contracts`.
 
 ## Classification Rules
 
@@ -75,6 +76,14 @@ legacy starter assumptions re-enter the targeted package tests silently.
 
 `make artifact-contract-closeout` is the integration closeout entrypoint for
 this contract. It runs the inventory guard, reruns `make release-surface-smoke`,
-and then reruns `go test ./pkg/api ./pkg/config ./pkg/replay ./tests/adhoc
-./tests/functional_test` so starter-surface checks and self-contained package
-tests fail together if a hidden legacy path dependency returns.
+and then reruns the package-owned contract proofs:
+
+- `go test ./pkg/api ./pkg/config ./pkg/replay ./tests/adhoc
+  ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run
+  "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_|LegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly)"`
+- `go test -tags=functionallong ./tests/functional/replay_contracts -run
+  "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)"`
+
+That keeps the root-artifact closeout aligned with the migrated behavior-owned
+functional packages instead of pointing back at the deleted
+`tests/functional_test` Go package.
