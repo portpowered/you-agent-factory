@@ -58,6 +58,8 @@ export type ReplayCoverageSurfaceID = (typeof replayCoverageSurfaceCatalog)[numb
 export interface BrowserIntegrationReplayMetadata {
   finalTick: number;
   headingName: string;
+  historicalHiddenButtonName?: RegExp;
+  inFlightSelectionTick?: number;
   name: string;
   requiresWorkItemSelection: boolean;
   selectedWorkText?: string;
@@ -78,6 +80,7 @@ export const replayFixtureCatalog = {
     browserIntegration: {
       finalTick: 2,
       headingName: "Agent Factory",
+      historicalHiddenButtonName: /^work-1/i,
       name: "baseline replay",
       requiresWorkItemSelection: true,
       workstationName: /^Select plan workstation$/i,
@@ -106,6 +109,8 @@ export const replayFixtureCatalog = {
     browserIntegration: {
       finalTick: 8,
       headingName: "Agent Factory",
+      historicalHiddenButtonName: /^work-1/i,
+      inFlightSelectionTick: 7,
       name: "captured replay 2",
       requiresWorkItemSelection: false,
       workstationName: /^Select process workstation$/i,
