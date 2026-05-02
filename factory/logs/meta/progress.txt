@@ -1669,3 +1669,51 @@
 - Queued one new ignored customer-ask-aligned idea at
   `factory/inputs/idea/default/retire-current-selection-inference-duplication.md`
   instead of re-queueing the already-landed dashboard-summary lane.
+
+## 2026-05-02 16:20:00 -07:00 - meta refresh after current-selection cleanup landed
+
+- Ran `git pull --rebase --autostash`; `main` and `origin/main` are both at
+  `f3eade6`.
+- Re-read the canonical meta backlog, prior world view, replay artifacts,
+  standards index, workflow contract docs, tracked `factory/inputs/**`
+  surface, ignored local workflow residue, live GitHub PR state, and the
+  current backend/UI seams before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels even though ignored local
+  residue continues to accumulate under `factory/inputs/**`.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `c6f37eb`
+  - it did not include merged PR `#63`
+    `retire-current-selection-inference-duplication`
+  - it still treated the current-selection duplication bug as the next live
+    customer lane even though that lane is already merged on `main`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state and direct `HEAD` inspection:
+  - `factory/inputs/idea/default/retire-current-selection-inference-duplication.md`
+    is now solved residue rather than pending work
+  - the throttle-related local idea residue is partly stale because merged PRs
+    `#42`, `#46`, and `#48` already landed the dispatcher-map retirement,
+    authored `INFERENCE_THROTTLE_GUARD`, and legacy fallback retirement on
+    `main`
+- Confirmed through live code inspection that the top throttle/system-deficit
+  ask is no longer the next active lane:
+  - `pkg/config/config_mapper.go` now lowers authored `factory.guards` entries
+    into `petri.InferenceThrottleGuard`
+  - `pkg/petri/inference_throttle_guard.go` derives active pauses from
+    dispatch history plus explicit clock time
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` keeps throttle policy
+    guard-owned instead of synthesizing provider/model pauses without an
+    authored guard
+- Used sidecar explorers plus direct UI inspection to compare the next
+  customer-ask website seam against the next reserve backend seam:
+  - the next customer-facing non-overlapping website lane is retiring
+    dashboard-owned bento/layout primitive ownership under
+    `ui/src/components/dashboard/`
+  - the smaller reserve backend seam in `pkg/interfaces/runtime_lookup.go`
+    remains real but secondary
+- Left `factory/logs/meta/asks.md` unchanged because the canonical backlog
+  order still holds and the file already has a local wording edit in this
+  workspace.
+- Queued one new ignored customer-ask-aligned idea at
+  `factory/inputs/idea/default/retire-dashboard-bento-layout-ownership.md`
+  instead of re-queueing the already-merged current-selection lane.
