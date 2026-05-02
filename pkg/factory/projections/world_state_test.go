@@ -581,6 +581,9 @@ func TestReconstructFactoryWorldState_WorkInputTokenIDMatchesRequestConsumption(
 	if got, ok := active.PlaceOccupancyByID["task:init"]; ok {
 		t.Fatalf("active task:init occupancy = %#v, want consumed runtime token removed", got)
 	}
+	if len(active.ActiveDispatches) != 1 || active.ActiveDispatches["dispatch-1"].WorkItemIDs[0] != "work-1" {
+		t.Fatalf("active dispatches = %#v, want dispatch-1 to retain work-1 while task:init occupancy is cleared", active.ActiveDispatches)
+	}
 }
 
 func TestReconstructFactoryWorldState_ResolvesBatchRelationSourcesByWorkName(t *testing.T) {
