@@ -749,6 +749,76 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 	}
 }
 
+func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testing.T) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init": {ID: "p-init"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t-a": {
+				ID:         "t-a",
+				Name:       "step-a",
+				WorkerType: "worker-a",
+				InputArcs: []petri.Arc{
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+			},
+		},
+	}
+	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
+	dispatcher := NewDispatcher(
+		n,
+		&mockScheduler{},
+		nil,
+		nil,
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
+			},
+		}),
+		WithDispatcherClock(func() time.Time { return currentTime }),
+		WithDispatcherThrottlePauseDuration(10*time.Minute),
+	)
+
+	firstSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", currentTime),
+		},
+	}
+	firstResult, err := dispatcher.Execute(context.Background(), &firstSnapshot)
+	if err != nil {
+		t.Fatalf("unexpected error while creating pause: %v", err)
+	}
+	firstPause := assertSingleActiveThrottlePause(t, firstResult, "claude", "claude-sonnet", "claude/claude-sonnet")
+
+	currentTime = currentTime.Add(4 * time.Minute)
+	stillPausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", firstPause.PausedAt),
+		},
+		ActiveThrottlePauses: append([]interfaces.ActiveThrottlePause(nil), firstResult.ActiveThrottlePauses...),
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &stillPausedSnapshot)
+	if err != nil {
+		t.Fatalf("unexpected error while pause remains active: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected throttle pause snapshot while window remains active")
+	}
+	if !result.ThrottlePausesObserved {
+		t.Fatal("expected dispatcher to keep reporting active throttle pause state")
+	}
+	pause := assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
+	assertThrottlePauseWindow(t, pause, firstPause.PausedAt, firstPause.PausedUntil)
+}
+
 func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPausedAt(t *testing.T) {
 	n := &state.Net{
 		Places: map[string]*petri.Place{
