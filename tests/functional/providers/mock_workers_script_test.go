@@ -16,7 +16,7 @@ import (
 )
 
 func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow mock-worker script accept sweep")
+	support.SkipLongFunctional(t, "slow mock-worker script accept sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script accept payload"))
 
@@ -35,7 +35,7 @@ func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testin
 }
 
 func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow mock-worker script reject sweep")
+	support.SkipLongFunctional(t, "slow mock-worker script reject sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script reject payload"))
 	logDir := t.TempDir()
@@ -89,7 +89,7 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 }
 
 func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow mock-worker zero-exit rejection sweep")
+	support.SkipLongFunctional(t, "slow mock-worker zero-exit rejection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script reject zero exit payload"))
 	exitCode := 0
@@ -132,7 +132,7 @@ func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *tes
 }
 
 func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow mock-worker command-runner side-effect sweep")
+	support.SkipLongFunctional(t, "slow mock-worker command-runner side-effect sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script command payload"))
 	sideEffectPath := filepath.Join(t.TempDir(), "mock-script-side-effect.txt")
@@ -175,7 +175,7 @@ func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
 }
 
 func TestMockWorkers_ScriptHelper(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow mock-worker helper sweep")
+	support.SkipLongFunctional(t, "slow mock-worker helper sweep")
 	if len(os.Args) < 4 {
 		return
 	}

@@ -26,7 +26,7 @@ type functionalStateCategories struct {
 }
 
 func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow functional-server override sweep")
+	support.SkipLongFunctional(t, "slow functional-server override sweep")
 	t.Run("StartFunctionalServerMockWorkersCompletes", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"mock worker compatibility"}`))

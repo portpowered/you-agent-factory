@@ -17,7 +17,7 @@ import (
 )
 
 func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow config-driven runtime API submit/query smoke")
+	support.SkipLongFunctional(t, "slow config-driven runtime API submit/query smoke")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 

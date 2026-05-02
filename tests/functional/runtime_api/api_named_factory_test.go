@@ -10,11 +10,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
 func TestNamedFactoryAPI_PersistsActivatesAndSwitchesWorkSurface(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow named-factory API sweep")
+	support.SkipLongFunctional(t, "slow named-factory API sweep")
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 

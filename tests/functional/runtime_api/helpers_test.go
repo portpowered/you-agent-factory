@@ -2,12 +2,9 @@ package runtime_api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -28,41 +25,6 @@ type functionalAPIServer struct {
 	service *service.FactoryService
 	cancel  context.CancelFunc
 	done    chan struct{}
-}
-
-func scaffoldFactory(t *testing.T, cfg map[string]any) string {
-	t.Helper()
-	dir := t.TempDir()
-	if _, ok := cfg["name"]; !ok {
-		cfg["name"] = "factory"
-	}
-
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal factory config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
-
-	if workstations, ok := cfg["workstations"].([]map[string]any); ok {
-		for _, ws := range workstations {
-			name, _ := ws["name"].(string)
-			if name == "" {
-				continue
-			}
-			wsDir := filepath.Join(dir, "workstations", name)
-			if err := os.MkdirAll(wsDir, 0o755); err != nil {
-				t.Fatalf("create workstation dir %s: %v", name, err)
-			}
-			agentsMD := "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"
-			if err := os.WriteFile(filepath.Join(wsDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
-				t.Fatalf("write workstation AGENTS.md for %s: %v", name, err)
-			}
-		}
-	}
-
-	return dir
 }
 
 func simplePipelineConfig() map[string]any {

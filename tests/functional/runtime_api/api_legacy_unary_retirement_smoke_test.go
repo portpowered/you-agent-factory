@@ -18,10 +18,10 @@ import (
 )
 
 func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow legacy unary retirement boundary smoke")
+	support.SkipLongFunctional(t, "slow legacy unary retirement boundary smoke")
 
 	t.Run("direct_POST_and_idempotent_PUT", func(t *testing.T) {
-		dir := scaffoldFactory(t, simplePipelineConfig())
+		dir := support.ScaffoldFactory(t, simplePipelineConfig())
 		server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 		traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
@@ -60,7 +60,7 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	})
 
 	t.Run("startup_work_file_batch", func(t *testing.T) {
-		dir := scaffoldFactory(t, simplePipelineConfig())
+		dir := support.ScaffoldFactory(t, simplePipelineConfig())
 		workFile := filepath.Join(dir, "startup-work.json")
 		support.WriteWorkRequestFile(t, workFile, interfaces.SubmitRequest{
 			RequestID:  "request-retired-unary-work-file",
@@ -93,7 +93,7 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	})
 
 	t.Run("file_watcher_non_batch_JSON", func(t *testing.T) {
-		dir := scaffoldFactory(t, simplePipelineConfig())
+		dir := support.ScaffoldFactory(t, simplePipelineConfig())
 		inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
 		if err := os.MkdirAll(inputDir, 0o755); err != nil {
 			t.Fatalf("create input dir: %v", err)
@@ -126,7 +126,7 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	t.Run("cron_internal_time_work", func(t *testing.T) {
 		start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 		fakeClock := clockwork.NewFakeClockAt(start)
-		dir := scaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
+		dir := support.ScaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
 		observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
 		server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService

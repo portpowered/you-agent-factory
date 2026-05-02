@@ -14,13 +14,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=cron-end-to-end-smoke review=2026-07-18 removal=split-smoke-helpers-before-next-cron-e2e-expansion
 func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	dir := scaffoldFactory(t, cronSmokeFactoryConfig("* * * * *"))
+	dir := support.ScaffoldFactory(t, cronSmokeFactoryConfig("* * * * *"))
 
 	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
@@ -117,7 +118,7 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 func TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutputAndDefaultWindow(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 13, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	dir := scaffoldFactory(t, cronDefaultExpiryTerminalOutputConfig("* * * * *"))
+	dir := support.ScaffoldFactory(t, cronDefaultExpiryTerminalOutputConfig("* * * * *"))
 
 	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {

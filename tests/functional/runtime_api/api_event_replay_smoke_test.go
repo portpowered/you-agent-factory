@@ -8,11 +8,12 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=event-replay-functional-smoke review=2026-07-18 removal=split-runtime-recording-projection-and-api-assertions-before-next-event-replay-smoke-change
 func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTimeline(t *testing.T) {
-	dir := scaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	releaseDispatch := make(chan struct{})
 	executor := &eventReplayBlockingExecutor{release: releaseDispatch}
 	server := startFunctionalServer(t, dir, false, factory.WithServiceMode(), factory.WithWorkerExecutor("worker-a", executor))

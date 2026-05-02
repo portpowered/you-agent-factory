@@ -17,12 +17,13 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow generated API and live runtime alignment smoke")
+	support.SkipLongFunctional(t, "slow generated API and live runtime alignment smoke")
 
-	dir := scaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
@@ -68,9 +69,9 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 }
 
 func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow CLI submit generated API smoke")
+	support.SkipLongFunctional(t, "slow CLI submit generated API smoke")
 
-	dir := scaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	payloadPath := filepath.Join(t.TempDir(), "request.md")
@@ -93,9 +94,9 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 }
 
 func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow batch generated API normalization smoke")
+	support.SkipLongFunctional(t, "slow batch generated API normalization smoke")
 
-	dir := scaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	firstWorkID := "work-generated-api-batch-first"

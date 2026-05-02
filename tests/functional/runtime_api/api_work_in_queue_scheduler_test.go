@@ -20,7 +20,7 @@ import (
 )
 
 func TestWorkInQueueScheduler_BatchSubmissionPrioritizesWorkInProgressState(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow work-in-queue scheduler state-priority sweep")
+	support.SkipLongFunctional(t, "slow work-in-queue scheduler state-priority sweep")
 	dir := workInProgressPriorityFixture(t)
 
 	var dispatches []interfaces.FactoryDispatchRecord
@@ -64,7 +64,7 @@ func TestWorkInQueueScheduler_BatchSubmissionPrioritizesWorkInProgressState(t *t
 }
 
 func TestWorkInQueueScheduler_RuntimeSmokeOrdersProcessingThenInitialThenCron(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow work-in-queue scheduler ordering sweep")
+	support.SkipLongFunctional(t, "slow work-in-queue scheduler ordering sweep")
 	dir := schedulerPrioritySmokeFixture(t)
 	dueAt := time.Now().UTC().Add(-time.Second)
 	expiresAt := dueAt.Add(time.Hour)
@@ -102,7 +102,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeOrdersProcessingThenInitialThenCron(t 
 }
 
 func TestWorkInQueueScheduler_RuntimeSmokeCustomSchedulerReceivesRuntimeConfig(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow work-in-queue scheduler runtime-config sweep")
+	support.SkipLongFunctional(t, "slow work-in-queue scheduler runtime-config sweep")
 	dir := schedulerPrioritySmokeFixture(t)
 	dueAt := time.Now().UTC().Add(-time.Second)
 	expiresAt := dueAt.Add(time.Hour)

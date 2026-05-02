@@ -15,7 +15,7 @@ import (
 // A slow executor blocks until released; the runtime state snapshot is taken
 // during that window and must show the dispatch with Duration > 0.
 func TestDashboard_InFlightDispatches(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow dashboard inflight sweep")
+	support.SkipLongFunctional(t, "slow dashboard inflight sweep")
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
 
 	// blockingExecutor blocks until released via a channel.

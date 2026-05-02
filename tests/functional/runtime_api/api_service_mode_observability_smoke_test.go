@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func stringValue(value *string) string {
@@ -35,8 +36,8 @@ func mapValue[K comparable, V any](values *map[K]V) map[K]V {
 
 // portos:func-length-exception owner=agent-factory reason=service-mode-lifecycle-runtime-api-smoke review=2026-07-19 removal=split-startup-idle-submission-completion-and-cancel-assertions-before-next-service-mode-smoke-change
 func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow service-mode lifecycle smoke")
-	dir := scaffoldFactory(t, twoStagePipelineConfig())
+	support.SkipLongFunctional(t, "slow service-mode lifecycle smoke")
+	dir := support.ScaffoldFactory(t, twoStagePipelineConfig())
 
 	dispatchRelease := make(chan struct{})
 	dispatchExecutor := &blockingExecutor{releaseCh: dispatchRelease, mu: &sync.Mutex{}, calls: new(int)}
@@ -157,8 +158,8 @@ func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayRea
 
 // portos:func-length-exception owner=agent-factory reason=observability-runtime-api-smoke review=2026-07-19 removal=split-snapshot-dashboard-status-and-event-assertions-before-next-observability-smoke-change
 func TestObservabilitySmoke_CanonicalServiceSnapshotMatchesStateAndDashboardAcrossRuntimeTransitions(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow observability smoke")
-	dir := scaffoldFactory(t, twoStagePipelineConfig())
+	support.SkipLongFunctional(t, "slow observability smoke")
+	dir := support.ScaffoldFactory(t, twoStagePipelineConfig())
 
 	dispatchRelease := make(chan struct{})
 	dispatchExecutor := &blockingExecutor{releaseCh: dispatchRelease, mu: &sync.Mutex{}, calls: new(int)}

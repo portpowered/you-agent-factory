@@ -38,7 +38,6 @@ tests/functional/internal/support/fixtures.go:136:6: unreachable func: UpdateFac
 tests/functional/internal/support/harness.go:53:6: unreachable func: CountFactoryEvents
 tests/functional/internal/support/provider.go:33:6: unreachable func: AcceptedCommandResults
 tests/functional/internal/support/provider.go:41:6: unreachable func: ProviderCommandRequestsForWorker
-tests/functional/internal/support/short.go:5:6: unreachable func: SkipLongFunctional
 tests/functional/providers/helpers_test.go:131:6: unreachable func: buildModelWorkerConfig
 tests/functional/providers/helpers_test.go:183:6: unreachable func: writeNamedWorkerAgents
 tests/functional/providers/helpers_test.go:209:6: unreachable func: writeExecutionTemplateWorkstationAgents

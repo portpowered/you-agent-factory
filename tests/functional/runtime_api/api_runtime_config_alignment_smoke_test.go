@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -33,7 +34,7 @@ const (
 )
 
 func TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow runtime config boundary alignment sweep")
+	support.SkipLongFunctional(t, "slow runtime config boundary alignment sweep")
 
 	for _, tc := range []struct {
 		name string
@@ -98,7 +99,7 @@ func assertRuntimeConfigAlignmentRejectsGeneratedFactoryAlias(t *testing.T, muta
 	cfg := runtimeConfigAlignmentFactoryJSONConfig()
 	mutate(cfg)
 
-	dir := scaffoldFactory(t, cfg)
+	dir := support.ScaffoldFactory(t, cfg)
 	writeRuntimeConfigAlignmentAgentConfigs(t, dir)
 
 	_, err := factoryconfig.LoadRuntimeConfig(dir, nil)
@@ -171,7 +172,7 @@ func assertRuntimeConfigAlignmentRejectsSplitWorkstationAlias(t *testing.T, work
 func setupRuntimeConfigAlignmentFactory(t *testing.T) string {
 	t.Helper()
 
-	dir := scaffoldFactory(t, runtimeConfigAlignmentFactoryJSONConfig())
+	dir := support.ScaffoldFactory(t, runtimeConfigAlignmentFactoryJSONConfig())
 	writeRuntimeConfigAlignmentAgentConfigs(t, dir)
 	return dir
 }

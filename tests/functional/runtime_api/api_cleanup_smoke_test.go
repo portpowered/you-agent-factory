@@ -13,10 +13,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
-	dir := scaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{

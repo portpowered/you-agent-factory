@@ -17,7 +17,7 @@ import (
 )
 
 func TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow timeout cleanup smoke")
+	support.SkipLongFunctional(t, "slow timeout cleanup smoke")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	childPIDFile := filepath.Join(t.TempDir(), "descendant.pid")
 
@@ -98,7 +98,7 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 }
 
 func TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow timeout retry smoke")
+	support.SkipLongFunctional(t, "slow timeout retry smoke")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	attemptFile := filepath.Join(t.TempDir(), "timeout-attempts.txt")
 

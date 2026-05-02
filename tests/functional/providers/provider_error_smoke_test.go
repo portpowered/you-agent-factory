@@ -16,7 +16,7 @@ import (
 
 // portos:func-length-exception owner=agent-factory reason=provider-throttle-isolation-smoke review=2026-07-19 removal=split-pause-harness-setup-submissions-and-lane-assertions-before-next-provider-error-smoke-change
 func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow provider throttle-pause isolation sweep")
+	support.SkipLongFunctional(t, "slow provider throttle-pause isolation sweep")
 
 	pauseHarness := testutil.NewProviderErrorSmokePauseIsolationHarness(
 		t,
@@ -104,7 +104,7 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 
 // portos:func-length-exception owner=agent-factory reason=provider-worker-pool-error-smoke review=2026-07-19 removal=split-codex-timeout-and-worker-pool-assertions-before-next-provider-error-smoke-change
 func TestProviderErrorSmoke_CodexAndTimeoutFailuresNormalizeThroughWorkerPool(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow provider worker-pool smoke")
+	support.SkipLongFunctional(t, "slow provider worker-pool smoke")
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
 	t.Run(providerErrorCorpusEntryLabel(capacityEntry)+"_BoundedErrorLine_RequeuesWithConciseFailureReason", func(t *testing.T) {
 		conciseError := providerErrorCorpusLastErrorLine(t, capacityEntry)
@@ -221,7 +221,7 @@ func TestProviderErrorSmoke_CodexAndTimeoutFailuresNormalizeThroughWorkerPool(t 
 }
 
 func TestProviderErrorSmoke_CodexTemporaryServerErrorsRequeueWithoutThrottlePause(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow codex retry smoke")
+	support.SkipLongFunctional(t, "slow codex retry smoke")
 	testCases := []struct {
 		name     string
 		workName string
@@ -271,7 +271,7 @@ func TestProviderErrorSmoke_CodexTemporaryServerErrorsRequeueWithoutThrottlePaus
 }
 
 func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRetryableProviderFailureMetadata(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow codex windows-exit provider smoke")
+	support.SkipLongFunctional(t, "slow codex windows-exit provider smoke")
 	entry := providerErrorCorpusEntryForTest(t, "codex_windows_exit_code_4294967295")
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
@@ -326,7 +326,7 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 }
 
 func TestProviderErrorSmoke_CodexHighDemandPersistentFailureFailsOnlyAfterGuardedLoopBreakerThreshold(t *testing.T) {
-	skipSlowFunctionalSmokeInShort(t, "slow guarded loop-breaker provider smoke")
+	support.SkipLongFunctional(t, "slow guarded loop-breaker provider smoke")
 
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,

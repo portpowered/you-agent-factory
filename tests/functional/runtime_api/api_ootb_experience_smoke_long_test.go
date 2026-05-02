@@ -16,7 +16,7 @@ import (
 func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 	support.SkipLongFunctional(t, "slow OOTB API simple pipeline sweep")
 
-	dir := scaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-ootb-001",
@@ -53,7 +53,7 @@ func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 	support.SkipLongFunctional(t, "slow OOTB API two-stage pipeline sweep")
 
-	dir := scaffoldFactory(t, ootbTwoStagePipelineConfig())
+	dir := support.ScaffoldFactory(t, ootbTwoStagePipelineConfig())
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-ootb-multistage-001",
@@ -82,7 +82,7 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 func TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion(t *testing.T) {
 	support.SkipLongFunctional(t, "slow OOTB API status-across-completion sweep")
 
-	dir := scaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-ootb-status-001",

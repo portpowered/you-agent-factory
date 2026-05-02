@@ -20,7 +20,7 @@ import (
 func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testing.T) {
 	support.SkipLongFunctional(t, "slow topology projection live-vs-replay sweep")
 
-	dir := scaffoldFactory(t, map[string]any{
+	dir := support.ScaffoldFactory(t, map[string]any{
 		"workTypes": []map[string]any{{"name": "task", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}, {"name": "failed", "type": "FAILED"}}}},
 		"resources": []map[string]any{{"name": "executor-slot", "capacity": 2}},
 		"workers":   []map[string]string{{"name": "executor"}},
