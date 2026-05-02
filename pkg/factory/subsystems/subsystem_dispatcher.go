@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	factory_throttle "github.com/portpowered/infinite-you/pkg/factory/internal/throttle"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorythrottle "github.com/portpowered/infinite-you/pkg/factory/throttle"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -82,7 +82,11 @@ func NewDispatcher(n *state.Net, sched scheduler.Scheduler, wfCtx *factory_conte
 	for _, opt := range opts {
 		opt(dispatcher)
 	}
-	dispatcher.evaluator = scheduler.NewEnablementEvaluator(l, scheduler.WithEnablementClock(dispatcher.now))
+	dispatcher.evaluator = scheduler.NewEnablementEvaluator(
+		l,
+		scheduler.WithEnablementClock(dispatcher.now),
+		scheduler.WithEnablementRuntimeConfig(dispatcher.runtimeConfig),
+	)
 	return dispatcher
 }
 
@@ -100,15 +104,17 @@ func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.
 	d.logger.Debug("dispatcher: dispatching work based on current snapshot", "snapshot", snapshot)
 	activeThrottlePauses := d.activeThrottlePauses(snapshot)
 	observedThrottlePauses := d.throttlePausesObserved(snapshot, activeThrottlePauses)
-	enabled := d.evaluator.FindEnabledTransitions(ctx, d.state, &snapshot.Marking)
+	enabled := d.evaluator.FindEnabledTransitionsWithSnapshot(ctx, d.state, snapshot)
 	if len(enabled) == 0 {
 		d.logger.Debug("dispatcher: no enabled transitions")
 		return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil
 	}
-	enabled = d.filterPausedEnabledTransitions(enabled, activeThrottlePauses)
-	if len(enabled) == 0 {
-		d.logger.Debug("dispatcher: all enabled transitions paused by provider/model throttle state")
-		return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil
+	if !d.hasAuthoredInferenceThrottleGuards() {
+		enabled = d.filterPausedEnabledTransitions(enabled, activeThrottlePauses)
+		if len(enabled) == 0 {
+			d.logger.Debug("dispatcher: all enabled transitions paused by provider/model throttle state")
+			return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil
+		}
 	}
 	if scheduler.SupportsRepeatedTransitionBindings(d.sched) {
 		expanded := scheduler.ExpandRepeatedBindings(d.state, &snapshot.Marking, enabled)
@@ -298,11 +304,104 @@ func (d *DispatcherSubsystem) filterPausedEnabledTransitions(enabled []interface
 	return filtered
 }
 
-func (d *DispatcherSubsystem) throttleFailureHistoryFromCompletedDispatches(history []interfaces.CompletedDispatch) []factory_throttle.FailureRecord {
+func (d *DispatcherSubsystem) throttlePauseSnapshotResult(active []interfaces.ActiveThrottlePause, observed bool) *interfaces.TickResult {
+	if !observed {
+		return nil
+	}
+	return &interfaces.TickResult{
+		ActiveThrottlePauses:   active,
+		ThrottlePausesObserved: true,
+	}
+}
+
+func (d *DispatcherSubsystem) activeThrottlePauses(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.ActiveThrottlePause {
+	if snapshot == nil {
+		return nil
+	}
+	if !d.hasAuthoredInferenceThrottleGuards() {
+		return factorythrottle.DeriveActiveThrottlePauses(
+			d.throttleFailureHistoryFromCompletedDispatches(snapshot.DispatchHistory),
+			d.throttlePauseDuration,
+			d.now(),
+		)
+	}
+	activeByLane := make(map[string]interfaces.ActiveThrottlePause)
+	runtime := petri.RuntimeGuardContext{
+		Now:               d.now(),
+		DispatchHistory:   snapshot.DispatchHistory,
+		RuntimeConfig:     d.runtimeConfig,
+		TransitionWorkers: transitionWorkerTypesForNet(d.state),
+	}
+	for _, transition := range d.state.Transitions {
+		for _, arc := range transition.InputArcs {
+			for _, pause := range activePausesForGuard(arc.Guard, runtime) {
+				activeByLane[pause.LaneID] = pause
+			}
+		}
+	}
+	active := make([]interfaces.ActiveThrottlePause, 0, len(activeByLane))
+	for _, pause := range activeByLane {
+		active = append(active, pause)
+	}
+	sort.Slice(active, func(i, j int) bool {
+		if active[i].Provider != active[j].Provider {
+			return active[i].Provider < active[j].Provider
+		}
+		if active[i].Model != active[j].Model {
+			return active[i].Model < active[j].Model
+		}
+		return active[i].LaneID < active[j].LaneID
+	})
+	return active
+}
+
+func activePausesForGuard(guard petri.Guard, runtime petri.RuntimeGuardContext) []interfaces.ActiveThrottlePause {
+	if guard == nil {
+		return nil
+	}
+	if provider, ok := guard.(petri.ActivePauseProvider); ok {
+		return provider.ActivePauses(runtime)
+	}
+	if all, ok := guard.(*petri.AllGuard); ok {
+		active := make([]interfaces.ActiveThrottlePause, 0)
+		for _, nested := range all.Guards {
+			active = append(active, activePausesForGuard(nested, runtime)...)
+		}
+		return active
+	}
+	return nil
+}
+
+func hasInferenceThrottleGuard(guard petri.Guard) bool {
+	switch typed := guard.(type) {
+	case *petri.InferenceThrottleGuard:
+		return true
+	case *petri.AllGuard:
+		for _, nested := range typed.Guards {
+			if hasInferenceThrottleGuard(nested) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (d *DispatcherSubsystem) hasAuthoredInferenceThrottleGuards() bool {
+	for _, transition := range d.state.Transitions {
+		for _, arc := range transition.InputArcs {
+			if hasInferenceThrottleGuard(arc.Guard) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (d *DispatcherSubsystem) throttleFailureHistoryFromCompletedDispatches(history []interfaces.CompletedDispatch) []factorythrottle.FailureRecord {
 	if len(history) == 0 {
 		return nil
 	}
-	records := make([]factory_throttle.FailureRecord, 0, len(history))
+	records := make([]factorythrottle.FailureRecord, 0, len(history))
 	for i := range history {
 		if !workers.ProviderFailureDecisionFromMetadata(history[i].ProviderFailure).TriggersThrottlePause {
 			continue
@@ -311,7 +410,7 @@ func (d *DispatcherSubsystem) throttleFailureHistoryFromCompletedDispatches(hist
 		if !ok {
 			continue
 		}
-		records = append(records, factory_throttle.FailureRecord{
+		records = append(records, factorythrottle.FailureRecord{
 			Provider:        key.provider,
 			Model:           key.model,
 			OccurredAt:      history[i].EndTime,
@@ -352,25 +451,18 @@ func (d *DispatcherSubsystem) providerModelKeyForWorker(workerName string) (prov
 	}, true
 }
 
-func (d *DispatcherSubsystem) throttlePauseSnapshotResult(active []interfaces.ActiveThrottlePause, observed bool) *interfaces.TickResult {
-	if !observed {
+func transitionWorkerTypesForNet(net *state.Net) map[string]string {
+	if net == nil || len(net.Transitions) == 0 {
 		return nil
 	}
-	return &interfaces.TickResult{
-		ActiveThrottlePauses:   active,
-		ThrottlePausesObserved: true,
+	workersByTransition := make(map[string]string, len(net.Transitions))
+	for transitionID, transition := range net.Transitions {
+		if transition == nil || transition.WorkerType == "" {
+			continue
+		}
+		workersByTransition[transitionID] = transition.WorkerType
 	}
-}
-
-func (d *DispatcherSubsystem) activeThrottlePauses(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.ActiveThrottlePause {
-	if snapshot == nil || len(snapshot.DispatchHistory) == 0 {
-		return nil
-	}
-	return factory_throttle.DeriveActiveThrottlePauses(
-		d.throttleFailureHistoryFromCompletedDispatches(snapshot.DispatchHistory),
-		d.throttlePauseDuration,
-		d.now(),
-	)
+	return workersByTransition
 }
 
 // workTypeFromTokens extracts the work type from the first non-resource input token.

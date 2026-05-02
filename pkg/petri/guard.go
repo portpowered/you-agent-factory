@@ -100,6 +100,7 @@ type AllGuard struct {
 }
 
 var _ Guard = (*AllGuard)(nil)
+var _ RuntimeGuard = (*AllGuard)(nil)
 
 func (g *AllGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) ([]interfaces.Token, bool) {
 	current := candidates
@@ -108,6 +109,32 @@ func (g *AllGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*
 			continue
 		}
 		matched, ok := guard.Evaluate(current, bindings, marking)
+		if !ok {
+			return nil, false
+		}
+		current = matched
+	}
+	return current, len(current) > 0
+}
+
+func (g *AllGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) ([]interfaces.Token, bool) {
+	current := candidates
+	for _, guard := range g.Guards {
+		if guard == nil {
+			continue
+		}
+		var (
+			matched []interfaces.Token
+			ok      bool
+		)
+		switch typed := guard.(type) {
+		case RuntimeGuard:
+			matched, ok = typed.EvaluateRuntime(ctx, current, bindings, marking)
+		case ClockedGuard:
+			matched, ok = typed.EvaluateAt(ctx.Now, current, bindings, marking)
+		default:
+			matched, ok = guard.Evaluate(current, bindings, marking)
+		}
 		if !ok {
 			return nil, false
 		}

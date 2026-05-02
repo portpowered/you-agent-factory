@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 func TestConfigMapping_SimplePath(t *testing.T) {
@@ -526,6 +527,133 @@ func TestConfigMapping_ValidationRejectsFactoryInferenceThrottleGuardInvalidRefr
 	}
 	if !strings.Contains(err.Error(), "guards[0](inference_throttle_guard).refreshWindow") {
 		t.Fatalf("expected refreshWindow field path, got %v", err)
+	}
+}
+
+func TestConfigMapping_LowersFactoryInferenceThrottleGuardAcrossWorkerTransitions(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		Guards: []interfaces.FactoryGuardConfig{{
+			Type:          interfaces.GuardTypeInferenceThrottle,
+			ModelProvider: "claude",
+			Model:         "claude-sonnet",
+			RefreshWindow: "15m",
+		}},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{
+			{Name: "claude-worker", ModelProvider: "claude", Model: "claude-sonnet"},
+			{Name: "codex-worker", ModelProvider: "codex", Model: "gpt-5-codex"},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name:           "claude-step",
+				WorkerTypeName: "claude-worker",
+				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			},
+			{
+				Name:           "codex-step",
+				WorkerTypeName: "codex-worker",
+				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected map error: %v", err)
+	}
+
+	claudeGuard := net.Transitions["claude-step"].InputArcs[0].Guard
+	codexGuard := net.Transitions["codex-step"].InputArcs[0].Guard
+	if !containsInferenceThrottleGuard(claudeGuard) {
+		t.Fatalf("claude-step guard = %#v, want inference throttle guard in chain", claudeGuard)
+	}
+	if !containsInferenceThrottleGuard(codexGuard) {
+		t.Fatalf("codex-step guard = %#v, want inference throttle guard in chain", codexGuard)
+	}
+}
+
+func TestConfigMapping_FactoryInferenceThrottleGuardBlocksOnlyMatchingLaneAtRuntime(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		Guards: []interfaces.FactoryGuardConfig{{
+			Type:          interfaces.GuardTypeInferenceThrottle,
+			ModelProvider: "claude",
+			Model:         "claude-sonnet",
+			RefreshWindow: "15m",
+		}},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{
+			{Name: "claude-worker", ModelProvider: "claude", Model: "claude-sonnet"},
+			{Name: "codex-worker", ModelProvider: "codex", Model: "gpt-5-codex"},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name:           "claude-step",
+				WorkerTypeName: "claude-worker",
+				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			},
+			{
+				Name:           "codex-step",
+				WorkerTypeName: "codex-worker",
+				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected map error: %v", err)
+	}
+
+	marking := petri.NewMarking("workflow")
+	marking.AddToken(&interfaces.Token{ID: "tok-claude", PlaceID: "task:init"})
+	marking.AddToken(&interfaces.Token{ID: "tok-codex", PlaceID: "task:init"})
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: marking.Snapshot(),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			{
+				DispatchID:   "d-throttle",
+				TransitionID: "claude-step",
+				ProviderFailure: &interfaces.ProviderFailureMetadata{
+					Family: interfaces.ProviderErrorFamilyThrottle,
+					Type:   interfaces.ProviderErrorTypeThrottled,
+				},
+				EndTime: time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	evaluator := scheduler.NewEnablementEvaluator(nil, scheduler.WithEnablementClock(func() time.Time {
+		return time.Date(2026, time.May, 1, 10, 5, 0, 0, time.UTC)
+	}), scheduler.WithEnablementRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"claude-worker": {ModelProvider: "claude", Model: "claude-sonnet"},
+			"codex-worker":  {ModelProvider: "codex", Model: "gpt-5-codex"},
+		},
+	}))
+
+	enabled := evaluator.FindEnabledTransitionsWithSnapshot(context.Background(), net, &snapshot)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions = %+v, want only codex-step", enabled)
+	}
+	if enabled[0].TransitionID != "codex-step" {
+		t.Fatalf("enabled transition = %s, want codex-step", enabled[0].TransitionID)
 	}
 }
 
@@ -2224,6 +2352,20 @@ func TestConfigMapping_ValidationRejectsMismatchedCountsAcrossMultiInputSameType
 	if !strings.Contains(err.Error(), "TYPE_COUNT_COLLISION") {
 		t.Fatalf("expected TYPE_COUNT_COLLISION in error, got %v", err)
 	}
+}
+
+func containsInferenceThrottleGuard(guard petri.Guard) bool {
+	switch typed := guard.(type) {
+	case *petri.InferenceThrottleGuard:
+		return true
+	case *petri.AllGuard:
+		for _, nested := range typed.Guards {
+			if containsInferenceThrottleGuard(nested) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestConfigMapping_ValidationAllowsCrossTypeFanout(t *testing.T) {
