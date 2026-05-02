@@ -27,10 +27,12 @@ func (m *mockScheduler) Select(_ []interfaces.EnabledTransition, _ *interfaces.E
 }
 
 type recordingScheduler struct {
-	received []interfaces.EnabledTransition
+	callCount int
+	received  []interfaces.EnabledTransition
 }
 
 func (s *recordingScheduler) Select(enabled []interfaces.EnabledTransition, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.FiringDecision {
+	s.callCount++
 	s.received = append([]interfaces.EnabledTransition(nil), enabled...)
 	decisions := make([]interfaces.FiringDecision, 0, len(enabled))
 	claimed := make(map[string]bool)
@@ -867,6 +869,66 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 	}
 	if !result.ThrottlePausesObserved {
 		t.Fatal("expected dispatcher to report observed throttle pause from service-owned transition")
+	}
+	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
+}
+
+func TestDispatcher_ThrottlePauseSkipsSchedulerWhenAllEnabledLanesPaused(t *testing.T) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init": {ID: "p-init"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t-a": {
+				ID:         "t-a",
+				Name:       "step-a",
+				WorkerType: "worker-a",
+				InputArcs: []petri.Arc{
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+			},
+		},
+	}
+	sched := &recordingScheduler{}
+	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
+	dispatcher := NewDispatcher(
+		n,
+		sched,
+		nil,
+		nil,
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {ModelProvider: "claude", Model: "claude-sonnet"},
+			},
+		}),
+		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherThrottlePauseDuration(10*time.Minute),
+	)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", now),
+		},
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sched.callCount != 0 {
+		t.Fatalf("expected scheduler Select to be skipped when every enabled lane is paused, got %d call(s)", sched.callCount)
+	}
+	if result == nil {
+		t.Fatal("expected throttle pause snapshot result")
+	}
+	if len(result.Dispatches) != 0 {
+		t.Fatalf("expected no dispatches while every enabled lane is paused, got %+v", result.Dispatches)
+	}
+	if !result.ThrottlePausesObserved {
+		t.Fatal("expected dispatcher to report observed throttle pauses")
 	}
 	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 }
