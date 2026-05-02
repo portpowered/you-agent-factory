@@ -40,6 +40,10 @@
   merged PR list as well as open PR file sets; fast-moving `main` can land the
   exact seam while the ignored workflow-input residue still suggests it is only
   queued.
+- After a customer-ask implementation lane merges, re-check whether a legacy
+  compatibility or fallback path still keeps the old abstraction live; the
+  next highest-value cleanup is often removing that fallback rather than
+  queueing an unrelated hygiene seam.
 - Before treating tracked sibling `copy` scripts under `ui/scripts/` as live
   tooling, confirm the canonical entrypoints in `ui/package.json` and the
   checked-in development docs; duplicate script copies can be dead residue even
@@ -1036,3 +1040,39 @@
 - Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
   matches `HEAD` `79b0552`, the live open PR map, and the current
   "customer lane active, legacy fallback still pending" throttle posture.
+
+## 2026-05-02 00:05:50 -07:00 - meta refresh after throttle and logger lanes landed
+
+- Ran `git pull --ff-only origin main` and verified the workspace is synced on
+  `main` at `9bb148e`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `79b0552`
+  - it still treated PR `#46` as open even though it is now merged
+  - it still treated the `pkg/logging.VerboseLogger` cleanup as queueable even
+    though merged PR `#47` already retired it
+- Used sidecar repository-inspection agents plus direct code inspection to
+  reassess the live customer throttle posture after the merge:
+  - authored `factory.guards` / `INFERENCE_THROTTLE_GUARD` support is now
+    present on `main`
+  - the runtime still keeps the legacy fallback throttle abstraction for
+    factories that do not author that guard
+  - the remaining fallback still flows through
+    `pkg/factory/options.go`,
+    `pkg/factory/runtime/factory.go`, and the fallback branch in
+    `pkg/factory/subsystems/subsystem_dispatcher.go`
+- Confirmed the only live open PR is `#30`
+  `prd-functional-test-suite-decomposition`, so the next cleanup lane should
+  stay out of `tests/functional/**`.
+- Queued one new ignored cleanup idea to retire the remaining legacy throttle
+  fallback abstraction instead of re-queuing stale hygiene seams from ignored
+  local residue.
+- Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
+  matches `HEAD` `9bb148e`, merged PRs `#46` and `#47`, and the new
+  post-merge throttle follow-up priority.
