@@ -300,16 +300,18 @@ async function exerciseHistoricalTimelineView(page, options) {
     historicalHiddenButtonName,
   } = options;
   const slider = page.getByRole("slider", { name: "Timeline tick" });
+  const currentButton = page.getByRole("button", { exact: true, name: "Current" });
   const previousTick = finalTick - 1;
 
   expect(previousTick).toBeGreaterThan(0);
 
   await slider.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  await page.getByRole("button", { exact: true, name: "Current" }).waitFor({
+  await currentButton.waitFor({
     state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
   expect(await slider.inputValue()).toBe(String(finalTick));
+  expect(await currentButton.isDisabled()).toBe(true);
   let latestButtonCount = null;
   if (historicalHiddenButtonName) {
     latestButtonCount = await countButtons(page, historicalHiddenButtonName);
@@ -322,6 +324,7 @@ async function exerciseHistoricalTimelineView(page, options) {
     timeout: uiInteractionTimeoutMs,
   });
   expect(await slider.inputValue()).toBe(String(previousTick));
+  expect(await currentButton.isDisabled()).toBe(false);
   if (historicalHiddenButtonName) {
     expect(await countButtons(page, historicalHiddenButtonName)).toBeLessThan(latestButtonCount);
   }
@@ -332,12 +335,14 @@ async function exerciseHistoricalTimelineView(page, options) {
     timeout: uiInteractionTimeoutMs,
   });
   expect(await slider.inputValue()).toBe(String(previousTick));
+  expect(await currentButton.isDisabled()).toBe(false);
 
-  await slider.press("ArrowRight");
+  await currentButton.click();
   await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
     timeout: uiInteractionTimeoutMs,
   });
   expect(await slider.inputValue()).toBe(String(finalTick));
+  expect(await currentButton.isDisabled()).toBe(true);
   if (historicalHiddenButtonName) {
     expect(await countButtons(page, historicalHiddenButtonName)).toBe(latestButtonCount);
   }
