@@ -3,7 +3,7 @@
 ## world state
 
 - after `git pull --ff-only`, repository `main` and `origin/main` are both at
-  `73fb57f` on May 2, 2026 in the local maintainer workspace
+  `185f699` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -22,6 +22,7 @@
   - `factory/inputs/idea/default/dedupe-factory-config-boundary-alias-rejection.md`
   - `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
   - `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+  - `factory/inputs/idea/default/dedupe-portable-bundled-path-containment-validation.md`
   - `factory/inputs/idea/default/dedupe-replay-factory-merge-helpers.md`
   - `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
   - `factory/inputs/idea/default/derive-throttle-windows-from-completed-dispatch-history.md`
@@ -29,6 +30,7 @@
   - `factory/inputs/idea/default/factory-level-inference-throttle-guard.md`
   - `factory/inputs/idea/default/inline-batch-relation-duplicate-rejection.md`
   - `factory/inputs/idea/default/inline-workstation-request-projection-fallback-helpers.md`
+  - `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
   - `factory/inputs/idea/default/prd-cli-consumer-installation.md`
   - `factory/inputs/idea/default/prd-current-factory-default-runtime-support.md`
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
@@ -44,6 +46,7 @@
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#56` `inline-workstation-runtime-lookup-key-fallback`
   - merged PR `#55` `dedupe-generated-public-enum-pointer-helpers`
   - merged PR `#54` `dedupe-factory-config-boundary-alias-rejection`
   - merged PR `#53` `dedupe-api-surface-factory-contract`
@@ -63,6 +66,10 @@
   live backlog
 - direct `HEAD` inspection confirmed that several ignored local workflow-input
   residues are now stale rather than queueable:
+  - merged PR `#56` landed the workstation runtime lookup-key fallback cleanup
+    on `main`, so
+    `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
+    is solved residue
   - merged PR `#55` landed the generated enum pointer-helper cleanup on
     `main`, so
     `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
@@ -76,26 +83,28 @@
     `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
     is also stale residue
 - direct code inspection plus a sidecar explorer found the next smaller
-  non-colliding reserve cleanup seam in workstation runtime lookup:
-  - `pkg/factory/workstationconfig/runtime_lookup.go` still keeps the private
-    wrappers `lookupKey(...)` and `lookupKeys(...)`
-  - `Workstation(...)` is already the canonical owner of the Name-then-ID
-    runtime workstation lookup fallback
-  - the helper layer is local redundancy that can be inlined without changing
-    behavior
-  - the supporting data-model note
-    `docs/development/workstation-runtime-config-data-model.md` already
-    documents `Workstation` as the unified runtime lookup seam
+  non-colliding reserve cleanup seam in portable bundled-file expansion:
+  - `pkg/config/portable_bundled_files.go` resolves each target path through
+    `portableBundledTargetPath(...)` and then immediately re-validates the same
+    path through `validatePortableBundledFilesystemPath(...)`
+  - `portableBundledTargetPath(...)` already owns lexical absolute-path and
+    `..` escape rejection for the expand target
+  - the remaining distinct safety concern is filesystem-link escape checking,
+    which can stay intact without keeping duplicate lexical containment
+    ownership
+  - existing focused proof already lives in
+    `pkg/config/portable_bundled_files_test.go` and
+    `pkg/config/portable_bundled_files_integration_test.go`
 
 ## current blockers
 
 1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid that tree until it merges
 2. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `a1dd288`
-   - it did not include merged PR `#55`
-   - it still treated the generated enum pointer-helper seam as the next move
-     even though `#55` already landed it on `main`
+   - it still described `HEAD` as `73fb57f`
+   - it did not include merged PR `#56`
+   - it still treated the workstation runtime lookup-key fallback seam as the
+     next move even though `#56` already landed it on `main`
 3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 4. many ignored local idea and plan files now correspond either to merged PRs
@@ -118,10 +127,11 @@
 - the safest reserve cleanup posture remains tiny package-local simplifications
   outside `tests/functional/**`, because PR `#30` is still the only live broad
   collision surface
-- the current highest-confidence reserve cleanup is the redundant
-  `lookupKey(...)` / `lookupKeys(...)` layer in
-  `pkg/factory/workstationconfig/runtime_lookup.go`, because the canonical
-  `Workstation(...)` lookup already owns the behavior and the seam is isolated
+- the current highest-confidence reserve cleanup is the duplicate lexical
+  expand-target containment ownership in
+  `pkg/config/portable_bundled_files.go`, because the package can keep
+  filesystem-link escape protection while shrinking the validation flow to one
+  lexical owner
 
 ## next best move
 
@@ -130,9 +140,8 @@
   still correct
 - do not re-queue solved or code-stale cleanup residue from ignored
   `factory/inputs/**`
-- queue one new ignored reserve cleanup idea for inlining the redundant
-  workstation runtime lookup key-selection helpers behind
-  `pkg/factory/workstationconfig.Workstation(...)`
+- queue one new ignored reserve cleanup idea for deduplicating portable
+  bundled-file path containment validation in `pkg/config`
 - keep any new reserve work out of `tests/functional/**` while PR `#30`
   remains open
 

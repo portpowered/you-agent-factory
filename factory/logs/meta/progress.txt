@@ -3,6 +3,9 @@
 - After a fresh `git pull`, verify recently changed candidate seams from live
   file reads before queuing work; the codebase-memory graph can lag `HEAD`
   briefly after merges.
+- When portable bundled-file expansion already rejects lexical target-path
+  escapes during resolution, keep later validation focused on filesystem-link
+  escape protection instead of re-owning the same lexical containment checks.
 - When generated public enum pointer helpers only differ by the output enum
   type, prefer one shared private nil-on-empty wrapper rather than repeating
   trim-check plus `&enumValue` plumbing across `pkg/interfaces`.
@@ -1386,3 +1389,39 @@
 - Queued one new ignored reserve cleanup idea at
   `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
   instead of re-queueing stale solved residue.
+
+## 2026-05-02 09:02:51 -07:00 - meta refresh after runtime-lookup cleanup landed on main
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `185f699`.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, live GitHub PR state, and candidate reserve cleanup seams
+  before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `73fb57f`
+  - it did not include merged PR `#56`
+    `inline-workstation-runtime-lookup-key-fallback`
+  - it still treated the workstation runtime lookup-key fallback seam as
+    queueable even though `#56` already landed it on `main`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state and direct `HEAD` inspection:
+  - `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
+    is now solved residue rather than pending work
+  - the tracked workflow inbox surface is still empty apart from `.gitkeep`
+    sentinels even though ignored local idea/task residue continues to grow
+- Used a sidecar explorer plus direct code inspection to validate the next
+  non-colliding reserve cleanup seam:
+  - `pkg/config/portable_bundled_files.go` resolves bundled targets through
+    `portableBundledTargetPath(...)` and then immediately re-validates the
+    same path in `validatePortableBundledFilesystemPath(...)`
+  - lexical expand-target containment already lives in
+    `portableBundledTargetPath(...)`
+  - the distinct remaining safety seam is filesystem-link escape protection,
+    already covered by package and integration tests
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/dedupe-portable-bundled-path-containment-validation.md`
+  instead of re-queueing the already-landed runtime-lookup seam.
