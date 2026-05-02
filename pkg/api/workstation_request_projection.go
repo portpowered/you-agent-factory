@@ -135,6 +135,14 @@ func workstationDispatchViewFromCompletion(
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 	latestScriptResponse *interfaces.FactoryWorldScriptResponse,
 ) factoryapi.FactoryWorldWorkstationRequestView {
+	providerSession := inferenceAttemptProviderSession(latestAttempt)
+	if providerSession == nil {
+		providerSession = completion.ProviderSession
+	}
+	diagnostics := inferenceAttemptDiagnostics(latestAttempt)
+	if diagnostics == nil {
+		diagnostics = completion.Diagnostics
+	}
 	inputWorkItems := generatedWorkItemRefs(workItemRefsForItems(completion.InputWorkItems))
 	if len(inputWorkItems) == 0 {
 		inputWorkItems = generatedWorkItemRefs(workItemRefsForInputs(completion.ConsumedInputs))
@@ -161,10 +169,10 @@ func workstationDispatchViewFromCompletion(
 			generatedTokenViewsFromInputs(completion.ConsumedInputs),
 			latestAttempt,
 			latestScriptRequest,
-			inferenceAttemptProviderSessionOrFallback(latestAttempt, completion.ProviderSession),
+			providerSession,
 			"",
 			"",
-			inferenceAttemptDiagnosticsOrFallback(latestAttempt, completion.Diagnostics),
+			diagnostics,
 		),
 		Response: &factoryapi.FactoryWorldWorkstationRequestResponseView{
 			Outcome:          workstationRequestStringPtr(completion.Result.Outcome),
@@ -173,9 +181,9 @@ func workstationDispatchViewFromCompletion(
 			FailureMessage:   workstationRequestStringPtr(completion.Result.FailureMessage),
 			ResponseText:     workstationRequestStringPtr(workstationResponseText(latestAttempt, latestScriptResponse, completion.Result.Output)),
 			ErrorClass:       workstationRequestStringPtr(workstationErrorClass(latestAttempt)),
-			ProviderSession:  interfaces.GeneratedProviderSessionMetadata(inferenceAttemptProviderSessionOrFallback(latestAttempt, completion.ProviderSession)),
-			Diagnostics:      generatedFactoryWorldWorkDiagnostics(inferenceAttemptDiagnosticsOrFallback(latestAttempt, completion.Diagnostics)),
-			ResponseMetadata: workstationRequestStringMapPtr(workstationResponseMetadata(inferenceAttemptDiagnosticsOrFallback(latestAttempt, completion.Diagnostics))),
+			ProviderSession:  interfaces.GeneratedProviderSessionMetadata(providerSession),
+			Diagnostics:      generatedFactoryWorldWorkDiagnostics(diagnostics),
+			ResponseMetadata: workstationRequestStringMapPtr(workstationResponseMetadata(diagnostics)),
 			ScriptResponse:   generatedFactoryWorldScriptResponse(latestScriptResponse),
 			EndTime:          timePtr(completion.CompletedAt),
 			DurationMillis:   int64Ptr(completion.DurationMillis),
@@ -292,31 +300,11 @@ func inferenceAttemptProviderSession(attempt *interfaces.FactoryWorldInferenceAt
 	return attempt.ProviderSession
 }
 
-func inferenceAttemptProviderSessionOrFallback(
-	attempt *interfaces.FactoryWorldInferenceAttempt,
-	fallback *interfaces.ProviderSessionMetadata,
-) *interfaces.ProviderSessionMetadata {
-	if session := inferenceAttemptProviderSession(attempt); session != nil {
-		return session
-	}
-	return fallback
-}
-
 func inferenceAttemptDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt) *interfaces.SafeWorkDiagnostics {
 	if attempt == nil {
 		return nil
 	}
 	return attempt.Diagnostics
-}
-
-func inferenceAttemptDiagnosticsOrFallback(
-	attempt *interfaces.FactoryWorldInferenceAttempt,
-	fallback *interfaces.SafeWorkDiagnostics,
-) *interfaces.SafeWorkDiagnostics {
-	if diagnostics := inferenceAttemptDiagnostics(attempt); diagnostics != nil {
-		return diagnostics
-	}
-	return fallback
 }
 
 func workstationRequestTime(attempt *interfaces.FactoryWorldInferenceAttempt) time.Time {
