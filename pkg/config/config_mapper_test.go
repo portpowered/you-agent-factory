@@ -460,6 +460,75 @@ func TestConfigMapping_ValidationRejectsUnknownGuardType(t *testing.T) {
 	}
 }
 
+func TestConfigMapping_ValidationRejectsFactoryInferenceThrottleGuardMissingModelProvider(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		Guards: []interfaces.FactoryGuardConfig{{
+			Type:          interfaces.GuardTypeInferenceThrottle,
+			RefreshWindow: "15m",
+		}},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "processor",
+			Inputs: []interfaces.IOConfig{
+				{StateName: "init", WorkTypeName: "task"},
+			},
+			Outputs: []interfaces.IOConfig{
+				{StateName: "complete", WorkTypeName: "task"},
+			},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	_, err := mapper.Map(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected validation error for factory inference throttle guard missing modelProvider")
+	}
+	if !strings.Contains(err.Error(), "guards[0](inference_throttle_guard).modelProvider") {
+		t.Fatalf("expected modelProvider field path, got %v", err)
+	}
+}
+
+func TestConfigMapping_ValidationRejectsFactoryInferenceThrottleGuardInvalidRefreshWindow(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		Guards: []interfaces.FactoryGuardConfig{{
+			Type:          interfaces.GuardTypeInferenceThrottle,
+			ModelProvider: "claude",
+			RefreshWindow: "later",
+		}},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "processor",
+			Inputs: []interfaces.IOConfig{
+				{StateName: "init", WorkTypeName: "task"},
+			},
+			Outputs: []interfaces.IOConfig{
+				{StateName: "complete", WorkTypeName: "task"},
+			},
+		}},
+	}
+
+	mapper := ConfigMapper{}
+	_, err := mapper.Map(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected validation error for factory inference throttle guard invalid refreshWindow")
+	}
+	if !strings.Contains(err.Error(), "guards[0](inference_throttle_guard).refreshWindow") {
+		t.Fatalf("expected refreshWindow field path, got %v", err)
+	}
+}
+
 func TestConfigMapping_ValidationRejectsMatchesFieldsMissingInputKey(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{{

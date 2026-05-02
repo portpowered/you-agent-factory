@@ -305,6 +305,39 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesFactoryInferenceThrottleGuard(t 
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsFactoryInferenceThrottleGuardWithWorkstationGuardFields(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"factory-throttle-guard-invalid-fields-factory",
+		"guards":[{
+			"type":"INFERENCE_THROTTLE_GUARD",
+			"modelProvider":"CLAUDE",
+			"refreshWindow":"15m",
+			"workstation":"processor"
+		}],
+		"workTypes": [
+			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-assets",
+			"worker":"matcher",
+			"inputs":[{"workType":"asset","state":"ready"}],
+			"outputs":[{"workType":"asset","state":"matched"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected workstation-only guard fields on factory guard to fail at generated boundary")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "guards[0].workstation is not supported") {
+		t.Fatalf("expected factory guard field path in error, got %v", err)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"retired-fan-in-factory",
