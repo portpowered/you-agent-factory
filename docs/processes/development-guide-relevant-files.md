@@ -5,7 +5,7 @@ This inventory records the checked-in files and directories that the maintainer 
 | Path | Role | Notes |
 | --- | --- | --- |
 | `go.mod` | Repository-root marker | Maintainer commands and worktree-aware tests should treat the directory containing `go.mod` as the canonical repository root. |
-| `Makefile` | Root command surface | The development guide should describe quality and generation commands as root-level invocations instead of teaching a nested package workflow. |
+| `Makefile` | Root command surface | The development guide should describe quality and generation commands as root-level invocations instead of teaching a nested package workflow; maintainers also rely on this file to preserve repo-owned `typecheck`, `release`, functional-lane, and API generation or verification commands. |
 | `api/` | Authored API contract workspace | OpenAPI validation and bundling start from the repository root, then shell into `api/` only where the documented workflow requires it. |
 | `api/components/schemas/shared/` | Shared OpenAPI fragment family | Cross-surface helper schemas such as maps, diagnostics helpers, and resource helper types live here and referenced fragments must use file-relative `$ref`s. |
 | `api/components/schemas/api/` | API payload OpenAPI fragment family | Request, response, status, token, and pagination contract fragments are authored here one schema per file. |
@@ -44,6 +44,7 @@ This inventory records the checked-in files and directories that the maintainer 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
+- When feature work touches the root `Makefile`, preserve the existing maintainer command surface unless the same change intentionally updates the corresponding docs and workflows; `typecheck`, `release`, and `api-smoke` still own UI typecheck, release prep, and generated client or server verification at the repository boundary.
 - When a repository-owned smoke test migrates out of `tests/functional_test/`, update the root `Makefile` target to call the new behavior-owned package immediately; otherwise CI can keep exercising a deleted legacy package even while the migrated tests themselves stay green.
 - When a backend cleanup narrows an exported seam without changing caller behavior, keep regression coverage at the owning package's public helper boundary and assert observable forwarding or no-op behavior instead of symbol-name, reflection, or source-inventory checks.
 - When runtime-state cleanup changes token or place bookkeeping, prove the contract through caller-facing mutation or reconstruction tests that assert owned state surfaces such as `Marking.PlaceTokens` or reconstructed `PlaceOccupancyByID`; do not add helper-topology or source-layout assertions.

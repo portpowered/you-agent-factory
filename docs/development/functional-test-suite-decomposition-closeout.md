@@ -51,8 +51,7 @@ the same feature areas:
 - `tests/functional/internal/support` is the only shared cross-package helper
   seam for decomposed functional coverage.
 - `tests/functional_test/` now remains only for legacy checked-in fixture data
-  under `testdata/` plus worktree-local planning artifacts when this workflow
-  materializes them there.
+  under `testdata/`.
 - New shared helper files must not be added to `tests/functional_test`; move
   that code into `tests/functional/internal/support` instead.
 - Broad or slow package-local scenarios should call

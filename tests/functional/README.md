@@ -90,9 +90,9 @@ legacy mixed bucket.
 
 Compatibility rules during coexistence:
 
-- `tests/functional_test/` stays open only for legacy checked-in fixture data
-  and temporary local planning artifacts inside this worktree; observable
-  non-long behavior coverage now belongs in `tests/functional/...`.
+- `tests/functional_test/` stays open only for legacy checked-in fixture data;
+  observable non-long behavior coverage now belongs in
+  `tests/functional/...`.
 - `tests/functional_test/testdata` remains the checked-in legacy fixture store
   until fixture ownership is migrated separately.
 - New behavior coverage belongs in `tests/functional/<behavior-package>/`.
