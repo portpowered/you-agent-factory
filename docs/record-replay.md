@@ -38,7 +38,7 @@ The artifact stores:
 
 The `events` array is the same customer-visible timeline served by `/events`: `RUN_REQUEST`, `INITIAL_STRUCTURE_REQUEST`, `WORK_REQUEST`, `RELATIONSHIP_CHANGE_REQUEST` when batch relations exist, `DISPATCH_REQUEST`, `INFERENCE_REQUEST`, `INFERENCE_RESPONSE`, `DISPATCH_RESPONSE`, `FACTORY_STATE_RESPONSE`, and `RUN_RESPONSE` where those events occur in the run.
 
-The `RUN_REQUEST` event embeds the effective runtime configuration used by replay. Current artifacts store each workstation once in the canonical `workstations` map with both scheduling `kind` and runtime executor `type`; replay does not depend on a separate `workstation_configs` map.
+The `RUN_REQUEST` event embeds the effective runtime configuration used by replay. Current artifacts store each workstation once in the canonical `workstations` map with canonical `behavior` and runtime executor `type`; replay does not depend on a separate `workstation_configs` map.
 
 Recordings can contain rendered inference prompts, payloads, command output, provider response text, provider metadata, and environment key names or redaction markers. Treat them as sensitive files. The prompt in `INFERENCE_REQUEST.payload.prompt` is intentional so operators can debug the exact provider attempt, but replay fixtures must still avoid raw command stdin and raw environment values in dispatch diagnostics.
 

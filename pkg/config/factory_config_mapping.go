@@ -34,6 +34,16 @@ type retiredBoundaryField struct {
 	replacement string
 }
 
+var retiredFactoryBoundaryFields = []retiredBoundaryField{
+	{key: "project", replacement: "use id"},
+	{key: "factoryDir", replacement: "use factoryDirectory"},
+	{key: "factory_dir", replacement: "use factoryDirectory"},
+	{key: "resourceManifest", replacement: "use supportingFiles"},
+	{key: "resource_manifest", replacement: "use supportingFiles"},
+	{key: "workflowId", replacement: "remove workflowId"},
+	{key: "workflow_id", replacement: "remove workflowId"},
+}
+
 var retiredWorkerBoundaryFields = []retiredBoundaryField{
 	{key: "provider", replacement: "use executorProvider"},
 	{key: "model_provider", replacement: "use modelProvider"},
@@ -43,6 +53,7 @@ var retiredWorkerBoundaryFields = []retiredBoundaryField{
 }
 
 var retiredWorkstationBoundaryFields = []retiredBoundaryField{
+	{key: "kind", replacement: "use behavior"},
 	{key: "runtimeType", replacement: "use type"},
 	{key: "runtime_type", replacement: "use type"},
 	{key: "resourceUsage", replacement: "use resources"},
@@ -105,6 +116,9 @@ func rejectRetiredGeneratedBoundaryAliases(data []byte) error {
 	var payload map[string]any
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return nil
+	}
+	if err := rejectRetiredBoundaryFields(payload, "factory", retiredFactoryBoundaryFields); err != nil {
+		return err
 	}
 	if err := rejectRetiredWorkerBoundaryAliases(payload); err != nil {
 		return err
@@ -246,6 +260,9 @@ func decodeGeneratedFactoryBoundary(data []byte) (factoryapi.Factory, error) {
 	if err := ensureFactoryBoundaryEOF(decoder); err != nil {
 		return factoryapi.Factory{}, err
 	}
+	if err := validateGeneratedFactoryBoundary(apiCfg); err != nil {
+		return factoryapi.Factory{}, err
+	}
 	return apiCfg, nil
 }
 
@@ -258,6 +275,13 @@ func ensureFactoryBoundaryEOF(decoder *json.Decoder) error {
 		return fmt.Errorf("unmarshal factory api model: %w", err)
 	}
 	return fmt.Errorf("unmarshal factory api model: unexpected trailing JSON value")
+}
+
+func validateGeneratedFactoryBoundary(apiCfg factoryapi.Factory) error {
+	if strings.TrimSpace(string(apiCfg.Name)) == "" {
+		return fmt.Errorf("factory.name is required")
+	}
+	return nil
 }
 
 // Flatten serializes an internal factory configuration into canonical JSON that is
@@ -287,9 +311,9 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		return factoryapi.Factory{}
 	}
 
-	apiCfg := factoryapi.Factory{}
+	apiCfg := factoryapi.Factory{Name: factoryReferenceName(cfg)}
 	if cfg.Project != "" {
-		apiCfg.Project = stringPtr(cfg.Project)
+		apiCfg.Id = stringPtr(cfg.Project)
 	}
 	if len(cfg.InputTypes) > 0 {
 		inputTypes := make([]factoryapi.InputType, len(cfg.InputTypes))
@@ -329,7 +353,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		apiCfg.Resources = &resources
 	}
 	if cfg.ResourceManifest != nil {
-		apiCfg.ResourceManifest = resourceManifestAPIFromInternal(cfg.ResourceManifest)
+		apiCfg.SupportingFiles = resourceManifestAPIFromInternal(cfg.ResourceManifest)
 	}
 	if len(cfg.Workers) > 0 {
 		workers := make([]factoryapi.Worker, len(cfg.Workers))
@@ -348,6 +372,16 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	return apiCfg
 }
 
+func factoryReferenceName(cfg *interfaces.FactoryConfig) factoryapi.FactoryName {
+	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
+		return factoryapi.FactoryName(cfg.Name)
+	}
+	if cfg != nil && strings.TrimSpace(cfg.Project) != "" {
+		return factoryapi.FactoryName(cfg.Project)
+	}
+	return factoryapi.FactoryName("factory")
+}
+
 // FactoryConfigToOpenAPI converts the internal factory config into the generated
 // OpenAPI model without passing through normalized on-disk JSON.
 func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) factoryapi.Factory {
@@ -355,9 +389,9 @@ func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) factoryapi.Factory {
 }
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
-	cfg := interfaces.FactoryConfig{}
-	if apiCfg.Project != nil {
-		cfg.Project = *apiCfg.Project
+	cfg := interfaces.FactoryConfig{Name: string(apiCfg.Name)}
+	if apiCfg.Id != nil {
+		cfg.Project = *apiCfg.Id
 	}
 	if apiCfg.InputTypes != nil {
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
@@ -368,8 +402,8 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	if apiCfg.Resources != nil {
 		cfg.Resources = resourcesInternalFromAPI(*apiCfg.Resources)
 	}
-	if apiCfg.ResourceManifest != nil {
-		cfg.ResourceManifest = resourceManifestInternalFromAPI(apiCfg.ResourceManifest)
+	if apiCfg.SupportingFiles != nil {
+		cfg.ResourceManifest = resourceManifestInternalFromAPI(apiCfg.SupportingFiles)
 	}
 	if apiCfg.Workers != nil {
 		workers, err := workersInternalFromAPI(*apiCfg.Workers)
@@ -575,8 +609,8 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if workstation.Type != nil {
 		cfg.Type = internalFactoryWorkstationTypeFromPublic(workstation.Type)
 	}
-	if workstation.Kind != nil {
-		cfg.Kind = internalFactoryWorkstationKindFromPublic(workstation.Kind)
+	if workstation.Behavior != nil {
+		cfg.Kind = internalFactoryWorkstationKindFromPublic(workstation.Behavior)
 	}
 	return cfg, nil
 }
@@ -644,7 +678,7 @@ func workstationIOInternalFromAPI(cfg factoryapi.WorkstationIO, fieldPath string
 	}, nil
 }
 
-func inputGuardInternalFromAPI(guards *[]factoryapi.InputGuard, fieldPath string) (*interfaces.InputGuardConfig, error) {
+func inputGuardInternalFromAPI(guards *[]factoryapi.Guard, fieldPath string) (*interfaces.InputGuardConfig, error) {
 	if guards == nil || len(*guards) == 0 {
 		return nil, nil
 	}
@@ -653,7 +687,7 @@ func inputGuardInternalFromAPI(guards *[]factoryapi.InputGuard, fieldPath string
 	}
 	guard := (*guards)[0]
 	return &interfaces.InputGuardConfig{
-		Type:        internalFactoryInputGuardTypeFromPublic(guard.Type),
+		Type:        internalFactoryGuardTypeFromPublic(guard.Type),
 		MatchInput:  stringValue(guard.MatchInput),
 		ParentInput: stringValue(guard.ParentInput),
 		SpawnedBy:   stringValue(guard.SpawnedBy),
@@ -674,14 +708,14 @@ func resourceRequirementsInternalFromAPI(resources *[]factoryapi.ResourceRequire
 	return values
 }
 
-func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []interfaces.GuardConfig {
+func workstationGuardsInternalFromAPI(guards *[]factoryapi.Guard) []interfaces.GuardConfig {
 	if guards == nil {
 		return nil
 	}
 	values := make([]interfaces.GuardConfig, len(*guards))
 	for i, guard := range *guards {
 		values[i] = interfaces.GuardConfig{
-			Type:        internalFactoryWorkstationGuardTypeFromPublic(guard.Type),
+			Type:        internalFactoryGuardTypeFromPublic(guard.Type),
 			Workstation: stringValue(guard.Workstation),
 			MaxVisits:   intValue(guard.MaxVisits),
 			MatchConfig: guardMatchConfigInternalFromAPI(guard.MatchConfig),
@@ -690,7 +724,7 @@ func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []i
 	return values
 }
 
-func guardMatchConfigInternalFromAPI(matchConfig *factoryapi.WorkstationGuardMatchConfig) *interfaces.GuardMatchConfig {
+func guardMatchConfigInternalFromAPI(matchConfig *factoryapi.GuardMatchConfig) *interfaces.GuardMatchConfig {
 	if matchConfig == nil {
 		return nil
 	}
@@ -728,8 +762,8 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		apiWorkstation.Id = stringPtr(normalized.ID)
 	}
 	if normalized.Kind != "" {
-		kind := publicFactoryWorkstationKindFromInternal(normalized.Kind)
-		apiWorkstation.Kind = &kind
+		behavior := publicFactoryWorkstationKindFromInternal(normalized.Kind)
+		apiWorkstation.Behavior = &behavior
 	}
 	if normalized.WorkingDirectory != "" {
 		apiWorkstation.WorkingDirectory = stringPtr(normalized.WorkingDirectory)
@@ -886,15 +920,15 @@ func workstationIOAPIFromInternal(cfg interfaces.IOConfig) factoryapi.Workstatio
 		WorkType: cfg.WorkTypeName,
 	}
 	if cfg.Guard != nil {
-		guards := []factoryapi.InputGuard{inputGuardAPIFromInternal(*cfg.Guard)}
+		guards := []factoryapi.Guard{inputGuardAPIFromInternal(*cfg.Guard)}
 		apiIO.Guards = &guards
 	}
 	return apiIO
 }
 
-func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.InputGuard {
-	apiGuard := factoryapi.InputGuard{
-		Type: publicFactoryInputGuardTypeFromInternal(guard.Type),
+func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.Guard {
+	apiGuard := factoryapi.Guard{
+		Type: publicFactoryGuardTypeFromInternal(guard.Type),
 	}
 	if guard.MatchInput != "" {
 		apiGuard.MatchInput = stringPtr(guard.MatchInput)
@@ -922,14 +956,14 @@ func resourceRequirementsAPIFromInternal(resources []interfaces.ResourceConfig) 
 	return &values
 }
 
-func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.WorkstationGuard {
+func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.Guard {
 	if len(guards) == 0 {
 		return nil
 	}
-	values := make([]factoryapi.WorkstationGuard, len(guards))
+	values := make([]factoryapi.Guard, len(guards))
 	for i, guard := range guards {
-		values[i] = factoryapi.WorkstationGuard{
-			Type:        publicFactoryWorkstationGuardTypeFromInternal(guard.Type),
+		values[i] = factoryapi.Guard{
+			Type:        publicFactoryGuardTypeFromInternal(guard.Type),
 			Workstation: stringPtrIfNotEmpty(guard.Workstation),
 			MaxVisits:   intPtrIfNonZero(guard.MaxVisits),
 			MatchConfig: guardMatchConfigAPIFromInternal(guard.MatchConfig),
@@ -938,11 +972,11 @@ func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factor
 	return &values
 }
 
-func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *factoryapi.WorkstationGuardMatchConfig {
+func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *factoryapi.GuardMatchConfig {
 	if matchConfig == nil {
 		return nil
 	}
-	return &factoryapi.WorkstationGuardMatchConfig{
+	return &factoryapi.GuardMatchConfig{
 		InputKey: matchConfig.InputKey,
 	}
 }

@@ -23,6 +23,7 @@ func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 		"payload": map[string]any{
 			"recordedAt": time.Date(2026, 4, 21, 0, 0, 0, 0, time.UTC).Format(time.RFC3339),
 			"factory": map[string]any{
+				"name": "retired-factory-alias-event",
 				"workTypes": []map[string]any{
 					{
 						"name": "story",
@@ -42,9 +43,9 @@ func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 				},
 				"workstations": []map[string]any{
 					{
-						"name":   "scheduled-story",
-						"kind":   "cron",
-						"worker": "executor",
+						"name":     "scheduled-story",
+						"behavior": "CRON",
+						"worker":   "executor",
 						"cron": map[string]any{
 							"schedule":         "*/5 * * * *",
 							"triggerAtStart":   false,
@@ -147,9 +148,9 @@ func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnly
 	factory := &factoryapi.Factory{
 		Workstations: &[]factoryapi.Workstation{
 			{
-				Name:   "alpha",
-				Worker: "stale-worker",
-				Kind:   workstationKindPtr(factoryapi.WorkstationKindCron),
+				Name:     "alpha",
+				Worker:   "stale-worker",
+				Behavior: workstationKindPtr(factoryapi.WorkstationKindCron),
 				Cron: &factoryapi.WorkstationCron{
 					Schedule: "0 * * * *",
 				},
@@ -210,8 +211,8 @@ func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnly
 	if got[0].Name != "alpha" || got[0].Worker != "fresh-worker" {
 		t.Fatalf("merged alpha workstation = %#v, want replaced runtime definition", got[0])
 	}
-	if got[0].Kind == nil || *got[0].Kind != factoryapi.WorkstationKindCron {
-		t.Fatalf("merged alpha kind = %#v, want CRON", got[0].Kind)
+	if got[0].Behavior == nil || *got[0].Behavior != factoryapi.WorkstationKindCron {
+		t.Fatalf("merged alpha behavior = %#v, want CRON", got[0].Behavior)
 	}
 	if got[0].Cron == nil || got[0].Cron.Schedule != "*/5 * * * *" || !boolValue(got[0].Cron.TriggerAtStart) || stringValue(got[0].Cron.ExpiryWindow) != "30s" {
 		t.Fatalf("merged alpha cron = %#v, want runtime cron fields", got[0].Cron)
@@ -243,8 +244,8 @@ func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnly
 	if got[3].Name != "charlie" || got[3].Worker != "charlie-worker" {
 		t.Fatalf("merged charlie workstation = %#v, want second sorted runtime-only append", got[3])
 	}
-	if got[3].Kind == nil || *got[3].Kind != factoryapi.WorkstationKindStandard {
-		t.Fatalf("merged charlie kind = %#v, want STANDARD", got[3].Kind)
+	if got[3].Behavior == nil || *got[3].Behavior != factoryapi.WorkstationKindStandard {
+		t.Fatalf("merged charlie behavior = %#v, want STANDARD", got[3].Behavior)
 	}
 }
 

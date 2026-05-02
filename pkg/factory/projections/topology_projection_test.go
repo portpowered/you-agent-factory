@@ -133,8 +133,8 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsLoadedWorkerMetadata(t *t
 		{
 			ID:            "builder",
 			Name:          "builder",
-			Provider:      "script_wrap",
-			ModelProvider: "codex",
+			Provider:      "codex-cli",
+			ModelProvider: "openai",
 			Model:         "gpt-5.4",
 			Config: map[string]string{
 				"type": interfaces.WorkerTypeModel,
@@ -143,8 +143,8 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsLoadedWorkerMetadata(t *t
 		{
 			ID:            "reviewer",
 			Name:          "reviewer",
-			Provider:      "script_wrap",
-			ModelProvider: "claude",
+			Provider:      "claude-cli",
+			ModelProvider: "anthropic",
 			Model:         "claude-sonnet-4-5",
 			Config: map[string]string{
 				"type": interfaces.WorkerTypeModel,
@@ -329,7 +329,7 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 
 	wantConfig := map[string]string{
 		"configured_worker": "builder",
-		"kind":              string(interfaces.WorkstationKindCron),
+		"behavior":          string(interfaces.WorkstationKindCron),
 		"output_schema":     "schema.json",
 		"prompt_file":       "prompt.md",
 		"type":              interfaces.WorkstationTypeModel,

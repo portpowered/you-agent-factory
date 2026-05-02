@@ -29,14 +29,16 @@ func TestNamedFactoryAPI_DefaultCurrentFactoryReadbackAndImportSwitch(t *testing
 	if current.Name != factoryapi.FactoryName("UNDEFINED") {
 		t.Fatalf("default current factory name = %q, want UNDEFINED", current.Name)
 	}
+	wantCurrent := fixture.GeneratedExportFactor
+	wantCurrent.Name = factoryapi.FactoryName("UNDEFINED")
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(current.Factory),
-		comparableExportImportFactory(fixture.GeneratedExportFactor),
+		comparableExportImportFactory(current),
+		comparableExportImportFactory(wantCurrent),
 	) {
 		t.Fatalf(
 			"default current factory payload drifted from the root runtime contract\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(current.Factory),
-			comparableExportImportFactory(fixture.GeneratedExportFactor),
+			comparableExportImportFactory(current),
+			comparableExportImportFactory(wantCurrent),
 		)
 	}
 
@@ -110,10 +112,9 @@ func TestNamedFactoryAPI_RejectsReservedCurrentFactoryNameOnCreate(t *testing.T)
 	rootDir := testutil.CopyFixtureDir(t, fixtureDir(t, "service_simple"))
 	server := startNamedFactoryTestServer(t, rootDir)
 
-	resp := createNamedFactoryExpectBadRequest(t, server.httpSrv.URL, factoryapi.NamedFactory{
-		Name:    apisurface.DefaultCurrentFactoryName,
-		Factory: convertViaJSON[factoryapi.Factory](t, json.RawMessage(functionalNamedFactoryPayloadJSON("reserved-name", "reserved-task"))),
-	})
+	request := convertViaJSON[factoryapi.Factory](t, json.RawMessage(functionalNamedFactoryPayloadJSON("reserved-name", "reserved-task")))
+	request.Name = apisurface.DefaultCurrentFactoryName
+	resp := createNamedFactoryExpectBadRequest(t, server.httpSrv.URL, request)
 	if string(resp.Code) != "INVALID_FACTORY_NAME" {
 		t.Fatalf("CreateFactoryWithResponse error code = %q, want INVALID_FACTORY_NAME", resp.Code)
 	}
@@ -150,17 +151,17 @@ func startNamedFactoryTestServer(t *testing.T, rootDir string) *FunctionalServer
 	})
 }
 
-func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.NamedFactory {
+func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.Factory {
 	t.Helper()
 
-	var request factoryapi.NamedFactory
+	var request factoryapi.Factory
 	if err := json.Unmarshal([]byte(functionalNamedFactoryBody(name, workType)), &request); err != nil {
 		t.Fatalf("unmarshal named factory request: %v", err)
 	}
 	return createNamedFactory(t, serverURL, request)
 }
 
-func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFactory {
+func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
 	return getCurrentNamedFactory(t, serverURL)
 }
@@ -206,12 +207,13 @@ func functionalNamedFactoryPayloadWithWorkType(t *testing.T, project, workType s
 }
 
 func functionalNamedFactoryBody(name, workType string) string {
-	return `{"name":"` + name + `","factory":` + functionalNamedFactoryPayloadJSON(name, workType) + `}`
+	return `{"name":"` + name + `",` + functionalNamedFactoryPayloadJSON(name, workType)[1:]
 }
 
 func functionalNamedFactoryPayloadJSON(project, workType string) string {
 	return `{
-		"project":"` + project + `",
+		"name":"` + project + `",
+		"id":"` + project + `",
 		"workTypes":[{
 			"name":"` + workType + `",
 			"states":[
@@ -223,13 +225,13 @@ func functionalNamedFactoryPayloadJSON(project, workType string) string {
 		"workers":[{
 			"name":"planner",
 			"type":"MODEL_WORKER",
-			"modelProvider":"claude",
-			"executorProvider":"script_wrap",
+			"modelProvider":"CLAUDE",
+			"executorProvider":"SCRIPT_WRAP",
 			"model":"claude-sonnet-4-20250514"
 		}],
 		"workstations":[{
 			"name":"plan-task",
-			"kind":"STANDARD",
+			"behavior":"STANDARD",
 			"type":"MODEL_WORKSTATION",
 			"worker":"planner",
 			"inputs":[{"workType":"` + workType + `","state":"init"}],

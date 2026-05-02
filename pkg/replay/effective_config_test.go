@@ -23,6 +23,8 @@ import (
 func TestGeneratedFactoryFromLoadedConfig_EmbedsLoadedFactoryAndRuntimeConfig(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "customer-facing-name",
+		"id":   "internal-id",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -82,6 +84,12 @@ Fallback body.
 	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
 		t.Fatalf("generated workstations = %#v, want one", generated.Workstations)
 	}
+	if generated.Name != "customer-facing-name" {
+		t.Fatalf("generated factory name = %q, want customer-facing-name", generated.Name)
+	}
+	if generated.Id == nil || *generated.Id != "internal-id" {
+		t.Fatalf("generated factory id = %#v, want internal-id", generated.Id)
+	}
 	workstation := (*generated.Workstations)[0]
 	if workstation.Name != "execute-story" {
 		t.Fatalf("generated workstation name = %q, want execute-story", workstation.Name)
@@ -124,9 +132,6 @@ Fallback body.
 	if generated.SourceDirectory == nil || *generated.SourceDirectory != factoryDir {
 		t.Fatalf("source directory = %#v, want %q", generated.SourceDirectory, factoryDir)
 	}
-	if generated.WorkflowId == nil || *generated.WorkflowId != "workflow-123" {
-		t.Fatalf("workflow ID = %#v, want workflow-123", generated.WorkflowId)
-	}
 	if generated.Metadata == nil {
 		t.Fatal("expected generated metadata")
 	}
@@ -145,6 +150,7 @@ Fallback body.
 func TestRuntimeConfigFromGeneratedFactory_RebuildsWithoutOriginalFiles(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -225,7 +231,8 @@ Move the token.
 func TestRuntimeConfigFromGeneratedFactory_KeepsCanonicalRelativeExecutionPath(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
-		"project": "agent-factory",
+		"name": "agent-factory",
+		"id":   "agent-factory",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -306,6 +313,7 @@ Work from {{ .Context.WorkDir }}
 func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFactory(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -319,14 +327,14 @@ func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFact
 		"workstations": []map[string]any{{
 			"id":        "execute-story-id",
 			"name":      "execute-story",
-			"kind":      string(interfaces.WorkstationKindStandard),
+			"behavior":  "STANDARD",
 			"worker":    "executor",
 			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
 			"onFailure": map[string]string{"workType": "story", "state": "failed"},
 			"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 			"guards": []map[string]any{{
-				"type":        string(interfaces.GuardTypeVisitCount),
+				"type":        "VISIT_COUNT",
 				"workstation": "execute-story",
 				"maxVisits":   3,
 			}},
@@ -335,8 +343,8 @@ func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFact
 	})
 	writeAgentsMD(t, filepath.Join(factoryDir, "workers", "executor"), `---
 type: MODEL_WORKER
-executorProvider: codex-cli
-modelProvider: openai
+executorProvider: script_wrap
+modelProvider: codex
 model: gpt-5.4
 timeout: 30m
 ---
@@ -431,6 +439,7 @@ Fallback body.
 func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -440,12 +449,12 @@ func TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind(t 
 		}},
 		"workers": []map[string]any{{"name": "executor"}},
 		"workstations": []map[string]any{{
-			"id":      "retry-story-id",
-			"name":    "retry-story",
-			"kind":    "repeater",
-			"worker":  "executor",
-			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
-			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			"id":       "retry-story-id",
+			"name":     "retry-story",
+			"behavior": "REPEATER",
+			"worker":   "executor",
+			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "story", "state": "complete"}},
 		}},
 	})
 	writeAgentsMD(t, filepath.Join(factoryDir, "workers", "executor"), `---
@@ -473,8 +482,8 @@ Retry the work.
 	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
 		t.Fatalf("generated workstations = %#v, want one", generated.Workstations)
 	}
-	if (*generated.Workstations)[0].Kind == nil || *(*generated.Workstations)[0].Kind != factoryapi.WorkstationKindRepeater {
-		t.Fatalf("generated workstation kind = %#v, want REPEATER", (*generated.Workstations)[0].Kind)
+	if (*generated.Workstations)[0].Behavior == nil || *(*generated.Workstations)[0].Behavior != factoryapi.WorkstationKindRepeater {
+		t.Fatalf("generated workstation behavior = %#v, want REPEATER", (*generated.Workstations)[0].Behavior)
 	}
 
 	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
@@ -502,8 +511,8 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesPerInputGuardFanIn(t *testin
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
-	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-complete"), "page", string(factoryapi.InputGuardTypeAllChildrenComplete))
-	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-failed"), "page", string(factoryapi.InputGuardTypeAnyChildFailed))
+	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-complete"), "page", string(factoryapi.GuardTypeAllChildrenComplete))
+	assertGeneratedInputGuard(t, generatedWorkstationByName(t, generated, "chapter-failed"), "page", string(factoryapi.GuardTypeAnyChildFailed))
 	data, err := json.Marshal(generated)
 	if err != nil {
 		t.Fatalf("marshal generated factory: %v", err)
@@ -567,6 +576,7 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesGuardedLoopBreakerRoundTrip(
 func writeGuardedLoopBreakerFactoryJSON(t *testing.T, factoryDir string) {
 	t.Helper()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -590,7 +600,7 @@ func writeGuardedLoopBreakerFactoryJSON(t *testing.T, factoryDir string) {
 				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs": []map[string]string{{"workType": "story", "state": "failed"}},
 				"guards": []map[string]any{{
-					"type":        "visit_count",
+					"type":        "VISIT_COUNT",
 					"workstation": "review-story",
 					"maxVisits":   3,
 				}},
@@ -848,6 +858,7 @@ func assertCanonicalRuntimeDefinitionLookupByName(
 func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 	t.Helper()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "chapter",
@@ -888,7 +899,7 @@ func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 						"workType": "page",
 						"state":    "complete",
 						"guards": []map[string]string{{
-							"type":        string(interfaces.GuardTypeAllChildrenComplete),
+							"type":        "ALL_CHILDREN_COMPLETE",
 							"parentInput": "chapter",
 							"spawnedBy":   "parser",
 						}},
@@ -905,7 +916,7 @@ func writePerInputGuardFanInFactoryJSON(t *testing.T, factoryDir string) {
 						"workType": "page",
 						"state":    "failed",
 						"guards": []map[string]string{{
-							"type":        string(interfaces.GuardTypeAnyChildFailed),
+							"type":        "ANY_CHILD_FAILED",
 							"parentInput": "chapter",
 							"spawnedBy":   "parser",
 						}},

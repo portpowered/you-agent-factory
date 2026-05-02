@@ -211,24 +211,6 @@ interface LegacyFactoryWorkCompat {
   work_type_id?: string;
 }
 
-interface LegacyFactoryDefinitionCompat {
-  work_types?: FactoryWorkType[];
-}
-
-interface LegacyFactoryWorkerCompat {
-  model_provider?: string;
-  provider?: string;
-}
-
-interface LegacyFactoryWorkstationCompat {
-  on_failure?: WorkstationIO;
-  on_rejection?: WorkstationIO;
-}
-
-interface LegacyWorkstationIOCompat {
-  work_type?: string;
-}
-
 export interface FactoryTimelineSnapshot {
   dashboard: DashboardSnapshot;
   relationsByWorkID: Record<string, FactoryRelation[]>;
@@ -343,8 +325,7 @@ function uniqueSorted(values: Array<string | null | undefined>): string[] {
 }
 
 function factoryWorkTypes(factory: FactoryDefinition): FactoryWorkType[] {
-  const legacyFactory = factory as FactoryDefinition & LegacyFactoryDefinitionCompat;
-  return factory.workTypes ?? legacyFactory.work_types ?? [];
+  return factory.workTypes ?? [];
 }
 
 function factoryWorkers(factory: FactoryDefinition): FactoryWorker[] {
@@ -355,34 +336,28 @@ function factoryWorkstations(factory: FactoryDefinition): FactoryWorkstation[] {
   return factory.workstations ?? [];
 }
 
-function ioWorkType(io: { workType?: string; work_type?: string }): string {
-  const legacyIO = io as typeof io & LegacyWorkstationIOCompat;
-  return io.workType ?? legacyIO.work_type ?? "";
+function ioWorkType(io: { workType?: string }): string {
+  return io.workType ?? "";
 }
 
 function workstationFailureIO(
   workstation: FactoryWorkstation,
 ): WorkstationIO | undefined {
-  const legacyWorkstation =
-    workstation as FactoryWorkstation & LegacyFactoryWorkstationCompat;
-  return workstation.onFailure ?? legacyWorkstation.on_failure;
+  return workstation.onFailure;
 }
 
 function workstationRejectionIO(
   workstation: FactoryWorkstation,
 ): WorkstationIO | undefined {
-  const legacyWorkstation =
-    workstation as FactoryWorkstation & LegacyFactoryWorkstationCompat;
-  return workstation.onRejection ?? legacyWorkstation.on_rejection;
+  return workstation.onRejection;
 }
 
 function workstationSchedulingKind(workstation: FactoryWorkstation): string | undefined {
-  return workstation.kind ?? workstation.type;
+  return workstation.behavior ?? workstation.type;
 }
 
 function workerModelProvider(worker: FactoryWorker | undefined): string | undefined {
-  const legacyWorker = worker as (FactoryWorker & LegacyFactoryWorkerCompat) | undefined;
-  return worker?.modelProvider ?? legacyWorker?.model_provider;
+  return worker?.modelProvider;
 }
 
 interface RelationKeyFields {
@@ -845,9 +820,7 @@ function normalizeFactoryPayload(
       model: worker.model,
       model_provider: workerModelProvider(worker),
       name: worker.name,
-      provider:
-        (worker as FactoryWorker & LegacyFactoryWorkerCompat).provider ??
-        worker.executorProvider,
+      provider: worker.executorProvider,
     })),
     work_types: workTypes,
     workstations: factoryWorkstations(factory)
@@ -904,7 +877,7 @@ function projectWorkstationTopology(
   };
 }
 
-function placeIDFromIO(io: { state: string; workType?: string; work_type?: string }): string {
+function placeIDFromIO(io: { state: string; workType?: string }): string {
   return placeID(ioWorkType(io), io.state);
 }
 
@@ -912,7 +885,7 @@ function placeID(workTypeID: string, state: string): string {
   return `${workTypeID}:${state}`;
 }
 
-function isPublicWorkstationIO(io: { workType?: string; work_type?: string }): boolean {
+function isPublicWorkstationIO(io: { workType?: string }): boolean {
   return !isSystemTimeWorkType(ioWorkType(io));
 }
 
@@ -1275,11 +1248,7 @@ function applyRequest(state: WorldState, event: DispatchRequestEvent): void {
       : legacyPayload.previous_chaining_trace_ids
         ? [...legacyPayload.previous_chaining_trace_ids]
       : undefined,
-    provider:
-      (legacyPayload.worker as (FactoryWorker & LegacyFactoryWorkerCompat) | undefined)
-        ?.provider ??
-      legacyPayload.worker?.executorProvider ??
-      worker?.provider,
+    provider: legacyPayload.worker?.executorProvider ?? worker?.provider,
     resources: consumeResourceUnits(state, event.payload.resources),
     startedAt: event.context.eventTime,
     systemOnly:

@@ -1,5 +1,6 @@
 {
-  "project": "ralph-loop-fixture",
+  "name": "ralph-loop-fixture",
+  "id": "ralph-loop-fixture",
   "workTypes": [
     {
       "name": "story",
@@ -47,7 +48,7 @@
           "workType": "story"
         }
       ],
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "name": "executor",
       "onFailure": {
         "state": "failed",
@@ -94,7 +95,7 @@
       "guards": [
         {
           "maxVisits": 3,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "reviewer"
         }
       ],
@@ -116,3 +117,4 @@
     }
   ]
 }
+

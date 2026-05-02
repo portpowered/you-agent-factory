@@ -16,6 +16,7 @@ import (
 // portos:func-length-exception owner=agent-factory reason=topology-projection-functional-smoke review=2026-07-18 removal=split-live-stream-replay-config-and-projection-assertions-before-next-topology-projection-change
 func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testing.T) {
 	dir := scaffoldFactory(t, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -35,7 +36,7 @@ func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testi
 			"onFailure": map[string]string{"workType": "task", "state": "failed"},
 			"resources": []map[string]any{{"name": "executor-slot", "capacity": 1}},
 			"guards": []map[string]any{{
-				"type":        "visit_count",
+				"type":        "VISIT_COUNT",
 				"workstation": "process-task",
 				"maxVisits":   3,
 			}},
@@ -44,8 +45,8 @@ func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testi
 	})
 	writeAgentConfig(t, dir, "executor", `---
 type: MODEL_WORKER
-executorProvider: codex-cli
-modelProvider: openai
+executorProvider: script_wrap
+modelProvider: codex
 model: gpt-5.4
 timeout: 30m
 stopToken: COMPLETE
@@ -84,8 +85,8 @@ Process {{ (index .Inputs 0).WorkID }}.
 	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{
 		ID:            "executor",
 		Name:          "executor",
-		Provider:      "script_wrap",
-		ModelProvider: "codex",
+		Provider:      "SCRIPT_WRAP",
+		ModelProvider: "CODEX",
 		Model:         "gpt-5.4",
 		Config:        map[string]string{"type": interfaces.WorkerTypeModel},
 	})

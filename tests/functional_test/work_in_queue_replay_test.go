@@ -188,6 +188,7 @@ func workInProgressPriorityFixture(t *testing.T) string {
 
 	dir := t.TempDir()
 	factoryJSON := `{
+  "name": "work-in-progress-priority-fixture",
   "workTypes": [
     {
       "name": "task",
@@ -240,6 +241,7 @@ func schedulerPrioritySmokeFixture(t *testing.T) string {
 
 func schedulerPrioritySmokeConfig() map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{"name": "task", "states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
@@ -275,7 +277,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 			},
 			{
 				"name":      "zzz-cron-initial",
-				"kind":      "cron",
+				"behavior":  "CRON",
 				"worker":    "cron-worker",
 				"cron":      map[string]string{"schedule": "0 * * * *", "expiryWindow": "2h"},
 				"inputs":    []map[string]string{{"workType": "scheduled", "state": "init"}},

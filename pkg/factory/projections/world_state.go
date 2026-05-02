@@ -1219,7 +1219,7 @@ func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEve
 			ID:                id,
 			Name:              workstation.Name,
 			WorkerID:          workstation.Worker,
-			Kind:              workstationKindString(workstation.Kind),
+			Kind:              workstationKindString(workstation.Behavior),
 			Config:            nilIfEmptyStringMap(config),
 			InputPlaceIDs:     placeIDsFromGeneratedIOs(workstation.Inputs),
 			OutputPlaceIDs:    placeIDsFromGeneratedIOs(workstation.Outputs),
@@ -1230,6 +1230,7 @@ func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEve
 	}
 
 	return interfaces.InitialStructurePayload{
+		Name:         string(factoryPayload.Name),
 		Resources:    resources,
 		Workers:      workers,
 		WorkTypes:    workTypes,

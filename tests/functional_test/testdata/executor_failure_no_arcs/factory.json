@@ -1,4 +1,5 @@
 {
+  "name": "executor_failure_no_arcs",
   "workTypes": [
     {
       "name": "task",
@@ -42,3 +43,4 @@
     }
   ]
 }
+

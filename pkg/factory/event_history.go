@@ -474,11 +474,19 @@ func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Fac
 	workstations := generatedWorkstations(payload.Workstations, payload.Places)
 
 	return factoryapi.Factory{
+		Name:         generatedFactoryName(payload.Name),
 		Resources:    slicePtr(resources),
 		WorkTypes:    slicePtr(workTypes),
 		Workers:      slicePtr(workers),
 		Workstations: slicePtr(workstations),
 	}
+}
+
+func generatedFactoryName(name string) factoryapi.FactoryName {
+	if strings.TrimSpace(name) == "" {
+		return "factory"
+	}
+	return factoryapi.FactoryName(name)
 }
 
 func generatedResources(resources []interfaces.FactoryResource) []factoryapi.Resource {
@@ -566,7 +574,7 @@ func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places 
 			OnFailure:   generatedWorkstationIOPtr(workstation.FailurePlaceIDs, placesByID),
 		}
 		if workstation.Kind != "" {
-			converted.Kind = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
+			converted.Behavior = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
 		}
 		out = append(out, converted)
 	}

@@ -1,4 +1,5 @@
 {
+  "name": "review_retry_exhaustion",
   "workTypes": [
     {
       "name": "code-change",
@@ -79,7 +80,7 @@
       "guards": [
         {
           "maxVisits": 3,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review"
         }
       ],
@@ -101,3 +102,4 @@
     }
   ]
 }
+

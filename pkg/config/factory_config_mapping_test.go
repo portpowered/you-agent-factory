@@ -13,6 +13,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	mapper := NewFactoryConfigMapper()
 
 	original := &interfaces.FactoryConfig{
+		Name:    "customer-facing-name",
 		Project: "sample-service",
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{
@@ -65,6 +66,9 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 	if expanded.Project != original.Project {
 		t.Fatalf("expected project %q, got %q", original.Project, expanded.Project)
 	}
+	if expanded.Name != original.Name {
+		t.Fatalf("expected name %q, got %q", original.Name, expanded.Name)
+	}
 
 	if len(expanded.WorkTypes) != len(original.WorkTypes) {
 		t.Fatalf("expected %d work types, got %d", len(original.WorkTypes), len(expanded.WorkTypes))
@@ -96,7 +100,8 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
-		"project": "analytics-platform",
+		"name": "analytics-factory",
+		"id": "analytics-platform",
 		"inputTypes": [{"name":"default","type":"DEFAULT"}],
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
@@ -104,7 +109,7 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 		"workstations": [{
 			"id":"execute-story-id",
 			"name":"execute-story",
-			"kind":"CRON",
+			"behavior":"CRON",
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}],
@@ -122,7 +127,10 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 		t.Fatalf("expected one parsed work type named story, got %#v", cfg.WorkTypes)
 	}
 	if cfg.Project != "analytics-platform" {
-		t.Fatalf("expected project analytics-platform, got %q", cfg.Project)
+		t.Fatalf("expected id analytics-platform to map to project, got %q", cfg.Project)
+	}
+	if cfg.Name != "analytics-factory" {
+		t.Fatalf("expected name analytics-factory to map through boundary, got %q", cfg.Name)
 	}
 
 	if cfg.Workstations[0].ID != "execute-story-id" {
@@ -176,7 +184,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredExhaustionRulesWithMigrationGui
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"execute-story",
-			"kind":"repeater",
+			"behavior":"REPEATER",
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"init"}]
@@ -252,8 +260,8 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 	mapper := NewFactoryConfigMapper()
 
 	legacy := []byte(`{
-		"project": "analytics-platform",
-		"inputTypes": [{"name":"default","type":"default"}],
+		"id": "analytics-platform",
+		"inputTypes": [{"name":"default","type":"DEFAULT"}],
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{
@@ -265,7 +273,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 		"workstations": [{
 			"id":"execute-story-id",
 			"name":"execute-story",
-			"kind":"CRON",
+			"behavior":"CRON",
 			"type":"MODEL_WORKSTATION",
 			"worker":"executor",
 			"promptFile":"prompt.md",
@@ -279,10 +287,10 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 			"cron":{"schedule":"*/10 * * * *","triggerAtStart":true,"expiryWindow":"20s"},
 			"inputs":[
 				{"workType":"story","state":"init"},
-				{"workType":"story","state":"complete","guards":[{"type":"all_children_complete","parentInput":"story","spawnedBy":"fanout"}]}
+				{"workType":"story","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"story","spawnedBy":"fanout"}]}
 			],
 			"outputs":[{"workType":"story","state":"complete"}],
-			"guards":[{"type":"visit_count","workstation":"execute-story","maxVisits":3}]
+			"guards":[{"type":"VISIT_COUNT","workstation":"execute-story","maxVisits":3}]
 		}]
 	}`)
 
@@ -389,7 +397,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredNestedWorkstationCronAliases(t 
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"CRON",
 			"worker":"executor",
 			"definition":{
 				"cron":{"trigger_at_start":true}
@@ -535,7 +543,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredCronIntervalField(t *testing.T)
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"CRON",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}
@@ -585,6 +593,7 @@ func TestFactoryConfigMapper_ExpandPreservesPerInputGuard(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"per-input-guard-test",
 		"workTypes": [
 			{"name":"request","states":[{"name":"waiting","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]},
 			{"name":"page","states":[{"name":"complete","type":"TERMINAL"}]}
@@ -595,7 +604,7 @@ func TestFactoryConfigMapper_ExpandPreservesPerInputGuard(t *testing.T) {
 			"worker":"collect-worker",
 			"inputs":[
 				{"workType":"request","state":"waiting"},
-				{"workType":"page","state":"complete","guards":[{"type":"all_children_complete","parentInput":"request","spawnedBy":"splitter"}]}
+				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"request","spawnedBy":"splitter"}]}
 			],
 			"outputs":[{"workType":"request","state":"complete"}]
 		}]
@@ -619,6 +628,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesSameNamePerInputGuard(t *t
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"same-name-guard-test",
 		"workTypes": [
 			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
 			{"name":"taskItem","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
@@ -629,7 +639,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesSameNamePerInputGuard(t *t
 			"worker":"matcher",
 			"inputs":[
 				{"workType":"planItem","state":"ready"},
-				{"workType":"taskItem","state":"ready","guards":[{"type":"same_name","matchInput":"planItem"}]}
+				{"workType":"taskItem","state":"ready","guards":[{"type":"SAME_NAME","matchInput":"planItem"}]}
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
@@ -674,6 +684,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesMatchesFieldsWorkstationGu
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"matches-fields-guard-test",
 		"workTypes": [
 			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
 		],
@@ -683,7 +694,7 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesMatchesFieldsWorkstationGu
 			"worker":"matcher",
 			"inputs":[{"workType":"asset","state":"ready"}],
 			"outputs":[{"workType":"asset","state":"matched"}],
-			"guards":[{"type":"matches_fields","matchConfig":{"inputKey":".Name"}}]
+			"guards":[{"type":"MATCHES_FIELDS","matchConfig":{"inputKey":".Name"}}]
 		}]
 	}`)
 
@@ -762,12 +773,13 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"inline-runtime-definitions-test",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
 			"type":"MODEL_WORKER",
 			"model":"claude-sonnet-4-20250514",
-			"modelProvider":"claude",
+			"modelProvider":"CLAUDE",
 			"stopToken":"COMPLETE",
 			"body":"You are the executor."
 		}],
@@ -858,6 +870,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesPortableResourceManifest(t
 
 func portableResourceManifestMapperFixture() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
+		Name: "portable-resource-manifest-test",
 		WorkTypes: []interfaces.WorkTypeConfig{{
 			Name: "story",
 			States: []interfaces.StateConfig{
@@ -908,9 +921,9 @@ func portableResourceManifestMapperFixture() *interfaces.FactoryConfig {
 func assertFlattenedPortableResourceManifestPayload(t *testing.T, payload map[string]any) {
 	t.Helper()
 
-	resourceManifest, ok := payload["resourceManifest"].(map[string]any)
+	resourceManifest, ok := payload["supportingFiles"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected canonical payload to include resourceManifest, got %#v", payload["resourceManifest"])
+		t.Fatalf("expected canonical payload to include supportingFiles, got %#v", payload["supportingFiles"])
 	}
 	requiredTools, ok := resourceManifest["requiredTools"].([]any)
 	if !ok || len(requiredTools) != 1 {
@@ -988,11 +1001,12 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"canonical-workstation-kind-test",
 		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"CRON",
 			"type":"MODEL_WORKSTATION",
 			"worker":"executor",
 			"inputs":[{"workType":"task","state":"ready"}],
@@ -1026,6 +1040,7 @@ func TestFactoryConfigMapper_FlattenRoundTripsCopyReferencedScriptsAsCanonicalCa
 	mapper := NewFactoryConfigMapper()
 
 	raw := []byte(`{
+		"name":"copy-referenced-scripts-test",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{

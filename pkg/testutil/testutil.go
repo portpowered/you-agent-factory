@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -188,7 +189,15 @@ func seedPayload(payload []byte) any {
 func ScaffoldFactoryDir(t *testing.T, cfg *interfaces.FactoryConfig) string {
 	t.Helper()
 	dir := t.TempDir()
-	data, err := factoryconfig.MarshalCanonicalFactoryConfig(cfg)
+	clone := *cfg
+	if strings.TrimSpace(clone.Name) == "" {
+		if strings.TrimSpace(clone.Project) != "" {
+			clone.Name = clone.Project
+		} else {
+			clone.Name = filepath.Base(dir)
+		}
+	}
+	data, err := factoryconfig.MarshalCanonicalFactoryConfig(&clone)
 	if err != nil {
 		t.Fatalf("ScaffoldFactoryDir: marshal config: %v", err)
 	}

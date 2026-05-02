@@ -28,7 +28,7 @@ func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (*EmbeddedR
 
 	runtimeCfg := &EmbeddedRuntimeConfig{
 		Factory:          factoryCopy,
-		FactoryDirPath:   stringValue(generated.FactoryDir),
+		FactoryDirPath:   stringValue(generated.FactoryDirectory),
 		WorkerConfigs:    make(map[string]*interfaces.WorkerConfig),
 		Workstations:     make(map[string]*interfaces.FactoryWorkstationConfig),
 		WorkersByID:      make(map[string]*interfaces.WorkerConfig),
@@ -107,10 +107,9 @@ func generatedFactoryHasConfig(generated factoryapi.Factory) bool {
 		generated.Workers != nil ||
 		generated.Workstations != nil ||
 		generated.InputTypes != nil ||
-		generated.Project != nil ||
-		generated.FactoryDir != nil ||
+		generated.Id != nil ||
+		generated.FactoryDirectory != nil ||
 		generated.SourceDirectory != nil ||
-		generated.WorkflowId != nil ||
 		generated.Metadata != nil
 }
 

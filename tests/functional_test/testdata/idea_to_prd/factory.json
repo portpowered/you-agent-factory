@@ -1,4 +1,5 @@
 {
+  "name": "idea_to_prd",
   "workTypes": [
     {
       "name": "idea",
@@ -82,3 +83,4 @@
     }
   ]
 }
+

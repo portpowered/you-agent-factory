@@ -87,9 +87,8 @@ func GeneratedFactoryFromRuntimeConfig(factoryDir string, factoryCfg *interfaces
 	if err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("inline runtime factory config: %w", err)
 	}
-	generated.FactoryDir = stringPtrIfNotEmpty(factoryDir)
+	generated.FactoryDirectory = stringPtrIfNotEmpty(factoryDir)
 	generated.SourceDirectory = stringPtrIfNotEmpty(options.sourceDirectory)
-	generated.WorkflowId = stringPtrIfNotEmpty(options.workflowID)
 	generated.Metadata = generatedStringMapPtr(generatedFactoryMetadata(
 		factoryWithRuntime,
 		workers,

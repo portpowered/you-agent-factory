@@ -10,6 +10,7 @@ type FactoryEventStream struct {
 
 // InitialStructurePayload describes the topology available before work moves.
 type InitialStructurePayload struct {
+	Name         string               `json:"name,omitempty"`
 	Resources    []FactoryResource    `json:"resources,omitempty"`
 	Constraints  []FactoryConstraint  `json:"constraints,omitempty"`
 	Workers      []FactoryWorker      `json:"workers,omitempty"`

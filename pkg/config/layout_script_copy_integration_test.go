@@ -221,7 +221,9 @@ func portableWorkDispatch() interfaces.WorkDispatch {
 
 func writePortableFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	t.Helper()
-
+	if _, ok := cfg["name"]; !ok {
+		cfg["name"] = filepath.Base(factoryDir)
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal factory.json: %v", err)

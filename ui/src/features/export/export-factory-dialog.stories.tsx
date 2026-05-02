@@ -2,11 +2,9 @@ import { expect, fireEvent, within } from "storybook/test";
 
 import { ExportFactoryDialog } from "./export-factory-dialog";
 
-const namedFactory = {
-  factory: {
-    workspaces: {},
-  },
+const factory = {
   name: "Factory Aurora",
+  workspaces: {},
 } as const;
 
 export default {
@@ -16,9 +14,9 @@ export default {
 
 export const Ready = {
   args: {
+    factory,
     initialFactoryName: "Factory Aurora",
     isOpen: true,
-    namedFactory,
     onClose: () => {},
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -35,9 +33,9 @@ export const Ready = {
 
 export const Validation = {
   args: {
+    factory,
     initialFactoryName: "",
     isOpen: true,
-    namedFactory,
     onClose: () => {},
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -53,10 +51,10 @@ export const Validation = {
 
 export const Preparing = {
   args: {
+    factory,
     initialFactoryName: "Factory Aurora",
     isOpen: true,
     isPreparing: true,
-    namedFactory,
     onClose: () => {},
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {

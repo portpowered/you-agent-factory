@@ -47,8 +47,8 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 		t.Fatalf("Workers = %#v, want one runtime worker", payload.Factory.Workers)
 	}
 	worker := (*payload.Factory.Workers)[0]
-	if worker.Name != "builder" || stringValueForEventHistoryTest(worker.ExecutorProvider) != "script_wrap" ||
-		stringValueForEventHistoryTest(worker.ModelProvider) != "codex" ||
+	if worker.Name != "builder" || stringValueForEventHistoryTest(worker.ExecutorProvider) != "SCRIPT_WRAP" ||
+		stringValueForEventHistoryTest(worker.ModelProvider) != "CODEX" ||
 		stringValueForEventHistoryTest(worker.Type) != string(factoryapi.WorkerTypeModelWorker) ||
 		stringValueForEventHistoryTest(worker.Model) != "gpt-5.4" {
 		t.Fatalf("worker metadata = %#v, want runtime-config provider/model metadata", worker)
@@ -114,16 +114,16 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 		t.Fatalf("workstations = %#v, want one generated workstation", payload.Factory.Workstations)
 	}
 	workstation := (*payload.Factory.Workstations)[0]
-	if workstation.Kind == nil || *workstation.Kind != factoryapi.WorkstationKindRepeater {
-		t.Fatalf("workstation kind = %#v, want REPEATER", workstation.Kind)
+	if workstation.Behavior == nil || *workstation.Behavior != factoryapi.WorkstationKindRepeater {
+		t.Fatalf("workstation behavior = %#v, want REPEATER", workstation.Behavior)
 	}
 
 	data, err := json.Marshal(events[0])
 	if err != nil {
 		t.Fatalf("marshal initial structure event: %v", err)
 	}
-	if !strings.Contains(string(data), `"kind":"REPEATER"`) {
-		t.Fatalf("initial structure event JSON = %s, want canonical uppercase workstation kind", data)
+	if !strings.Contains(string(data), `"behavior":"REPEATER"`) {
+		t.Fatalf("initial structure event JSON = %s, want canonical uppercase workstation behavior", data)
 	}
 }
 

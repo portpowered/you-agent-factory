@@ -80,12 +80,12 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	workstationKind := factoryapi.WorkstationKindCron
 	workstationRuntimeType := factoryapi.WorkstationTypeModelWorkstation
 	workstation := factoryapi.Workstation{
-		Name:    "daily-refresh",
-		Kind:    &workstationKind,
-		Type:    &workstationRuntimeType,
-		Worker:  "agent",
-		Inputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-		Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+		Name:     "daily-refresh",
+		Behavior: &workstationKind,
+		Type:     &workstationRuntimeType,
+		Worker:   "agent",
+		Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
+		Outputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 	workRequest := factoryapi.WorkRequest{
 		RequestId:              requestID,
@@ -96,16 +96,16 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	}
 	submitResponse := factoryapi.SubmitWorkResponse{TraceId: "trace-1"}
 	upsertResponse := factoryapi.UpsertWorkRequestResponse{RequestId: requestID, TraceId: "trace-1"}
-	namedFactory := factoryapi.NamedFactory{
-		Name:    factoryapi.FactoryName("customer-support-triage"),
-		Factory: factoryapi.Factory{Workstations: &[]factoryapi.Workstation{workstation}},
+	namedFactory := factoryapi.Factory{
+		Name:         factoryapi.FactoryName("customer-support-triage"),
+		Workstations: &[]factoryapi.Workstation{workstation},
 	}
 	triggerAtStart := true
 	cron := factoryapi.WorkstationCron{
 		Schedule:       "*/5 * * * *",
 		TriggerAtStart: &triggerAtStart,
 	}
-	if submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Factory.Workstations == nil || workstation.Kind == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
 	if submitRequest.CurrentChainingTraceId == nil || *submitRequest.CurrentChainingTraceId != "chain-submit-1" {
@@ -132,7 +132,7 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	}
 }
 
-func TestGeneratedNamedFactoryContractsCompileAndRoundTrip(t *testing.T) {
+func TestGeneratedFactoryContractsCompileAndRoundTrip(t *testing.T) {
 	namedFactory := generatedNamedFactoryFixture()
 
 	assertGeneratedNamedFactoryContracts(t, namedFactory)
@@ -141,38 +141,36 @@ func TestGeneratedNamedFactoryContractsCompileAndRoundTrip(t *testing.T) {
 	assertGeneratedCurrentFactoryNotFoundJSON(t)
 }
 
-func generatedNamedFactoryFixture() factoryapi.NamedFactory {
-	return factoryapi.NamedFactory{
+func generatedNamedFactoryFixture() factoryapi.Factory {
+	return factoryapi.Factory{
 		Name: "customer-support-triage",
-		Factory: factoryapi.Factory{
-			WorkTypes: &[]factoryapi.WorkType{{
-				Name: "task",
-				States: []factoryapi.WorkState{
-					{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
-					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
-				},
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "task",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Name:             "planner",
+			Type:             workerTypePtr(factoryapi.WorkerTypeModelWorker),
+			ModelProvider:    workerModelProviderPtr(factoryapi.WorkerModelProviderClaude),
+			ExecutorProvider: workerProviderPtr(factoryapi.WorkerProviderScriptWrap),
+			Model:            stringPtr("claude-sonnet-4-20250514"),
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "plan-task",
+			Worker: "planner",
+			Inputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
+			Outputs: []factoryapi.WorkstationIO{{
+				WorkType: "task",
+				State:    "done",
 			}},
-			Workers: &[]factoryapi.Worker{{
-				Name:             "planner",
-				Type:             workerTypePtr(factoryapi.WorkerTypeModelWorker),
-				ModelProvider:    workerModelProviderPtr(factoryapi.WorkerModelProviderClaude),
-				ExecutorProvider: workerProviderPtr(factoryapi.WorkerProviderScriptWrap),
-				Model:            stringPtr("claude-sonnet-4-20250514"),
-			}},
-			Workstations: &[]factoryapi.Workstation{{
-				Name:   "plan-task",
-				Worker: "planner",
-				Inputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
-				Outputs: []factoryapi.WorkstationIO{{
-					WorkType: "task",
-					State:    "done",
-				}},
-			}},
-		},
+		}},
 	}
 }
 
-func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.NamedFactory) {
+func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.Factory) {
 	t.Helper()
 
 	createRequest := factoryapi.CreateFactoryJSONRequestBody(namedFactory)
@@ -188,10 +186,10 @@ func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.
 		Message: "factory already exists",
 	}
 
-	if createRequest.Name == "" || createRequest.Factory.WorkTypes == nil || createRequest.Factory.Workers == nil || createRequest.Factory.Workstations == nil {
+	if createRequest.Name == "" || createRequest.WorkTypes == nil || createRequest.Workers == nil || createRequest.Workstations == nil {
 		t.Fatal("generated named-factory request and response types should be usable")
 	}
-	if current.Name == "" || current.Factory.Workstations == nil {
+	if current.Name == "" || current.Workstations == nil {
 		t.Fatal("generated current named-factory response type should be usable")
 	}
 	if badRequest.Code != factoryapi.INVALIDFACTORYNAME || badRequest.Family != factoryapi.ErrorFamilyBadRequest {
@@ -202,7 +200,7 @@ func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.
 	}
 }
 
-func assertGeneratedNamedFactoryJSONRoundTrip(t *testing.T, namedFactory factoryapi.NamedFactory) {
+func assertGeneratedNamedFactoryJSONRoundTrip(t *testing.T, namedFactory factoryapi.Factory) {
 	t.Helper()
 
 	encoded, err := json.Marshal(namedFactory)
@@ -212,43 +210,40 @@ func assertGeneratedNamedFactoryJSONRoundTrip(t *testing.T, namedFactory factory
 	if !strings.Contains(string(encoded), `"name":"customer-support-triage"`) {
 		t.Fatalf("generated NamedFactory JSON missing canonical name field: %s", encoded)
 	}
-	if !strings.Contains(string(encoded), `"factory"`) {
-		t.Fatalf("generated NamedFactory JSON missing canonical factory field: %s", encoded)
-	}
 	if strings.Contains(string(encoded), `"factory_name"`) {
 		t.Fatalf("generated NamedFactory JSON contains unexpected legacy field: %s", encoded)
 	}
 
-	var roundTripped factoryapi.NamedFactory
+	var roundTripped factoryapi.Factory
 	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
 		t.Fatalf("unmarshal generated NamedFactory: %v", err)
 	}
 	if roundTripped.Name != namedFactory.Name {
 		t.Fatalf("round-tripped named factory name = %q, want %q", roundTripped.Name, namedFactory.Name)
 	}
-	if roundTripped.Factory.Workstations == nil || len(*roundTripped.Factory.Workstations) != 1 || (*roundTripped.Factory.Workstations)[0].Worker != "planner" {
-		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Factory.Workstations)
+	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
+		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)
 	}
 }
 
-func assertGeneratedReservedCurrentFactoryJSONRoundTrip(t *testing.T, namedFactory factoryapi.NamedFactory) {
+func assertGeneratedReservedCurrentFactoryJSONRoundTrip(t *testing.T, namedFactory factoryapi.Factory) {
 	t.Helper()
 
 	namedFactory.Name = "UNDEFINED"
 	encoded, err := json.Marshal(namedFactory)
 	if err != nil {
-		t.Fatalf("marshal generated current NamedFactory: %v", err)
+		t.Fatalf("marshal generated current Factory: %v", err)
 	}
 	if !strings.Contains(string(encoded), `"name":"UNDEFINED"`) {
-		t.Fatalf("generated current NamedFactory JSON missing reserved current-factory name: %s", encoded)
+		t.Fatalf("generated current Factory JSON missing reserved current-factory name: %s", encoded)
 	}
 
-	var roundTripped factoryapi.NamedFactory
+	var roundTripped factoryapi.Factory
 	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
-		t.Fatalf("unmarshal generated current NamedFactory: %v", err)
+		t.Fatalf("unmarshal generated current Factory: %v", err)
 	}
 	if roundTripped.Name != "UNDEFINED" {
-		t.Fatalf("round-tripped current named factory name = %q, want %q", roundTripped.Name, "UNDEFINED")
+		t.Fatalf("round-tripped current factory name = %q, want %q", roundTripped.Name, "UNDEFINED")
 	}
 }
 
@@ -311,7 +306,7 @@ func TestGeneratedFactoryEventContractsCompile(t *testing.T) {
 			Context:       factoryapi.FactoryEventContext{Sequence: 0, Tick: 0, EventTime: eventTime},
 			Payload: factoryEventPayload(t, factoryapi.RunRequestEventPayload{
 				RecordedAt: eventTime,
-				Factory:    factoryapi.Factory{},
+				Factory:    factoryapi.Factory{Name: "factory"},
 				WallClock:  &factoryapi.WallClock{StartedAt: &eventTime},
 			}),
 		},
@@ -321,7 +316,7 @@ func TestGeneratedFactoryEventContractsCompile(t *testing.T) {
 			Type:          factoryapi.FactoryEventTypeInitialStructureRequest,
 			Context:       factoryapi.FactoryEventContext{Sequence: 1, Tick: 0, EventTime: eventTime},
 			Payload: factoryEventPayload(t, factoryapi.InitialStructureRequestEventPayload{
-				Factory: factoryapi.Factory{},
+				Factory: factoryapi.Factory{Name: "factory"},
 			}),
 		},
 		{
@@ -785,6 +780,7 @@ func TestGeneratedFactoryEventJSONRoundTripPreservesRunRequestFactoryConfig(t *t
 		Payload: factoryEventPayload(t, factoryapi.RunRequestEventPayload{
 			RecordedAt: eventTime,
 			Factory: factoryapi.Factory{
+				Name:     "factory",
 				Metadata: &metadata,
 				WorkTypes: &[]factoryapi.WorkType{{
 					Name: "task",

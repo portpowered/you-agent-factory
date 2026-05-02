@@ -59,6 +59,7 @@ func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 // pipeline: task:init → task:complete (with task:failed for failures).
 func simplePipelineConfig() map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -88,6 +89,7 @@ func simplePipelineConfig() map[string]any {
 // task:init → task:processing → task:complete.
 func twoStagePipelineConfig() map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",

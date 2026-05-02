@@ -33,7 +33,7 @@ Choose the submitted relation this way:
 
 | If you need | Use | Why |
 |-------------|-----|-----|
-| Child membership under one parent for parent-aware guards such as `any_child_failed` or `all_children_complete` | `PARENT_CHILD` | It records parent lineage on the child token. |
+| Child membership under one parent for parent-aware guards such as `ANY_CHILD_FAILED` or `ALL_CHILDREN_COMPLETE` | `PARENT_CHILD` | It records parent lineage on the child token. |
 | One sibling work item to wait for another sibling work item | `DEPENDS_ON` | It only blocks dispatch ordering; it does not create parent lineage. |
 
 `DEPENDS_ON` and `PARENT_CHILD` can appear in the same submitted batch, but
@@ -56,7 +56,7 @@ input it should match against:
   "state": "complete",
   "guards": [
     {
-      "type": "all_children_complete",
+      "type": "ALL_CHILDREN_COMPLETE",
       "parentInput": "story",
       "spawnedBy": "split-story"
     }
@@ -133,12 +133,12 @@ Use these surfaces this way:
 
 Submitted `PARENT_CHILD` batches are enough to create parent lineage for
 parent-aware matching. That is the key requirement for routes such as
-`any_child_failed`.
+`ANY_CHILD_FAILED`.
 
-`all_children_complete` needs one more detail: the runtime must know how many
+`ALL_CHILDREN_COMPLETE` needs one more detail: the runtime must know how many
 children count toward completion. Use `spawnedBy` when a splitter workstation
 discovers children at runtime and emits the fanout-count token. For submitted
-batches with no splitter, use `all_children_complete` only when some other part
+batches with no splitter, use `ALL_CHILDREN_COMPLETE` only when some other part
 of the topology already makes the expected child set explicit; otherwise the
 guard cannot tell "all known children are complete" from "more children have
 not arrived yet."
@@ -168,7 +168,7 @@ children:
       "state": "failed",
       "guards": [
         {
-          "type": "any_child_failed",
+          "type": "ANY_CHILD_FAILED",
           "parentInput": "story-set"
         }
       ]
@@ -197,7 +197,7 @@ has reached the child complete state:
       "state": "complete",
       "guards": [
         {
-          "type": "all_children_complete",
+          "type": "ALL_CHILDREN_COMPLETE",
           "parentInput": "story",
           "spawnedBy": "split-story"
         }
@@ -228,7 +228,7 @@ Use a separate fan-in route when one failed child should fail the parent:
       "state": "failed",
       "guards": [
         {
-          "type": "any_child_failed",
+          "type": "ANY_CHILD_FAILED",
           "parentInput": "story",
           "spawnedBy": "split-story"
         }
@@ -239,7 +239,7 @@ Use a separate fan-in route when one failed child should fail the parent:
 }
 ```
 
-Use `any_child_failed` on the failed child input. The workstation fires when at
+Use `ANY_CHILD_FAILED` on the failed child input. The workstation fires when at
 least one failed child token matches the parent.
 
 ## Guard Fields
@@ -248,7 +248,7 @@ Parent-aware fan-in belongs on `workstations[].inputs[].guards[]`.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `type` | Yes | `all_children_complete` or `any_child_failed`. |
+| `type` | Yes | `ALL_CHILDREN_COMPLETE` or `ANY_CHILD_FAILED`. |
 | `parentInput` | Yes | Work type name for another input on the same workstation. |
 | `spawnedBy` | Recommended | Workstation that spawned the child work. Required when the runtime must track the exact dynamic fanout count. |
 
@@ -266,8 +266,8 @@ matching child tokens already present in the guarded child state, but it does
 not know how many children should eventually arrive. Avoid it for generated
 child work unless another part of the topology makes the expected child set
 explicit. Submitted `PARENT_CHILD` batches often pair well with
-`any_child_failed`; use extra care before documenting or relying on a static
-`all_children_complete` route.
+`ANY_CHILD_FAILED`; use extra care before documenting or relying on a static
+`ALL_CHILDREN_COMPLETE` route.
 
 ## Troubleshooting Submitted Fan-In
 
@@ -277,7 +277,7 @@ explicit. Submitted `PARENT_CHILD` batches often pair well with
 | The parent never enters the fan-in workstation. | The submitted parent is missing the waiting `state` expected by the parent input. | Set the parent `works[].state` to the exact state consumed by the workstation, such as `waiting`. |
 | Validation passes but the guard still does not match the intended parent input. | `parentInput` names the wrong work type. | Set `parentInput` to the workstation input work type name for the parent, not to a work item name or state name. |
 | Sibling ordering works, but parent-aware guards never see a parent-child relationship. | The batch used `DEPENDS_ON` where `PARENT_CHILD` was required. | Use `PARENT_CHILD` for parent membership and keep `DEPENDS_ON` only for prerequisite ordering between siblings. |
-| An `all_children_complete` route fires too early or cannot represent the whole child set. | The topology has no explicit fanout count. | Use a splitter plus `spawnedBy`, or add another topology element that makes the expected child set explicit before relying on `all_children_complete`. |
+| An `ALL_CHILDREN_COMPLETE` route fires too early or cannot represent the whole child set. | The topology has no explicit fanout count. | Use a splitter plus `spawnedBy`, or add another topology element that makes the expected child set explicit before relying on `ALL_CHILDREN_COMPLETE`. |
 
 ## Full Shape
 
@@ -336,7 +336,7 @@ the story when all tasks complete, and fails the story when any task fails:
           "state": "complete",
           "guards": [
             {
-              "type": "all_children_complete",
+              "type": "ALL_CHILDREN_COMPLETE",
               "parentInput": "story",
               "spawnedBy": "split-story"
             }
@@ -356,7 +356,7 @@ the story when all tasks complete, and fails the story when any task fails:
           "state": "failed",
           "guards": [
             {
-              "type": "any_child_failed",
+              "type": "ANY_CHILD_FAILED",
               "parentInput": "story",
               "spawnedBy": "split-story"
             }
@@ -377,14 +377,14 @@ then match children whose parent ID is the parent story's work ID.
 
 - The guarded child input uses `guards`, not the retired workstation-level
   `join` field.
-- `type` is `all_children_complete` or `any_child_failed`.
+- `type` is `ALL_CHILDREN_COMPLETE` or `ANY_CHILD_FAILED`.
 - `parentInput` names another input work type on the same workstation.
 - `parentInput` does not name the guarded child input's own work type.
 - `spawnedBy`, when set, names an existing workstation.
 - Dynamic fanout uses `spawnedBy` so the runtime can track expected child
   count.
 - Child fan-in guards are not placed in `workstations[].guards[]`; that field
-  only supports workstation-level `visit_count` guards.
+  only supports workstation-level `VISIT_COUNT` guards.
 
 ## Related
 

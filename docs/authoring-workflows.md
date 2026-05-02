@@ -85,7 +85,7 @@ camelCase config fields.
 
 ```json
 {
-  "project": "sample-service",
+  "id": "sample-service",
   "resources": [
     { "name": "agent-slot", "capacity": 1 }
   ],
@@ -107,7 +107,7 @@ camelCase config fields.
   "workstations": [
     {
       "name": "execute-story",
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
@@ -127,7 +127,7 @@ camelCase config fields.
     {
       "name": "review-loop-breaker",
       "type": "LOGICAL_MOVE",
-      "guards": [{ "type": "visit_count", "workstation": "review-story", "maxVisits": 3 }],
+      "guards": [{ "type": "VISIT_COUNT", "workstation": "review-story", "maxVisits": 3 }],
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "failed" }]
     }
@@ -140,12 +140,12 @@ guarded loop breaker so a rejected story cannot cycle forever.
 
 ### Optional portability manifest
 
-Add `resourceManifest` only when the workflow also needs declarative host-tool
+Add `supportingFiles` only when the workflow also needs declarative host-tool
 checks or bundled helper files that should travel with the factory contract.
 
 ```json
 {
-  "resourceManifest": {
+  "supportingFiles": {
     "requiredTools": [
       {
         "name": "python",
@@ -205,8 +205,8 @@ checks or bundled helper files that should travel with the factory contract.
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 1h
 skipPermissions: true
 ---
@@ -221,8 +221,8 @@ verification before finishing.
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 30m
 skipPermissions: true
 ---
@@ -394,7 +394,7 @@ If no entry matches, mock-worker mode returns the default accepted result.
 - Keep the public workflow contract in `factory.json`.
 - Use camelCase factory-config fields such as `workTypes`, `resources`,
   `onFailure`, `onRejection`, and `maxVisits`.
-- Use `resourceManifest` only for portability-only concerns such as
+- Use `supportingFiles` only for portability-only concerns such as
   validation-only PATH tools and explicitly bundled scripts or docs.
 - Keep prompt-heavy worker and workstation runtime fields in split `AGENTS.md`
   files unless you intentionally need a single-file config.

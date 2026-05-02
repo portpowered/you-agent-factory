@@ -5,22 +5,24 @@ import {
 } from "./api";
 
 describe("normalizeFactoryDefinition", () => {
-  it("normalizes public and legacy aliases into the generated factory contract", () => {
+  it("accepts canonical generated factory payloads", () => {
     expect(
       normalizeFactoryDefinition({
-        input_types: [{ name: "default", type: "default" }],
-        project: "agent-factory",
-        source_directory: "/tmp/legacy-factory",
+        inputTypes: [{ name: "default", type: "DEFAULT" }],
+        id: "agent-factory",
+        name: "agent-factory",
+        sourceDirectory: "/tmp/canonical-factory",
+        supportingFiles: {
+          requiredTools: [{ command: "python", name: "python" }],
+        },
         workers: [
           {
-            model_provider: "OPENAI",
+            modelProvider: "CODEX",
             name: "writer",
-            provider: "local-claude",
-            session_id: "sess-123",
             type: "MODEL_WORKER",
           },
         ],
-        work_types: [
+        workTypes: [
           {
             name: "story",
             states: [{ name: "new", type: "INITIAL" }],
@@ -30,34 +32,37 @@ describe("normalizeFactoryDefinition", () => {
           {
             guards: [
               {
-                max_visits: 3,
-                type: "visit_count",
+                maxVisits: 3,
+                type: "VISIT_COUNT",
                 workstation: "Draft",
               },
             ],
             inputs: [
               {
-                guards: [{ match_input: "planItem", type: "same_name" }],
+                guards: [{ matchInput: "planItem", type: "SAME_NAME" }],
                 state: "new",
-                work_type: "story",
+                workType: "story",
               },
             ],
-            kind: "standard",
+            behavior: "STANDARD",
             name: "Draft",
-            on_failure: { state: "failed", work_type: "story" },
-            outputs: [{ state: "done", work_type: "story" }],
+            onFailure: { state: "failed", workType: "story" },
+            outputs: [{ state: "done", workType: "story" }],
             worker: "writer",
           },
         ],
       }),
     ).toEqual({
+      name: "agent-factory",
       inputTypes: [{ name: "default", type: "DEFAULT" }],
-      project: "agent-factory",
-      sourceDirectory: "/tmp/legacy-factory",
+      id: "agent-factory",
+      sourceDirectory: "/tmp/canonical-factory",
+      supportingFiles: {
+        requiredTools: [{ command: "python", name: "python" }],
+      },
       workers: [
         {
-          executorProvider: "script_wrap",
-          modelProvider: "codex",
+          modelProvider: "CODEX",
           name: "writer",
           type: "MODEL_WORKER",
         },
@@ -84,7 +89,7 @@ describe("normalizeFactoryDefinition", () => {
               workType: "story",
             },
           ],
-          kind: "STANDARD",
+          behavior: "STANDARD",
           name: "Draft",
           onFailure: { state: "failed", workType: "story" },
           outputs: [{ state: "done", workType: "story" }],
@@ -94,15 +99,69 @@ describe("normalizeFactoryDefinition", () => {
     });
   });
 
-  it("rejects fields outside the generated contract", () => {
+  it("rejects retired lowercase public enum aliases", () => {
     expect(() =>
       normalizeFactoryDefinition({
-        exhaustion_rules: [],
-        project: "legacy-factory",
+        name: "legacy-factory",
+        workstations: [
+          {
+            behavior: "repeater",
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            worker: "writer",
+          },
+        ],
       }),
     ).toThrowError(
       new FactoryDefinitionAPIError(
-        "factory.exhaustion_rules is not allowed by the generated factory contract.",
+        "factory.workstations[0].behavior must be one of CRON, REPEATER, STANDARD.",
+      ),
+    );
+  });
+
+  it("rejects retired legacy field aliases in the UI boundary", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workers: [
+          {
+            model_provider: "CODEX",
+            name: "writer",
+          },
+        ],
+        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workstations: [
+          {
+            definition: {
+              runtime_type: "MODEL_WORKSTATION",
+            },
+            inputs: [{ state: "new", work_type: "story" }],
+            name: "Draft",
+            on_failure: { state: "failed", work_type: "story" },
+            outputs: [{ state: "done", work_type: "story" }],
+            resource_usage: [{ capacity: 1, name: "slot" }],
+            stop_token: "DONE",
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workers[0].model_provider is not allowed by the generated factory contract.",
+      ),
+    );
+  });
+
+  it("rejects fields outside the generated contract", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        project: "legacy-factory",
+        name: "legacy-factory",
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.project is not allowed by the generated factory contract.",
       ),
     );
   });
@@ -112,7 +171,8 @@ describe("isCanonicalFactoryDefinition", () => {
   it("returns true for canonical generated payloads", () => {
     expect(
       isCanonicalFactoryDefinition({
-        project: "agent-factory",
+        id: "agent-factory",
+        name: "agent-factory",
         workstations: [
           {
             inputs: [{ state: "new", workType: "story" }],

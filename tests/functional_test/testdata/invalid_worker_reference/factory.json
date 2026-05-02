@@ -1,4 +1,5 @@
 {
+  "name": "invalid_worker_reference",
   "workTypes": [
     {
       "name": "task",
@@ -38,3 +39,4 @@
     }
   ]
 }
+

@@ -1,4 +1,5 @@
 {
+  "name": "multi_output_color_propagation",
   "workTypes": [
     {
       "name": "idea",
@@ -87,3 +88,4 @@
     }
   ]
 }
+

@@ -42,8 +42,8 @@ You are a software engineer. Write tests for all new code.
 	if cfg.ModelProvider != "claude" {
 		t.Errorf("expected model provider claude, got %s", cfg.ModelProvider)
 	}
-	if cfg.ExecutorProvider != "script_wrap" {
-		t.Errorf("expected executor provider script_wrap, got %s", cfg.ExecutorProvider)
+	if cfg.ExecutorProvider != "LOCAL_CLAUDE" {
+		t.Errorf("expected executor provider LOCAL_CLAUDE, got %s", cfg.ExecutorProvider)
 	}
 	if len(cfg.Resources) != 1 || cfg.Resources[0].Name != "gpu:1" || cfg.Resources[0].Capacity != 1 {
 		t.Errorf("expected resources [{gpu:1 1}], got %v", cfg.Resources)
@@ -354,7 +354,7 @@ Aggregation point. Collects completed work items.
 func TestLoadWorkstationConfig_NormalizesCanonicalPublicEnums(t *testing.T) {
 	dir := t.TempDir()
 	agentsMD := `---
-kind: CRON
+behavior: CRON
 type: MODEL_WORKSTATION
 worker: swe
 guards:

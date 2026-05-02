@@ -13,11 +13,9 @@ vi.mock("./factory-png-export", () => ({
   writeFactoryExportPng: vi.fn(),
 }));
 
-const namedFactory = {
-  factory: {
-    workspaces: {},
-  },
+const factory = {
   name: "Factory Aurora",
+  workspaces: {},
 } as const;
 
 describe("ExportFactoryDialog", () => {
@@ -29,9 +27,9 @@ describe("ExportFactoryDialog", () => {
   it("shows validation errors when the export name or cover image is missing", async () => {
     render(
       <ExportFactoryDialog
+        factory={factory}
         initialFactoryName=""
         isOpen
-        namedFactory={namedFactory}
         onClose={() => {}}
       />,
     );
@@ -55,10 +53,10 @@ describe("ExportFactoryDialog", () => {
   it("disables actions while the export is being prepared", () => {
     render(
       <ExportFactoryDialog
+        factory={factory}
         initialFactoryName="Factory Aurora"
         isOpen
         isPreparing
-        namedFactory={namedFactory}
         onClose={() => {}}
       />,
     );
@@ -80,9 +78,9 @@ describe("ExportFactoryDialog", () => {
     const onClose = vi.fn();
     render(
       <ExportFactoryDialog
+        factory={factory}
         initialFactoryName="  Factory Aurora  "
         isOpen
-        namedFactory={namedFactory}
         onClose={onClose}
       />,
     );
@@ -99,11 +97,11 @@ describe("ExportFactoryDialog", () => {
       "true",
     );
     expect(writeFactoryExportPng).toHaveBeenCalledWith({
-      image: exportImage,
-      namedFactory: {
-        ...namedFactory,
+      factory: {
+        ...factory,
         name: "Factory Aurora",
       },
+      image: exportImage,
     });
 
     if (!resolveExport) {
@@ -113,9 +111,9 @@ describe("ExportFactoryDialog", () => {
     resolveExport({
       blob: new Blob(["png"], { type: "image/png" }),
       envelope: {
-        ...namedFactory,
-        name: "Factory Aurora",
         schemaVersion: "portos.agent-factory.png.v1",
+        ...factory,
+        name: "Factory Aurora",
       },
       ok: true,
     });

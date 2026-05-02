@@ -20,6 +20,7 @@ import (
 func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *testing.T) {
 	dir := t.TempDir()
 	original := []byte(`{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -36,7 +37,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
       	"name": "executor",
 		"type": "MODEL_WORKER",
 		"model": "claude-sonnet-4-20250514",
-		"modelProvider": "claude",
+		"modelProvider": "CLAUDE",
 		"resources": [{ "name": "agent-slot", "capacity": 1 }],
 		"stopToken": "COMPLETE",
 		"body": "You are the portable factory executor."
@@ -133,6 +134,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 func TestFactoryConfigPortability_FlattenSplitLayoutExecutesStandalone(t *testing.T) {
 	splitDir := t.TempDir()
 	writeFatFactoryJSON(t, splitDir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -218,6 +220,7 @@ Complete {{ (index .Inputs 0).WorkID }} from split config.`)
 func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *testing.T) {
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -234,7 +237,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
       "name": "executor",
         "type": "MODEL_WORKER",
         "model": "claude-sonnet-4-20250514",
-        "modelProvider": "claude",
+        "modelProvider": "CLAUDE",
         "stopToken": "COMPLETE",
         "body": "You are the standalone factory executor."
     }
@@ -281,6 +284,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
 func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
 	dir := t.TempDir()
 	writeFatFactoryJSON(t, dir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -296,7 +300,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
     {
       "name": "executor",
 	"type": "MODEL_WORKER",
-	"modelProvider": "claude",
+	"modelProvider": "CLAUDE",
 	"stopToken": "COMPLETE",
 	"body": "You are loaded through the shared mapper."
 
@@ -366,6 +370,7 @@ func writeInlineScriptBackedFactoryFixture(t *testing.T) string {
 
 	authoredDir := t.TempDir()
 	writeFatFactoryJSON(t, authoredDir, `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -544,10 +549,19 @@ func assertFlattenedInlineScriptStandaloneExecutes(t *testing.T, standaloneDir s
 func canonicalFactoryPayload(t *testing.T, data []byte) any {
 	t.Helper()
 
-	mapper := factoryconfig.NewFactoryConfigMapper()
-	cfg, err := mapper.Expand(data)
+	var authored map[string]any
+	if err := json.Unmarshal(data, &authored); err != nil {
+		t.Fatalf("unmarshal authored canonical factory payload: %v\n%s", err, string(data))
+	}
+	normalized, err := json.Marshal(authored)
 	if err != nil {
-		t.Fatalf("expand canonical factory payload: %v\n%s", err, string(data))
+		t.Fatalf("marshal normalized canonical factory payload: %v", err)
+	}
+
+	mapper := factoryconfig.NewFactoryConfigMapper()
+	cfg, err := mapper.Expand(normalized)
+	if err != nil {
+		t.Fatalf("expand canonical factory payload: %v\n%s", err, string(normalized))
 	}
 	flattened, err := mapper.Flatten(cfg)
 	if err != nil {
@@ -573,7 +587,15 @@ func prettyJSON(t *testing.T, value any) string {
 
 func writeFatFactoryJSON(t *testing.T, dir, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(content), 0o644); err != nil {
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(content), &cfg); err != nil {
+		t.Fatalf("parse fat factory.json fixture: %v", err)
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal fat factory.json fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), data, 0o644); err != nil {
 		t.Fatalf("write fat factory.json: %v", err)
 	}
 }

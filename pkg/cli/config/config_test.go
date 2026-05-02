@@ -20,14 +20,15 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
 	writeCLITestFile(t, factoryPath, `{
+		"name":"expand-config-deterministic",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{
 			"name":"executor",
 				"type":"MODEL_WORKER",
 				"model":"claude-sonnet-4-20250514",
-				"modelProvider":"claude",
-				"executorProvider":"script_wrap",
+				"modelProvider":"CLAUDE",
+				"executorProvider":"SCRIPT_WRAP",
 				"resources":[{"name":"agent-slot","capacity":1}],
 				"timeout":"20m",
 				"stopToken":"COMPLETE",
@@ -80,8 +81,8 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 		t.Fatalf("expected worker AGENTS.md to be loadable MODEL_WORKER, got:\n%s", string(workerAgents))
 	}
 	assertExpandedAgentsFrontmatterUsesCamelCase(t, string(workerAgents), []string{
-		"modelProvider: claude",
-		"executorProvider: script_wrap",
+		"modelProvider: CLAUDE",
+		"executorProvider: SCRIPT_WRAP",
 		"stopToken: COMPLETE",
 		"skipPermissions: true",
 	}, []string{
@@ -191,6 +192,7 @@ func TestExpandFactoryConfig_WritesPromptFileFromBodyWhenPromptTemplateMissing(t
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
 	writeCLITestFile(t, factoryPath, `{
+		"name":"expand-config-prompt-file",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [],
 		"workers": [{
@@ -347,8 +349,9 @@ func writePortableResourceManifestFactoryConfigWithScriptTarget(t *testing.T, fa
 	t.Helper()
 
 	writeCLITestFile(t, factoryPath, `{
+		"name":"portable-resource-manifest-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"resourceManifest": {
+		"supportingFiles": {
 			"requiredTools": [`+requiredToolsJSON+`],
 			"bundledFiles": [{
 				"type":"SCRIPT",
@@ -397,9 +400,9 @@ func expandPortableResourceManifestFactory(t *testing.T, factoryPath string) (st
 func assertPortableResourceManifestPayload(t *testing.T, canonical map[string]any, wantCommand string) {
 	t.Helper()
 
-	resourceManifest, ok := canonical["resourceManifest"].(map[string]any)
+	resourceManifest, ok := canonical["supportingFiles"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected expanded canonical factory.json to preserve resourceManifest, got %#v", canonical["resourceManifest"])
+		t.Fatalf("expected expanded canonical factory.json to preserve supportingFiles, got %#v", canonical["supportingFiles"])
 	}
 	requiredTools, ok := resourceManifest["requiredTools"].([]any)
 	if !ok || len(requiredTools) != 1 {
@@ -437,8 +440,8 @@ func assertFlattenedPortableResourceManifestPreserved(t *testing.T, targetDir st
 		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
 	}
 	flattenedPayload := mustDecodeCanonicalFactoryPayload(t, flattened)
-	if _, ok := flattenedPayload["resourceManifest"].(map[string]any); !ok {
-		t.Fatalf("expected flattened expanded layout to preserve resourceManifest, got %#v", flattenedPayload["resourceManifest"])
+	if _, ok := flattenedPayload["supportingFiles"].(map[string]any); !ok {
+		t.Fatalf("expected flattened expanded layout to preserve supportingFiles, got %#v", flattenedPayload["supportingFiles"])
 	}
 }
 
@@ -450,9 +453,9 @@ func assertFlattenedPortableResourceManifestPreservedWithCommand(t *testing.T, t
 		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
 	}
 	flattenedPayload := mustDecodeCanonicalFactoryPayload(t, flattened)
-	flattenedManifest, ok := flattenedPayload["resourceManifest"].(map[string]any)
+	flattenedManifest, ok := flattenedPayload["supportingFiles"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected flattened expanded layout to preserve resourceManifest, got %#v", flattenedPayload["resourceManifest"])
+		t.Fatalf("expected flattened expanded layout to preserve supportingFiles, got %#v", flattenedPayload["supportingFiles"])
 	}
 	requiredTools, ok := flattenedManifest["requiredTools"].([]any)
 	if !ok || len(requiredTools) != 1 {
@@ -514,7 +517,7 @@ func assertLoadedPortableResourceManifest(t *testing.T, targetDir string) {
 func writePortableResourceManifestWithMissingTool(t *testing.T, canonicalPath string, canonical map[string]any) {
 	t.Helper()
 
-	resourceManifest := canonical["resourceManifest"].(map[string]any)
+	resourceManifest := canonical["supportingFiles"].(map[string]any)
 	requiredTools := resourceManifest["requiredTools"].([]any)
 	resourceManifest["requiredTools"] = append(requiredTools, map[string]any{
 		"name":    "Missing helper",
@@ -586,6 +589,7 @@ func TestExpandFactoryConfig_KeepsExistingCanonicalSplitDefinitionsWhenInlineDef
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
+				"name":"keep-existing-canonical-split-definitions",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"resources": [],
 				"workers": [{"name":"executor"}],
@@ -693,6 +697,7 @@ Existing workstation body.
 func TestFlattenFactoryConfig_FlattensCanonicalWorkstationStopWords(t *testing.T) {
 	dir := t.TempDir()
 	writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
+		"name":"flatten-canonical-workstation-stop-words",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [],
 		"workers": [{
@@ -760,6 +765,7 @@ func TestExpandFactoryConfig_PreservesExistingSplitDefinitionsWhenInlineDefiniti
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
+				"name":"preserve-existing-split-definitions",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"resources": [],
 				"workers": [{"name":"executor"}],

@@ -156,6 +156,7 @@ func writeFlattenCommandFixture(t *testing.T, factoryDir string) {
 	t.Helper()
 
 	writeRootTestFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), `{
+		"name":"flatten-command-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{"name":"executor"}],
@@ -170,8 +171,8 @@ func writeFlattenCommandFixture(t *testing.T, factoryDir string) {
 	writeRootTestFile(t, filepath.Join(factoryDir, "workers", "executor", "AGENTS.md"), `---
 type: MODEL_WORKER
 model: claude-sonnet-4-6
-modelProvider: claude
-executorProvider: script_wrap
+modelProvider: CLAUDE
+executorProvider: SCRIPT_WRAP
 stopToken: COMPLETE
 ---
 
@@ -242,10 +243,10 @@ func assertCanonicalFlattenPayload(t *testing.T, payload map[string]any) {
 	if !ok {
 		t.Fatalf("expected flattened worker to include inline definition, got %#v", workerPayload)
 	}
-	if workerPayload["model"] != "claude-sonnet-4-6" || workerPayload["modelProvider"] != "claude" {
+	if workerPayload["model"] != "claude-sonnet-4-6" || workerPayload["modelProvider"] != "CLAUDE" {
 		t.Fatalf("expected flattened worker definition to preserve model/provider, got %#v", workerPayload)
 	}
-	if workerPayload["executorProvider"] != "script_wrap" {
+	if workerPayload["executorProvider"] != "SCRIPT_WRAP" {
 		t.Fatalf("expected flattened worker definition to preserve canonical executorProvider, got %#v", workerPayload)
 	}
 	for _, retired := range []string{"provider", "sessionId", "concurrency"} {
@@ -335,6 +336,7 @@ func TestConfigExpandCommand_WritesSplitFactoryLayout(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
 	writeRootTestFile(t, factoryPath, `{
+		"name":"expand-command-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [],
 		"workers": [{"name":"executor"}],

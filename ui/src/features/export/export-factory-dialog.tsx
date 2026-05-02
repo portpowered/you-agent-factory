@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { NamedFactoryValue } from "../../api/named-factory";
+import type { FactoryValue } from "../../api/named-factory";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -41,7 +41,7 @@ const DIALOG_ERROR_PANEL_CLASS =
 const DIALOG_CONTENT_CLASS = "w-[min(92vw,42rem)] gap-6";
 
 export interface ExportFactoryDialogProps {
-  namedFactory: NamedFactoryValue | null;
+  factory: FactoryValue | null;
   initialFactoryName: string;
   isPreparing?: boolean;
   isOpen: boolean;
@@ -55,7 +55,7 @@ type ExportDialogState =
   | { status: "exporting" };
 
 export function ExportFactoryDialog({
-  namedFactory,
+  factory,
   initialFactoryName,
   isPreparing = false,
   isOpen,
@@ -107,7 +107,7 @@ export function ExportFactoryDialog({
   const nameValidationId = `${validationIdBase}-name-validation`;
   const imageValidationId = `${validationIdBase}-image-validation`;
   const isExporting = dialogState.status === "exporting";
-  const exportDisabled = isExporting || isPreparing || namedFactory === null;
+  const exportDisabled = isExporting || isPreparing || factory === null;
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       handleClose();
@@ -138,7 +138,7 @@ export function ExportFactoryDialog({
     setNameTouched(true);
     setImageTouched(true);
 
-    if (!namedFactory) {
+    if (!factory) {
       setDialogState({
         message:
           preparationFailure?.message ??
@@ -157,11 +157,11 @@ export function ExportFactoryDialog({
     setDialogState({ status: "exporting" });
 
     const result = await writeFactoryExportPng({
-      image: selectedImage,
-      namedFactory: {
-        ...namedFactory,
+      factory: {
+        ...factory,
         name: trimmedExportName,
       },
+      image: selectedImage,
     });
 
     if (exportAttemptRef.current !== exportAttempt) {
@@ -278,7 +278,7 @@ export function ExportFactoryDialog({
             </div>
           ) : null}
 
-          {preparationFailure && namedFactory === null && !isPreparing ? (
+          {preparationFailure && factory === null && !isPreparing ? (
             <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
               {preparationFailure.message}
             </div>

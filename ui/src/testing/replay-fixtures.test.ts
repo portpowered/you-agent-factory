@@ -33,4 +33,18 @@ describe("replay fixture helpers", () => {
       "17c38f40-de4e-4d5f-bd44-649a2bf4a284",
     );
   });
+
+  it("projects canonical workstation behavior from maintained replay fixtures", () => {
+    const snapshot = buildReplayFixtureTimelineSnapshot(
+      "runtimeConfigInterfaceConsolidation",
+      0,
+    );
+
+    expect(
+      snapshot.dashboard.topology.workstation_nodes_by_id.cleaner?.workstation_kind,
+    ).toBe("CRON");
+    expect(
+      snapshot.dashboard.topology.workstation_nodes_by_id.process?.workstation_kind,
+    ).toBe("REPEATER");
+  });
 });

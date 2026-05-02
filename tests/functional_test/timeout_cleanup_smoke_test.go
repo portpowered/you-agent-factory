@@ -27,7 +27,7 @@ func TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution(t *t
 			"inputs":  []map[string]any{{"workType": "task", "state": "init"}},
 			"outputs": []map[string]any{{"workType": "task", "state": "failed"}},
 			"guards": []map[string]any{{
-				"type":        "visit_count",
+				"type":        "VISIT_COUNT",
 				"workstation": "run-script",
 				"maxVisits":   float64(1),
 			}},

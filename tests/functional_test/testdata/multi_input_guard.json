@@ -99,7 +99,7 @@
             {
               "parentInput": "chapter",
               "spawnedBy": "chapter-parser",
-              "type": "all_children_complete"
+              "type": "ALL_CHILDREN_COMPLETE"
             }
           ],
           "state": "complete",

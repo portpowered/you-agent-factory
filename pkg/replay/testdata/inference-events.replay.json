@@ -9,7 +9,8 @@
       "id": "factory-event/run-started",
       "payload": {
         "factory": {
-          "factoryDir": "fixtures/inference-events",
+          "name": "inference-events-fixture",
+          "factoryDirectory": "fixtures/inference-events",
           "resources": [],
           "workTypes": [
             {

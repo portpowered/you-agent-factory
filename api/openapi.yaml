@@ -154,21 +154,21 @@ paths:
       tags:
         - Factory
       operationId: createFactory
-      summary: Create named factory
-      description: Stores one named factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
+      summary: Create factory
+      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NamedFactory'
+              $ref: '#/components/schemas/Factory'
       responses:
         '201':
-          description: Named factory was stored and activated.
+          description: Factory was stored and activated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NamedFactory'
+                $ref: '#/components/schemas/Factory'
         '400':
           $ref: '#/components/responses/CreateFactoryBadRequest'
         '409':
@@ -180,45 +180,44 @@ paths:
       tags:
         - Factory
       operationId: getCurrentFactory
-      summary: Get current named factory
-      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `NamedFactory.name`.
+      summary: Get current factory
+      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
       responses:
         '200':
-          description: Current active named factory or the active default root runtime when no named-factory pointer exists yet.
+          description: Current active factory or the active default root runtime when no current-factory pointer exists yet.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NamedFactory'
+                $ref: '#/components/schemas/Factory'
               examples:
                 defaultRootRuntime:
                   summary: Default root runtime is active.
                   value:
                     name: UNDEFINED
-                    factory:
-                      workTypes:
-                        - name: task
-                          states:
-                            - name: init
-                              type: INITIAL
-                            - name: done
-                              type: TERMINAL
-                      workers:
-                        - name: planner
-                          type: MODEL_WORKER
-                          modelProvider: claude
-                          executorProvider: script_wrap
-                          model: claude-sonnet-4-20250514
-                      workstations:
-                        - name: plan-task
-                          kind: STANDARD
-                          type: MODEL_WORKSTATION
-                          worker: planner
-                          inputs:
-                            - workType: task
-                              state: init
-                          outputs:
-                            - workType: task
-                              state: done
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers:
+                      - name: planner
+                        type: MODEL_WORKER
+                        modelProvider: CLAUDE
+                        executorProvider: SCRIPT_WRAP
+                        model: claude-sonnet-4-20250514
+                    workstations:
+                      - name: plan-task
+                        behavior: STANDARD
+                        type: MODEL_WORKSTATION
+                        worker: planner
+                        inputs:
+                          - workType: task
+                            state: init
+                        outputs:
+                          - workType: task
+                            state: done
         '404':
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
@@ -574,45 +573,6 @@ components:
       pattern: ^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$
       description: Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
       example: customer-support-triage
-    NamedFactory:
-      type: object
-      additionalProperties: false
-      description: Canonical named-factory contract used for factory activation requests and current-factory readback.
-      required:
-        - name
-        - factory
-      example:
-        name: customer-support-triage
-        factory:
-          workTypes:
-            - name: task
-              states:
-                - name: init
-                  type: INITIAL
-                - name: done
-                  type: TERMINAL
-          workers:
-            - name: planner
-              type: MODEL_WORKER
-              modelProvider: claude
-              executorProvider: script_wrap
-              model: claude-sonnet-4-20250514
-          workstations:
-            - name: plan-task
-              kind: STANDARD
-              type: MODEL_WORKSTATION
-              worker: planner
-              inputs:
-                - workType: task
-                  state: init
-              outputs:
-                - workType: task
-                  state: done
-      properties:
-        name:
-          $ref: '#/components/schemas/FactoryName'
-        factory:
-          $ref: '#/components/schemas/Factory'
     FactoryWorldWorkstationRequestProjectionSlice:
       type: object
       additionalProperties: false
@@ -1047,8 +1007,6 @@ components:
       properties:
         factory:
           $ref: '#/components/schemas/Factory'
-        workflowId:
-          type: string
         sourceDirectory:
           type: string
         metadata:
@@ -1544,7 +1502,10 @@ components:
       type: object
       description: Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
       additionalProperties: false
+      required:
+        - name
       example:
+        name: customer-support-triage
         inputTypes:
           - name: brief
             type: DEFAULT
@@ -1559,7 +1520,7 @@ components:
                 type: FAILED
               - name: complete
                 type: TERMINAL
-        resourceManifest:
+        supportingFiles:
           requiredTools:
             - name: python
               command: python
@@ -1587,17 +1548,17 @@ components:
         workers:
           - name: reviewer
             type: MODEL_WORKER
-            executorProvider: script_wrap
-            modelProvider: claude
+            executorProvider: SCRIPT_WRAP
+            modelProvider: CLAUDE
             model: claude-sonnet-4-20250514
           - name: review-loop-breaker
             type: MODEL_WORKER
-            executorProvider: script_wrap
-            modelProvider: claude
+            executorProvider: SCRIPT_WRAP
+            modelProvider: CLAUDE
             model: claude-sonnet-4-20250514
         workstations:
           - name: review-story
-            kind: REPEATER
+            behavior: REPEATER
             type: MODEL_WORKSTATION
             worker: reviewer
             inputs:
@@ -1626,18 +1587,17 @@ components:
               - workType: story
                 state: failed
       properties:
-        project:
+        name:
+          $ref: '#/components/schemas/FactoryName'
+        id:
           type: string
-          description: Project identifier used as the factory-level template context fallback.
-        factoryDir:
+          description: Factory identifier used as the factory-level template context fallback.
+        factoryDirectory:
           type: string
           description: Directory that contained the factory.json used for this serialized runtime config.
         sourceDirectory:
           type: string
           description: Original source directory for record/replay and drift diagnostics.
-        workflowId:
-          type: string
-          description: Optional workflow identity associated with this serialized runtime config.
         metadata:
           $ref: '#/components/schemas/StringMap'
           description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
@@ -1656,7 +1616,7 @@ components:
           description: Shared capacity pools that workers or workstations can consume while work is executing.
           items:
             $ref: '#/components/schemas/Resource'
-        resourceManifest:
+        supportingFiles:
           $ref: '#/components/schemas/ResourceManifest'
           description: Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources.
         workers:
@@ -1846,10 +1806,10 @@ components:
           description: Model identifier to request from the configured model provider when this worker uses model execution.
         modelProvider:
           $ref: '#/components/schemas/WorkerModelProvider'
-          description: Canonical model-provider identifier used for model routing and provider diagnostics. Current built-in values are `claude` and `codex`, which match the executable provider command IDs.
+          description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
         executorProvider:
           $ref: '#/components/schemas/WorkerProvider'
-          description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `script_wrap`.
+          description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
         command:
           type: string
           description: Command to execute when this worker runs through a command or script provider.
@@ -1894,8 +1854,8 @@ components:
         - WorkerModelProviderClaude
         - WorkerModelProviderCodex
       enum:
-        - claude
-        - codex
+        - CLAUDE
+        - CODEX
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
@@ -1905,7 +1865,7 @@ components:
       x-enum-varnames:
         - WorkerProviderScriptWrap
       enum:
-        - script_wrap
+        - SCRIPT_WRAP
       x-enum-descriptions:
         - Public worker executor adapter that shells out through the configured worker command path.
     Workstation:
@@ -1924,7 +1884,7 @@ components:
         name:
           type: string
           description: Customer-authored workstation name used by guards, diagnostics, and authored references.
-        kind:
+        behavior:
           $ref: '#/components/schemas/WorkstationKind'
           description: Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
         type:
@@ -1950,7 +1910,7 @@ components:
           description: Inline Go template rendered into the prompt for model-oriented workstation execution.
         cron:
           $ref: '#/components/schemas/WorkstationCron'
-          description: Cron trigger configuration for workstations whose kind is cron.
+          description: Cron trigger configuration for workstations whose behavior is CRON.
         inputs:
           type: array
           description: Work states this workstation can consume before it dispatches.
@@ -1980,9 +1940,9 @@ components:
           description: Copy supported referenced script files into the expanded workstation layout when config expand runs.
         guards:
           type: array
-          description: Guarded loop breakers should use `visit_count` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
+          description: Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
           items:
-            $ref: '#/components/schemas/WorkstationGuard'
+            $ref: '#/components/schemas/Guard'
         stopWords:
           type: array
           description: Stop words authored on the topology entry for model-oriented dispatches.
@@ -2056,28 +2016,38 @@ components:
         expiryWindow:
           type: string
           description: Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.
-    WorkstationGuardType:
+    GuardType:
       type: string
-      description: Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
+      description: Guard condition attached to a workstation or one of its specific inputs.
       x-enum-varnames:
-        - WorkstationGuardTypeVisitCount
-        - WorkstationGuardTypeMatchesFields
+        - GuardTypeVisitCount
+        - GuardTypeMatchesFields
+        - GuardTypeAllChildrenComplete
+        - GuardTypeAnyChildFailed
+        - GuardTypeSameName
       enum:
         - VISIT_COUNT
         - MATCHES_FIELDS
+        - ALL_CHILDREN_COMPLETE
+        - ANY_CHILD_FAILED
+        - SAME_NAME
       x-enum-descriptions:
         - Allows or blocks work based on how many times a workstation has already handled it.
         - Requires all candidate workstation inputs to resolve the same configured field value.
-    WorkstationGuard:
+        - This input is available only after all matching child work completes.
+        - This input is available when any matching child work fails.
+        - This input is available only when its token name exactly matches the bound token name from another input.
+    Guard:
       type: object
-      description: Guard attached to a workstation as a whole before it is allowed to consume work.
+      description: Shared guard attached either to a workstation as a whole or to one specific workstation input.
       additionalProperties: false
       required:
         - type
       properties:
         type:
-          $ref: '#/components/schemas/WorkstationGuardType'
-          description: Guard condition to evaluate before this workstation is allowed to run.
+          allOf:
+            - $ref: '#/components/schemas/GuardType'
+          description: Guard condition to evaluate for this workstation-level or input-level attachment.
         workstation:
           type: string
           description: For `VISIT_COUNT` guards, the workstation whose visits are counted.
@@ -2086,9 +2056,19 @@ components:
           minimum: 1
           description: For `VISIT_COUNT` guards, the visit threshold.
         matchConfig:
-          $ref: '#/components/schemas/WorkstationGuardMatchConfig'
+          allOf:
+            - $ref: '#/components/schemas/GuardMatchConfig'
           description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
-    WorkstationGuardMatchConfig:
+        parentInput:
+          type: string
+          description: For parent-aware input guards, the parent workType name from another input in the same workstation.
+        matchInput:
+          type: string
+          description: For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation.
+        spawnedBy:
+          type: string
+          description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    GuardMatchConfig:
       type: object
       additionalProperties: false
       required:
@@ -2116,41 +2096,7 @@ components:
           type: array
           description: Per-input guards that must pass before this specific input can be used.
           items:
-            $ref: '#/components/schemas/InputGuard'
-    InputGuard:
-      type: object
-      description: Guard attached to one workstation input for parent-aware fan-in or same-name matching against another input.
-      additionalProperties: false
-      required:
-        - type
-      properties:
-        type:
-          $ref: '#/components/schemas/InputGuardType'
-          description: Input guard condition to evaluate for this specific workstation input.
-        parentInput:
-          type: string
-          description: Parent workType name from another input in the same workstation.
-        matchInput:
-          type: string
-          description: Peer input workType name from another input in the same workstation for same-name matching.
-        spawnedBy:
-          type: string
-          description: Workstation that spawns the children for dynamic fanout count tracking.
-    InputGuardType:
-      type: string
-      description: Guard condition attached to a specific workstation input.
-      x-enum-varnames:
-        - InputGuardTypeAllChildrenComplete
-        - InputGuardTypeAnyChildFailed
-        - InputGuardTypeSameName
-      enum:
-        - ALL_CHILDREN_COMPLETE
-        - ANY_CHILD_FAILED
-        - SAME_NAME
-      x-enum-descriptions:
-        - This input is available only after all matching child work completes.
-        - This input is available when any matching child work fails.
-        - This input is available only when its token name exactly matches the bound token name from another input.
+            $ref: '#/components/schemas/Guard'
     Transition:
       type: object
       additionalProperties: false

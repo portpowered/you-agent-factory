@@ -442,7 +442,8 @@ func functionalNamedFactoryPayloadWithTerminalState(t *testing.T, project, termi
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
-		"project": project,
+		"name": project,
+		"id": project,
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -455,8 +456,8 @@ func functionalNamedFactoryPayloadWithTerminalState(t *testing.T, project, termi
 			"name":             "worker-a",
 			"type":             "MODEL_WORKER",
 			"body":             "You are worker " + project + ".",
-			"modelProvider":    "claude",
-			"executorProvider": "script_wrap",
+			"modelProvider":    "CLAUDE",
+			"executorProvider": "SCRIPT_WRAP",
 			"model":            "claude-sonnet-4-20250514",
 		}},
 		"workstations": []map[string]any{{

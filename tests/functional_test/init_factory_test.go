@@ -290,8 +290,8 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantModel, wantProv
 	workerAgents := string(workerAgentsBytes)
 	for _, expected := range []string{
 		"model: " + wantModel,
-		"modelProvider: " + wantProvider,
-		"executorProvider: script_wrap",
+		"modelProvider: " + strings.ToUpper(wantProvider),
+		"executorProvider: SCRIPT_WRAP",
 		"skipPermissions: true",
 		"timeout: 1h",
 		"You are the processor. Complete the task.",

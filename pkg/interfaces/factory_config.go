@@ -4,6 +4,7 @@ import "encoding/json"
 
 // FactoryConfig is the specification of a factory as a JSON file.
 type FactoryConfig struct {
+	Name             string                          `json:"name"`
 	Project          string                          `json:"project,omitempty"`
 	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
 	WorkTypes        []WorkTypeConfig                `json:"work_types"`
@@ -114,7 +115,7 @@ type WorkflowConfig struct {
 type FactoryWorkstationConfig struct {
 	ID                    string            `json:"id" yaml:"id,omitempty"`
 	Name                  string            `json:"name" yaml:"name,omitempty"`
-	Kind                  WorkstationKind   `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Kind                  WorkstationKind   `json:"behavior,omitempty" yaml:"behavior,omitempty"`
 	Type                  string            `json:"type,omitempty" yaml:"type,omitempty"`
 	WorkerTypeName        string            `json:"worker" yaml:"worker,omitempty"`
 	PromptFile            string            `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`

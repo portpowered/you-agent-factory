@@ -160,8 +160,8 @@ func normalizeEventStreamRunRequestFactories(events []factoryapi.FactoryEvent) e
 		if payload.Factory.Workstations != nil {
 			for workstationIndex := range *payload.Factory.Workstations {
 				workstation := &(*payload.Factory.Workstations)[workstationIndex]
-				if workstation.Kind != nil &&
-					*workstation.Kind == factoryapi.WorkstationKindCron &&
+				if workstation.Behavior != nil &&
+					*workstation.Behavior == factoryapi.WorkstationKindCron &&
 					workstation.Cron == nil {
 					workstation.Cron = &factoryapi.WorkstationCron{
 						Schedule: legacyEventStreamCronPlaceholderSchedule,
@@ -226,17 +226,14 @@ func adjacentFactoryDir(eventStreamPath string) (string, bool) {
 
 func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, authored factoryapi.Factory) factoryapi.Factory {
 	merged := recorded
-	if merged.FactoryDir == nil {
-		merged.FactoryDir = authored.FactoryDir
+	if merged.FactoryDirectory == nil {
+		merged.FactoryDirectory = authored.FactoryDirectory
 	}
 	if merged.SourceDirectory == nil {
 		merged.SourceDirectory = authored.SourceDirectory
 	}
-	if merged.WorkflowId == nil {
-		merged.WorkflowId = authored.WorkflowId
-	}
-	if merged.Project == nil {
-		merged.Project = authored.Project
+	if merged.Id == nil {
+		merged.Id = authored.Id
 	}
 	if merged.Metadata == nil || len(*merged.Metadata) == 0 {
 		merged.Metadata = authored.Metadata
@@ -301,8 +298,8 @@ func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, auth
 			if workstation.Id == nil {
 				workstation.Id = authoredWorkstation.Id
 			}
-			if workstation.Kind == nil {
-				workstation.Kind = authoredWorkstation.Kind
+			if workstation.Behavior == nil {
+				workstation.Behavior = authoredWorkstation.Behavior
 			}
 			if workstation.Type == nil {
 				workstation.Type = authoredWorkstation.Type

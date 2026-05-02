@@ -42,7 +42,7 @@ func TestSameNameGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 	}
 
 	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.Type != factoryapi.InputGuardTypeSameName {
+	if guard.Type != factoryapi.GuardTypeSameName {
 		t.Fatalf("generated guard type = %q, want SAME_NAME", guard.Type)
 	}
 	if guard.MatchInput == nil || *guard.MatchInput != "plan" {

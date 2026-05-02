@@ -1,4 +1,5 @@
 {
+  "name": "n_to_n_type_matching",
   "workTypes": [
     {
       "name": "idea",
@@ -71,3 +72,4 @@
     }
   ]
 }
+

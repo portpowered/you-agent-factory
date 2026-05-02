@@ -1,8 +1,7 @@
 import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
 
-export type NamedFactoryDefinition = components["schemas"]["Factory"];
-export type NamedFactoryValue = components["schemas"]["NamedFactory"];
+export type FactoryValue = components["schemas"]["Factory"];
 
 export type NamedFactoryAPIErrorCode =
   | "BAD_REQUEST"
@@ -21,11 +20,11 @@ export interface NamedFactoryAPIErrorDetails {
   statusText?: string;
 }
 
-export interface CreateNamedFactoryOptions {
+export interface CreateFactoryOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-export interface GetCurrentNamedFactoryOptions {
+export interface GetCurrentFactoryOptions {
   fetch?: typeof globalThis.fetch;
 }
 
@@ -53,10 +52,10 @@ export class NamedFactoryAPIError extends Error {
   }
 }
 
-export async function createNamedFactory(
-  value: NamedFactoryValue,
-  options: CreateNamedFactoryOptions = {},
-): Promise<NamedFactoryValue> {
+export async function createFactory(
+  value: FactoryValue,
+  options: CreateFactoryOptions = {},
+): Promise<FactoryValue> {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
 
   if (typeof fetchImplementation !== "function") {
@@ -95,7 +94,7 @@ export async function createNamedFactory(
     );
   }
 
-  if (!isNamedFactoryValue(responseBody)) {
+  if (!isFactoryValue(responseBody)) {
     throw new NamedFactoryAPIError("The factory activation API returned an invalid response.", {
       code: "INTERNAL_ERROR",
       responseBody,
@@ -107,9 +106,9 @@ export async function createNamedFactory(
   return responseBody;
 }
 
-export async function getCurrentNamedFactory(
-  options: GetCurrentNamedFactoryOptions = {},
-): Promise<NamedFactoryValue> {
+export async function getCurrentFactory(
+  options: GetCurrentFactoryOptions = {},
+): Promise<FactoryValue> {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
 
   if (typeof fetchImplementation !== "function") {
@@ -144,7 +143,7 @@ export async function getCurrentNamedFactory(
     );
   }
 
-  if (!isNamedFactoryValue(responseBody)) {
+  if (!isFactoryValue(responseBody)) {
     throw new NamedFactoryAPIError("The current factory API returned an invalid response.", {
       code: "INTERNAL_ERROR",
       responseBody,
@@ -195,11 +194,11 @@ function normalizeNamedFactoryAPIErrorCode(code: string | undefined): NamedFacto
   }
 }
 
-function isNamedFactoryValue(value: unknown): value is NamedFactoryValue {
+function isFactoryValue(value: unknown): value is FactoryValue {
   return (
     isRecord(value) &&
     typeof value.name === "string" &&
-    isRecord(value.factory)
+    value.factory === undefined
   );
 }
 

@@ -2,38 +2,36 @@ import { describe, expect, it } from "vitest";
 
 import type { components, operations, paths } from "./openapi";
 
-describe("generated named-factory OpenAPI types", () => {
+describe("generated factory OpenAPI types", () => {
   it("exposes typed operations, payloads, and machine-readable error codes", () => {
     const request: operations["createFactory"]["requestBody"]["content"]["application/json"] = {
       name: "customer-support-triage",
-      factory: {
-        workTypes: [
-          {
-            name: "task",
-            states: [
-              { name: "init", type: "INITIAL" },
-              { name: "done", type: "TERMINAL" },
-            ],
-          },
-        ],
-        workers: [
-          {
-            executorProvider: "script_wrap",
-            model: "claude-sonnet-4-20250514",
-            modelProvider: "claude",
-            name: "planner",
-            type: "MODEL_WORKER",
-          },
-        ],
-        workstations: [
-          {
-            inputs: [{ state: "init", workType: "task" }],
-            name: "plan-task",
-            outputs: [{ state: "done", workType: "task" }],
-            worker: "planner",
-          },
-        ],
-      },
+      workTypes: [
+        {
+          name: "task",
+          states: [
+            { name: "init", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workers: [
+        {
+          executorProvider: "SCRIPT_WRAP",
+          model: "claude-sonnet-4-20250514",
+          modelProvider: "CLAUDE",
+          name: "planner",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          inputs: [{ state: "init", workType: "task" }],
+          name: "plan-task",
+          outputs: [{ state: "done", workType: "task" }],
+          worker: "planner",
+        },
+      ],
     };
     const created: operations["createFactory"]["responses"][201]["content"]["application/json"] =
       request;
@@ -61,7 +59,7 @@ describe("generated named-factory OpenAPI types", () => {
       };
 
     expect(current.name).toBe("customer-support-triage");
-    expect(current.factory.workstations?.[0]?.worker).toBe("planner");
+    expect(current.workstations?.[0]?.worker).toBe("planner");
     expect(currentNotFound.code).toBe("NOT_FOUND");
     expect(currentNotFound.family).toBe("NOT_FOUND");
     expect([invalidName, invalidFactory, duplicateName, runtimeBusy]).toEqual([

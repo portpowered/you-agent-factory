@@ -34,6 +34,7 @@ func testReplayArtifact(t *testing.T, events ...factoryapi.FactoryEvent) *interf
 
 func testGeneratedFactory() factoryapi.Factory {
 	return factoryapi.Factory{
+		Name:      "test-replay-factory",
 		WorkTypes: &[]factoryapi.WorkType{{Name: "task"}},
 		Workers:   &[]factoryapi.Worker{{Name: "worker-a"}},
 		Workstations: &[]factoryapi.Workstation{{

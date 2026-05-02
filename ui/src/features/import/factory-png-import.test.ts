@@ -12,7 +12,8 @@ const ONE_PIXEL_PNG_BASE64 =
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
 const canonicalFactory: FactorySchemas["Factory"] = {
-  project: "agent-factory",
+  id: "agent-factory",
+  name: "agent-factory",
   workTypes: [
     {
       name: "story",
@@ -24,9 +25,9 @@ const canonicalFactory: FactorySchemas["Factory"] = {
   ],
   workers: [
     {
-      executorProvider: "script_wrap",
+      executorProvider: "SCRIPT_WRAP",
       model: "codex-mini",
-      modelProvider: "codex",
+      modelProvider: "CODEX",
       name: "writer",
       type: "MODEL_WORKER",
     },
@@ -49,8 +50,10 @@ describe("readFactoryImportPng", () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => previewUrl,
       file: createFactoryPngFile({
-        factory: canonicalFactory,
-        name: "Factory Import",
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
         schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
       }),
       revokePreviewImageSrc,
@@ -62,47 +65,37 @@ describe("readFactoryImportPng", () => {
       throw new Error("expected successful PNG import");
     }
 
-    expect(result.value.envelope).toEqual({
-      factory: canonicalFactory,
-      name: "Factory Import",
-      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
-    });
-    expect(result.value.namedFactory).toEqual({
-      factory: canonicalFactory,
+    expect(result.value.factory).toEqual({
+      ...canonicalFactory,
       name: "Factory Import",
     });
     expect(result.value.previewImageSrc).toBe(previewUrl);
+    expect(result.value.schemaVersion).toBe(PORT_OS_FACTORY_PNG_SCHEMA_VERSION);
 
     result.value.revokePreviewImageSrc();
     expect(revokePreviewImageSrc).toHaveBeenCalledWith(previewUrl);
   });
 
-  it("accepts the legacy v1 factoryName envelope and normalizes it to name", async () => {
+  it("rejects the retired factoryName envelope fallback", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => "blob:legacy-preview",
-      file: createLegacyFactoryPngFile({
-        factory: canonicalFactory,
-        factoryName: "Legacy Factory Import",
-        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
-      }),
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify({
+          ...canonicalFactory,
+          factoryName: "Legacy Factory Import",
+          schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+        }),
+      ),
       validatePreviewImage: async () => {},
     });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      throw new Error("expected successful PNG import");
-    }
-
-    expect(result.value.envelope).toEqual({
-      factory: canonicalFactory,
-      name: "Legacy Factory Import",
-      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+    expect(result).toEqual({
+      error: {
+        code: "FACTORY_PAYLOAD_INVALID",
+        message: "The Port OS factory metadata does not contain a valid factory payload.",
+      },
+      ok: false,
     });
-    expect(result.value.namedFactory).toEqual({
-      factory: canonicalFactory,
-      name: "Legacy Factory Import",
-    });
-    expect(result.value.factoryName).toBe("Legacy Factory Import");
   });
 
   it("rejects factory payloads that fall outside the generated contract", async () => {
@@ -112,12 +105,37 @@ describe("readFactoryImportPng", () => {
       },
       file: createFactoryPngFileWithMetadataText(
         JSON.stringify({
-          factory: {
-            exhaustion_rules: [],
-            project: "legacy-factory",
-          },
+          exhaustion_rules: [],
+          project: "legacy-factory",
+          name: "legacy-factory",
           name: "Invalid Factory Import",
           schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+        }),
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        code: "FACTORY_PAYLOAD_INVALID",
+        message: "The Port OS factory metadata does not contain a valid factory payload.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects PNG metadata that falls back to the legacy top-level factory payload", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify({
+          id: "legacy-factory",
+          schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+          workTypes: canonicalFactory.workTypes,
+          workers: canonicalFactory.workers,
+          workstations: canonicalFactory.workstations,
         }),
       ),
       validatePreviewImage: async () => {},
@@ -176,8 +194,10 @@ describe("readFactoryImportPng", () => {
         throw new Error("should not create preview");
       },
       file: createFactoryPngFile({
-        factory: canonicalFactory,
-        name: "Factory Import",
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
         schemaVersion: "portos.agent-factory.png.v2",
       }),
       validatePreviewImage: async () => {},
@@ -201,8 +221,10 @@ describe("readFactoryImportPng", () => {
         throw new Error("should not create preview");
       },
       file: createFactoryPngFile({
-        factory: canonicalFactory,
-        name: "Factory Import",
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
         schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
       }),
       validatePreviewImage: async () => {
@@ -242,35 +264,14 @@ describe("readFactoryImportPng", () => {
 
 function createFactoryPngFile({
   factory,
-  name,
   schemaVersion,
 }: {
   factory: FactorySchemas["Factory"];
-  name: string;
   schemaVersion: string;
 }): File {
   return createFactoryPngFileWithMetadataText(
     JSON.stringify({
-      factory,
-      name,
-      schemaVersion,
-    }),
-  );
-}
-
-function createLegacyFactoryPngFile({
-  factory,
-  factoryName,
-  schemaVersion,
-}: {
-  factory: FactorySchemas["Factory"];
-  factoryName: string;
-  schemaVersion: string;
-}): File {
-  return createFactoryPngFileWithMetadataText(
-    JSON.stringify({
-      factory,
-      factoryName,
+      ...factory,
       schemaVersion,
     }),
   );

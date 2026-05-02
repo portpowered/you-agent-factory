@@ -10,7 +10,7 @@
     },
     "payload": {
       "recordedAt": "2026-04-21T12:00:00Z",
-      "factory": {}
+      "factory": {"name": "factory"}
     }
   },
   {
@@ -23,7 +23,7 @@
       "eventTime": "2026-04-21T12:00:01Z"
     },
     "payload": {
-      "factory": {}
+      "factory": {"name": "factory"}
     }
   },
   {

@@ -1,4 +1,5 @@
 {
+  "name": "write-code-review",
   "resources": [
     {
       "capacity": 5,
@@ -48,7 +49,7 @@
           "workType": "story"
         }
       ],
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "name": "execute-story",
       "onFailure": {
         "state": "failed",
@@ -81,7 +82,7 @@
           "workType": "story"
         }
       ],
-      "kind": "standard",
+      "behavior": "STANDARD",
       "name": "review-story",
       "onFailure": {
         "state": "failed",
@@ -110,7 +111,7 @@
       "guards": [
         {
           "maxVisits": 50,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "execute-story"
         }
       ],
@@ -134,7 +135,7 @@
       "guards": [
         {
           "maxVisits": 3,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review-story"
         }
       ],
@@ -156,3 +157,4 @@
     }
   ]
 }
+

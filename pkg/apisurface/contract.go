@@ -18,8 +18,8 @@ type APISurface interface {
 	SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 	SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
-	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.NamedFactory) (factoryapi.NamedFactory, error)
-	GetCurrentNamedFactory(ctx context.Context) (factoryapi.NamedFactory, error)
+	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error)
+	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
 }
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was

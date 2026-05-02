@@ -1,112 +1,283 @@
 {
+  "name": "factory",
   "workTypes": [
     {
       "name": "thoughts",
       "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
       ]
     },
     {
       "name": "task",
       "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "in-review", "type": "IN_REVIEW" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "in-review",
+          "type": "IN_REVIEW"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
       ]
     },
     {
       "name": "idea",
       "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
       ]
     },
     {
       "name": "plan",
       "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
       ]
     },
     {
       "name": "cron-triggers",
       "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
       ]
     }
   ],
   "resources": [
-    { "name": "executor-slot", "capacity": 1 }
+    {
+      "name": "executor-slot",
+      "capacity": 1
+    }
   ],
   "workers": [
-    { "name": "processor" },
-    { "name": "workspace-setup" }
+    {
+      "name": "processor"
+    },
+    {
+      "name": "workspace-setup"
+    }
   ],
   "workstations": [
     {
       "name": "ideafy",
-      "worker": "processor", 
-      "inputs":  [{ "workType": "thoughts", "state": "init" }],
-      "outputs": [{ "workType": "thoughts", "state": "complete" }],
-      "onFailure": { "workType": "thoughts", "state": "failed" },
-      "resources": [{ "name": "executor-slot", "capacity": 1 }]
+      "worker": "processor",
+      "inputs": [
+        {
+          "workType": "thoughts",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "thoughts",
+          "state": "complete"
+        }
+      ],
+      "onFailure": {
+        "workType": "thoughts",
+        "state": "failed"
+      },
+      "resources": [
+        {
+          "name": "executor-slot",
+          "capacity": 1
+        }
+      ]
     },
     {
       "name": "plan",
       "worker": "processor",
-      "inputs":  [{ "workType": "idea", "state": "init" }],
-      "outputs": [{ "workType": "idea", "state": "complete" }, { "workType": "plan", "state": "init" }],
-      "resources": [{ "name": "executor-slot", "capacity": 1 }],
-      "onRejection": { "workType": "idea", "state": "failed" },
-      "onFailure": { "workType": "idea", "state": "failed" }
+      "inputs": [
+        {
+          "workType": "idea",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "idea",
+          "state": "complete"
+        },
+        {
+          "workType": "plan",
+          "state": "init"
+        }
+      ],
+      "resources": [
+        {
+          "name": "executor-slot",
+          "capacity": 1
+        }
+      ],
+      "onRejection": {
+        "workType": "idea",
+        "state": "failed"
+      },
+      "onFailure": {
+        "workType": "idea",
+        "state": "failed"
+      }
     },
     {
       "name": "setup-workspace",
       "type": "MODEL_WORKSTATION",
       "worker": "workspace-setup",
-      "inputs":  [{ "workType": "plan", "state": "init" }],
-      "outputs": [{ "workType": "plan", "state": "complete" }, { "workType": "task", "state": "init" }],
-      "onFailure": { "workType": "plan", "state": "failed" }
+      "inputs": [
+        {
+          "workType": "plan",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "plan",
+          "state": "complete"
+        },
+        {
+          "workType": "task",
+          "state": "init"
+        }
+      ],
+      "onFailure": {
+        "workType": "plan",
+        "state": "failed"
+      }
     },
     {
       "name": "process",
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "worker": "processor",
-      "inputs":  [{ "workType": "task", "state": "init" }],
-      "outputs": [{ "workType": "task", "state": "in-review" }],
-      "onContinue": { "workType": "task", "state": "init" },
-      "onRejection": { "workType": "task", "state": "init" },
-      "onFailure": { "workType": "task", "state": "failed" },
-      "resources": [{ "name": "executor-slot", "capacity": 1 }],
+      "inputs": [
+        {
+          "workType": "task",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "task",
+          "state": "in-review"
+        }
+      ],
+      "onContinue": {
+        "workType": "task",
+        "state": "init"
+      },
+      "onRejection": {
+        "workType": "task",
+        "state": "init"
+      },
+      "onFailure": {
+        "workType": "task",
+        "state": "failed"
+      },
+      "resources": [
+        {
+          "name": "executor-slot",
+          "capacity": 1
+        }
+      ],
       "worktree": "{{ (index .Inputs 0).Name }}",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
       "name": "review",
       "worker": "processor",
-      "inputs":  [{ "workType": "task", "state": "in-review" }],
-      "outputs": [{ "workType": "task", "state": "complete" }],
-      "onRejection": { "workType": "task", "state": "init" },
-      "onFailure": { "workType": "task", "state": "failed" },
-      "resources": [{ "name": "executor-slot", "capacity": 1 }],
+      "inputs": [
+        {
+          "workType": "task",
+          "state": "in-review"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "task",
+          "state": "complete"
+        }
+      ],
+      "onRejection": {
+        "workType": "task",
+        "state": "init"
+      },
+      "onFailure": {
+        "workType": "task",
+        "state": "failed"
+      },
+      "resources": [
+        {
+          "name": "executor-slot",
+          "capacity": 1
+        }
+      ],
       "worktree": "{{ (index .Inputs 0).Name }}",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
       "name": "executor-loop-breaker",
       "type": "LOGICAL_MOVE",
-      "inputs": [{ "workType": "task", "state": "init" }],
-      "outputs": [{ "workType": "task", "state": "failed" }],
+      "inputs": [
+        {
+          "workType": "task",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "task",
+          "state": "failed"
+        }
+      ],
       "guards": [
         {
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "process",
           "maxVisits": 50
         }
@@ -115,11 +286,21 @@
     {
       "name": "review-loop-breaker",
       "type": "LOGICAL_MOVE",
-      "inputs": [{ "workType": "task", "state": "in-review" }],
-      "outputs": [{ "workType": "task", "state": "failed" }],
+      "inputs": [
+        {
+          "workType": "task",
+          "state": "in-review"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "task",
+          "state": "failed"
+        }
+      ],
       "guards": [
         {
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review",
           "maxVisits": 10
         }
@@ -127,3 +308,4 @@
     }
   ]
 }
+

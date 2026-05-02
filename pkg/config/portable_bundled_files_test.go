@@ -16,6 +16,7 @@ func TestFlattenFactoryConfig_CollectsSupportedPortableBundledFiles(t *testing.T
 	factoryDir := filepath.Join(projectDir, portableFactoryDirName)
 
 	writePortableBundledTestFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-files-test",
   "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
   "resources": [],
   "workers": [{"name":"executor"}],

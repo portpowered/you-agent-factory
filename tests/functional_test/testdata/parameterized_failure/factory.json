@@ -1,4 +1,5 @@
 {
+  "name": "parameterized_failure",
   "workTypes": [
     {
       "name": "task",
@@ -47,3 +48,4 @@
     }
   ]
 }
+

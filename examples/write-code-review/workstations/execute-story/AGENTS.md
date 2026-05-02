@@ -1,5 +1,5 @@
 ---
-kind: repeater
+behavior: repeater
 type: MODEL_WORKSTATION
 worker: executor
 ---

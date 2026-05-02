@@ -1,4 +1,5 @@
 {
+  "name": "logical_move_dir",
   "workTypes": [
     {
       "name": "task",
@@ -38,3 +39,4 @@
     }
   ]
 }
+
