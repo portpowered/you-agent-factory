@@ -4,11 +4,8 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard/typography";
-import { Button, Input, Select, Textarea } from "../../components/ui";
-import {
-  WIDGET_SUBTITLE_CLASS,
-  DashboardWidgetFrame,
-} from "../../components/dashboard/widget-board";
+import { Button, DashboardWidgetFrame, Input, Select, Textarea } from "../../components/ui";
+import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 
 export interface SubmitWorkDraft {
   requestName: string;

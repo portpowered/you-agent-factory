@@ -1,10 +1,8 @@
 import { useSelectionHistoryStore } from "../../state/selectionHistoryStore";
 import { cx } from "../../components/dashboard/classnames";
 import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../components/dashboard/typography";
-import {
-  DashboardWidgetFrame,
-  DETAIL_CARD_WIDE_CLASS,
-} from "../../components/dashboard/widget-board";
+import { DETAIL_CARD_WIDE_CLASS } from "../../components/dashboard/widget-board";
+import { DashboardWidgetFrame } from "../../components/ui";
 import type { SelectionDetailLayoutProps } from "./detail-card-types";
 
 const CURRENT_SELECTION_TITLE = "Current selection";

@@ -1,4 +1,3 @@
-import { AgentBentoCard } from "../../components/dashboard/bento";
 import { getDashboardWorkChartSeriesDefinitions } from "./chart-contract";
 import { cx } from "../../components/dashboard/classnames";
 import { WORK_CHART_SERIES_DEFINITIONS } from "./trends";
@@ -6,6 +5,7 @@ import type { WorkChartModel } from "./trends";
 import { WorkChart } from "./work-chart";
 import type { WorkChartSeriesDefinition, WorkChartState } from "./work-chart";
 import { DASHBOARD_WIDGET_CLASS } from "../../components/dashboard/widget-board";
+import { AgentBentoCard } from "../../components/ui";
 
 export interface WorkChartCardProps {
   chartState?: WorkChartState;

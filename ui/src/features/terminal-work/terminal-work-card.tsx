@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
 import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
-import { AgentBentoCard } from "../../components/dashboard/bento";
 import { cx } from "../../components/dashboard/classnames";
 import {
   formatProviderSession,
@@ -18,6 +17,7 @@ import {
   DETAIL_CARD_CLASS,
   DETAIL_COPY_CLASS,
 } from "../../components/dashboard/widget-board";
+import { AgentBentoCard } from "../../components/ui";
 import { Button } from "../../components/ui/button";
 import {
   Collapsible,

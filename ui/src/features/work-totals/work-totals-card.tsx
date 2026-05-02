@@ -1,5 +1,5 @@
-import { AgentBentoCard } from "../../components/dashboard/bento";
 import { cx } from "../../components/dashboard/classnames";
+import { AgentBentoCard } from "../../components/ui";
 
 interface WorkTotalsCardProps {
   completedCount: number;

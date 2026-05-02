@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { AgentBentoLayoutItem } from "../../components/dashboard";
+import type { AgentBentoLayoutItem } from "../../components/ui";
 
 const DASHBOARD_LAYOUT_STORAGE_KEY = "agent-factory.dashboard.layout.v2";
 const LEGACY_SELECTION_WIDGET_IDS = [
