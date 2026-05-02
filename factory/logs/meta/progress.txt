@@ -1200,3 +1200,42 @@
 - Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
   matches `HEAD` `d028000`, merged PR `#50`, the stale ignored-residue map,
   and the new reserve cleanup posture.
+
+## 2026-05-02 04:20:00 -07:00 - meta refresh after throttle and timeout reserve lanes merged
+
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `913f007`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, workflow contract
+  docs, tracked workflow-input surfaces, ignored local workflow residue, live
+  GitHub PR state, and current production code before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `d028000`
+  - it still treated PR `#48` as open even though it is now merged
+  - it still treated the workstation-timeout reserve seam as queueable even
+    though merged PR `#51` already landed it on `main`
+- Confirmed the current GitHub PR shape on May 2, 2026 is:
+  - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PRs `#51`, `#50`, `#49`, `#48`, `#47`, `#46`, `#45`, and `#44`
+- Revalidated the customer throttle posture directly against current history
+  and code:
+  - authored factory-level throttle guard support is merged on `main`
+  - the remaining implicit throttle fallback cleanup is also merged on `main`
+  - the throttle ask should no longer be treated as active backlog
+- Used a sidecar repository-inspection agent plus direct code inspection to
+  identify one new narrow reserve cleanup candidate outside the open PR lane:
+  - `pkg/api/workstation_request_projection.go` still keeps the single-caller
+    helpers `inferenceAttemptProviderSessionOrFallback(...)` and
+    `inferenceAttemptDiagnosticsOrFallback(...)`
+  - both helpers only perform local nil-check fallback inside
+    `workstationDispatchViewFromCompletion(...)`
+  - the seam stays outside `tests/functional/**`
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/inline-workstation-request-projection-fallback-helpers.md`
+  instead of re-queueing solved throttle or timeout residue.
+- Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
+  matches `HEAD` `913f007`, the merged throttle/timeout reserve state, the
+  open `#30` collision surface, and the next package-local cleanup posture.

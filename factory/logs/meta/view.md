@@ -2,9 +2,8 @@
 
 ## world state
 
-- after `git pull`, repository `main` and
-  `origin/main` are both at `d028000` on May 2, 2026 in the local maintainer
-  workspace
+- after `git pull --ff-only`, repository `main` and `origin/main` are both at
+  `913f007` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -26,6 +25,7 @@
   - `factory/inputs/idea/default/derive-throttle-windows-from-event-history.md`
   - `factory/inputs/idea/default/factory-level-inference-throttle-guard.md`
   - `factory/inputs/idea/default/inline-batch-relation-duplicate-rejection.md`
+  - `factory/inputs/idea/default/inline-workstation-request-projection-fallback-helpers.md`
   - `factory/inputs/idea/default/prd-cli-consumer-installation.md`
   - `factory/inputs/idea/default/prd-current-factory-default-runtime-support.md`
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
@@ -40,105 +40,73 @@
   - `factory/inputs/task/default/prd-api-model-contract-cleanup.md`
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
-  - open PR `#48` `retire-legacy-throttle-fallback-after-authored-guard`
   - open PR `#30` `prd-functional-test-suite-decomposition`
-  - merged PR `#49` `retire-runtime-lookup-helper-duplication`
+  - merged PR `#51` `retire-legacy-workstation-timeout-alias-fallback`
   - merged PR `#50` `unify-token-removal-bookkeeping`
+  - merged PR `#49` `retire-runtime-lookup-helper-duplication`
+  - merged PR `#48` `retire-legacy-throttle-fallback-after-authored-guard`
   - merged PR `#47` `retire-verbose-logger-export`
   - merged PR `#46` `factory-level-inference-throttle-guard`
   - merged PR `#45` `retire-duplicate-ui-script-copies`
   - merged PR `#44` `inline-batch-relation-duplicate-rejection`
-  - merged PR `#43` `collapse-dashboard-fallback-work-item-collectors`
-  - merged PR `#42` `retire-dispatcher-throttle-pause-map`
-  - merged PR `#41` `dedupe-replay-factory-merge-helpers`
-  - merged PR `#40` `dedupe-worker-event-exit-code-extraction`
-  - merged PR `#39` `chaining-trace-ids`
-  - merged PR `#38` `prd-current-factory-default-runtime-support`
-  - merged PR `#37` `prd-cli-consumer-installation`
-  - merged PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
-  - merged PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
-  - merged PR `#33` `prd-api-model-contract-cleanup`
 - the worktree is currently clean even though ignored local workflow-input
   residue remains under `factory/inputs/**`
-- the broad throttle customer ask remains the highest-value architecture ask,
-  and is now represented by an active cleanup lane plus the already-merged
-  authored-guard implementation:
-  - merged PR `#46` added the root authored contract in
+- the broad throttle customer ask is now implemented on `main` rather than
+  merely in-flight:
+  - merged PR `#46` added authored factory-level guard support through
     `api/components/schemas/data-models/Factory.yaml`,
     `api/components/schemas/data-models/FactoryGuard.yaml`,
     `api/components/schemas/data-models/GuardType.yaml`,
-    `api/openapi.yaml`, and generated API/UI client output
-  - merged PR `#46` added the factory-level config/mapping/validation lane
-    through `pkg/interfaces/factory_config.go`,
+    `api/openapi.yaml`,
+    `pkg/interfaces/factory_config.go`,
     `pkg/config/factory_config_mapping.go`,
     `pkg/config/openapi_factory.go`,
     `pkg/config/config_validator.go`,
-    `pkg/config/public_factory_enums.go`, and
-    `pkg/config/config_mapper.go`
-  - merged PR `#46` lowered the authored guard into ordinary runtime guard
-    evaluation through `pkg/petri/guard.go`,
+    `pkg/config/public_factory_enums.go`,
+    `pkg/config/config_mapper.go`,
+    `pkg/petri/guard.go`,
     `pkg/petri/inference_throttle_guard.go`,
     `pkg/factory/scheduler/enablement.go`, and
     `pkg/factory/subsystems/subsystem_dispatcher.go`
-  - merged PR `#46` verified the lane with targeted package/API/UI tests while
-    still avoiding `tests/functional/**`
-  - open PR `#48` now owns the explicit post-merge simplification follow-up:
-    retire the legacy implicit throttle-policy fallback for factories that do
-    not author `factory.guards`
-  - the live fallback on `main` still lives in:
-    - `pkg/factory/options.go` via `WithProviderThrottlePauseDuration`
-    - `pkg/factory/runtime/factory.go` via dispatcher wiring from
-      `ProviderThrottlePauseDuration`
-    - `pkg/factory/subsystems/subsystem_dispatcher.go` via the
-      `activeThrottlePauses` branch that falls back to
-      `factorythrottle.DeriveActiveThrottlePauses(...)` when no authored
-      inference-throttle guard exists
-  - PR `#48` covers those files plus focused regression proof in
-    `pkg/factory/subsystems/dispatcher_test.go`,
-    `pkg/petri/inference_throttle_guard_test.go`,
-    `pkg/testutil/testutil.go`, and
-    `tests/functional_test/provider_error_smoke_test.go`; that last file sits
-    outside the still-open `tests/functional/**` reorganization lane in `#30`
-- the previously queued reserve cleanup changed again while `main` advanced:
-  - merged PR `#49` already retired the duplicated first-non-nil helper loops
-    in `pkg/interfaces/runtime_lookup.go`
+  - merged PR `#48` retired the remaining implicit provider-throttle fallback
+    path after authored guard support landed, simplifying
+    `pkg/factory/options.go`,
+    `pkg/factory/runtime/factory.go`, and
+    `pkg/factory/subsystems/subsystem_dispatcher.go`
+  - the next maintainer action on that ask is no longer "queue or merge the
+    throttle lane"; it is simply to keep the world model accurate and avoid
+    re-queuing solved throttle residue from ignored local inputs
+- the previously recommended reserve seam is now solved:
+  - merged PR `#51` retired the in-memory top-level workstation timeout alias
+    fallback from `pkg/config/workstation_execution_limits.go`
   - the ignored local idea
-    `factory/inputs/idea/default/retire-runtime-lookup-helper-duplication.md`
+    `factory/inputs/idea/default/retire-legacy-workstation-timeout-alias-fallback.md`
     is now solved residue rather than pending work
-- direct code inspection also invalidated another ignored local reserve idea:
-  - `pkg/api/server.go` still owns the handwritten tolerant `/work` wrapper
-  - `pkg/api/handlers.go` on `main` no longer re-parses raw `maxResults`
-    query text inside `ListWork`
-  - the ignored local idea
-    `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
-    is stale because its problem statement is no longer true on `main`
-- direct code inspection plus current PR validation found the next smaller
-  non-colliding reserve cleanup in legacy workstation timeout handling:
-  - `pkg/config/workstation_execution_limits.go` still normalizes
-    workstation-level `timeout` into `limits.maxExecutionTime` and also keeps a
-    second direct-struct legacy fallback in `WorkstationExecutionTimeout(...)`
-  - `pkg/workers/workstation_executor.go` still consumes that helper for live
-    dispatch deadlines
-  - `pkg/workers/workstation_executor_test.go` still proves the legacy
-    top-level timeout alias path with `legacy_timeout_alias_zero`
-  - docs already describe top-level workstation `timeout` as a load-boundary
-    alias that is normalized away, so the remaining in-memory fallback is the
-    smaller cleanup seam
-  - this seam stays outside open PR `#48` and open PR `#30`
+- direct code inspection plus a sidecar explorer found the next smaller
+  non-colliding reserve cleanup seam in workstation request projection:
+  - `pkg/api/workstation_request_projection.go` still keeps the local helpers
+    `inferenceAttemptProviderSessionOrFallback(...)` and
+    `inferenceAttemptDiagnosticsOrFallback(...)`
+  - each helper has one caller inside
+    `workstationDispatchViewFromCompletion(...)`
+  - both helpers only express local nil-check fallback that can be inlined at
+    the call site without changing any public contract
+  - this seam stays outside the open `tests/functional/**` reorganization lane
+    in PR `#30`
 
 ## current blockers
 
-1. open PR `#48` occupies the exact remaining customer throttle cleanup lane,
-   so that ask should not be re-queued while review is pending
-2. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
-   new work should avoid those paths until that lane merges
-3. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `12c56e2`
-   - it still treated the token-removal reserve seam as queueable even though
-     merged PR `#50` already landed it on `main`
-   - it did not capture the next reserve seam in legacy workstation-timeout
-     alias fallback handling
-4. workspace-local ignored residue can drift independently of `main` and must
+1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
+   new work should avoid that tree until it merges
+2. the previous checked-in world model was stale again:
+   - it still described `HEAD` as `d028000`
+   - it still treated the throttle follow-up as open even though PR `#48`
+     merged
+   - it still treated the workstation-timeout reserve seam as queueable even
+     though PR `#51` merged
+   - it did not capture the next reserve seam in
+     `pkg/api/workstation_request_projection.go`
+3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 
 ## theory of mind
@@ -147,57 +115,42 @@
   checked-in meta view and ignored `factory/inputs/**` residue; this
   repository changes quickly enough that the checked-in world model drifts
   within hours
-- after merged PR `#46`, the customer throttle ask became "finish the
-  simplification" by retiring the implicit fallback path that still applies
-  provider/model throttle pauses even when a factory has not authored
-  `INFERENCE_THROTTLE_GUARD`; open PR `#48` is now the active embodiment of
-  that follow-up
-- the customer explicitly asked to replace the separate global-throttle logic
-  with a factory-level guard and reduce special abstractions, so the correct
-  maintainer action today is to track `#48` as the active lane rather than
-  queueing another competing throttle request
-- a safe parallel cleanup lane must still stay outside both `#48` and
-  `tests/functional/**` while PR `#30` is open
-- ignored local idea files are even less trustworthy than their filenames
-  suggest; they can be stale because the seam already landed or because later
-  mainline cleanup removed the underlying duplication before the idea was ever
-  dispatched
-- when a deprecated config field is already normalized away at the load
-  boundary, the next simplification step is usually retiring any second
-  in-memory fallback path that still preserves that alias for tests or manual
-  struct assembly
-- the smallest currently validated reserve hygiene lane is retiring the
-  legacy workstation timeout alias fallback across
-  `pkg/config/workstation_execution_limits.go` and
-  `pkg/workers/workstation_executor_test.go`; it is still lower value than the
-  active customer-owned throttle follow-up but remains safe background work
+- the customer throttle outage-prevention ask is now complete on `main`; the
+  correct maintainer posture is to stop treating throttle cleanup as live
+  backlog and to avoid creating new overlapping throttle requests from stale
+  local residue
+- with PR `#48` and PR `#51` merged, the only live broad collision surface is
+  PR `#30` in `tests/functional/**`
+- safe parallel cleanup should therefore stay package-local and outside
+  `tests/functional/**`
+- local single-caller fallback helpers are good reserve seams when they keep
+  duplicate nil-check ownership inside one production function without adding
+  public value
+- the broad quality and website-quality asks remain important, but they are
+  still programs rather than one narrow immediate lane; until they are broken
+  down further, the highest-confidence maintainer move is narrow cleanup that
+  reduces local complexity without colliding with the active functional-test
+  reorganization
 
 ## next best move
 
 - update the checked-in meta world model and progress log now
-- leave `factory/logs/meta/asks.md` unchanged; the priority order is still
-  correct
-- do not re-queue the already-open throttle fallback cleanup lane in `#48`
-- queue one new ignored reserve cleanup idea for retiring the legacy
-  workstation timeout alias fallback from
-  `pkg/config/workstation_execution_limits.go` and
-  `pkg/workers/workstation_executor_test.go`
-- keep any new reserve work out of both the `#48` file set and
-  `tests/functional/**` while PR `#30` remains open
-- treat the active customer throttle follow-up as review/merge work now, not
-  as a fresh backlog item
+- leave `factory/logs/meta/asks.md` unchanged; the checked-in priority order
+  is still correct
+- do not re-queue any throttle or workstation-timeout lane already merged on
+  `main`
+- queue one new ignored reserve cleanup idea for simplifying the single-caller
+  fallback helpers in `pkg/api/workstation_request_projection.go`
+- keep any new reserve work out of `tests/functional/**` while PR `#30`
+  remains open
 
 ## customer asks
 
 - `factory/logs/meta/asks.md` remains the only checked-in backlog surface
 - no ask is marked urgent as of May 2, 2026 in the maintainer workspace
-- the throttling ask is still the most important architecture-level customer
-  ask, with authored-guard support merged on `main` and the remaining fallback
-  retirement now active in open PR `#48`
-- the quality and website-quality asks remain broader follow-on programs, but
-  they are still subordinate to the throttling outage-prevention ask
-- the next maintainer action on that ask is to review and merge `#48` rather
-  than creating another throttle request, while reserve hygiene can continue in
-  non-colliding seams such as retiring the legacy workstation timeout alias
-  fallback in `pkg/config/workstation_execution_limits.go` and
-  `pkg/workers/workstation_executor_test.go`
+- the throttling ask is now satisfied on `main` through merged PRs `#46` and
+  `#48`
+- the next customer-facing asks are the broader quality, website-quality,
+  linting, docs-audit, manual-QA, and systems-quality programs; none of them
+  are yet decomposed into a single new checked-in priority item that should
+  displace the current backlog ordering during this pass
