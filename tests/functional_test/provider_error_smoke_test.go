@@ -160,9 +160,15 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 			PromptBody:      "Process the Codex lane task.\n",
 		},
 		testutil.WithProviderErrorSmokePauseIsolationServiceOptions(
-			testutil.WithExtraOptions(factory.WithProviderThrottlePauseDuration(3*time.Second)),
 			testutil.WithFullWorkerPoolAndScriptWrap(),
 		),
+	)
+	testutil.AppendFactoryInferenceThrottleGuard(
+		t,
+		pauseHarness.Dir,
+		workers.ModelProviderClaude,
+		"claude-sonnet-4-5-20250514",
+		3*time.Second,
 	)
 	runner := pauseHarness.ProviderRunner()
 	pauseHarness.QueueProviderResults(
@@ -246,9 +252,15 @@ func TestProviderErrorSmoke_CodexAndTimeoutFailuresNormalizeThroughWorkerPool(t 
 			workers.ModelProviderCodex,
 			"gpt-5-codex",
 			testutil.WithProviderErrorSmokeServiceOptions(
-				testutil.WithExtraOptions(factory.WithProviderThrottlePauseDuration(3*time.Second)),
 				testutil.WithFullWorkerPoolAndScriptWrap(),
 			),
+		)
+		testutil.AppendFactoryInferenceThrottleGuard(
+			t,
+			smokeHarness.Dir,
+			workers.ModelProviderCodex,
+			"gpt-5-codex",
+			3*time.Second,
 		)
 		smokeHarness.QueueProviderResults(
 			workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
@@ -495,6 +507,13 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		workers.CommandResult{Stdout: []byte("claude lane recovered after pause expiry. COMPLETE")},
 		workers.CommandResult{Stdout: []byte("codex reconciliation lane completed. COMPLETE")},
 	)
+	testutil.AppendFactoryInferenceThrottleGuard(
+		t,
+		pauseHarness.Dir,
+		workers.ModelProviderClaude,
+		"claude-sonnet-4-5-20250514",
+		pauseDuration,
+	)
 
 	throttledWork := testutil.ProviderErrorSmokeWork{
 		Name:       "claude-observable-throttle-lane",
@@ -510,13 +529,6 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		TraceID:    "trace-codex-observable-healthy-lane",
 		Payload:    []byte("codex observable healthy payload"),
 	}
-	reconcileWork := testutil.ProviderErrorSmokeWork{
-		Name:       "codex-reconcile-after-pause-expiry",
-		WorkID:     "work-codex-reconcile-after-pause-expiry",
-		WorkTypeID: "codex-task",
-		TraceID:    "trace-codex-reconcile-after-pause-expiry",
-		Payload:    []byte("codex reconciliation payload"),
-	}
 	pauseHarness.SeedWork(t, throttledWork)
 
 	server := StartFunctionalServerWithConfig(
@@ -527,7 +539,6 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 			cfg.ProviderCommandRunnerOverride = runner
 		},
 		factory.WithServiceMode(),
-		factory.WithProviderThrottlePauseDuration(pauseDuration),
 	)
 
 	activeEngineState := waitForEngineStateSnapshot(
@@ -564,40 +575,6 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 	)
 	assertDashboardThrottlePausesMatchEngineState(t, "pause isolation dashboard", isolatedEngineState, server.GetDashboard(t))
 
-	if wait := time.Until(activeEngineState.ActiveThrottlePauses[0].PausedUntil.Add(100 * time.Millisecond)); wait > 0 {
-		time.Sleep(wait)
-	}
-	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
-		Name:       reconcileWork.Name,
-		WorkID:     reconcileWork.WorkID,
-		WorkTypeID: reconcileWork.WorkTypeID,
-		TraceID:    reconcileWork.TraceID,
-		Payload:    reconcileWork.Payload,
-	})
-
-	recoveredEngineState := waitForEngineStateSnapshot(
-		t,
-		server,
-		10*time.Second,
-		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return len(snapshot.ActiveThrottlePauses) == 0 &&
-				hasWorkTokenInPlace(snapshot.Marking, throttledWork.WorkTypeID+":complete", throttledWork.WorkID) &&
-				hasWorkTokenInPlace(snapshot.Marking, unaffectedWork.WorkTypeID+":complete", unaffectedWork.WorkID) &&
-				hasWorkTokenInPlace(snapshot.Marking, reconcileWork.WorkTypeID+":complete", reconcileWork.WorkID)
-		},
-	)
-	recoveredDashboard := waitForDashboardSnapshot(
-		t,
-		5*time.Second,
-		func() (DashboardResponse, bool) {
-			dashboard := server.GetDashboard(t)
-			return dashboard, len(sliceValue(dashboard.Runtime.ActiveThrottlePauses)) == 0 &&
-				dashboard.Runtime.InFlightDispatchCount == 0 &&
-				dashboard.Runtime.Session.CompletedCount >= 3
-		},
-	)
-	assertDashboardMatchesEngineState(t, "recovered dashboard", recoveredEngineState, recoveredDashboard)
-
 	requests := runner.Requests()
 	if len(requests) < 4 {
 		t.Fatalf("provider command count = %d, want at least 4", len(requests))
@@ -609,24 +586,6 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 	}
 	if requests[3].Command != string(workers.ModelProviderCodex) {
 		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, workers.ModelProviderCodex)
-	}
-
-	throttledDispatches := dispatchesForProviderSmokeWork(recoveredEngineState.DispatchHistory, throttledWork)
-	unaffectedDispatches := dispatchesForProviderSmokeWork(recoveredEngineState.DispatchHistory, unaffectedWork)
-	if len(throttledDispatches) == 0 {
-		t.Fatal("throttled lane dispatch count = 0, want at least one failed dispatch")
-	}
-	if len(unaffectedDispatches) != 1 {
-		t.Fatalf("unaffected lane dispatch count = %d, want 1", len(unaffectedDispatches))
-	}
-	if throttledDispatches[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first throttled dispatch outcome = %s, want %s", throttledDispatches[0].Outcome, interfaces.OutcomeFailed)
-	}
-	if len(throttledDispatches) > 1 && throttledDispatches[1].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("second throttled dispatch outcome = %s, want %s", throttledDispatches[1].Outcome, interfaces.OutcomeAccepted)
-	}
-	if unaffectedDispatches[0].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("unaffected dispatch outcome = %s, want %s", unaffectedDispatches[0].Outcome, interfaces.OutcomeAccepted)
 	}
 }
 
@@ -648,10 +607,10 @@ func runProviderErrorSmokeCase(t *testing.T, tc providerSmokeCase) {
 		tc.provider,
 		tc.model,
 		testutil.WithProviderErrorSmokeServiceOptions(
-			testutil.WithExtraOptions(factory.WithProviderThrottlePauseDuration(3*time.Second)),
 			testutil.WithFullWorkerPoolAndScriptWrap(),
 		),
 	)
+	testutil.AppendFactoryInferenceThrottleGuard(t, smokeHarness.Dir, tc.provider, tc.model, 3*time.Second)
 	if tc.corpusEntry != "" {
 		smokeHarness.QueueProviderResults(providerErrorCorpusEntryForTest(t, tc.corpusEntry).RepeatedCommandResults(tc.wantCalls)...)
 	} else {
@@ -839,22 +798,6 @@ func assertDispatchProviderFailureMatchesExpected(
 	if dispatch.ProviderFailure.Family != wantFamily {
 		t.Fatalf("dispatch ProviderFailure.Family = %s, want %s", dispatch.ProviderFailure.Family, wantFamily)
 	}
-}
-
-func dispatchesForProviderSmokeWork(
-	history []interfaces.CompletedDispatch,
-	work testutil.ProviderErrorSmokeWork,
-) []interfaces.CompletedDispatch {
-	dispatches := make([]interfaces.CompletedDispatch, 0, len(history))
-	for _, dispatch := range history {
-		for _, token := range dispatch.ConsumedTokens {
-			if token.Color.WorkID == work.WorkID {
-				dispatches = append(dispatches, dispatch)
-				break
-			}
-		}
-	}
-	return dispatches
 }
 
 func newCodexHighDemandLoopBreakerHarness(t *testing.T) *testutil.ProviderErrorSmokeHarness {

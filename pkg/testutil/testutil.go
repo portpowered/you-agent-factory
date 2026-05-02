@@ -10,9 +10,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // seedFileCounter provides unique filenames across concurrent test invocations.
@@ -205,6 +207,58 @@ func ScaffoldFactoryDir(t *testing.T, cfg *interfaces.FactoryConfig) string {
 		t.Fatalf("ScaffoldFactoryDir: write factory.json: %v", err)
 	}
 	return dir
+}
+
+// UpdateFactoryJSON applies an in-place mutation to a copied fixture's
+// factory.json so tests can author focused topology or guard changes without
+// bypassing the normal config loader.
+func UpdateFactoryJSON(t *testing.T, dir string, mutate func(map[string]any)) {
+	t.Helper()
+
+	path := filepath.Join(dir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("UpdateFactoryJSON: read %s: %v", path, err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("UpdateFactoryJSON: unmarshal %s: %v", path, err)
+	}
+
+	mutate(cfg)
+
+	updated, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("UpdateFactoryJSON: marshal %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		t.Fatalf("UpdateFactoryJSON: write %s: %v", path, err)
+	}
+}
+
+// AppendFactoryInferenceThrottleGuard authors a root-level inference throttle
+// guard into a copied fixture so tests exercise the supported config path
+// instead of retired runtime-only wiring.
+func AppendFactoryInferenceThrottleGuard(
+	t *testing.T,
+	dir string,
+	provider workers.ModelProvider,
+	model string,
+	refreshWindow time.Duration,
+) {
+	t.Helper()
+
+	UpdateFactoryJSON(t, dir, func(cfg map[string]any) {
+		guards, _ := cfg["guards"].([]any)
+		guards = append(guards, map[string]any{
+			"type":          "INFERENCE_THROTTLE_GUARD",
+			"modelProvider": strings.ToUpper(string(provider)),
+			"model":         model,
+			"refreshWindow": refreshWindow.String(),
+		})
+		cfg["guards"] = guards
+	})
 }
 
 // PipelineConfig returns a FactoryConfig for a linear N-stage pipeline:

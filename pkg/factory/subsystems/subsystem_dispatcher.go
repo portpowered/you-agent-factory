@@ -58,16 +58,6 @@ func WithDispatcherClock(now func() time.Time) DispatcherOption {
 	}
 }
 
-// WithDispatcherThrottlePauseDuration overrides the internal pause window used
-// for provider/model throttling. Zero or negative values keep the default.
-func WithDispatcherThrottlePauseDuration(duration time.Duration) DispatcherOption {
-	return func(d *DispatcherSubsystem) {
-		if duration > 0 {
-			d.throttlePauseDuration = duration
-		}
-	}
-}
-
 // NewDispatcher creates a new DispatcherSubsystem.
 func NewDispatcher(n *state.Net, sched scheduler.Scheduler, wfCtx *factory_context.FactoryContext, logger logging.Logger, opts ...DispatcherOption) *DispatcherSubsystem {
 	l := logging.EnsureLogger(logger)

@@ -67,7 +67,6 @@ func TestFactoryOptions_PreserveSupportedCoreConstructionSurface(t *testing.T) {
 		WithRuntimeConfig(runtimeCfg),
 		WithWorkflowContext(workflowContext),
 		WithInlineDispatch(),
-		WithProviderThrottlePauseDuration(time.Second),
 		WithCompletionDeliveryPlanner(planner),
 	}
 
@@ -101,9 +100,6 @@ func TestFactoryOptions_PreserveSupportedCoreConstructionSurface(t *testing.T) {
 	}
 	if !cfg.IsInlineDispatch() {
 		t.Fatal("expected WithInlineDispatch to enable inline dispatch")
-	}
-	if cfg.ProviderThrottlePauseDuration != time.Second {
-		t.Fatalf("ProviderThrottlePauseDuration = %s, want %s", cfg.ProviderThrottlePauseDuration, time.Second)
 	}
 	if cfg.CompletionDeliveryPlanner != planner {
 		t.Fatal("expected WithCompletionDeliveryPlanner to preserve the provided planner")
