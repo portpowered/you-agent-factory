@@ -53,6 +53,7 @@ export interface ExecutionDetailsSectionProps {
   details: SelectedWorkItemExecutionDetails;
   now: number;
   onSelectTraceID?: (traceID: string) => void;
+  showInferenceAttempts?: boolean;
   traceTargetId: string;
 }
 

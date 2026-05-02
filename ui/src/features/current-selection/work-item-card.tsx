@@ -81,6 +81,7 @@ export function WorkItemDetailCard({
         details={executionDetails}
         now={now}
         onSelectTraceID={onSelectTraceID}
+        showInferenceAttempts={false}
         traceTargetId={traceTargetId}
       />
       <WorkRelationshipsSection

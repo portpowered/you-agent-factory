@@ -14,10 +14,6 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "./components/dashboard";
 import {
-  INFERENCE_REQUEST_PROMPT_LABEL,
-  INFERENCE_RESPONSE_LABEL,
-} from "./features/current-selection/current-selection-cards";
-import {
   dashboardWorkstationRequestFixtures,
   failureAnalysisTimelineEvents,
   resourceCountTimelineEvents,
@@ -1143,14 +1139,12 @@ export const InferenceCurrentSelectionDetails = {
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const failedPromptText = "Review Active Story and return a decision.";
-    const retryPromptText = "Retry Active Story after provider recovery.";
-    const retryResponseText = "Active Story is ready for the next workstation.";
 
     await userEvent.click((await canvas.findAllByRole("button", { name: /Active Story/ }))[0]);
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    await expect(currentSelection.getByRole("heading", { name: "Inference attempts" }))
+    expect(currentSelection.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
+    await expect(currentSelection.getByRole("heading", { name: "Workstation dispatches" }))
       .toBeVisible();
     expect(currentSelection.getAllByText(/codex/).length).toBeGreaterThan(0);
     expect(currentSelection.getAllByText(/factory-renderer/).length).toBeGreaterThan(0);
@@ -1159,34 +1153,6 @@ export const InferenceCurrentSelectionDetails = {
       currentSelection.queryByText(/Model details are not available for this selected run/),
     ).toBeNull();
     expect(currentSelection.queryByText("sha256:user-runtime")).toBeNull();
-    const attempts = currentSelection.getAllByRole("article", { name: /Inference attempt/ });
-    await expect(within(attempts[0]).getByText("provider_rate_limit")).toBeVisible();
-    await expect(
-      within(attempts[0]).getByRole("region", { name: INFERENCE_REQUEST_PROMPT_LABEL }),
-    ).toBeVisible();
-    await expect(
-      within(attempts[0]).getByText(failedPromptText),
-    ).toBeVisible();
-    expect(
-      within(attempts[0]).queryByRole("region", { name: INFERENCE_RESPONSE_LABEL }),
-    ).toBeNull();
-    await expect(
-      within(attempts[0]).getByText(
-        "Provider response text is not available for this inference attempt.",
-      ),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByRole("region", { name: INFERENCE_REQUEST_PROMPT_LABEL }),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByText(retryPromptText),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByRole("region", { name: INFERENCE_RESPONSE_LABEL }),
-    ).toBeVisible();
-    await expect(
-      within(attempts[1]).getByText(retryResponseText),
-    ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
