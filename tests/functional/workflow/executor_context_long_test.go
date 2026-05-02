@@ -107,6 +107,7 @@ func TestExecutorContext_RejectionFeedback(t *testing.T) {
 
 // TestExecutorContext_ParentLineage verifies that parent-child and depends-on
 // relations survive onto the executor dispatch token for workflow lineage.
+// portos:func-length-exception owner=agent-factory reason=executor-context-parent-lineage-smoke review=2026-07-22 removal=split-parent-and-depends-on-lineage-assertions-before-next-executor-context-lineage-change
 func TestExecutorContext_ParentLineage(t *testing.T) {
 	support.SkipLongFunctional(t, "slow executor-context parent-lineage sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))

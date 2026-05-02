@@ -19,6 +19,7 @@ const (
 	timeoutCompanionRunTimeout    = 20 * time.Second
 )
 
+// portos:func-length-exception owner=agent-factory reason=script-timeout-companion-long-smoke review=2026-07-22 removal=split-timeout-runner-setup-requeue-observation-and-completion-assertions-before-next-timeout-companion-change
 func TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	traceID := "trace-script-timeout-companion-001"

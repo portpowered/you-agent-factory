@@ -30,6 +30,7 @@ func singleStagePipelineConfig() *interfaces.FactoryConfig {
 	}
 }
 
+// portos:func-length-exception owner=agent-factory reason=dashboard-single-snapshot-smoke review=2026-07-22 removal=split-runtime-setup-selected-work-and-world-view-assertions-before-next-dashboard-snapshot-change
 func TestDashboard_SingleWorkItemSnapshot(t *testing.T) {
 	support.SkipLongFunctional(t, "slow dashboard single-work snapshot sweep")
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
@@ -135,6 +136,7 @@ func (e *snapshotCapturingExecutor) Execute(_ context.Context, d interfaces.Work
 	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
 }
 
+// portos:func-length-exception owner=agent-factory reason=dashboard-parallel-snapshot-smoke review=2026-07-22 removal=split-parallel-submission-occupancy-and-dashboard-assertions-before-next-dashboard-snapshot-change
 func TestDashboard_ParallelWorkItemsSnapshot(t *testing.T) {
 	support.SkipLongFunctional(t, "slow dashboard parallel snapshot sweep")
 	cfg := singleStagePipelineConfig()

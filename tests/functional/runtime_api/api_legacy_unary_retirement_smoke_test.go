@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// portos:func-length-exception owner=agent-factory reason=legacy-unary-runtime-submit-smoke review=2026-07-22 removal=split-http-upsert-workfile-watcher-and-cron-submit-assertions-before-next-unary-retirement-change
 func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T) {
 	support.SkipLongFunctional(t, "slow legacy unary retirement boundary smoke")
 

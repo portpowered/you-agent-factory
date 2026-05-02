@@ -67,6 +67,7 @@ func persistTestPipelineConfig() *interfaces.FactoryConfig {
 	}
 }
 
+// portos:func-length-exception owner=agent-factory reason=runtime-api-functional-server-fixture review=2026-07-22 removal=split-server-build-run-and-runtime-surface-capture-helpers-before-next-runtime-api-functional-server-change
 func startFunctionalServerWithConfig(
 	t *testing.T,
 	factoryDir string,

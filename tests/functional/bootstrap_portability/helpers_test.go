@@ -29,6 +29,7 @@ type functionalAPIServer struct {
 	done    chan struct{}
 }
 
+// portos:func-length-exception owner=agent-factory reason=bootstrap-functional-server-fixture review=2026-07-22 removal=split-server-build-run-and-service-mode-readiness-helpers-before-next-bootstrap-functional-server-change
 func startFunctionalServerWithConfig(
 	t *testing.T,
 	factoryDir string,

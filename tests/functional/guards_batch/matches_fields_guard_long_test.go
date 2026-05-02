@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// portos:func-length-exception owner=agent-factory reason=matches-fields-boundary-fixture-sweep review=2026-07-22 removal=split-generated-boundary-and-runtime-config-assertions-before-next-matches-fields-fixture-change
 func TestMatchesFieldsGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 	support.SkipLongFunctional(t, "slow matches-fields fixture-boundary sweep")
 	t.Parallel()
@@ -238,6 +239,7 @@ func TestMatchesFieldsGuard_ThreeInputNestedTagMismatchRejectsCandidateSet(t *te
 	assertMatchesFieldsHarnessBlocked(t, h, provider, []string{"first:ready", "second:ready", "third:ready"}, "triple:matched")
 }
 
+// portos:func-length-exception owner=agent-factory reason=matches-fields-grouped-execution-fixture review=2026-07-22 removal=split-matching-and-mismatching-grouped-execution-cases-before-next-matches-fields-integration-change
 func TestMatchesFieldsGuard_IntegrationSmoke_GroupedExecution(t *testing.T) {
 	support.SkipLongFunctional(t, "slow matches-fields grouped-execution sweep")
 	t.Run("matching pair dispatches through normal path", func(t *testing.T) {

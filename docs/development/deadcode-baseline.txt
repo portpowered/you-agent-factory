@@ -16,9 +16,9 @@ pkg/testutil/testutil.go:81:6: unreachable func: WriteSeedMarkdownFile
 pkg/testutil/testutil.go:109:6: unreachable func: WriteSeedBatchFile
 tests/functional/bootstrap_portability/cli_relative_working_directory_test.go:9:6: unreachable func: writeRelativeWorkingDirectoryFactoryConfig
 tests/functional/bootstrap_portability/cli_relative_working_directory_test.go:46:6: unreachable func: writeRelativeWorkingDirectoryWorkstationConfig
-tests/functional/bootstrap_portability/helpers_test.go:118:32: unreachable func: functionalAPIServer.SubmitWork
-tests/functional/bootstrap_portability/helpers_test.go:147:32: unreachable func: functionalAPIServer.GetEngineStateSnapshot
-tests/functional/bootstrap_portability/helpers_test.go:176:6: unreachable func: waitForGeneratedWorkAtPlace
+tests/functional/bootstrap_portability/helpers_test.go:119:32: unreachable func: functionalAPIServer.SubmitWork
+tests/functional/bootstrap_portability/helpers_test.go:148:32: unreachable func: functionalAPIServer.GetEngineStateSnapshot
+tests/functional/bootstrap_portability/helpers_test.go:177:6: unreachable func: waitForGeneratedWorkAtPlace
 tests/functional/bootstrap_portability/portability_helpers_test.go:34:29: unreachable func: fakeCommandRunner.Run
 tests/functional/bootstrap_portability/portability_helpers_test.go:38:6: unreachable func: successRunner
 tests/functional/bootstrap_portability/portability_helpers_test.go:42:6: unreachable func: writeFatFactoryJSON

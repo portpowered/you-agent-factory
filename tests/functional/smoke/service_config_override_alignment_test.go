@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// portos:func-length-exception owner=agent-factory reason=shared-command-runner-smoke review=2026-07-22 removal=split-script-request-and-provider-request-assertions-before-next-command-runner-alignment-change
 func TestServiceConfigOverrideAlignment_ServiceHarnessSharesScriptAndProviderCommandRunner(t *testing.T) {
 	cfg := twoStageServicePipelineConfig()
 	workstations := cfg["workstations"].([]map[string]any)
