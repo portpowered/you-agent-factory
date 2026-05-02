@@ -344,6 +344,8 @@ func validatePortableBundledFilesystemPath(root portableBundledValidationRoot, t
 			}
 			return fmt.Errorf("inspect bundled file path %q: %w", targetLocation, err)
 		}
+		// Lexical containment is already owned by portableBundledTargetPath.
+		// This walk only rejects existing filesystem links that resolve outside the expand root.
 		resolvedPath, isLink, err := portableBundledResolvedLinkPath(currentPath, info)
 		if err != nil {
 			return fmt.Errorf("resolve filesystem link for %q: %w", targetLocation, err)
