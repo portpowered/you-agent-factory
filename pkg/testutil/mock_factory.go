@@ -35,6 +35,7 @@ type MockFactory struct {
 	CurrentNamedFactoryErr   error
 }
 
+var _ factory.APIFactory = (*MockFactory)(nil)
 var _ factory.Factory = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
 
