@@ -1,7 +1,11 @@
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../styles.css";
-import { AgentBentoCard, AgentBentoLayout, type AgentBentoLayoutItem } from "./bento";
+import {
+  AgentBentoCard,
+  AgentBentoLayout,
+  type AgentBentoLayoutItem,
+} from "./agent-bento";
 
 const defaultLayout: AgentBentoLayoutItem[] = [{ id: "summary", x: 0, y: 0, w: 4, h: 2 }];
 

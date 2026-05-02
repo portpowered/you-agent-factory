@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { AgentBentoCard, AgentBentoLayout, type AgentBentoLayoutItem } from "./bento";
+import {
+  AgentBentoCard,
+  AgentBentoLayout,
+  type AgentBentoLayoutItem,
+} from "./agent-bento";
 
 const defaultLayout: AgentBentoLayoutItem[] = [
   { id: "activity", x: 0, y: 0, w: 6, h: 2 },
