@@ -3,6 +3,9 @@
 - After a fresh `git pull`, verify recently changed candidate seams from live
   file reads before queuing work; the codebase-memory graph can lag `HEAD`
   briefly after merges.
+- When generated public enum pointer helpers only differ by the output enum
+  type, prefer one shared private nil-on-empty wrapper rather than repeating
+  trim-check plus `&enumValue` plumbing across `pkg/interfaces`.
 - When an API/service seam repeats an existing runtime interface method-for-method,
   prefer embedding the narrower interface instead of re-declaring the shared
   contract in a second package.
@@ -1303,8 +1306,42 @@
   - `pkg/config/factory_config_mapping.go` still repeats retired-field
     rejection walks for worker and workstation top-level objects plus nested
     `definition` objects while applying the same boundary-specific field
-    inventories
+  inventories
   - the seam stays within `pkg/config` and focused package tests, outside open
     PR `#30`
 - Confirmed the codebase-memory graph can lag immediately after fresh merges,
   so live file reads should verify any just-landed seam before it is re-queued.
+
+## 2026-05-02 07:07:17 -07:00 - meta refresh after config-boundary dedupe landed
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `a1dd288`.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, live GitHub PR state, and the current `pkg/interfaces`
+  enum-boundary code before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `5736135`
+  - it did not include merged PR `#54`
+    `dedupe-factory-config-boundary-alias-rejection`
+  - it still treated the config-boundary alias-rejection seam as queueable
+    even though `#54` already landed it on `main`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state:
+  - `factory/inputs/idea/default/dedupe-factory-config-boundary-alias-rejection.md`
+    is now solved residue rather than pending work
+  - the checked-in inbox surface is still empty apart from `.gitkeep`
+    sentinels even though ignored local idea/task residue continues to grow
+- Used sidecar explorers plus direct code inspection to validate the next
+  non-colliding reserve cleanup seam:
+  - `pkg/interfaces/public_factory_enums.go` repeats the same nil-on-empty
+    pointer-wrapper logic in four generated enum pointer helpers
+  - `pkg/interfaces/workstation_kind_public.go` repeats the same pattern for
+    generated workstation kind pointers
+  - `pkg/factory/event_history.go` is the only production caller, so the seam
+    is isolated and low-risk
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
+  instead of re-queueing the already-landed config-boundary cleanup.
