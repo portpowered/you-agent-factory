@@ -286,20 +286,49 @@ async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
   }
 }
 
-async function exerciseTimelineSlider(page, finalTick) {
+async function exerciseTimelineSlider(page, options) {
+  return await exerciseHistoricalTimelineView(page, options);
+}
+
+async function countButtons(page, buttonName) {
+  return await page.getByRole("button", { name: buttonName }).count();
+}
+
+async function exerciseHistoricalTimelineView(page, options) {
+  const {
+    finalTick,
+    historicalHiddenButtonName,
+  } = options;
   const slider = page.getByRole("slider", { name: "Timeline tick" });
-  const currentButton = page.getByRole("button", { exact: true, name: "Current" });
   const previousTick = finalTick - 1;
 
   expect(previousTick).toBeGreaterThan(0);
 
   await slider.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  await currentButton.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+  await page.getByRole("button", { exact: true, name: "Current" }).waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
   expect(await slider.inputValue()).toBe(String(finalTick));
+  let latestButtonCount = null;
+  if (historicalHiddenButtonName) {
+    latestButtonCount = await countButtons(page, historicalHiddenButtonName);
+    expect(latestButtonCount).toBeGreaterThan(0);
+  }
 
   await slider.focus();
   await slider.press("ArrowLeft");
   await page.getByText(`Tick ${previousTick} of ${finalTick}`).waitFor({
+    timeout: uiInteractionTimeoutMs,
+  });
+  expect(await slider.inputValue()).toBe(String(previousTick));
+  if (historicalHiddenButtonName) {
+    expect(await countButtons(page, historicalHiddenButtonName)).toBeLessThan(latestButtonCount);
+  }
+
+  await delay(250);
+  await page.getByText(`Tick ${previousTick} of ${finalTick}`).waitFor({
+    state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
   expect(await slider.inputValue()).toBe(String(previousTick));
@@ -309,6 +338,9 @@ async function exerciseTimelineSlider(page, finalTick) {
     timeout: uiInteractionTimeoutMs,
   });
   expect(await slider.inputValue()).toBe(String(finalTick));
+  if (historicalHiddenButtonName) {
+    expect(await countButtons(page, historicalHiddenButtonName)).toBe(latestButtonCount);
+  }
 }
 
 async function assertReplayScenarioRenders({
@@ -319,6 +351,7 @@ async function assertReplayScenarioRenders({
   const {
     finalTick,
     headingName,
+    historicalHiddenButtonName,
     requiresWorkItemSelection,
     selectedWorkText,
     workstationName,
@@ -357,7 +390,10 @@ async function assertReplayScenarioRenders({
     await page.getByText(`Tick ${finalTick} of ${finalTick}`).waitFor({
       timeout: uiInteractionTimeoutMs,
     });
-    await exerciseTimelineSlider(page, finalTick);
+    await exerciseTimelineSlider(page, {
+      finalTick,
+      historicalHiddenButtonName,
+    });
     await page
       .locator('[aria-label="dashboard summary"]')
       .getByText("RUNNING", { exact: true })
