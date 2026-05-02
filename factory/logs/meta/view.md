@@ -3,7 +3,7 @@
 ## world state
 
 - after `git pull --ff-only origin main`, repository `main` and
-  `origin/main` are both at `314d889` on May 2, 2026 in the local maintainer
+  `origin/main` are both at `12c56e2` on May 2, 2026 in the local maintainer
   workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
@@ -56,9 +56,11 @@
   - merged PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
   - merged PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
   - merged PR `#33` `prd-api-model-contract-cleanup`
+- the worktree is currently clean even though ignored local workflow-input
+  residue remains under `factory/inputs/**`
 - the broad throttle customer ask remains the highest-value architecture ask,
-  with authored-guard support already merged on `main` and the remaining
-  authored-guard-only cleanup active in open PR `#48`:
+  and is now represented by an active cleanup lane plus the already-merged
+  authored-guard implementation:
   - merged PR `#46` added the root authored contract in
     `api/components/schemas/data-models/Factory.yaml`,
     `api/components/schemas/data-models/FactoryGuard.yaml`,
@@ -139,9 +141,11 @@
   checked-in meta view and ignored `factory/inputs/**` residue; this
   repository changes quickly enough that the checked-in world model drifts
   within hours
-- after merged PR `#46`, the customer throttle ask moved from "introduce an
-  authored guard contract" to "finish the simplification" by retiring the
-  implicit fallback path; open PR `#48` is that follow-up lane
+- after merged PR `#46`, the customer throttle ask became "finish the
+  simplification" by retiring the implicit fallback path that still applies
+  provider/model throttle pauses even when a factory has not authored
+  `INFERENCE_THROTTLE_GUARD`; open PR `#48` is now the active embodiment of
+  that follow-up
 - the customer explicitly asked to replace the separate global-throttle logic
   with a factory-level guard and reduce special abstractions, so the correct
   maintainer action today is to track `#48` as the active lane rather than
