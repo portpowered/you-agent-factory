@@ -15,8 +15,7 @@ type LoadedFactoryConfig struct {
 	factoryDir     string
 	runtimeBaseDir string
 	factory        *interfaces.FactoryConfig
-	workers        map[string]*interfaces.WorkerConfig
-	workstations   map[string]*interfaces.FactoryWorkstationConfig
+	lookup         *runtimeDefinitionLookupMaps
 }
 
 var _ interfaces.RuntimeConfigLookup = (*LoadedFactoryConfig)(nil)
@@ -34,10 +33,9 @@ func NewLoadedFactoryConfig(factoryDir string, factoryCfg *interfaces.FactoryCon
 	}
 
 	loaded := &LoadedFactoryConfig{
-		factoryDir:   factoryDir,
-		factory:      effectiveFactory,
-		workers:      make(map[string]*interfaces.WorkerConfig, len(effectiveFactory.Workers)),
-		workstations: make(map[string]*interfaces.FactoryWorkstationConfig, len(effectiveFactory.Workstations)),
+		factoryDir: factoryDir,
+		factory:    effectiveFactory,
+		lookup:     newRuntimeDefinitionLookupMaps(len(effectiveFactory.Workers), len(effectiveFactory.Workstations)),
 	}
 
 	for i := range effectiveFactory.Workers {
@@ -49,7 +47,7 @@ func NewLoadedFactoryConfig(factoryDir string, factoryCfg *interfaces.FactoryCon
 		}
 		effectiveFactory.Workers[i] = worker
 		workerCopy := CloneWorkerConfig(worker)
-		loaded.workers[workerCopy.Name] = &workerCopy
+		loaded.lookup.workers[workerCopy.Name] = &workerCopy
 	}
 
 	for i := range effectiveFactory.Workstations {
@@ -64,7 +62,7 @@ func NewLoadedFactoryConfig(factoryDir string, factoryCfg *interfaces.FactoryCon
 		}
 		effectiveFactory.Workstations[i] = workstation
 		workstationCopy := CloneWorkstationConfig(workstation)
-		loaded.workstations[workstationCopy.Name] = &workstationCopy
+		loaded.lookup.workstations[workstationCopy.Name] = &workstationCopy
 	}
 
 	return loaded, nil
@@ -158,45 +156,36 @@ func (c *LoadedFactoryConfig) FactoryConfig() *interfaces.FactoryConfig {
 
 // WorkstationConfigs returns the effective workstation definitions by name.
 func (c *LoadedFactoryConfig) WorkstationConfigs() map[string]*interfaces.FactoryWorkstationConfig {
-	if c == nil {
+	lookup := c.runtimeDefinitionLookup()
+	if lookup == nil {
 		return nil
 	}
-	return c.workstations
+	return lookup.workstations
 }
 
 // Worker returns the loaded worker definition for the given configured worker name.
 func (c *LoadedFactoryConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	if c == nil {
-		return nil, false
-	}
-	def, ok := c.workers[name]
-	return def, ok
+	return c.runtimeDefinitionLookup().Worker(name)
 }
 
 // Workstation returns the canonical loaded workstation entry for the given configured workstation name.
 func (c *LoadedFactoryConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	if c == nil {
-		return nil, false
-	}
-	def, ok := c.workstations[name]
-	return def, ok
+	return c.runtimeDefinitionLookup().Workstation(name)
 }
 
-type runtimeDefinitionConfig struct {
+func (c *LoadedFactoryConfig) runtimeDefinitionLookup() *runtimeDefinitionLookupMaps {
+	if c == nil {
+		return nil
+	}
+	return c.lookup
+}
+
+type runtimeDefinitionLookupMaps struct {
 	workers      map[string]*interfaces.WorkerConfig
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
-var _ interfaces.RuntimeDefinitionLookup = (*runtimeDefinitionConfig)(nil)
-
-func newRuntimeDefinitionConfig(workerCount, workstationCount int) *runtimeDefinitionConfig {
-	return &runtimeDefinitionConfig{
-		workers:      make(map[string]*interfaces.WorkerConfig, workerCount),
-		workstations: make(map[string]*interfaces.FactoryWorkstationConfig, workstationCount),
-	}
-}
-
-func (c *runtimeDefinitionConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (c *runtimeDefinitionLookupMaps) Worker(name string) (*interfaces.WorkerConfig, bool) {
 	if c == nil {
 		return nil, false
 	}
@@ -204,12 +193,27 @@ func (c *runtimeDefinitionConfig) Worker(name string) (*interfaces.WorkerConfig,
 	return def, ok
 }
 
-func (c *runtimeDefinitionConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+func (c *runtimeDefinitionLookupMaps) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
 	if c == nil {
 		return nil, false
 	}
 	def, ok := c.workstations[name]
 	return def, ok
+}
+
+type runtimeDefinitionConfig = runtimeDefinitionLookupMaps
+
+var _ interfaces.RuntimeDefinitionLookup = (*runtimeDefinitionConfig)(nil)
+
+func newRuntimeDefinitionConfig(workerCount, workstationCount int) *runtimeDefinitionConfig {
+	return newRuntimeDefinitionLookupMaps(workerCount, workstationCount)
+}
+
+func newRuntimeDefinitionLookupMaps(workerCount, workstationCount int) *runtimeDefinitionLookupMaps {
+	return &runtimeDefinitionLookupMaps{
+		workers:      make(map[string]*interfaces.WorkerConfig, workerCount),
+		workstations: make(map[string]*interfaces.FactoryWorkstationConfig, workstationCount),
+	}
 }
 
 func loadFactoryConfig(factoryDir string) (*interfaces.FactoryConfig, error) {
