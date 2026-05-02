@@ -3,36 +3,8 @@ package functional_test
 import (
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
 	"github.com/portpowered/agent-factory/pkg/petri"
 )
-
-func assertDispatchHistoryContainsWorkstationRoute(
-	t *testing.T,
-	history []interfaces.CompletedDispatch,
-	workstationName string,
-	terminalPlace string,
-) {
-	t.Helper()
-
-	for _, dispatch := range history {
-		if dispatch.WorkstationName != workstationName {
-			continue
-		}
-		for _, mutation := range dispatch.OutputMutations {
-			if mutation.ToPlace == terminalPlace {
-				return
-			}
-		}
-	}
-
-	t.Fatalf(
-		"dispatch history missing %q route to %q: %#v",
-		workstationName,
-		terminalPlace,
-		history,
-	)
-}
 
 func assertTokenPayload(t *testing.T, snap *petri.MarkingSnapshot, placeID, want string) {
 	t.Helper()
