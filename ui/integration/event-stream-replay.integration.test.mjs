@@ -2,8 +2,9 @@
 
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -17,6 +18,10 @@ import {
   formatReplayCoverageReportMarkdown,
   listBrowserIntegrationReplayScenarios,
 } from "../src/testing/replay-fixture-catalog";
+import {
+  PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+  readFactoryImportPng,
+} from "../src/features/import/factory-png-import";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
@@ -38,6 +43,60 @@ let replayCompleted = Promise.resolve();
 let replayPaused = Promise.resolve();
 let releaseReplayStream = () => {};
 const replayFixtures = listBrowserIntegrationReplayScenarios();
+const exportCoverImagePath = path.resolve(packageRoot, "..", "docs", "resources", "dashboard.png");
+const exportFactoryDefinition = {
+  inputTypes: [
+    {
+      name: "Factory request",
+      type: "DEFAULT",
+    },
+  ],
+  name: "Browser Export Factory",
+  workers: [
+    {
+      body: "Return the request unchanged.",
+      model: "gpt-5.4-mini",
+      modelProvider: "CODEX",
+      name: "browser-export-worker",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workTypes: [
+    {
+      name: "request",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      behavior: "STANDARD",
+      inputs: [
+        {
+          state: "queued",
+          workType: "request",
+        },
+      ],
+      name: "Browser export workstation",
+      outputs: [
+        {
+          state: "done",
+          workType: "request",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "browser-export-worker",
+    },
+  ],
+};
 
 function createBunEnv(extraEnv = {}, options = {}) {
   const env = {
@@ -173,7 +232,10 @@ async function waitForURL(url, timeoutMs = readyTimeoutMs) {
 }
 
 async function startReplayServer(lines, options = {}) {
-  const { pauseBeforeTick = null } = options;
+  const {
+    currentFactory = null,
+    pauseBeforeTick = null,
+  } = options;
   let resolveReplayCompleted = () => {};
   replayCompleted = new Promise((resolve) => {
     resolveReplayCompleted = resolve;
@@ -200,6 +262,27 @@ async function startReplayServer(lines, options = {}) {
     });
 
   apiServer = http.createServer((request, response) => {
+    if (request.url === "/factory/~current" && request.method === "GET") {
+      if (currentFactory === null) {
+        response.writeHead(404, {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        });
+        response.end(JSON.stringify({
+          code: "NOT_FOUND",
+          message: "The current factory definition is not available.",
+        }));
+        return;
+      }
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(currentFactory));
+      return;
+    }
+
     if (request.url !== "/events") {
       response.statusCode = 404;
       response.end("not found");
@@ -502,6 +585,143 @@ async function assertReplayScenarioRenders({
   }
 }
 
+async function assertFactoryExportRoundTrip() {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ acceptDownloads: true });
+  const page = await context.newPage();
+  const pageErrors = [];
+  const consoleErrors = [];
+  const downloadDirectory = await mkdtemp(path.join(os.tmpdir(), "agent-factory-export-"));
+
+  await page.addInitScript(() => {
+    window.__agentFactoryCapturedDownloads = [];
+    const originalClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function click(...args) {
+      if (this.download && this.href.startsWith("blob:")) {
+        const filename = this.download;
+        const href = this.href;
+        const capture = fetch(href)
+          .then(async (response) => {
+            const buffer = await response.arrayBuffer();
+            return {
+              bytes: Array.from(new Uint8Array(buffer)),
+              filename,
+            };
+          })
+          .then((download) => {
+            window.__agentFactoryCapturedDownloads.push(download);
+          });
+        window.__agentFactoryPendingDownload = capture;
+      }
+
+      return originalClick.apply(this, args);
+    };
+  });
+
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.stack ?? error.message);
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+
+  try {
+    await startReplayServer(
+      await loadReplayLines("graph-state-smoke-replay.jsonl"),
+      { currentFactory: exportFactoryDefinition },
+    );
+    await page.goto(previewURL, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Agent Factory" }).waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    await replayCompleted;
+    await page.getByRole("button", { name: "Export PNG" }).waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+
+    await page.getByRole("button", { name: "Export PNG" }).click();
+    await page.getByRole("heading", { name: "Export factory" }).waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    const exportDialog = page.getByRole("dialog", { name: "Export factory" });
+    await exportDialog.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+
+    const exportName = "Roundtrip Browser Export";
+    await exportDialog.getByLabel("Factory name").fill(exportName);
+    await exportDialog.getByLabel("Cover image").setInputFiles(exportCoverImagePath);
+    await exportDialog.getByText("Selected image: dashboard.png").waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    const exportDialogButton = exportDialog.getByRole("button", { name: "Export PNG" });
+    expect(await exportDialogButton.isEnabled()).toBe(true);
+
+    await exportDialogButton.click();
+    const exportOutcome = await Promise.race([
+      page.waitForFunction(
+        () => window.__agentFactoryCapturedDownloads.length > 0,
+        null,
+        { timeout: uiInteractionTimeoutMs },
+      ).then(() => "download"),
+      exportDialog.getByRole("alert").waitFor({
+        state: "visible",
+        timeout: uiInteractionTimeoutMs,
+      }).then(() => "error"),
+    ]);
+    if (exportOutcome === "error") {
+      throw new Error(await exportDialog.getByRole("alert").innerText());
+    }
+    const download = await page.evaluate(() => window.__agentFactoryCapturedDownloads[0] ?? null);
+    expect(download).not.toBeNull();
+    const downloadPath = path.join(downloadDirectory, download.filename);
+    await writeFile(downloadPath, new Uint8Array(download.bytes));
+
+    expect(download.filename).toBe("roundtrip-browser-export.png");
+    await page.getByRole("heading", { name: "Export factory" }).waitFor({
+      state: "hidden",
+      timeout: uiInteractionTimeoutMs,
+    });
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+
+    const exportedBytes = await readFile(downloadPath);
+    expect(exportedBytes.subarray(0, 8)).toEqual(
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+
+    const importResult = await readFactoryImportPng({
+      createPreviewImageSrc: () => "blob:test-preview",
+      file: new Blob([exportedBytes], { type: "image/png" }),
+      revokePreviewImageSrc: () => {},
+      validatePreviewImage: async () => {},
+    });
+
+    expect(importResult.ok).toBe(true);
+    if (!importResult.ok) {
+      throw new Error(importResult.error.message);
+    }
+    expect(importResult.value.factory).toEqual({
+      ...exportFactoryDefinition,
+      name: exportName,
+    });
+    expect(importResult.value.schemaVersion).toBe(PORT_OS_FACTORY_PNG_SCHEMA_VERSION);
+  } finally {
+    await rm(downloadDirectory, { force: true, recursive: true });
+    await page.close();
+    await context.close();
+    await browser.close();
+    await stopReplayServer();
+  }
+}
+
 describe.sequential("captured event stream replay", () => {
   beforeAll(async () => {
     apiPort = await reserveAvailablePort();
@@ -544,4 +764,12 @@ describe.sequential("captured event stream replay", () => {
       browserScenarioTimeoutMs,
     );
   }
+
+  it(
+    "exports the current factory as a downloadable PNG without uncaught browser exceptions",
+    async () => {
+      await assertFactoryExportRoundTrip();
+    },
+    browserScenarioTimeoutMs,
+  );
 });
