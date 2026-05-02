@@ -45,6 +45,7 @@ This inventory records the checked-in files and directories that the maintainer 
 - When maintainer docs describe command execution, anchor the instructions to the repository root that contains `go.mod` and `Makefile`.
 - If a workflow temporarily changes directories, state that it starts from the repository root and why the subdirectory hop is required.
 - When GitHub Actions or other automation is added, prefer repository-owned root commands or package scripts that the maintainer guide already documents instead of inventing CI-only command sequences.
+- When a repository-owned smoke test migrates out of `tests/functional_test/`, update the root `Makefile` target to call the new behavior-owned package immediately; otherwise CI can keep exercising a deleted legacy package even while the migrated tests themselves stay green.
 - When contributor docs mention the repository CI workflow, mirror the exact root-level command sequence and its stated scope from `.github/workflows/ci.yml` so local reproduction and review expectations do not drift.
 - When UI assets are committed for Go embedding, keep the build pipeline responsible for normalizing output filenames and refreshing any cache-busting stamp files instead of hand-editing `ui/dist/`.
 - When browser-backed UI replay tests and replay coverage reports share the same scenarios, keep that metadata in one repository-owned catalog so the tests, scripts, and docs cannot silently drift.

@@ -13,7 +13,7 @@ SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
 CRON_TIME_WORK_SMOKE_TEST := TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews
 CRON_TIME_WORK_SMOKE_COUNT ?= 10
 CRON_TIME_WORK_SMOKE_TIMEOUT ?= 120s
-CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryWatcherSwitchSmoke_ActivatedFactoryOwnsWatchedInputWithoutDuplicateConsumption
+CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT ?= 1
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
 
@@ -71,14 +71,14 @@ api-smoke:
 	$(MAKE) generate-api
 	git diff --exit-code -- api/openapi.yaml pkg/api/generated/server.gen.go ui/src/api/generated/openapi.ts
 	$(GO) test ./pkg/api -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./tests/functional_test -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1
+	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 docs-reference-check:
 	$(GO) run ../markdown-linter/cmd/markdown-linter docs/README.md docs/reference
 
 docs-reference-smoke:
 	$(MAKE) docs-reference-check
-	$(GO) test ./tests/functional_test -run TestReferenceDocsSurface_ -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test:
 	$(GO) test -short ./... -timeout $(GO_TEST_TIMEOUT)
@@ -96,13 +96,13 @@ functional-layout-contract:
 	$(GO) test ./internal/contractguard -run TestFunctionalLayoutContractGuard_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 script-timeout-companion-smoke-100:
-	$(GO) test ./tests/functional_test -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
+	$(GO) test ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
 
 cron-time-work-smoke:
-	$(GO) test ./tests/functional_test -run $(CRON_TIME_WORK_SMOKE_TEST) -count=$(CRON_TIME_WORK_SMOKE_COUNT) -timeout $(CRON_TIME_WORK_SMOKE_TIMEOUT)
+	$(GO) test ./tests/functional/runtime_api -run $(CRON_TIME_WORK_SMOKE_TEST) -count=$(CRON_TIME_WORK_SMOKE_COUNT) -timeout $(CRON_TIME_WORK_SMOKE_TIMEOUT)
 
 current-factory-watcher-switch-smoke:
-	$(GO) test ./tests/functional_test -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/bootstrap_portability -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
 
 artifact-contract-closeout:
 	$(GO) test ./pkg/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
