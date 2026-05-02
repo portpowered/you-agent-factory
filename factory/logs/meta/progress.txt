@@ -780,3 +780,44 @@
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
   PR state, the current throttle ownership split, and the revised next-lane
   recommendation.
+
+## 2026-05-01 18:02 -07:00 - meta refresh after dispatcher throttle cleanup landed
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `bd240ae`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `f7efd5f`
+  - it still treated PRs `#38` and `#37` as open even though both are now
+    merged
+  - it did not include merged PR `#42`
+  - it still treated the dispatcher throttle pause-map cleanup as the next
+    queueable lane even though that seam is already merged on `main`
+- Reconfirmed through direct code inspection that the throttle ask posture has
+  narrowed again on `main`:
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` no longer stores a
+    mutable `throttlePauses` map
+  - active provider/model pause windows are now derived from
+    `snapshot.DispatchHistory` and the pure helper in
+    `pkg/factory/internal/throttle/windows.go`
+  - the remaining ask is now factory-level `INFERENCE_THROTTLE_GUARD`
+    config/lowering rather than dispatcher-local duplicate state cleanup
+- Used a sidecar repository-inspection agent plus direct local validation to
+  identify one new narrow cleanup candidate outside open PRs `#33` and `#30`:
+  - `pkg/cli/dashboard/dashboard.go` still owns
+    `worldViewFallbackCompletedWorkItems` and
+    `worldViewFallbackFailedWorkItems`
+  - both helpers already share the same collector path and differ only in
+    terminal-work inclusion and missing-input fallback rules
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
+  as the next narrow lane instead of re-queuing the already-landed throttle
+  cleanup.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  `#42` state, the narrowed throttle ask posture, and the revised next-lane
+  recommendation.

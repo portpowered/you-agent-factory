@@ -2,8 +2,8 @@
 
 ## world state
 
-- after `git pull`, repository `main` and `origin/main` are both at
-  `f7efd5f` on May 1, 2026
+- after `git pull --ff-only`, repository `main` and `origin/main` are both at
+  `bd240ae` on May 1, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -29,14 +29,16 @@
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
   - `factory/inputs/idea/default/retire-dispatcher-throttle-pause-map.md`
   - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
-- the current GitHub lane state on May 1, 2026 is:
-  - open PR `#38` `prd-current-factory-default-runtime-support`
-  - open PR `#37` `prd-cli-consumer-installation`
+- the current GitHub lane state is now materially different from the previous
+  checked-in world model:
   - open PR `#33` `prd-api-model-contract-cleanup`
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#42` `retire-dispatcher-throttle-pause-map`
   - merged PR `#41` `dedupe-replay-factory-merge-helpers`
   - merged PR `#40` `dedupe-worker-event-exit-code-extraction`
   - merged PR `#39` `chaining-trace-ids`
+  - merged PR `#38` `prd-current-factory-default-runtime-support`
+  - merged PR `#37` `prd-cli-consumer-installation`
   - merged PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
   - merged PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
   - merged PR `#34` `dedupe-list-work-legacy-pagination-fallback`
@@ -44,82 +46,51 @@
   - merged PR `#31` `derive-throttle-windows-from-completed-dispatch-history`
   - merged PR `#29` `prd-goreleaser-release-pipeline`
   - merged PR `#28` `derive-throttle-windows-from-event-history`
-  - merged PR `#27` `dedupe-generated-boundary-alias-rejection-coverage`
-  - merged PR `#26` `dedupe-retired-boundary-alias-rejection-tables`
-  - merged PR `#25` `retire-scriptwrap-build-args-shim`
-  - merged PR `#24` `consolidate-public-factory-enum-alias-ownership`
-  - merged PR `#23` `centralize-work-request-trace-normalization`
-  - merged PR `#22` `align-process-review-loop-contract`
-  - merged PR `#21` `dedupe-dispatcher-throttle-pause-filter`
 - the worktree is currently clean even though ignored local workflow-input
   residue remains under `factory/inputs/**`
-- the broad throttle customer ask remains open, and its posture is unchanged in
-  the ways that matter for follow-up decomposition:
-  - `pkg/factory/internal/throttle/windows.go` owns the pure helper that
+- the broad throttle customer ask remains the highest-value architecture ask,
+  but its implementation posture changed again on `main`:
+  - `pkg/factory/internal/throttle/windows.go` still owns the pure helper that
     derives active provider/model throttle windows from normalized failure
     history, pause duration, and explicit clock time
-  - `pkg/factory/subsystems/subsystem_dispatcher.go` still owns mutable
-    provider/model pause state via `throttlePauses`, still gates scheduling by
-    dispatcher-owned runtime state, and still reconstructs that state from
-    `snapshot.DispatchHistory`
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` no longer stores the
+    mutable `throttlePauses` map after merged PR `#42`; it now derives current
+    active pauses from `snapshot.DispatchHistory` per tick and preserves the
+    existing `TickResult` pause observability payload
   - there is still no checked-in `factory.guards` lowering path for
     `INFERENCE_THROTTLE_GUARD`
-  - current open PR overlap around the ask is still broad:
-    - `#37` touches throttle derivation-adjacent config, interfaces, and
-      projections
-    - `#33` touches guard/config/API contract surfaces
-    - `#38` touches service-facing runtime support and API/service tests
-    - `#30` touches the functional throttle coverage lane
-    - none of those open PRs currently touch
-      `pkg/factory/subsystems/subsystem_dispatcher.go`
-- PR `#39` is now merged, so main advanced across shared replay, event-history,
-  projection, API-contract, and UI timeline surfaces:
-  - `pkg/factory/event_history.go` and `pkg/factory/projections/world_state.go`
-    now carry chaining-trace context updates on `main`
-  - `pkg/replay/event_reducer.go` now participates in the chaining-trace lane
-  - `ui/src/state/factoryTimelineStore.ts` and its tests now consume the newer
-    trace context shape
-- two previously queued narrow cleanup seams have now landed on `main`:
-  - PR `#41` merged the replay artifact merge-helper dedupe in
-    `pkg/replay/event_artifact.go`
-  - PR `#40` merged the worker event exit-code extraction dedupe in
-    `pkg/workers/script.go`, `pkg/workers/recording_provider.go`, and related
-    tests
-- one new narrow cleanup seam is now queueable outside the active PR file
+  - the remaining gap is now factory-level config, guard lowering, and
+    transition ownership rather than dispatcher-local duplicate pause state
+- one new narrow cleanup seam is queueable outside the remaining open PR file
   sets:
-  - `pkg/factory/subsystems/subsystem_dispatcher.go` still owns the mutable
-    `throttlePauses` map even though active windows are already derivable from
-    completed dispatch history plus `pkg/factory/internal/throttle/windows.go`
-  - the dispatcher can likely derive current active pauses directly per tick,
-    preserve current `TickResult` and snapshot observability payloads, and
-    remove duplicate mutable pause ownership without changing public config
-    contracts
-  - that seam stays off the current open PR file sets if it is kept inside
-    `pkg/factory/subsystems/subsystem_dispatcher.go`,
-    `pkg/factory/subsystems/dispatcher_test.go`, and nearby internal throttle
-    tests only
+  - `pkg/cli/dashboard/dashboard.go` still owns two unexported fallback
+    collectors, `worldViewFallbackCompletedWorkItems` and
+    `worldViewFallbackFailedWorkItems`
+  - both helpers already route through the same collector type and differ only
+    in their terminal-work inclusion and missing-input fallback rules
+  - that lane can stay inside `pkg/cli/dashboard/dashboard.go` and, if
+    necessary, `pkg/cli/dashboard/dashboard_test.go`, so it stays off the
+    current `#33` API/config contract lane and the `#30` functional test
+    decomposition lane
 
 ## current blockers
 
 1. the broad `INFERENCE_THROTTLE_GUARD` customer ask still spans config shape,
-   guard lowering, scheduler ownership, and observability, so it is still too
-   large for a safe single lane
-2. open PRs `#38`, `#37`, `#33`, and `#30` still occupy most of the active
-   runtime-support, release/CLI/config, public-contract, and functional-test
-   file sets
-3. the previous checked-in world model was stale in four important ways:
-   - it still described upstream `HEAD` as `f6e5ac6`
-   - it did not account for merged PR `#41`
-   - it still treated PR `#40` as open even though it merged on May 1, 2026
-   - it still treated the replay merge-helper dedupe as the next queueable lane
-     even though it already landed
-4. open PRs `#37` and `#33` remain unusually wide for nominally focused lanes,
-   so any new
-   cleanup candidate still needs exact changed-file validation rather than
-   package intuition
-5. the highest-priority customer ask now has one attractive internal follow-up
-   seam, but that lane still has to avoid adjacent config, projection, and
-   service surfaces already occupied by `#37`, `#33`, `#38`, and `#30`
+   guard lowering, and transition ownership, so it is still too large for a
+   safe single lane
+2. open PR `#33` occupies most of the active API/config/public-contract file
+   sets that a guard-lowering lane would need
+3. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
+   new cleanup work should avoid functional test file moves for now
+4. the previous checked-in world model was stale in five important ways:
+   - it still described upstream `HEAD` as `f7efd5f`
+   - it still treated PRs `#38` and `#37` as open even though both are now
+     merged
+   - it did not account for merged PR `#42`
+   - it still treated the dispatcher throttle-pause-map cleanup as the next
+     queueable lane even though that seam has already landed
+   - it still described the throttle ask as blocked by open runtime-support
+     lanes that are no longer open
 
 ## theory of mind
 
@@ -128,17 +99,21 @@
   is changing quickly enough that the checked-in world model can drift within
   hours
 - the highest-value live customer problem is still global throttling, but the
-  remaining gap is now clearly split into two layers:
-  - an internal dispatcher-state simplification seam
-  - a broader later config/lowering/guard-ownership lane
-- because PRs `#33`, `#38`, and especially `#37` are wide lanes, new follow-up
-  work should still avoid public boundaries and shared runtime/config surfaces
-  rather than trying to parallelize into them
-- the best available cleanup work right now is no longer replay-internal;
-  `#41` already landed that seam
-- the best available queueable follow-up now is an internal dispatcher cleanup
-  that removes the mutable throttle-pause map while preserving the current
-  observability payload shape
+  remaining gap is now clearly the public/config/lowering layer:
+  - dispatcher-local duplicate throttle state has already been removed on
+    `main`
+  - the remaining work is a later `factory.guards` /
+    `INFERENCE_THROTTLE_GUARD` lane
+- with PRs `#38` and `#37` now merged, the remaining live collision surface is
+  much smaller than before:
+  - `#33` owns API/config/public guard contract cleanup
+  - `#30` owns functional test package decomposition
+- because the open PR footprint is now narrow, the best available cleanup work
+  is no longer throttle-internal or replay-internal; both of those recent
+  narrow lanes already landed
+- the best available queueable follow-up is now a low-risk dashboard
+  simplification that removes duplicate fallback collector ownership without
+  changing public contracts
 - when a cleanup lane already exists as ignored local residue under
   `factory/inputs/**`, it may still be the correct next task; the maintainer
   loop should refresh the world model instead of forcing artificial queue churn
@@ -149,21 +124,23 @@
 - update the checked-in meta world model and progress log now
 - leave `factory/logs/meta/asks.md` unchanged; the priority order is still
   correct
-- do not re-queue already-landed lanes such as `#41`, `#40`, `#36`, or `#35`
-- queue one new ignored cleanup idea for the dispatcher throttle follow-up:
-  preserve current pause observability behavior, but remove dispatcher-owned
-  mutable `throttlePauses` state and derive active pauses directly from
-  dispatch history plus the pure throttle-window helper
-- avoid colliding with open PRs `#38`, `#37`, `#33`, and `#30`
+- do not re-queue already-landed lanes such as `#42`, `#41`, `#40`, `#38`,
+  `#37`, `#36`, or `#35`
+- queue one new ignored cleanup idea for the CLI dashboard fallback collector
+  seam:
+  - preserve current completed and failed work-item fallback behavior
+  - collapse the duplicate helper ownership behind one parametrized internal
+    collector path
+  - avoid API/config/public-contract and `tests/functional/**` surfaces
 
 ## customer asks
 
 - `factory/logs/meta/asks.md` remains the only checked-in backlog surface
-- no ask is marked urgent as of May 1, 2026
+- no ask is marked urgent as of May 1, 2026 in the maintainer workspace
 - the throttling ask is still the most important architecture-level customer
-  ask
-- the quality and website-quality asks are now partially represented by live
-  and freshly merged lanes, but they remain broader than the current narrow
-  cleanup queue
+  ask, but its remaining work is now narrower than the previous checked-in
+  model described
+- the quality and website-quality asks remain broader follow-on programs
+  rather than the next narrow cleanup lane
 - the next throttle follow-up should stay decomposed and should not overlap the
-  already-open public-model, runtime-support, or functional-test umbrella lanes
+  already-open API/config contract lane in `#33`
