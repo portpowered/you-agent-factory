@@ -1,5 +1,9 @@
 ## Codebase Patterns
 
+- When browser-level UI ask slices merge quickly, re-check the exact merged PR
+  history before queueing the next website-quality lane; the right follow-up
+  can shift from missing coverage to shared-component consolidation within
+  hours.
 - After a fresh `git pull`, verify recently changed candidate seams from live
   file reads before queuing work; the codebase-memory graph can lag `HEAD`
   briefly after merges.
@@ -1542,3 +1546,43 @@
 - Queued one new ignored customer-ask-aligned idea at
   `factory/inputs/idea/default/browser-integration-png-export-import-roundtrip.md`
   instead of re-queueing the already-landed tick-control lane.
+
+## 2026-05-02 13:03:55 -07:00 - meta refresh after png browser roundtrip landed
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `0ea191c`.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, live GitHub PR state, and the current UI/shared-component
+  seams before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `c1dffe4`
+  - it did not include merged PR `#60`
+    `browser-integration-png-export-import-roundtrip`
+  - it still treated browser PNG roundtrip coverage as the next move even
+    though `#60` already landed it on `main`
+- Confirmed the current GitHub PR shape on May 2, 2026 is:
+  - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PRs `#60`, `#59`, `#58`, `#57`, `#56`, `#55`, `#54`, `#53`, and `#52`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state and direct `HEAD` inspection:
+  - `factory/inputs/idea/default/browser-integration-png-export-import-roundtrip.md`
+    is now solved residue rather than pending work
+  - the tracked workflow inbox surface is still empty apart from `.gitkeep`
+    sentinels even though ignored local idea/task residue continues to grow
+- Used sidecar explorers plus direct code inspection to validate the next
+  non-colliding customer-ask-aligned website cleanup seam:
+  - shared `ui/src/components/ui/button.tsx` and `ui/src/components/ui/dialog.tsx`
+    already exist
+  - older dashboard-only `ui/src/components/dashboard/button.tsx` and
+    `ui/src/components/dashboard/mutation-dialog.tsx` still keep duplicate
+    action-primitive ownership across live feature consumers
+  - the seam stays inside `ui/**` and outside open PR `#30`
+- Left `factory/logs/meta/asks.md` unchanged because the file already has a
+  local wording edit and did not need backlog reprioritization for this pass.
+- Queued one new ignored customer-ask-aligned idea at
+  `factory/inputs/idea/default/browser-shared-action-primitives.md`
+  instead of re-queueing the already-landed browser PNG lane.

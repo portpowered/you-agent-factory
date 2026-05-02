@@ -3,7 +3,7 @@
 ## world state
 
 - after `git pull --ff-only`, repository `main` and `origin/main` are both at
-  `c1dffe4` on May 2, 2026 in the local maintainer workspace
+  `0ea191c` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -16,7 +16,9 @@
 - the workspace-local `factory/inputs/**` surface still has ignored residue
   beyond the tracked sentinels, so those files remain local context only and
   not checked-in workflow truth:
+  - `factory/inputs/idea/default/browser-integration-png-export-import-roundtrip.md`
   - `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
+  - `factory/inputs/idea/default/browser-shared-action-primitives.md`
   - `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
   - `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
   - `factory/inputs/idea/default/dedupe-api-surface-factory-contract.md`
@@ -48,6 +50,7 @@
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#60` `browser-integration-png-export-import-roundtrip`
   - merged PR `#59` `browser-integration-timeline-tick-controls`
   - merged PR `#58` `dedupe-loaded-runtime-definition-lookups`
   - merged PR `#57` `dedupe-portable-bundled-path-containment-validation`
@@ -62,15 +65,23 @@
   - merged PR `#48` `retire-legacy-throttle-fallback-after-authored-guard`
   - merged PR `#47` `retire-verbose-logger-export`
   - merged PR `#46` `factory-level-inference-throttle-guard`
-  - merged PR `#45` `retire-duplicate-ui-script-copies`
-  - merged PR `#44` `inline-batch-relation-duplicate-rejection`
-- the worktree is currently clean even though ignored local workflow-input
-  residue remains under `factory/inputs/**`
+- the worktree is not clean:
+  - `factory/logs/meta/asks.md` has a local wording edit from "material design
+    style" to "shadcn" in the website-variable ask wording
+  - ignored local workflow-input residue remains under `factory/inputs/**`
 - the broad throttle customer ask is fully implemented on `main` through
   merged PRs `#46` and `#48`; it should remain treated as solved rather than
   live backlog
 - direct `HEAD` inspection confirmed that more ignored local workflow-input
   residue is now stale rather than queueable:
+  - merged PR `#60` landed browser-level PNG export/import roundtrip coverage
+    on `main`, so
+    `factory/inputs/idea/default/browser-integration-png-export-import-roundtrip.md`
+    is solved residue
+  - merged PR `#59` landed browser replay coverage for moving the timeline
+    slider and resetting back to `Current`, so
+    `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
+    is solved residue
   - merged PR `#58` landed the runtime lookup ownership cleanup on `main`, so
     `factory/inputs/idea/default/dedupe-loaded-runtime-definition-lookups.md`
     is solved residue
@@ -86,10 +97,6 @@
     `main`, so
     `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
     is solved residue
-  - merged PR `#59` landed browser replay coverage for moving the timeline
-    slider and resetting back to `Current`, so
-    `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
-    is solved residue
   - `pkg/cli/dashboard/dashboard.go` now routes both completed and failed
     fallback collection through `worldViewFallbackWorkItems(...)`, so both
     `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
@@ -100,35 +107,43 @@
     `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
     is also stale residue
 - direct code inspection against `Makefile`, `.github/workflows/ci.yml`, the
-  standards docs, and the current UI integration harness refined the next
-  customer-ask-aligned quality seams:
+  standards docs, and the current UI component and integration layers refined
+  the next customer-ask-aligned quality seams:
   - the current checked-in lint surface is real but narrow: `make lint` runs
     `go vet ./...` plus `go run ./cmd/deadcodecheck`, and CI invokes that same
     target
   - there is no checked-in `golangci-lint` configuration or CI lane yet, so
     broader backend lint automation remains a live follow-up quality seam
-  - merged PR `#59` closed the earlier browser-level tick-control gap by
-    updating `ui/integration/event-stream-replay.integration.test.mjs` and
-    `ui/src/testing/replay-fixture-catalog.ts`
-  - the next narrow website-quality gap is browser-level PNG export/import
-    coverage: `ui/src/App.test.tsx`, `ui/src/features/export/*.test.tsx`,
-    `ui/src/features/import/*.test.ts(x)`, and
-    `ui/src/features/workflow-activity/react-flow-current-activity-card.test.tsx`
-    already cover the PNG flows heavily in jsdom, but there is still no
-    built-app browser smoke for the actual export/download plus import preview
-    and activation path
-  - this PNG browser lane stays outside open PR `#30` because it can remain
-    entirely under `ui/**` and avoid `tests/functional/**`
+  - merged PRs `#59` and `#60` closed the earlier browser-level website test
+    ask for timeline tick controls plus PNG export/import roundtrip coverage
+  - the next narrow website-quality gap is the duplicated dashboard action
+    primitive layer:
+    - shared `ui/src/components/ui/button.tsx` and
+      `ui/src/components/ui/dialog.tsx` already exist
+    - older dashboard-only `ui/src/components/dashboard/button.tsx` and
+      `ui/src/components/dashboard/mutation-dialog.tsx` still keep separate
+      action/button/dialog styling contracts
+    - live consumers remain in
+      `ui/src/features/workflow-activity/react-flow-current-activity-card.tsx`,
+      `ui/src/components/dashboard/tick-slider-control.tsx`,
+      `ui/src/features/export/export-factory-dialog.tsx`,
+      `ui/src/features/submit-work/submit-work-card.tsx`,
+      `ui/src/features/trace-drilldown/trace-grid-card.tsx`, and
+      `ui/src/features/terminal-work/terminal-work-card.tsx`
+  - the narrowest website cleanup slice is to retire the remaining
+    dashboard-only action primitives in favor of the shared UI button/dialog
+    layer without widening into a broader typography, bento, or token-system
+    rewrite
 
 ## current blockers
 
 1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid that tree until it merges
 2. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `c929979`
-   - it did not include merged PR `#59`
-   - it still treated browser tick-control coverage as the next move even
-     though `#59` already landed it on `main`
+   - it still described `HEAD` as `c1dffe4`
+   - it did not include merged PR `#60`
+   - it still treated browser PNG roundtrip coverage as the next move even
+     though `#60` already landed it on `main`
 3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 4. many ignored local idea and plan files now correspond either to merged PRs
@@ -137,6 +152,9 @@
 5. the quality and linting customer asks remain broad, so they only become
    actionable when decomposed into small checked-in or ignored idea files with
    explicit file scope and observable acceptance criteria
+6. the tracked maintainer backlog file itself is currently dirty in the local
+   workspace, so meta updates must avoid overwriting `factory/logs/meta/asks.md`
+   while still keeping the world model aligned to live code and merged history
 
 ## theory of mind
 
@@ -154,23 +172,24 @@
 - the safest non-colliding cleanup posture remains small, package-local or
   root-quality-lane work outside `tests/functional/**`, because PR `#30` is
   still the only live broad collision surface
-- the next customer-ask-aligned move is not "introduce website testing from
-  zero"; the repository already has strong jsdom coverage for PNG import/export
-  and timeline state, so the live UI gap has shifted from replay tick controls
-  to a browser-level PNG export/import roundtrip smoke rather than another
-  unit-style test
+- the website-testing sub-ask that explicitly named tick controls plus PNG
+  export/import is now satisfied on `main` through merged PRs `#59` and `#60`
+- the next customer-ask-aligned website move is to reduce design-system drift
+  by collapsing the remaining dashboard-only action primitives onto the shared
+  UI button/dialog layer before attempting a broader token or component rewrite
 - broader lint automation is still a real quality seam, but it is now the
-  secondary follow-up behind the narrower PNG browser lane
+  secondary follow-up behind the narrower shared-action-primitive website lane
 
 ## next best move
 
 - update the checked-in meta world model and progress log now
-- leave `factory/logs/meta/asks.md` unchanged; the checked-in priority order is
-  still correct
+- leave `factory/logs/meta/asks.md` unchanged; its local wording edit should
+  remain intact and the checked-in priority order is still correct
 - do not re-queue solved or code-stale cleanup residue from ignored
   `factory/inputs/**`
-- queue one new ignored customer-ask-aligned idea for browser integration
-  coverage of PNG export/import flows
+- queue one new ignored customer-ask-aligned idea for retiring the remaining
+  dashboard-only action primitives in favor of shared UI button/dialog
+  components
 - keep any new reserve or quality work out of `tests/functional/**` while PR
   `#30` remains open
 
@@ -182,6 +201,6 @@
 - the quality and linting asks remain live, but the next best slice after this
   pass is no longer throttle-related
 - the website-quality ask remains live at a broader design-system and
-  consistency level, and its clearest narrow unchecked subproblem is
-  browser-level PNG export/import coverage now that tick-control replay
-  coverage is merged on `main`
+  consistency level, and its clearest narrow unchecked subproblem is the
+  duplicated dashboard-only action primitive layer now that both browser replay
+  tick controls and browser PNG export/import coverage are merged on `main`
