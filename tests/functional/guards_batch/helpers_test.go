@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/agent-factory/pkg/petri"
 	"github.com/portpowered/agent-factory/pkg/workers"
 	"github.com/portpowered/agent-factory/tests/functional/internal/support"
 )
@@ -82,6 +83,36 @@ func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch interfaces.Wo
 	}, nil
 }
 
+func (e *fanoutParserExecutor) callCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.calls
+}
+
+type failOnNthPageExecutor struct {
+	mu     sync.Mutex
+	calls  int
+	failOn int
+}
+
+func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.mu.Lock()
+	e.calls++
+	call := e.calls
+	e.mu.Unlock()
+
+	outcome := interfaces.OutcomeAccepted
+	if call == e.failOn {
+		outcome = interfaces.OutcomeFailed
+	}
+
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      outcome,
+	}, nil
+}
+
 type multiChapterParserExecutor struct {
 	mu          sync.Mutex
 	calls       int
@@ -125,6 +156,14 @@ type panickingExecutor struct{}
 
 func (e *panickingExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
 	panic("intentional executor panic for testing")
+}
+
+func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {
+	places := make(map[string]int)
+	for _, tok := range snap.Tokens {
+		places[tok.PlaceID]++
+	}
+	return places
 }
 
 var _ workers.WorkerExecutor = (*panickingExecutor)(nil)
