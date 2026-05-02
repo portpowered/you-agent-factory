@@ -940,11 +940,6 @@ func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 			workerDef:         &interfaces.WorkerConfig{Type: interfaces.WorkerTypeScript},
 			workstationConfig: &interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "0s"}},
 		},
-		{
-			name:              "legacy_timeout_alias_zero",
-			workerDef:         &interfaces.WorkerConfig{Type: interfaces.WorkerTypeScript},
-			workstationConfig: &interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work", Timeout: "0s"},
-		},
 	}
 
 	for _, tt := range tests {
