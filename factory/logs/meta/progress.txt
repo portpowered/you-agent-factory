@@ -821,3 +821,41 @@
 - Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
   `#42` state, the narrowed throttle ask posture, and the revised next-lane
   recommendation.
+
+## 2026-05-01 19:03 -07:00 - meta refresh after dashboard fallback cleanup landed
+- Ran `git pull --ff-only` and verified the workspace is synced on `main` at
+  `23729cb`, with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `bd240ae`
+  - it did not include merged PR `#43`
+  - it still treated the dashboard fallback collector cleanup as the next
+    queueable lane even though that seam is already merged on `main`
+- Reconfirmed through direct code inspection that the throttle ask posture is
+  unchanged after the dashboard cleanup:
+  - `pkg/factory/internal/throttle/windows.go` still owns pure active-window
+    derivation
+  - `pkg/factory/subsystems/subsystem_dispatcher.go` still derives live pauses
+    from dispatch history rather than storing a mutable pause map
+  - there is still no checked-in `factory.guards` /
+    `INFERENCE_THROTTLE_GUARD` lowering path
+- Used a sidecar repository-inspection agent plus direct local validation to
+  identify one new narrow cleanup candidate outside open PRs `#33` and `#30`:
+  - `pkg/factory/work_request.go` still owns the private
+    `rejectDuplicateBatchRelation` helper
+  - that helper has a single caller, `validateAndIndexBatchRelations`
+  - it only formats one of two duplicate-relation errors, so it is a safe
+    inline simplification seam
+- Queued one new ignored cleanup idea at
+  `factory/inputs/idea/default/inline-batch-relation-duplicate-rejection.md`
+  as the next narrow lane instead of re-queuing the already-landed dashboard
+  cleanup.
+- Updated `factory/logs/meta/view.md` to reflect the new `HEAD`, the merged
+  `#43` state, the unchanged throttle posture, and the revised next-lane
+  recommendation.
