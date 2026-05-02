@@ -38,6 +38,9 @@
   inference/recording event payload assembly paths; small boundary-event helper
   duplication can span those sibling files even when the behavior is already
   test-covered.
+- When `pkg/factory/workstationconfig.Workstation(...)` already owns
+  Name-then-ID runtime lookup fallback, prefer keeping that fallback inline at
+  the canonical seam instead of maintaining separate key-selection wrappers.
 - When a package-local cleanup candidate looks safe, verify the exact live PR
   file sets again after any sidecar exploration; open lanes can advance during
   the same maintainer pass and make an initially valid idea stale before it is
@@ -1345,3 +1348,41 @@
 - Queued one new ignored reserve cleanup idea at
   `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
   instead of re-queueing the already-landed config-boundary cleanup.
+
+## 2026-05-02 08:05:00 -07:00 - meta refresh after enum-pointer cleanup landed
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `73fb57f`.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, live GitHub PR state, and the current runtime-lookup
+  cleanup seams before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `a1dd288`
+  - it did not include merged PR `#55`
+    `dedupe-generated-public-enum-pointer-helpers`
+  - it still treated the generated enum pointer-helper seam as queueable even
+    though `#55` already landed it on `main`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state and to direct `HEAD` inspection:
+  - `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
+    is now solved residue rather than pending work
+  - `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
+    no longer matches live code because `pkg/cli/dashboard/dashboard.go` now
+    shares one `worldViewFallbackWorkItems(...)` fallback owner
+  - `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+    is stale residue because `pkg/api/handlers.go` no longer re-parses raw
+    `maxResults`
+- Used a sidecar explorer plus direct code inspection to validate the next
+  non-colliding reserve cleanup seam:
+  - `pkg/factory/workstationconfig/runtime_lookup.go` still keeps the private
+    wrappers `lookupKey(...)` and `lookupKeys(...)`
+  - `Workstation(...)` already owns the canonical Name-then-ID runtime lookup
+    fallback, so the helper layer is local redundancy
+  - the seam stays outside open PR `#30` and outside the merged PR `#55` file
+    set
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
+  instead of re-queueing stale solved residue.
