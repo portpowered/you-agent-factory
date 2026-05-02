@@ -12,8 +12,8 @@ pkg/testutil/replay_harness.go:36:6: unreachable func: WithReplayHarnessDir
 pkg/testutil/replay_harness.go:44:6: unreachable func: WithReplayHarnessServiceOptions
 pkg/testutil/replay_harness.go:147:6: unreachable func: AssertReplayDiverges
 pkg/testutil/service_harness.go:122:6: unreachable func: WithExecutionBaseDir
-pkg/testutil/testutil.go:79:6: unreachable func: WriteSeedMarkdownFile
-pkg/testutil/testutil.go:107:6: unreachable func: WriteSeedBatchFile
+pkg/testutil/testutil.go:81:6: unreachable func: WriteSeedMarkdownFile
+pkg/testutil/testutil.go:109:6: unreachable func: WriteSeedBatchFile
 tests/functional/bootstrap_portability/cli_relative_working_directory_test.go:9:6: unreachable func: writeRelativeWorkingDirectoryFactoryConfig
 tests/functional/bootstrap_portability/cli_relative_working_directory_test.go:46:6: unreachable func: writeRelativeWorkingDirectoryWorkstationConfig
 tests/functional/bootstrap_portability/helpers_test.go:118:32: unreachable func: functionalAPIServer.SubmitWork

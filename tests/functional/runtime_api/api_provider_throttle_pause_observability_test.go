@@ -69,6 +69,13 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 		Payload:    []byte("codex reconciliation payload"),
 	}
 	pauseHarness.SeedWork(t, throttledWork)
+	testutil.AppendFactoryInferenceThrottleGuard(
+		t,
+		pauseHarness.Dir,
+		workers.ModelProviderClaude,
+		"claude-sonnet-4-5-20250514",
+		pauseDuration,
+	)
 
 	server := startFunctionalServerWithConfig(
 		t,
@@ -78,7 +85,6 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 			cfg.ProviderCommandRunnerOverride = runner
 		},
 		factory.WithServiceMode(),
-		factory.WithProviderThrottlePauseDuration(pauseDuration),
 	)
 
 	activeEngineState := waitForRuntimeAPIEngineStateSnapshot(

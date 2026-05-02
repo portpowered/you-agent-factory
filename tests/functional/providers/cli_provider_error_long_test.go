@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -74,10 +73,10 @@ func runProviderErrorLongCase(t *testing.T, tc providerLongCase) {
 		tc.provider,
 		tc.model,
 		testutil.WithProviderErrorSmokeServiceOptions(
-			testutil.WithExtraOptions(factory.WithProviderThrottlePauseDuration(3*time.Second)),
 			testutil.WithFullWorkerPoolAndScriptWrap(),
 		),
 	)
+	testutil.AppendFactoryInferenceThrottleGuard(t, smokeHarness.Dir, tc.provider, tc.model, 3*time.Second)
 	queueProviderErrorResults(t, smokeHarness, tc)
 
 	work := testutil.ProviderErrorSmokeWork{

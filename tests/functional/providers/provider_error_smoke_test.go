@@ -7,7 +7,6 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -37,9 +36,15 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 			PromptBody:      "Process the Codex lane task.\n",
 		},
 		testutil.WithProviderErrorSmokePauseIsolationServiceOptions(
-			testutil.WithExtraOptions(factory.WithProviderThrottlePauseDuration(3*time.Second)),
 			testutil.WithFullWorkerPoolAndScriptWrap(),
 		),
+	)
+	testutil.AppendFactoryInferenceThrottleGuard(
+		t,
+		pauseHarness.Dir,
+		workers.ModelProviderClaude,
+		"claude-sonnet-4-5-20250514",
+		3*time.Second,
 	)
 	runner := pauseHarness.ProviderRunner()
 	pauseHarness.QueueProviderResults(
@@ -123,9 +128,15 @@ func TestProviderErrorSmoke_CodexAndTimeoutFailuresNormalizeThroughWorkerPool(t 
 			workers.ModelProviderCodex,
 			"gpt-5-codex",
 			testutil.WithProviderErrorSmokeServiceOptions(
-				testutil.WithExtraOptions(factory.WithProviderThrottlePauseDuration(3*time.Second)),
 				testutil.WithFullWorkerPoolAndScriptWrap(),
 			),
+		)
+		testutil.AppendFactoryInferenceThrottleGuard(
+			t,
+			smokeHarness.Dir,
+			workers.ModelProviderCodex,
+			"gpt-5-codex",
+			3*time.Second,
 		)
 		smokeHarness.QueueProviderResults(
 			workers.CommandResult{ExitCode: capacityEntry.ExitCode, Stdout: []byte(rawOutput)},
