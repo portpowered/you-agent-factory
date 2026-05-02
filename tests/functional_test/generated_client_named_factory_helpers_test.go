@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	generatedclient "github.com/portpowered/agent-factory/pkg/generatedclient"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	generatedclient "github.com/portpowered/infinite-you/pkg/generatedclient"
 )
 
 func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.NamedFactory) factoryapi.NamedFactory {

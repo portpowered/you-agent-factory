@@ -3,8 +3,8 @@ package apisurface
 import (
 	"fmt"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 )
 
 // ValidateWritableNamedFactoryName enforces the public named-factory contract
