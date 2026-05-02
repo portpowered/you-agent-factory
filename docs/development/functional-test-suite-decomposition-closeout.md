@@ -16,15 +16,17 @@ discovery in short mode. The long lane runs the full behavior tree plus any
 
 ## Measured Runtime
 
-- The branch originally recorded a `1.76s` representative-only run, but that
-  contract has been reverted because it did not execute all non-long short-mode
+- The branch previously tried a representative-only `1.76s` run, but that
+  contract was reverted because it did not execute all non-long short-mode
   functional behavior.
-- The current repository-owned command is again `make test-functional` over the
-  full short-mode `./tests/functional/...` tree.
-- As of 2026-05-01 in this Windows worktree, the runtime target remains open:
-  `go test -short ./tests/functional/... -count=1` still measured about `54s`,
-  so additional long-gating or test-splitting is still required before the
-  PRD's `<=10s` target is met.
+- The repository-owned default command is again `make test-functional`, which
+  runs `go test -short ./tests/functional/...` over the full short-mode tree.
+- On 2026-05-01 in this Windows worktree, a sequential
+  `go test -short ./tests/functional/... -count=1` measured about `8.07s`.
+- On 2026-05-01 in this Windows worktree, a sequential
+  `make test-functional` measured about `8.09s`.
+- The runtime target is therefore met for the documented default command while
+  the explicit long lane remains `make test-functional-long`.
 
 ## Compatibility Strategy
 

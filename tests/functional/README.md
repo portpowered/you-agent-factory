@@ -61,6 +61,9 @@ available without widening the default feedback loop.
 - When every test in a file belongs to the long lane, move the whole file into
   a `*_long_test.go` unit instead of leaving short-mode builds to compile a
   file that only calls `support.SkipLongFunctional(...)` at runtime.
+- When a mixed file keeps only a few short-lane assertions, split the slow
+  tests and any long-only helpers into sibling `*_long_test.go` files so the
+  default build stops compiling broad sweeps that are already long-lane only.
 - When a legacy fixture-directory smoke loop mixes unrelated behaviors, replace
   it with package-owned tests that assert the user-visible outcome for each
   behavior instead of keeping one umbrella "loads every fixture" check in the
