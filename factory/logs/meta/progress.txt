@@ -51,6 +51,10 @@
 - When a customer ask is already represented by an open PR, do not queue a
   second overlapping idea in the same file set; update the world model first,
   then keep parallel cleanup work confined to non-colliding seams.
+- When a deprecated config field is already normalized away at the load
+  boundary, prefer retiring any second in-memory runtime fallback for that
+  alias instead of preserving duplicate compatibility in execution paths and
+  test fixtures.
 
 ## 2026-04-30 - meta control-plane reconciliation
 
@@ -1153,4 +1157,46 @@
   instead of re-queueing stale solved residue.
 - Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
   matches `HEAD` `12c56e2`, merged PR `#49`, the stale ignored-residue map,
+  and the new reserve cleanup posture.
+
+## 2026-05-02 03:11:00 -07:00 - meta refresh after token-removal cleanup landed
+
+- Ran `git pull` and verified the workspace is synced on `main` at `d028000`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  factory workflow contract docs, tracked workflow-input surfaces, ignored
+  local workflow residue, open PR file sets, and the newly landed runtime-state
+  cleanup before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels and that the extra files
+  under `factory/inputs/**` remain ignored workspace-local residue.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `12c56e2`
+  - it still treated the token-removal reserve seam as queueable even though
+    merged PR `#50` already landed it on `main`
+  - it did not capture the next reserve cleanup seam in legacy workstation
+    timeout alias fallback handling
+- Confirmed the current GitHub PR shape on May 2, 2026 is:
+  - open PRs `#48` and `#30`
+  - merged PR `#50` `unify-token-removal-bookkeeping`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state:
+  - `factory/inputs/idea/default/unify-token-removal-bookkeeping.md` is now
+    solved residue rather than pending work
+- Used a sidecar explorer plus direct code inspection to validate the next
+  non-colliding reserve cleanup seam:
+  - `pkg/config/workstation_execution_limits.go` still keeps a direct-struct
+    legacy top-level workstation `timeout` fallback inside
+    `WorkstationExecutionTimeout(...)`
+  - `pkg/workers/workstation_executor.go` consumes that helper for live
+    execution deadlines
+  - `pkg/workers/workstation_executor_test.go` still proves the retired alias
+    path through `legacy_timeout_alias_zero`
+  - docs already describe top-level workstation `timeout` as a load-boundary
+    alias that is normalized away
+- Queued one new ignored reserve cleanup idea at
+  `factory/inputs/idea/default/retire-legacy-workstation-timeout-alias-fallback.md`
+  instead of re-queueing the merged token-removal lane.
+- Updated `factory/logs/meta/view.md` so the checked-in theory of mind now
+  matches `HEAD` `d028000`, merged PR `#50`, the stale ignored-residue map,
   and the new reserve cleanup posture.

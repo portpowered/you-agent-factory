@@ -2,8 +2,8 @@
 
 ## world state
 
-- after `git pull --ff-only origin main`, repository `main` and
-  `origin/main` are both at `12c56e2` on May 2, 2026 in the local maintainer
+- after `git pull`, repository `main` and
+  `origin/main` are both at `d028000` on May 2, 2026 in the local maintainer
   workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
@@ -32,6 +32,7 @@
   - `factory/inputs/idea/default/retire-dispatcher-throttle-pause-map.md`
   - `factory/inputs/idea/default/retire-duplicate-ui-script-copies.md`
   - `factory/inputs/idea/default/retire-legacy-throttle-fallback-after-authored-guard.md`
+  - `factory/inputs/idea/default/retire-legacy-workstation-timeout-alias-fallback.md`
   - `factory/inputs/idea/default/retire-runtime-lookup-helper-duplication.md`
   - `factory/inputs/idea/default/retire-verbose-logger-export.md`
   - `factory/inputs/idea/default/unify-token-removal-bookkeeping.md`
@@ -42,6 +43,7 @@
   - open PR `#48` `retire-legacy-throttle-fallback-after-authored-guard`
   - open PR `#30` `prd-functional-test-suite-decomposition`
   - merged PR `#49` `retire-runtime-lookup-helper-duplication`
+  - merged PR `#50` `unify-token-removal-bookkeeping`
   - merged PR `#47` `retire-verbose-logger-export`
   - merged PR `#46` `factory-level-inference-throttle-guard`
   - merged PR `#45` `retire-duplicate-ui-script-copies`
@@ -110,13 +112,18 @@
   - the ignored local idea
     `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
     is stale because its problem statement is no longer true on `main`
-- sidecar exploration plus direct validation found the next smaller
-  non-colliding reserve cleanup in runtime token bookkeeping:
-  - `pkg/petri/marking.go` owns `(*Marking).RemoveToken`
-  - `pkg/factory/projections/world_state.go` owns
-    `(*factoryWorldReducer).removeToken`
-  - both implement the same "remove token and clean the place index when it
-    becomes empty" responsibility in different runtime state models
+- direct code inspection plus current PR validation found the next smaller
+  non-colliding reserve cleanup in legacy workstation timeout handling:
+  - `pkg/config/workstation_execution_limits.go` still normalizes
+    workstation-level `timeout` into `limits.maxExecutionTime` and also keeps a
+    second direct-struct legacy fallback in `WorkstationExecutionTimeout(...)`
+  - `pkg/workers/workstation_executor.go` still consumes that helper for live
+    dispatch deadlines
+  - `pkg/workers/workstation_executor_test.go` still proves the legacy
+    top-level timeout alias path with `legacy_timeout_alias_zero`
+  - docs already describe top-level workstation `timeout` as a load-boundary
+    alias that is normalized away, so the remaining in-memory fallback is the
+    smaller cleanup seam
   - this seam stays outside open PR `#48` and open PR `#30`
 
 ## current blockers
@@ -126,12 +133,11 @@
 2. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid those paths until that lane merges
 3. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `45cefd2`
-   - it still treated the runtime-lookup reserve seam as queueable even though
-     merged PR `#49` already landed it on `main`
-   - it did not capture that the local
-     `dedupe-list-work-legacy-pagination-fallback` idea is stale because the
-     duplicate parsing seam is already gone on `main`
+   - it still described `HEAD` as `12c56e2`
+   - it still treated the token-removal reserve seam as queueable even though
+     merged PR `#50` already landed it on `main`
+   - it did not capture the next reserve seam in legacy workstation-timeout
+     alias fallback handling
 4. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 
@@ -156,9 +162,14 @@
   suggest; they can be stale because the seam already landed or because later
   mainline cleanup removed the underlying duplication before the idea was ever
   dispatched
-- the smallest currently validated reserve hygiene lane is token-removal
-  bookkeeping dedupe across `pkg/petri/marking.go` and
-  `pkg/factory/projections/world_state.go`; it is still lower value than the
+- when a deprecated config field is already normalized away at the load
+  boundary, the next simplification step is usually retiring any second
+  in-memory fallback path that still preserves that alias for tests or manual
+  struct assembly
+- the smallest currently validated reserve hygiene lane is retiring the
+  legacy workstation timeout alias fallback across
+  `pkg/config/workstation_execution_limits.go` and
+  `pkg/workers/workstation_executor_test.go`; it is still lower value than the
   active customer-owned throttle follow-up but remains safe background work
 
 ## next best move
@@ -167,9 +178,10 @@
 - leave `factory/logs/meta/asks.md` unchanged; the priority order is still
   correct
 - do not re-queue the already-open throttle fallback cleanup lane in `#48`
-- queue one new ignored reserve cleanup idea for token-removal bookkeeping
-  dedupe across `pkg/petri/marking.go` and
-  `pkg/factory/projections/world_state.go`
+- queue one new ignored reserve cleanup idea for retiring the legacy
+  workstation timeout alias fallback from
+  `pkg/config/workstation_execution_limits.go` and
+  `pkg/workers/workstation_executor_test.go`
 - keep any new reserve work out of both the `#48` file set and
   `tests/functional/**` while PR `#30` remains open
 - treat the active customer throttle follow-up as review/merge work now, not
@@ -186,5 +198,6 @@
   they are still subordinate to the throttling outage-prevention ask
 - the next maintainer action on that ask is to review and merge `#48` rather
   than creating another throttle request, while reserve hygiene can continue in
-  non-colliding seams such as token-removal bookkeeping dedupe in
-  `pkg/petri/marking.go` and `pkg/factory/projections/world_state.go`
+  non-colliding seams such as retiring the legacy workstation timeout alias
+  fallback in `pkg/config/workstation_execution_limits.go` and
+  `pkg/workers/workstation_executor_test.go`
