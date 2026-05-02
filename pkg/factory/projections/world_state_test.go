@@ -256,6 +256,59 @@ func TestReconstructFactoryWorldState_RetainsScriptAttemptsByDispatchID(t *testi
 	}
 }
 
+func TestFactoryWorldReducer_RemoveTokenCleansWorkIndexes(t *testing.T) {
+	reducer := newFactoryWorldReducer(0)
+	firstItem := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}
+	secondItem := interfaces.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", TraceID: "trace-2", PlaceID: "task:init"}
+
+	reducer.addWorkToken("tok-work-1", "task:init", firstItem)
+	reducer.addWorkToken("tok-work-2", "task:init", secondItem)
+
+	reducer.removeToken("tok-work-1")
+
+	if _, ok := reducer.tokenPlaces["tok-work-1"]; ok {
+		t.Fatalf("token place for removed work token should be deleted")
+	}
+	if _, ok := reducer.tokenKinds["tok-work-1"]; ok {
+		t.Fatalf("token kind for removed work token should be deleted")
+	}
+	if _, ok := reducer.tokenWorkIDs["tok-work-1"]; ok {
+		t.Fatalf("token work ID for removed work token should be deleted")
+	}
+	if len(reducer.placeTokens["task:init"]) != 1 {
+		t.Fatalf("task:init token count = %d, want 1 remaining token", len(reducer.placeTokens["task:init"]))
+	}
+	if _, ok := reducer.placeTokens["task:init"]["tok-work-2"]; !ok {
+		t.Fatalf("task:init should retain tok-work-2 after removing tok-work-1")
+	}
+
+	reducer.removeToken("tok-work-2")
+
+	if _, ok := reducer.placeTokens["task:init"]; ok {
+		t.Fatalf("task:init place index should be deleted after final work token removal")
+	}
+}
+
+func TestFactoryWorldReducer_RemoveTokenCleansResourceIndexes(t *testing.T) {
+	reducer := newFactoryWorldReducer(0)
+	resource := interfaces.FactoryResource{ID: "agent-slot", Capacity: 1}
+
+	reducer.seedResourceTokens(resource)
+
+	tokenID := resourceTokenID(resource.ID, 0)
+	reducer.removeToken(tokenID)
+
+	if _, ok := reducer.tokenPlaces[tokenID]; ok {
+		t.Fatalf("token place for removed resource token should be deleted")
+	}
+	if _, ok := reducer.tokenKinds[tokenID]; ok {
+		t.Fatalf("token kind for removed resource token should be deleted")
+	}
+	if _, ok := reducer.placeTokens[resourceAvailablePlaceID(resource.ID)]; ok {
+		t.Fatalf("resource available place index should be deleted after final token removal")
+	}
+}
+
 func TestReconstructFactoryWorldState_PreservesSafeResponseDiagnostics(t *testing.T) {
 	t0 := time.Date(2026, 4, 18, 10, 0, 0, 0, time.UTC)
 	state, err := ReconstructFactoryWorldState(safeResponseDiagnosticsProjectionEvents(t0), 3)
@@ -527,6 +580,9 @@ func TestReconstructFactoryWorldState_WorkInputTokenIDMatchesRequestConsumption(
 	}
 	if got, ok := active.PlaceOccupancyByID["task:init"]; ok {
 		t.Fatalf("active task:init occupancy = %#v, want consumed runtime token removed", got)
+	}
+	if len(active.ActiveDispatches) != 1 || active.ActiveDispatches["dispatch-1"].WorkItemIDs[0] != "work-1" {
+		t.Fatalf("active dispatches = %#v, want dispatch-1 to retain work-1 while task:init occupancy is cleared", active.ActiveDispatches)
 	}
 }
 
