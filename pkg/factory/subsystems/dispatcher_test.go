@@ -719,13 +719,17 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 	if len(result.Dispatches) != 0 {
 		t.Fatalf("expected no dispatch while lane is paused, got %+v", result.Dispatches)
 	}
-	assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
+	firstPause := assertSingleActiveThrottlePause(t, result, "claude", "claude-sonnet", "claude/claude-sonnet")
 
 	currentTime = currentTime.Add(11 * time.Minute)
 	resumedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", firstPause.PausedAt),
+		},
+		ActiveThrottlePauses: append([]interfaces.ActiveThrottlePause(nil), result.ActiveThrottlePauses...),
 	}
 
 	result, err = dispatcher.Execute(context.Background(), &resumedSnapshot)
@@ -801,6 +805,7 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle-1", "t-a", firstPause.PausedAt),
 			throttledCompletedDispatch("d-throttle-2", "t-a", currentTime),
 		},
 	}
@@ -1010,6 +1015,10 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("d-throttle", "t-a", result.ActiveThrottlePauses[0].PausedAt),
+		},
+		ActiveThrottlePauses: append([]interfaces.ActiveThrottlePause(nil), result.ActiveThrottlePauses...),
 	}
 	result, err = dispatcher.Execute(context.Background(), &expiredSnapshot)
 	if err != nil {
