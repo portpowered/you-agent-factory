@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	publicFactoryInputKindDefault                  = "DEFAULT"
-	publicFactoryWorkerTypeModel                   = "MODEL_WORKER"
-	publicFactoryWorkerTypeScript                  = "SCRIPT_WORKER"
-	publicFactoryWorkerModelProviderClaude         = "CLAUDE"
-	publicFactoryWorkerModelProviderCodex          = "CODEX"
-	publicFactoryWorkerProviderScriptWrap          = "SCRIPT_WRAP"
-	publicFactoryWorkstationKindStandard           = "STANDARD"
-	publicFactoryWorkstationKindRepeater           = "REPEATER"
-	publicFactoryWorkstationKindCron               = "CRON"
-	publicFactoryWorkstationTypeModel              = "MODEL_WORKSTATION"
-	publicFactoryWorkstationTypeLogical            = "LOGICAL_MOVE"
+	publicFactoryInputKindDefault             = "DEFAULT"
+	publicFactoryWorkerTypeModel              = "MODEL_WORKER"
+	publicFactoryWorkerTypeScript             = "SCRIPT_WORKER"
+	publicFactoryWorkerModelProviderClaude    = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex     = "CODEX"
+	publicFactoryWorkerProviderScriptWrap     = "SCRIPT_WRAP"
+	publicFactoryWorkstationKindStandard      = "STANDARD"
+	publicFactoryWorkstationKindRepeater      = "REPEATER"
+	publicFactoryWorkstationKindCron          = "CRON"
+	publicFactoryWorkstationTypeModel         = "MODEL_WORKSTATION"
+	publicFactoryWorkstationTypeLogical       = "LOGICAL_MOVE"
 	publicFactoryGuardTypeVisitCount          = "VISIT_COUNT"
 	publicFactoryGuardTypeMatchesFields       = "MATCHES_FIELDS"
 	publicFactoryGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
@@ -45,6 +45,22 @@ var publicFactoryGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
 	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
 	publicFactoryGuardTypeInferenceThrottle:   publicFactoryGuardTypeInferenceThrottle,
+}
+
+var publicFactoryRootGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeInferenceThrottle: publicFactoryGuardTypeInferenceThrottle,
+}
+
+var publicFactoryWorkstationGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeVisitCount:    publicFactoryGuardTypeVisitCount,
+	publicFactoryGuardTypeMatchesFields: publicFactoryGuardTypeMatchesFields,
+}
+
+var publicFactoryInputGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeVisitCount:          publicFactoryGuardTypeVisitCount,
+	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
+	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
+	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
 }
 
 func canonicalPublicFactoryEnumValue(value string, aliases map[string]string) string {

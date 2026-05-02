@@ -338,6 +338,61 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsFactoryInferenceThrottleGuardWit
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsInferenceThrottleGuardOnWorkstation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"workstation-throttle-guard-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer"}],
+		"workstations": [{
+			"name":"draft-story",
+			"worker":"writer",
+			"guards":[{"type":"INFERENCE_THROTTLE_GUARD"}],
+			"inputs":[{"workType":"story","state":"ready"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected root-only inference throttle guard to fail on workstation guards")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].guards[0].type") {
+		t.Fatalf("expected workstation guard field path in error, got %v", err)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsInferenceThrottleGuardOnInput(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"input-throttle-guard-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer"}],
+		"workstations": [{
+			"name":"draft-story",
+			"worker":"writer",
+			"inputs":[{
+				"workType":"story",
+				"state":"ready",
+				"guards":[{"type":"INFERENCE_THROTTLE_GUARD"}]
+			}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected root-only inference throttle guard to fail on input guards")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].inputs[0].guards[0].type") {
+		t.Fatalf("expected input guard field path in error, got %v", err)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"retired-fan-in-factory",

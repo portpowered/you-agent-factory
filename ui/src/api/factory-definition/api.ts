@@ -122,13 +122,15 @@ const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>
 const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
   "INFERENCE_THROTTLE_GUARD",
 ]);
-const GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+const WORKSTATION_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
   "VISIT_COUNT",
   "MATCHES_FIELDS",
+]);
+const INPUT_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+  "VISIT_COUNT",
   "ALL_CHILDREN_COMPLETE",
   "ANY_CHILD_FAILED",
   "SAME_NAME",
-  "INFERENCE_THROTTLE_GUARD",
 ]);
 
 export class FactoryDefinitionAPIError extends Error {
@@ -441,7 +443,7 @@ function decodeWorkstationGuard(value: unknown, path: string): FactoryGuard {
   rejectUnknownKeys(record, GUARD_KEYS, path);
 
   const guard: FactoryGuard = {
-    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
+    type: readRequiredEnum(record, "type", path, WORKSTATION_GUARD_TYPE_VALUES),
   };
   const matchConfig = readOptionalGuardMatchConfig(record, path);
   const workstation = readOptionalString(record, "workstation", path);
@@ -463,7 +465,7 @@ function decodeInputGuard(value: unknown, path: string): FactoryGuard {
   rejectUnknownKeys(record, GUARD_KEYS, path);
 
   const guard: FactoryGuard = {
-    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
+    type: readRequiredEnum(record, "type", path, INPUT_GUARD_TYPE_VALUES),
   };
   const matchInput = readOptionalString(record, "matchInput", path);
   const parentInput = readOptionalString(record, "parentInput", path);

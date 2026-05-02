@@ -174,6 +174,65 @@ describe("normalizeFactoryDefinition", () => {
     );
   });
 
+  it("rejects inference throttle guards on workstations", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workers: [{ name: "writer" }],
+        workstations: [
+          {
+            name: "Draft",
+            worker: "writer",
+            guards: [{ type: "INFERENCE_THROTTLE_GUARD" }],
+            inputs: [{ state: "new", workType: "story" }],
+            outputs: [{ state: "new", workType: "story" }],
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workstations[0].guards[0].type must be one of VISIT_COUNT, MATCHES_FIELDS.",
+      ),
+    );
+  });
+
+  it("rejects inference throttle guards on inputs", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workers: [{ name: "writer" }],
+        workstations: [
+          {
+            name: "Draft",
+            worker: "writer",
+            inputs: [
+              {
+                state: "new",
+                workType: "story",
+                guards: [{ type: "INFERENCE_THROTTLE_GUARD" }],
+              },
+            ],
+            outputs: [{ state: "done", workType: "story" }],
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workstations[0].inputs[0].guards[0].type must be one of VISIT_COUNT, ALL_CHILDREN_COMPLETE, ANY_CHILD_FAILED, SAME_NAME.",
+      ),
+    );
+  });
+
   it("rejects retired legacy field aliases in the UI boundary", () => {
     expect(() =>
       normalizeFactoryDefinition({
