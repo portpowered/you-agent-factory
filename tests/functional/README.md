@@ -7,7 +7,7 @@
 - Default non-long lane: `make test-functional`
 - Opt-in long lane: `make test-functional-long`
 
-The default lane runs `go test -p 1 -short ./tests/functional/...` through the
+The default lane runs `go test -p 2 -short ./tests/functional/...` through the
 repository-owned `make test-functional` target, so the full behavior tree still
 runs through package discovery without hard-coded package lists while avoiding
 the slow Windows cross-package parallel scheduling path. The long lane runs the

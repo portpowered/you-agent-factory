@@ -8,7 +8,7 @@ evidence for the functional suite decomposition PRD.
 - Default non-long functional lane: `make test-functional`
 - Opt-in long functional lane: `make test-functional-long`
 
-The default lane runs `go test -p 1 -short ./tests/functional/...` through the
+The default lane runs `go test -p 2 -short ./tests/functional/...` through the
 repository-owned `make test-functional` target, so the full behavior tree still
 uses package discovery without a hard-coded package list while avoiding the
 slow Windows cross-package parallel scheduling path. The long lane runs the
@@ -23,10 +23,11 @@ full behavior tree plus any `functionallong`-tagged files.
   ./tests/functional/...` invocation could regress badly because Go's
   cross-package parallel scheduling reported multi-dozen-second wall-clock
   totals even after the broad sweeps moved behind `functionallong`.
-- On 2026-05-02 in this Windows worktree, `go test -p 1 -short
-  ./tests/functional/... -count=1 -timeout 300s` measured about `6.32s`.
+- On 2026-05-02 in this Windows worktree, `Measure-Command { go test -p 2
+  -short ./tests/functional/... -count=1 -timeout 300s *> $null }` measured
+  about `4.31s`.
 - On 2026-05-02 in this Windows worktree, `make test-functional` measured
-  about `6.3s` after repointing the target to that `-p 1` invocation.
+  about `4.20s` after repointing the target to that `-p 2` invocation.
 - The runtime target is therefore met for the documented default command while
   the explicit long lane remains `make test-functional-long`.
 

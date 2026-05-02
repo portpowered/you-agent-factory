@@ -88,7 +88,7 @@ test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
 
 test-functional:
-	$(GO) test -p 1 -short $(FUNCTIONAL_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -p $(FUNCTIONAL_DEFAULT_JOBS) -short $(FUNCTIONAL_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
