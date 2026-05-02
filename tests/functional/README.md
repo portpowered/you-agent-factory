@@ -56,8 +56,8 @@ available without widening the default feedback loop.
   full short-mode `./tests/functional/...` tree without ad hoc package or
   test arguments at invocation time.
 - When a slow test is gated behind `functionallong`, name the file
-  `*_long_test.go` so review-time scanning and guardrails can spot the lane
-  boundary immediately.
+  `*_long_test.go` so review-time checks can spot the lane boundary
+  immediately.
 - When every test in a file belongs to the long lane, move the whole file into
   a `*_long_test.go` unit instead of leaving short-mode builds to compile a
   file that only calls `support.SkipLongFunctional(...)` at runtime.
@@ -93,7 +93,7 @@ Compatibility rules during coexistence:
 - New behavior coverage belongs in `tests/functional/<behavior-package>/`.
 - New shared harnesses, assertions, and fixture seams belong in
   `tests/functional/internal/support`.
-- The repository-owned guard in `internal/contractguard/functional_layout_test.go`
-  fails when a `_long_test.go` file misses the `functionallong` tag, when a
-  `functionallong` file sits outside `tests/functional/`, or when a new helper
-  shim appears in `tests/functional_test`.
+- Review changes for long-lane placement and helper drift before merge:
+  `functionallong` files belong under `tests/functional/...`, slow-lane files
+  should use `*_long_test.go`, and new cross-package helpers should land in
+  `tests/functional/internal/support` rather than `tests/functional_test`.

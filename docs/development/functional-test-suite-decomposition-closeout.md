@@ -7,8 +7,6 @@ evidence for the functional suite decomposition PRD.
 
 - Default non-long functional lane: `make test-functional`
 - Opt-in long functional lane: `make test-functional-long`
-- Review-time guardrail for lane placement and legacy helper drift:
-  `make functional-layout-contract`
 
 The default lane runs `go test -short ./tests/functional/...` through package
 discovery in short mode. The long lane runs the full behavior tree plus any
@@ -48,20 +46,20 @@ discovery in short mode. The long lane runs the full behavior tree plus any
 
 ## Guardrail Coverage
 
-The repository-owned guard in
-`internal/contractguard/functional_layout_test.go` fails when:
+Contributor guidance and review-time checks now carry the decomposition
+guardrails:
 
-- a `*_long_test.go` file is missing the `functionallong` build tag
-- a `functionallong`-tagged file sits outside `tests/functional/...`
-- a new helper or compatibility shim appears in `tests/functional_test/`
-  outside the current allowlist
+- long-lane files stay under `tests/functional/<behavior-package>/`
+- slow-lane files that use the `functionallong` build tag should use
+  `*_long_test.go` names
+- new cross-package helper growth belongs in
+  `tests/functional/internal/support`, not `tests/functional_test/`
 
 ## Verification
 
 The decomposition closeout was verified with these repository-root commands:
 
 ```text
-make functional-layout-contract
 make test-functional
 make test-functional-long
 make test
