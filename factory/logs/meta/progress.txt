@@ -1467,3 +1467,37 @@
 - Queued one new ignored reserve cleanup idea at
   `factory/inputs/idea/default/dedupe-loaded-runtime-definition-lookups.md`
   instead of re-queueing the already-landed portable bundled-file seam.
+
+## 2026-05-02 10:47:00 -07:00 - meta refresh after runtime-lookup cleanup landed
+
+- Ran `git pull --ff-only`; `main` and `origin/main` are both at `c929979`.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, live GitHub PR state, and the current UI/backend quality
+  seams before choosing work.
+- Verified with `git ls-files factory/inputs factory/logs/meta factory/meta`
+  that the checked-in workflow inboxes still contain only `.gitkeep`
+  sentinels and that `factory/logs/meta/*.md|txt` remain the canonical tracked
+  meta control-plane files.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `8a1c002`
+  - it did not include merged PR `#58`
+    `dedupe-loaded-runtime-definition-lookups`
+  - it still treated the runtime-lookup cleanup seam as queueable even though
+    `#58` already landed it on `main`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state and direct `HEAD` inspection:
+  - `factory/inputs/idea/default/dedupe-loaded-runtime-definition-lookups.md`
+    is now solved residue rather than pending work
+  - the dashboard fallback collector residue is stale because
+    `pkg/cli/dashboard/dashboard.go` already routes both fallback modes through
+    `worldViewFallbackWorkItems(...)`
+- Rechecked the checked-in website-quality ask against live UI tests:
+  - PNG import/export and timeline semantics already have substantial jsdom
+    coverage in `ui/src/App.test.tsx` and related feature/store tests
+  - the live narrower gap is browser integration coverage for moving the
+    timeline tick slider and resetting back to `Current` inside
+    `ui/integration/event-stream-replay.integration.test.mjs`
+- Queued one new ignored customer-ask-aligned idea at
+  `factory/inputs/idea/default/browser-integration-timeline-tick-controls.md`
+  instead of creating another stale backend reserve lane.

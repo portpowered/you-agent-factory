@@ -3,7 +3,7 @@
 ## world state
 
 - after `git pull --ff-only`, repository `main` and `origin/main` are both at
-  `8a1c002` on May 2, 2026 in the local maintainer workspace
+  `c929979` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -22,6 +22,7 @@
   - `factory/inputs/idea/default/dedupe-factory-config-boundary-alias-rejection.md`
   - `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
   - `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+  - `factory/inputs/idea/default/dedupe-loaded-runtime-definition-lookups.md`
   - `factory/inputs/idea/default/dedupe-portable-bundled-path-containment-validation.md`
   - `factory/inputs/idea/default/dedupe-replay-factory-merge-helpers.md`
   - `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
@@ -46,6 +47,7 @@
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#58` `dedupe-loaded-runtime-definition-lookups`
   - merged PR `#57` `dedupe-portable-bundled-path-containment-validation`
   - merged PR `#56` `inline-workstation-runtime-lookup-key-fallback`
   - merged PR `#55` `dedupe-generated-public-enum-pointer-helpers`
@@ -65,8 +67,11 @@
 - the broad throttle customer ask is fully implemented on `main` through
   merged PRs `#46` and `#48`; it should remain treated as solved rather than
   live backlog
-- direct `HEAD` inspection confirmed that several ignored local workflow-input
-  residues are now stale rather than queueable:
+- direct `HEAD` inspection confirmed that more ignored local workflow-input
+  residue is now stale rather than queueable:
+  - merged PR `#58` landed the runtime lookup ownership cleanup on `main`, so
+    `factory/inputs/idea/default/dedupe-loaded-runtime-definition-lookups.md`
+    is solved residue
   - merged PR `#57` landed the portable bundled-file containment cleanup on
     `main`, so
     `factory/inputs/idea/default/dedupe-portable-bundled-path-containment-validation.md`
@@ -80,44 +85,48 @@
     `factory/inputs/idea/default/dedupe-generated-public-enum-pointer-helpers.md`
     is solved residue
   - `pkg/cli/dashboard/dashboard.go` now routes both completed and failed
-    session fallback collection through the shared
-    `worldViewFallbackWorkItems(...)` seam, so
+    fallback collection through `worldViewFallbackWorkItems(...)`, so both
+    `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
+    and
     `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
-    no longer matches live code
+    no longer match live code
   - `pkg/api/handlers.go` no longer re-parses raw `maxResults`, so
     `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
     is also stale residue
-- direct code inspection plus two sidecar explorers found the next smaller
-  non-colliding reserve cleanup seam in runtime lookup ownership:
-  - `pkg/config/runtime_config.go` currently duplicates the same map-backed
-    `Worker(...)` and `Workstation(...)` lookup methods on both
-    `LoadedFactoryConfig` and `runtimeDefinitionConfig`
-  - the duplication remains live on `main` because `LoadedFactoryConfig`
-    is the canonical `interfaces.RuntimeConfigLookup` implementer consumed by
-    service, replay, event-history, and topology-projection paths, while
-    `runtimeDefinitionConfig` is only the internal staging object used before
-    `NewLoadedFactoryConfig(...)`
-  - the canonical lookup contracts in `pkg/interfaces/runtime_lookup.go`
-    already express the shared behavior; the duplicated method bodies in
-    `pkg/config/runtime_config.go` are the narrower cleanup target than
-    reopening broader interface-shape work
-  - this seam stays outside open PR `#30` because it can remain package-local
-    to `pkg/config` plus focused package tests
+- direct code inspection against `Makefile`, `.github/workflows/ci.yml`, the
+  standards docs, and the current UI integration harness refined the next
+  customer-ask-aligned quality seams:
+  - the current checked-in lint surface is real but narrow: `make lint` runs
+    `go vet ./...` plus `go run ./cmd/deadcodecheck`, and CI invokes that same
+    target
+  - there is no checked-in `golangci-lint` configuration or CI lane yet, so
+    broader backend lint automation remains a live follow-up quality seam
+  - the more immediate narrow website-quality gap is browser-level tick-control
+    coverage: `ui/src/App.test.tsx` and
+    `ui/src/state/factoryTimelineStore.test.ts` already cover slider semantics
+    in jsdom and store tests, but
+    `ui/integration/event-stream-replay.integration.test.mjs` still does not
+    move the timeline slider or verify the `Current` reset path in the browser
+  - this tick-control lane stays outside open PR `#30` because it remains
+    entirely under `ui/**` and avoids `tests/functional/**`
 
 ## current blockers
 
 1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid that tree until it merges
 2. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `185f699`
-   - it did not include merged PR `#57`
-   - it still treated the portable bundled-file containment seam as the next
-     move even though `#57` already landed it on `main`
+   - it still described `HEAD` as `8a1c002`
+   - it did not include merged PR `#58`
+   - it still treated the runtime-lookup cleanup seam as the next move even
+     though `#58` already landed it on `main`
 3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 4. many ignored local idea and plan files now correspond either to merged PRs
    or to already-simplified code on `HEAD`, so the local workflow-input
    surface is increasingly a stale mix rather than an actionable queue
+5. the quality and linting customer asks remain broad, so they only become
+   actionable when decomposed into small checked-in or ignored idea files with
+   explicit file scope and observable acceptance criteria
 
 ## theory of mind
 
@@ -132,13 +141,15 @@
 - the local workflow-input surface is now stale in two different ways:
   merged lanes remain as ignored idea residue, and some older ideas no longer
   match live code because later cleanups already simplified the targeted seam
-- the safest reserve cleanup posture remains tiny package-local simplifications
-  outside `tests/functional/**`, because PR `#30` is still the only live broad
-  collision surface
-- the current highest-confidence reserve cleanup is the duplicate runtime
-  lookup ownership in `pkg/config/runtime_config.go`, because the canonical
-  runtime lookup contracts already exist and the live duplication is limited to
-  internal staging versus loaded-config map accessors
+- the safest non-colliding cleanup posture remains small, package-local or
+  root-quality-lane work outside `tests/functional/**`, because PR `#30` is
+  still the only live broad collision surface
+- the next customer-ask-aligned move is not "introduce website testing from
+  zero"; the repository already has strong jsdom coverage for PNG import/export
+  and timeline state, so the live UI gap is browser-level replay interaction
+  coverage for the tick slider rather than another unit-style test
+- broader lint automation is still a real quality seam, but it is now the
+  secondary follow-up behind the narrower website-quality lane
 
 ## next best move
 
@@ -147,17 +158,18 @@
   still correct
 - do not re-queue solved or code-stale cleanup residue from ignored
   `factory/inputs/**`
-- queue one new ignored reserve cleanup idea for deduplicating loaded versus
-  staging runtime definition lookups in `pkg/config/runtime_config.go`
-- keep any new reserve work out of `tests/functional/**` while PR `#30`
-  remains open
+- queue one new ignored customer-ask-aligned idea for browser integration
+  coverage of timeline tick controls
+- keep any new reserve or quality work out of `tests/functional/**` while PR
+  `#30` remains open
 
 ## customer asks
 
 - `factory/logs/meta/asks.md` remains the only checked-in backlog surface
 - no ask is marked urgent as of May 2, 2026 in the maintainer workspace
 - the throttling ask is satisfied on `main` through merged PRs `#46` and `#48`
-- the next customer-facing asks are the broader quality, website-quality,
-  linting, docs-audit, manual-QA, and systems-quality programs; none of them
-  are yet decomposed into a single new checked-in priority item that should
-  displace the current backlog ordering during this pass
+- the quality and linting asks remain live, but the next best slice after this
+  pass is no longer throttle-related
+- the website-quality ask remains live at a broader design-system and
+  consistency level, and its clearest narrow unchecked subproblem is
+  browser-level tick-control replay coverage rather than PNG import/export
