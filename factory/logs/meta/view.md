@@ -2,8 +2,9 @@
 
 ## world state
 
-- after `git pull --ff-only origin main`, repository `main` and `origin/main`
-  are both at `45cefd2` on May 2, 2026 in the local maintainer workspace
+- after `git pull --ff-only origin main`, repository `main` and
+  `origin/main` are both at `314d889` on May 2, 2026 in the local maintainer
+  workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -30,14 +31,17 @@
   - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
   - `factory/inputs/idea/default/retire-dispatcher-throttle-pause-map.md`
   - `factory/inputs/idea/default/retire-duplicate-ui-script-copies.md`
+  - `factory/inputs/idea/default/retire-legacy-throttle-fallback-after-authored-guard.md`
   - `factory/inputs/idea/default/retire-runtime-lookup-helper-duplication.md`
   - `factory/inputs/idea/default/retire-verbose-logger-export.md`
+  - `factory/inputs/idea/default/unify-token-removal-bookkeeping.md`
   - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
   - `factory/inputs/task/default/prd-api-model-contract-cleanup.md`
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#48` `retire-legacy-throttle-fallback-after-authored-guard`
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#49` `retire-runtime-lookup-helper-duplication`
   - merged PR `#47` `retire-verbose-logger-export`
   - merged PR `#46` `factory-level-inference-throttle-guard`
   - merged PR `#45` `retire-duplicate-ui-script-copies`
@@ -77,17 +81,41 @@
   - open PR `#48` now owns the explicit post-merge simplification follow-up:
     retire the legacy implicit throttle-policy fallback for factories that do
     not author `factory.guards`
-  - on this branch, that cleanup removes the old runtime seam from
-    `pkg/factory/options.go` and `pkg/factory/runtime/factory.go`, removes the
-    dispatcher no-guard fallback in
-    `pkg/factory/subsystems/subsystem_dispatcher.go`, and adds focused
-    package-owned regression coverage in `pkg/factory/...` and `pkg/petri/...`
-- the previously queued dead-surface fallback cleanup is now already complete:
-  - merged PR `#47` retired the exported `pkg/logging.VerboseLogger` surface
-- sidecar exploration found the next smaller non-colliding reserve cleanup in
-  `pkg/interfaces/runtime_lookup.go`, where
-  `FirstRuntimeDefinitionLookup` and `FirstRuntimeWorkstationLookup` duplicate
-  the same first-non-nil helper loop
+  - the live fallback on `main` still lives in:
+    - `pkg/factory/options.go` via `WithProviderThrottlePauseDuration`
+    - `pkg/factory/runtime/factory.go` via dispatcher wiring from
+      `ProviderThrottlePauseDuration`
+    - `pkg/factory/subsystems/subsystem_dispatcher.go` via the
+      `activeThrottlePauses` branch that falls back to
+      `factorythrottle.DeriveActiveThrottlePauses(...)` when no authored
+      inference-throttle guard exists
+  - PR `#48` covers those files plus focused regression proof in
+    `pkg/factory/subsystems/dispatcher_test.go`,
+    `pkg/petri/inference_throttle_guard_test.go`,
+    `pkg/testutil/testutil.go`, and
+    `tests/functional_test/provider_error_smoke_test.go`; that last file sits
+    outside the still-open `tests/functional/**` reorganization lane in `#30`
+- the previously queued reserve cleanup changed again while `main` advanced:
+  - merged PR `#49` already retired the duplicated first-non-nil helper loops
+    in `pkg/interfaces/runtime_lookup.go`
+  - the ignored local idea
+    `factory/inputs/idea/default/retire-runtime-lookup-helper-duplication.md`
+    is now solved residue rather than pending work
+- direct code inspection also invalidated another ignored local reserve idea:
+  - `pkg/api/server.go` still owns the handwritten tolerant `/work` wrapper
+  - `pkg/api/handlers.go` on `main` no longer re-parses raw `maxResults`
+    query text inside `ListWork`
+  - the ignored local idea
+    `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+    is stale because its problem statement is no longer true on `main`
+- sidecar exploration plus direct validation found the next smaller
+  non-colliding reserve cleanup in runtime token bookkeeping:
+  - `pkg/petri/marking.go` owns `(*Marking).RemoveToken`
+  - `pkg/factory/projections/world_state.go` owns
+    `(*factoryWorldReducer).removeToken`
+  - both implement the same "remove token and clean the place index when it
+    becomes empty" responsibility in different runtime state models
+  - this seam stays outside open PR `#48` and open PR `#30`
 
 ## current blockers
 
@@ -96,13 +124,12 @@
 2. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid those paths until that lane merges
 3. the previous checked-in world model was stale again:
-   - it still described upstream `HEAD` as `79b0552`
-   - it still treated the throttle lane as an open PR instead of a merged
-     implementation
-   - it still treated the exported `VerboseLogger` seam as queueable even
-     though merged PR `#47` already removed it
-   - it did not capture that the authored-guard-only cleanup is now in
-     progress on its own branch
+   - it still described `HEAD` as `45cefd2`
+   - it still treated the runtime-lookup reserve seam as queueable even though
+     merged PR `#49` already landed it on `main`
+   - it did not capture that the local
+     `dedupe-list-work-legacy-pagination-fallback` idea is stale because the
+     duplicate parsing seam is already gone on `main`
 4. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 
@@ -116,16 +143,19 @@
   authored guard contract" to "finish the simplification" by retiring the
   implicit fallback path; open PR `#48` is that follow-up lane
 - the customer explicitly asked to replace the separate global-throttle logic
-  with a factory-level guard and reduce special abstractions, so the current
-  branch should converge on authored guards as the only supported throttle
-  policy without leaving compatibility seams behind
-- a safe cleanup lane must still stay outside both `#48` and
-  `tests/functional/**` while PR `#30` is open, which makes focused
-  package/runtime coverage the right proof shape for the active throttle
-  follow-up
-- the small reserve helper cleanup in `pkg/interfaces/runtime_lookup.go`
-  remains a valid background hygiene lane, but it is subordinate to the
-  remaining customer-owned throttle simplification
+  with a factory-level guard and reduce special abstractions, so the correct
+  maintainer action today is to track `#48` as the active lane rather than
+  queueing another competing throttle request
+- a safe parallel cleanup lane must still stay outside both `#48` and
+  `tests/functional/**` while PR `#30` is open
+- ignored local idea files are even less trustworthy than their filenames
+  suggest; they can be stale because the seam already landed or because later
+  mainline cleanup removed the underlying duplication before the idea was ever
+  dispatched
+- the smallest currently validated reserve hygiene lane is token-removal
+  bookkeeping dedupe across `pkg/petri/marking.go` and
+  `pkg/factory/projections/world_state.go`; it is still lower value than the
+  active customer-owned throttle follow-up but remains safe background work
 
 ## next best move
 
@@ -133,8 +163,9 @@
 - leave `factory/logs/meta/asks.md` unchanged; the priority order is still
   correct
 - do not re-queue the already-open throttle fallback cleanup lane in `#48`
-- queue one new ignored reserve cleanup idea for helper dedupe in
-  `pkg/interfaces/runtime_lookup.go`
+- queue one new ignored reserve cleanup idea for token-removal bookkeeping
+  dedupe across `pkg/petri/marking.go` and
+  `pkg/factory/projections/world_state.go`
 - keep any new reserve work out of both the `#48` file set and
   `tests/functional/**` while PR `#30` remains open
 - treat the active customer throttle follow-up as review/merge work now, not
@@ -151,4 +182,5 @@
   they are still subordinate to the throttling outage-prevention ask
 - the next maintainer action on that ask is to review and merge `#48` rather
   than creating another throttle request, while reserve hygiene can continue in
-  non-colliding seams such as `pkg/interfaces/runtime_lookup.go`
+  non-colliding seams such as token-removal bookkeeping dedupe in
+  `pkg/petri/marking.go` and `pkg/factory/projections/world_state.go`

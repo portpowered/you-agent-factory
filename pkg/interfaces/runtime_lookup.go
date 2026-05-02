@@ -20,24 +20,24 @@ type RuntimeConfigLookup interface {
 	RuntimeBaseDir() string
 }
 
-// FirstRuntimeDefinitionLookup returns the first non-nil runtime definition
-// lookup from the provided candidates.
-func FirstRuntimeDefinitionLookup(lookups ...RuntimeDefinitionLookup) RuntimeDefinitionLookup {
+func firstNonNilLookup[T comparable](lookups ...T) T {
+	var zero T
 	for _, lookup := range lookups {
-		if lookup != nil {
+		if lookup != zero {
 			return lookup
 		}
 	}
-	return nil
+	return zero
+}
+
+// FirstRuntimeDefinitionLookup returns the first non-nil runtime definition
+// lookup from the provided candidates.
+func FirstRuntimeDefinitionLookup(lookups ...RuntimeDefinitionLookup) RuntimeDefinitionLookup {
+	return firstNonNilLookup(lookups...)
 }
 
 // FirstRuntimeWorkstationLookup returns the first non-nil runtime workstation
 // lookup from the provided candidates.
 func FirstRuntimeWorkstationLookup(lookups ...RuntimeWorkstationLookup) RuntimeWorkstationLookup {
-	for _, lookup := range lookups {
-		if lookup != nil {
-			return lookup
-		}
-	}
-	return nil
+	return firstNonNilLookup(lookups...)
 }
