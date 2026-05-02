@@ -22,8 +22,7 @@ func NormalizeWorkstationExecutionLimit(cfg *interfaces.FactoryWorkstationConfig
 }
 
 // WorkstationExecutionTimeout resolves the configured workstation execution
-// timeout from the canonical execution limits field with a direct-struct legacy
-// timeout fallback for older in-memory fixtures.
+// timeout from the canonical execution limits field.
 func WorkstationExecutionTimeout(cfg *interfaces.FactoryWorkstationConfig) (time.Duration, error) {
 	if cfg == nil {
 		return 0, nil
@@ -33,16 +32,6 @@ func WorkstationExecutionTimeout(cfg *interfaces.FactoryWorkstationConfig) (time
 		timeout, err := time.ParseDuration(cfg.Limits.MaxExecutionTime)
 		if err != nil {
 			return 0, fmt.Errorf("invalid workstation limits.maxExecutionTime %q: %v", cfg.Limits.MaxExecutionTime, err)
-		}
-		if timeout > 0 {
-			return timeout, nil
-		}
-	}
-
-	if strings.TrimSpace(cfg.Timeout) != "" {
-		timeout, err := time.ParseDuration(cfg.Timeout)
-		if err != nil {
-			return 0, fmt.Errorf("invalid legacy workstation timeout %q: %v", cfg.Timeout, err)
 		}
 		if timeout > 0 {
 			return timeout, nil
