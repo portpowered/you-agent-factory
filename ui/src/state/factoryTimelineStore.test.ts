@@ -2059,6 +2059,8 @@ describe("factory timeline reconstruction", () => {
       4,
     );
 
+    expect(failedTick.dashboard.runtime.session.dispatched_count).toBe(1);
+    expect(failedTick.dashboard.runtime.session.completed_count).toBe(0);
     expect(failedTick.dashboard.runtime.session.failed_count).toBe(3);
     expect(failedTick.dashboard.runtime.session.failed_by_work_type).toEqual({
       story: 3,
