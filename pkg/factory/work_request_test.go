@@ -250,8 +250,62 @@ func TestNormalizeWorkRequest_RejectsMultipleParentChildParentsForOneChild(t *te
 	}, interfaces.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"story-set": true, "story": true},
 	})
-	if err == nil || !strings.Contains(err.Error(), "multiple PARENT_CHILD parents") {
-		t.Fatalf("expected multiple parent rejection, got %v", err)
+	wantErr := `work_request: relations[1] assigns multiple PARENT_CHILD parents to "story-a" ("parent-a" and "parent-b")`
+	if err == nil || err.Error() != wantErr {
+		t.Fatalf("error = %v, want %q", err, wantErr)
+	}
+}
+
+func TestNormalizeWorkRequest_RejectsDuplicateDependsOnRelationWithNormalizedRequiredState(t *testing.T) {
+	_, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-duplicate-depends-on",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "build", WorkTypeID: "task"},
+			{Name: "review", WorkTypeID: "task"},
+		},
+		Relations: []interfaces.WorkRelation{
+			{
+				Type:           interfaces.WorkRelationDependsOn,
+				SourceWorkName: "review",
+				TargetWorkName: "build",
+				RequiredState:  "reviewed",
+			},
+			{
+				Type:           interfaces.WorkRelationDependsOn,
+				SourceWorkName: "review",
+				TargetWorkName: "build",
+				RequiredState:  "reviewed",
+			},
+		},
+	}, interfaces.WorkRequestNormalizeOptions{
+		ValidWorkTypes:    map[string]bool{"task": true},
+		ValidStatesByType: map[string]map[string]bool{"task": {"reviewed": true, "complete": true}},
+	})
+	wantErr := `work_request: relations[1] duplicates relations[0] ("DEPENDS_ON" "review" -> "build" with requiredState "reviewed")`
+	if err == nil || err.Error() != wantErr {
+		t.Fatalf("error = %v, want %q", err, wantErr)
+	}
+}
+
+func TestNormalizeWorkRequest_RejectsDuplicateParentChildRelationWithoutRequiredStateSuffix(t *testing.T) {
+	_, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-duplicate-parent-child",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "parent", WorkTypeID: "task"},
+			{Name: "child", WorkTypeID: "task"},
+		},
+		Relations: []interfaces.WorkRelation{
+			{Type: interfaces.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
+			{Type: interfaces.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
+		},
+	}, interfaces.WorkRequestNormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true},
+	})
+	wantErr := `work_request: relations[1] duplicates relations[0] ("PARENT_CHILD" "child" -> "parent")`
+	if err == nil || err.Error() != wantErr {
+		t.Fatalf("error = %v, want %q", err, wantErr)
 	}
 }
 
