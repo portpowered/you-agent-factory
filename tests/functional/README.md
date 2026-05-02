@@ -83,16 +83,14 @@ without widening the default feedback loop.
 
 ## Migration Compatibility
 
-The remaining `tests/functional_test/` coverage is temporary while stories
-finish the last migration gaps. New decomposition work should target the
-behavior-first package tree rather than adding more unrelated coverage to the
-legacy mixed bucket.
+`tests/functional_test/` is now a legacy fixture store only. New decomposition
+work should target the behavior-first package tree rather than adding more
+coverage or helpers to that legacy directory.
 
 Compatibility rules during coexistence:
 
 - `tests/functional_test/` stays open only for legacy checked-in fixture data;
-  observable non-long behavior coverage now belongs in
-  `tests/functional/...`.
+  observable non-long behavior coverage belongs in `tests/functional/...`.
 - `tests/functional_test/testdata` remains the checked-in legacy fixture store
   until fixture ownership is migrated separately.
 - New behavior coverage belongs in `tests/functional/<behavior-package>/`.
