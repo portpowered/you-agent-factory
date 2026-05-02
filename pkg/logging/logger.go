@@ -13,9 +13,9 @@ type Logger interface {
 	Error(msg string, keysAndValues ...any)
 }
 
-// VerboseLogger is an optional extension for loggers that can emit records
+// verboseLogger is an optional extension for loggers that can emit records
 // only when the caller explicitly enabled verbose runtime diagnostics.
-type VerboseLogger interface {
+type verboseLogger interface {
 	Logger
 	Verbose(msg string, keysAndValues ...any)
 }
@@ -42,7 +42,7 @@ func EnsureLogger(l Logger) Logger {
 // Verbose emits a verbose-only log record when the logger supports that
 // optional mode. Plain Logger implementations ignore verbose records.
 func Verbose(l Logger, msg string, keysAndValues ...any) {
-	if logger, ok := l.(VerboseLogger); ok {
+	if logger, ok := l.(verboseLogger); ok {
 		logger.Verbose(msg, keysAndValues...)
 	}
 }
