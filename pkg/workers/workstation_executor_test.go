@@ -691,6 +691,46 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 	}
 }
 
+func TestWorkstationExecutor_InvalidWorkstationExecutionLimitReturnsActionableFailure(t *testing.T) {
+	mock := &wsMockExecutor{}
+	we := &WorkstationExecutor{
+		RuntimeConfig: staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", Timeout: "75ms"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"timed": {
+					Type:           interfaces.WorkstationTypeModel,
+					PromptTemplate: "do work",
+					Limits:         interfaces.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
+				},
+			},
+		},
+		Executor: mock,
+		Renderer: &DefaultPromptRenderer{},
+	}
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-timeout",
+		TransitionID:    "t-timeout",
+		WorkerType:      "worker-a",
+		WorkstationName: "timed",
+		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.called {
+		t.Fatal("executor should not be called when workstation execution limit is invalid")
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	}
+	if got, want := result.Error, `invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`; got != want {
+		t.Fatalf("Error = %q, want %q", got, want)
+	}
+}
+
 func TestWorkstationExecutor_WorkstationExecutionLimitSetsTimeout(t *testing.T) {
 	mock := &deadlineCapturingExecutor{}
 	we := &WorkstationExecutor{

@@ -1867,6 +1867,44 @@ func TestFactoryService_CronTickTimeoutFailureIsClassifiedAndBounded(t *testing.
 	}
 }
 
+func TestFactoryService_CronExecutionTimeoutUsesCanonicalWorkstationLimit(t *testing.T) {
+	svc := &FactoryService{}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:   "poll-for-work",
+			Limits: interfaces.WorkstationLimits{MaxExecutionTime: "75ms"},
+		}},
+	}, nil, nil)
+
+	timeout, err := svc.cronExecutionTimeout(runtimeCfg, cronWorkstationConfigForTest("poll-for-work"))
+	if err != nil {
+		t.Fatalf("cronExecutionTimeout: %v", err)
+	}
+	if timeout != 75*time.Millisecond {
+		t.Fatalf("timeout = %v, want %v", timeout, 75*time.Millisecond)
+	}
+}
+
+func TestFactoryService_CronExecutionTimeoutReturnsCanonicalLimitError(t *testing.T) {
+	svc := &FactoryService{}
+	runtimeCfg := serviceTestRuntimeConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"poll-for-work": {
+				Name:   "poll-for-work",
+				Limits: interfaces.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
+			},
+		},
+	}
+
+	_, err := svc.cronExecutionTimeout(runtimeCfg, cronWorkstationConfigForTest("poll-for-work"))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if got, want := err.Error(), `cron workstation "poll-for-work": invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+}
+
 func TestFactoryService_CronTickRetryableFailureRetriesBeforeSuccess(t *testing.T) {
 	retryErr := errors.New("temporary submission ingress failure")
 	mock := &aggregateSnapshotFactory{}
