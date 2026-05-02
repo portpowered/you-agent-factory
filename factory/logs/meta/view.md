@@ -3,7 +3,7 @@
 ## world state
 
 - after `git pull --ff-only`, repository `main` and `origin/main` are both at
-  `185f699` on May 2, 2026 in the local maintainer workspace
+  `8a1c002` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -46,6 +46,7 @@
   - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#57` `dedupe-portable-bundled-path-containment-validation`
   - merged PR `#56` `inline-workstation-runtime-lookup-key-fallback`
   - merged PR `#55` `dedupe-generated-public-enum-pointer-helpers`
   - merged PR `#54` `dedupe-factory-config-boundary-alias-rejection`
@@ -66,6 +67,10 @@
   live backlog
 - direct `HEAD` inspection confirmed that several ignored local workflow-input
   residues are now stale rather than queueable:
+  - merged PR `#57` landed the portable bundled-file containment cleanup on
+    `main`, so
+    `factory/inputs/idea/default/dedupe-portable-bundled-path-containment-validation.md`
+    is solved residue
   - merged PR `#56` landed the workstation runtime lookup-key fallback cleanup
     on `main`, so
     `factory/inputs/idea/default/inline-workstation-runtime-lookup-key-fallback.md`
@@ -82,29 +87,32 @@
   - `pkg/api/handlers.go` no longer re-parses raw `maxResults`, so
     `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
     is also stale residue
-- direct code inspection plus a sidecar explorer found the next smaller
-  non-colliding reserve cleanup seam in portable bundled-file expansion:
-  - `pkg/config/portable_bundled_files.go` resolves each target path through
-    `portableBundledTargetPath(...)` and then immediately re-validates the same
-    path through `validatePortableBundledFilesystemPath(...)`
-  - `portableBundledTargetPath(...)` already owns lexical absolute-path and
-    `..` escape rejection for the expand target
-  - the remaining distinct safety concern is filesystem-link escape checking,
-    which can stay intact without keeping duplicate lexical containment
-    ownership
-  - existing focused proof already lives in
-    `pkg/config/portable_bundled_files_test.go` and
-    `pkg/config/portable_bundled_files_integration_test.go`
+- direct code inspection plus two sidecar explorers found the next smaller
+  non-colliding reserve cleanup seam in runtime lookup ownership:
+  - `pkg/config/runtime_config.go` currently duplicates the same map-backed
+    `Worker(...)` and `Workstation(...)` lookup methods on both
+    `LoadedFactoryConfig` and `runtimeDefinitionConfig`
+  - the duplication remains live on `main` because `LoadedFactoryConfig`
+    is the canonical `interfaces.RuntimeConfigLookup` implementer consumed by
+    service, replay, event-history, and topology-projection paths, while
+    `runtimeDefinitionConfig` is only the internal staging object used before
+    `NewLoadedFactoryConfig(...)`
+  - the canonical lookup contracts in `pkg/interfaces/runtime_lookup.go`
+    already express the shared behavior; the duplicated method bodies in
+    `pkg/config/runtime_config.go` are the narrower cleanup target than
+    reopening broader interface-shape work
+  - this seam stays outside open PR `#30` because it can remain package-local
+    to `pkg/config` plus focused package tests
 
 ## current blockers
 
 1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
    new work should avoid that tree until it merges
 2. the previous checked-in world model was stale again:
-   - it still described `HEAD` as `73fb57f`
-   - it did not include merged PR `#56`
-   - it still treated the workstation runtime lookup-key fallback seam as the
-     next move even though `#56` already landed it on `main`
+   - it still described `HEAD` as `185f699`
+   - it did not include merged PR `#57`
+   - it still treated the portable bundled-file containment seam as the next
+     move even though `#57` already landed it on `main`
 3. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 4. many ignored local idea and plan files now correspond either to merged PRs
@@ -127,11 +135,10 @@
 - the safest reserve cleanup posture remains tiny package-local simplifications
   outside `tests/functional/**`, because PR `#30` is still the only live broad
   collision surface
-- the current highest-confidence reserve cleanup is the duplicate lexical
-  expand-target containment ownership in
-  `pkg/config/portable_bundled_files.go`, because the package can keep
-  filesystem-link escape protection while shrinking the validation flow to one
-  lexical owner
+- the current highest-confidence reserve cleanup is the duplicate runtime
+  lookup ownership in `pkg/config/runtime_config.go`, because the canonical
+  runtime lookup contracts already exist and the live duplication is limited to
+  internal staging versus loaded-config map accessors
 
 ## next best move
 
@@ -140,8 +147,8 @@
   still correct
 - do not re-queue solved or code-stale cleanup residue from ignored
   `factory/inputs/**`
-- queue one new ignored reserve cleanup idea for deduplicating portable
-  bundled-file path containment validation in `pkg/config`
+- queue one new ignored reserve cleanup idea for deduplicating loaded versus
+  staging runtime definition lookups in `pkg/config/runtime_config.go`
 - keep any new reserve work out of `tests/functional/**` while PR `#30`
   remains open
 
