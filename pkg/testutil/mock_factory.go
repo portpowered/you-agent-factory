@@ -6,6 +6,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -35,6 +36,7 @@ type MockFactory struct {
 }
 
 var _ factory.Factory = (*MockFactory)(nil)
+var _ apisurface.APISurface = (*MockFactory)(nil)
 
 func (m *MockFactory) Run(_ context.Context) error   { return nil }
 func (m *MockFactory) Pause(_ context.Context) error { return nil }
