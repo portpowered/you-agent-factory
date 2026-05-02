@@ -315,6 +315,9 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	if cfg.Project != "" {
 		apiCfg.Id = stringPtr(cfg.Project)
 	}
+	if len(cfg.Guards) > 0 {
+		apiCfg.Guards = factoryGuardsAPIFromInternal(cfg.Guards)
+	}
 	if len(cfg.InputTypes) > 0 {
 		inputTypes := make([]factoryapi.InputType, len(cfg.InputTypes))
 		for i, inputType := range cfg.InputTypes {
@@ -393,6 +396,7 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	if apiCfg.Id != nil {
 		cfg.Project = *apiCfg.Id
 	}
+	cfg.Guards = factoryGuardsInternalFromAPI(apiCfg.Guards)
 	if apiCfg.InputTypes != nil {
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
 	}
@@ -664,6 +668,22 @@ func workstationIOPtrInternalFromAPI(cfg *factoryapi.WorkstationIO, fieldPath st
 		return nil, err
 	}
 	return &value, nil
+}
+
+func factoryGuardsInternalFromAPI(guards *[]factoryapi.FactoryGuard) []interfaces.FactoryGuardConfig {
+	if guards == nil {
+		return nil
+	}
+	values := make([]interfaces.FactoryGuardConfig, len(*guards))
+	for i, guard := range *guards {
+		values[i] = interfaces.FactoryGuardConfig{
+			Type:          internalFactoryGuardTypeFromPublic(guard.Type),
+			ModelProvider: internalFactoryWorkerModelProviderFromPublic(&guard.ModelProvider),
+			Model:         stringValue(guard.Model),
+			RefreshWindow: guard.RefreshWindow,
+		}
+	}
+	return values
 }
 
 func workstationIOInternalFromAPI(cfg factoryapi.WorkstationIO, fieldPath string) (interfaces.IOConfig, error) {
@@ -967,6 +987,22 @@ func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factor
 			Workstation: stringPtrIfNotEmpty(guard.Workstation),
 			MaxVisits:   intPtrIfNonZero(guard.MaxVisits),
 			MatchConfig: guardMatchConfigAPIFromInternal(guard.MatchConfig),
+		}
+	}
+	return &values
+}
+
+func factoryGuardsAPIFromInternal(guards []interfaces.FactoryGuardConfig) *[]factoryapi.FactoryGuard {
+	if len(guards) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.FactoryGuard, len(guards))
+	for i, guard := range guards {
+		values[i] = factoryapi.FactoryGuard{
+			Type:          publicFactoryGuardTypeFromInternal(guard.Type),
+			ModelProvider: publicFactoryWorkerModelProviderFromInternal(guard.ModelProvider),
+			Model:         stringPtrIfNotEmpty(guard.Model),
+			RefreshWindow: guard.RefreshWindow,
 		}
 	}
 	return &values

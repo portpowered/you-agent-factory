@@ -81,8 +81,12 @@ func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBound
 			name: "rejects mis-cased worker model provider",
 			payload: strings.Replace(
 				factoryConfigSmokeCanonicalJSON(),
-				`"modelProvider":"CLAUDE"`,
-				`"modelProvider":"Claude"`,
+				`"type":"MODEL_WORKER",
+    "executorProvider":"SCRIPT_WRAP",
+    "modelProvider":"CLAUDE",`,
+				`"type":"MODEL_WORKER",
+    "executorProvider":"SCRIPT_WRAP",
+    "modelProvider":"Claude",`,
 				1,
 			),
 			fieldPath: "workers[0].modelProvider",
@@ -584,6 +588,7 @@ func factoryConfigSmokeCanonicalJSON() string {
   "name": "analytics-platform",
   "id": "analytics-platform",
   "inputTypes": [{"name":"batch","type":"DEFAULT"}],
+  "guards": [{"type":"INFERENCE_THROTTLE_GUARD","modelProvider":"CLAUDE","model":"claude-sonnet-4-20250514","refreshWindow":"15m"}],
   "workTypes": [
     {"name":"parent","states":[{"name":"init","type":"INITIAL"}]},
     {"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"},{"name":"complete","type":"TERMINAL"}]}

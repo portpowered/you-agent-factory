@@ -25,6 +25,7 @@ const (
 	publicFactoryGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
 	publicFactoryGuardTypeAnyChildFailed      = "ANY_CHILD_FAILED"
 	publicFactoryGuardTypeSameName            = "SAME_NAME"
+	publicFactoryGuardTypeInferenceThrottle   = "INFERENCE_THROTTLE_GUARD"
 )
 
 var publicFactoryInputKindAliases = map[string]string{
@@ -43,6 +44,7 @@ var publicFactoryGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
 	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
 	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
+	publicFactoryGuardTypeInferenceThrottle:   publicFactoryGuardTypeInferenceThrottle,
 }
 
 func canonicalPublicFactoryEnumValue(value string, aliases map[string]string) string {
@@ -202,6 +204,8 @@ func publicFactoryGuardTypeStringFromInternal(value interfaces.GuardType) string
 		return publicFactoryGuardTypeAnyChildFailed
 	case string(interfaces.GuardTypeSameName), publicFactoryGuardTypeSameName:
 		return publicFactoryGuardTypeSameName
+	case string(interfaces.GuardTypeInferenceThrottle), publicFactoryGuardTypeInferenceThrottle:
+		return publicFactoryGuardTypeInferenceThrottle
 	}
 	return strings.TrimSpace(string(value))
 }
@@ -218,6 +222,8 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 		return interfaces.GuardTypeAnyChildFailed
 	case publicFactoryGuardTypeSameName:
 		return interfaces.GuardTypeSameName
+	case publicFactoryGuardTypeInferenceThrottle:
+		return interfaces.GuardTypeInferenceThrottle
 	default:
 		return interfaces.GuardType(strings.TrimSpace(string(value)))
 	}

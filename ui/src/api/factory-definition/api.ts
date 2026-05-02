@@ -3,6 +3,7 @@ import type { components } from "../generated/openapi";
 export type CanonicalFactoryDefinition = components["schemas"]["Factory"];
 
 type FactorySchemas = components["schemas"];
+type FactoryRootGuard = FactorySchemas["FactoryGuard"];
 type FactoryGuard = FactorySchemas["Guard"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
@@ -16,6 +17,7 @@ type FactoryWorkstationLimits = FactorySchemas["WorkstationLimits"];
 type FactoryWorkType = FactorySchemas["WorkType"];
 const FACTORY_KEYS = new Set([
   "factoryDirectory",
+  "guards",
   "id",
   "inputTypes",
   "metadata",
@@ -27,6 +29,7 @@ const FACTORY_KEYS = new Set([
   "workTypes",
   "workstations",
 ]);
+const FACTORY_GUARD_KEYS = new Set(["model", "modelProvider", "refreshWindow", "type"]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set(["name", "states"]);
 const WORK_STATE_KEYS = new Set(["name", "type"]);
@@ -122,6 +125,7 @@ const GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
   "ALL_CHILDREN_COMPLETE",
   "ANY_CHILD_FAILED",
   "SAME_NAME",
+  "INFERENCE_THROTTLE_GUARD",
 ]);
 
 export class FactoryDefinitionAPIError extends Error {
@@ -166,6 +170,7 @@ function decodeFactoryDefinition(
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);
   const metadata = readOptionalStringMap(value, "metadata", path);
   const inputTypes = readOptionalArray(value, "inputTypes", path, decodeInputType);
+  const guards = readOptionalArray(value, "guards", path, decodeFactoryGuard);
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
   const supportingFiles = readOptionalObject(value, "supportingFiles", path, expectObject);
@@ -189,6 +194,9 @@ function decodeFactoryDefinition(
   }
   if (inputTypes !== undefined) {
     factory.inputTypes = inputTypes;
+  }
+  if (guards !== undefined) {
+    factory.guards = guards;
   }
   if (workTypes !== undefined) {
     factory.workTypes = workTypes;
@@ -407,6 +415,22 @@ function decodeWorkstationIO(value: unknown, path: string): FactoryWorkstationIO
     io.guards = guards;
   }
   return io;
+}
+
+function decodeFactoryGuard(value: unknown, path: string): FactoryRootGuard {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, FACTORY_GUARD_KEYS, path);
+
+  const guard: FactoryRootGuard = {
+    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
+    modelProvider: readRequiredEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES),
+    refreshWindow: readRequiredString(record, "refreshWindow", path),
+  };
+  const model = readOptionalString(record, "model", path);
+  if (model !== undefined) {
+    guard.model = model;
+  }
+  return guard;
 }
 
 function decodeWorkstationGuard(value: unknown, path: string): FactoryGuard {

@@ -1018,6 +1018,7 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 	expectedRefs := map[string]string{
 		"FactoryName":                 "./components/schemas/data-models/FactoryName.yaml",
 		"Factory":                     "./components/schemas/data-models/Factory.yaml",
+		"FactoryGuard":                "./components/schemas/data-models/FactoryGuard.yaml",
 		"ResourceManifest":            "./components/schemas/data-models/ResourceManifest.yaml",
 		"RequiredTool":                "./components/schemas/data-models/RequiredTool.yaml",
 		"BundledFile":                 "./components/schemas/data-models/BundledFile.yaml",

@@ -8,6 +8,14 @@ describe("normalizeFactoryDefinition", () => {
   it("accepts canonical generated factory payloads", () => {
     expect(
       normalizeFactoryDefinition({
+        guards: [
+          {
+            modelProvider: "CLAUDE",
+            model: "claude-sonnet-4-20250514",
+            refreshWindow: "15m",
+            type: "INFERENCE_THROTTLE_GUARD",
+          },
+        ],
         inputTypes: [{ name: "default", type: "DEFAULT" }],
         id: "agent-factory",
         name: "agent-factory",
@@ -54,6 +62,14 @@ describe("normalizeFactoryDefinition", () => {
       }),
     ).toEqual({
       name: "agent-factory",
+      guards: [
+        {
+          modelProvider: "CLAUDE",
+          model: "claude-sonnet-4-20250514",
+          refreshWindow: "15m",
+          type: "INFERENCE_THROTTLE_GUARD",
+        },
+      ],
       inputTypes: [{ name: "default", type: "DEFAULT" }],
       id: "agent-factory",
       sourceDirectory: "/tmp/canonical-factory",
@@ -116,6 +132,25 @@ describe("normalizeFactoryDefinition", () => {
     ).toThrowError(
       new FactoryDefinitionAPIError(
         "factory.workstations[0].behavior must be one of CRON, REPEATER, STANDARD.",
+      ),
+    );
+  });
+
+  it("rejects malformed factory-level throttle guards", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        guards: [
+          {
+            modelProvider: "claude",
+            refreshWindow: "15m",
+            type: "INFERENCE_THROTTLE_GUARD",
+          },
+        ],
+        name: "legacy-factory",
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.guards[0].modelProvider must be one of CLAUDE, CODEX.",
       ),
     );
   });
