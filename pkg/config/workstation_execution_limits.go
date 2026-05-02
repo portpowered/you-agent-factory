@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // NormalizeWorkstationExecutionLimit rewrites legacy workstation timeout

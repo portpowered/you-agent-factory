@@ -1,0 +1,22 @@
+type: object
+description: Factory-level guard attached at the root factory definition.
+additionalProperties: false
+required:
+  - type
+  - modelProvider
+  - refreshWindow
+properties:
+  type:
+    allOf:
+      - $ref: './GuardType.yaml'
+    description: Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
+  modelProvider:
+    allOf:
+      - $ref: './WorkerModelProvider.yaml'
+    description: Provider whose inference-throttle history controls this factory-level guard.
+  model:
+    type: string
+    description: Optional model name to scope throttling more narrowly than the provider-level window.
+  refreshWindow:
+    type: string
+    description: Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again.

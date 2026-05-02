@@ -13,13 +13,13 @@ import (
 	"strings"
 	"testing"
 
-	docscli "github.com/portpowered/agent-factory/pkg/cli/docs"
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
-	submitcli "github.com/portpowered/agent-factory/pkg/cli/submit"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 func TestNewRootCommand_HasSubcommands(t *testing.T) {
@@ -85,9 +85,9 @@ func TestRootCommand_HelpDocumentsSupportedDocsTopics(t *testing.T) {
 	help := out.String()
 	for _, want := range append(
 		[]string{
-			"Packaged reference topics are also available through agent-factory docs <topic>.",
+			"Packaged reference topics are also available through infinite-you docs <topic>.",
 			"Supported docs topics:",
-			"agent-factory docs workstation",
+			"infinite-you docs workstation",
 		},
 		docscli.SupportedTopics()...,
 	) {
@@ -156,6 +156,7 @@ func writeFlattenCommandFixture(t *testing.T, factoryDir string) {
 	t.Helper()
 
 	writeRootTestFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), `{
+		"name":"flatten-command-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{"name":"executor"}],
@@ -170,8 +171,8 @@ func writeFlattenCommandFixture(t *testing.T, factoryDir string) {
 	writeRootTestFile(t, filepath.Join(factoryDir, "workers", "executor", "AGENTS.md"), `---
 type: MODEL_WORKER
 model: claude-sonnet-4-6
-modelProvider: claude
-executorProvider: script_wrap
+modelProvider: CLAUDE
+executorProvider: SCRIPT_WRAP
 stopToken: COMPLETE
 ---
 
@@ -242,10 +243,10 @@ func assertCanonicalFlattenPayload(t *testing.T, payload map[string]any) {
 	if !ok {
 		t.Fatalf("expected flattened worker to include inline definition, got %#v", workerPayload)
 	}
-	if workerPayload["model"] != "claude-sonnet-4-6" || workerPayload["modelProvider"] != "claude" {
+	if workerPayload["model"] != "claude-sonnet-4-6" || workerPayload["modelProvider"] != "CLAUDE" {
 		t.Fatalf("expected flattened worker definition to preserve model/provider, got %#v", workerPayload)
 	}
-	if workerPayload["executorProvider"] != "script_wrap" {
+	if workerPayload["executorProvider"] != "SCRIPT_WRAP" {
 		t.Fatalf("expected flattened worker definition to preserve canonical executorProvider, got %#v", workerPayload)
 	}
 	for _, retired := range []string{"provider", "sessionId", "concurrency"} {
@@ -335,6 +336,7 @@ func TestConfigExpandCommand_WritesSplitFactoryLayout(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
 	writeRootTestFile(t, factoryPath, `{
+		"name":"expand-command-fixture",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [],
 		"workers": [{"name":"executor"}],
@@ -425,7 +427,7 @@ func TestReadmeCommandListDoesNotAdvertiseRemovedAuditStateSurfaces(t *testing.T
 		t.Fatalf("read package README: %v", err)
 	}
 
-	if strings.Contains(string(readme), "agent-factory audit state-surfaces") {
+	if strings.Contains(string(readme), "infinite-you audit state-surfaces") {
 		t.Fatal("README should not advertise removed audit state-surfaces command")
 	}
 }
@@ -448,7 +450,6 @@ func TestReadmeQuickstartDocumentsInitStarterOptions(t *testing.T) {
 		}
 	}
 }
-
 func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 	readme, err := os.ReadFile("../../README.md")
 	if err != nil {
@@ -461,6 +462,8 @@ func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 		"agent-factory docs workstation",
 		"Supported docs topics are `config`, `workstation`, `workers`, `resources`,",
 		"`batch-work`, and `templates`.",
+		"agent-factory docs batch-work",
+		"agent-factory docs config",
 	} {
 		if !strings.Contains(contents, want) {
 			t.Fatalf("README missing %q:\n%s", want, contents)
@@ -476,7 +479,7 @@ func TestDocsIndexDocumentsDocsCommandTopics(t *testing.T) {
 
 	contents := string(docsReadme)
 	for _, want := range []string{
-		"agent-factory docs",
+		"infinite-you docs",
 		"`config`",
 		"`workstation`",
 		"`workers`",
@@ -738,13 +741,13 @@ func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"Running agent-factory with no arguments starts the out-of-the-box flow",
+		"Running infinite-you with no arguments starts the out-of-the-box flow",
 		"factory/inputs/tasks/default",
 		"http://localhost:7437/dashboard/ui",
 		"printf \"Fix the lint issues\\n\" > factory/inputs/tasks/default/fix-lint.md",
 		"docs",
 		"Print packaged markdown reference topics",
-		"agent-factory docs workstation",
+		"infinite-you docs workstation",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("root help missing %q:\n%s", want, help)
@@ -796,7 +799,7 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 	if runCmd.Long == "" {
 		t.Fatal("expected run command long help text")
 	}
-	if !strings.Contains(runCmd.Long, "run agent-factory with no arguments") {
+	if !strings.Contains(runCmd.Long, "run infinite-you with no arguments") {
 		t.Fatal("expected run command long help text to point users to no-arg default flow")
 	}
 	if !strings.Contains(runCmd.Long, "factory/inputs/tasks/default") {

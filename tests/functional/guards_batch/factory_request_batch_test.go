@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestFactoryRequestBatch_InvalidStructureRejected(t *testing.T) {

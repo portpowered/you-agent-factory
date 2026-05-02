@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // WorkType defines a type of work and its state machine.

@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/cli"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/cli"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-config-portability-fixture review=2026-07-18 removal=split-expand-flatten-fixture-builders-before-next-portability-change

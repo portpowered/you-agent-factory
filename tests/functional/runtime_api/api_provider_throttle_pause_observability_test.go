@@ -4,14 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/service"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/pkg/workers"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=provider-throttle-runtime-observability-smoke review=2026-07-19 removal=split-pause-setup-runtime-polling-and-dashboard-assertions-before-next-throttle-observability-change

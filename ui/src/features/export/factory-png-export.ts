@@ -1,4 +1,4 @@
-import type { NamedFactoryValue } from "../../api/named-factory";
+import type { FactoryValue } from "../../api/named-factory";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_TEXT_CHUNK = "tEXt";
@@ -7,20 +7,20 @@ const PNG_INTERNATIONAL_TEXT_CHUNK = "iTXt";
 export const PORT_OS_FACTORY_PNG_METADATA_KEYWORD = "portos.agent-factory";
 export const PORT_OS_FACTORY_PNG_SCHEMA_VERSION = "portos.agent-factory.png.v1";
 
-export type CanonicalFactoryDefinition = NamedFactoryValue["factory"];
-export interface PortOSFactoryPngEnvelope extends NamedFactoryValue {
+export type CanonicalFactoryDefinition = FactoryValue;
+export interface FactoryPngMetadata extends FactoryValue {
   schemaVersion: typeof PORT_OS_FACTORY_PNG_SCHEMA_VERSION;
 }
 
 export interface WriteFactoryExportPngOptions {
+  factory: FactoryValue;
   image: Blob;
-  namedFactory: NamedFactoryValue;
   rasterizeImageToPngBytes?: (image: Blob) => Promise<Uint8Array>;
 }
 
 export interface WriteFactoryExportPngSuccess {
   blob: Blob;
-  envelope: PortOSFactoryPngEnvelope;
+  metadata: FactoryPngMetadata;
   ok: true;
 }
 
@@ -40,12 +40,12 @@ export interface FactoryExportPngError {
 }
 
 export async function writeFactoryExportPng({
+  factory,
   image,
-  namedFactory,
   rasterizeImageToPngBytes = rasterizeImageToPngBytesInBrowser,
 }: WriteFactoryExportPngOptions): Promise<WriteFactoryExportPngResult> {
-  const envelope: PortOSFactoryPngEnvelope = {
-    ...namedFactory,
+  const metadata: FactoryPngMetadata = {
+    ...factory,
     schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
   };
 
@@ -66,13 +66,13 @@ export async function writeFactoryExportPng({
   try {
     const metadataChunk = buildInternationalTextChunk(
       PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
-      JSON.stringify(envelope),
+      JSON.stringify(metadata),
     );
     const pngWithMetadata = injectMetadataChunk(pngBytes, metadataChunk);
 
     return {
       blob: new Blob([toArrayBuffer(pngWithMetadata)], { type: "image/png" }),
-      envelope,
+      metadata,
       ok: true,
     };
   } catch (error) {

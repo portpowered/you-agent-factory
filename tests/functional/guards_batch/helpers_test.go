@@ -8,9 +8,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/workers"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func writeAgentConfig(t *testing.T, dir, workerName, content string) {

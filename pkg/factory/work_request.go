@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // NormalizeWorkRequest validates a FACTORY_REQUEST_BATCH and converts it into runtime submit requests.
@@ -285,8 +285,26 @@ func validateAndIndexBatchRelations(req interfaces.WorkRequest, workIndex map[st
 			}
 			parentTargets[rel.SourceWorkName] = rel.TargetWorkName
 		}
-		if err := rejectDuplicateBatchRelation(i, rel, normalized.RequiredState, key, seen); err != nil {
-			return nil, err
+		if original, duplicate := seen[key]; duplicate {
+			if rel.Type == interfaces.WorkRelationDependsOn {
+				return nil, fmt.Errorf(
+					"work_request: relations[%d] duplicates relations[%d] (%q %q -> %q with requiredState %q)",
+					i,
+					original,
+					rel.Type,
+					rel.SourceWorkName,
+					rel.TargetWorkName,
+					normalized.RequiredState,
+				)
+			}
+			return nil, fmt.Errorf(
+				"work_request: relations[%d] duplicates relations[%d] (%q %q -> %q)",
+				i,
+				original,
+				rel.Type,
+				rel.SourceWorkName,
+				rel.TargetWorkName,
+			)
 		}
 		seen[key] = i
 		relIndex[rel.SourceWorkName] = append(relIndex[rel.SourceWorkName], normalized)
@@ -356,32 +374,6 @@ func normalizeParentChildRelation(i int, rel interfaces.WorkRelation, targetWork
 		Type:         interfaces.RelationParentChild,
 		TargetWorkID: targetWork.id,
 	}, relationValidationKey(rel.Type, rel.SourceWorkName, rel.TargetWorkName, ""), nil
-}
-
-func rejectDuplicateBatchRelation(i int, rel interfaces.WorkRelation, requiredState string, key string, seen map[string]int) error {
-	original, duplicate := seen[key]
-	if !duplicate {
-		return nil
-	}
-	if rel.Type == interfaces.WorkRelationDependsOn {
-		return fmt.Errorf(
-			"work_request: relations[%d] duplicates relations[%d] (%q %q -> %q with requiredState %q)",
-			i,
-			original,
-			rel.Type,
-			rel.SourceWorkName,
-			rel.TargetWorkName,
-			requiredState,
-		)
-	}
-	return fmt.Errorf(
-		"work_request: relations[%d] duplicates relations[%d] (%q %q -> %q)",
-		i,
-		original,
-		rel.Type,
-		rel.SourceWorkName,
-		rel.TargetWorkName,
-	)
 }
 
 func relationValidationKey(relType interfaces.WorkRelationType, sourceWorkName string, targetWorkName string, requiredState string) string {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 var retiredInitFactoryJSONFields = []string{`"work_types"`, `"work_type"`, `"on_failure"`}
@@ -127,11 +127,11 @@ func TestInit_CreatesDirectoryStructure(t *testing.T) {
 	if !strings.Contains(string(workerAgents), "model: gpt-5-codex") {
 		t.Fatalf("generated worker AGENTS.md = %q, want model: gpt-5-codex", string(workerAgents))
 	}
-	if !strings.Contains(string(workerAgents), "modelProvider: codex") {
-		t.Fatalf("generated worker AGENTS.md = %q, want modelProvider: codex", string(workerAgents))
+	if !strings.Contains(string(workerAgents), "modelProvider: CODEX") {
+		t.Fatalf("generated worker AGENTS.md = %q, want modelProvider: CODEX", string(workerAgents))
 	}
-	if !strings.Contains(string(workerAgents), "executorProvider: script_wrap") {
-		t.Fatalf("generated worker AGENTS.md = %q, want executorProvider: script_wrap", string(workerAgents))
+	if !strings.Contains(string(workerAgents), "executorProvider: SCRIPT_WRAP") {
+		t.Fatalf("generated worker AGENTS.md = %q, want executorProvider: SCRIPT_WRAP", string(workerAgents))
 	}
 	if strings.Contains(string(workerAgents), "model_provider: codex") {
 		t.Fatalf("generated worker AGENTS.md = %q, should not contain model_provider", string(workerAgents))
@@ -188,11 +188,11 @@ func TestInit_ClaudeExecutorCreatesClaudeWorkerScaffold(t *testing.T) {
 	if !strings.Contains(contents, "model: claude-sonnet-4-20250514") {
 		t.Fatalf("generated worker AGENTS.md = %q, want Claude model scaffold", contents)
 	}
-	if !strings.Contains(contents, "modelProvider: claude") {
-		t.Fatalf("generated worker AGENTS.md = %q, want modelProvider: claude", contents)
+	if !strings.Contains(contents, "modelProvider: CLAUDE") {
+		t.Fatalf("generated worker AGENTS.md = %q, want modelProvider: CLAUDE", contents)
 	}
-	if !strings.Contains(contents, "executorProvider: script_wrap") {
-		t.Fatalf("generated worker AGENTS.md = %q, want executorProvider: script_wrap", contents)
+	if !strings.Contains(contents, "executorProvider: SCRIPT_WRAP") {
+		t.Fatalf("generated worker AGENTS.md = %q, want executorProvider: SCRIPT_WRAP", contents)
 	}
 	if !strings.Contains(contents, defaultProcessorSystemBody) {
 		t.Fatalf("generated worker AGENTS.md = %q, want default processor system prompt", contents)
@@ -363,7 +363,7 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 		t.Fatalf("loop-breaker guards = %d, want 1", len(loopBreaker.Guards))
 	}
 	if guard := loopBreaker.Guards[0]; guard.Type != interfaces.GuardTypeVisitCount || guard.Workstation != "execute-story" || guard.MaxVisits != 8 {
-		t.Fatalf("loop-breaker guard = %#v, want visit_count on execute-story max 8", guard)
+		t.Fatalf("loop-breaker guard = %#v, want VISIT_COUNT on execute-story max 8", guard)
 	}
 
 	for _, unexpected := range []string{"review-story", "thoughts", "cron"} {
@@ -387,8 +387,8 @@ func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.
 		workerBody := readFileString(t, workerPath)
 		requireContainsAll(t, workerPath, workerBody, []string{
 			"type: MODEL_WORKER",
-			"modelProvider: codex",
-			"executorProvider: script_wrap",
+			"modelProvider: CODEX",
+			"executorProvider: SCRIPT_WRAP",
 			`stopToken: "<COMPLETE>"`,
 			"skipPermissions: true",
 		})
@@ -609,8 +609,8 @@ func assertInitScaffoldFilesCanonical(t *testing.T, base, wantModel, wantProvide
 	workerAgents := string(workerAgentsBytes)
 	for _, expected := range []string{
 		"model: " + wantModel,
-		"modelProvider: " + wantProvider,
-		"executorProvider: script_wrap",
+		"modelProvider: " + strings.ToUpper(wantProvider),
+		"executorProvider: SCRIPT_WRAP",
 		"timeout: 1h",
 		"skipPermissions: true",
 		defaultProcessorSystemBody,

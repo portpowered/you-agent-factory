@@ -1,6 +1,6 @@
 package config
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 func WriteExpandedFactoryLayoutForTest(
 	sourceDir, targetDir string,

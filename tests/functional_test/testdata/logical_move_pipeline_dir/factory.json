@@ -1,4 +1,5 @@
 {
+  "name": "logical_move_pipeline_dir",
   "workTypes": [
     {
       "name": "task",
@@ -69,3 +70,4 @@
     }
   ]
 }
+

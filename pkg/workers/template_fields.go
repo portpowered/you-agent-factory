@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"text/template"
 
-	factory_context "github.com/portpowered/agent-factory/pkg/factory/context"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // ResolvedFields holds the resolved values of parameterized workstation fields.

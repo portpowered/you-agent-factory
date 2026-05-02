@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type agentFactoryExportImportFixture struct {
@@ -72,7 +72,8 @@ func writeAgentFactoryExportImportAuthoredLayout(
 	t.Helper()
 
 	payload, err := json.MarshalIndent(map[string]any{
-		"project": project,
+		"name": project,
+		"id": project,
 		"workTypes": []map[string]any{{
 			"name": workType,
 			"states": []map[string]string{

@@ -6,10 +6,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // EnablementEvaluator wraps transition enablement logic with structured logging.
@@ -17,8 +17,9 @@ import (
 // the transition ID, whether it was enabled or disabled, and the reason for
 // disablement.
 type EnablementEvaluator struct {
-	logger logging.Logger
-	now    func() time.Time
+	logger        logging.Logger
+	now           func() time.Time
+	runtimeConfig interfaces.RuntimeDefinitionLookup
 }
 
 // EnablementOption configures an EnablementEvaluator.
@@ -30,6 +31,14 @@ func WithEnablementClock(now func() time.Time) EnablementOption {
 		if now != nil {
 			e.now = now
 		}
+	}
+}
+
+// WithEnablementRuntimeConfig injects worker/runtime lookup used by guards
+// that resolve authored lanes from runtime-loaded worker configuration.
+func WithEnablementRuntimeConfig(runtimeConfig interfaces.RuntimeDefinitionLookup) EnablementOption {
+	return func(e *EnablementEvaluator) {
+		e.runtimeConfig = runtimeConfig
 	}
 }
 
@@ -49,11 +58,22 @@ func NewEnablementEvaluator(logger logging.Logger, opts ...EnablementOption) *En
 // FindEnabledTransitions identifies all transitions whose input arcs are satisfied
 // in the current marking. Each transition evaluation is logged with its result.
 func (e *EnablementEvaluator) FindEnabledTransitions(ctx context.Context, n *state.Net, marking *petri.MarkingSnapshot) []interfaces.EnabledTransition {
+	return e.FindEnabledTransitionsWithSnapshot(ctx, n, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: *marking,
+	})
+}
+
+// FindEnabledTransitionsWithSnapshot evaluates transitions with access to the
+// broader runtime snapshot for guards that depend on dispatch history or time.
+func (e *EnablementEvaluator) FindEnabledTransitionsWithSnapshot(ctx context.Context, n *state.Net, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.EnabledTransition {
 	var enabled []interfaces.EnabledTransition
+	if snapshot == nil {
+		return enabled
+	}
 
 	transitions := sortedTransitions(n.Transitions)
 	for _, tr := range transitions {
-		if et, ok := e.checkTransitionEnabled(ctx, tr, marking); ok {
+		if et, ok := e.checkTransitionEnabled(ctx, tr, snapshot); ok {
 			e.logger.Info("enablement: transition enabled",
 				"transitionID", tr.ID,
 				"transitionName", tr.Name,
@@ -72,7 +92,8 @@ func (e *EnablementEvaluator) FindEnabledTransitions(ctx context.Context, n *sta
 
 // checkTransitionEnabled evaluates a single transition and logs the reason if disabled.
 // portos:func-length-exception owner=agent-factory reason=legacy-enable-evaluation-loop review=2026-07-18 removal=split-binding-phases-before-next-scheduler-expansion
-func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petri.Transition, marking *petri.MarkingSnapshot) (interfaces.EnabledTransition, bool) {
+func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (interfaces.EnabledTransition, bool) {
+	marking := &snapshot.Marking
 	if len(tr.InputArcs) == 0 {
 		e.logger.Debug("enablement: transition disabled",
 			"transitionID", tr.ID,
@@ -120,7 +141,12 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 	for _, idx := range guarded {
 		arc := &tr.InputArcs[idx]
 		candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
-		guardMatched, ok := e.evaluateGuard(arc.Guard, candidates, guardBindings, marking)
+		guardMatched, ok := e.evaluateGuard(arc.Guard, petri.RuntimeGuardContext{
+			Now:               e.now(),
+			DispatchHistory:   snapshot.DispatchHistory,
+			RuntimeConfig:     e.runtimeConfig,
+			TransitionWorkers: transitionWorkerTypes(snapshot.Topology, tr),
+		}, candidates, guardBindings, marking)
 		if !ok {
 			e.logger.Debug("enablement: transition disabled",
 				"transitionID", tr.ID,
@@ -154,14 +180,34 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 	}, true
 }
 
-func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *petri.MarkingSnapshot) ([]interfaces.Token, bool) {
+func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, runtime petri.RuntimeGuardContext, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *petri.MarkingSnapshot) ([]interfaces.Token, bool) {
 	if guard == nil {
 		return nil, false
+	}
+	if runtimeGuard, ok := guard.(petri.RuntimeGuard); ok {
+		return runtimeGuard.EvaluateRuntime(runtime, candidates, bindings, marking)
 	}
 	if clocked, ok := guard.(petri.ClockedGuard); ok {
 		return clocked.EvaluateAt(e.now(), candidates, bindings, marking)
 	}
 	return guard.Evaluate(candidates, bindings, marking)
+}
+
+func transitionWorkerTypes(topology *state.Net, current *petri.Transition) map[string]string {
+	if topology == nil || len(topology.Transitions) == 0 {
+		if current == nil || current.ID == "" || current.WorkerType == "" {
+			return nil
+		}
+		return map[string]string{current.ID: current.WorkerType}
+	}
+	workersByTransition := make(map[string]string, len(topology.Transitions))
+	for transitionID, transition := range topology.Transitions {
+		if transition == nil || transition.WorkerType == "" {
+			continue
+		}
+		workersByTransition[transitionID] = transition.WorkerType
+	}
+	return workersByTransition
 }
 
 // ExpandRepeatedBindings converts single-token work transitions into one enabled

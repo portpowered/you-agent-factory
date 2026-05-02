@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/cli/dashboardrender"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // FormatSimpleDashboard renders the snapshot-only dashboard shell. Session
@@ -414,7 +414,10 @@ func dashboardSessionViewFromRenderData(renderData dashboardrender.SimpleDashboa
 		"TERMINAL",
 	)
 	if len(completedWorkItems) == 0 {
-		completedWorkItems = worldViewFallbackCompletedWorkItems(session.DispatchHistory)
+		completedWorkItems = worldViewFallbackWorkItems(
+			session.DispatchHistory,
+			worldViewFallbackCompletedWorkItemLane,
+		)
 	}
 	failedWorkItems := worldViewWorkItemsForPlaceCategory(
 		renderData.PlaceOccupancyWorkItemsByPlaceID,
@@ -422,7 +425,10 @@ func dashboardSessionViewFromRenderData(renderData dashboardrender.SimpleDashboa
 		"FAILED",
 	)
 	if len(failedWorkItems) == 0 {
-		failedWorkItems = worldViewFallbackFailedWorkItems(session.DispatchHistory)
+		failedWorkItems = worldViewFallbackWorkItems(
+			session.DispatchHistory,
+			worldViewFallbackFailedWorkItemLane,
+		)
 	}
 	return dashboardSessionView{
 		HasData:              session.HasData,
@@ -478,57 +484,109 @@ func worldViewWorkItemsForPlaceCategory(
 	return workItems
 }
 
-func worldViewFallbackCompletedWorkItems(
+type worldViewFallbackWorkItemLane string
+
+const (
+	worldViewFallbackCompletedWorkItemLane worldViewFallbackWorkItemLane = "completed"
+	worldViewFallbackFailedWorkItemLane    worldViewFallbackWorkItemLane = "failed"
+)
+
+func worldViewFallbackWorkItems(
 	completions []interfaces.FactoryWorldDispatchCompletion,
+	lane worldViewFallbackWorkItemLane,
 ) []interfaces.FactoryWorldWorkItemRef {
-	workItemsByID := make(map[string]interfaces.FactoryWorldWorkItemRef)
-	for _, completion := range completions {
-		if interfaces.WorkOutcome(completion.Result.Outcome) != interfaces.OutcomeAccepted {
-			continue
-		}
-		if completion.TerminalWork != nil && completion.TerminalWork.Status != "FAILED" {
-			workItemsByID[completion.TerminalWork.WorkItem.ID] = workRefForDashboardItem(completion.TerminalWork.WorkItem)
-			continue
-		}
-		for _, item := range completion.OutputWorkItems {
-			if item.ID == "" {
-				continue
-			}
-			workItemsByID[item.ID] = workRefForDashboardItem(item)
-		}
+	switch lane {
+	case worldViewFallbackCompletedWorkItemLane:
+		return collectWorldViewFallbackWorkItems(
+			completions,
+			interfaces.OutcomeAccepted,
+			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
+				if collector.addTerminalWork(completion.TerminalWork, func(status string) bool {
+					return status != "FAILED"
+				}) {
+					return
+				}
+				collector.addWorkItems(completion.OutputWorkItems)
+			},
+		)
+	case worldViewFallbackFailedWorkItemLane:
+		return collectWorldViewFallbackWorkItems(
+			completions,
+			interfaces.OutcomeFailed,
+			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
+				if collector.addTerminalWork(completion.TerminalWork, func(string) bool {
+					return true
+				}) {
+					return
+				}
+				collector.addWorkItems(completion.OutputWorkItems)
+				collector.addMissingWorkItems(completion.InputWorkItems)
+			},
+		)
+	default:
+		return nil
 	}
-	return sortedWorldWorkItemRefs(workItemsByID)
 }
 
-func worldViewFallbackFailedWorkItems(
+type worldViewFallbackWorkItemCollector struct {
+	workItemsByID map[string]interfaces.FactoryWorldWorkItemRef
+}
+
+func collectWorldViewFallbackWorkItems(
 	completions []interfaces.FactoryWorldDispatchCompletion,
+	outcome interfaces.WorkOutcome,
+	collect func(*worldViewFallbackWorkItemCollector, interfaces.FactoryWorldDispatchCompletion),
 ) []interfaces.FactoryWorldWorkItemRef {
-	workItemsByID := make(map[string]interfaces.FactoryWorldWorkItemRef)
-	for _, completion := range completions {
-		if interfaces.WorkOutcome(completion.Result.Outcome) != interfaces.OutcomeFailed {
-			continue
-		}
-		if completion.TerminalWork != nil && completion.TerminalWork.WorkItem.ID != "" {
-			workItemsByID[completion.TerminalWork.WorkItem.ID] = workRefForDashboardItem(completion.TerminalWork.WorkItem)
-			continue
-		}
-		for _, item := range completion.OutputWorkItems {
-			if item.ID == "" {
-				continue
-			}
-			workItemsByID[item.ID] = workRefForDashboardItem(item)
-		}
-		for _, item := range completion.InputWorkItems {
-			if item.ID == "" {
-				continue
-			}
-			if _, ok := workItemsByID[item.ID]; ok {
-				continue
-			}
-			workItemsByID[item.ID] = workRefForDashboardItem(item)
-		}
+	collector := worldViewFallbackWorkItemCollector{
+		workItemsByID: make(map[string]interfaces.FactoryWorldWorkItemRef),
 	}
-	return sortedWorldWorkItemRefs(workItemsByID)
+	for _, completion := range completions {
+		if interfaces.WorkOutcome(completion.Result.Outcome) != outcome {
+			continue
+		}
+		collect(&collector, completion)
+	}
+	return collector.sorted()
+}
+
+func (collector *worldViewFallbackWorkItemCollector) addTerminalWork(
+	terminalWork *interfaces.FactoryTerminalWork,
+	include func(status string) bool,
+) bool {
+	if terminalWork == nil || terminalWork.WorkItem.ID == "" || !include(terminalWork.Status) {
+		return false
+	}
+	collector.workItemsByID[terminalWork.WorkItem.ID] = workRefForDashboardItem(terminalWork.WorkItem)
+	return true
+}
+
+func (collector *worldViewFallbackWorkItemCollector) addWorkItems(
+	items []interfaces.FactoryWorkItem,
+) {
+	for _, item := range items {
+		if item.ID == "" {
+			continue
+		}
+		collector.workItemsByID[item.ID] = workRefForDashboardItem(item)
+	}
+}
+
+func (collector *worldViewFallbackWorkItemCollector) addMissingWorkItems(
+	items []interfaces.FactoryWorkItem,
+) {
+	for _, item := range items {
+		if item.ID == "" {
+			continue
+		}
+		if _, ok := collector.workItemsByID[item.ID]; ok {
+			continue
+		}
+		collector.workItemsByID[item.ID] = workRefForDashboardItem(item)
+	}
+}
+
+func (collector *worldViewFallbackWorkItemCollector) sorted() []interfaces.FactoryWorldWorkItemRef {
+	return sortedWorldWorkItemRefs(collector.workItemsByID)
 }
 
 func dashboardFailedWorkDetailsFromRenderData(

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/internal/handwrittensourceguard"
+	"github.com/portpowered/infinite-you/internal/handwrittensourceguard"
 )
 
 var retiredTransitionRuntimeFields = map[string]struct{}{
@@ -136,7 +136,7 @@ func walkTransitionGuardProductionFiles(moduleRoot string, visit func(path strin
 func transitionImportAliases(file *ast.File) map[string]struct{} {
 	aliases := map[string]struct{}{}
 	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/agent-factory/pkg/petri"` {
+		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/infinite-you/pkg/petri"` {
 			continue
 		}
 		name := "petri"

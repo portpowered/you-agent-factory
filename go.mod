@@ -1,4 +1,4 @@
-module github.com/portpowered/agent-factory
+module github.com/portpowered/infinite-you
 
 go 1.24.0
 

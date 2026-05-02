@@ -3,7 +3,7 @@ package interfaces
 import (
 	"strings"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 var publicFactoryWorkerTypeAliases = map[string]string{
@@ -12,6 +12,26 @@ var publicFactoryWorkerTypeAliases = map[string]string{
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{
+	publicFactoryWorkerModelProviderClaude: publicFactoryWorkerModelProviderClaude,
+	publicFactoryWorkerModelProviderCodex:  publicFactoryWorkerModelProviderCodex,
+}
+
+var publicFactoryWorkerProviderAliases = map[string]string{
+	publicFactoryWorkerProviderScriptWrap: publicFactoryWorkerProviderScriptWrap,
+}
+
+var publicFactoryWorkstationTypeAliases = map[string]string{
+	WorkstationTypeLogical: WorkstationTypeLogical,
+	WorkstationTypeModel:   WorkstationTypeModel,
+}
+
+const (
+	publicFactoryWorkerModelProviderClaude = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex  = "CODEX"
+	publicFactoryWorkerProviderScriptWrap  = "SCRIPT_WRAP"
+)
+
+var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"ANTHROPIC": publicFactoryWorkerModelProviderClaude,
 	"CLAUDE":    publicFactoryWorkerModelProviderClaude,
 	"CODEX":     publicFactoryWorkerModelProviderCodex,
@@ -22,7 +42,7 @@ var publicFactoryWorkerModelProviderAliases = map[string]string{
 	"openai":    publicFactoryWorkerModelProviderCodex,
 }
 
-var publicFactoryWorkerProviderAliases = map[string]string{
+var internalFactoryWorkerProviderAliases = map[string]string{
 	"ANTHROPIC":    publicFactoryWorkerProviderScriptWrap,
 	"CLAUDE":       publicFactoryWorkerProviderScriptWrap,
 	"CLAUDE_CLI":   publicFactoryWorkerProviderScriptWrap,
@@ -46,17 +66,6 @@ var publicFactoryWorkerProviderAliases = map[string]string{
 	"script_wrap":  publicFactoryWorkerProviderScriptWrap,
 	"script-wrap":  publicFactoryWorkerProviderScriptWrap,
 }
-
-var publicFactoryWorkstationTypeAliases = map[string]string{
-	WorkstationTypeLogical: WorkstationTypeLogical,
-	WorkstationTypeModel:   WorkstationTypeModel,
-}
-
-const (
-	publicFactoryWorkerModelProviderClaude = "claude"
-	publicFactoryWorkerModelProviderCodex  = "codex"
-	publicFactoryWorkerProviderScriptWrap  = "script_wrap"
-)
 
 func normalizePublicFactoryEnumValue(value string, aliases map[string]string, preserveUnknown bool) string {
 	trimmed := strings.TrimSpace(value)
@@ -128,7 +137,7 @@ func GeneratedPublicFactoryWorkerTypePtr(value string) *factoryapi.WorkerType {
 
 // GeneratedPublicFactoryWorkerModelProvider returns the generated worker model provider enum.
 func GeneratedPublicFactoryWorkerModelProvider(value string) factoryapi.WorkerModelProvider {
-	return factoryapi.WorkerModelProvider(PermissivePublicFactoryWorkerModelProvider(value))
+	return factoryapi.WorkerModelProvider(normalizePublicFactoryEnumValue(value, internalFactoryWorkerModelProviderAliases, true))
 }
 
 // GeneratedPublicFactoryWorkerModelProviderPtr returns the generated worker model provider enum when non-empty.
@@ -142,7 +151,7 @@ func GeneratedPublicFactoryWorkerModelProviderPtr(value string) *factoryapi.Work
 
 // GeneratedPublicFactoryWorkerProvider returns the generated worker provider enum.
 func GeneratedPublicFactoryWorkerProvider(value string) factoryapi.WorkerProvider {
-	return factoryapi.WorkerProvider(PermissivePublicFactoryWorkerProvider(value))
+	return factoryapi.WorkerProvider(normalizePublicFactoryEnumValue(value, internalFactoryWorkerProviderAliases, true))
 }
 
 // GeneratedPublicFactoryWorkerProviderPtr returns the generated worker provider enum when non-empty.

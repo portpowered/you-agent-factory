@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-runtime-config-fixture review=2026-07-18 removal=split-runtime-config-fixture-before-next-runtime-config-change
@@ -16,6 +16,7 @@ func TestLoadRuntimeConfig_LoadsEffectiveRuntimeConfig(t *testing.T) {
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -34,12 +35,12 @@ func TestLoadRuntimeConfig_LoadsEffectiveRuntimeConfig(t *testing.T) {
 		},
 		"workstations": []map[string]any{
 			{
-				"id":      "execute-story",
-				"name":    "execute-story",
-				"kind":    "repeater",
-				"worker":  "executor",
-				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
-				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+				"id":       "execute-story",
+				"name":     "execute-story",
+				"behavior": "REPEATER",
+				"worker":   "executor",
+				"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "story", "state": "complete"}},
 			},
 		},
 	})
@@ -168,7 +169,7 @@ func TestPersistNamedFactory_RejectsInvalidPayloadWithoutChangingCurrentFactory(
 	}
 
 	invalidPayload, err := json.Marshal(map[string]any{
-		"project": "broken",
+		"id": "broken",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -294,6 +295,7 @@ func TestLoadRuntimeConfig_RejectsRetiredSplitWorkerAliases(t *testing.T) {
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -339,10 +341,51 @@ Run the work.
 	}
 }
 
+func TestLoadRuntimeConfig_RejectsMissingRequiredFactoryName(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writePortableNameOmittedFactoryJSON := map[string]any{
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{{"name": "executor"}},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(writePortableNameOmittedFactoryJSON, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	_, err = LoadRuntimeConfig(factoryDir, nil)
+	if err == nil {
+		t.Fatal("expected missing factory.name to be rejected")
+	}
+	if !containsAll(err.Error(), generatedFactoryBoundaryErrorPrefix, "factory.name is required") {
+		t.Fatalf("expected missing factory.name boundary error, got %v", err)
+	}
+}
+
 func TestLoadRuntimeConfig_RejectsRetiredExhaustionRulesWithMigrationGuidance(t *testing.T) {
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -390,6 +433,7 @@ func TestLoadRuntimeConfig_AllowsTopologyOnlyLogicalMoveLoopBreakersWithoutSplit
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -415,7 +459,7 @@ func TestLoadRuntimeConfig_AllowsTopologyOnlyLogicalMoveLoopBreakersWithoutSplit
 				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs": []map[string]string{{"workType": "story", "state": "failed"}},
 				"guards": []map[string]any{{
-					"type":        "visit_count",
+					"type":        "VISIT_COUNT",
 					"workstation": "execute-story",
 					"maxVisits":   3,
 				}},
@@ -456,6 +500,7 @@ func TestInlineRuntimeDefinitions_LoadsSplitDefinitionsIntoFactoryConfig(t *test
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -520,6 +565,7 @@ func TestLoadRuntimeConfig_LoadsCronWorkstationConfig(t *testing.T) {
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -534,10 +580,10 @@ func TestLoadRuntimeConfig_LoadsCronWorkstationConfig(t *testing.T) {
 		"workers":   []map[string]any{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"id":     "daily-refresh",
-				"name":   "daily-refresh",
-				"kind":   "cron",
-				"worker": "cron-worker",
+				"id":       "daily-refresh",
+				"name":     "daily-refresh",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
 				"cron": map[string]any{
 					"schedule":       "*/5 * * * *",
 					"triggerAtStart": true,
@@ -590,6 +636,7 @@ func TestLoadRuntimeConfig_DecodesOmittedTriggerAtStartAsFalse(t *testing.T) {
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -603,11 +650,11 @@ func TestLoadRuntimeConfig_DecodesOmittedTriggerAtStartAsFalse(t *testing.T) {
 		"workers":   []map[string]any{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":    "daily-refresh",
-				"kind":    "cron",
-				"worker":  "cron-worker",
-				"cron":    map[string]string{"schedule": "0 * * * *"},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"name":     "daily-refresh",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     map[string]string{"schedule": "0 * * * *"},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 		},
 	})
@@ -632,6 +679,7 @@ func TestLoadRuntimeConfig_RejectsRetiredLegacyAliasesAtGeneratedBoundary(t *tes
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -650,9 +698,9 @@ func TestLoadRuntimeConfig_RejectsRetiredLegacyAliasesAtGeneratedBoundary(t *tes
 		},
 		"workstations": []map[string]any{
 			{
-				"name":   "scheduled-story",
-				"kind":   "cron",
-				"worker": "executor",
+				"name":     "scheduled-story",
+				"behavior": "CRON",
+				"worker":   "executor",
 				"cron": map[string]any{
 					"schedule":         "*/5 * * * *",
 					"trigger_at_start": true,
@@ -680,6 +728,7 @@ func TestLoadRuntimeConfig_UsesCanonicalResourcesCapacity(t *testing.T) {
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -724,6 +773,7 @@ func TestLoadRuntimeConfig_RejectsLegacyResourceUsageAliasAtGeneratedBoundary(t 
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -766,6 +816,7 @@ func TestLoadRuntimeConfig_RejectsUnsupportedGeneratedBoundaryField(t *testing.T
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -803,6 +854,7 @@ func TestLoadRuntimeConfig_RejectsRetiredCronIntervalAtGeneratedBoundary(t *test
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -815,11 +867,11 @@ func TestLoadRuntimeConfig_RejectsRetiredCronIntervalAtGeneratedBoundary(t *test
 		"workers": []map[string]any{{"name": "executor"}},
 		"workstations": []map[string]any{
 			{
-				"name":    "daily-refresh",
-				"kind":    "cron",
-				"worker":  "executor",
-				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
-				"cron":    map[string]any{"interval": "5m"},
+				"name":     "daily-refresh",
+				"behavior": "CRON",
+				"worker":   "executor",
+				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
+				"cron":     map[string]any{"interval": "5m"},
 			},
 		},
 	})
@@ -840,6 +892,7 @@ func TestLoadRuntimeConfig_RejectsMissingRequiredToolInResourceManifest(t *testi
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -860,7 +913,7 @@ func TestLoadRuntimeConfig_RejectsMissingRequiredToolInResourceManifest(t *testi
 				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
 			},
 		},
-		"resourceManifest": map[string]any{
+		"supportingFiles": map[string]any{
 			"requiredTools": []map[string]any{
 				{
 					"name":    "missing helper",
@@ -883,6 +936,7 @@ func TestLoadRuntimeConfig_LoadsInlineRuntimeDefinitionsWithoutAgentsFiles(t *te
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -898,7 +952,7 @@ func TestLoadRuntimeConfig_LoadsInlineRuntimeDefinitionsWithoutAgentsFiles(t *te
 				"name":          "executor",
 				"type":          "MODEL_WORKER",
 				"model":         "claude-sonnet-4-20250514",
-				"modelProvider": "claude",
+				"modelProvider": "CLAUDE",
 				"stopToken":     "COMPLETE",
 				"body":          "You are the executor.",
 			},
@@ -958,6 +1012,7 @@ func TestLoadRuntimeConfig_NormalizesInlineWorkstationRuntimeFieldsIntoCanonical
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -979,7 +1034,7 @@ func TestLoadRuntimeConfig_NormalizesInlineWorkstationRuntimeFieldsIntoCanonical
 			{
 				"id":               "execute-story-id",
 				"name":             "execute-story",
-				"kind":             "standard",
+				"behavior":         "STANDARD",
 				"worker":           "executor",
 				"inputs":           []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs":          []map[string]string{{"workType": "story", "state": "complete"}},
@@ -1008,6 +1063,7 @@ func TestLoadRuntimeConfig_MergesSplitRuntimeWorkstationOverInlineRuntimeFields(
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -1075,6 +1131,7 @@ func TestLoadRuntimeConfig_DerivesCanonicalWorkstationTypeFromWorkerAcrossInline
 	splitDir := t.TempDir()
 
 	topology := map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "parent",
@@ -1157,6 +1214,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 	splitDir := t.TempDir()
 
 	topology := map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "parent",
@@ -1189,11 +1247,11 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 		},
 		"workstations": []map[string]any{
 			{
-				"id":     "execute-story-id",
-				"name":   "execute-story",
-				"kind":   "cron",
-				"worker": "executor",
-				"cron":   map[string]any{"schedule": "*/5 * * * *", "triggerAtStart": true, "jitter": "5s", "expiryWindow": "45s"},
+				"id":       "execute-story-id",
+				"name":     "execute-story",
+				"behavior": "CRON",
+				"worker":   "executor",
+				"cron":     map[string]any{"schedule": "*/5 * * * *", "triggerAtStart": true, "jitter": "5s", "expiryWindow": "45s"},
 				"inputs": []map[string]any{
 					{
 						"workType": "parent",
@@ -1203,7 +1261,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 						"workType": "story",
 						"state":    "init",
 						"guards": []map[string]string{{
-							"type":        "all_children_complete",
+							"type":        "ALL_CHILDREN_COMPLETE",
 							"parentInput": "parent",
 						}},
 					},
@@ -1212,7 +1270,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 				"onFailure": map[string]string{"workType": "story", "state": "failed"},
 				"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 				"guards": []map[string]any{
-					{"type": "visit_count", "workstation": "execute-story", "maxVisits": 3},
+					{"type": "VISIT_COUNT", "workstation": "execute-story", "maxVisits": 3},
 				},
 			},
 		},
@@ -1603,7 +1661,8 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 
 	cfg := map[string]any{
-		"project": project,
+		"name": project,
+		"id":   project,
 		"workTypes": []map[string]any{
 			{
 				"name": "task",

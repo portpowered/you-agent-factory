@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/service"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestFactoryValidation rejects factories whose workstation wiring references

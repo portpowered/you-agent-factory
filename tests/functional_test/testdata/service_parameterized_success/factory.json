@@ -1,4 +1,5 @@
 {
+  "name": "service_parameterized_success",
   "workTypes": [
     {
       "name": "task",
@@ -47,3 +48,4 @@
     }
   ]
 }
+

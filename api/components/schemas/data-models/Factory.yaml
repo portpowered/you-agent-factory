@@ -7,10 +7,18 @@ description: >-
   workstations using VISIT_COUNT guards instead of a top-level
   exhaustion-rules field.
 additionalProperties: false
+required:
+  - name
 example:
+  name: customer-support-triage
   inputTypes:
     - name: brief
       type: DEFAULT
+  guards:
+    - type: INFERENCE_THROTTLE_GUARD
+      modelProvider: CLAUDE
+      model: claude-sonnet-4-20250514
+      refreshWindow: 15m
   workTypes:
     - name: story
       states:
@@ -22,7 +30,7 @@ example:
           type: FAILED
         - name: complete
           type: TERMINAL
-  resourceManifest:
+  supportingFiles:
     requiredTools:
       - name: python
         command: python
@@ -50,17 +58,17 @@ example:
   workers:
     - name: reviewer
       type: MODEL_WORKER
-      executorProvider: script_wrap
-      modelProvider: claude
+      executorProvider: SCRIPT_WRAP
+      modelProvider: CLAUDE
       model: claude-sonnet-4-20250514
     - name: review-loop-breaker
       type: MODEL_WORKER
-      executorProvider: script_wrap
-      modelProvider: claude
+      executorProvider: SCRIPT_WRAP
+      modelProvider: CLAUDE
       model: claude-sonnet-4-20250514
   workstations:
     - name: review-story
-      kind: REPEATER
+      behavior: REPEATER
       type: MODEL_WORKSTATION
       worker: reviewer
       inputs:
@@ -89,18 +97,17 @@ example:
         - workType: story
           state: failed
 properties:
-  project:
+  name:
+    $ref: './FactoryName.yaml'
+  id:
     type: string
-    description: Project identifier used as the factory-level template context fallback.
-  factoryDir:
+    description: Factory identifier used as the factory-level template context fallback.
+  factoryDirectory:
     type: string
     description: Directory that contained the factory.json used for this serialized runtime config.
   sourceDirectory:
     type: string
     description: Original source directory for record/replay and drift diagnostics.
-  workflowId:
-    type: string
-    description: Optional workflow identity associated with this serialized runtime config.
   metadata:
     $ref: '../shared/StringMap.yaml'
     description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
@@ -109,6 +116,11 @@ properties:
     description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
     items:
       $ref: './InputType.yaml'
+  guards:
+    type: array
+    description: Root-level guards that apply across the factory instead of one specific workstation or input.
+    items:
+      $ref: './FactoryGuard.yaml'
   workTypes:
     type: array
     description: Customer-authored work item categories and the lifecycle states each one can occupy.
@@ -119,7 +131,7 @@ properties:
     description: Shared capacity pools that workers or workstations can consume while work is executing.
     items:
       $ref: './Resource.yaml'
-  resourceManifest:
+  supportingFiles:
     $ref: './ResourceManifest.yaml'
     description: Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources.
   workers:

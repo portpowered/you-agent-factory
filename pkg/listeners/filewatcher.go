@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 )
 

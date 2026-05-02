@@ -9,20 +9,20 @@ import (
 	"testing"
 	"time"
 
-	factoryboundary "github.com/portpowered/agent-factory/pkg/api"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/internal/submission"
-	"github.com/portpowered/agent-factory/pkg/logging"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/replay"
-	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/internal/submission"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 type passExecutor struct{}
@@ -913,8 +913,8 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 		t.Fatalf("Workers = %#v, want one runtime worker", payload.Factory.Workers)
 	}
 	worker := (*payload.Factory.Workers)[0]
-	if worker.Name != "mock" || stringValueForRuntimeTest(worker.ExecutorProvider) != "script_wrap" ||
-		stringValueForRuntimeTest(worker.ModelProvider) != "codex" ||
+	if worker.Name != "mock" || stringValueForRuntimeTest(worker.ExecutorProvider) != "SCRIPT_WRAP" ||
+		stringValueForRuntimeTest(worker.ModelProvider) != "CODEX" ||
 		stringValueForRuntimeTest(worker.Model) != "gpt-5.4" {
 		t.Fatalf("worker metadata = %#v, want runtime config provider/model metadata", worker)
 	}
@@ -1675,6 +1675,7 @@ func safeBoundaryResult(
 func safeBoundaryGeneratedFactory() factoryapi.Factory {
 	workstationID := "t-process"
 	return factoryapi.Factory{
+		Name: "safe-boundary-factory",
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "task",
 			States: []factoryapi.WorkState{

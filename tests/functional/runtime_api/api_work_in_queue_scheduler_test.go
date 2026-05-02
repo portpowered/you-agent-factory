@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/pkg/workers"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestWorkInQueueScheduler_BatchSubmissionPrioritizesWorkInProgressState(t *testing.T) {

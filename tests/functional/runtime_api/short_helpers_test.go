@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/replay"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/replay"
 )
 
 func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) interfaces.InitialStructurePayload {

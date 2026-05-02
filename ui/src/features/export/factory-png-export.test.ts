@@ -11,7 +11,8 @@ const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
 
 const canonicalFactory: FactorySchemas["Factory"] = {
-  project: "agent-factory",
+  id: "agent-factory",
+  name: "agent-factory",
   workTypes: [
     {
       name: "story",
@@ -23,9 +24,9 @@ const canonicalFactory: FactorySchemas["Factory"] = {
   ],
   workers: [
     {
-      executorProvider: "script_wrap",
+      executorProvider: "SCRIPT_WRAP",
       model: "codex-mini",
-      modelProvider: "codex",
+      modelProvider: "CODEX",
       name: "writer",
       type: "MODEL_WORKER",
     },
@@ -42,14 +43,14 @@ const canonicalFactory: FactorySchemas["Factory"] = {
 };
 
 describe("writeFactoryExportPng", () => {
-  it("writes the Port OS metadata envelope without changing the source PNG image data", async () => {
+  it("writes the Port OS factory metadata without changing the source PNG image data", async () => {
     const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
     const result = await writeFactoryExportPng({
-      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
-      namedFactory: {
-        factory: canonicalFactory,
+      factory: {
+        ...canonicalFactory,
         name: "Factory Export",
       },
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
       rasterizeImageToPngBytes: async () => sourcePng,
     });
 
@@ -68,7 +69,7 @@ describe("writeFactoryExportPng", () => {
     expect(readInternationalTextChunk(metadataChunk?.data ?? new Uint8Array())).toEqual({
       keyword: PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
       text: JSON.stringify({
-        factory: canonicalFactory,
+        ...canonicalFactory,
         name: "Factory Export",
         schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
       }),
@@ -78,11 +79,11 @@ describe("writeFactoryExportPng", () => {
 
   it("returns an explicit decode failure when the image cannot be rasterized", async () => {
     const result = await writeFactoryExportPng({
-      image: new Blob(["not-an-image"], { type: "text/plain" }),
-      namedFactory: {
-        factory: canonicalFactory,
+      factory: {
+        ...canonicalFactory,
         name: "Broken Export",
       },
+      image: new Blob(["not-an-image"], { type: "text/plain" }),
       rasterizeImageToPngBytes: async () => {
         throw new Error("decode failed");
       },
@@ -100,11 +101,11 @@ describe("writeFactoryExportPng", () => {
 
   it("returns an explicit metadata-write failure when the rasterized bytes are not a PNG", async () => {
     const result = await writeFactoryExportPng({
-      image: new Blob(["not-a-png"], { type: "image/png" }),
-      namedFactory: {
-        factory: canonicalFactory,
+      factory: {
+        ...canonicalFactory,
         name: "Broken Export",
       },
+      image: new Blob(["not-a-png"], { type: "image/png" }),
       rasterizeImageToPngBytes: async () => new Uint8Array([1, 2, 3, 4]),
     });
 
@@ -124,6 +125,14 @@ function fromBase64(value: string): Uint8Array {
 }
 
 async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
+  if (typeof blob.arrayBuffer === "function") {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  if (typeof FileReader === "undefined") {
+    throw new Error("Blob readers are unavailable.");
+  }
+
   return await new Promise<Uint8Array>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

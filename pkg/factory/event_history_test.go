@@ -1,18 +1,19 @@
 package factory
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil/runtimefixtures"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/workers"
 
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
@@ -46,11 +47,45 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 		t.Fatalf("Workers = %#v, want one runtime worker", payload.Factory.Workers)
 	}
 	worker := (*payload.Factory.Workers)[0]
-	if worker.Name != "builder" || stringValueForEventHistoryTest(worker.ExecutorProvider) != "script_wrap" ||
-		stringValueForEventHistoryTest(worker.ModelProvider) != "codex" ||
+	if worker.Name != "builder" || stringValueForEventHistoryTest(worker.ExecutorProvider) != "SCRIPT_WRAP" ||
+		stringValueForEventHistoryTest(worker.ModelProvider) != "CODEX" ||
 		stringValueForEventHistoryTest(worker.Type) != string(factoryapi.WorkerTypeModelWorker) ||
 		stringValueForEventHistoryTest(worker.Model) != "gpt-5.4" {
 		t.Fatalf("worker metadata = %#v, want runtime-config provider/model metadata", worker)
+	}
+}
+
+func TestFactoryEventHistory_SubscribeCancelClosesStreamWithoutPanickingAppenders(t *testing.T) {
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := history.Subscribe(ctx)
+
+	history.RecordInitialStructure()
+
+	select {
+	case <-stream.Events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial live event")
+	}
+
+	cancel()
+
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case _, ok := <-stream.Events:
+			if !ok {
+				goto closed
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for stream closure after cancellation")
+		}
+	}
+
+closed:
+	for i := 0; i < 32; i++ {
+		history.RecordFactoryStateChange(i, interfaces.FactoryStateIdle, interfaces.FactoryStateRunning, "post-cancel", time.Unix(int64(i+1), 0).UTC())
 	}
 }
 
@@ -79,16 +114,16 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 		t.Fatalf("workstations = %#v, want one generated workstation", payload.Factory.Workstations)
 	}
 	workstation := (*payload.Factory.Workstations)[0]
-	if workstation.Kind == nil || *workstation.Kind != factoryapi.WorkstationKindRepeater {
-		t.Fatalf("workstation kind = %#v, want REPEATER", workstation.Kind)
+	if workstation.Behavior == nil || *workstation.Behavior != factoryapi.WorkstationKindRepeater {
+		t.Fatalf("workstation behavior = %#v, want REPEATER", workstation.Behavior)
 	}
 
 	data, err := json.Marshal(events[0])
 	if err != nil {
 		t.Fatalf("marshal initial structure event: %v", err)
 	}
-	if !strings.Contains(string(data), `"kind":"REPEATER"`) {
-		t.Fatalf("initial structure event JSON = %s, want canonical uppercase workstation kind", data)
+	if !strings.Contains(string(data), `"behavior":"REPEATER"`) {
+		t.Fatalf("initial structure event JSON = %s, want canonical uppercase workstation behavior", data)
 	}
 }
 
@@ -565,6 +600,12 @@ func assertEventHistoryRequestLineage(t *testing.T, event factoryapi.FactoryEven
 	if got := stringSliceValueForEventHistoryTest(requestPayload.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
 		t.Fatalf("dispatch request previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
 	}
+	if stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId) != "trace-z" {
+		t.Fatalf("dispatch request context current chaining trace ID = %q, want trace-z", stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId))
+	}
+	if got := stringSliceValueForEventHistoryTest(event.Context.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+		t.Fatalf("dispatch request context previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
 	if len(requestPayload.Inputs) != 2 {
 		t.Fatalf("dispatch request inputs = %#v, want two consumed work refs", requestPayload.Inputs)
 	}
@@ -588,6 +629,12 @@ func assertEventHistoryResponseLineage(t *testing.T, event factoryapi.FactoryEve
 	}
 	if got := stringSliceValueForEventHistoryTest(responsePayload.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
 		t.Fatalf("dispatch response previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
+	if stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId) != "trace-z" {
+		t.Fatalf("dispatch response context current chaining trace ID = %q, want trace-z", stringValueForEventHistoryTest(event.Context.CurrentChainingTraceId))
+	}
+	if got := stringSliceValueForEventHistoryTest(event.Context.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+		t.Fatalf("dispatch response context previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
 	}
 	if responsePayload.OutputWork == nil || len(*responsePayload.OutputWork) != 1 {
 		t.Fatalf("output work = %#v, want one generated output work item", responsePayload.OutputWork)

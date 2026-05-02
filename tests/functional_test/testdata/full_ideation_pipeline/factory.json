@@ -1,4 +1,5 @@
 {
+  "name": "full_ideation_pipeline",
   "workTypes": [
     {
       "name": "idea",
@@ -118,7 +119,7 @@
           "workType": "story"
         }
       ],
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "name": "execute-story",
       "onFailure": {
         "state": "failed",
@@ -160,7 +161,7 @@
       "guards": [
         {
           "maxVisits": 3,
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "review-story"
         }
       ],
@@ -182,3 +183,4 @@
     }
   ]
 }
+

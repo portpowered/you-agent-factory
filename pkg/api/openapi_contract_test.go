@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/agent-factory/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/api/generated"
 	"gopkg.in/yaml.v3"
 )
 
@@ -105,6 +105,8 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"RUN_RESPONSE":                "RunResponseEventPayload",
 }
 
+const openAPISchemaRefPrefix = "#/components/schemas/"
+
 // portos:func-length-exception owner=agent-factory reason=openapi-contract-table review=2026-07-18 removal=split-operation-and-schema-assertions-before-next-openapi-surface-change
 func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi.yaml")
@@ -192,7 +194,6 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		"ErrorFamily",
 		"ErrorResponse",
 		"FactoryName",
-		"NamedFactory",
 		"StatusCategories",
 		"StatusResponse",
 	}
@@ -318,7 +319,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.Workstation.properties is missing")
 	}
-	assertPropertyRef(t, workstationProperties, "kind", "#/components/schemas/WorkstationKind")
+	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
 	if _, ok := workstationProperties["timeout"]; ok {
 		t.Fatalf("components.schemas.Workstation.properties.timeout must not be advertised")
@@ -440,7 +441,7 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 
 	factory := requireOpenAPI3ComponentSchema(t, doc, "Factory")
 	assertOpenAPI3Description(t, "Factory", factory.Description)
-	assertOpenAPI3PropertyDescription(t, factory, "Factory", "project")
+	assertOpenAPI3PropertyDescription(t, factory, "Factory", "id")
 	workType := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "workTypes")
 	resource := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "resources")
 	worker := assertOpenAPI3ArrayPropertyDescription(t, factory, "Factory", "workers")
@@ -464,7 +465,7 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 	}
 
 	assertOpenAPI3Description(t, "Workstation", workstation.Description)
-	for _, propertyName := range []string{"name", "kind", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
+	for _, propertyName := range []string{"name", "behavior", "type", "worker", "limits", "resources", "stopWords", "inputs", "outputs", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstation, "Workstation", propertyName)
 	}
 	workstationLimits := assertOpenAPI3RefPropertyDescription(t, workstation, "Workstation", "limits")
@@ -485,20 +486,15 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 	for _, propertyName := range []string{"workType", "state", "guards"} {
 		assertOpenAPI3PropertyDescription(t, workstationIO, "WorkstationIO", propertyName)
 	}
-	inputGuard := assertOpenAPI3ArrayPropertyDescription(t, workstationIO, "WorkstationIO", "guards")
+	assertOpenAPI3ArrayPropertyDescription(t, workstationIO, "WorkstationIO", "guards")
 
-	assertOpenAPI3Description(t, "WorkstationGuard", workstationGuard.Description)
-	for _, propertyName := range []string{"type", "workstation", "maxVisits"} {
-		assertOpenAPI3PropertyDescription(t, workstationGuard, "WorkstationGuard", propertyName)
-	}
-
-	assertOpenAPI3Description(t, "InputGuard", inputGuard.Description)
-	for _, propertyName := range []string{"type", "parentInput", "spawnedBy"} {
-		assertOpenAPI3PropertyDescription(t, inputGuard, "InputGuard", propertyName)
+	assertOpenAPI3Description(t, "Guard", workstationGuard.Description)
+	for _, propertyName := range []string{"type", "workstation", "maxVisits", "matchConfig", "parentInput", "matchInput", "spawnedBy"} {
+		assertOpenAPI3PropertyDescription(t, workstationGuard, "Guard", propertyName)
 	}
 }
 
-func TestOpenAPIContract_NamedFactorySchemaReusesCanonicalFactoryShape(t *testing.T) {
+func TestOpenAPIContract_FactorySchemaPublishesCanonicalNameField(t *testing.T) {
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromFile("../../api/openapi.yaml")
 	if err != nil {
@@ -508,20 +504,19 @@ func TestOpenAPIContract_NamedFactorySchemaReusesCanonicalFactoryShape(t *testin
 		t.Fatalf("validate openapi contract: %v", err)
 	}
 
-	namedFactory := requireOpenAPI3ComponentSchema(t, doc, "NamedFactory")
-	assertOpenAPI3Description(t, "NamedFactory", namedFactory.Description)
-	assertRequiredStringValues(t, namedFactory.Required, "name", "factory")
-	assertOpenAPI3PropertyRef(t, namedFactory, "NamedFactory", "name", "#/components/schemas/FactoryName")
-	assertOpenAPI3PropertyRef(t, namedFactory, "NamedFactory", "factory", "#/components/schemas/Factory")
-	if namedFactory.Example == nil {
-		t.Fatal("NamedFactory.example is missing")
+	factorySchema := requireOpenAPI3ComponentSchema(t, doc, "Factory")
+	assertOpenAPI3Description(t, "Factory", factorySchema.Description)
+	assertRequiredStringValues(t, factorySchema.Required, "name")
+	assertOpenAPI3PropertyRef(t, factorySchema, "Factory", "name", "#/components/schemas/FactoryName")
+	if factorySchema.Example == nil {
+		t.Fatal("Factory.example is missing")
 	}
-	if err := namedFactory.VisitJSON(namedFactory.Example); err != nil {
-		t.Fatalf("NamedFactory.example should validate: %v", err)
+	if err := factorySchema.VisitJSON(factorySchema.Example); err != nil {
+		t.Fatalf("Factory.example should validate: %v", err)
 	}
 }
 
-func TestOpenAPIContract_NamedFactoryOperationsPublishMachineReadableErrors(t *testing.T) {
+func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read openapi contract: %v", err)
@@ -538,12 +533,12 @@ func TestOpenAPIContract_NamedFactoryOperationsPublishMachineReadableErrors(t *t
 	}
 
 	createFactory := pathOperation(t, paths, "/factory", "post")
-	assertResponseSchemaRef(t, createFactory, "201", "#/components/schemas/NamedFactory")
+	assertResponseSchemaRef(t, createFactory, "201", "#/components/schemas/Factory")
 	assertResponseRef(t, createFactory, "400", "#/components/responses/CreateFactoryBadRequest")
 	assertResponseRef(t, createFactory, "409", "#/components/responses/CreateFactoryConflict")
 
 	currentFactory := pathOperation(t, paths, "/factory/~current", "get")
-	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/NamedFactory")
+	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, currentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
 
 	components, ok := doc["components"].(map[string]any)
@@ -839,11 +834,12 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryEventType"), "FactoryEventType", bundledFactoryEventTypeValues)
 
 	contextProperties := schemaProperties(t, schemaObject(t, schemas, "FactoryEventContext"), "FactoryEventContext")
-	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId"} {
+	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId", "currentChainingTraceId"} {
 		if _, ok := contextProperties[field]; !ok {
 			t.Fatalf("FactoryEventContext.properties.%s is missing", field)
 		}
 	}
+	assertStringArrayProperty(t, contextProperties, "previousChainingTraceIds")
 
 	inferenceResponseProperties := schemaProperties(t, schemaObject(t, schemas, "InferenceResponseEventPayload"), "InferenceResponseEventPayload")
 	assertPropertyRef(t, inferenceResponseProperties, "outcome", "#/components/schemas/InferenceOutcome")
@@ -1021,8 +1017,8 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
 		"FactoryName":                 "./components/schemas/data-models/FactoryName.yaml",
-		"NamedFactory":                "./components/schemas/data-models/NamedFactory.yaml",
 		"Factory":                     "./components/schemas/data-models/Factory.yaml",
+		"FactoryGuard":                "./components/schemas/data-models/FactoryGuard.yaml",
 		"ResourceManifest":            "./components/schemas/data-models/ResourceManifest.yaml",
 		"RequiredTool":                "./components/schemas/data-models/RequiredTool.yaml",
 		"BundledFile":                 "./components/schemas/data-models/BundledFile.yaml",
@@ -1042,12 +1038,10 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkstationKind":             "./components/schemas/data-models/WorkstationKind.yaml",
 		"WorkstationType":             "./components/schemas/data-models/WorkstationType.yaml",
 		"WorkstationCron":             "./components/schemas/data-models/WorkstationCron.yaml",
-		"WorkstationGuardType":        "./components/schemas/data-models/WorkstationGuardType.yaml",
-		"WorkstationGuard":            "./components/schemas/data-models/WorkstationGuard.yaml",
-		"WorkstationGuardMatchConfig": "./components/schemas/data-models/WorkstationGuardMatchConfig.yaml",
+		"GuardType":                   "./components/schemas/data-models/GuardType.yaml",
+		"Guard":                       "./components/schemas/data-models/Guard.yaml",
+		"GuardMatchConfig":            "./components/schemas/data-models/GuardMatchConfig.yaml",
 		"WorkstationIO":               "./components/schemas/data-models/WorkstationIO.yaml",
-		"InputGuard":                  "./components/schemas/data-models/InputGuard.yaml",
-		"InputGuardType":              "./components/schemas/data-models/InputGuardType.yaml",
 		"Transition":                  "./components/schemas/data-models/Transition.yaml",
 		"Work":                        "./components/schemas/data-models/Work.yaml",
 		"Relation":                    "./components/schemas/data-models/Relation.yaml",
@@ -1139,11 +1133,12 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	context := schemaObject(t, schemas, "FactoryEventContext")
 	assertRequiredFields(t, context, "sequence", "tick", "eventTime")
 	contextProperties := schemaProperties(t, context, "FactoryEventContext")
-	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId"} {
+	for _, field := range []string{"eventTime", "requestId", "traceIds", "workIds", "dispatchId", "currentChainingTraceId"} {
 		if _, ok := contextProperties[field]; !ok {
 			t.Fatalf("FactoryEventContext.properties.%s is missing", field)
 		}
 	}
+	assertStringArrayProperty(t, contextProperties, "previousChainingTraceIds")
 	for _, snakeCaseField := range []string{"event_time", "request_id", "trace_ids", "work_ids", "dispatch_id"} {
 		if _, ok := contextProperties[snakeCaseField]; ok {
 			t.Fatalf("FactoryEventContext.properties.%s must use camelCase", snakeCaseField)
@@ -1151,7 +1146,14 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	}
 
 	initialStructure := schemaObject(t, schemas, "InitialStructureRequestEventPayload")
-	assertPropertyRef(t, schemaProperties(t, initialStructure, "InitialStructureRequestEventPayload"), "factory", "#/components/schemas/Factory")
+	initialStructureProperties := schemaProperties(t, initialStructure, "InitialStructureRequestEventPayload")
+	assertPropertyRef(t, initialStructureProperties, "factory", "#/components/schemas/Factory")
+	if _, ok := initialStructureProperties["workflowId"]; ok {
+		t.Fatal("InitialStructureRequestEventPayload.properties.workflowId must not be advertised")
+	}
+	if _, ok := reflect.TypeOf(generated.InitialStructureRequestEventPayload{}).FieldByName("WorkflowId"); ok {
+		t.Fatal("generated.InitialStructureRequestEventPayload must not expose WorkflowId")
+	}
 
 	runRequest := schemaObject(t, schemas, "RunRequestEventPayload")
 	assertRequiredFields(t, runRequest, "recordedAt", "factory")
@@ -1163,7 +1165,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 
 	factory := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factory, "Factory")
-	for _, field := range []string{"factoryDir", "sourceDirectory", "workflowId", "metadata", "inputTypes", "workTypes"} {
+	for _, field := range []string{"factoryDirectory", "sourceDirectory", "metadata", "inputTypes", "workTypes"} {
 		if _, ok := factoryProperties[field]; !ok {
 			t.Fatalf("Factory.properties.%s is missing", field)
 		}
@@ -1201,8 +1203,12 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	dispatchRequest := schemaObject(t, schemas, "DispatchRequestEventPayload")
 	dispatchRequestProperties := schemaProperties(t, dispatchRequest, "DispatchRequestEventPayload")
 	for _, field := range []string{"currentChainingTraceId", "previousChainingTraceIds"} {
-		if _, ok := dispatchRequestProperties[field]; !ok {
+		property, ok := dispatchRequestProperties[field].(map[string]any)
+		if !ok {
 			t.Fatalf("DispatchRequestEventPayload.properties.%s is missing", field)
+		}
+		if got, ok := property["deprecated"].(bool); !ok || !got {
+			t.Fatalf("DispatchRequestEventPayload.properties.%s must be marked deprecated", field)
 		}
 	}
 	assertArrayItemRef(t, dispatchRequestProperties, "inputs", "#/components/schemas/DispatchConsumedWorkRef")
@@ -1281,8 +1287,12 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	dispatchResponse := schemaObject(t, schemas, "DispatchResponseEventPayload")
 	dispatchResponseProperties := schemaProperties(t, dispatchResponse, "DispatchResponseEventPayload")
 	for _, field := range []string{"currentChainingTraceId", "previousChainingTraceIds"} {
-		if _, ok := dispatchResponseProperties[field]; !ok {
+		property, ok := dispatchResponseProperties[field].(map[string]any)
+		if !ok {
 			t.Fatalf("DispatchResponseEventPayload.properties.%s is missing", field)
+		}
+		if got, ok := property["deprecated"].(bool); !ok || !got {
+			t.Fatalf("DispatchResponseEventPayload.properties.%s must be marked deprecated", field)
 		}
 	}
 	assertArrayItemRef(t, dispatchResponseProperties, "outputWork", "#/components/schemas/Work")
@@ -1427,7 +1437,7 @@ func assertCanonicalFactoryEventFixtureOwnership(
 	switch eventType {
 	case "DISPATCH_REQUEST":
 		assertJSONKeysAbsent(t, payloadMap, "canonical dispatch request payload", "dispatchId", "workstation", "worker")
-		assertJSONKeysPresent(t, contextMap, "canonical dispatch request context", "dispatchId", "requestId")
+		assertJSONKeysPresent(t, contextMap, "canonical dispatch request context", "dispatchId", "requestId", "currentChainingTraceId", "previousChainingTraceIds")
 		if metadata, ok := payloadMap["metadata"].(map[string]any); ok {
 			assertJSONKeysAbsent(t, metadata, "canonical dispatch request metadata", "requestId")
 		}
@@ -1439,7 +1449,7 @@ func assertCanonicalFactoryEventFixtureOwnership(
 		assertJSONKeysPresent(t, contextMap, "canonical inference response context", "dispatchId")
 	case "DISPATCH_RESPONSE":
 		assertJSONKeysAbsent(t, payloadMap, "canonical dispatch response payload", "dispatchId", "workstation", "worker")
-		assertJSONKeysPresent(t, contextMap, "canonical dispatch response context", "dispatchId")
+		assertJSONKeysPresent(t, contextMap, "canonical dispatch response context", "dispatchId", "currentChainingTraceId", "previousChainingTraceIds")
 	}
 }
 
@@ -1479,9 +1489,10 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 	validPayload := map[string]any{
 		"recordedAt": "2026-04-10T12:00:00Z",
 		"factory": map[string]any{
-			"factoryDir":      "/tmp/runtime-factory",
+			"name":            "runtime-factory",
+			"factoryDirectory": "/tmp/runtime-factory",
 			"sourceDirectory": "/tmp/customer-factory",
-			"workflowId":      "workflow-123",
+			"id":              "runtime-factory",
 			"metadata":        map[string]any{"factory_hash": "sha256:test"},
 			"inputTypes": []any{
 				map[string]any{"name": "default", "type": "DEFAULT"},
@@ -1499,8 +1510,8 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 			"workers": []any{map[string]any{
 				"name":             "executor",
 				"type":             "MODEL_WORKER",
-				"modelProvider":    "claude",
-				"executorProvider": "script_wrap",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
 				"stopToken":        "<COMPLETE>",
 				"skipPermissions":  true,
 				"command":          "echo",
@@ -1508,7 +1519,7 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 			"workstations": []any{map[string]any{
 				"name":           "execute",
 				"worker":         "executor",
-				"kind":           "STANDARD",
+				"behavior":       "STANDARD",
 				"type":           "MODEL_WORKSTATION",
 				"promptFile":     "prompt.md",
 				"promptTemplate": "Finish {{ .WorkID }}",
@@ -1651,7 +1662,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 		t.Fatal("Worker.properties.modelProvider must be an object")
 	}
 	modelProviderDescription, _ := modelProviderProperty["description"].(string)
-	if !strings.Contains(modelProviderDescription, "claude") || !strings.Contains(modelProviderDescription, "codex") {
+	if !strings.Contains(modelProviderDescription, "CLAUDE") || !strings.Contains(modelProviderDescription, "CODEX") {
 		t.Fatalf("Worker.properties.modelProvider.description must document built-in values, got %q", modelProviderDescription)
 	}
 	executorProviderProperty, ok := workerProperties["executorProvider"].(map[string]any)
@@ -1659,7 +1670,7 @@ func TestOpenAPIContract_WorkerSchemaAndGeneratedModelRetireLegacyFields(t *test
 		t.Fatal("Worker.properties.executorProvider must be an object")
 	}
 	executorProviderDescription, _ := executorProviderProperty["description"].(string)
-	if !strings.Contains(executorProviderDescription, "script_wrap") {
+	if !strings.Contains(executorProviderDescription, "SCRIPT_WRAP") {
 		t.Fatalf("Worker.properties.executorProvider.description must document the public built-in value, got %q", executorProviderDescription)
 	}
 
@@ -1728,8 +1739,8 @@ func generatedFactoryLoopBreakerPayload(t *testing.T) map[string]any {
 			Type:    &logicalMoveType,
 			Inputs:  []generated.WorkstationIO{{WorkType: "story", State: "in_review"}},
 			Outputs: []generated.WorkstationIO{{WorkType: "story", State: "failed"}},
-			Guards: &[]generated.WorkstationGuard{{
-				Type:        generated.WorkstationGuardTypeVisitCount,
+			Guards: &[]generated.Guard{{
+				Type:        generated.GuardTypeVisitCount,
 				Workstation: &guardedWorkstation,
 				MaxVisits:   &maxVisits,
 			}},
@@ -1769,8 +1780,8 @@ func assertGeneratedFactoryLoopBreakerPayload(t *testing.T, payload map[string]a
 	if !ok {
 		t.Fatalf("generated.Factory workstation guard must be an object, got %T", guards[0])
 	}
-	if guard["type"] != string(generated.WorkstationGuardTypeVisitCount) {
-		t.Fatalf("generated.Factory workstation guard type = %#v, want %q", guard["type"], generated.WorkstationGuardTypeVisitCount)
+	if guard["type"] != string(generated.GuardTypeVisitCount) {
+		t.Fatalf("generated.Factory workstation guard type = %#v, want %q", guard["type"], generated.GuardTypeVisitCount)
 	}
 	if guard["workstation"] != "review-story" {
 		t.Fatalf("generated.Factory workstation guard workstation = %#v, want %q", guard["workstation"], "review-story")
@@ -1887,6 +1898,14 @@ func componentSchemas(t *testing.T, doc map[string]any) map[string]any {
 	return schemas
 }
 
+func openAPISchemaNameFromRef(ref any) (string, bool) {
+	refString, ok := ref.(string)
+	if !ok || !strings.HasPrefix(refString, openAPISchemaRefPrefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(refString, openAPISchemaRefPrefix), true
+}
+
 func schemaObject(t *testing.T, schemas map[string]any, schemaName string) map[string]any {
 	t.Helper()
 
@@ -1998,8 +2017,22 @@ func assertPropertyRef(t *testing.T, properties map[string]any, propertyName str
 	if !ok {
 		t.Fatalf("properties.%s is missing", propertyName)
 	}
-	if got, ok := property["$ref"].(string); !ok || got != wantRef {
-		t.Fatalf("properties.%s.$ref = %v, want %s", propertyName, property["$ref"], wantRef)
+	if got, ok := property["$ref"].(string); ok {
+		if got != wantRef {
+			t.Fatalf("properties.%s.$ref = %v, want %s", propertyName, got, wantRef)
+		}
+		return
+	}
+	allOf, ok := property["allOf"].([]any)
+	if !ok || len(allOf) == 0 {
+		t.Fatalf("properties.%s has neither $ref nor allOf", propertyName)
+	}
+	first, ok := allOf[0].(map[string]any)
+	if !ok {
+		t.Fatalf("properties.%s.allOf[0] must be an object", propertyName)
+	}
+	if got, ok := first["$ref"].(string); !ok || got != wantRef {
+		t.Fatalf("properties.%s ref = %v, want %s", propertyName, first["$ref"], wantRef)
 	}
 }
 

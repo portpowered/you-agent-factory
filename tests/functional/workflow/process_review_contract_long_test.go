@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestAdhocProcessReviewContract_ProcessContinueUsesContinuePath(t *testing.T) {

@@ -11,13 +11,13 @@ import (
 	"strings"
 	"syscall"
 
-	configcli "github.com/portpowered/agent-factory/pkg/cli/config"
-	defaultcmd "github.com/portpowered/agent-factory/pkg/cli/default"
-	docscli "github.com/portpowered/agent-factory/pkg/cli/docs"
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	runcli "github.com/portpowered/agent-factory/pkg/cli/run"
-	submitcli "github.com/portpowered/agent-factory/pkg/cli/submit"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
+	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -31,26 +31,28 @@ const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
 )
 
-// NewRootCommand creates the top-level Cobra command for the agent-factory CLI.
+const cliBinaryName = "infinite-you"
+
+// NewRootCommand creates the top-level Cobra command for the infinite-you CLI.
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "agent-factory",
+		Use:   cliBinaryName,
 		Short: "Run and manage CPN-based workflow factories",
 		Long: "Run and manage CPN-based workflow factories.\n\n" +
-			"Running agent-factory with no arguments starts the out-of-the-box flow: " +
+			"Running " + cliBinaryName + " with no arguments starts the out-of-the-box flow: " +
 			"it prepares ./factory when needed, keeps the runtime alive in continuous mode, " +
 			"watches factory/inputs/tasks/default for Markdown or JSON task files, and reports " +
 			"the local dashboard at the first available port, preferring http://localhost:7437/dashboard/ui.\n\n" +
-			"Packaged reference topics are also available through agent-factory docs <topic>. " +
+			"Packaged reference topics are also available through " + cliBinaryName + " docs <topic>. " +
 			"Supported docs topics: " + supportedDocsTopicsHelpText() + ".",
 		Example: "  # Start the default Codex-backed factory in the current project.\n" +
-			"  agent-factory\n\n" +
+			"  " + cliBinaryName + "\n\n" +
 			"  # In another terminal, submit a Markdown task to the default scaffold.\n" +
 			"  printf \"Fix the lint issues\\n\" > factory/inputs/tasks/default/fix-lint.md\n\n" +
 			"  # Print the packaged workstation reference page from the installed binary.\n" +
-			"  agent-factory docs workstation\n\n" +
+			"  " + cliBinaryName + " docs workstation\n\n" +
 			"  # Explicit batch-style runs are still available when you need them.\n" +
-			"  agent-factory run --dir factory",
+			"  " + cliBinaryName + " run --dir factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFactory(cmd, defaultcmd.OOTBRunConfig(), false, false)
 		},
@@ -184,11 +186,11 @@ func newInitCommand() *cobra.Command {
 			"Omitting --type keeps the current default scaffold behavior. " +
 			"For the default scaffold, --executor chooses which starter worker scaffold is generated.",
 		Example: "  # Create the default Codex-backed scaffold in ./factory.\n" +
-			"  agent-factory init\n\n" +
+			"  " + cliBinaryName + " init\n\n" +
 			"  # Create a Claude-backed default scaffold in a custom directory.\n" +
-			"  agent-factory init --dir my-factory --executor claude\n\n" +
+			"  " + cliBinaryName + " init --dir my-factory --executor claude\n\n" +
 			"  # Create the minimal Ralph PRD-to-execution scaffold.\n" +
-			"  agent-factory init --type ralph --dir ralph-factory",
+			"  " + cliBinaryName + " init --type ralph --dir ralph-factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return initFactory(cfg)
 		},
@@ -217,7 +219,7 @@ func newRunCommand() *cobra.Command {
 		Use:   "run",
 		Short: "Load workflow and run the factory engine",
 		Long: "Load workflow and run the factory engine.\n\n" +
-			"For the quickest local setup, run agent-factory with no arguments. " +
+			"For the quickest local setup, run " + cliBinaryName + " with no arguments. " +
 			"That default flow bootstraps ./factory, watches factory/inputs/tasks/default, " +
 			"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
 			"Default execution uses batch mode and exits after idle completion. " +
@@ -226,11 +228,11 @@ func newRunCommand() *cobra.Command {
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
 			"Runtime logs are structured JSON rolling files; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
 		Example: "  # Start the out-of-the-box continuous factory.\n" +
-			"  agent-factory\n\n" +
+			"  " + cliBinaryName + "\n\n" +
 			"  # Submit a Markdown task to the default scaffold.\n" +
 			"  printf \"Fix the lint issues\\n\" > factory/inputs/tasks/default/fix-lint.md\n\n" +
 			"  # Run an existing factory once in explicit batch mode.\n" +
-			"  agent-factory run --dir factory",
+			"  " + cliBinaryName + " run --dir factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
 			if cmd.Flags().Changed("port") {

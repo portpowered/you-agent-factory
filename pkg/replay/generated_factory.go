@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // GeneratedFactoryOption customizes the generated Factory payload captured for
@@ -87,9 +87,8 @@ func GeneratedFactoryFromRuntimeConfig(factoryDir string, factoryCfg *interfaces
 	if err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("inline runtime factory config: %w", err)
 	}
-	generated.FactoryDir = stringPtrIfNotEmpty(factoryDir)
+	generated.FactoryDirectory = stringPtrIfNotEmpty(factoryDir)
 	generated.SourceDirectory = stringPtrIfNotEmpty(options.sourceDirectory)
-	generated.WorkflowId = stringPtrIfNotEmpty(options.workflowID)
 	generated.Metadata = generatedStringMapPtr(generatedFactoryMetadata(
 		factoryWithRuntime,
 		workers,

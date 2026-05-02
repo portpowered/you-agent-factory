@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // ScaffoldType names a supported init scaffold.
@@ -65,6 +65,7 @@ func defaultScaffoldDefinition() scaffoldDefinition {
 		inputWorkType: DefaultFactoryInputType,
 		files: map[string]string{
 			interfaces.FactoryConfigFile: `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "tasks",
@@ -115,8 +116,8 @@ The file watcher monitors this directory tree and automatically watches new subd
 			factoryWorkersDirName + "/processor/" + factoryAgentsFileName: `---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 resources: ["agent-slot"]
 timeout: 1h
 skipPermissions: true
@@ -180,6 +181,7 @@ The planner writes ` + "`prd.md`" + `, ` + "`prd.json`" + `, and ` + "`progress.
 The executor keeps those artifacts aligned and returns ` + "`<COMPLETE>`" + ` only when every story passes.
 `,
 			interfaces.FactoryConfigFile: `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "request",
@@ -216,7 +218,7 @@ The executor keeps those artifacts aligned and returns ` + "`<COMPLETE>`" + ` on
     },
     {
       "name": "execute-story",
-      "kind": "repeater",
+      "behavior": "REPEATER",
       "worker": "executor",
       "workingDirectory": ".",
       "inputs": [{ "workType": "story", "state": "init" }],
@@ -231,7 +233,7 @@ The executor keeps those artifacts aligned and returns ` + "`<COMPLETE>`" + ` on
       "outputs": [{ "workType": "story", "state": "failed" }],
       "guards": [
         {
-          "type": "visit_count",
+          "type": "VISIT_COUNT",
           "workstation": "execute-story",
           "maxVisits": 8
         }
@@ -279,8 +281,8 @@ Keep the plan product-neutral unless the customer request names a specific produ
 			factoryWorkersDirName + "/planner/" + factoryAgentsFileName: `---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 stopToken: "<COMPLETE>"
 resources: ["agent-slot"]
 timeout: 1h
@@ -293,8 +295,8 @@ Produce clear, product-neutral planning artifacts that the executor can apply di
 			factoryWorkersDirName + "/executor/" + factoryAgentsFileName: `---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 stopToken: "<COMPLETE>"
 resources: ["agent-slot"]
 timeout: 1h
@@ -383,3 +385,4 @@ Story payload:
 		},
 	}
 }
+

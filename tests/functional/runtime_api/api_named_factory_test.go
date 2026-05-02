@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"testing"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +59,7 @@ func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	}
 }
 
-func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.NamedFactory {
+func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) factoryapi.Factory {
 	t.Helper()
 	resp, err := http.Post(serverURL+"/factory", "application/json", bytes.NewBufferString(functionalNamedFactoryBody(name, workType)))
 	if err != nil {
@@ -69,12 +69,12 @@ func createNamedFactoryFromBody(t *testing.T, serverURL, name, workType string) 
 		resp.Body.Close()
 		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
 	}
-	var created factoryapi.NamedFactory
+	var created factoryapi.Factory
 	decodeNamedFactoryJSONResponse(t, resp, &created, "decode create factory response")
 	return created
 }
 
-func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFactory {
+func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
 	resp, err := http.Get(serverURL + "/factory/~current")
 	if err != nil {
@@ -84,7 +84,7 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.NamedFact
 		resp.Body.Close()
 		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
 	}
-	var current factoryapi.NamedFactory
+	var current factoryapi.Factory
 	decodeNamedFactoryJSONResponse(t, resp, &current, "decode current factory response")
 	return current
 }
@@ -121,20 +121,20 @@ func assertNamedFactoryCurrentPointer(t *testing.T, rootDir, want string) {
 	}
 }
 
-func functionalNamedFactoryPayloadWithWorkType(t *testing.T, project, workType string) []byte {
+func functionalNamedFactoryPayloadWithWorkType(t *testing.T, name, workType string) []byte {
 	t.Helper()
-	return []byte(functionalNamedFactoryPayloadJSON(project, workType))
+	return []byte(functionalNamedFactoryPayloadJSON(name, workType))
 }
 
 func functionalNamedFactoryBody(name, workType string) string {
-	return `{"name":"` + name + `","factory":` + functionalNamedFactoryPayloadJSON(name, workType) + `}`
+	return functionalNamedFactoryPayloadJSON(name, workType)
 }
 
-func functionalNamedFactoryPayloadJSON(project, workType string) string {
+func functionalNamedFactoryPayloadJSON(name, workType string) string {
 	return `{
-		"project":"` + project + `",
+		"name":"` + name + `",
 		"workTypes":[{"name":"` + workType + `","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
 		"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"claude","executorProvider":"script_wrap","model":"claude-sonnet-4-20250514"}],
-		"workstations":[{"name":"plan-task","kind":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"done"}]}]
+		"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"done"}]}]
 	}`
 }

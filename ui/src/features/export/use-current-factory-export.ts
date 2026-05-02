@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import {
-  getCurrentNamedFactory,
+  getCurrentFactory,
+  type FactoryValue,
   NamedFactoryAPIError,
-  type NamedFactoryValue,
 } from "../../api/named-factory";
 
 const CURRENT_FACTORY_EXPORT_QUERY_KEY = ["agent-factory-current-export"] as const;
@@ -14,8 +14,7 @@ const CURRENT_FACTORY_LOAD_FAILED_MESSAGE =
   "The current factory definition could not be loaded from the current-factory API.";
 
 export interface CurrentFactoryExportSuccess {
-  factory: NamedFactoryValue["factory"];
-  namedFactory: NamedFactoryValue;
+  factoryDefinition: FactoryValue;
   ok: true;
 }
 
@@ -37,7 +36,7 @@ export interface UseCurrentFactoryExportResult {
 export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryExportResult {
   const query = useQuery({
     queryKey: CURRENT_FACTORY_EXPORT_QUERY_KEY,
-    queryFn: () => getCurrentNamedFactory(),
+    queryFn: () => getCurrentFactory(),
     enabled: isEnabled,
     gcTime: 0,
     refetchOnWindowFocus: false,
@@ -50,8 +49,7 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
     if (query.data && !isRefreshingCurrentFactory) {
       return {
         currentFactoryExport: {
-          factory: query.data.factory,
-          namedFactory: query.data,
+          factoryDefinition: query.data,
           ok: true,
         },
         isPreparing: false,

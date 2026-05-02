@@ -74,17 +74,20 @@ const (
 	FactoryStateRunning   FactoryState = "RUNNING"
 )
 
+// Defines values for GuardType.
+const (
+	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
+	GuardTypeAnyChildFailed      GuardType = "ANY_CHILD_FAILED"
+	GuardTypeInferenceThrottle   GuardType = "INFERENCE_THROTTLE_GUARD"
+	GuardTypeMatchesFields       GuardType = "MATCHES_FIELDS"
+	GuardTypeSameName            GuardType = "SAME_NAME"
+	GuardTypeVisitCount          GuardType = "VISIT_COUNT"
+)
+
 // Defines values for InferenceOutcome.
 const (
 	InferenceOutcomeFailed    InferenceOutcome = "FAILED"
 	InferenceOutcomeSucceeded InferenceOutcome = "SUCCEEDED"
-)
-
-// Defines values for InputGuardType.
-const (
-	InputGuardTypeAllChildrenComplete InputGuardType = "ALL_CHILDREN_COMPLETE"
-	InputGuardTypeAnyChildFailed      InputGuardType = "ANY_CHILD_FAILED"
-	InputGuardTypeSameName            InputGuardType = "SAME_NAME"
 )
 
 // Defines values for InputKind.
@@ -136,25 +139,19 @@ const (
 
 // Defines values for WorkerModelProvider.
 const (
-	WorkerModelProviderClaude WorkerModelProvider = "claude"
-	WorkerModelProviderCodex  WorkerModelProvider = "codex"
+	WorkerModelProviderClaude WorkerModelProvider = "CLAUDE"
+	WorkerModelProviderCodex  WorkerModelProvider = "CODEX"
 )
 
 // Defines values for WorkerProvider.
 const (
-	WorkerProviderScriptWrap WorkerProvider = "script_wrap"
+	WorkerProviderScriptWrap WorkerProvider = "SCRIPT_WRAP"
 )
 
 // Defines values for WorkerType.
 const (
 	WorkerTypeModelWorker  WorkerType = "MODEL_WORKER"
 	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
-)
-
-// Defines values for WorkstationGuardType.
-const (
-	WorkstationGuardTypeMatchesFields WorkstationGuardType = "MATCHES_FIELDS"
-	WorkstationGuardTypeVisitCount    WorkstationGuardType = "VISIT_COUNT"
 )
 
 // Defines values for WorkstationKind.
@@ -231,14 +228,16 @@ type DispatchRequestEventMetadata struct {
 
 // DispatchRequestEventPayload Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history.
 type DispatchRequestEventPayload struct {
-	// CurrentChainingTraceId Explicit chaining-trace identifier for the dispatch currently being represented.
+	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CurrentChainingTraceId *string                   `json:"currentChainingTraceId,omitempty"`
 	Inputs                 []DispatchConsumedWorkRef `json:"inputs"`
 
 	// Metadata Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here.
 	Metadata *DispatchRequestEventMetadata `json:"metadata,omitempty"`
 
-	// PreviousChainingTraceIds Explicit predecessor chaining traces consumed by this dispatch in deterministic order.
+	// PreviousChainingTraceIds Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PreviousChainingTraceIds *[]string   `json:"previousChainingTraceIds,omitempty"`
 	Resources                *[]Resource `json:"resources,omitempty"`
 	TransitionId             string      `json:"transitionId"`
@@ -248,7 +247,8 @@ type DispatchRequestEventPayload struct {
 type DispatchResponseEventPayload struct {
 	CompletionId *string `json:"completionId,omitempty"`
 
-	// CurrentChainingTraceId Explicit chaining-trace identifier for the dispatch currently being represented.
+	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CurrentChainingTraceId *string      `json:"currentChainingTraceId,omitempty"`
 	DurationMillis         *int64       `json:"durationMillis,omitempty"`
 	Error                  *string      `json:"error,omitempty"`
@@ -264,7 +264,8 @@ type DispatchResponseEventPayload struct {
 	OutputResources *[]Resource `json:"outputResources,omitempty"`
 	OutputWork      *[]Work     `json:"outputWork,omitempty"`
 
-	// PreviousChainingTraceIds Explicit predecessor chaining traces consumed by this dispatch in deterministic order.
+	// PreviousChainingTraceIds Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PreviousChainingTraceIds *[]string                `json:"previousChainingTraceIds,omitempty"`
 	ProviderFailure          *ProviderFailureMetadata `json:"providerFailure,omitempty"`
 	TransitionId             string                   `json:"transitionId"`
@@ -288,18 +289,21 @@ type ErrorResponseCode string
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
-	// FactoryDir Directory that contained the factory.json used for this serialized runtime config.
-	FactoryDir *string `json:"factoryDir,omitempty"`
+	// FactoryDirectory Directory that contained the factory.json used for this serialized runtime config.
+	FactoryDirectory *string `json:"factoryDirectory,omitempty"`
+
+	// Guards Root-level guards that apply across the factory instead of one specific workstation or input.
+	Guards *[]FactoryGuard `json:"guards,omitempty"`
+
+	// Id Factory identifier used as the factory-level template context fallback.
+	Id *string `json:"id,omitempty"`
 
 	// InputTypes Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 	Metadata   *StringMap   `json:"metadata,omitempty"`
 
-	// Project Project identifier used as the factory-level template context fallback.
-	Project *string `json:"project,omitempty"`
-
-	// ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
-	ResourceManifest *ResourceManifest `json:"resourceManifest,omitempty"`
+	// Name Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+	Name FactoryName `json:"name"`
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
@@ -307,14 +311,14 @@ type Factory struct {
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
 
+	// SupportingFiles Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
+	SupportingFiles *ResourceManifest `json:"supportingFiles,omitempty"`
+
 	// WorkTypes Customer-authored work item categories and the lifecycle states each one can occupy.
 	WorkTypes *[]WorkType `json:"workTypes,omitempty"`
 
 	// Workers Reusable worker definitions that workstations reference by name when dispatching work.
 	Workers *[]Worker `json:"workers,omitempty"`
-
-	// WorkflowId Optional workflow identity associated with this serialized runtime config.
-	WorkflowId *string `json:"workflowId,omitempty"`
 
 	// Workstations Processing steps that consume work, invoke workers, and emit the next work states.
 	Workstations *[]Workstation `json:"workstations,omitempty"`
@@ -345,11 +349,17 @@ type FactoryEventSchemaVersion string
 
 // FactoryEventContext defines model for FactoryEventContext.
 type FactoryEventContext struct {
+	// CurrentChainingTraceId Canonical chaining-trace identifier for the dispatch currently represented by this event context.
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
 	// DispatchId Canonical dispatch identity for dispatch and inference events; payloads must not restate it.
 	DispatchId *string `json:"dispatchId,omitempty"`
 
 	// EventTime Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.
 	EventTime time.Time `json:"eventTime"`
+
+	// PreviousChainingTraceIds Canonical predecessor chaining traces consumed by the dispatch in deterministic order.
+	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
 
 	// RequestId Canonical request identity for all request-scoped events; payload metadata must not restate it.
 	RequestId *string `json:"requestId,omitempty"`
@@ -373,7 +383,22 @@ type FactoryEventContext struct {
 // FactoryEventType Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
 type FactoryEventType string
 
-// FactoryName Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
+// FactoryGuard Factory-level guard attached at the root factory definition.
+type FactoryGuard struct {
+	// Model Optional model name to scope throttling more narrowly than the provider-level window.
+	Model *string `json:"model,omitempty"`
+
+	// ModelProvider Provider whose inference-throttle history controls this factory-level guard.
+	ModelProvider WorkerModelProvider `json:"modelProvider"`
+
+	// RefreshWindow Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again.
+	RefreshWindow string `json:"refreshWindow"`
+
+	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
+	Type GuardType `json:"type"`
+}
+
+// FactoryName Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
 // FactoryState Lifecycle state of the running factory.
@@ -522,6 +547,39 @@ type FactoryWorldWorkstationRequestView struct {
 	WorkstationName *string                                     `json:"workstationName,omitempty"`
 }
 
+// Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
+type Guard struct {
+	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
+
+	// MatchInput For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation.
+	MatchInput *string `json:"matchInput,omitempty"`
+
+	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
+	ParentInput *string `json:"parentInput,omitempty"`
+
+	// SpawnedBy For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+	SpawnedBy *string `json:"spawnedBy,omitempty"`
+
+	// Type Guard condition to evaluate for this workstation-level or input-level attachment.
+	Type GuardType `json:"type"`
+
+	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
+	Workstation *string `json:"workstation,omitempty"`
+}
+
+// GuardMatchConfig defines model for GuardMatchConfig.
+type GuardMatchConfig struct {
+	// InputKey Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.
+	InputKey string `json:"inputKey"`
+}
+
+// GuardType Guard condition attached to a workstation or one of its specific inputs.
+type GuardType string
+
 // InferenceOutcome Result category returned by a provider inference attempt.
 type InferenceOutcome string
 
@@ -577,26 +635,7 @@ type InitialStructureRequestEventPayload struct {
 	Factory         Factory    `json:"factory"`
 	Metadata        *StringMap `json:"metadata,omitempty"`
 	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
-	WorkflowId      *string    `json:"workflowId,omitempty"`
 }
-
-// InputGuard Guard attached to one workstation input for parent-aware fan-in or same-name matching against another input.
-type InputGuard struct {
-	// MatchInput Peer input workType name from another input in the same workstation for same-name matching.
-	MatchInput *string `json:"matchInput,omitempty"`
-
-	// ParentInput Parent workType name from another input in the same workstation.
-	ParentInput *string `json:"parentInput,omitempty"`
-
-	// SpawnedBy Workstation that spawns the children for dynamic fanout count tracking.
-	SpawnedBy *string `json:"spawnedBy,omitempty"`
-
-	// Type Guard condition attached to a specific workstation input.
-	Type InputGuardType `json:"type"`
-}
-
-// InputGuardType Guard condition attached to a specific workstation input.
-type InputGuardType string
 
 // InputKind Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
 type InputKind string
@@ -617,15 +656,6 @@ type IntegerMap map[string]int
 type ListWorkResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
 	Results           []TokenResponse    `json:"results"`
-}
-
-// NamedFactory Canonical named-factory contract used for factory activation requests and current-factory readback.
-type NamedFactory struct {
-	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	Factory Factory `json:"factory"`
-
-	// Name Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
-	Name FactoryName `json:"name"`
 }
 
 // PaginationContext defines model for PaginationContext.
@@ -1064,6 +1094,9 @@ type WorkerType string
 
 // Workstation A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
 type Workstation struct {
+	// Behavior Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
+	Behavior *WorkstationKind `json:"behavior,omitempty"`
+
 	// Body Inline workstation instructions or script body when authored directly in factory config.
 	Body *string `json:"body,omitempty"`
 
@@ -1074,17 +1107,14 @@ type Workstation struct {
 	Cron *WorkstationCron `json:"cron,omitempty"`
 	Env  *StringMap       `json:"env,omitempty"`
 
-	// Guards Guarded loop breakers should use `visit_count` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
-	Guards *[]WorkstationGuard `json:"guards,omitempty"`
+	// Guards Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
+	Guards *[]Guard `json:"guards,omitempty"`
 
 	// Id Optional stable identifier for this workstation in serialized runtime and replay payloads.
 	Id *string `json:"id,omitempty"`
 
 	// Inputs Work states this workstation can consume before it dispatches.
 	Inputs []WorkstationIO `json:"inputs"`
-
-	// Kind Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied.
-	Kind *WorkstationKind `json:"kind,omitempty"`
 
 	// Limits Retry and execution ceilings applied to one workstation definition.
 	Limits *WorkstationLimits `json:"limits,omitempty"`
@@ -1147,33 +1177,10 @@ type WorkstationCron struct {
 	TriggerAtStart *bool `json:"triggerAtStart,omitempty"`
 }
 
-// WorkstationGuard Guard attached to a workstation as a whole before it is allowed to consume work.
-type WorkstationGuard struct {
-	MatchConfig *WorkstationGuardMatchConfig `json:"matchConfig,omitempty"`
-
-	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
-	MaxVisits *int `json:"maxVisits,omitempty"`
-
-	// Type Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
-	Type WorkstationGuardType `json:"type"`
-
-	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
-	Workstation *string `json:"workstation,omitempty"`
-}
-
-// WorkstationGuardMatchConfig defines model for WorkstationGuardMatchConfig.
-type WorkstationGuardMatchConfig struct {
-	// InputKey Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`.
-	InputKey string `json:"inputKey"`
-}
-
-// WorkstationGuardType Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
-type WorkstationGuardType string
-
 // WorkstationIO One authored work-state reference consumed or emitted by a workstation.
 type WorkstationIO struct {
 	// Guards Per-input guards that must pass before this specific input can be used.
-	Guards *[]InputGuard `json:"guards,omitempty"`
+	Guards *[]Guard `json:"guards,omitempty"`
 
 	// State Name of the work state consumed or emitted for the referenced work type.
 	State string `json:"state"`
@@ -1234,7 +1241,7 @@ type ListWorkParams struct {
 }
 
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
-type CreateFactoryJSONRequestBody = NamedFactory
+type CreateFactoryJSONRequestBody = Factory
 
 // SubmitWorkJSONRequestBody defines body for SubmitWork for application/json ContentType.
 type SubmitWorkJSONRequestBody = SubmitWorkRequest
@@ -1569,10 +1576,10 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
-	// Create named factory
+	// Create factory
 	// (POST /factory)
 	CreateFactory(w http.ResponseWriter, r *http.Request)
-	// Get current named factory
+	// Get current factory
 	// (GET /factory/~current)
 	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
 	// Get runtime status

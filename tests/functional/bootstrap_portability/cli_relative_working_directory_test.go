@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/pkg/workers"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // portos:func-length-exception owner=agent-factory reason=branch-carried functional fixture review=2026-07-22 removal=split setup and command assertions on next relative-working-directory test change
@@ -89,6 +89,7 @@ func writeRelativeWorkingDirectoryFactoryConfig(t *testing.T, factoryDir string)
 	t.Helper()
 
 	config := `{
+  "name": "factory",
   "workTypes": [
     {
       "name": "task",
@@ -105,6 +106,7 @@ func writeRelativeWorkingDirectoryFactoryConfig(t *testing.T, factoryDir string)
   "workstations": [
     {
       "name": "process",
+      "behavior": "STANDARD",
       "worker": "worker-a",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],

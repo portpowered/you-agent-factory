@@ -3,7 +3,7 @@ package interfaces
 import (
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 // ReplayArtifact is the versioned, self-contained recording used to replay a

@@ -118,8 +118,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create named factory
-         * @description Stores one named factory definition and activates it as the current factory when the runtime is idle.
+         * Create factory
+         * @description Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
          */
         post: operations["createFactory"];
         delete?: never;
@@ -136,8 +136,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get current named factory
-         * @description Returns the active named factory from the durable current-factory pointer and canonical flattened factory payload.
+         * Get current factory
+         * @description Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
          */
         get: operations["getCurrentFactory"];
         put?: never;
@@ -251,66 +251,10 @@ export interface components {
             [key: string]: number;
         };
         /**
-         * @description Customer-facing identifier for one stored named factory. Semantic validation failures return `INVALID_FACTORY_NAME`.
+         * @description Customer-facing identifier for one stored named factory. `GET /factory/~current` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
          * @example customer-support-triage
          */
         FactoryName: string;
-        /**
-         * @description Canonical named-factory contract used for factory activation requests and current-factory readback.
-         * @example {
-         *       "name": "customer-support-triage",
-         *       "factory": {
-         *         "workTypes": [
-         *           {
-         *             "name": "task",
-         *             "states": [
-         *               {
-         *                 "name": "init",
-         *                 "type": "INITIAL"
-         *               },
-         *               {
-         *                 "name": "done",
-         *                 "type": "TERMINAL"
-         *               }
-         *             ]
-         *           }
-         *         ],
-         *         "workers": [
-         *           {
-         *             "name": "planner",
-         *             "type": "MODEL_WORKER",
-         *             "modelProvider": "claude",
-         *             "executorProvider": "script_wrap",
-         *             "model": "claude-sonnet-4-20250514"
-         *           }
-         *         ],
-         *         "workstations": [
-         *           {
-         *             "name": "plan-task",
-         *             "kind": "STANDARD",
-         *             "type": "MODEL_WORKSTATION",
-         *             "worker": "planner",
-         *             "inputs": [
-         *               {
-         *                 "workType": "task",
-         *                 "state": "init"
-         *               }
-         *             ],
-         *             "outputs": [
-         *               {
-         *                 "workType": "task",
-         *                 "state": "done"
-         *               }
-         *             ]
-         *           }
-         *         ]
-         *       }
-         *     }
-         */
-        NamedFactory: {
-            name: components["schemas"]["FactoryName"];
-            factory: components["schemas"]["Factory"];
-        };
         /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
         FactoryWorldWorkstationRequestProjectionSlice: {
             workstationRequestsByDispatchId?: {
@@ -459,6 +403,10 @@ export interface components {
             workIds?: string[];
             /** @description Canonical dispatch identity for dispatch and inference events; payloads must not restate it. */
             dispatchId?: string;
+            /** @description Canonical chaining-trace identifier for the dispatch currently represented by this event context. */
+            currentChainingTraceId?: string;
+            /** @description Canonical predecessor chaining traces consumed by the dispatch in deterministic order. */
+            previousChainingTraceIds?: string[];
             /** @description Human-readable source such as api, filewatcher, replay, cron, or worker. */
             source?: string;
         };
@@ -482,7 +430,6 @@ export interface components {
         /** @description Runtime topology snapshot before work moves. */
         InitialStructureRequestEventPayload: {
             factory: components["schemas"]["Factory"];
-            workflowId?: string;
             sourceDirectory?: string;
             metadata?: components["schemas"]["StringMap"];
         };
@@ -500,9 +447,15 @@ export interface components {
         /** @description Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history. */
         DispatchRequestEventPayload: {
             transitionId: string;
-            /** @description Explicit chaining-trace identifier for the dispatch currently being represented. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+             */
             currentChainingTraceId?: string;
-            /** @description Explicit predecessor chaining traces consumed by this dispatch in deterministic order. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+             */
             previousChainingTraceIds?: string[];
             inputs: components["schemas"]["DispatchConsumedWorkRef"][];
             resources?: components["schemas"]["Resource"][];
@@ -581,9 +534,15 @@ export interface components {
         DispatchResponseEventPayload: {
             completionId?: string;
             transitionId: string;
-            /** @description Explicit chaining-trace identifier for the dispatch currently being represented. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+             */
             currentChainingTraceId?: string;
-            /** @description Explicit predecessor chaining traces consumed by this dispatch in deterministic order. */
+            /**
+             * @deprecated
+             * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+             */
             previousChainingTraceIds?: string[];
             outcome: components["schemas"]["WorkOutcome"];
             output?: string;
@@ -706,10 +665,19 @@ export interface components {
         /**
          * @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
          * @example {
+         *       "name": "customer-support-triage",
          *       "inputTypes": [
          *         {
          *           "name": "brief",
          *           "type": "DEFAULT"
+         *         }
+         *       ],
+         *       "guards": [
+         *         {
+         *           "type": "INFERENCE_THROTTLE_GUARD",
+         *           "modelProvider": "CLAUDE",
+         *           "model": "claude-sonnet-4-20250514",
+         *           "refreshWindow": "15m"
          *         }
          *       ],
          *       "workTypes": [
@@ -735,7 +703,7 @@ export interface components {
          *           ]
          *         }
          *       ],
-         *       "resourceManifest": {
+         *       "supportingFiles": {
          *         "requiredTools": [
          *           {
          *             "name": "python",
@@ -777,22 +745,22 @@ export interface components {
          *         {
          *           "name": "reviewer",
          *           "type": "MODEL_WORKER",
-         *           "executorProvider": "script_wrap",
-         *           "modelProvider": "claude",
+         *           "executorProvider": "SCRIPT_WRAP",
+         *           "modelProvider": "CLAUDE",
          *           "model": "claude-sonnet-4-20250514"
          *         },
          *         {
          *           "name": "review-loop-breaker",
          *           "type": "MODEL_WORKER",
-         *           "executorProvider": "script_wrap",
-         *           "modelProvider": "claude",
+         *           "executorProvider": "SCRIPT_WRAP",
+         *           "modelProvider": "CLAUDE",
          *           "model": "claude-sonnet-4-20250514"
          *         }
          *       ],
          *       "workstations": [
          *         {
          *           "name": "review-story",
-         *           "kind": "REPEATER",
+         *           "behavior": "REPEATER",
          *           "type": "MODEL_WORKSTATION",
          *           "worker": "reviewer",
          *           "inputs": [
@@ -844,28 +812,40 @@ export interface components {
          *     }
          */
         Factory: {
-            /** @description Project identifier used as the factory-level template context fallback. */
-            project?: string;
+            name: components["schemas"]["FactoryName"];
+            /** @description Factory identifier used as the factory-level template context fallback. */
+            id?: string;
             /** @description Directory that contained the factory.json used for this serialized runtime config. */
-            factoryDir?: string;
+            factoryDirectory?: string;
             /** @description Original source directory for record/replay and drift diagnostics. */
             sourceDirectory?: string;
-            /** @description Optional workflow identity associated with this serialized runtime config. */
-            workflowId?: string;
             /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
             metadata?: components["schemas"]["StringMap"];
             /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
             inputTypes?: components["schemas"]["InputType"][];
+            /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
+            guards?: components["schemas"]["FactoryGuard"][];
             /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
             workTypes?: components["schemas"]["WorkType"][];
             /** @description Shared capacity pools that workers or workstations can consume while work is executing. */
             resources?: components["schemas"]["Resource"][];
             /** @description Optional portability manifest for validation-only external tools and portable bundled files. This contract is distinct from runtime-capacity resources. */
-            resourceManifest?: components["schemas"]["ResourceManifest"];
+            supportingFiles?: components["schemas"]["ResourceManifest"];
             /** @description Reusable worker definitions that workstations reference by name when dispatching work. */
             workers?: components["schemas"]["Worker"][];
             /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
             workstations?: components["schemas"]["Workstation"][];
+        };
+        /** @description Factory-level guard attached at the root factory definition. */
+        FactoryGuard: {
+            /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
+            type: components["schemas"]["GuardType"];
+            /** @description Provider whose inference-throttle history controls this factory-level guard. */
+            modelProvider: components["schemas"]["WorkerModelProvider"];
+            /** @description Optional model name to scope throttling more narrowly than the provider-level window. */
+            model?: string;
+            /** @description Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again. */
+            refreshWindow: string;
         };
         /** @description Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary. */
         ResourceManifest: {
@@ -951,9 +931,9 @@ export interface components {
             type?: components["schemas"]["WorkerType"];
             /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
             model?: string;
-            /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current built-in values are `claude` and `codex`, which match the executable provider command IDs. */
+            /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
             modelProvider?: components["schemas"]["WorkerModelProvider"];
-            /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `script_wrap`. */
+            /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`. */
             executorProvider?: components["schemas"]["WorkerProvider"];
             /** @description Command to execute when this worker runs through a command or script provider. */
             command?: string;
@@ -979,12 +959,12 @@ export interface components {
          * @description Canonical model-provider identifiers supported by model workers in factory config.
          * @enum {string}
          */
-        WorkerModelProvider: "claude" | "codex";
+        WorkerModelProvider: "CLAUDE" | "CODEX";
         /**
          * @description Concrete worker-provider wrappers supported by the public factory-config contract.
          * @enum {string}
          */
-        WorkerProvider: "script_wrap";
+        WorkerProvider: "SCRIPT_WRAP";
         /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
         Workstation: {
             /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */
@@ -992,7 +972,7 @@ export interface components {
             /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
             name: string;
             /** @description Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution. */
-            kind?: components["schemas"]["WorkstationKind"];
+            behavior?: components["schemas"]["WorkstationKind"];
             /** @description Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type. */
             type?: components["schemas"]["WorkstationType"];
             /** @description Name of a worker declared in the workers list. */
@@ -1007,7 +987,7 @@ export interface components {
             body?: string;
             /** @description Inline Go template rendered into the prompt for model-oriented workstation execution. */
             promptTemplate?: string;
-            /** @description Cron trigger configuration for workstations whose kind is cron. */
+            /** @description Cron trigger configuration for workstations whose behavior is CRON. */
             cron?: components["schemas"]["WorkstationCron"];
             /** @description Work states this workstation can consume before it dispatches. */
             inputs: components["schemas"]["WorkstationIO"][];
@@ -1023,8 +1003,8 @@ export interface components {
             resources?: components["schemas"]["ResourceRequirement"][];
             /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
             copyReferencedScripts?: boolean;
-            /** @description Guarded loop breakers should use `visit_count` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules. */
-            guards?: components["schemas"]["WorkstationGuard"][];
+            /** @description Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules. */
+            guards?: components["schemas"]["Guard"][];
             /** @description Stop words authored on the topology entry for model-oriented dispatches. */
             stopWords?: string[];
             /** @description Go template resolved from token tags at dispatch time. */
@@ -1067,22 +1047,28 @@ export interface components {
             expiryWindow?: string;
         };
         /**
-         * @description Guard condition that must pass before a workstation input can be used. Parent-aware fan-in guards are configured on WorkstationIO.guards.
+         * @description Guard condition attached to a workstation or one of its specific inputs.
          * @enum {string}
          */
-        WorkstationGuardType: "VISIT_COUNT" | "MATCHES_FIELDS";
-        /** @description Guard attached to a workstation as a whole before it is allowed to consume work. */
-        WorkstationGuard: {
-            /** @description Guard condition to evaluate before this workstation is allowed to run. */
-            type: components["schemas"]["WorkstationGuardType"];
+        GuardType: "VISIT_COUNT" | "MATCHES_FIELDS" | "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME" | "INFERENCE_THROTTLE_GUARD";
+        /** @description Shared guard attached either to a workstation as a whole or to one specific workstation input. */
+        Guard: {
+            /** @description Guard condition to evaluate for this workstation-level or input-level attachment. */
+            type: components["schemas"]["GuardType"];
             /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
             workstation?: string;
             /** @description For `VISIT_COUNT` guards, the visit threshold. */
             maxVisits?: number;
             /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
-            matchConfig?: components["schemas"]["WorkstationGuardMatchConfig"];
+            matchConfig?: components["schemas"]["GuardMatchConfig"];
+            /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
+            parentInput?: string;
+            /** @description For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation. */
+            matchInput?: string;
+            /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
+            spawnedBy?: string;
         };
-        WorkstationGuardMatchConfig: {
+        GuardMatchConfig: {
             /** @description Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`. */
             inputKey: string;
         };
@@ -1093,24 +1079,8 @@ export interface components {
             /** @description Name of the work state consumed or emitted for the referenced work type. */
             state: string;
             /** @description Per-input guards that must pass before this specific input can be used. */
-            guards?: components["schemas"]["InputGuard"][];
+            guards?: components["schemas"]["Guard"][];
         };
-        /** @description Guard attached to one workstation input for parent-aware fan-in or same-name matching against another input. */
-        InputGuard: {
-            /** @description Input guard condition to evaluate for this specific workstation input. */
-            type: components["schemas"]["InputGuardType"];
-            /** @description Parent workType name from another input in the same workstation. */
-            parentInput?: string;
-            /** @description Peer input workType name from another input in the same workstation for same-name matching. */
-            matchInput?: string;
-            /** @description Workstation that spawns the children for dynamic fanout count tracking. */
-            spawnedBy?: string;
-        };
-        /**
-         * @description Guard condition attached to a specific workstation input.
-         * @enum {string}
-         */
-        InputGuardType: "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME";
         Transition: {
             /** @description Source workstation name. */
             from: string;
@@ -1396,17 +1366,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedFactory"];
+                "application/json": components["schemas"]["Factory"];
             };
         };
         responses: {
-            /** @description Named factory was stored and activated. */
+            /** @description Factory was stored and activated. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NamedFactory"];
+                    "application/json": components["schemas"]["Factory"];
                 };
             };
             400: components["responses"]["CreateFactoryBadRequest"];
@@ -1423,13 +1393,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current active named factory. */
+            /** @description Current active factory or the active default root runtime when no current-factory pointer exists yet. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NamedFactory"];
+                    "application/json": components["schemas"]["Factory"];
                 };
             };
             404: components["responses"]["CurrentFactoryNotFound"];

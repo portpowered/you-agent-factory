@@ -1,6 +1,6 @@
 package projections
 
-import "github.com/portpowered/agent-factory/pkg/interfaces"
+import "github.com/portpowered/infinite-you/pkg/interfaces"
 
 func workItemRefsForIDs(
 	ids []string,

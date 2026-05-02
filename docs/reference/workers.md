@@ -26,8 +26,8 @@ runtime backend details for that name.
 - Workstations define topology, routing, prompt templates, and per-step
   execution context.
 - The current worker types are `MODEL_WORKER` and `SCRIPT_WORKER`.
-- Current built-in `modelProvider` values are `claude` and `codex`.
-- The current public `executorProvider` value is `script_wrap`.
+- Current built-in `modelProvider` values are `CLAUDE` and `CODEX`.
+- The current public `executorProvider` value is `SCRIPT_WRAP`.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
 
@@ -68,8 +68,8 @@ The markdown body is the system prompt.
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 1h
 skipPermissions: true
 ---
@@ -115,9 +115,9 @@ Runs the Go test suite.
 Keep `modelProvider` and `executorProvider` separate:
 
 - `modelProvider` names the model backend. Current built-in values are
-  `claude` and `codex`.
+  `CLAUDE` and `CODEX`.
 - `executorProvider` names the execution wrapper around that worker. The
-  current public built-in value is `script_wrap`.
+  current public built-in value is `SCRIPT_WRAP`.
 
 For a normal model worker, both fields can appear on the same worker because
 they answer different questions: which model backend to use, and which worker

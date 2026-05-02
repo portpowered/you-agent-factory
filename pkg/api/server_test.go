@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/apisurface"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
 
@@ -85,6 +85,30 @@ func assertJSONError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	if resp.Message != wantMessage {
 		t.Fatalf("error message = %q, want %q", resp.Message, wantMessage)
 	}
+}
+
+func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*interfaces.Token {
+	tokens := make(map[string]*interfaces.Token, count)
+	for i := 1; i <= count; i++ {
+		suffix := string(rune('0' + i))
+		id := "tok-" + prefix + "-" + suffix
+		tokens[id] = &interfaces.Token{
+			ID:      id,
+			PlaceID: prefix + ":init",
+			Color: interfaces.TokenColor{
+				WorkID:     "work-" + prefix + "-" + suffix,
+				WorkTypeID: prefix,
+			},
+			CreatedAt: now,
+			EnteredAt: now,
+			History: interfaces.TokenHistory{
+				TotalVisits:         make(map[string]int),
+				ConsecutiveFailures: make(map[string]int),
+				PlaceVisits:         make(map[string]int),
+			},
+		}
+	}
+	return tokens
 }
 
 func TestSubmitWork(t *testing.T) {
@@ -276,7 +300,7 @@ func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 	}
 }
 
-func TestCreateFactory_ReturnsCreatedNamedFactoryShape(t *testing.T) {
+func TestCreateFactory_ReturnsCreatedFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)
 
@@ -292,31 +316,29 @@ func TestCreateFactory_ReturnsCreatedNamedFactoryShape(t *testing.T) {
 		t.Fatalf("created factories = %d, want 1", len(mf.CreatedFactories))
 	}
 
-	var created factoryapi.NamedFactory
+	var created factoryapi.Factory
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create factory response: %v", err)
 	}
 	if created.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
-	if created.Factory.WorkTypes == nil || len(*created.Factory.WorkTypes) != 1 || (*created.Factory.WorkTypes)[0].Name != "beta-task" {
-		t.Fatalf("created factory work types = %#v, want beta-task", created.Factory.WorkTypes)
+	if created.WorkTypes == nil || len(*created.WorkTypes) != 1 || (*created.WorkTypes)[0].Name != "beta-task" {
+		t.Fatalf("created factory work types = %#v, want beta-task", created.WorkTypes)
 	}
 }
 
-func TestGetCurrentFactory_ReturnsNamedFactoryShape(t *testing.T) {
+func TestGetCurrentFactory_ReturnsFactoryShape(t *testing.T) {
 	mf := &testutil.MockFactory{
-		CurrentNamedFactory: &factoryapi.NamedFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
 			Name: factoryapi.FactoryName("beta"),
-			Factory: factoryapi.Factory{
-				WorkTypes: &[]factoryapi.WorkType{{
-					Name: "beta-task",
-					States: []factoryapi.WorkState{
-						{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
-						{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
-					},
-				}},
-			},
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "beta-task",
+				States: []factoryapi.WorkState{
+					{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+				},
+			}},
 		},
 	}
 	srv := newTestServer(mf)
@@ -329,15 +351,44 @@ func TestGetCurrentFactory_ReturnsNamedFactoryShape(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var current factoryapi.NamedFactory
+	var current factoryapi.Factory
 	if err := json.NewDecoder(rec.Body).Decode(&current); err != nil {
 		t.Fatalf("decode current factory response: %v", err)
 	}
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
-	if current.Factory.WorkTypes == nil || len(*current.Factory.WorkTypes) != 1 || (*current.Factory.WorkTypes)[0].Name != "beta-task" {
-		t.Fatalf("current factory work types = %#v, want beta-task", current.Factory.WorkTypes)
+	if current.WorkTypes == nil || len(*current.WorkTypes) != 1 || (*current.WorkTypes)[0].Name != "beta-task" {
+		t.Fatalf("current factory work types = %#v, want beta-task", current.WorkTypes)
+	}
+}
+
+func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
+	mf := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: apisurface.DefaultCurrentFactoryName,
+			Id:   stringPointerForAPITest("root-runtime"),
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var current factoryapi.Factory
+	if err := json.NewDecoder(rec.Body).Decode(&current); err != nil {
+		t.Fatalf("decode current factory response: %v", err)
+	}
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if current.Id == nil || *current.Id != "root-runtime" {
+		t.Fatalf("current factory id = %#v, want root-runtime", current.Id)
 	}
 }
 
@@ -362,7 +413,18 @@ func TestCreateFactory_RejectsInvalidFactoryName(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators.")
+	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.")
+}
+
+func TestCreateFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(validNamedFactoryBody(string(apisurface.DefaultCurrentFactoryName), "task")))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "INVALID_FACTORY_NAME", "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.")
 }
 
 func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {
@@ -370,7 +432,7 @@ func TestCreateFactory_RejectsInvalidFactoryPayload(t *testing.T) {
 		CreateNamedFactoryErr: apisurface.ErrInvalidNamedFactory,
 	})
 
-	body := `{"name":"beta","factory":{"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"claude","executorProvider":"script_wrap","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","kind":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}}`
+	body := `{"name":"beta","workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514"}],"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"missing-worker","inputs":[{"workType":"beta-task","state":"init"}],"outputs":[{"workType":"beta-task","state":"done"}]}]}`
 	req := httptest.NewRequest(http.MethodPost, "/factory", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1432,7 +1494,7 @@ func TestGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 			Tick:      0,
 			EventTime: eventTime,
 		},
-			factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{}}),
+			factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
 		testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/request-1", factoryapi.FactoryEventContext{
 			Tick:      1,
 			EventTime: time.Date(2026, 4, 8, 12, 0, 1, 0, time.UTC),
@@ -1521,7 +1583,7 @@ func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 			History: []factoryapi.FactoryEvent{
 				testFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0",
 					factoryapi.FactoryEventContext{Tick: 0, EventTime: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)},
-					factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{}}),
+					factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
 			},
 			Events: liveEvents,
 		},
@@ -1574,25 +1636,7 @@ func TestDashboardSnapshotRoutes_RemovedFromRouter(t *testing.T) {
 
 func TestListWork(t *testing.T) {
 	now := time.Now()
-	tokens := make(map[string]*interfaces.Token)
-	for i := 1; i <= 3; i++ {
-		id := "tok-prd-" + string(rune('0'+i))
-		tokens[id] = &interfaces.Token{
-			ID:      id,
-			PlaceID: "prd:init",
-			Color: interfaces.TokenColor{
-				WorkID:     "work-prd-" + string(rune('0'+i)),
-				WorkTypeID: "prd",
-			},
-			CreatedAt: now,
-			EnteredAt: now,
-			History: interfaces.TokenHistory{
-				TotalVisits:         make(map[string]int),
-				ConsecutiveFailures: make(map[string]int),
-				PlaceVisits:         make(map[string]int),
-			},
-		}
-	}
+	tokens := makeListWorkTokens("prd", 3, now)
 
 	mf := &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{Tokens: tokens},
@@ -1608,7 +1652,9 @@ func TestListWork(t *testing.T) {
 	}
 
 	var resp factoryapi.ListWorkResponse
-	json.NewDecoder(rec.Body).Decode(&resp)
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 	if len(resp.Results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(resp.Results))
 	}
@@ -1622,25 +1668,7 @@ func TestListWork(t *testing.T) {
 
 func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 	now := time.Now()
-	tokens := make(map[string]*interfaces.Token)
-	for i := 1; i <= 3; i++ {
-		id := "tok-legacy-" + string(rune('0'+i))
-		tokens[id] = &interfaces.Token{
-			ID:      id,
-			PlaceID: "legacy:init",
-			Color: interfaces.TokenColor{
-				WorkID:     "work-legacy-" + string(rune('0'+i)),
-				WorkTypeID: "legacy",
-			},
-			CreatedAt: now,
-			EnteredAt: now,
-			History: interfaces.TokenHistory{
-				TotalVisits:         make(map[string]int),
-				ConsecutiveFailures: make(map[string]int),
-				PlaceVisits:         make(map[string]int),
-			},
-		}
-	}
+	tokens := makeListWorkTokens("legacy", 3, now)
 
 	srv := newTestServer(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{Tokens: tokens},
@@ -1650,6 +1678,8 @@ func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 		name string
 		path string
 	}{
+		{name: "absent", path: "/work"},
+		{name: "empty", path: "/work?maxResults="},
 		{name: "invalid", path: "/work?maxResults=abc"},
 		{name: "non_positive", path: "/work?maxResults=0"},
 	} {
@@ -1673,6 +1703,62 @@ func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 				t.Fatalf("expected no pagination context when maxResults defaults to %d, got %#v", defaultMaxResults, resp.PaginationContext)
 			}
 		})
+	}
+}
+
+func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: makeListWorkTokens("cursor", 3, time.Now())},
+	})
+
+	firstReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2", nil)
+	firstRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(firstRec, firstReq)
+
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("first page status = %d, want %d", firstRec.Code, http.StatusOK)
+	}
+
+	var firstResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(firstRec.Body).Decode(&firstResp); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(firstResp.Results) != 2 {
+		t.Fatalf("first page results = %d, want 2", len(firstResp.Results))
+	}
+	if firstResp.PaginationContext == nil {
+		t.Fatal("expected first page pagination context")
+	}
+
+	nextToken := stringValue(firstResp.PaginationContext.NextToken)
+	if nextToken == "" {
+		t.Fatal("expected first page nextToken")
+	}
+
+	secondReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2&nextToken="+nextToken, nil)
+	secondRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(secondRec, secondReq)
+
+	if secondRec.Code != http.StatusOK {
+		t.Fatalf("second page status = %d, want %d", secondRec.Code, http.StatusOK)
+	}
+
+	var secondResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(secondRec.Body).Decode(&secondResp); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(secondResp.Results) != 1 {
+		t.Fatalf("second page results = %d, want 1", len(secondResp.Results))
+	}
+	if secondResp.PaginationContext != nil {
+		t.Fatalf("expected final page to omit pagination context, got %#v", secondResp.PaginationContext)
+	}
+	if firstResp.Results[0].WorkId != "work-cursor-1" ||
+		firstResp.Results[1].WorkId != "work-cursor-2" {
+		t.Fatalf("unexpected first page work ids: %#v", firstResp.Results)
+	}
+	if secondResp.Results[0].WorkId != "work-cursor-3" {
+		t.Fatalf("unexpected continued work id %q", secondResp.Results[0].WorkId)
 	}
 }
 
@@ -1743,12 +1829,13 @@ func engineStateWithRuntimeStatus(status interfaces.RuntimeStatus) *interfaces.E
 }
 
 func validNamedFactoryBody(name, workType string) string {
-	return fmt.Sprintf(`{"name":%q,"factory":%s}`, name, namedFactoryPayloadJSON(name, workType))
+	return fmt.Sprintf(`{"name":%q,%s`, name, strings.TrimPrefix(namedFactoryPayloadJSON(name, workType), "{"))
 }
 
 func namedFactoryPayloadJSON(project, workType string) string {
 	return fmt.Sprintf(`{
-		"project": %q,
+		"name": %q,
+		"id": %q,
 		"workTypes": [{
 			"name": %q,
 			"states": [
@@ -1760,19 +1847,19 @@ func namedFactoryPayloadJSON(project, workType string) string {
 		"workers": [{
 			"name":"planner",
 			"type":"MODEL_WORKER",
-			"modelProvider":"claude",
-			"executorProvider":"script_wrap",
+			"modelProvider":"CLAUDE",
+			"executorProvider":"SCRIPT_WRAP",
 			"model":"claude-sonnet-4-20250514"
 		}],
 		"workstations": [{
 			"name":"plan-task",
-			"kind":"STANDARD",
+			"behavior":"STANDARD",
 			"type":"MODEL_WORKSTATION",
 			"worker":"planner",
 			"inputs":[{"workType":%q,"state":"init"}],
 			"outputs":[{"workType":%q,"state":"done"}]
 		}]
-	}`, project, workType, workType, workType)
+	}`, project, project, workType, workType, workType)
 }
 
 func submittedRequestNamed(t *testing.T, requests []interfaces.SubmitRequest, name string) interfaces.SubmitRequest {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestPortableBundledFiles_RoundTripAcrossFlattenAndExpand(t *testing.T) {
@@ -96,6 +96,7 @@ func seedPortableBundledRoundTripFactory(t *testing.T) (string, string) {
 	sourceDir := filepath.Join(projectDir, "factory")
 
 	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-roundtrip-factory",
   "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
   "workers": [{"name":"executor"}],
   "workstations": [{

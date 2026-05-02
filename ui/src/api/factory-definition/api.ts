@@ -3,7 +3,8 @@ import type { components } from "../generated/openapi";
 export type CanonicalFactoryDefinition = components["schemas"]["Factory"];
 
 type FactorySchemas = components["schemas"];
-type FactoryInputGuard = FactorySchemas["InputGuard"];
+type FactoryRootGuard = FactorySchemas["FactoryGuard"];
+type FactoryGuard = FactorySchemas["Guard"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
@@ -11,83 +12,24 @@ type FactoryWorker = FactorySchemas["Worker"];
 type FactoryWorkState = FactorySchemas["WorkState"];
 type FactoryWorkstation = FactorySchemas["Workstation"];
 type FactoryWorkstationCron = FactorySchemas["WorkstationCron"];
-type FactoryWorkstationGuard = FactorySchemas["WorkstationGuard"];
 type FactoryWorkstationIO = FactorySchemas["WorkstationIO"];
 type FactoryWorkstationLimits = FactorySchemas["WorkstationLimits"];
 type FactoryWorkType = FactorySchemas["WorkType"];
-
-const WORKSTATION_GUARD_TYPE_ALIASES: Record<string, string> = {
-  VISIT_COUNT: "VISIT_COUNT",
-  visit_count: "VISIT_COUNT",
-};
-const INPUT_GUARD_TYPE_ALIASES: Record<string, string> = {
-  ALL_CHILDREN_COMPLETE: "ALL_CHILDREN_COMPLETE",
-  ANY_CHILD_FAILED: "ANY_CHILD_FAILED",
-  SAME_NAME: "SAME_NAME",
-  all_children_complete: "ALL_CHILDREN_COMPLETE",
-  any_child_failed: "ANY_CHILD_FAILED",
-  same_name: "SAME_NAME",
-};
-const INPUT_KIND_ALIASES: Record<string, FactoryInputType["type"]> = {
-  DEFAULT: "DEFAULT",
-  default: "DEFAULT",
-};
-const WORKER_MODEL_PROVIDER_ALIASES: Record<
-  string,
-  NonNullable<FactoryWorker["modelProvider"]>
-> = {
-  ANTHROPIC: "claude",
-  CLAUDE: "claude",
-  CODEX: "codex",
-  OPENAI: "codex",
-  anthropic: "claude",
-  claude: "claude",
-  codex: "codex",
-  openai: "codex",
-};
-const WORKER_PROVIDER_ALIASES: Record<string, NonNullable<FactoryWorker["executorProvider"]>> = {
-  ANTHROPIC: "script_wrap",
-  CLAUDE: "script_wrap",
-  CLAUDE_CLI: "script_wrap",
-  CODEX_CLI: "script_wrap",
-  LOCAL: "script_wrap",
-  SCRIPT: "script_wrap",
-  SCRIPTWRAP: "script_wrap",
-  SCRIPT_WRAP: "script_wrap",
-  anthropic: "script_wrap",
-  claude: "script_wrap",
-  "claude-cli": "script_wrap",
-  claude_cli: "script_wrap",
-  "codex-cli": "script_wrap",
-  codex_cli: "script_wrap",
-  local: "script_wrap",
-  "local-claude": "script_wrap",
-  local_claude: "script_wrap",
-  script: "script_wrap",
-  "script-wrap": "script_wrap",
-  script_wrap: "script_wrap",
-  scriptwrap: "script_wrap",
-};
-const WORKSTATION_KIND_ALIASES: Record<string, NonNullable<FactoryWorkstation["kind"]>> = {
-  CRON: "CRON",
-  REPEATER: "REPEATER",
-  STANDARD: "STANDARD",
-  cron: "CRON",
-  repeater: "REPEATER",
-  standard: "STANDARD",
-};
 const FACTORY_KEYS = new Set([
-  "factoryDir",
+  "factoryDirectory",
+  "guards",
+  "id",
   "inputTypes",
   "metadata",
-  "project",
+  "name",
   "resources",
   "sourceDirectory",
+  "supportingFiles",
   "workers",
   "workTypes",
   "workstations",
-  "workflowId",
 ]);
+const FACTORY_GUARD_KEYS = new Set(["model", "modelProvider", "refreshWindow", "type"]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set(["name", "states"]);
 const WORK_STATE_KEYS = new Set(["name", "type"]);
@@ -114,7 +56,7 @@ const WORKSTATION_KEYS = new Set([
   "guards",
   "id",
   "inputs",
-  "kind",
+  "behavior",
   "limits",
   "name",
   "onFailure",
@@ -131,8 +73,15 @@ const WORKSTATION_KEYS = new Set([
   "worktree",
 ]);
 const WORKSTATION_IO_KEYS = new Set(["guards", "state", "workType"]);
-const WORKSTATION_GUARD_KEYS = new Set(["maxVisits", "type", "workstation"]);
-const INPUT_GUARD_KEYS = new Set(["matchInput", "parentInput", "spawnedBy", "type"]);
+const GUARD_KEYS = new Set([
+  "matchConfig",
+  "matchInput",
+  "maxVisits",
+  "parentInput",
+  "spawnedBy",
+  "type",
+  "workstation",
+]);
 const WORKSTATION_LIMITS_KEYS = new Set(["maxExecutionTime", "maxRetries"]);
 const WORKSTATION_CRON_KEYS = new Set([
   "expiryWindow",
@@ -153,13 +102,15 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
   "SCRIPT_WORKER",
 ]);
 const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelProvider"]>>([
-  "claude",
-  "codex",
+  "CLAUDE",
+  "CODEX",
 ]);
 const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
-  "script_wrap",
+  "SCRIPT_WRAP",
 ]);
-const WORKSTATION_KIND_VALUES = new Set<NonNullable<FactoryWorkstation["kind"]>>([
+const WORKSTATION_BEHAVIOR_VALUES = new Set<
+  NonNullable<FactoryWorkstation["behavior"]>
+>([
   "CRON",
   "REPEATER",
   "STANDARD",
@@ -168,10 +119,15 @@ const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>
   "LOGICAL_MOVE",
   "MODEL_WORKSTATION",
 ]);
-const WORKSTATION_GUARD_TYPE_VALUES = new Set<FactoryWorkstationGuard["type"]>([
-  "VISIT_COUNT",
+const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
+  "INFERENCE_THROTTLE_GUARD",
 ]);
-const INPUT_GUARD_TYPE_VALUES = new Set<FactoryInputGuard["type"]>([
+const WORKSTATION_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+  "VISIT_COUNT",
+  "MATCHES_FIELDS",
+]);
+const INPUT_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+  "VISIT_COUNT",
   "ALL_CHILDREN_COMPLETE",
   "ANY_CHILD_FAILED",
   "SAME_NAME",
@@ -185,65 +141,7 @@ export class FactoryDefinitionAPIError extends Error {
 }
 
 export function normalizeFactoryDefinition(factoryPayload: unknown): CanonicalFactoryDefinition {
-  const factory = withAliasedKeys(asRecord(factoryPayload), {
-    factory_dir: "factoryDir",
-    input_types: "inputTypes",
-    source_directory: "sourceDirectory",
-    work_types: "workTypes",
-    workflow_id: "workflowId",
-  });
-
-  if (Array.isArray(factory.inputTypes)) {
-    factory.inputTypes = factory.inputTypes.map((inputType) => {
-      const normalizedInputType = withAliasedKeys(asRecord(inputType), {});
-      canonicalizeEnumValue(normalizedInputType, "type", INPUT_KIND_ALIASES);
-      return normalizedInputType;
-    });
-  }
-
-  if (Array.isArray(factory.workTypes)) {
-    factory.workTypes = factory.workTypes.map((workType) => {
-      const normalizedWorkType = withAliasedKeys(asRecord(workType), {});
-      if (Array.isArray(normalizedWorkType.states)) {
-        normalizedWorkType.states = normalizedWorkType.states.map((state) =>
-          withAliasedKeys(asRecord(state), {}),
-        );
-      }
-      return normalizedWorkType;
-    });
-  }
-
-  if (Array.isArray(factory.resources)) {
-    factory.resources = factory.resources.map((resource) =>
-      withAliasedKeys(asRecord(resource), {}),
-    );
-  }
-
-  if (Array.isArray(factory.workers)) {
-    factory.workers = factory.workers.map((worker) => {
-      const normalizedWorker = withAliasedKeys(mergeDefinitionFields(asRecord(worker)), {
-        model_provider: "modelProvider",
-        provider: "executorProvider",
-        skip_permissions: "skipPermissions",
-        stop_token: "stopToken",
-      });
-      canonicalizeEnumValue(normalizedWorker, "modelProvider", WORKER_MODEL_PROVIDER_ALIASES);
-      canonicalizeEnumValue(normalizedWorker, "executorProvider", WORKER_PROVIDER_ALIASES);
-      delete normalizedWorker.concurrency;
-      delete normalizedWorker.sessionId;
-      delete normalizedWorker.session_id;
-      normalizedWorker.resources = normalizeResourceRequirements(normalizedWorker.resources);
-      return normalizedWorker;
-    });
-  }
-
-  if (Array.isArray(factory.workstations)) {
-    factory.workstations = factory.workstations.map((workstation) =>
-      canonicalizeWorkstation(workstation),
-    );
-  }
-
-  return decodeFactoryDefinition(factory, "factory");
+  return decodeFactoryDefinition(asRecord(factoryPayload), "factory");
 }
 
 export function isCanonicalFactoryDefinition(value: unknown): value is CanonicalFactoryDefinition {
@@ -255,97 +153,6 @@ export function isCanonicalFactoryDefinition(value: unknown): value is Canonical
   }
 }
 
-function canonicalizeWorkstation(workstation: unknown): Record<string, unknown> {
-  const normalizedWorkstation = withAliasedKeys(mergeDefinitionFields(asRecord(workstation)), {
-    copy_referenced_scripts: "copyReferencedScripts",
-    on_failure: "onFailure",
-    on_rejection: "onRejection",
-    output_schema: "outputSchema",
-    prompt_file: "promptFile",
-    prompt_template: "promptTemplate",
-    stop_words: "stopWords",
-    working_directory: "workingDirectory",
-  });
-  normalizeLegacyWorkstationTypeFields(normalizedWorkstation);
-  canonicalizeEnumValue(normalizedWorkstation, "kind", WORKSTATION_KIND_ALIASES);
-  normalizeWorkstationRuntimeTypeField(normalizedWorkstation);
-  normalizeLegacyWorkstationStopAliases(normalizedWorkstation);
-  normalizeLegacyWorkstationTimeoutAlias(normalizedWorkstation);
-  normalizeLegacyWorkstationResourceAlias(normalizedWorkstation);
-
-  if (Array.isArray(normalizedWorkstation.inputs)) {
-    normalizedWorkstation.inputs = normalizedWorkstation.inputs.map((input) =>
-      canonicalizeWorkstationIO(input),
-    );
-  }
-
-  if (Array.isArray(normalizedWorkstation.outputs)) {
-    normalizedWorkstation.outputs = normalizedWorkstation.outputs.map((output) =>
-      canonicalizeWorkstationIO(output),
-    );
-  }
-
-  if (normalizedWorkstation.onFailure) {
-    normalizedWorkstation.onFailure = canonicalizeWorkstationIO(normalizedWorkstation.onFailure);
-  }
-
-  if (normalizedWorkstation.onRejection) {
-    normalizedWorkstation.onRejection = canonicalizeWorkstationIO(
-      normalizedWorkstation.onRejection,
-    );
-  }
-
-  normalizedWorkstation.resources = normalizeResourceRequirements(normalizedWorkstation.resources);
-
-  if (Array.isArray(normalizedWorkstation.guards)) {
-    normalizedWorkstation.guards = normalizedWorkstation.guards.map((guard) =>
-      canonicalizeGuard(
-        withAliasedKeys(asRecord(guard), {
-          max_visits: "maxVisits",
-        }),
-        WORKSTATION_GUARD_TYPE_ALIASES,
-      ),
-    );
-  }
-
-  if (normalizedWorkstation.limits) {
-    normalizedWorkstation.limits = withAliasedKeys(asRecord(normalizedWorkstation.limits), {
-      max_execution_time: "maxExecutionTime",
-      max_retries: "maxRetries",
-    });
-  }
-
-  if (normalizedWorkstation.cron) {
-    normalizedWorkstation.cron = withAliasedKeys(asRecord(normalizedWorkstation.cron), {
-      expiry_window: "expiryWindow",
-      trigger_at_start: "triggerAtStart",
-    });
-  }
-
-  return normalizedWorkstation;
-}
-
-function canonicalizeWorkstationIO(value: unknown): Record<string, unknown> {
-  const normalizedIO = withAliasedKeys(asRecord(value), {
-    work_type: "workType",
-  });
-
-  if (Array.isArray(normalizedIO.guards)) {
-    normalizedIO.guards = normalizedIO.guards.map((guard) =>
-      canonicalizeGuard(
-        withAliasedKeys(asRecord(guard), {
-          match_input: "matchInput",
-          parent_input: "parentInput",
-          spawned_by: "spawnedBy",
-        }),
-        INPUT_GUARD_TYPE_ALIASES,
-      ),
-    );
-  }
-
-  return normalizedIO;
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -354,220 +161,47 @@ function asRecord(value: unknown): Record<string, unknown> {
   return { ...value };
 }
 
-function withAliasedKeys(
-  value: Record<string, unknown>,
-  aliases: Record<string, string>,
-): Record<string, unknown> {
-  const normalizedValue = { ...value };
-
-  for (const [legacyKey, canonicalKey] of Object.entries(aliases)) {
-    if (normalizedValue[canonicalKey] === undefined && normalizedValue[legacyKey] !== undefined) {
-      normalizedValue[canonicalKey] = normalizedValue[legacyKey];
-    }
-    delete normalizedValue[legacyKey];
-  }
-
-  return normalizedValue;
-}
-
-function canonicalizeGuard(
-  guard: Record<string, unknown>,
-  typeAliases: Record<string, string>,
-): Record<string, unknown> {
-  const normalizedGuard = { ...guard };
-  const guardType = normalizedGuard.type;
-
-  if (typeof guardType === "string" && typeAliases[guardType] !== undefined) {
-    normalizedGuard.type = typeAliases[guardType];
-  }
-
-  return normalizedGuard;
-}
-
-function canonicalizeEnumValue<T extends string>(
-  value: Record<string, unknown>,
-  key: string,
-  aliases: Record<string, T>,
-): void {
-  const rawValue = value[key];
-  if (typeof rawValue !== "string") {
-    return;
-  }
-
-  const canonicalValue = aliases[rawValue];
-  if (canonicalValue !== undefined) {
-    value[key] = canonicalValue;
-  }
-}
-
-function mergeDefinitionFields(container: Record<string, unknown>): Record<string, unknown> {
-  const normalizedContainer = { ...container };
-  const definition = asRecord(normalizedContainer.definition);
-
-  for (const [key, value] of Object.entries(definition)) {
-    if (normalizedContainer[key] !== undefined) {
-      continue;
-    }
-    normalizedContainer[key] = value;
-  }
-
-  delete normalizedContainer.definition;
-  return normalizedContainer;
-}
-
-function normalizeLegacyWorkstationTypeFields(workstation: Record<string, unknown>): void {
-  if (workstation.kind !== undefined || typeof workstation.type !== "string") {
-    return;
-  }
-
-  const workstationKind = WORKSTATION_KIND_ALIASES[workstation.type];
-  if (workstationKind === undefined) {
-    return;
-  }
-
-  workstation.kind = workstationKind;
-  delete workstation.type;
-}
-
-function normalizeWorkstationRuntimeTypeField(workstation: Record<string, unknown>): void {
-  if (workstation.type === undefined && workstation.runtimeType !== undefined) {
-    workstation.type = workstation.runtimeType;
-  }
-  delete workstation.runtimeType;
-}
-
-function normalizeLegacyWorkstationStopAliases(workstation: Record<string, unknown>): void {
-  mergeLegacyWorkstationStopWords(workstation, "runtimeStopWords");
-  mergeLegacyWorkstationStopWords(workstation, "stopToken");
-}
-
-function mergeLegacyWorkstationStopWords(
-  workstation: Record<string, unknown>,
-  legacyKey: string,
-): void {
-  if (workstation[legacyKey] === undefined) {
-    return;
-  }
-
-  if (workstation.stopWords === undefined) {
-    const stopWords = workstationStopWordsFromBoundaryValue(workstation[legacyKey]);
-    if (stopWords.length > 0) {
-      workstation.stopWords = stopWords;
-    }
-  }
-
-  delete workstation[legacyKey];
-}
-
-function workstationStopWordsFromBoundaryValue(value: unknown): string[] {
-  if (typeof value === "string") {
-    const trimmedValue = value.trim();
-    return trimmedValue ? [trimmedValue] : [];
-  }
-
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((item) => {
-    if (typeof item !== "string") {
-      return [];
-    }
-    const trimmedValue = item.trim();
-    return trimmedValue ? [trimmedValue] : [];
-  });
-}
-
-function normalizeLegacyWorkstationTimeoutAlias(workstation: Record<string, unknown>): void {
-  if (workstation.timeout === undefined) {
-    return;
-  }
-
-  const limits = withAliasedKeys(asRecord(workstation.limits), {
-    max_execution_time: "maxExecutionTime",
-    max_retries: "maxRetries",
-  });
-  if (limits.maxExecutionTime === undefined) {
-    limits.maxExecutionTime = workstation.timeout;
-  }
-
-  workstation.limits = limits;
-  delete workstation.timeout;
-}
-
-function normalizeLegacyWorkstationResourceAlias(workstation: Record<string, unknown>): void {
-  if (workstation.resources === undefined && workstation.resourceUsage !== undefined) {
-    workstation.resources = workstation.resourceUsage;
-  }
-  delete workstation.resourceUsage;
-}
-
-function normalizeResourceRequirements(value: unknown): unknown {
-  if (value === undefined || value === null) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeResourceRequirement(item) ?? item);
-  }
-
-  return [normalizeResourceRequirement(value) ?? value];
-}
-
-function normalizeResourceRequirement(value: unknown): Record<string, unknown> | null {
-  if (typeof value === "string") {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) {
-      return null;
-    }
-    return {
-      capacity: 1,
-      name: trimmedValue,
-    };
-  }
-
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return asRecord(value);
-}
-
 function decodeFactoryDefinition(
   value: Record<string, unknown>,
   path: string,
 ): CanonicalFactoryDefinition {
   rejectUnknownKeys(value, FACTORY_KEYS, path);
 
-  const factory: CanonicalFactoryDefinition = {};
-  const project = readOptionalString(value, "project", path);
-  const factoryDir = readOptionalString(value, "factoryDir", path);
+  const factory: CanonicalFactoryDefinition = {
+    name: readRequiredString(value, "name", path),
+  };
+  const id = readOptionalString(value, "id", path);
+  const factoryDirectory = readOptionalString(value, "factoryDirectory", path);
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);
-  const workflowId = readOptionalString(value, "workflowId", path);
   const metadata = readOptionalStringMap(value, "metadata", path);
   const inputTypes = readOptionalArray(value, "inputTypes", path, decodeInputType);
+  const guards = readOptionalArray(value, "guards", path, decodeFactoryGuard);
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
+  const supportingFiles = readOptionalObject(value, "supportingFiles", path, expectObject);
   const workers = readOptionalArray(value, "workers", path, decodeWorker);
   const workstations = readOptionalArray(value, "workstations", path, decodeWorkstation);
 
-  if (project !== undefined) {
-    factory.project = project;
+  if (id !== undefined) {
+    factory.id = id;
   }
-  if (factoryDir !== undefined) {
-    factory.factoryDir = factoryDir;
+  if (factoryDirectory !== undefined) {
+    factory.factoryDirectory = factoryDirectory;
   }
   if (sourceDirectory !== undefined) {
     factory.sourceDirectory = sourceDirectory;
   }
-  if (workflowId !== undefined) {
-    factory.workflowId = workflowId;
+  if (supportingFiles !== undefined) {
+    factory.supportingFiles = supportingFiles as CanonicalFactoryDefinition["supportingFiles"];
   }
   if (metadata !== undefined) {
     factory.metadata = metadata;
   }
   if (inputTypes !== undefined) {
     factory.inputTypes = inputTypes;
+  }
+  if (guards !== undefined) {
+    factory.guards = guards;
   }
   if (workTypes !== undefined) {
     factory.workTypes = workTypes;
@@ -697,7 +331,7 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
     worker: readRequiredString(record, "worker", path),
   };
   const id = readOptionalString(record, "id", path);
-  const kind = readOptionalEnum(record, "kind", path, WORKSTATION_KIND_VALUES);
+  const behavior = readOptionalEnum(record, "behavior", path, WORKSTATION_BEHAVIOR_VALUES);
   const type = readOptionalEnum(record, "type", path, WORKSTATION_TYPE_VALUES);
   const promptFile = readOptionalString(record, "promptFile", path);
   const outputSchema = readOptionalString(record, "outputSchema", path);
@@ -718,8 +352,8 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   if (id !== undefined) {
     workstation.id = id;
   }
-  if (kind !== undefined) {
-    workstation.kind = kind;
+  if (behavior !== undefined) {
+    workstation.behavior = behavior;
   }
   if (type !== undefined) {
     workstation.type = type;
@@ -788,15 +422,35 @@ function decodeWorkstationIO(value: unknown, path: string): FactoryWorkstationIO
   return io;
 }
 
-function decodeWorkstationGuard(value: unknown, path: string): FactoryWorkstationGuard {
+function decodeFactoryGuard(value: unknown, path: string): FactoryRootGuard {
   const record = expectObject(value, path);
-  rejectUnknownKeys(record, WORKSTATION_GUARD_KEYS, path);
+  rejectUnknownKeys(record, FACTORY_GUARD_KEYS, path);
 
-  const guard: FactoryWorkstationGuard = {
+  const guard: FactoryRootGuard = {
+    type: readRequiredEnum(record, "type", path, FACTORY_ROOT_GUARD_TYPE_VALUES),
+    modelProvider: readRequiredEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES),
+    refreshWindow: readRequiredString(record, "refreshWindow", path),
+  };
+  const model = readOptionalString(record, "model", path);
+  if (model !== undefined) {
+    guard.model = model;
+  }
+  return guard;
+}
+
+function decodeWorkstationGuard(value: unknown, path: string): FactoryGuard {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, GUARD_KEYS, path);
+
+  const guard: FactoryGuard = {
     type: readRequiredEnum(record, "type", path, WORKSTATION_GUARD_TYPE_VALUES),
   };
+  const matchConfig = readOptionalGuardMatchConfig(record, path);
   const workstation = readOptionalString(record, "workstation", path);
   const maxVisits = readOptionalInteger(record, "maxVisits", path);
+  if (matchConfig !== undefined) {
+    guard.matchConfig = matchConfig;
+  }
   if (workstation !== undefined) {
     guard.workstation = workstation;
   }
@@ -806,11 +460,11 @@ function decodeWorkstationGuard(value: unknown, path: string): FactoryWorkstatio
   return guard;
 }
 
-function decodeInputGuard(value: unknown, path: string): FactoryInputGuard {
+function decodeInputGuard(value: unknown, path: string): FactoryGuard {
   const record = expectObject(value, path);
-  rejectUnknownKeys(record, INPUT_GUARD_KEYS, path);
+  rejectUnknownKeys(record, GUARD_KEYS, path);
 
-  const guard: FactoryInputGuard = {
+  const guard: FactoryGuard = {
     type: readRequiredEnum(record, "type", path, INPUT_GUARD_TYPE_VALUES),
   };
   const matchInput = readOptionalString(record, "matchInput", path);
@@ -826,6 +480,22 @@ function decodeInputGuard(value: unknown, path: string): FactoryInputGuard {
     guard.spawnedBy = spawnedBy;
   }
   return guard;
+}
+
+function readOptionalGuardMatchConfig(
+  record: Record<string, unknown>,
+  path: string,
+): FactoryGuard["matchConfig"] | undefined {
+  const rawValue = record.matchConfig;
+  if (rawValue === undefined) {
+    return undefined;
+  }
+  const matchConfigPath = `${path}.matchConfig`;
+  const matchConfig = expectObject(rawValue, matchConfigPath);
+  rejectUnknownKeys(matchConfig, new Set(["inputKey"]), matchConfigPath);
+  return {
+    inputKey: readRequiredString(matchConfig, "inputKey", matchConfigPath),
+  };
 }
 
 function decodeWorkstationLimits(value: unknown, path: string): FactoryWorkstationLimits {

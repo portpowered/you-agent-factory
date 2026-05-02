@@ -52,7 +52,7 @@ const initialStructureRequest = event(
           type: "MODEL_WORKER",
         },
       ],
-      work_types: [
+      workTypes: [
         {
           name: "story",
           states: [
@@ -66,17 +66,17 @@ const initialStructureRequest = event(
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          on_failure: { state: "failed", work_type: "story" },
-          outputs: [{ state: "review", work_type: "story" }],
+          onFailure: { state: "failed", workType: "story" },
+          outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
         {
           id: "complete",
-          inputs: [{ state: "review", work_type: "story" }],
+          inputs: [{ state: "review", workType: "story" }],
           name: "Complete",
-          outputs: [{ state: "done", work_type: "story" }],
+          outputs: [{ state: "done", workType: "story" }],
           worker: "completer",
         },
       ],
@@ -104,7 +104,7 @@ const runRequest = event(
           type: "MODEL_WORKER",
         },
       ],
-      work_types: [
+      workTypes: [
         {
           name: "story",
           states: [
@@ -118,17 +118,17 @@ const runRequest = event(
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          on_failure: { state: "failed", work_type: "story" },
-          outputs: [{ state: "review", work_type: "story" }],
+          onFailure: { state: "failed", workType: "story" },
+          outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
         {
           id: "complete",
-          inputs: [{ state: "review", work_type: "story" }],
+          inputs: [{ state: "review", workType: "story" }],
           name: "Complete",
-          outputs: [{ state: "done", work_type: "story" }],
+          outputs: [{ state: "done", workType: "story" }],
           worker: "completer",
         },
       ],
@@ -347,7 +347,7 @@ const resourceRequest = event(
     transitionId: "implement",
     workstation: {
       id: "implement",
-      inputs: [{ state: "available", work_type: "agent-slot" }],
+      inputs: [{ state: "available", workType: "agent-slot" }],
       name: "Implement",
       outputs: [],
       worker: "agent",
@@ -367,7 +367,7 @@ const resourceResponse = event(
     transitionId: "implement",
     workstation: {
       id: "implement",
-      inputs: [{ state: "available", work_type: "agent-slot" }],
+      inputs: [{ state: "available", workType: "agent-slot" }],
       name: "Implement",
       outputs: [],
       worker: "agent",
@@ -413,10 +413,10 @@ const failedRequest = event(
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_failure: { state: "failed", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onFailure: { state: "failed", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
   },
@@ -464,10 +464,10 @@ const failedResponse = event(
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_failure: { state: "failed", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onFailure: { state: "failed", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
   },
@@ -513,10 +513,10 @@ const rejectedRequest = event(
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_rejection: { state: "new", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onRejection: { state: "new", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
   },
@@ -602,10 +602,10 @@ const rejectedResponse = event(
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_rejection: { state: "new", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onRejection: { state: "new", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
   },
@@ -651,15 +651,15 @@ const scriptPendingDispatchRequest = event(
     transitionId: "review",
     worker: {
       name: "script-reviewer",
-      provider: "script_wrap",
+      executorProvider: "SCRIPT_WRAP",
       type: "SCRIPT_WORKER",
     },
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_failure: { state: "failed", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onFailure: { state: "failed", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
   },
@@ -723,15 +723,15 @@ const scriptSuccessDispatchRequest = event(
     transitionId: "review",
     worker: {
       name: "script-reviewer",
-      provider: "script_wrap",
+      executorProvider: "SCRIPT_WRAP",
       type: "SCRIPT_WORKER",
     },
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_failure: { state: "failed", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onFailure: { state: "failed", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
   },
@@ -798,9 +798,9 @@ const scriptSuccessDispatchResponse = event(
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      outputs: [{ state: "done", work_type: "story" }],
+      outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
   },
@@ -846,15 +846,15 @@ const scriptFailedDispatchRequest = event(
     transitionId: "review",
     worker: {
       name: "script-reviewer",
-      provider: "script_wrap",
+      executorProvider: "SCRIPT_WRAP",
       type: "SCRIPT_WORKER",
     },
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_failure: { state: "failed", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onFailure: { state: "failed", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
   },
@@ -924,10 +924,10 @@ const scriptFailedDispatchResponse = event(
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      on_failure: { state: "failed", work_type: "story" },
-      outputs: [{ state: "done", work_type: "story" }],
+      onFailure: { state: "failed", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
   },
@@ -1136,9 +1136,9 @@ describe("factory timeline reconstruction", () => {
           resources: [{ capacity: 10, name: "executor-slot" }],
           workers: [
             {
-              modelProvider: "codex",
+              executorProvider: "SCRIPT_WRAP",
+              modelProvider: "CODEX",
               name: "processor",
-              provider: "script_wrap",
               type: "MODEL_WORKER",
             },
           ],
@@ -1159,7 +1159,7 @@ describe("factory timeline reconstruction", () => {
                 { state: "available", workType: "executor-slot" },
                 { state: "init", workType: "thoughts" },
               ],
-              kind: "standard",
+              behavior: "STANDARD",
               name: "ideafy",
               onFailure: { state: "failed", workType: "thoughts" },
               onRejection: { state: "failed", workType: "thoughts" },
@@ -1213,9 +1213,9 @@ describe("factory timeline reconstruction", () => {
         resources: [{ capacity: 10, name: "executor-slot" }],
         transitionId: "ideafy",
         worker: {
-          modelProvider: "codex",
+          executorProvider: "SCRIPT_WRAP",
+          modelProvider: "CODEX",
           name: "processor",
-          provider: "script_wrap",
         },
         workstation: {
           id: "ideafy",
@@ -1223,7 +1223,7 @@ describe("factory timeline reconstruction", () => {
             { state: "available", workType: "executor-slot" },
             { state: "init", workType: "thoughts" },
           ],
-          kind: "standard",
+          behavior: "STANDARD",
           name: "ideafy",
           onFailure: { state: "failed", workType: "thoughts" },
           onRejection: { state: "failed", workType: "thoughts" },
@@ -1280,7 +1280,7 @@ describe("factory timeline reconstruction", () => {
             { state: "available", workType: "executor-slot" },
             { state: "init", workType: "thoughts" },
           ],
-          kind: "standard",
+          behavior: "STANDARD",
           name: "ideafy",
           onFailure: { state: "failed", workType: "thoughts" },
           onRejection: { state: "failed", workType: "thoughts" },
@@ -1322,11 +1322,11 @@ describe("factory timeline reconstruction", () => {
     expect(
       active.dashboard.runtime.active_executions_by_dispatch_id?.["dispatch-camel-1"]
         ?.model_provider,
-    ).toBe("codex");
+    ).toBe("CODEX");
     expect(
       active.dashboard.runtime.active_executions_by_dispatch_id?.["dispatch-camel-1"]
         ?.provider,
-    ).toBe("script_wrap");
+    ).toBe("SCRIPT_WRAP");
     expect(active.dashboard.runtime.current_work_items_by_place_id?.["thoughts:init"]).toEqual(
       [],
     );
@@ -1351,6 +1351,56 @@ describe("factory timeline reconstruction", () => {
     expect(
       completed.dashboard.runtime.session.provider_sessions?.[0]?.provider_session?.id,
     ).toBe("session-camel-1");
+  });
+
+  it("does not project retired factory-config aliases from initial-structure events", () => {
+    const legacyInitialStructure = event(
+      "event-legacy-factory-1",
+      1,
+      FACTORY_EVENT_TYPES.initialStructureRequest,
+      {
+        factory: {
+          workers: [
+            {
+              model_provider: "CODEX",
+              name: "processor",
+              provider: "SCRIPT_WRAP",
+              type: "MODEL_WORKER",
+            },
+          ],
+          work_types: [
+            {
+              name: "thoughts",
+              states: [
+                { name: "init", type: "INITIAL" },
+                { name: "complete", type: "TERMINAL" },
+              ],
+            },
+          ],
+          workstations: [
+            {
+              id: "ideafy",
+              inputs: [{ state: "init", work_type: "thoughts" }],
+              kind: "STANDARD",
+              name: "ideafy",
+              on_failure: { state: "complete", work_type: "thoughts" },
+              outputs: [{ state: "complete", work_type: "thoughts" }],
+              worker: "processor",
+            },
+          ],
+        },
+      },
+    );
+
+    const projected = buildFactoryTimelineSnapshot([legacyInitialStructure], 1);
+
+    expect(projected.dashboard.topology.submit_work_types).toEqual([]);
+    expect(projected.dashboard.topology.workstation_nodes_by_id?.ideafy).toMatchObject({
+      input_place_ids: [":init"],
+      input_work_type_ids: [],
+      output_place_ids: [":complete"],
+      output_work_type_ids: [],
+    });
   });
 
   it("replays the resource-count smoke fixture across idle, active, and released ticks", () => {
@@ -1469,9 +1519,9 @@ describe("factory timeline reconstruction", () => {
         transitionId: "complete",
         workstation: {
           id: "complete",
-          inputs: [{ state: "review", work_type: "story" }],
+          inputs: [{ state: "review", workType: "story" }],
           name: "Complete",
-          outputs: [{ state: "done", work_type: "story" }],
+          outputs: [{ state: "done", workType: "story" }],
           worker: "completer",
         },
       },
@@ -1503,9 +1553,9 @@ describe("factory timeline reconstruction", () => {
         transitionId: "complete",
         workstation: {
           id: "complete",
-          inputs: [{ state: "review", work_type: "story" }],
+          inputs: [{ state: "review", workType: "story" }],
           name: "Complete",
-          outputs: [{ state: "done", work_type: "story" }],
+          outputs: [{ state: "done", workType: "story" }],
           worker: "completer",
         },
       },
@@ -1665,6 +1715,172 @@ describe("factory timeline reconstruction", () => {
         },
       ]),
     );
+  });
+
+  it("prefers context dispatch chaining lineage over deprecated payload copies", () => {
+    const chainingWorkRequest = event(
+      "event-context-chaining-work-request",
+      2,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        source: "api",
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            current_chaining_trace_id: "chain-a",
+            name: "Fan In A",
+            trace_id: "chain-a",
+            work_id: "work-chain-a",
+            work_type_id: "story",
+          },
+          {
+            current_chaining_trace_id: "chain-b",
+            name: "Fan In B",
+            trace_id: "chain-b",
+            work_id: "work-chain-b",
+            work_type_id: "story",
+          },
+        ],
+      },
+    );
+    chainingWorkRequest.context.requestId = "request-chain";
+    chainingWorkRequest.context.traceIds = ["chain-a", "chain-b"];
+    chainingWorkRequest.context.workIds = ["work-chain-a", "work-chain-b"];
+
+    const chainingDispatchRequest = event(
+      "event-context-chaining-dispatch-request",
+      3,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        current_chaining_trace_id: "payload-chain-stale",
+        dispatchId: "dispatch-chain",
+        inputs: [
+          {
+            current_chaining_trace_id: "chain-a",
+            name: "Fan In A",
+            trace_id: "chain-a",
+            work_id: "work-chain-a",
+            work_type_id: "story",
+          },
+          {
+            current_chaining_trace_id: "chain-b",
+            name: "Fan In B",
+            trace_id: "chain-b",
+            work_id: "work-chain-b",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["payload-chain-z", "payload-chain-y"],
+        transitionId: "complete",
+        workstation: {
+          id: "complete",
+          inputs: [{ state: "review", work_type: "story" }],
+          name: "Complete",
+          outputs: [{ state: "done", work_type: "story" }],
+          worker: "completer",
+        },
+      },
+    );
+    chainingDispatchRequest.context.currentChainingTraceId = "chain-a";
+    chainingDispatchRequest.context.previousChainingTraceIds = [
+      "chain-a",
+      "chain-b",
+    ];
+    chainingDispatchRequest.context.dispatchId = "dispatch-chain";
+    chainingDispatchRequest.context.traceIds = ["chain-a", "chain-b"];
+    chainingDispatchRequest.context.workIds = ["work-chain-a", "work-chain-b"];
+
+    const chainingDispatchResponse = event(
+      "event-context-chaining-dispatch-response",
+      4,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        current_chaining_trace_id: "payload-chain-stale",
+        dispatchId: "dispatch-chain",
+        durationMillis: 980,
+        outcome: "ACCEPTED",
+        outputWork: [
+          {
+            current_chaining_trace_id: "chain-a",
+            name: "Fan In Result",
+            previous_chaining_trace_ids: ["chain-a", "chain-b"],
+            trace_id: "chain-a",
+            work_id: "work-chain-result",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["payload-chain-z", "payload-chain-y"],
+        transitionId: "complete",
+        workstation: {
+          id: "complete",
+          inputs: [{ state: "review", work_type: "story" }],
+          name: "Complete",
+          outputs: [{ state: "done", work_type: "story" }],
+          worker: "completer",
+        },
+      },
+    );
+    chainingDispatchResponse.context.currentChainingTraceId = "chain-a";
+    chainingDispatchResponse.context.previousChainingTraceIds = [
+      "chain-a",
+      "chain-b",
+    ];
+    chainingDispatchResponse.context.dispatchId = "dispatch-chain";
+    chainingDispatchResponse.context.traceIds = ["chain-a", "chain-b"];
+    chainingDispatchResponse.context.workIds = ["work-chain-a", "work-chain-b"];
+
+    const tickThree = buildFactoryTimelineSnapshot(
+      [initialStructureRequest, chainingWorkRequest, chainingDispatchRequest],
+      3,
+    );
+    const tickFour = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        chainingWorkRequest,
+        chainingDispatchRequest,
+        chainingDispatchResponse,
+      ],
+      4,
+    );
+
+    expect(
+      tickThree.workstationRequestsByDispatchID["dispatch-chain"]?.request_view
+        ?.current_chaining_trace_id,
+    ).toBe("chain-a");
+    expect(
+      tickThree.workstationRequestsByDispatchID["dispatch-chain"]?.request_view
+        ?.previous_chaining_trace_ids,
+    ).toEqual(["chain-a", "chain-b"]);
+    expect(
+      tickFour.dashboard.runtime.workstation_requests_by_dispatch_id?.[
+        "dispatch-chain"
+      ]?.request?.current_chaining_trace_id,
+    ).toBe("chain-a");
+    expect(
+      tickFour.dashboard.runtime.workstation_requests_by_dispatch_id?.[
+        "dispatch-chain"
+      ]?.request?.previous_chaining_trace_ids,
+    ).toEqual(["chain-a", "chain-b"]);
+    expect(
+      tickFour.dashboard.runtime.workstation_requests_by_dispatch_id?.[
+        "dispatch-chain"
+      ]?.response?.output_work_items,
+    ).toEqual([
+      {
+        current_chaining_trace_id: "chain-a",
+        display_name: "Fan In Result",
+        previous_chaining_trace_ids: ["chain-a", "chain-b"],
+        trace_id: "chain-a",
+        work_id: "work-chain-result",
+        work_type_id: "story",
+      },
+    ]);
+    expect(
+      tickFour.tracesByWorkID["work-chain-result"].dispatches[0],
+    ).toMatchObject({
+      current_chaining_trace_id: "chain-a",
+      previous_chaining_trace_ids: ["chain-a", "chain-b"],
+    });
   });
 
   it("retains failed completion details in fixed timeline reconstruction", () => {
@@ -2517,7 +2733,7 @@ describe("factory timeline reconstruction", () => {
         transitionId: "review",
         worker: {
           model: "gpt-5.4",
-          model_provider: "openai",
+          modelProvider: "openai",
         },
       },
     );
@@ -2724,7 +2940,7 @@ describe("factory timeline reconstruction", () => {
       FACTORY_EVENT_TYPES.initialStructureRequest,
       {
         factory: {
-          work_types: [
+          workTypes: [
             {
               name: "story",
               states: [
@@ -2741,17 +2957,17 @@ describe("factory timeline reconstruction", () => {
             {
               id: "daily-refresh",
               inputs: [
-                { state: "new", work_type: "story" },
-                { state: "pending", work_type: rawSystemTime },
+                { state: "new", workType: "story" },
+                { state: "pending", workType: rawSystemTime },
               ],
               name: "Daily refresh",
-              outputs: [{ state: "done", work_type: "story" }],
-              type: "cron",
+              outputs: [{ state: "done", workType: "story" }],
+              behavior: "CRON",
               worker: "refresh-worker",
             },
             {
               id: `${rawSystemTime}:expire`,
-              inputs: [{ state: "pending", work_type: rawSystemTime }],
+              inputs: [{ state: "pending", workType: rawSystemTime }],
               name: `${rawSystemTime}:expire`,
               outputs: [],
               worker: "",
@@ -2797,7 +3013,7 @@ describe("factory timeline reconstruction", () => {
         transitionId: `${rawSystemTime}:expire`,
         workstation: {
           id: `${rawSystemTime}:expire`,
-          inputs: [{ state: "pending", work_type: rawSystemTime }],
+          inputs: [{ state: "pending", workType: rawSystemTime }],
           name: `${rawSystemTime}:expire`,
           outputs: [],
           worker: "",
@@ -2816,7 +3032,7 @@ describe("factory timeline reconstruction", () => {
         transitionId: `${rawSystemTime}:expire`,
         workstation: {
           id: `${rawSystemTime}:expire`,
-          inputs: [{ state: "pending", work_type: rawSystemTime }],
+          inputs: [{ state: "pending", workType: rawSystemTime }],
           name: `${rawSystemTime}:expire`,
           outputs: [],
           worker: "",

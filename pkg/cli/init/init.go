@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // InitConfig holds parameters for the init command.
@@ -67,17 +67,17 @@ func parseStarterExecutor(raw string) (starterExecutor, error) {
 
 func defaultModelWorkerAgentsMD(executor starterExecutor) string {
 	model := "gpt-5-codex"
-	modelProvider := string(StarterExecutorCodex)
+	modelProvider := "CODEX"
 	if executor == StarterExecutorClaude {
 		model = "claude-sonnet-4-20250514"
-		modelProvider = string(StarterExecutorClaude)
+		modelProvider = "CLAUDE"
 	}
 
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
 model: %s
 modelProvider: %s
-executorProvider: script_wrap
+executorProvider: SCRIPT_WRAP
 resources:
   - name: agent-slot
     capacity: 1

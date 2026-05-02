@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestDispatcherLifecycle_ExecutorFailure verifies that when the executor fails,

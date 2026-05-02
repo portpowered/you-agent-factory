@@ -3,7 +3,7 @@ package testutil
 import (
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // MarkingAssert provides fluent assertions on a MarkingSnapshot.

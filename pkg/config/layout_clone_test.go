@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestFactoryConfig_SharedSurfaceRetiresExhaustionRules(t *testing.T) {

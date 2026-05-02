@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
 
@@ -32,10 +32,10 @@ type exportImportSmokeHarnessOption func(*exportImportSmokeHarnessOptions)
 type exportImportSmokeHarnessResult struct {
 	RootDir          string
 	Server           *functionalAPIServer
-	ExportedFactory  factoryapi.NamedFactory
-	ImportRequest    factoryapi.NamedFactory
-	ImportedFactory  factoryapi.NamedFactory
-	CurrentFactory   factoryapi.NamedFactory
+	ExportedFactory  factoryapi.Factory
+	ImportRequest    factoryapi.Factory
+	ImportedFactory  factoryapi.Factory
+	CurrentFactory   factoryapi.Factory
 	Status           factoryapi.StatusResponse
 	SourceFactoryDir string
 	ImportedDir      string
@@ -111,12 +111,12 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 		t.Fatal("api contract drift: GET /factory/~current returned an empty current factory name")
 	}
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(r.ExportedFactory.Factory),
+		comparableExportImportFactory(r.ExportedFactory),
 		comparableExportImportFactory(fixture.GeneratedExportFactor),
 	) {
 		t.Fatalf(
 			"payload drift: exported current factory diverged from canonical generated payload\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(r.ExportedFactory.Factory),
+			comparableExportImportFactory(r.ExportedFactory),
 			comparableExportImportFactory(fixture.GeneratedExportFactor),
 		)
 	}
@@ -124,26 +124,26 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 		t.Fatalf("api contract drift: POST /factory created name = %q, want %q", r.ImportedFactory.Name, r.ImportRequest.Name)
 	}
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(r.ImportedFactory.Factory),
-		comparableExportImportFactory(r.ImportRequest.Factory),
+		comparableExportImportFactory(r.ImportedFactory),
+		comparableExportImportFactory(r.ImportRequest),
 	) {
 		t.Fatalf(
 			"api contract drift: POST /factory response diverged from submitted payload\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(r.ImportedFactory.Factory),
-			comparableExportImportFactory(r.ImportRequest.Factory),
+			comparableExportImportFactory(r.ImportedFactory),
+			comparableExportImportFactory(r.ImportRequest),
 		)
 	}
 	if r.CurrentFactory.Name != r.ImportRequest.Name {
 		t.Fatalf("api contract drift: GET /factory/~current after import = %q, want %q", r.CurrentFactory.Name, r.ImportRequest.Name)
 	}
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(r.CurrentFactory.Factory),
-		comparableExportImportFactory(r.ImportRequest.Factory),
+		comparableExportImportFactory(r.CurrentFactory),
+		comparableExportImportFactory(r.ImportRequest),
 	) {
 		t.Fatalf(
 			"api contract drift: current-factory readback diverged from imported payload\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(r.CurrentFactory.Factory),
-			comparableExportImportFactory(r.ImportRequest.Factory),
+			comparableExportImportFactory(r.CurrentFactory),
+			comparableExportImportFactory(r.ImportRequest),
 		)
 	}
 }
@@ -168,7 +168,7 @@ func (r exportImportSmokeHarnessResult) AssertDashboardActivationSuccess(
 	}
 }
 
-func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.NamedFactory) factoryapi.NamedFactory {
+func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.Factory) factoryapi.Factory {
 	t.Helper()
 
 	body, err := json.Marshal(namedFactory)
@@ -185,12 +185,12 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
 	}
 
-	var created factoryapi.NamedFactory
+	var created factoryapi.Factory
 	decodeJSONResponse(t, resp, &created, "decode create factory response")
 	return created
 }
 
-func getCurrentNamedFactory(t *testing.T, serverURL string) factoryapi.NamedFactory {
+func getCurrentNamedFactory(t *testing.T, serverURL string) factoryapi.Factory {
 	t.Helper()
 
 	resp, err := http.Get(serverURL + "/factory/~current")
@@ -202,7 +202,7 @@ func getCurrentNamedFactory(t *testing.T, serverURL string) factoryapi.NamedFact
 		t.Fatalf("GET /factory/~current status = %d, want 200", resp.StatusCode)
 	}
 
-	var current factoryapi.NamedFactory
+	var current factoryapi.Factory
 	decodeJSONResponse(t, resp, &current, "decode current factory response")
 	return current
 }

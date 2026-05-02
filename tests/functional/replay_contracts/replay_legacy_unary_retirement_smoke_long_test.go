@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *testing.T) {

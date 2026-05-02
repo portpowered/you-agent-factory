@@ -68,6 +68,6 @@ Use `workTypeName` in public batch payloads. Do not use the retired
 
 ## Related
 
-- `agent-factory docs config`
-- `agent-factory docs workstation`
-- `agent-factory docs templates`
+- `infinite-you docs config`
+- `infinite-you docs workstation`
+- `infinite-you docs templates`

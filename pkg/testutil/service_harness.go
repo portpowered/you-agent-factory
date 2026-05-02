@@ -7,16 +7,16 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/internal/submission"
-	"github.com/portpowered/agent-factory/pkg/logging"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/service"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/internal/submission"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // ServiceTestHarness wraps a FactoryService built via BuildFactoryService()

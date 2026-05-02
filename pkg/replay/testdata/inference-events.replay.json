@@ -9,7 +9,8 @@
       "id": "factory-event/run-started",
       "payload": {
         "factory": {
-          "factoryDir": "fixtures/inference-events",
+          "name": "inference-events-fixture",
+          "factoryDirectory": "fixtures/inference-events",
           "resources": [],
           "workTypes": [
             {
@@ -100,7 +101,11 @@
     {
       "context": {
         "dispatchId": "dispatch-fixture-1",
+        "currentChainingTraceId": "trace-fixture-1",
         "eventTime": "2026-04-19T08:00:02Z",
+        "previousChainingTraceIds": [
+          "trace-fixture-1"
+        ],
         "requestId": "request-fixture-1",
         "sequence": 2,
         "tick": 2,
@@ -182,7 +187,11 @@
     {
       "context": {
         "dispatchId": "dispatch-fixture-1",
+        "currentChainingTraceId": "trace-fixture-1",
         "eventTime": "2026-04-19T08:00:04Z",
+        "previousChainingTraceIds": [
+          "trace-fixture-1"
+        ],
         "sequence": 5,
         "tick": 3
       },
@@ -217,4 +226,3 @@
   "recordedAt": "2026-04-19T08:00:00Z",
   "schemaVersion": "agent-factory.replay.v1"
 }
-

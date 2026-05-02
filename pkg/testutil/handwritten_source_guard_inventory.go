@@ -1,6 +1,6 @@
 package testutil
 
-import "github.com/portpowered/agent-factory/internal/handwrittensourceguard"
+import "github.com/portpowered/infinite-you/internal/handwrittensourceguard"
 
 type HandwrittenSourcePathClass = handwrittensourceguard.PathClass
 

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/cli/dashboardrender"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // buildTestTopology creates a minimal topology with one work type for testing.
@@ -332,6 +332,176 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 	}
 }
 
+func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
+
+	renderData := dashboardrender.SimpleDashboardRenderData{
+		Session: dashboardrender.SimpleDashboardSessionData{
+			HasData:              true,
+			DispatchedCount:      5,
+			CompletedCount:       2,
+			FailedCount:          2,
+			DispatchedByWorkType: map[string]int{"story": 5},
+			CompletedByWorkType:  map[string]int{"story": 2},
+			FailedByWorkType:     map[string]int{"story": 2},
+			DispatchHistory: []interfaces.FactoryWorldDispatchCompletion{
+				{
+					DispatchID:   "accepted-terminal",
+					TransitionID: "write",
+					Workstation:  interfaces.FactoryWorkstationRef{Name: "Writer"},
+					TerminalWork: &interfaces.FactoryTerminalWork{
+						Status:   "COMPLETE",
+						WorkItem: interfaces.FactoryWorkItem{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "Published draft"},
+					},
+					OutputWorkItems: []interfaces.FactoryWorkItem{
+						{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "should not replace terminal"},
+					},
+					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+					StartedAt:      now.Add(-50 * time.Second),
+					CompletedAt:    now.Add(-40 * time.Second),
+					DurationMillis: 10000,
+				},
+				{
+					DispatchID:   "accepted-output",
+					TransitionID: "review",
+					Workstation:  interfaces.FactoryWorkstationRef{Name: "Reviewer"},
+					TerminalWork: &interfaces.FactoryTerminalWork{
+						Status:   "FAILED",
+						WorkItem: interfaces.FactoryWorkItem{ID: "completed-output", WorkTypeID: "story", DisplayName: "should skip failed terminal"},
+					},
+					OutputWorkItems: []interfaces.FactoryWorkItem{
+						{ID: "completed-output", WorkTypeID: "story", DisplayName: "Review ready"},
+					},
+					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+					StartedAt:      now.Add(-39 * time.Second),
+					CompletedAt:    now.Add(-30 * time.Second),
+					DurationMillis: 9000,
+				},
+				{
+					DispatchID:     "accepted-input-only",
+					TransitionID:   "draft",
+					Workstation:    interfaces.FactoryWorkstationRef{Name: "Drafter"},
+					InputWorkItems: []interfaces.FactoryWorkItem{{ID: "completed-input-only", WorkTypeID: "story", DisplayName: "should stay hidden"}},
+					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+					StartedAt:      now.Add(-35 * time.Second),
+					CompletedAt:    now.Add(-31 * time.Second),
+					DurationMillis: 4000,
+				},
+				{
+					DispatchID:   "failed-terminal",
+					TransitionID: "ship",
+					Workstation:  interfaces.FactoryWorkstationRef{Name: "Publisher"},
+					TerminalWork: &interfaces.FactoryTerminalWork{
+						Status:   "FAILED",
+						WorkItem: interfaces.FactoryWorkItem{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "Publish blocked"},
+					},
+					OutputWorkItems: []interfaces.FactoryWorkItem{
+						{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "should not replace failed terminal"},
+					},
+					Result: interfaces.WorkstationResult{
+						Outcome:        string(interfaces.OutcomeFailed),
+						FailureReason:  "throttled",
+						FailureMessage: "provider unavailable",
+					},
+					StartedAt:      now.Add(-29 * time.Second),
+					CompletedAt:    now.Add(-20 * time.Second),
+					DurationMillis: 9000,
+				},
+				{
+					DispatchID:   "failed-output-and-input-fallback",
+					TransitionID: interfaces.SystemTimeExpiryTransitionID,
+					Workstation:  interfaces.FactoryWorkstationRef{Name: interfaces.SystemTimeExpiryTransitionID},
+					InputWorkItems: []interfaces.FactoryWorkItem{
+						{ID: "failed-output", WorkTypeID: "story", DisplayName: "should not replace failed output"},
+						{ID: "failed-input", WorkTypeID: "story", DisplayName: "Retry later"},
+					},
+					OutputWorkItems: []interfaces.FactoryWorkItem{
+						{ID: "failed-output", WorkTypeID: "story", DisplayName: "Expired artifact"},
+					},
+					Result: interfaces.WorkstationResult{
+						Outcome:       string(interfaces.OutcomeFailed),
+						FailureReason: "expired",
+					},
+					StartedAt:      now.Add(-19 * time.Second),
+					CompletedAt:    now.Add(-10 * time.Second),
+					DurationMillis: 9000,
+				},
+			},
+		},
+	}
+	view := dashboardSessionViewFromRenderData(renderData)
+
+	if got, want := view.CompletedWorkLabels, []string{"Published draft", "Review ready"}; !equalStrings(got, want) {
+		t.Fatalf("CompletedWorkLabels = %v, want %v", got, want)
+	}
+	if got, want := view.FailedWorkLabels, []string{"Expired artifact", "Publish blocked", "Retry later"}; !equalStrings(got, want) {
+		t.Fatalf("FailedWorkLabels = %v, want %v", got, want)
+	}
+	if len(view.FailedWorkDetails) != 3 {
+		t.Fatalf("len(FailedWorkDetails) = %d, want 3", len(view.FailedWorkDetails))
+	}
+
+	detailsByLabel := make(map[string]dashboardFailedWorkDetail, len(view.FailedWorkDetails))
+	for _, detail := range view.FailedWorkDetails {
+		detailsByLabel[detail.WorkItem.DisplayName] = detail
+	}
+
+	publishBlocked := detailsByLabel["Publish blocked"]
+	if publishBlocked.DispatchID != "failed-terminal" ||
+		publishBlocked.WorkstationName != "Publisher" ||
+		publishBlocked.FailureReason != "throttled" ||
+		publishBlocked.FailureMessage != "provider unavailable" {
+		t.Fatalf("Publish blocked detail = %+v", publishBlocked)
+	}
+
+	expiredArtifact := detailsByLabel["Expired artifact"]
+	if expiredArtifact.DispatchID != "failed-output-and-input-fallback" ||
+		expiredArtifact.TransitionID != interfaces.SystemTimeDashboardExpiryTransitionID ||
+		expiredArtifact.WorkstationName != interfaces.SystemTimeDashboardExpiryTransitionID ||
+		expiredArtifact.FailureReason != "expired" ||
+		expiredArtifact.FailureMessage != "" {
+		t.Fatalf("Expired artifact detail = %+v", expiredArtifact)
+	}
+
+	retryLater := detailsByLabel["Retry later"]
+	if retryLater.DispatchID != "failed-output-and-input-fallback" ||
+		retryLater.TransitionID != interfaces.SystemTimeDashboardExpiryTransitionID ||
+		retryLater.WorkstationName != interfaces.SystemTimeDashboardExpiryTransitionID ||
+		retryLater.FailureReason != "expired" ||
+		retryLater.FailureMessage != "" {
+		t.Fatalf("Retry later detail = %+v", retryLater)
+	}
+
+	output := FormatSimpleDashboardWithRenderData(
+		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+			Topology:      buildTestTopology(),
+			Uptime:        5 * time.Minute,
+		},
+		renderData,
+		now,
+	)
+
+	for _, want := range []string{
+		"Failed work: 3",
+		"Expired artifact [failed-output-and-input-fallback] time:expire expired",
+		"Publish blocked [failed-terminal] Publisher throttled - provider unavailable",
+		"Retry later [failed-output-and-input-fallback] time:expire expired",
+		"Completed work: 2",
+		"Published draft",
+		"Review ready",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "should skip failed terminal") {
+		t.Fatalf("output should not contain failed terminal completed label:\n%s", output)
+	}
+}
+
 func TestFormatSimpleDashboard_SnapshotOnlyDoesNotRenderSessionRows(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
 	topology := buildTestTopology()
@@ -415,4 +585,16 @@ func TestFormatDashboardTime(t *testing.T) {
 	if got != "12:00:00" {
 		t.Fatalf("formatDashboardTime() = %q, want %q", got, "12:00:00")
 	}
+}
+
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestFlattenFactoryConfig_CollectsSupportedPortableBundledFiles(t *testing.T) {
@@ -16,6 +16,7 @@ func TestFlattenFactoryConfig_CollectsSupportedPortableBundledFiles(t *testing.T
 	factoryDir := filepath.Join(projectDir, portableFactoryDirName)
 
 	writePortableBundledTestFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-files-test",
   "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
   "resources": [],
   "workers": [{"name":"executor"}],

@@ -3,9 +3,9 @@ package replay
 import (
 	"fmt"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 type replayEventLog struct {
@@ -222,13 +222,11 @@ func replayDispatchFromEvent(factory factoryapi.Factory, event factoryapi.Factor
 	}
 	workstation := generatedReplayWorkstation(factory, payload.TransitionId)
 	dispatch := interfaces.WorkDispatch{
-		DispatchID:               dispatchID,
-		TransitionID:             payload.TransitionId,
-		WorkerType:               generatedReplayWorkerName(workstation),
-		WorkstationName:          generatedReplayWorkstationName(workstation, payload.TransitionId),
-		CurrentChainingTraceID:   stringValue(payload.CurrentChainingTraceId),
-		PreviousChainingTraceIDs: stringSliceValue(payload.PreviousChainingTraceIds),
-		InputTokens:              replayInputTokensFromDispatchPayload(event.Context, payload, workByID),
+		DispatchID:      dispatchID,
+		TransitionID:    payload.TransitionId,
+		WorkerType:      generatedReplayWorkerName(workstation),
+		WorkstationName: generatedReplayWorkstationName(workstation, payload.TransitionId),
+		InputTokens:     replayInputTokensFromDispatchPayload(event.Context, payload, workByID),
 		Execution: interfaces.ExecutionMetadata{
 			RequestID:           stringValue(event.Context.RequestId),
 			TraceID:             firstString(event.Context.TraceIds),
@@ -243,12 +241,16 @@ func replayDispatchFromEvent(factory factoryapi.Factory, event factoryapi.Factor
 	if dispatch.Execution.TraceID == "" {
 		dispatch.Execution.TraceID = firstTraceIDFromDispatchRefs(payload.Inputs, stringSliceValue(event.Context.WorkIds), workByID)
 	}
-	if dispatch.CurrentChainingTraceID == "" {
-		dispatch.CurrentChainingTraceID = dispatch.Execution.TraceID
-	}
-	if len(dispatch.PreviousChainingTraceIDs) == 0 {
-		dispatch.PreviousChainingTraceIDs = interfaces.PreviousChainingTraceIDsFromTokens(workDispatchInputTokensForReplay(event.Context, payload, workByID))
-	}
+	dispatch.CurrentChainingTraceID = replayDispatchCurrentChainingTraceID(
+		event.Context.CurrentChainingTraceId,
+		payload.CurrentChainingTraceId,
+		dispatch.Execution.TraceID,
+	)
+	dispatch.PreviousChainingTraceIDs = replayDispatchPreviousChainingTraceIDs(
+		event.Context.PreviousChainingTraceIds,
+		payload.PreviousChainingTraceIds,
+		workDispatchInputTokensForReplay(event.Context, payload, workByID),
+	)
 	return replayDispatch{
 		eventID:     event.Id,
 		dispatchID:  dispatchID,
@@ -398,6 +400,34 @@ func replayMetadataValue(metadata *factoryapi.DispatchRequestEventMetadata) stri
 		return ""
 	}
 	return stringValue(metadata.ReplayKey)
+}
+
+func replayDispatchCurrentChainingTraceID(
+	contextCurrent *string,
+	payloadCurrent *string,
+	fallbackTraceID string,
+) string {
+	if current := stringValue(contextCurrent); current != "" {
+		return current
+	}
+	if current := stringValue(payloadCurrent); current != "" {
+		return current
+	}
+	return fallbackTraceID
+}
+
+func replayDispatchPreviousChainingTraceIDs(
+	contextPrevious *[]string,
+	payloadPrevious *[]string,
+	inputTokens []interfaces.Token,
+) []string {
+	if previous := stringSliceValue(contextPrevious); len(previous) > 0 {
+		return interfaces.CanonicalChainingTraceIDs(previous)
+	}
+	if previous := stringSliceValue(payloadPrevious); len(previous) > 0 {
+		return interfaces.CanonicalChainingTraceIDs(previous)
+	}
+	return interfaces.PreviousChainingTraceIDsFromTokens(inputTokens)
 }
 
 func generatedReplayWorkstation(factory factoryapi.Factory, transitionID string) *factoryapi.Workstation {

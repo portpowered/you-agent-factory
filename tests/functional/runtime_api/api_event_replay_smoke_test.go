@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // portos:func-length-exception owner=agent-factory reason=event-replay-functional-smoke review=2026-07-18 removal=split-runtime-recording-projection-and-api-assertions-before-next-event-replay-smoke-change

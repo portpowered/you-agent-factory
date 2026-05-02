@@ -4,57 +4,63 @@ import (
 	"fmt"
 	"strings"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (
-	publicFactoryInputKindDefault                  = "DEFAULT"
-	publicFactoryWorkerTypeModel                   = "MODEL_WORKER"
-	publicFactoryWorkerTypeScript                  = "SCRIPT_WORKER"
-	publicFactoryWorkerModelProviderClaude         = "claude"
-	publicFactoryWorkerModelProviderCodex          = "codex"
-	publicFactoryWorkerProviderScriptWrap          = "script_wrap"
-	publicFactoryWorkstationKindStandard           = "STANDARD"
-	publicFactoryWorkstationKindRepeater           = "REPEATER"
-	publicFactoryWorkstationKindCron               = "CRON"
-	publicFactoryWorkstationTypeModel              = "MODEL_WORKSTATION"
-	publicFactoryWorkstationTypeLogical            = "LOGICAL_MOVE"
-	publicFactoryWorkstationGuardTypeVisitCount    = "VISIT_COUNT"
-	publicFactoryWorkstationGuardTypeMatchesFields = "MATCHES_FIELDS"
-	publicFactoryInputGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
-	publicFactoryInputGuardTypeAnyChildFailed      = "ANY_CHILD_FAILED"
-	publicFactoryInputGuardTypeSameName            = "SAME_NAME"
+	publicFactoryInputKindDefault             = "DEFAULT"
+	publicFactoryWorkerTypeModel              = "MODEL_WORKER"
+	publicFactoryWorkerTypeScript             = "SCRIPT_WORKER"
+	publicFactoryWorkerModelProviderClaude    = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex     = "CODEX"
+	publicFactoryWorkerProviderScriptWrap     = "SCRIPT_WRAP"
+	publicFactoryWorkstationKindStandard      = "STANDARD"
+	publicFactoryWorkstationKindRepeater      = "REPEATER"
+	publicFactoryWorkstationKindCron          = "CRON"
+	publicFactoryWorkstationTypeModel         = "MODEL_WORKSTATION"
+	publicFactoryWorkstationTypeLogical       = "LOGICAL_MOVE"
+	publicFactoryGuardTypeVisitCount          = "VISIT_COUNT"
+	publicFactoryGuardTypeMatchesFields       = "MATCHES_FIELDS"
+	publicFactoryGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
+	publicFactoryGuardTypeAnyChildFailed      = "ANY_CHILD_FAILED"
+	publicFactoryGuardTypeSameName            = "SAME_NAME"
+	publicFactoryGuardTypeInferenceThrottle   = "INFERENCE_THROTTLE_GUARD"
 )
 
 var publicFactoryInputKindAliases = map[string]string{
 	"DEFAULT": publicFactoryInputKindDefault,
-	"default": publicFactoryInputKindDefault,
 }
 
 var publicFactoryWorkstationKindAliases = map[string]string{
 	publicFactoryWorkstationKindCron:     publicFactoryWorkstationKindCron,
 	publicFactoryWorkstationKindRepeater: publicFactoryWorkstationKindRepeater,
 	publicFactoryWorkstationKindStandard: publicFactoryWorkstationKindStandard,
-	"cron":                               publicFactoryWorkstationKindCron,
-	"repeater":                           publicFactoryWorkstationKindRepeater,
-	"standard":                           publicFactoryWorkstationKindStandard,
+}
+
+var publicFactoryGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeVisitCount:          publicFactoryGuardTypeVisitCount,
+	publicFactoryGuardTypeMatchesFields:       publicFactoryGuardTypeMatchesFields,
+	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
+	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
+	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
+	publicFactoryGuardTypeInferenceThrottle:   publicFactoryGuardTypeInferenceThrottle,
+}
+
+var publicFactoryRootGuardTypeAliases = map[string]string{
+	publicFactoryGuardTypeInferenceThrottle: publicFactoryGuardTypeInferenceThrottle,
 }
 
 var publicFactoryWorkstationGuardTypeAliases = map[string]string{
-	publicFactoryWorkstationGuardTypeVisitCount:    publicFactoryWorkstationGuardTypeVisitCount,
-	publicFactoryWorkstationGuardTypeMatchesFields: publicFactoryWorkstationGuardTypeMatchesFields,
-	"visit_count":    publicFactoryWorkstationGuardTypeVisitCount,
-	"matches_fields": publicFactoryWorkstationGuardTypeMatchesFields,
+	publicFactoryGuardTypeVisitCount:    publicFactoryGuardTypeVisitCount,
+	publicFactoryGuardTypeMatchesFields: publicFactoryGuardTypeMatchesFields,
 }
 
 var publicFactoryInputGuardTypeAliases = map[string]string{
-	publicFactoryInputGuardTypeAllChildrenComplete: publicFactoryInputGuardTypeAllChildrenComplete,
-	publicFactoryInputGuardTypeAnyChildFailed:      publicFactoryInputGuardTypeAnyChildFailed,
-	publicFactoryInputGuardTypeSameName:            publicFactoryInputGuardTypeSameName,
-	"all_children_complete":                        publicFactoryInputGuardTypeAllChildrenComplete,
-	"any_child_failed":                             publicFactoryInputGuardTypeAnyChildFailed,
-	"same_name":                                    publicFactoryInputGuardTypeSameName,
+	publicFactoryGuardTypeVisitCount:          publicFactoryGuardTypeVisitCount,
+	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
+	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
+	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
 }
 
 func canonicalPublicFactoryEnumValue(value string, aliases map[string]string) string {
@@ -105,8 +111,9 @@ func publicFactoryInputKindFromInternal(kind interfaces.InputKind) factoryapi.In
 }
 
 func publicFactoryInputKindStringFromInternal(kind interfaces.InputKind) string {
-	if canonical := canonicalPublicFactoryEnumValue(string(kind), publicFactoryInputKindAliases); canonical != "" {
-		return canonical
+	switch strings.TrimSpace(string(kind)) {
+	case string(interfaces.InputKindDefault), publicFactoryInputKindDefault:
+		return publicFactoryInputKindDefault
 	}
 	return strings.TrimSpace(string(kind))
 }
@@ -139,7 +146,7 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 	if value == nil {
 		return ""
 	}
-	switch interfaces.PermissivePublicFactoryWorkerModelProvider(string(*value)) {
+	switch interfaces.StrictPublicFactoryWorkerModelProvider(string(*value)) {
 	case publicFactoryWorkerModelProviderClaude:
 		return string(factoryapiToInternalModelProviderClaude())
 	case publicFactoryWorkerModelProviderCodex:
@@ -157,8 +164,8 @@ func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) s
 	if value == nil {
 		return ""
 	}
-	if canonical := interfaces.PermissivePublicFactoryWorkerProvider(string(*value)); canonical != "" {
-		return canonical
+	if canonical := interfaces.StrictPublicFactoryWorkerProvider(string(*value)); canonical != "" {
+		return strings.ToLower(canonical)
 	}
 	return strings.TrimSpace(string(*value))
 }
@@ -197,47 +204,42 @@ func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType)
 	return strings.TrimSpace(string(*value))
 }
 
-func publicFactoryWorkstationGuardTypeFromInternal(value interfaces.GuardType) factoryapi.WorkstationGuardType {
-	return factoryapi.WorkstationGuardType(publicFactoryWorkstationGuardTypeStringFromInternal(value))
+func publicFactoryGuardTypeFromInternal(value interfaces.GuardType) factoryapi.GuardType {
+	return factoryapi.GuardType(publicFactoryGuardTypeStringFromInternal(value))
 }
 
-func publicFactoryWorkstationGuardTypeStringFromInternal(value interfaces.GuardType) string {
-	if canonical := canonicalPublicFactoryEnumValue(string(value), publicFactoryWorkstationGuardTypeAliases); canonical != "" {
-		return canonical
+func publicFactoryGuardTypeStringFromInternal(value interfaces.GuardType) string {
+	switch strings.TrimSpace(string(value)) {
+	case string(interfaces.GuardTypeVisitCount), publicFactoryGuardTypeVisitCount:
+		return publicFactoryGuardTypeVisitCount
+	case string(interfaces.GuardTypeMatchesFields), publicFactoryGuardTypeMatchesFields:
+		return publicFactoryGuardTypeMatchesFields
+	case string(interfaces.GuardTypeAllChildrenComplete), publicFactoryGuardTypeAllChildrenComplete:
+		return publicFactoryGuardTypeAllChildrenComplete
+	case string(interfaces.GuardTypeAnyChildFailed), publicFactoryGuardTypeAnyChildFailed:
+		return publicFactoryGuardTypeAnyChildFailed
+	case string(interfaces.GuardTypeSameName), publicFactoryGuardTypeSameName:
+		return publicFactoryGuardTypeSameName
+	case string(interfaces.GuardTypeInferenceThrottle), publicFactoryGuardTypeInferenceThrottle:
+		return publicFactoryGuardTypeInferenceThrottle
 	}
 	return strings.TrimSpace(string(value))
 }
 
-func internalFactoryWorkstationGuardTypeFromPublic(value factoryapi.WorkstationGuardType) interfaces.GuardType {
-	switch canonicalPublicFactoryEnumValue(string(value), publicFactoryWorkstationGuardTypeAliases) {
-	case publicFactoryWorkstationGuardTypeVisitCount:
+func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.GuardType {
+	switch canonicalPublicFactoryEnumValue(string(value), publicFactoryGuardTypeAliases) {
+	case publicFactoryGuardTypeVisitCount:
 		return interfaces.GuardTypeVisitCount
-	case publicFactoryWorkstationGuardTypeMatchesFields:
+	case publicFactoryGuardTypeMatchesFields:
 		return interfaces.GuardTypeMatchesFields
-	default:
-		return interfaces.GuardType(strings.TrimSpace(string(value)))
-	}
-}
-
-func publicFactoryInputGuardTypeFromInternal(value interfaces.GuardType) factoryapi.InputGuardType {
-	return factoryapi.InputGuardType(publicFactoryInputGuardTypeStringFromInternal(value))
-}
-
-func publicFactoryInputGuardTypeStringFromInternal(value interfaces.GuardType) string {
-	if canonical := canonicalPublicFactoryEnumValue(string(value), publicFactoryInputGuardTypeAliases); canonical != "" {
-		return canonical
-	}
-	return strings.TrimSpace(string(value))
-}
-
-func internalFactoryInputGuardTypeFromPublic(value factoryapi.InputGuardType) interfaces.GuardType {
-	switch canonicalPublicFactoryEnumValue(string(value), publicFactoryInputGuardTypeAliases) {
-	case publicFactoryInputGuardTypeAllChildrenComplete:
+	case publicFactoryGuardTypeAllChildrenComplete:
 		return interfaces.GuardTypeAllChildrenComplete
-	case publicFactoryInputGuardTypeAnyChildFailed:
+	case publicFactoryGuardTypeAnyChildFailed:
 		return interfaces.GuardTypeAnyChildFailed
-	case publicFactoryInputGuardTypeSameName:
+	case publicFactoryGuardTypeSameName:
 		return interfaces.GuardTypeSameName
+	case publicFactoryGuardTypeInferenceThrottle:
+		return interfaces.GuardTypeInferenceThrottle
 	default:
 		return interfaces.GuardType(strings.TrimSpace(string(value)))
 	}

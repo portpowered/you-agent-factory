@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	agentcli "github.com/portpowered/agent-factory/pkg/cli"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	agentcli "github.com/portpowered/infinite-you/pkg/cli"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type docsSmokeTopic struct {
@@ -19,7 +19,7 @@ type docsSmokeTopic struct {
 }
 
 var docsSmokeTopics = []docsSmokeTopic{
-	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "agent-factory docs workstation"}},
+	{name: "config", heading: "# Config", markers: []string{"factory.json", "workTypes", "behavior"}},
 	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE"}},
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot"}},

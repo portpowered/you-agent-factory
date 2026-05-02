@@ -1,6 +1,5 @@
 import { normalizeFactoryDefinition } from "../../api/factory-definition";
 import type { CanonicalFactoryDefinition } from "../../api/factory-definition";
-import type { NamedFactoryValue } from "../../api/named-factory";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_TEXT_CHUNK = "tEXt";
@@ -11,7 +10,7 @@ const PORT_OS_FACTORY_PNG_ITXT_UNCOMPRESSED_FLAG = 0;
 export const PORT_OS_FACTORY_PNG_METADATA_KEYWORD = "portos.agent-factory";
 export const PORT_OS_FACTORY_PNG_SCHEMA_VERSION = "portos.agent-factory.png.v1";
 
-export interface PortOSFactoryPngEnvelope extends NamedFactoryValue {
+export interface FactoryPngMetadata extends CanonicalFactoryDefinition {
   schemaVersion: typeof PORT_OS_FACTORY_PNG_SCHEMA_VERSION;
 }
 
@@ -43,12 +42,10 @@ export interface ReadFactoryImportPngOptions {
 }
 
 export interface FactoryPngImportValue {
-  envelope: PortOSFactoryPngEnvelope;
   factory: CanonicalFactoryDefinition;
-  factoryName: string;
-  namedFactory: NamedFactoryValue;
   previewImageSrc: string;
   revokePreviewImageSrc: () => void;
+  schemaVersion: typeof PORT_OS_FACTORY_PNG_SCHEMA_VERSION;
 }
 
 export interface ReadFactoryImportPngFailure {
@@ -83,9 +80,9 @@ export async function readFactoryImportPng({
     return metadataText;
   }
 
-  const envelope = parseFactoryEnvelope(metadataText.value);
-  if (!envelope.ok) {
-    return envelope;
+  const metadata = parseFactoryMetadata(metadataText.value);
+  if (!metadata.ok) {
+    return metadata;
   }
 
   try {
@@ -118,17 +115,12 @@ export async function readFactoryImportPng({
   return {
     ok: true,
     value: {
-      envelope: envelope.value,
-      factory: envelope.value.factory,
-      factoryName: envelope.value.name,
-      namedFactory: {
-        factory: envelope.value.factory,
-        name: envelope.value.name,
-      },
+      factory: stripMetadataSchemaVersion(metadata.value),
       previewImageSrc,
       revokePreviewImageSrc: () => {
         revokePreviewImageSrc(previewImageSrc);
       },
+      schemaVersion: metadata.value.schemaVersion,
     },
   };
 }
@@ -206,10 +198,10 @@ function readFactoryMetadataText(pngBytes: Uint8Array): ImportStepResult<string>
   };
 }
 
-function parseFactoryEnvelope(metadataText: string): ImportStepResult<PortOSFactoryPngEnvelope> {
-  let parsedEnvelope: unknown;
+function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPngMetadata> {
+  let parsedMetadata: unknown;
   try {
-    parsedEnvelope = JSON.parse(metadataText);
+    parsedMetadata = JSON.parse(metadataText);
   } catch (error) {
     return {
       error: {
@@ -221,7 +213,7 @@ function parseFactoryEnvelope(metadataText: string): ImportStepResult<PortOSFact
     };
   }
 
-  if (!isRecord(parsedEnvelope)) {
+  if (!isRecord(parsedMetadata)) {
     return {
       error: {
         code: "PNG_METADATA_INVALID",
@@ -231,7 +223,7 @@ function parseFactoryEnvelope(metadataText: string): ImportStepResult<PortOSFact
     };
   }
 
-  if (!isNonEmptyString(parsedEnvelope.schemaVersion)) {
+  if (!isNonEmptyString(parsedMetadata.schemaVersion)) {
     return {
       error: {
         code: "PNG_METADATA_INVALID",
@@ -241,12 +233,12 @@ function parseFactoryEnvelope(metadataText: string): ImportStepResult<PortOSFact
     };
   }
 
-  if (parsedEnvelope.schemaVersion !== PORT_OS_FACTORY_PNG_SCHEMA_VERSION) {
+  if (parsedMetadata.schemaVersion !== PORT_OS_FACTORY_PNG_SCHEMA_VERSION) {
     return {
       error: {
         code: "UNSUPPORTED_SCHEMA_VERSION",
         details: {
-          schemaVersion: parsedEnvelope.schemaVersion,
+          schemaVersion: parsedMetadata.schemaVersion,
         },
         message: "The selected PNG uses an unsupported Port OS factory metadata version.",
       },
@@ -254,23 +246,23 @@ function parseFactoryEnvelope(metadataText: string): ImportStepResult<PortOSFact
     };
   }
 
-  const normalizedEnvelope = normalizeFactoryEnvelope(parsedEnvelope);
-  if (!normalizedEnvelope.ok) {
-    return normalizedEnvelope;
+  const normalizedMetadata = normalizeFactoryMetadata(parsedMetadata);
+  if (!normalizedMetadata.ok) {
+    return normalizedMetadata;
   }
 
   return {
     ok: true,
-    value: normalizedEnvelope.value,
+    value: normalizedMetadata.value,
   };
 }
 
-function normalizeFactoryEnvelope(
-  parsedEnvelope: Record<string, unknown>,
-): ImportStepResult<PortOSFactoryPngEnvelope> {
+function normalizeFactoryMetadata(
+  parsedMetadata: Record<string, unknown>,
+): ImportStepResult<FactoryPngMetadata> {
   let normalizedFactory: CanonicalFactoryDefinition;
   try {
-    normalizedFactory = normalizeFactoryDefinition(parsedEnvelope.factory);
+    normalizedFactory = normalizeFactoryPayload(parsedMetadata);
   } catch {
     return {
       error: {
@@ -281,7 +273,7 @@ function normalizeFactoryEnvelope(
     };
   }
 
-  const normalizedFactoryName = readFactoryEnvelopeName(parsedEnvelope);
+  const normalizedFactoryName = readFactoryMetadataName(parsedMetadata);
   if (!normalizedFactoryName.ok) {
     return normalizedFactoryName;
   }
@@ -289,27 +281,25 @@ function normalizeFactoryEnvelope(
   return {
     ok: true,
     value: {
-      factory: normalizedFactory,
-      name: normalizedFactoryName.value,
+      ...normalizedFactory,
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     },
   };
 }
 
-function readFactoryEnvelopeName(parsedEnvelope: Record<string, unknown>): ImportStepResult<string> {
-  const canonicalEnvelopeName = readCanonicalPortOSFactoryPngEnvelopeName(parsedEnvelope);
-  if (canonicalEnvelopeName !== null) {
-    return {
-      ok: true,
-      value: canonicalEnvelopeName,
-    };
-  }
+function normalizeFactoryPayload(
+  parsedMetadata: Record<string, unknown>,
+): CanonicalFactoryDefinition {
+  const { schemaVersion: _schemaVersion, ...factoryPayload } = parsedMetadata;
+  return normalizeFactoryDefinition(factoryPayload);
+}
 
-  const legacyEnvelopeName = readLegacyPortOSFactoryPngEnvelopeName(parsedEnvelope);
-  if (legacyEnvelopeName !== null) {
+function readFactoryMetadataName(parsedMetadata: Record<string, unknown>): ImportStepResult<string> {
+  const canonicalFactoryName = readCanonicalFactoryMetadataName(parsedMetadata);
+  if (canonicalFactoryName !== null) {
     return {
       ok: true,
-      value: legacyEnvelopeName,
+      value: canonicalFactoryName,
     };
   }
 
@@ -482,20 +472,17 @@ function decodeAscii(value: Uint8Array): string {
   return String.fromCharCode(...value);
 }
 
-function readCanonicalPortOSFactoryPngEnvelopeName(value: Record<string, unknown>): string | null {
-  if (!isNonEmptyString(value.name) || !isOptionalString(value.factoryName)) {
+function readCanonicalFactoryMetadataName(value: Record<string, unknown>): string | null {
+  if (!isNonEmptyString(value.name)) {
     return null;
   }
 
   return value.name.trim();
 }
 
-function readLegacyPortOSFactoryPngEnvelopeName(value: Record<string, unknown>): string | null {
-  if (!isNonEmptyString(value.factoryName) || value.name !== undefined) {
-    return null;
-  }
-
-  return value.factoryName.trim();
+function stripMetadataSchemaVersion(metadata: FactoryPngMetadata): CanonicalFactoryDefinition {
+  const { schemaVersion: _schemaVersion, ...factory } = metadata;
+  return factory;
 }
 
 function isStringMap(value: unknown): value is Record<string, string> | undefined {
@@ -512,10 +499,6 @@ function isStringMap(value: unknown): value is Record<string, string> | undefine
 
 function isOptionalArray<T>(value: unknown, predicate: (entry: unknown) => boolean): value is T[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((entry) => predicate(entry)));
-}
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
 }
 
 function isNonEmptyString(value: unknown): value is string {

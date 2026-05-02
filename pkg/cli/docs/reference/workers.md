@@ -25,8 +25,8 @@ model-backed or script-backed. Workstations reference workers by `name`.
 ---
 type: MODEL_WORKER
 model: gpt-5-codex
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 timeout: 1h
 skipPermissions: true
 ---
@@ -51,7 +51,7 @@ changes scoped to the current work item.
 | `resources` | All | Worker-scoped resource labels used by runtime integrations. |
 | `model` | Model | Provider model name. |
 | `modelProvider` | Model | Public model provider identifier such as `claude` or `codex`. |
-| `executorProvider` | Model | Executor wrapper identifier such as `script_wrap`. |
+| `executorProvider` | Model | Executor wrapper identifier such as `SCRIPT_WRAP`. |
 | `stopToken` | Model | Accepted-completion marker when configured. |
 | `skipPermissions` | Model | Provider-specific local permission shortcut. |
 | `command` | Script | Executable name. |
@@ -66,6 +66,6 @@ changes scoped to the current work item.
 
 ## Related
 
-- `agent-factory docs config`
-- `agent-factory docs workstation`
-- `agent-factory docs templates`
+- `infinite-you docs config`
+- `infinite-you docs workstation`
+- `infinite-you docs templates`

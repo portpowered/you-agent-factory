@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 type RecordingCommandRunner struct {

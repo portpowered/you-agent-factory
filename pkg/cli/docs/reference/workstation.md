@@ -28,7 +28,7 @@ configured output, continue, rejection, or failure place.
 | Field | Description |
 |-------|-------------|
 | `name` | Stable workstation and transition name. |
-| `kind` | Scheduling kind: `standard`, `repeater`, or `cron`. |
+| `behavior` | Scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`. |
 | `worker` | Worker name to dispatch when the workstation executes. |
 | `inputs` | Places that must be present before the workstation can fire. |
 | `outputs` | Places produced on accepted completion. |
@@ -36,8 +36,8 @@ configured output, continue, rejection, or failure place.
 | `onRejection` | Place produced on rejected completion. |
 | `onFailure` | Place produced on failure or timeout. |
 | `resources` | Resource capacity held while the dispatch is in flight. |
-| `guards` | Workstation-level `visit_count` guards. |
-| `cron` | Schedule configuration for `kind: "cron"`. |
+| `guards` | Workstation-level `VISIT_COUNT` guards. |
+| `CRON` | Schedule configuration for `behavior: "CRON"`. |
 
 ## Runtime Fields
 
@@ -58,18 +58,18 @@ These can live inline in `factory.json` or in
 
 ## Scheduling Kinds
 
-- `standard` fires once when its inputs are ready.
-- `repeater` fires again after continue results and is the normal fit for
+- `STANDARD` fires once when its inputs are ready.
+- `REPEATER` fires again after continue results and is the normal fit for
   iterative agent loops that keep rejection reserved for true send-back or
   negative outcomes.
-- `cron` submits internal time work on a schedule while the runtime stays in
+- `CRON` submits internal time work on a schedule while the runtime stays in
   service mode.
 
 Use a guarded `LOGICAL_MOVE` workstation to cap repeater or review loops.
 
 ## Related
 
-- `agent-factory docs config`
-- `agent-factory docs workers`
-- `agent-factory docs resources`
-- `agent-factory docs templates`
+- `infinite-you docs config`
+- `infinite-you docs workers`
+- `infinite-you docs resources`
+- `infinite-you docs templates`

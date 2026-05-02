@@ -3,7 +3,7 @@ package workers
 import (
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {

@@ -154,21 +154,21 @@ paths:
       tags:
         - Factory
       operationId: createFactory
-      summary: Create named factory
-      description: Stores one named factory definition and activates it as the current factory when the runtime is idle.
+      summary: Create factory
+      description: Stores one factory definition and activates it as the current factory when the runtime is idle. The reserved `UNDEFINED` identifier is for `GET /factory/~current` readback only and cannot be activated as a customer-named factory.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NamedFactory'
+              $ref: '#/components/schemas/Factory'
       responses:
         '201':
-          description: Named factory was stored and activated.
+          description: Factory was stored and activated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NamedFactory'
+                $ref: '#/components/schemas/Factory'
         '400':
           $ref: '#/components/responses/CreateFactoryBadRequest'
         '409':
@@ -180,15 +180,44 @@ paths:
       tags:
         - Factory
       operationId: getCurrentFactory
-      summary: Get current named factory
-      description: Returns the active named factory from the durable current-factory pointer and canonical flattened factory payload.
+      summary: Get current factory
+      description: Returns the canonical current-factory payload from the durable current-factory pointer or, when no pointer exists yet, from the active default root runtime. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`.
       responses:
         '200':
-          description: Current active named factory.
+          description: Current active factory or the active default root runtime when no current-factory pointer exists yet.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NamedFactory'
+                $ref: '#/components/schemas/Factory'
+              examples:
+                defaultRootRuntime:
+                  summary: Default root runtime is active.
+                  value:
+                    name: UNDEFINED
+                    workTypes:
+                      - name: task
+                        states:
+                          - name: init
+                            type: INITIAL
+                          - name: done
+                            type: TERMINAL
+                    workers:
+                      - name: planner
+                        type: MODEL_WORKER
+                        modelProvider: CLAUDE
+                        executorProvider: SCRIPT_WRAP
+                        model: claude-sonnet-4-20250514
+                    workstations:
+                      - name: plan-task
+                        behavior: STANDARD
+                        type: MODEL_WORKSTATION
+                        worker: planner
+                        inputs:
+                          - workType: task
+                            state: init
+                        outputs:
+                          - workType: task
+                            state: done
         '404':
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
@@ -323,8 +352,6 @@ components:
       $ref: './components/schemas/shared/IntegerMap.yaml'
     FactoryName:
       $ref: './components/schemas/data-models/FactoryName.yaml'
-    NamedFactory:
-      $ref: './components/schemas/data-models/NamedFactory.yaml'
     FactoryWorldWorkstationRequestProjectionSlice:
       $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestProjectionSlice.yaml'
     FactoryWorldRenderedPromptDiagnostic:
@@ -423,6 +450,8 @@ components:
     # ==== Raw data schemas for a factor =======
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    FactoryGuard:
+      $ref: './components/schemas/data-models/FactoryGuard.yaml'
     ResourceManifest:
       $ref: './components/schemas/data-models/ResourceManifest.yaml'
     RequiredTool:
@@ -461,18 +490,14 @@ components:
       $ref: './components/schemas/data-models/WorkstationType.yaml'
     WorkstationCron:
       $ref: './components/schemas/data-models/WorkstationCron.yaml'
-    WorkstationGuardType:
-      $ref: './components/schemas/data-models/WorkstationGuardType.yaml'
-    WorkstationGuard:
-      $ref: './components/schemas/data-models/WorkstationGuard.yaml'
-    WorkstationGuardMatchConfig:
-      $ref: './components/schemas/data-models/WorkstationGuardMatchConfig.yaml'
+    GuardType:
+      $ref: './components/schemas/data-models/GuardType.yaml'
+    Guard:
+      $ref: './components/schemas/data-models/Guard.yaml'
+    GuardMatchConfig:
+      $ref: './components/schemas/data-models/GuardMatchConfig.yaml'
     WorkstationIO:
       $ref: './components/schemas/data-models/WorkstationIO.yaml'
-    InputGuard:
-      $ref: './components/schemas/data-models/InputGuard.yaml'
-    InputGuardType:
-      $ref: './components/schemas/data-models/InputGuardType.yaml'
     Transition:
       $ref: './components/schemas/data-models/Transition.yaml'
     # ==== Raw data types here =======

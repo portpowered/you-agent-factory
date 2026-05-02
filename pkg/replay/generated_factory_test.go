@@ -8,17 +8,18 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/replay"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/replay"
 )
 
 // portos:func-length-exception owner=agent-factory reason=generated-factory-serialization-fixture review=2026-07-18 removal=split-fixture-builder-before-next-factory-serialization-change
 func TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
-		"project": "customer-project",
+		"name": "customer-project",
+		"id":   "customer-project",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -101,6 +102,7 @@ Fallback body.
 func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOnlyMaps(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{{
 			"name": "story",
 			"states": []map[string]string{
@@ -169,14 +171,11 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOn
 
 func assertGeneratedFactoryMetadata(t *testing.T, generated factoryapi.Factory, factoryDir, workflowID string) {
 	t.Helper()
-	if generated.FactoryDir == nil || *generated.FactoryDir != factoryDir {
-		t.Fatalf("generated factoryDir = %#v, want %q", generated.FactoryDir, factoryDir)
+	if generated.FactoryDirectory == nil || *generated.FactoryDirectory != factoryDir {
+		t.Fatalf("generated factoryDirectory = %#v, want %q", generated.FactoryDirectory, factoryDir)
 	}
 	if generated.SourceDirectory == nil || *generated.SourceDirectory != factoryDir {
 		t.Fatalf("generated sourceDirectory = %#v, want %q", generated.SourceDirectory, factoryDir)
-	}
-	if generated.WorkflowId == nil || *generated.WorkflowId != workflowID {
-		t.Fatalf("generated workflowID = %#v, want %q", generated.WorkflowId, workflowID)
 	}
 	if generated.Metadata == nil {
 		t.Fatal("expected generated metadata")

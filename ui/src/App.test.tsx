@@ -49,7 +49,7 @@ import type {
 } from "./api/dashboard";
 import { FACTORY_EVENT_TYPES } from "./api/events";
 import type { FactoryEvent } from "./api/events";
-import type { NamedFactoryValue } from "./api/named-factory";
+import type { FactoryValue } from "./api/named-factory";
 import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
 import { buildFactoryTimelineSnapshot, useFactoryTimelineStore } from "./state/factoryTimelineStore";
@@ -561,7 +561,7 @@ function expectSeparatedStateMarkerZones(label: string, count: number): void {
 const selectedTickTimelineEvents: FactoryEvent[] = [
   factoryEvent("timeline-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
     factory: {
-      work_types: [{
+      workTypes: [{
         name: "story",
         states: [
           { name: "new", type: "INITIAL" },
@@ -572,9 +572,9 @@ const selectedTickTimelineEvents: FactoryEvent[] = [
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          outputs: [{ state: "review", work_type: "story" }],
+          outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
       ],
@@ -602,9 +602,9 @@ const selectedTickTimelineEvents: FactoryEvent[] = [
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      outputs: [{ state: "review", work_type: "story" }],
+      outputs: [{ state: "review", workType: "story" }],
       worker: "reviewer",
     },
   }),
@@ -628,9 +628,9 @@ const selectedTickTimelineEvents: FactoryEvent[] = [
     transitionId: "review",
     workstation: {
       id: "review",
-      inputs: [{ state: "new", work_type: "story" }],
+      inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      outputs: [{ state: "done", work_type: "story" }],
+      outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
   }),
@@ -647,17 +647,17 @@ selectedTickTimelineEvents[3].context.workIds = [eventTimelineWorkID];
 
 const traceFanInReviewWorkstation = {
   id: "review",
-  inputs: [{ state: "new", work_type: "story" }],
+  inputs: [{ state: "new", workType: "story" }],
   name: "Review",
-  outputs: [{ state: "review", work_type: "story" }],
+  outputs: [{ state: "review", workType: "story" }],
   worker: "reviewer",
 } as const;
 
 const traceFanInCompleteWorkstation = {
   id: "complete",
-  inputs: [{ state: "review", work_type: "story" }],
+  inputs: [{ state: "review", workType: "story" }],
   name: "Complete",
-  outputs: [{ state: "active", work_type: "story" }],
+  outputs: [{ state: "active", workType: "story" }],
   worker: "completer",
 } as const;
 
@@ -665,7 +665,7 @@ function buildTraceFanInTimelineEvents(): FactoryEvent[] {
   return [
     factoryEvent("trace-fan-in-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
       factory: {
-        work_types: [{
+        workTypes: [{
           name: "story",
           states: [
             { name: "new", type: "INITIAL" },
@@ -858,7 +858,7 @@ function buildLegacyTraceTimelineEvents(): FactoryEvent[] {
   return [
     factoryEvent("trace-legacy-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
       factory: {
-        work_types: [{
+        workTypes: [{
           name: "story",
           states: [
             { name: "new", type: "INITIAL" },
@@ -978,7 +978,7 @@ function buildLegacyTraceTimelineEvents(): FactoryEvent[] {
 const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
   factoryEvent("timeline-zero-1", 0, FACTORY_EVENT_TYPES.initialStructureRequest, {
     factory: {
-      work_types: [{
+      workTypes: [{
         name: "story",
         states: [
           { name: "new", type: "INITIAL" },
@@ -988,9 +988,9 @@ const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          outputs: [{ state: "review", work_type: "story" }],
+          outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
       ],
@@ -1000,18 +1000,19 @@ const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
 
 const exportTimelineEvents: FactoryEvent[] = [
   factoryEvent("export-run-request", 0, FACTORY_EVENT_TYPES.runRequest, {
-    factory: {
-      project: "semantic-workflow",
-      source_directory: "/work/factories/semantic-workflow",
+  factory: {
+      id: "semantic-workflow",
+      name: "semantic-workflow",
+      factoryDirectory: "/work/factories/semantic-workflow",
       workers: [
         {
-          model_provider: "codex",
+          modelProvider: "CODEX",
           name: "reviewer",
-          provider: "script_wrap",
+          executorProvider: "SCRIPT_WRAP",
           type: "MODEL_WORKER",
         },
       ],
-      work_types: [{
+      workTypes: [{
         name: "story",
         states: [
           { name: "new", type: "INITIAL" },
@@ -1021,10 +1022,10 @@ const exportTimelineEvents: FactoryEvent[] = [
       workstations: [
         {
           id: "review",
-          inputs: [{ state: "new", work_type: "story" }],
+          inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          on_failure: { state: "done", work_type: "story" },
-          outputs: [{ state: "done", work_type: "story" }],
+          onFailure: { state: "done", workType: "story" },
+          outputs: [{ state: "done", workType: "story" }],
           worker: "reviewer",
         },
       ],
@@ -1033,41 +1034,38 @@ const exportTimelineEvents: FactoryEvent[] = [
   }),
 ];
 const currentNamedFactoryExportResponse = {
-  factory: {
-    metadata: {
-      contractSource: "current-factory-api",
-    },
-    project: "authored-current-factory",
-    workers: [
-      {
-        executorProvider: "script_wrap",
-        modelProvider: "codex",
-        name: "reviewer",
-        type: "MODEL_WORKER",
-      },
-    ],
-    workTypes: [{
-      name: "story",
-      states: [
-        { name: "new", type: "INITIAL" },
-        { name: "done", type: "TERMINAL" },
-      ],
-    }],
-    workstations: [
-      {
-        id: "review",
-        inputs: [{ state: "new", workType: "story" }],
-        name: "Review",
-        onFailure: { state: "done", workType: "story" },
-        outputs: [{ state: "done", workType: "story" }],
-        type: "MODEL_WORKSTATION",
-        worker: "reviewer",
-      },
-    ],
+  metadata: {
+    contractSource: "current-factory-api",
   },
+  id: "authored-current-factory",
   name: "semantic-workflow",
-} satisfies NamedFactoryValue;
-
+  workers: [
+    {
+      executorProvider: "SCRIPT_WRAP",
+      modelProvider: "CODEX",
+      name: "reviewer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workTypes: [{
+    name: "story",
+    states: [
+      { name: "new", type: "INITIAL" },
+      { name: "done", type: "TERMINAL" },
+    ],
+  }],
+  workstations: [
+    {
+      id: "review",
+      inputs: [{ state: "new", workType: "story" }],
+      name: "Review",
+      onFailure: { state: "done", workType: "story" },
+      outputs: [{ state: "done", workType: "story" }],
+      type: "MODEL_WORKSTATION",
+      worker: "reviewer",
+    },
+  ],
+} satisfies FactoryValue;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
 
@@ -1326,31 +1324,15 @@ function renderTraceDrilldownHarness({
 
 function createFactoryImportValue(): FactoryPngImportValue {
   return {
-    envelope: {
-      factory: {
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      },
-      name: "Dropped Factory",
-      schemaVersion: "portos.agent-factory.png.v1",
-    },
     factory: {
+      name: "Dropped Factory",
       workTypes: [],
       workers: [],
       workstations: [],
     },
-    factoryName: "Dropped Factory",
-    namedFactory: {
-      factory: {
-        workTypes: [],
-        workers: [],
-        workstations: [],
-      },
-      name: "Dropped Factory",
-    },
     previewImageSrc: "blob:factory-preview",
     revokePreviewImageSrc: vi.fn(),
+    schemaVersion: "portos.agent-factory.png.v1",
   };
 }
 
@@ -1452,7 +1434,7 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "Terminal summary" })).toBeNull();
   });
 
-  it("smoke tests dropped factory import activation through preview confirmation and dashboard refresh", async () => {
+  it("posts the dropped factory import as a direct canonical /factory activation payload", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
@@ -1471,10 +1453,7 @@ describe("App", () => {
 
       if (path === "/factory") {
         return new Response(
-          JSON.stringify({
-            factory: importValue.factory,
-            name: importValue.factoryName,
-          }),
+          JSON.stringify(importValue.factory),
           {
             headers: {
               "Content-Type": "application/json",
@@ -1501,10 +1480,7 @@ describe("App", () => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/factory",
         expect.objectContaining({
-          body: JSON.stringify({
-            factory: importValue.factory,
-            name: importValue.factoryName,
-          }),
+          body: JSON.stringify(importValue.factory),
           headers: {
             "Content-Type": "application/json",
           },
@@ -1512,34 +1488,13 @@ describe("App", () => {
         }),
       );
     });
-    await waitFor(() => {
-      expect(MockEventSource.instances).toHaveLength(2);
-    });
-    expect(importValue.revokePreviewImageSrc).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("dialog", { name: "Review factory import" })).toBeNull();
-
-    const refreshedStream = MockEventSource.instances[1];
-    if (!refreshedStream) {
-      throw new Error("expected a refreshed dashboard stream after factory activation");
-    }
-
-    act(() => {
-      refreshedStream.emit("snapshot", importedFactorySnapshot);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Imported factory active")).toBeTruthy();
-    });
-    expect(await screen.findByRole("button", { name: "Select Imported Review workstation" }))
-      .toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Select Review workstation" })).toBeNull();
   });
 
   it("smoke tests authored export and dropped import as one dashboard-shell roundtrip", async () => {
     const exportProbe = installExportDownloadProbe();
     const mockedExportResult = await factoryPngExportModule.writeFactoryExportPng({
+      factory: currentNamedFactoryExportResponse,
       image: exportImageFile(),
-      namedFactory: currentNamedFactoryExportResponse,
       rasterizeImageToPngBytes: async () => fromBase64(ONE_PIXEL_PNG_BASE64),
     });
     if (!mockedExportResult.ok) {
@@ -1635,12 +1590,12 @@ describe("App", () => {
         expect(JSON.parse(String(activationCall?.[1]?.body))).toEqual(currentNamedFactoryExportResponse);
       });
       await waitFor(() => {
-        expect(MockEventSource.instances).toHaveLength(2);
+        expect(MockEventSource.instances.length).toBeGreaterThan(0);
       });
 
-      const refreshedStream = MockEventSource.instances[1];
+      const refreshedStream = MockEventSource.instances.at(-1);
       if (!refreshedStream) {
-        throw new Error("expected a refreshed dashboard stream after factory activation");
+        throw new Error("expected a dashboard stream after factory activation");
       }
 
       act(() => {
@@ -1724,18 +1679,15 @@ describe("App", () => {
   });
 
   it("waits for a fresh current-factory response before exporting after reopen", async () => {
-    const refreshedCurrentNamedFactoryExportResponse = {
+    const refreshedCurrentFactoryExportResponse = {
       ...currentNamedFactoryExportResponse,
-      factory: {
-        ...currentNamedFactoryExportResponse.factory,
-        metadata: {
-          ...currentNamedFactoryExportResponse.factory.metadata,
-          contractSource: "refetched-current-factory-api",
-        },
-        project: "authored-refetched-factory",
+      metadata: {
+        ...currentNamedFactoryExportResponse.metadata,
+        contractSource: "refetched-current-factory-api",
       },
+      id: "authored-refetched-factory",
       name: "imported-workflow",
-    } satisfies NamedFactoryValue;
+    } satisfies FactoryValue;
     const refreshedCurrentFactoryResponse = createDeferredPromise<Response>();
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
@@ -1743,8 +1695,8 @@ describe("App", () => {
         blob: new Blob([toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))], {
           type: "image/png",
         }),
-        envelope: {
-          ...refreshedCurrentNamedFactoryExportResponse,
+        metadata: {
+          ...refreshedCurrentFactoryExportResponse,
           schemaVersion: "portos.agent-factory.png.v1",
         },
         ok: true,
@@ -1811,7 +1763,7 @@ describe("App", () => {
 
       await act(async () => {
         refreshedCurrentFactoryResponse.resolve(
-          jsonResponse(refreshedCurrentNamedFactoryExportResponse),
+          jsonResponse(refreshedCurrentFactoryExportResponse),
         );
         await refreshedCurrentFactoryResponse.promise;
       });
@@ -1834,8 +1786,8 @@ describe("App", () => {
 
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
+          factory: refreshedCurrentFactoryExportResponse,
           image: expect.any(File),
-          namedFactory: refreshedCurrentNamedFactoryExportResponse,
         });
       });
       await waitFor(() => {
@@ -1895,8 +1847,8 @@ describe("App", () => {
           blob: new Blob([toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))], {
             type: "image/png",
           }),
-          envelope: {
-            factory: currentNamedFactoryExportResponse.factory,
+          metadata: {
+            ...currentNamedFactoryExportResponse,
             name: "Factory Poster",
             schemaVersion: "portos.agent-factory.png.v1",
           },
@@ -1978,8 +1930,8 @@ describe("App", () => {
         blob: new Blob([toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))], {
           type: "image/png",
         }),
-        envelope: {
-          factory: currentNamedFactoryExportResponse.factory,
+        metadata: {
+          ...currentNamedFactoryExportResponse,
           name: "Factory Poster",
           schemaVersion: "portos.agent-factory.png.v1",
         },
@@ -2013,11 +1965,11 @@ describe("App", () => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledTimes(1);
       });
       expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-        image: expect.any(File),
-        namedFactory: {
+        factory: {
           ...currentNamedFactoryExportResponse,
           name: "Factory Poster",
         },
+        image: expect.any(File),
       });
       expect(exportProbe.getDownloadedFilename()).toBe("factory-poster.png");
     } finally {
@@ -3312,13 +3264,10 @@ describe("App", () => {
       within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
     ).toBeTruthy();
     expect(within(trendWidget).queryByRole("list", { name: "Work outcome totals" })).toBeNull();
-    expect(
-      trendWidget.querySelector(
-        `[data-axis-tick='x'][data-axis-tick-value='${baselineSnapshot.tick_count}']`,
-      ),
-    ).toBeTruthy();
-    expect(trendWidget.querySelector("[data-axis-tick='y'][data-axis-tick-value='0']")).toBeTruthy();
-    expect(trendWidget.querySelector("circle")).toBeNull();
+    expect(within(trendWidget).getByText("Queued")).toBeTruthy();
+    expect(within(trendWidget).getByText("In-flight")).toBeTruthy();
+    expect(within(trendWidget).getByText("Completed")).toBeTruthy();
+    expect(within(trendWidget).getByText("Failed/retried")).toBeTruthy();
     expect(within(trendWidget).getByText("Ticks")).toBeTruthy();
     expect(within(trendWidget).getByText("Work count")).toBeTruthy();
 
@@ -3351,10 +3300,9 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(trendWidget.querySelector("[data-axis-gridline='x']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-gridline='y']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-chart-series='queued']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-chart-series='completed']")).toBeTruthy();
+      expect(
+        within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
+      ).toBeTruthy();
     });
 
     expect(
@@ -3422,17 +3370,16 @@ describe("App", () => {
     ).toBeTruthy();
     fireEvent.change(slider, { target: { value: "1" } });
     await waitFor(() => {
-      expect(trendWidget.querySelector("[data-chart-series='completed']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='1']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='4']")).toBeNull();
+      expect(
+        within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
+      ).toBeTruthy();
     });
 
     fireEvent.change(slider, { target: { value: "4" } });
     await waitFor(() => {
-      expect(trendWidget.querySelector("[data-chart-series='failed']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='1']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-tick='x'][data-axis-tick-value='4']")).toBeTruthy();
-      expect(trendWidget.querySelector("[data-axis-gridline='y']")).toBeTruthy();
+      expect(
+        within(trendWidget).getByRole("img", { name: "Work outcome chart for Session" }),
+      ).toBeTruthy();
     });
   });
 

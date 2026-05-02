@@ -3,6 +3,6 @@ description: Concrete worker-provider wrappers supported by the public factory-c
 x-enum-varnames:
   - WorkerProviderScriptWrap
 enum:
-  - script_wrap
+  - SCRIPT_WRAP
 x-enum-descriptions:
   - Public worker executor adapter that shells out through the configured worker command path.

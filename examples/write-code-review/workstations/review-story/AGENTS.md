@@ -1,5 +1,5 @@
 ---
-kind: standard
+behavior: standard
 type: MODEL_WORKSTATION
 worker: reviewer
 ---

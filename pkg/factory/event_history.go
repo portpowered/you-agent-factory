@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // TODO: we should move these constants to the interfaces package, actually we should move the events generally to the openapi.yaml to allow generation of the various types of events payloads.
@@ -31,7 +31,14 @@ const (
 	failureReasonWorkerError       = "worker_error"
 	failureReasonUnknown           = "workstation_failed"
 	failureMessageUnavailable      = "Workstation failed without a reported error message."
+	eventHistoryStreamBufferSize   = 64
 )
+
+type eventHistorySubscription struct {
+	events chan factoryapi.FactoryEvent
+	inbox  chan factoryapi.FactoryEvent
+	done   <-chan struct{}
+}
 
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
@@ -43,7 +50,7 @@ type FactoryEventHistory struct {
 	events         []factoryapi.FactoryEvent
 	recorders      []func(factoryapi.FactoryEvent)
 	nextID         int
-	streams        map[int]chan factoryapi.FactoryEvent
+	streams        map[int]*eventHistorySubscription
 	runRecordedAt  time.Time
 	hasRunRequest  bool
 	hasRunResponse bool
@@ -59,7 +66,7 @@ func NewFactoryEventHistory(net *state.Net, now func() time.Time, runtimeConfigs
 		net:           net,
 		runtimeConfig: interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...),
 		now:           now,
-		streams:       make(map[int]chan factoryapi.FactoryEvent),
+		streams:       make(map[int]*eventHistorySubscription),
 	}
 }
 
@@ -89,22 +96,37 @@ func (h *FactoryEventHistory) Subscribe(ctx context.Context) interfaces.FactoryE
 	copy(events, h.events)
 	id := h.nextID
 	h.nextID++
-	ch := make(chan factoryapi.FactoryEvent, 64)
-	h.streams[id] = ch
+	subscription := &eventHistorySubscription{
+		events: make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		inbox:  make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		done:   ctx.Done(),
+	}
+	h.streams[id] = subscription
 	h.mu.Unlock()
 
 	go func() {
-		<-ctx.Done()
-		h.mu.Lock()
-		stream, ok := h.streams[id]
-		if ok {
-			delete(h.streams, id)
-			close(stream)
+		defer close(subscription.events)
+		for {
+			select {
+			case <-subscription.done:
+				h.mu.Lock()
+				delete(h.streams, id)
+				h.mu.Unlock()
+				return
+			case event := <-subscription.inbox:
+				select {
+				case <-subscription.done:
+					h.mu.Lock()
+					delete(h.streams, id)
+					h.mu.Unlock()
+					return
+				case subscription.events <- event:
+				}
+			}
 		}
-		h.mu.Unlock()
 	}()
 
-	return interfaces.FactoryEventStream{History: events, Events: ch}
+	return interfaces.FactoryEventStream{History: events, Events: subscription.events}
 }
 
 // AddGeneratedRecorder registers a callback invoked for every future generated
@@ -244,12 +266,14 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 		factoryapi.FactoryEventTypeDispatchRequest,
 		fmt.Sprintf("%s/%s", eventIDDispatchCreatedPrefix, dispatchID),
 		factoryapi.FactoryEventContext{
-			Tick:       tick,
-			EventTime:  eventTime,
-			DispatchId: stringPtr(dispatchID),
-			RequestId:  stringPtrIfNotEmpty(record.Dispatch.Execution.RequestID),
-			TraceIds:   stringSlicePtr(traceIDsFromTokens(inputTokens)),
-			WorkIds:    stringSlicePtr(workIDsFromTokens(inputTokens)),
+			Tick:                     tick,
+			EventTime:                eventTime,
+			DispatchId:               stringPtr(dispatchID),
+			RequestId:                stringPtrIfNotEmpty(record.Dispatch.Execution.RequestID),
+			TraceIds:                 stringSlicePtr(traceIDsFromTokens(inputTokens)),
+			WorkIds:                  stringSlicePtr(workIDsFromTokens(inputTokens)),
+			CurrentChainingTraceId:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
+			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 		},
 		factoryapi.DispatchRequestEventPayload{
 			TransitionId:             record.Dispatch.TransitionID,
@@ -276,11 +300,13 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfa
 		factoryapi.FactoryEventTypeDispatchResponse,
 		fmt.Sprintf("%s/%s", eventIDDispatchCompletedPrefix, result.DispatchID),
 		factoryapi.FactoryEventContext{
-			Tick:       tick,
-			EventTime:  eventTime,
-			DispatchId: stringPtr(result.DispatchID),
-			TraceIds:   stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
-			WorkIds:    stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
+			Tick:                     tick,
+			EventTime:                eventTime,
+			DispatchId:               stringPtr(result.DispatchID),
+			TraceIds:                 stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
+			WorkIds:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
+			CurrentChainingTraceId:   stringPtrIfNotEmpty(interfaces.CurrentChainingTraceIDFromTokens(completed.ConsumedTokens)),
+			PreviousChainingTraceIds: stringSlicePtr(interfaces.PreviousChainingTraceIDsFromTokens(completed.ConsumedTokens)),
 		},
 		factoryapi.DispatchResponseEventPayload{
 			TransitionId:             result.TransitionID,
@@ -375,7 +401,7 @@ func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
 	event.SchemaVersion = factoryapi.AgentFactoryEventV1
 	event.Context.Sequence = len(h.events)
 	h.events = append(h.events, event)
-	streams := make([]chan factoryapi.FactoryEvent, 0, len(h.streams))
+	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
 		streams = append(streams, stream)
 	}
@@ -387,7 +413,12 @@ func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
 	}
 	for _, stream := range streams {
 		select {
-		case stream <- event:
+		case <-stream.done:
+			continue
+		default:
+		}
+		select {
+		case stream.inbox <- event:
 		default:
 		}
 	}
@@ -443,11 +474,19 @@ func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Fac
 	workstations := generatedWorkstations(payload.Workstations, payload.Places)
 
 	return factoryapi.Factory{
+		Name:         generatedFactoryName(payload.Name),
 		Resources:    slicePtr(resources),
 		WorkTypes:    slicePtr(workTypes),
 		Workers:      slicePtr(workers),
 		Workstations: slicePtr(workstations),
 	}
+}
+
+func generatedFactoryName(name string) factoryapi.FactoryName {
+	if strings.TrimSpace(name) == "" {
+		return "factory"
+	}
+	return factoryapi.FactoryName(name)
 }
 
 func generatedResources(resources []interfaces.FactoryResource) []factoryapi.Resource {
@@ -535,7 +574,7 @@ func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places 
 			OnFailure:   generatedWorkstationIOPtr(workstation.FailurePlaceIDs, placesByID),
 		}
 		if workstation.Kind != "" {
-			converted.Kind = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
+			converted.Behavior = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
 		}
 		out = append(out, converted)
 	}

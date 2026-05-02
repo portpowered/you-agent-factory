@@ -1,4 +1,5 @@
 {
+  "name": "workflow_v1_dir",
   "workTypes": [
     {
       "name": "task",
@@ -73,3 +74,4 @@
     }
   ]
 }
+

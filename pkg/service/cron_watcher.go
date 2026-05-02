@@ -10,9 +10,9 @@ import (
 
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/timework"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/timework"
 	"go.uber.org/zap"
 )
 

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
@@ -34,19 +34,32 @@ func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
 		PreviousChainingTraceIDs: []string{"chain-a", "chain-z"},
 		TraceID:                  "chain-next",
 	}
-	requestPayload := interfaces.WorkstationRequestPayload{
-		DispatchID:   "dispatch-1",
-		TransitionID: "t-review",
-		Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-		Inputs: []interfaces.WorkstationInput{
-			{TokenID: inputZ.ID, PlaceID: inputZ.PlaceID, WorkItem: &inputZ},
-			{TokenID: inputA.ID, PlaceID: inputA.PlaceID, WorkItem: &inputA},
+	requestEvent := generatedProjectionEvent(
+		factoryapi.FactoryEventTypeDispatchRequest,
+		"request/dispatch-1",
+		2,
+		t0.Add(3*time.Second),
+		factoryapi.FactoryEventContext{
+			DispatchId:               stringPtrForProjectionTest("dispatch-1"),
+			CurrentChainingTraceId:   stringPtrForProjectionTest("chain-z"),
+			PreviousChainingTraceIds: stringSlicePtrForProjectionTest([]string{"chain-a", "chain-z"}),
+			TraceIds:                 stringSlicePtrForProjectionTest([]string{"chain-z", "chain-a"}),
+			WorkIds:                  stringSlicePtrForProjectionTest([]string{"work-z", "work-a"}),
 		},
-	}
+		factoryapi.DispatchRequestEventPayload{
+			TransitionId:             "t-review",
+			CurrentChainingTraceId:   stringPtrForProjectionTest("payload-current"),
+			PreviousChainingTraceIds: stringSlicePtrForProjectionTest([]string{"payload-a", "payload-z"}),
+			Inputs: []factoryapi.DispatchConsumedWorkRef{
+				{WorkId: inputZ.ID},
+				{WorkId: inputA.ID},
+			},
+		},
+	)
 	responsePayload := factoryapi.DispatchResponseEventPayload{
 		TransitionId:             "t-review",
-		CurrentChainingTraceId:   stringPtrForProjectionTest("chain-z"),
-		PreviousChainingTraceIds: stringSlicePtrForProjectionTest([]string{"chain-a", "chain-z"}),
+		CurrentChainingTraceId:   stringPtrForProjectionTest("payload-current"),
+		PreviousChainingTraceIds: stringSlicePtrForProjectionTest([]string{"payload-a", "payload-z"}),
 		Outcome:                  factoryapi.WorkOutcomeAccepted,
 		OutputWork:               &[]factoryapi.Work{generatedWorkForProjectionTest(output, "")},
 	}
@@ -55,16 +68,18 @@ func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
 		initialStructureEvent(t0),
 		workInputEvent(1, t0.Add(time.Second), inputZ),
 		workInputEvent(1, t0.Add(2*time.Second), inputA),
-		workstationRequestEvent(2, t0.Add(3*time.Second), requestPayload),
+		requestEvent,
 		generatedProjectionEvent(
 			factoryapi.FactoryEventTypeDispatchResponse,
 			"response/dispatch-1",
 			3,
 			t0.Add(4*time.Second),
 			factoryapi.FactoryEventContext{
-				DispatchId: stringPtrForProjectionTest("dispatch-1"),
-				TraceIds:   stringSlicePtrForProjectionTest([]string{"chain-next"}),
-				WorkIds:    stringSlicePtrForProjectionTest([]string{"work-out"}),
+				DispatchId:               stringPtrForProjectionTest("dispatch-1"),
+				CurrentChainingTraceId:   stringPtrForProjectionTest("chain-z"),
+				PreviousChainingTraceIds: stringSlicePtrForProjectionTest([]string{"chain-a", "chain-z"}),
+				TraceIds:                 stringSlicePtrForProjectionTest([]string{"chain-next"}),
+				WorkIds:                  stringSlicePtrForProjectionTest([]string{"work-out"}),
 			},
 			responsePayload,
 		),

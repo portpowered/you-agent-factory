@@ -17,10 +17,10 @@ properties:
     description: Model identifier to request from the configured model provider when this worker uses model execution.
   modelProvider:
     $ref: './WorkerModelProvider.yaml'
-    description: Canonical model-provider identifier used for model routing and provider diagnostics. Current built-in values are `claude` and `codex`, which match the executable provider command IDs.
+    description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
   executorProvider:
     $ref: './WorkerProvider.yaml'
-    description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `script_wrap`.
+    description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
   command:
     type: string
     description: Command to execute when this worker runs through a command or script provider.

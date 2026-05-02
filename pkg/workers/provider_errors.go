@@ -3,7 +3,7 @@ package workers
 import (
 	"fmt"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // ProviderError is the shared normalized provider failure contract. Provider

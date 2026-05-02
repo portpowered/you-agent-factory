@@ -19,6 +19,23 @@ func (s *spyLogger) Info(msg string, _ ...any)  { s.infoCalls = append(s.infoCal
 func (s *spyLogger) Warn(msg string, _ ...any)  { s.warnCalls = append(s.warnCalls, msg) }
 func (s *spyLogger) Error(msg string, _ ...any) { s.errorCalls = append(s.errorCalls, msg) }
 
+type verboseCall struct {
+	msg           string
+	keysAndValues []any
+}
+
+type verboseSpyLogger struct {
+	spyLogger
+	verboseCalls []verboseCall
+}
+
+func (s *verboseSpyLogger) Verbose(msg string, keysAndValues ...any) {
+	s.verboseCalls = append(s.verboseCalls, verboseCall{
+		msg:           msg,
+		keysAndValues: append([]any(nil), keysAndValues...),
+	})
+}
+
 func TestSpyLogger_ImplementsLogger(t *testing.T) {
 	var l Logger = &spyLogger{}
 	l.Debug("debug msg", "key", "value")
@@ -58,6 +75,38 @@ func TestEnsureLogger_NonNilReturnsSame(t *testing.T) {
 	l := EnsureLogger(spy)
 	if l != spy {
 		t.Error("expected EnsureLogger to return the same logger when non-nil")
+	}
+}
+
+func TestVerbose_ForwardsToVerboseCapableLogger(t *testing.T) {
+	logger := &verboseSpyLogger{}
+
+	Verbose(logger, "verbose message", "worker", "alpha", "attempt", 2)
+
+	if len(logger.verboseCalls) != 1 {
+		t.Fatalf("expected 1 verbose call, got %d", len(logger.verboseCalls))
+	}
+	if logger.verboseCalls[0].msg != "verbose message" {
+		t.Fatalf("expected verbose message to be forwarded, got %q", logger.verboseCalls[0].msg)
+	}
+	expectedFields := []any{"worker", "alpha", "attempt", 2}
+	if len(logger.verboseCalls[0].keysAndValues) != len(expectedFields) {
+		t.Fatalf("expected %d verbose fields, got %d", len(expectedFields), len(logger.verboseCalls[0].keysAndValues))
+	}
+	for i, field := range expectedFields {
+		if logger.verboseCalls[0].keysAndValues[i] != field {
+			t.Fatalf("expected verbose field %d to be %#v, got %#v", i, field, logger.verboseCalls[0].keysAndValues[i])
+		}
+	}
+}
+
+func TestVerbose_IgnoresPlainLogger(t *testing.T) {
+	logger := &spyLogger{}
+
+	Verbose(logger, "verbose message", "worker", "alpha")
+
+	if len(logger.debugCalls) != 0 || len(logger.infoCalls) != 0 || len(logger.warnCalls) != 0 || len(logger.errorCalls) != 0 {
+		t.Fatalf("expected plain logger to ignore verbose emission, got debug=%v info=%v warn=%v error=%v", logger.debugCalls, logger.infoCalls, logger.warnCalls, logger.errorCalls)
 	}
 }
 

@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/service"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 

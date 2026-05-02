@@ -8,16 +8,16 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	factoryconfig "github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/factory/scheduler"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/replay"
-	"github.com/portpowered/agent-factory/pkg/service"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/pkg/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 const (
@@ -131,7 +131,7 @@ You are the review worker.
 
 func testRuntimeConfigAlignmentRejectsSplitWorkstationRuntimeTypeAlias(t *testing.T) {
 	assertRuntimeConfigAlignmentRejectsSplitWorkstationAlias(t, runtimeConfigAlignmentReviewWorkstation, `---
-kind: REPEATER
+behavior: REPEATER
 runtime_type: MODEL_WORKSTATION
 worker: reviewer
 stopWords:
@@ -143,7 +143,7 @@ Review the task and return DONE when it is acceptable.
 
 func testRuntimeConfigAlignmentRejectsSplitWorkstationCronTriggerAtStartAlias(t *testing.T) {
 	assertRuntimeConfigAlignmentRejectsSplitWorkstationAlias(t, runtimeConfigAlignmentCronWorkstation, `---
-kind: CRON
+behavior: CRON
 type: MODEL_WORKSTATION
 worker: cron-worker
 cron:
@@ -178,11 +178,11 @@ func setupRuntimeConfigAlignmentFactory(t *testing.T) string {
 
 func runtimeConfigAlignmentFactoryJSONConfig() map[string]any {
 	return map[string]any{
-		"workTypes":        runtimeConfigAlignmentWorkTypes(),
-		"resources":        runtimeConfigAlignmentResources(),
-		"resourceManifest": runtimeConfigAlignmentResourceManifest(),
-		"workers":          runtimeConfigAlignmentWorkers(),
-		"workstations":     runtimeConfigAlignmentWorkstations(),
+		"workTypes":       runtimeConfigAlignmentWorkTypes(),
+		"resources":       runtimeConfigAlignmentResources(),
+		"supportingFiles": runtimeConfigAlignmentResourceManifest(),
+		"workers":         runtimeConfigAlignmentWorkers(),
+		"workstations":    runtimeConfigAlignmentWorkstations(),
 	}
 }
 
@@ -326,7 +326,7 @@ stopToken: COMPLETE
 You are the cron worker.
 `)
 	writeWorkstationConfig(t, dir, runtimeConfigAlignmentReviewWorkstation, `---
-kind: REPEATER
+behavior: REPEATER
 type: MODEL_WORKSTATION
 worker: reviewer
 stopWords:
@@ -344,7 +344,7 @@ limits:
 Execute the reviewed task.
 `)
 	writeWorkstationConfig(t, dir, runtimeConfigAlignmentCronWorkstation, `---
-kind: CRON
+behavior: CRON
 type: MODEL_WORKSTATION
 worker: cron-worker
 cron:
@@ -394,8 +394,8 @@ func assertRuntimeConfigAlignmentCanonicalRoundTrip(t *testing.T, dir string) {
 			runtimeConfigAlignmentComparableFactory(generatedFactory),
 		)
 	}
-	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, flattenedFactory.ResourceManifest)
-	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, generatedFactory.ResourceManifest)
+	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, flattenedFactory.SupportingFiles)
+	assertRuntimeConfigAlignmentGeneratedResourceManifest(t, generatedFactory.SupportingFiles)
 
 	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(generatedFactory)
 	if err != nil {
@@ -740,8 +740,8 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if cron.Worker != "cron-worker" {
 		t.Fatalf("%s worker = %q, want cron-worker", runtimeConfigAlignmentCronWorkstation, cron.Worker)
 	}
-	if cron.Kind == nil || *cron.Kind != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindCron) {
-		t.Fatalf("%s kind = %#v, want CRON", runtimeConfigAlignmentCronWorkstation, cron.Kind)
+	if cron.Behavior == nil || *cron.Behavior != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindCron) {
+		t.Fatalf("%s kind = %#v, want CRON", runtimeConfigAlignmentCronWorkstation, cron.Behavior)
 	}
 	if cron.Cron == nil || cron.Cron.Schedule != "0 * * * *" {
 		t.Fatalf("%s cron = %#v, want schedule 0 * * * *", runtimeConfigAlignmentCronWorkstation, cron.Cron)
@@ -753,8 +753,8 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if stringValueFromFunctionalPtr(review.Type) != interfaces.WorkstationTypeModel {
 		t.Fatalf("%s type = %q, want %q", runtimeConfigAlignmentReviewWorkstation, stringValueFromFunctionalPtr(review.Type), interfaces.WorkstationTypeModel)
 	}
-	if review.Kind == nil || *review.Kind != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindRepeater) {
-		t.Fatalf("%s kind = %#v, want REPEATER", runtimeConfigAlignmentReviewWorkstation, review.Kind)
+	if review.Behavior == nil || *review.Behavior != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindRepeater) {
+		t.Fatalf("%s kind = %#v, want REPEATER", runtimeConfigAlignmentReviewWorkstation, review.Behavior)
 	}
 	if !reflect.DeepEqual(stringSliceValue(review.StopWords), []string{"DONE"}) {
 		t.Fatalf("%s stopWords = %#v, want [DONE]", runtimeConfigAlignmentReviewWorkstation, review.StopWords)
@@ -808,9 +808,8 @@ func runtimeConfigAlignmentRequireGeneratedWorkstation(
 
 func runtimeConfigAlignmentComparableFactory(factory factoryapi.Factory) factoryapi.Factory {
 	comparable := factory
-	comparable.FactoryDir = nil
+	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
-	comparable.WorkflowId = nil
 	comparable.Metadata = nil
 	return comparable
 }

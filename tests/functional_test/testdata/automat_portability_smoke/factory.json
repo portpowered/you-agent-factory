@@ -1,5 +1,6 @@
 {
-  "project": "translate-automat-smoke",
+  "name": "translate-automat-smoke",
+  "id": "translate-automat-smoke",
   "workTypes": [
     {
       "name": "chapter",
@@ -31,7 +32,7 @@
       "name": "verify-external-tools"
     }
   ],
-  "resourceManifest": {
+  "supportingFiles": {
     "requiredTools": [
       {
         "name": "mangaka.exe",
@@ -100,3 +101,4 @@
     }
   ]
 }
+

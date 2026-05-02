@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"finish-chapter-factory",
 		"workTypes": [
 			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
 			{"name":"page","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}
@@ -21,7 +22,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 		"workstations": [{
 			"id":"finish-chapter-id",
 			"name":"finish-chapter",
-			"kind":"STANDARD",
+			"behavior":"STANDARD",
 			"worker":"executor",
 			"type":"LOGICAL_MOVE",
 			"promptTemplate":"Finish {{ .WorkID }}.",
@@ -72,7 +73,8 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
-		"project": "customer-project",
+		"name":"customer-facing-name",
+		"id": "customer-project",
 		"workTypes": [
 			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
 			{"name":"page","states":[{"name":"complete","type":"TERMINAL"}]}
@@ -82,7 +84,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 		"workstations": [{
 			"id":"finish-chapter-id",
 			"name":"finish-chapter",
-			"kind":"REPEATER",
+			"behavior":"REPEATER",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
 			"promptTemplate":"Finish {{ .WorkID }}.",
@@ -99,8 +101,8 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
-	if generated.Project == nil || *generated.Project != "customer-project" {
-		t.Fatalf("expected generated project customer-project, got %#v", generated.Project)
+	if generated.Id == nil || *generated.Id != "customer-project" {
+		t.Fatalf("expected generated id customer-project, got %#v", generated.Id)
 	}
 	if generated.Workers == nil || len(*generated.Workers) != 1 {
 		t.Fatalf("expected one generated worker, got %#v", generated.Workers)
@@ -150,6 +152,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"same-name-input-guard-factory",
 		"workTypes": [
 			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
 			{"name":"taskItem","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
@@ -160,7 +163,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 			"worker":"matcher",
 			"inputs":[
 				{"workType":"planItem","state":"ready"},
-				{"workType":"taskItem","state":"ready","guards":[{"type":"same_name","matchInput":"planItem"}]}
+				{"workType":"taskItem","state":"ready","guards":[{"type":"SAME_NAME","matchInput":"planItem"}]}
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
@@ -178,7 +181,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 		t.Fatalf("expected generated same-name guard to survive boundary decode, got %#v", workstation.Inputs)
 	}
 	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.Type != factoryapi.InputGuardTypeSameName {
+	if guard.Type != factoryapi.GuardTypeSameName {
 		t.Fatalf("expected generated guard type SAME_NAME, got %#v", guard.Type)
 	}
 	if guard.MatchInput == nil || *guard.MatchInput != "planItem" {
@@ -206,6 +209,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"matches-fields-guard-factory",
 		"workTypes": [
 			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
 		],
@@ -215,7 +219,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 			"worker":"matcher",
 			"inputs":[{"workType":"asset","state":"ready"}],
 			"outputs":[{"workType":"asset","state":"matched"}],
-			"guards":[{"type":"matches_fields","matchConfig":{"inputKey":".Tags[\"_last_output\"]"}}]
+			"guards":[{"type":"MATCHES_FIELDS","matchConfig":{"inputKey":".Tags[\"_last_output\"]"}}]
 		}]
 	}`)
 
@@ -228,7 +232,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 		t.Fatalf("expected generated matches-fields guard to survive boundary decode, got %#v", workstation.Guards)
 	}
 	guard := (*workstation.Guards)[0]
-	if guard.Type != factoryapi.WorkstationGuardTypeMatchesFields {
+	if guard.Type != factoryapi.GuardTypeMatchesFields {
 		t.Fatalf("expected generated guard type MATCHES_FIELDS, got %#v", guard.Type)
 	}
 	if guard.MatchConfig == nil || guard.MatchConfig.InputKey != `.Tags["_last_output"]` {
@@ -248,8 +252,150 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_DecodesFactoryInferenceThrottleGuard(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"factory-throttle-guard-factory",
+		"guards":[{"type":"INFERENCE_THROTTLE_GUARD","modelProvider":"CLAUDE","model":"claude-sonnet-4-20250514","refreshWindow":"15m"}],
+		"workTypes": [
+			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-assets",
+			"worker":"matcher",
+			"inputs":[{"workType":"asset","state":"ready"}],
+			"outputs":[{"workType":"asset","state":"matched"}]
+		}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Guards == nil || len(*generated.Guards) != 1 {
+		t.Fatalf("expected generated factory guard to survive boundary decode, got %#v", generated.Guards)
+	}
+	guard := (*generated.Guards)[0]
+	if guard.Type != factoryapi.GuardTypeInferenceThrottle {
+		t.Fatalf("expected generated guard type INFERENCE_THROTTLE_GUARD, got %#v", guard.Type)
+	}
+	if guard.ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("expected generated guard modelProvider CLAUDE, got %#v", guard.ModelProvider)
+	}
+	if guard.Model == nil || *guard.Model != "claude-sonnet-4-20250514" {
+		t.Fatalf("expected generated guard model, got %#v", guard.Model)
+	}
+	if guard.RefreshWindow != "15m" {
+		t.Fatalf("expected generated guard refreshWindow, got %#v", guard.RefreshWindow)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	if len(cfg.Guards) != 1 {
+		t.Fatalf("expected runtime factory guard to survive generated mapping, got %#v", cfg.Guards)
+	}
+	runtimeGuard := cfg.Guards[0]
+	if runtimeGuard.Type != interfaces.GuardTypeInferenceThrottle {
+		t.Fatalf("expected runtime guard type inference_throttle_guard, got %#v", runtimeGuard)
+	}
+	if runtimeGuard.ModelProvider != "claude" || runtimeGuard.Model != "claude-sonnet-4-20250514" || runtimeGuard.RefreshWindow != "15m" {
+		t.Fatalf("expected runtime factory guard fields to match generated boundary, got %#v", runtimeGuard)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsFactoryInferenceThrottleGuardWithWorkstationGuardFields(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"factory-throttle-guard-invalid-fields-factory",
+		"guards":[{
+			"type":"INFERENCE_THROTTLE_GUARD",
+			"modelProvider":"CLAUDE",
+			"refreshWindow":"15m",
+			"workstation":"processor"
+		}],
+		"workTypes": [
+			{"name":"asset","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-assets",
+			"worker":"matcher",
+			"inputs":[{"workType":"asset","state":"ready"}],
+			"outputs":[{"workType":"asset","state":"matched"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected workstation-only guard fields on factory guard to fail at generated boundary")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "guards[0].workstation is not supported") {
+		t.Fatalf("expected factory guard field path in error, got %v", err)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsInferenceThrottleGuardOnWorkstation(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"workstation-throttle-guard-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer"}],
+		"workstations": [{
+			"name":"draft-story",
+			"worker":"writer",
+			"guards":[{"type":"INFERENCE_THROTTLE_GUARD"}],
+			"inputs":[{"workType":"story","state":"ready"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected root-only inference throttle guard to fail on workstation guards")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].guards[0].type") {
+		t.Fatalf("expected workstation guard field path in error, got %v", err)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsInferenceThrottleGuardOnInput(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"input-throttle-guard-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer"}],
+		"workstations": [{
+			"name":"draft-story",
+			"worker":"writer",
+			"inputs":[{
+				"workType":"story",
+				"state":"ready",
+				"guards":[{"type":"INFERENCE_THROTTLE_GUARD"}]
+			}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected root-only inference throttle guard to fail on input guards")
+	}
+	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+		t.Fatalf("expected generated boundary context, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "workstations[0].inputs[0].guards[0].type") {
+		t.Fatalf("expected input guard field path in error, got %v", err)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"retired-fan-in-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -275,6 +421,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *t
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredExhaustionRulesFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"retired-exhaustion-rules-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -306,11 +453,12 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredExhaustionRulesFieldAtBou
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredCronIntervalFieldAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"retired-cron-interval-factory",
 		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
 			"name":"daily-refresh",
-			"kind":"cron",
+			"behavior":"CRON",
 			"worker":"executor",
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"interval":"5m"}
@@ -341,6 +489,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			fieldPath: "workers[0].type",
 			value:     "model_worker",
 			payload: `{
+				"name":"worker-type-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","type":"model_worker"}],
 				"workstations": [{
@@ -356,6 +505,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			fieldPath: "workers[0].modelProvider",
 			value:     "Claude",
 			payload: `{
+				"name":"worker-model-provider-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","type":"MODEL_WORKER","modelProvider":"Claude"}],
 				"workstations": [{
@@ -368,10 +518,29 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 			}`,
 		},
 		{
+			name:      "workstation behavior",
+			fieldPath: "workstations[0].behavior",
+			value:     "cron",
+			payload: `{
+				"name":"workstation-behavior-factory",
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+				"workstations": [{
+					"name":"execute-story",
+					"worker":"executor",
+					"behavior":"cron",
+					"type":"MODEL_WORKSTATION",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
+		{
 			name:      "workstation type",
 			fieldPath: "workstations[0].type",
 			value:     "logical_move",
 			payload: `{
+				"name":"workstation-type-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","type":"MODEL_WORKER"}],
 				"workstations": [{
@@ -404,18 +573,19 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *
 	}
 }
 
-func TestGeneratedFactoryFromOpenAPIJSON_CanonicalizesSupportedSharedEnumAliasesAtBoundary(t *testing.T) {
+func TestGeneratedFactoryFromOpenAPIJSON_ParsesCanonicalUppercaseSharedEnumsAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"uppercase-enums-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
 			"type":"MODEL_WORKER",
-			"modelProvider":"OPENAI",
-			"executorProvider":"local-claude"
+			"modelProvider":"CODEX",
+			"executorProvider":"SCRIPT_WRAP"
 		}],
 		"workstations": [{
 			"name":"execute-story",
-			"kind":"STANDARD",
+			"behavior":"STANDARD",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
 			"inputs":[{"workType":"story","state":"init"}],
@@ -432,10 +602,10 @@ func TestGeneratedFactoryFromOpenAPIJSON_CanonicalizesSupportedSharedEnumAliases
 	}
 	worker := (*generated.Workers)[0]
 	if worker.ModelProvider == nil || *worker.ModelProvider != factoryapi.WorkerModelProviderCodex {
-		t.Fatalf("expected generated worker modelProvider codex, got %#v", worker.ModelProvider)
+		t.Fatalf("expected generated worker modelProvider CODEX, got %#v", worker.ModelProvider)
 	}
 	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
-		t.Fatalf("expected generated worker executorProvider script_wrap, got %#v", worker.ExecutorProvider)
+		t.Fatalf("expected generated worker executorProvider SCRIPT_WRAP, got %#v", worker.ExecutorProvider)
 	}
 
 	cfg, err := FactoryConfigFromOpenAPI(generated)
@@ -455,6 +625,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_CanonicalizesSupportedSharedEnumAliases
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"unsupported-executor-provider-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
@@ -498,6 +669,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workers[0].model_provider",
 		replacement: "use modelProvider",
 		payload: `{
+				"name":"worker-snake-case-provider-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor","model_provider":"CODEX"}],
 				"workstations": [{
@@ -513,6 +685,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].resource_usage",
 		replacement: "use resources",
 		payload: `{
+				"name":"workstation-resource-usage-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
@@ -529,6 +702,7 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].stop_token",
 		replacement: "use stopWords",
 		payload: `{
+				"name":"workstation-stop-token-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
@@ -545,11 +719,12 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].cron.trigger_at_start",
 		replacement: "use triggerAtStart",
 		payload: `{
+				"name":"cron-trigger-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
 					"name":"scheduled-story",
-					"kind":"CRON",
+					"behavior":"CRON",
 					"worker":"executor",
 					"outputs":[{"workType":"story","state":"complete"}],
 					"cron":{"schedule":"*/5 * * * *","trigger_at_start":true}
@@ -561,11 +736,12 @@ var generatedFactoryRetiredAliasCases = []generatedFactoryRetiredAliasCase{
 		field:       "workstations[0].definition.runtime_type",
 		replacement: "use type",
 		payload: `{
+				"name":"definition-alias-factory",
 				"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
 				"workers": [{"name":"executor"}],
 				"workstations": [{
 					"name":"scheduled-story",
-					"kind":"STANDARD",
+					"behavior":"STANDARD",
 					"worker":"executor",
 					"inputs":[{"workType":"story","state":"ready"}],
 					"outputs":[{"workType":"story","state":"complete"}],
@@ -604,6 +780,7 @@ func assertGeneratedFactoryRejectsRetiredRenamedFieldAlias(t *testing.T, tc gene
 
 func TestFactoryConfigFromOpenAPIJSON_MapsCopyReferencedScriptsField(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"copy-referenced-scripts-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -637,6 +814,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCopyReferencedScriptsField(t *testing.
 
 func TestFactoryConfigFromOpenAPIJSON_PreservesMapKeysAndCurrentInputGuards(t *testing.T) {
 	cfgJSON := []byte(`{
+		"name":"preserve-map-keys-and-input-guards-factory",
 		"metadata":{"factory_hash":"sha256:test"},
 		"workTypes": [
 			{"name":"chapter","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]},
@@ -649,7 +827,7 @@ func TestFactoryConfigFromOpenAPIJSON_PreservesMapKeysAndCurrentInputGuards(t *t
 			"worker":"executor",
 			"inputs":[
 				{"workType":"chapter","state":"init"},
-				{"workType":"page","state":"complete","guards":[{"type":"all_children_complete","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
+				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
 			],
 			"outputs":[{"workType":"chapter","state":"complete"}],
 			"env":{"TEAM":"{{ index .Tags \"team\" }}"}
@@ -826,9 +1004,9 @@ func TestFactoryConfigFromOpenAPI_ExplicitMapperMatchesJSONBoundary(t *testing.T
 }
 
 func TestFactoryConfigFromOpenAPI_ReportsNestedGeneratedFieldPathOnMappingError(t *testing.T) {
-	guards := []factoryapi.InputGuard{
-		{Type: factoryapi.InputGuardTypeAllChildrenComplete},
-		{Type: factoryapi.InputGuardTypeAnyChildFailed},
+	guards := []factoryapi.Guard{
+		{Type: factoryapi.GuardTypeAllChildrenComplete},
+		{Type: factoryapi.GuardTypeAnyChildFailed},
 	}
 	workstations := []factoryapi.Workstation{{
 		Name:   "finish-story",

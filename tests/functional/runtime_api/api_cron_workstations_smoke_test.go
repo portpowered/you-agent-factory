@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 // portos:func-length-exception owner=agent-factory reason=cron-end-to-end-smoke review=2026-07-18 removal=split-smoke-helpers-before-next-cron-e2e-expansion
@@ -170,6 +170,7 @@ func assertExpiredCronTimeWorkHandled(t *testing.T, fs *functionalAPIServer, exp
 
 func cronSmokeFactoryConfig(schedule string) map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "signal",
@@ -191,9 +192,9 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":   "startup-refresh",
-				"kind":   "cron",
-				"worker": "cron-worker",
+				"name":     "startup-refresh",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
 				"cron": map[string]any{
 					"schedule":       schedule,
 					"triggerAtStart": true,
@@ -202,19 +203,19 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
 			},
 			{
-				"name":    "poll-for-work",
-				"kind":    "cron",
-				"worker":  "cron-worker",
-				"cron":    map[string]any{"schedule": schedule, "expiryWindow": "10s"},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"name":     "poll-for-work",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "expiryWindow": "10s"},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 			{
-				"name":    "poll-with-input",
-				"kind":    "cron",
-				"worker":  "cron-worker",
-				"cron":    map[string]any{"schedule": schedule, "expiryWindow": "10s"},
-				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"name":     "poll-with-input",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "expiryWindow": "10s"},
+				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
 			},
 		},
 	}
@@ -222,6 +223,7 @@ func cronSmokeFactoryConfig(schedule string) map[string]any {
 
 func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 	return map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "signal",
@@ -243,12 +245,12 @@ func cronDefaultExpiryTerminalOutputConfig(schedule string) map[string]any {
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":    "poll-terminal-output",
-				"kind":    "cron",
-				"worker":  "cron-worker",
-				"cron":    map[string]any{"schedule": schedule, "triggerAtStart": true},
-				"inputs":  []map[string]string{{"workType": "signal", "state": "init"}},
-				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"name":     "poll-terminal-output",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron":     map[string]any{"schedule": schedule, "triggerAtStart": true},
+				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
 			},
 		},
 	}

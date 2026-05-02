@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/service"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -451,7 +451,7 @@ func functionalNamedFactoryPayloadWithTerminalState(t *testing.T, project, termi
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]any{
-		"project": project,
+		"name": project,
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -470,6 +470,7 @@ func functionalNamedFactoryPayloadWithTerminalState(t *testing.T, project, termi
 		}},
 		"workstations": []map[string]any{{
 			"name":           "process",
+			"behavior":       "STANDARD",
 			"worker":         "worker-a",
 			"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":        []map[string]string{{"workType": "task", "state": terminalState}},

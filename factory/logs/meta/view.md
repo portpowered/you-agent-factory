@@ -2,8 +2,8 @@
 
 ## world state
 
-- repository `HEAD` is `ca942db` on `main` on May 1, 2026, and
-  `origin/main` is the same commit after `git pull --ff-only`
+- after `git pull --ff-only origin main`, repository `main` and `origin/main`
+  are both at `9bb148e` on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -16,96 +16,139 @@
 - the workspace-local `factory/inputs/**` surface still has ignored residue
   beyond the tracked sentinels, so those files remain local context only and
   not checked-in workflow truth:
-  - `factory/inputs/idea/default/align-process-review-loop-contract.md`
-  - `factory/inputs/idea/default/centralize-work-request-trace-normalization.md`
-  - `factory/inputs/idea/default/consolidate-public-factory-enum-alias-ownership.md`
-  - `factory/inputs/idea/default/dedupe-dispatcher-throttle-pause-filter.md`
-  - `factory/inputs/idea/default/dedupe-generated-boundary-alias-rejection-coverage.md`
-  - `factory/inputs/idea/default/dedupe-retired-boundary-alias-rejection-tables.md`
-  - `factory/inputs/idea/default/retire-scriptwrap-build-args-shim.md`
-  - `factory/inputs/idea/default/systems-cleanup.md`
-  - `factory/inputs/idea/default/test-cleanup.md`
-  - `factory/inputs/task/default/ci-cd.md`
-- the current GitHub lane state on May 1, 2026 is:
-  - open PR `#20` `test-cleanup`
-  - open PR `#16` `dedupe-root-factory-artifact-contract-entries`
-  - open PR `#4` `standardize-contract-guard-skip-policy`
-  - merged PR `#27` `dedupe-generated-boundary-alias-rejection-coverage`
-  - merged PR `#26` `dedupe-retired-boundary-alias-rejection-tables`
-  - merged PR `#25` `retire-scriptwrap-build-args-shim`
-  - merged PR `#24` `consolidate-public-factory-enum-alias-ownership`
-  - merged PR `#23` `centralize-work-request-trace-normalization`
-  - merged PR `#22` `align-process-review-loop-contract`
-  - merged PR `#21` `dedupe-dispatcher-throttle-pause-filter`
-- the previous generated-boundary alias cleanup lane is now complete on `main`:
-  - PR `#27` merged on May 1, 2026
-  - `pkg/config/openapi_factory_test.go` no longer carries the redundant
-    retired generated-boundary alias rejection cases
-  - `pkg/config/factory_config_mapping_test.go` remains the canonical owner for
-    that rejection seam, including nested `definition` and `definition.cron`
-    paths
-- the broader throttle customer ask remains open at the architecture level:
-  - pause state still lives as dispatcher-owned runtime memory keyed by
-    provider/model in `pkg/factory/subsystems/subsystem_dispatcher.go`
-  - the ask for config-authored `factory.guards` with
-    `INFERENCE_THROTTLE_GUARD` is still not implemented on `main`
-- one inspected narrow API cleanup candidate is not ready for queueing:
-  - `pkg/api/server.go` registers a handwritten `/work` route that forwards to
-    `ListWork`
-  - that shim intentionally preserves tolerant `maxResults` parsing before the
-    generated server's stricter integer binding runs
-  - removing it would change current public request tolerance, so it is not a
-    pure dead-code cleanup
+  - `factory/inputs/idea/default/collapse-dashboard-fallback-work-item-collectors.md`
+  - `factory/inputs/idea/default/consolidate-dashboard-session-fallback-workitem-collectors.md`
+  - `factory/inputs/idea/default/dedupe-list-work-legacy-pagination-fallback.md`
+  - `factory/inputs/idea/default/dedupe-replay-factory-merge-helpers.md`
+  - `factory/inputs/idea/default/dedupe-worker-event-exit-code-extraction.md`
+  - `factory/inputs/idea/default/derive-throttle-windows-from-completed-dispatch-history.md`
+  - `factory/inputs/idea/default/derive-throttle-windows-from-event-history.md`
+  - `factory/inputs/idea/default/factory-level-inference-throttle-guard.md`
+  - `factory/inputs/idea/default/inline-batch-relation-duplicate-rejection.md`
+  - `factory/inputs/idea/default/prd-cli-consumer-installation.md`
+  - `factory/inputs/idea/default/prd-current-factory-default-runtime-support.md`
+  - `factory/inputs/idea/default/prd-goreleaser-release-pipeline.md`
+  - `factory/inputs/idea/default/retire-dispatcher-throttle-pause-map.md`
+  - `factory/inputs/idea/default/retire-duplicate-ui-script-copies.md`
+  - `factory/inputs/idea/default/retire-verbose-logger-export.md`
+  - `factory/inputs/plan/default/retire-dispatch-result-hook-syncdispatch-cache.md`
+  - `factory/inputs/task/default/prd-api-model-contract-cleanup.md`
+  - `factory/inputs/task/default/prd-functional-test-suite-decomposition.md`
+- the current GitHub lane state in the maintainer workspace is:
+  - open PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PR `#47` `retire-verbose-logger-export`
+  - merged PR `#46` `factory-level-inference-throttle-guard`
+  - merged PR `#45` `retire-duplicate-ui-script-copies`
+  - merged PR `#44` `inline-batch-relation-duplicate-rejection`
+  - merged PR `#43` `collapse-dashboard-fallback-work-item-collectors`
+  - merged PR `#42` `retire-dispatcher-throttle-pause-map`
+  - merged PR `#41` `dedupe-replay-factory-merge-helpers`
+  - merged PR `#40` `dedupe-worker-event-exit-code-extraction`
+  - merged PR `#39` `chaining-trace-ids`
+  - merged PR `#38` `prd-current-factory-default-runtime-support`
+  - merged PR `#37` `prd-cli-consumer-installation`
+  - merged PR `#36` `retire-dispatch-result-hook-syncdispatch-cache`
+  - merged PR `#35` `consolidate-dashboard-session-fallback-workitem-collectors`
+  - merged PR `#33` `prd-api-model-contract-cleanup`
+- the worktree is currently clean even though ignored local workflow-input
+  residue remains under `factory/inputs/**`
+- the broad throttle customer ask remains the highest-value architecture ask,
+  and the first authored-guard lane is now merged on `main`:
+  - merged PR `#46` added the root authored contract in
+    `api/components/schemas/data-models/Factory.yaml`,
+    `api/components/schemas/data-models/FactoryGuard.yaml`,
+    `api/components/schemas/data-models/GuardType.yaml`,
+    `api/openapi.yaml`, and generated API/UI client output
+  - merged PR `#46` added the factory-level config/mapping/validation lane
+    through `pkg/interfaces/factory_config.go`,
+    `pkg/config/factory_config_mapping.go`,
+    `pkg/config/openapi_factory.go`,
+    `pkg/config/config_validator.go`,
+    `pkg/config/public_factory_enums.go`, and
+    `pkg/config/config_mapper.go`
+  - merged PR `#46` lowered the authored guard into ordinary runtime guard
+    evaluation through `pkg/petri/guard.go`,
+    `pkg/petri/inference_throttle_guard.go`,
+    `pkg/factory/scheduler/enablement.go`, and
+    `pkg/factory/subsystems/subsystem_dispatcher.go`
+  - merged PR `#46` verified the lane with targeted package/API/UI tests while
+    still avoiding `tests/functional/**`
+  - the highest-value remaining gap is now explicit post-merge follow-up:
+    runtime still keeps a legacy implicit throttle-policy fallback for
+    factories that do not author `factory.guards`
+  - that fallback still lives in:
+    - `pkg/factory/options.go` via `WithProviderThrottlePauseDuration`
+    - `pkg/factory/runtime/factory.go` via dispatcher wiring from
+      `ProviderThrottlePauseDuration`
+    - `pkg/factory/subsystems/subsystem_dispatcher.go` via the
+      `activeThrottlePauses` branch that falls back to
+      `factorythrottle.DeriveActiveThrottlePauses(...)` when no authored
+      inference-throttle guard exists
+- the previously queued dead-surface fallback cleanup is now already complete:
+  - merged PR `#47` retired the exported `pkg/logging.VerboseLogger` surface
+- sidecar exploration found a smaller non-colliding helper cleanup in
+  `pkg/factory/workstationconfig/runtime_lookup.go`, but it is lower value than
+  retiring the still-live legacy throttle abstraction
 
 ## current blockers
 
-1. the broad `INFERENCE_THROTTLE_GUARD` customer ask is still too large for a
-   safe direct jump from the current dispatcher-owned runtime policy
-2. open PRs `#20`, `#16`, and `#4` still occupy their respective file sets, so
-   new cleanup work should stay outside those lanes
-3. the most recent previously queued narrow cleanup lane already landed as PR
-   `#27`, so any world model still pointing to it is stale
-4. the `/work` pagination shim is behavior-bearing compatibility code today,
-   not confirmed dead code
+1. open PR `#30` occupies the `tests/functional/**` reorganization lane, so
+   new work should avoid those paths until that lane merges
+2. the previous checked-in world model was stale again:
+   - it still described upstream `HEAD` as `79b0552`
+   - it still treated the throttle lane as an open PR instead of a merged
+     implementation
+   - it still treated the exported `VerboseLogger` seam as queueable even
+     though merged PR `#47` already removed it
+   - it did not capture that only the legacy throttle fallback remains live
+3. workspace-local ignored residue can drift independently of `main` and must
+   not be re-queued blindly
 
 ## theory of mind
 
-- the checked-in meta model drifted again because it still treated
-  `dedupe-generated-boundary-alias-rejection-coverage` as the next lane even
-  though PR `#27` has already landed on `main`
-- ignored `factory/inputs/**` residue can outlive the merge status of the lane
-  it originally described, so merged PR history must continue to win over both
-  local residue and the previous checked-in meta view
-- the highest-value customer problem is still the throttle redesign, but the
-  live implementation spans dispatcher runtime pause state, runtime snapshots,
-  and transition enablement behavior, so it still needs decomposition before a
-  safe executable request can be queued
-- an apparent duplicate path is not automatically cleanup-ready:
-  the `/work` router shim looks redundant structurally, but the inline comment
-  and current code show it preserves tolerant public pagination parsing that
-  the generated binding would otherwise reject
-- the right immediate maintainer action is to refresh the checked-in world
-  model and avoid fabricating another cleanup idea until a distinct,
-  behavior-safe seam is confirmed
+- merged PR history and live open PR file sets must keep winning over both the
+  checked-in meta view and ignored `factory/inputs/**` residue; this
+  repository changes quickly enough that the checked-in world model drifts
+  within hours
+- after merged PR `#46`, the customer throttle ask is no longer "introduce an
+  authored guard contract"; it is "finish the simplification" by retiring the
+  implicit fallback path that still applies provider/model throttle pauses even
+  when a factory has not authored `INFERENCE_THROTTLE_GUARD`
+- the customer explicitly asked to replace the separate global-throttle logic
+  with a factory-level guard and reduce special abstractions, so the highest
+  value follow-up is now removing the remaining runtime option and dispatcher
+  fallback that preserve the old policy shape
+- a safe cleanup lane must still stay outside `tests/functional/**` while
+  PR `#30` is open, which makes focused package/runtime coverage the right
+  first follow-up proof shape
+- the tiny isolated helper cleanup in
+  `pkg/factory/workstationconfig/runtime_lookup.go` remains a valid reserve
+  option, but it is subordinate to the remaining customer-owned throttle
+  simplification
 
 ## next best move
 
 - update the checked-in meta world model and progress log now
-- do not queue another generated-boundary alias, retired-boundary alias,
-  worker build-args, enum-alias, trace-normalization, or process/review cleanup
-  idea, because those lanes already landed on `main`
-- leave `factory/logs/meta/asks.md` unchanged for now; no ask is urgent and the
-  throttle redesign still needs a narrower executable decomposition
-- use the next meta iteration either to decompose the
-  `INFERENCE_THROTTLE_GUARD` ask into a smaller guard-design lane or to find a
-  fresh cleanup seam that does not alter public behavior
+- leave `factory/logs/meta/asks.md` unchanged; the priority order is still
+  correct
+- do not re-queue the already-merged authored throttle-guard lane
+- queue one new ignored cleanup idea to retire the remaining legacy throttle
+  fallback path in `pkg/factory/options.go`,
+  `pkg/factory/runtime/factory.go`, and
+  `pkg/factory/subsystems/subsystem_dispatcher.go`
+- keep that follow-up out of `tests/functional/**` while PR `#30` remains open
+- treat the tiny `pkg/factory/workstationconfig/runtime_lookup.go` helper seam
+  as reserve hygiene only if the throttle cleanup becomes blocked
 
 ## customer asks
 
 - `factory/logs/meta/asks.md` remains the only checked-in backlog surface
-- no ask is marked urgent as of May 1, 2026
-- the throttling ask is still active, but no checked-in change has yet moved
-  pause enforcement into config-authored guards
-- the next customer-adjacent architectural step is still the future
-  `INFERENCE_THROTTLE_GUARD` lane, but it should be queued only after it is
-  decomposed into a narrow, non-overlapping request
+- no ask is marked urgent as of May 2, 2026 in the maintainer workspace
+- the throttling ask is still the most important architecture-level customer
+  ask, and the first authored-guard implementation lane is now merged on
+  `main`
+- the quality and website-quality asks remain broader follow-on programs, but
+  they are still subordinate to the throttling outage-prevention ask
+- the next throttle follow-up should now target removal of the legacy fallback
+  abstraction while continuing to avoid the still-open functional-test
+  decomposition lane in `#30`

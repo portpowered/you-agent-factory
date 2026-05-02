@@ -10,7 +10,7 @@
     },
     "payload": {
       "recordedAt": "2026-04-21T12:00:00Z",
-      "factory": {}
+      "factory": {"name": "factory"}
     }
   },
   {
@@ -23,7 +23,7 @@
       "eventTime": "2026-04-21T12:00:01Z"
     },
     "payload": {
-      "factory": {}
+      "factory": {"name": "factory"}
     }
   },
   {
@@ -82,6 +82,11 @@
       "tick": 2,
       "eventTime": "2026-04-21T12:00:04Z",
       "dispatchId": "dispatch-1",
+      "currentChainingTraceId": "chain-current-1",
+      "previousChainingTraceIds": [
+        "chain-a",
+        "chain-z"
+      ],
       "requestId": "request-1",
       "traceIds": [
         "trace-1"
@@ -212,6 +217,11 @@
       "tick": 3,
       "eventTime": "2026-04-21T12:00:07Z",
       "dispatchId": "dispatch-script-1",
+      "currentChainingTraceId": "chain-current-1",
+      "previousChainingTraceIds": [
+        "chain-a",
+        "chain-z"
+      ],
       "workIds": [
         "work-1"
       ]

@@ -1,0 +1,10 @@
+package: generatedclient
+output: client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  include-operation-ids:
+    - createFactory
+    - getCurrentFactory
+  response-type-suffix: ClientResponse

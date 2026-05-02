@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type sleepyExecutor struct{ sleep time.Duration }

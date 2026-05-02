@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type stubRequiredToolChecker map[string]RequiredToolCheckResult
@@ -215,6 +215,64 @@ func TestRulePlaceReferences_AllValid(t *testing.T) {
 }
 
 // --- US-005: Guard validation rule ---
+
+func TestRuleFactoryGuards_InferenceThrottleRequiresModelProvider(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		RefreshWindow: "15m",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-inference-throttle-model-provider", "guards[0](inference_throttle_guard).modelProvider", "modelProvider")
+}
+
+func TestRuleFactoryGuards_InferenceThrottleRejectsInvalidRefreshWindow(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		ModelProvider: "claude",
+		RefreshWindow: "tomorrow",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-inference-throttle-refresh-window", "guards[0](inference_throttle_guard).refreshWindow", "positive duration")
+}
+
+func TestRuleFactoryGuards_InferenceThrottleRejectsNonPositiveRefreshWindow(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		ModelProvider: "claude",
+		RefreshWindow: "0s",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-inference-throttle-refresh-window", "guards[0](inference_throttle_guard).refreshWindow", "positive duration")
+}
+
+func TestRuleFactoryGuards_RejectsUnsupportedType(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{Type: interfaces.GuardTypeVisitCount}}
+
+	findings := ruleFactoryGuards(cfg)
+	assertFindingMatch(t, findings, "factory-guard-unknown-type", "guards[0](visit_count)", "factory guards support: inference_throttle_guard")
+}
+
+func TestRuleFactoryGuards_ValidInferenceThrottleGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Guards = []interfaces.FactoryGuardConfig{{
+		Type:          interfaces.GuardTypeInferenceThrottle,
+		ModelProvider: "claude",
+		Model:         "claude-sonnet-4-20250514",
+		RefreshWindow: "15m",
+	}}
+
+	findings := ruleFactoryGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
 
 func TestRuleGuards_VisitCountMissingWorkstation(t *testing.T) {
 	cfg := testBaseConfig()
@@ -1028,6 +1086,23 @@ func assertFindingExists(t *testing.T, findings []Finding, rule string) {
 		if f.Rule == rule && f.Severity == SeverityError {
 			return
 		}
+	}
+	t.Fatalf("expected error finding with rule %q, got %v", rule, findings)
+}
+
+func assertFindingMatch(t *testing.T, findings []Finding, rule string, pathSubstring string, messageSubstring string) {
+	t.Helper()
+	for _, f := range findings {
+		if f.Rule != rule || f.Severity != SeverityError {
+			continue
+		}
+		if !strings.Contains(f.Path, pathSubstring) {
+			t.Fatalf("finding path = %q, want substring %q", f.Path, pathSubstring)
+		}
+		if !strings.Contains(f.Message, messageSubstring) {
+			t.Fatalf("finding message = %q, want substring %q", f.Message, messageSubstring)
+		}
+		return
 	}
 	t.Fatalf("expected error finding with rule %q, got %v", rule, findings)
 }

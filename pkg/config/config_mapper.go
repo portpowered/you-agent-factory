@@ -3,12 +3,13 @@ package config
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/factory/state/validation"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/state/validation"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // ConfigMapper converts a FactoryConfig into a petri state.
@@ -38,6 +39,7 @@ func (cm *ConfigMapper) Map(ctx context.Context, cfg *interfaces.FactoryConfig, 
 	}
 
 	state.NormalizeTransitionTopology(n, firstTransitionTopologyRuntimeConfig(cfg, runtimeConfigs...))
+	cm.applyFactoryGuards(cfg, n.Transitions)
 	if err := validateNetTopology(n); err != nil {
 		return nil, err
 	}
@@ -215,6 +217,35 @@ func (cm *ConfigMapper) applyWorkstationGuards(ws interfaces.FactoryWorkstationC
 			if guard != nil {
 				t.InputArcs[0].Guard = combineArcGuards(t.InputArcs[0].Guard, guard)
 			}
+		}
+	}
+}
+
+func (cm *ConfigMapper) applyFactoryGuards(cfg *interfaces.FactoryConfig, transitions map[string]*petri.Transition) {
+	if cfg == nil || len(cfg.Guards) == 0 || len(transitions) == 0 {
+		return
+	}
+	for _, authoredGuard := range cfg.Guards {
+		if authoredGuard.Type != interfaces.GuardTypeInferenceThrottle {
+			continue
+		}
+		refreshWindow, err := time.ParseDuration(authoredGuard.RefreshWindow)
+		if err != nil || refreshWindow <= 0 {
+			continue
+		}
+		for _, transition := range transitions {
+			if transition == nil || len(transition.InputArcs) == 0 {
+				continue
+			}
+			if transition.WorkerType == "" {
+				continue
+			}
+			transition.InputArcs[0].Guard = combineArcGuards(transition.InputArcs[0].Guard, &petri.InferenceThrottleGuard{
+				Provider:      authoredGuard.ModelProvider,
+				Model:         authoredGuard.Model,
+				WorkerName:    transition.WorkerType,
+				RefreshWindow: refreshWindow,
+			})
 		}
 	}
 }

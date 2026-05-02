@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (
@@ -266,18 +266,26 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 
 	worker := r.workerForTransition(payload.TransitionId)
 	dispatch := interfaces.FactoryWorldDispatch{
-		DispatchID:               dispatchID,
-		TransitionID:             payload.TransitionId,
-		Workstation:              r.workstationRefForTransition(payload.TransitionId),
-		Provider:                 worker.Provider,
-		Model:                    worker.Model,
-		StartedTick:              event.Context.Tick,
-		StartedAt:                event.Context.EventTime,
-		Inputs:                   inputs,
-		WorkItemIDs:              sortedStrings(workIDs),
-		CurrentChainingTraceID:   dispatchCurrentChainingTraceID(payload.CurrentChainingTraceId, inputWorkItems),
-		PreviousChainingTraceIDs: dispatchPreviousChainingTraceIDs(payload.PreviousChainingTraceIds, inputWorkItems),
-		TraceIDs:                 interfaces.CanonicalChainingTraceIDs(traceIDs),
+		DispatchID:   dispatchID,
+		TransitionID: payload.TransitionId,
+		Workstation:  r.workstationRefForTransition(payload.TransitionId),
+		Provider:     worker.Provider,
+		Model:        worker.Model,
+		StartedTick:  event.Context.Tick,
+		StartedAt:    event.Context.EventTime,
+		Inputs:       inputs,
+		WorkItemIDs:  sortedStrings(workIDs),
+		CurrentChainingTraceID: dispatchCurrentChainingTraceID(
+			event.Context.CurrentChainingTraceId,
+			payload.CurrentChainingTraceId,
+			inputWorkItems,
+		),
+		PreviousChainingTraceIDs: dispatchPreviousChainingTraceIDs(
+			event.Context.PreviousChainingTraceIds,
+			payload.PreviousChainingTraceIds,
+			inputWorkItems,
+		),
+		TraceIDs: interfaces.CanonicalChainingTraceIDs(traceIDs),
 	}
 	dispatch.Resources = r.consumeResourceUnits(payload.Resources)
 	r.stateValue.ActiveDispatches[dispatchID] = dispatch
@@ -483,25 +491,35 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 	inputWorkItems := dispatchInputWorkItems(dispatch)
 	latestAttempt := r.latestInferenceAttemptForDispatch(dispatchID)
 	return interfaces.FactoryWorldDispatchCompletion{
-		DispatchID:               dispatchID,
-		TransitionID:             payload.TransitionId,
-		Workstation:              dispatch.Workstation,
-		StartedTick:              dispatch.StartedTick,
-		CompletedTick:            event.Context.Tick,
-		StartedAt:                dispatch.StartedAt,
-		CompletedAt:              event.Context.EventTime,
-		DurationMillis:           int64Value(payload.DurationMillis),
-		Result:                   workstationResultFromGenerated(payload),
-		WorkItemIDs:              sortedStrings(workIDs),
-		ConsumedInputs:           cloneWorkstationInputs(dispatch.Inputs),
-		InputWorkItems:           sortedWorkItems(inputWorkItems),
-		OutputWorkItems:          sortedWorkItems(outputWorkItems),
-		CurrentChainingTraceID:   completedDispatchCurrentChainingTraceID(payload.CurrentChainingTraceId, dispatch, inputWorkItems),
-		PreviousChainingTraceIDs: completedDispatchPreviousChainingTraceIDs(payload.PreviousChainingTraceIds, dispatch, inputWorkItems),
-		TraceIDs:                 interfaces.CanonicalChainingTraceIDs(traceIDs),
-		ProviderSession:          latestInferenceProviderSession(latestAttempt),
-		Diagnostics:              latestInferenceDiagnostics(latestAttempt),
-		TerminalWork:             r.terminalWorkForCompletion(payload.Outcome, workIDs),
+		DispatchID:      dispatchID,
+		TransitionID:    payload.TransitionId,
+		Workstation:     dispatch.Workstation,
+		StartedTick:     dispatch.StartedTick,
+		CompletedTick:   event.Context.Tick,
+		StartedAt:       dispatch.StartedAt,
+		CompletedAt:     event.Context.EventTime,
+		DurationMillis:  int64Value(payload.DurationMillis),
+		Result:          workstationResultFromGenerated(payload),
+		WorkItemIDs:     sortedStrings(workIDs),
+		ConsumedInputs:  cloneWorkstationInputs(dispatch.Inputs),
+		InputWorkItems:  sortedWorkItems(inputWorkItems),
+		OutputWorkItems: sortedWorkItems(outputWorkItems),
+		CurrentChainingTraceID: completedDispatchCurrentChainingTraceID(
+			event.Context.CurrentChainingTraceId,
+			payload.CurrentChainingTraceId,
+			dispatch,
+			inputWorkItems,
+		),
+		PreviousChainingTraceIDs: completedDispatchPreviousChainingTraceIDs(
+			event.Context.PreviousChainingTraceIds,
+			payload.PreviousChainingTraceIds,
+			dispatch,
+			inputWorkItems,
+		),
+		TraceIDs:        interfaces.CanonicalChainingTraceIDs(traceIDs),
+		ProviderSession: latestInferenceProviderSession(latestAttempt),
+		Diagnostics:     latestInferenceDiagnostics(latestAttempt),
+		TerminalWork:    r.terminalWorkForCompletion(payload.Outcome, workIDs),
 	}
 }
 
@@ -547,26 +565,44 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 	})
 }
 
-func dispatchCurrentChainingTraceID(explicit *string, inputWorkItems []interfaces.FactoryWorkItem) string {
-	if current := stringValue(explicit); current != "" {
+func dispatchCurrentChainingTraceID(
+	contextCurrent *string,
+	payloadCurrent *string,
+	inputWorkItems []interfaces.FactoryWorkItem,
+) string {
+	if current := stringValue(contextCurrent); current != "" {
+		return current
+	}
+	if current := stringValue(payloadCurrent); current != "" {
 		return current
 	}
 	return interfaces.CurrentChainingTraceIDFromWorkItems(inputWorkItems)
 }
 
-func dispatchPreviousChainingTraceIDs(explicit *[]string, inputWorkItems []interfaces.FactoryWorkItem) []string {
-	if previous := cloneStringSlice(sliceValue(explicit)); len(previous) > 0 {
+func dispatchPreviousChainingTraceIDs(
+	contextPrevious *[]string,
+	payloadPrevious *[]string,
+	inputWorkItems []interfaces.FactoryWorkItem,
+) []string {
+	if previous := cloneStringSlice(sliceValue(contextPrevious)); len(previous) > 0 {
+		return interfaces.CanonicalChainingTraceIDs(previous)
+	}
+	if previous := cloneStringSlice(sliceValue(payloadPrevious)); len(previous) > 0 {
 		return interfaces.CanonicalChainingTraceIDs(previous)
 	}
 	return interfaces.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)
 }
 
 func completedDispatchCurrentChainingTraceID(
-	explicit *string,
+	contextCurrent *string,
+	payloadCurrent *string,
 	dispatch interfaces.FactoryWorldDispatch,
 	inputWorkItems []interfaces.FactoryWorkItem,
 ) string {
-	if current := stringValue(explicit); current != "" {
+	if current := stringValue(contextCurrent); current != "" {
+		return current
+	}
+	if current := stringValue(payloadCurrent); current != "" {
 		return current
 	}
 	if dispatch.CurrentChainingTraceID != "" {
@@ -576,11 +612,15 @@ func completedDispatchCurrentChainingTraceID(
 }
 
 func completedDispatchPreviousChainingTraceIDs(
-	explicit *[]string,
+	contextPrevious *[]string,
+	payloadPrevious *[]string,
 	dispatch interfaces.FactoryWorldDispatch,
 	inputWorkItems []interfaces.FactoryWorkItem,
 ) []string {
-	if previous := cloneStringSlice(sliceValue(explicit)); len(previous) > 0 {
+	if previous := cloneStringSlice(sliceValue(contextPrevious)); len(previous) > 0 {
+		return interfaces.CanonicalChainingTraceIDs(previous)
+	}
+	if previous := cloneStringSlice(sliceValue(payloadPrevious)); len(previous) > 0 {
 		return interfaces.CanonicalChainingTraceIDs(previous)
 	}
 	if len(dispatch.PreviousChainingTraceIDs) > 0 {
@@ -1179,7 +1219,7 @@ func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEve
 			ID:                id,
 			Name:              workstation.Name,
 			WorkerID:          workstation.Worker,
-			Kind:              workstationKindString(workstation.Kind),
+			Kind:              workstationKindString(workstation.Behavior),
 			Config:            nilIfEmptyStringMap(config),
 			InputPlaceIDs:     placeIDsFromGeneratedIOs(workstation.Inputs),
 			OutputPlaceIDs:    placeIDsFromGeneratedIOs(workstation.Outputs),
@@ -1190,6 +1230,7 @@ func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEve
 	}
 
 	return interfaces.InitialStructurePayload{
+		Name:         string(factoryPayload.Name),
 		Resources:    resources,
 		Workers:      workers,
 		WorkTypes:    workTypes,

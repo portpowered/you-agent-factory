@@ -10,9 +10,9 @@ import (
 	"text/template"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/logging"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 const (
@@ -194,9 +194,7 @@ func scriptResponseEvent(req CommandRequest, result interfaces.WorkResult, attem
 	if failureType != nil {
 		payload.FailureType = failureType
 	}
-	if exitCode, ok := scriptResponseExitCode(result, outcome); ok {
-		payload.ExitCode = &exitCode
-	}
+	payload.ExitCode = scriptResponseExitCode(result, outcome)
 	return factoryapi.FactoryEvent{
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          factoryapi.FactoryEventTypeScriptResponse,
@@ -262,17 +260,16 @@ func scriptResponseOutcome(result interfaces.WorkResult) (factoryapi.ScriptExecu
 	return factoryapi.ScriptExecutionOutcomeSucceeded, nil
 }
 
-func scriptResponseExitCode(result interfaces.WorkResult, outcome factoryapi.ScriptExecutionOutcome) (int, bool) {
+func scriptResponseExitCode(result interfaces.WorkResult, outcome factoryapi.ScriptExecutionOutcome) *int {
 	command, ok := scriptCommandDiagnostic(result)
 	if !ok {
-		return 0, false
+		return nil
 	}
-	switch outcome {
-	case factoryapi.ScriptExecutionOutcomeSucceeded, factoryapi.ScriptExecutionOutcomeFailedExitCode:
-		return command.ExitCode, true
-	default:
-		return 0, false
-	}
+	return workerEventExitCode(
+		command.ExitCode,
+		outcome == factoryapi.ScriptExecutionOutcomeSucceeded || outcome == factoryapi.ScriptExecutionOutcomeFailedExitCode,
+		includeZeroWorkerEventExitCode,
+	)
 }
 
 func scriptResponseStdout(result interfaces.WorkResult) string {

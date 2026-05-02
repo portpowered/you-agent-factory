@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/api"
-	"github.com/portpowered/agent-factory/pkg/apisurface"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
-	"github.com/portpowered/agent-factory/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/api"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
 
@@ -33,6 +33,9 @@ type functionalAPIServer struct {
 func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()
+	if _, ok := cfg["name"]; !ok {
+		cfg["name"] = "factory"
+	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

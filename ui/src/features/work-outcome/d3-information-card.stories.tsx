@@ -140,15 +140,20 @@ function expectWorkOutcomeChartContract(card: HTMLElement): void {
   const chart = within(card).getByRole("img", { name: "Work outcome chart for 15m" });
 
   expect(chart).toBeVisible();
+  expect(within(card).getByText("Queued")).toBeVisible();
+  expect(within(card).getByText("In-flight")).toBeVisible();
+  expect(within(card).getByText("Completed")).toBeVisible();
+  expect(within(card).getByText("Failed/retried")).toBeVisible();
   expect(within(card).getByText("Ticks")).toBeVisible();
   expect(within(card).getByText("Work count")).toBeVisible();
 
   for (const series of WORK_OUTCOME_CHART_SERIES) {
-    const path = chart.querySelector<SVGPathElement>(`[data-chart-series='${series.key}']`);
+    const path = chart.querySelector<SVGPathElement>(
+      `.recharts-line-curve[data-chart-series='${series.key}']`,
+    );
 
     expect(path).not.toBeNull();
     expect(path?.getAttribute("data-chart-series-color")).toBe(series.lineColor);
-    expect(path?.getAttribute("class")).toContain("[stroke-width:2.25]");
     expect(path ? window.getComputedStyle(path).strokeWidth : "").toBe("2.25px");
   }
 }
@@ -162,7 +167,7 @@ function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
 }
 
 export default {
-  title: "Agent Factory/Dashboard/D3 Work Outcome Information Card",
+  title: "Agent Factory/Dashboard/Work Outcome Chart Card",
   component: D3CompletionInformationCard,
 };
 

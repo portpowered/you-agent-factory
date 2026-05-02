@@ -1,7 +1,7 @@
 ---
 type: MODEL_WORKER
 model: gpt-5.4
-modelProvider: codex
+modelProvider: CODEX
 stopToken: COMPLETE
 ---
 

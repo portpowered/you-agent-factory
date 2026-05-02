@@ -1,7 +1,7 @@
 ---
 type: MODEL_WORKER
-modelProvider: codex
-executorProvider: script_wrap
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
 skipPermissions: true
 stopToken: "<COMPLETE>"
 ---

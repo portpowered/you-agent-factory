@@ -1,4 +1,5 @@
 {
+  "name": "dependency_terminal",
   "workTypes": [
     {
       "name": "prd",
@@ -73,3 +74,4 @@
     }
   ]
 }
+

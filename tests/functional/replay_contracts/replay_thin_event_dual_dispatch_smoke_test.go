@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	factoryboundary "github.com/portpowered/agent-factory/pkg/api"
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/factory/projections"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const dualDispatchSmokeRequestID = "request-thin-dual-dispatch-smoke"

@@ -112,6 +112,22 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(within(completedRow).getByRole("button", { name: /Done Story/ })).toBeTruthy();
   });
 
+  it("marks the selected outcome item through the shared button state", () => {
+    render(
+      <CompletedFailedWorkstationCard
+        completedItems={[{ label: "Done Story", traceWorkID: "work-done-story" }]}
+        failedItems={[{ label: "Failed Story", traceWorkID: "work-failed-story" }]}
+        onSelectItem={vi.fn()}
+        selectedItem={{ label: "Failed Story", status: "failed" }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Failed Story/ }).getAttribute("data-selected")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Done Story/ }).getAttribute("data-selected")).toBeNull();
+  });
+
   it("renders explicit empty messages for each outcome row", () => {
     render(
       <CompletedFailedWorkstationCard

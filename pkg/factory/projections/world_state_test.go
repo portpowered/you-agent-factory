@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestReconstructFactoryWorldState_AppliesCanonicalEventsByTick(t *testing.T) {
@@ -87,6 +87,51 @@ func TestReconstructFactoryWorldState_PreservesExplicitDispatchChainingLineage(t
 		t.Fatalf("ReconstructFactoryWorldState completed tick: %v", err)
 	}
 	assertChainingTraceProjectionCompletedState(t, completedState)
+}
+
+func TestReconstructFactoryWorldState_FallsBackToPayloadDispatchChainingLineageForLegacyEvents(t *testing.T) {
+	t0 := time.Date(2026, 4, 22, 13, 0, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+			ID:                     "work-1",
+			WorkTypeID:             "task",
+			DisplayName:            "Input",
+			CurrentChainingTraceID: "chain-input",
+			TraceID:                "trace-input",
+			PlaceID:                "task:init",
+		}),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeDispatchRequest,
+			"request/dispatch-legacy",
+			2,
+			t0.Add(2*time.Second),
+			factoryapi.FactoryEventContext{
+				DispatchId: stringPtrForProjectionTest("dispatch-legacy"),
+				TraceIds:   stringSlicePtrForProjectionTest([]string{"trace-input"}),
+				WorkIds:    stringSlicePtrForProjectionTest([]string{"work-1"}),
+			},
+			factoryapi.DispatchRequestEventPayload{
+				TransitionId:             "t-review",
+				CurrentChainingTraceId:   stringPtrForProjectionTest("payload-current"),
+				PreviousChainingTraceIds: stringSlicePtrForProjectionTest([]string{"payload-a", "payload-z"}),
+				Inputs:                   []factoryapi.DispatchConsumedWorkRef{{WorkId: "work-1"}},
+			},
+		),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	dispatch := state.ActiveDispatches["dispatch-legacy"]
+	if dispatch.CurrentChainingTraceID != "payload-current" {
+		t.Fatalf("active dispatch current chaining trace ID = %q, want payload-current", dispatch.CurrentChainingTraceID)
+	}
+	if got := dispatch.PreviousChainingTraceIDs; len(got) != 2 || got[0] != "payload-a" || got[1] != "payload-z" {
+		t.Fatalf("active dispatch previous chaining trace IDs = %#v, want [payload-a payload-z]", got)
+	}
 }
 
 func TestReconstructFactoryWorldState_RetainsInferenceAttemptsByDispatchID(t *testing.T) {
@@ -898,9 +943,11 @@ func workstationRequestEvent(tick int, eventTime time.Time, payload interfaces.W
 		}
 	}
 	context := factoryapi.FactoryEventContext{
-		DispatchId: stringPtrForProjectionTest(payload.DispatchID),
-		TraceIds:   stringSlicePtrForProjectionTest(traceIDsForProjectionTest(works)),
-		WorkIds:    stringSlicePtrForProjectionTest(workIDsForProjectionTest(works)),
+		DispatchId:               stringPtrForProjectionTest(payload.DispatchID),
+		CurrentChainingTraceId:   stringPtrForProjectionTest(interfaces.CurrentChainingTraceIDFromWorkItems(inputWorkItems)),
+		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(interfaces.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
+		TraceIds:                 stringSlicePtrForProjectionTest(traceIDsForProjectionTest(works)),
+		WorkIds:                  stringSlicePtrForProjectionTest(workIDsForProjectionTest(works)),
 	}
 	generatedPayload := factoryapi.DispatchRequestEventPayload{
 		TransitionId:             payload.TransitionID,

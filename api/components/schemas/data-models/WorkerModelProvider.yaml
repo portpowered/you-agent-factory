@@ -4,8 +4,8 @@ x-enum-varnames:
   - WorkerModelProviderClaude
   - WorkerModelProviderCodex
 enum:
-  - claude
-  - codex
+  - CLAUDE
+  - CODEX
 x-enum-descriptions:
   - Claude model execution routed through the `claude` provider command.
   - Codex model execution routed through the `codex` provider command.

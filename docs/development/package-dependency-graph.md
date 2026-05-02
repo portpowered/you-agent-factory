@@ -21,7 +21,7 @@ Or for a focused view of inter-package imports only:
 ```bash
 go list -f '{{.ImportPath}}: {{join .Imports ", "}}' ./... \
   | grep portpowered \
-  | sed 's|github.com/portpowered/agent-factory/||g'
+  | sed 's|github.com/portpowered/infinite-you/||g'
 ```
 
 ## Package Overview

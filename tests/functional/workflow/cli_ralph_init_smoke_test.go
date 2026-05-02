@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/pkg/workers"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const ralphInitSmokeRequest = `Create a minimal release-planning loop for a document processing service.

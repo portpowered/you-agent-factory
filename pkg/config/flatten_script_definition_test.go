@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // portos:func-length-exception owner=agent-factory reason=script-backed-flatten-portability-fixture review=2026-07-21 removal=extract-shared-inline-script-fixture-before-next-flatten-expand-portability-change
@@ -14,6 +14,7 @@ func TestFlattenFactoryConfig_FlattensInlineScriptBackedWorkstationWithoutSplitA
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",
@@ -112,6 +113,7 @@ func TestLoadRuntimeConfig_RejectsMissingSplitWorkstationWhenScriptExecutionCont
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "story",

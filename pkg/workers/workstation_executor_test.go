@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type wsMockExecutor struct {
@@ -396,7 +396,7 @@ func writeRuntimeLookupFixture(t *testing.T, factoryDir string) {
 	t.Helper()
 
 	writeRuntimeLookupFactoryJSON(t, factoryDir, map[string]any{
-		"project": "agent-factory",
+		"id": "agent-factory",
 		"workTypes": []map[string]any{
 			{
 				"name": "task",
@@ -435,6 +435,9 @@ Work from {{ .Context.WorkDir }}
 
 func writeRuntimeLookupFactoryJSON(t *testing.T, factoryDir string, cfg map[string]any) {
 	t.Helper()
+	if _, ok := cfg["name"]; !ok {
+		cfg["name"] = filepath.Base(factoryDir)
+	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

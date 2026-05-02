@@ -34,12 +34,14 @@ make generate-api
 make api-smoke
 make test
 make test-full
+make typecheck
 make release-surface-smoke
 make lint
 make script-timeout-companion-smoke-100
 make current-factory-watcher-switch-smoke
 make fmt
 make dashboard-verify
+make release VERSION=v1.2.3
 make ui-deps
 make ui-build
 make ui-test
@@ -50,6 +52,8 @@ make ui-test-storybook
 ## GitHub Actions CI Baseline
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
+
+The maintainer-owned CLI release policy lives in [CLI release policy](../guides/cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
 The workflow currently executes these repository-owned commands in order:
 
@@ -67,7 +71,11 @@ Use the same root-level commands locally when reproducing a GitHub Actions failu
 
 Use `make dashboard-verify` for dashboard review readiness after UI source changes that affect embedded assets. It runs `ui-build`, `lint`, and the short Go test suite sequentially so Vite asset rotation does not race with Go embed scanning.
 
+`make typecheck` is the root-level dashboard typecheck command and should stay aligned with the CI `bun run tsc` step.
+
 `make lint` runs `go vet ./...` and the pinned deadcode analyzer. The deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/development/deadcode-baseline.txt`. Review any drift before updating the baseline.
+
+`make release VERSION=v1.2.3` is the maintainer-owned release-preparation path. It must run from a clean `main` checkout, reruns the repository readiness targets, creates the semver tag locally, and pushes only the tag so GitHub Actions owns publication.
 
 
 Use `make ui-storybook` followed by `make ui-test-storybook` when dashboard Storybook stories, play functions, runtime mocks, or the package-local Storybook runner change. `ui-storybook` builds `ui/storybook-static`; `ui-test-storybook` serves that static build on the dashboard-owned runner port and executes the dashboard Storybook interaction tests through the UI package's `test-storybook` script.
@@ -98,7 +106,7 @@ This uses the repository-supported Redocly CLI from the root `api/` workspace an
 make generate-api
 ```
 
-`make generate-api` rebundles `api/openapi.yaml`, then runs `go generate -tags=interfaces ./pkg/api`, which uses `api/codegen_config/server.yaml` and writes `pkg/api/generated/server.gen.go`. It also runs the dashboard UI OpenAPI generator and writes `ui/src/api/generated/openapi.ts`.
+`make generate-api` rebundles `api/openapi.yaml`, then runs `go generate -tags=interfaces ./pkg/api`, which uses `api/codegen_config/server.yaml` and writes `pkg/api/generated/server.gen.go`. It also runs `go generate -tags=interfaces ./pkg/generatedclient`, which uses `api/codegen_config/client.yaml` and writes `pkg/generatedclient/client.gen.go`, and then runs the dashboard UI OpenAPI generator to refresh `ui/src/api/generated/openapi.ts`.
 
 4. Prove regeneration is stable when the authored sources are unchanged:
 
@@ -106,7 +114,7 @@ make generate-api
 make api-smoke
 ```
 
-`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, and event routes without requiring live LLM provider credentials.
+`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
 
 5. Run the focused API and package checks that cover the contract boundary:
 
@@ -122,7 +130,10 @@ Review any generated diff together with the authored OpenAPI change. Do not hand
 
 The canonical export/import sharing boundary is the generated OpenAPI
 `NamedFactory` payload returned by `GET /factory/~current` and accepted by
-`POST /factory`. PNG export and import reuse that exact payload through
+`POST /factory`. When the active runtime is still the default root factory and
+no durable current pointer exists yet, `GET /factory/~current` returns that
+same payload with `name: "UNDEFINED"` as the reserved identifier. PNG export
+and import reuse that exact payload through
 
 Use [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md)
 as the detailed contract reference. Keep the dashboard on the authored API
@@ -278,6 +289,7 @@ The config validator checks workstation scheduling values against a known set of
 
 ## Related Docs
 
+- [CLI release policy](../guides/cli-release-policy.md)
 - [Agent Factory README](../../README.md)
 - [Internal Architecture](architecture.md)
 - [API Inventory](api-inventory.md)

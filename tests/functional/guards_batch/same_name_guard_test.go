@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestSameNameGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
@@ -42,7 +42,7 @@ func TestSameNameGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 	}
 
 	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.Type != factoryapi.InputGuardTypeSameName {
+	if guard.Type != factoryapi.GuardTypeSameName {
 		t.Fatalf("generated guard type = %q, want SAME_NAME", guard.Type)
 	}
 	if guard.MatchInput == nil || *guard.MatchInput != "plan" {

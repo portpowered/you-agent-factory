@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 func waitForCurrentFactoryRuntimeIdle(t *testing.T, svc *service.FactoryService, timeout time.Duration) {

@@ -6,13 +6,13 @@ pkg/replay/event_stream_artifact.go:138:6: unreachable func: SaveArtifactFromEve
 pkg/replay/event_stream_artifact.go:182:6: unreachable func: hydrateArtifactFromAdjacentFactory
 pkg/replay/event_stream_artifact.go:211:6: unreachable func: adjacentFactoryDir
 pkg/replay/event_stream_artifact.go:227:6: unreachable func: mergeGeneratedFactoryMissingRuntimeFields
-pkg/replay/event_stream_artifact.go:360:6: unreachable func: rewriteArtifactFactoryEvents
+pkg/replay/event_stream_artifact.go:357:6: unreachable func: rewriteArtifactFactoryEvents
 pkg/testutil/artifact_contract.go:41:6: unreachable func: MustClassifiedArtifactPath
 pkg/testutil/replay_harness.go:36:6: unreachable func: WithReplayHarnessDir
 pkg/testutil/replay_harness.go:147:6: unreachable func: AssertReplayDiverges
 pkg/testutil/service_harness.go:122:6: unreachable func: WithExecutionBaseDir
-pkg/testutil/testutil.go:78:6: unreachable func: WriteSeedMarkdownFile
-pkg/testutil/testutil.go:106:6: unreachable func: WriteSeedBatchFile
+pkg/testutil/testutil.go:79:6: unreachable func: WriteSeedMarkdownFile
+pkg/testutil/testutil.go:107:6: unreachable func: WriteSeedBatchFile
 tests/functional/bootstrap_portability/helpers_test.go:118:32: unreachable func: functionalAPIServer.SubmitWork
 tests/functional/bootstrap_portability/helpers_test.go:147:32: unreachable func: functionalAPIServer.GetEngineStateSnapshot
 tests/functional/bootstrap_portability/helpers_test.go:176:6: unreachable func: waitForGeneratedWorkAtPlace
@@ -31,7 +31,7 @@ tests/functional/internal/support/events.go:136:6: unreachable func: dispatchInp
 tests/functional/internal/support/events.go:150:6: unreachable func: appendUniqueDispatchWorkID
 tests/functional/internal/support/events.go:162:6: unreachable func: LastFactoryEventTick
 tests/functional/internal/support/events.go:172:6: unreachable func: eventStringSlice
-tests/functional/internal/support/fixtures.go:133:6: unreachable func: UpdateFactoryConfig
+tests/functional/internal/support/fixtures.go:136:6: unreachable func: UpdateFactoryConfig
 tests/functional/internal/support/harness.go:53:6: unreachable func: CountFactoryEvents
 tests/functional/internal/support/provider.go:33:6: unreachable func: AcceptedCommandResults
 tests/functional/internal/support/provider.go:41:6: unreachable func: ProviderCommandRequestsForWorker

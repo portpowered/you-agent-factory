@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/factory/state"
-	"github.com/portpowered/agent-factory/pkg/factory/workstationconfig"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // ProjectInitialStructure projects the static net topology into the canonical
@@ -21,6 +21,7 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 	}
 	runtimeConfig := interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...)
 	return interfaces.InitialStructurePayload{
+		Name:         runtimeFactoryName(runtimeConfig),
 		Resources:    factoryResources(net.Resources),
 		Constraints:  factoryConstraints(net, runtimeConfig),
 		Workers:      factoryWorkers(net.Transitions, runtimeConfig),
@@ -29,6 +30,17 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 		Places:       factoryPlaces(net.Places, net),
 		Relations:    topologyRelations(net.Transitions),
 	}
+}
+
+func runtimeFactoryName(runtimeConfig interfaces.RuntimeDefinitionLookup) string {
+	type factoryConfigReader interface {
+		FactoryConfig() *interfaces.FactoryConfig
+	}
+	reader, ok := runtimeConfig.(factoryConfigReader)
+	if !ok || reader.FactoryConfig() == nil {
+		return ""
+	}
+	return reader.FactoryConfig().Name
 }
 
 func factoryResources(resources map[string]*state.ResourceDef) []interfaces.FactoryResource {
@@ -159,7 +171,7 @@ func workstationConfig(transition *petri.Transition, runtimeConfig interfaces.Ru
 	configValues := make(map[string]string)
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil {
 		addStringValue(configValues, "configured_worker", workstation.WorkerTypeName)
-		addStringValue(configValues, "kind", string(workstation.Kind))
+		addStringValue(configValues, "behavior", string(workstation.Kind))
 		addStringValue(configValues, "worktree", workstation.Worktree)
 		addStringValue(configValues, "working_directory", workstation.WorkingDirectory)
 		addStringValue(configValues, "type", workstation.Type)

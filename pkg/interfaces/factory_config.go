@@ -4,7 +4,9 @@ import "encoding/json"
 
 // FactoryConfig is the specification of a factory as a JSON file.
 type FactoryConfig struct {
+	Name             string                          `json:"name"`
 	Project          string                          `json:"project,omitempty"`
+	Guards           []FactoryGuardConfig            `json:"guards,omitempty"`
 	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
 	WorkTypes        []WorkTypeConfig                `json:"work_types"`
 	Resources        []ResourceConfig                `json:"resources"`
@@ -114,7 +116,7 @@ type WorkflowConfig struct {
 type FactoryWorkstationConfig struct {
 	ID                    string            `json:"id" yaml:"id,omitempty"`
 	Name                  string            `json:"name" yaml:"name,omitempty"`
-	Kind                  WorkstationKind   `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Kind                  WorkstationKind   `json:"behavior,omitempty" yaml:"behavior,omitempty"`
 	Type                  string            `json:"type,omitempty" yaml:"type,omitempty"`
 	WorkerTypeName        string            `json:"worker" yaml:"worker,omitempty"`
 	PromptFile            string            `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
@@ -206,7 +208,16 @@ const (
 	GuardTypeAllChildrenComplete GuardType = "all_children_complete"
 	GuardTypeAnyChildFailed      GuardType = "any_child_failed"
 	GuardTypeSameName            GuardType = "same_name"
+	GuardTypeInferenceThrottle   GuardType = "inference_throttle_guard"
 )
+
+// FactoryGuardConfig declares a root-level factory guard using customer-facing names.
+type FactoryGuardConfig struct {
+	Type          GuardType `json:"type" yaml:"type"`
+	ModelProvider string    `json:"model_provider,omitempty" yaml:"modelProvider,omitempty"`
+	Model         string    `json:"model,omitempty" yaml:"model,omitempty"`
+	RefreshWindow string    `json:"refresh_window,omitempty" yaml:"refreshWindow,omitempty"`
+}
 
 type GuardMatchConfig struct {
 	InputKey string `json:"input_key,omitempty" yaml:"inputKey,omitempty"`

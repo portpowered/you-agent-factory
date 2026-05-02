@@ -20,7 +20,7 @@ Keep this README focused on the local fixture shape and workflow slice.
 ## Intentionally External Tools
 
 The portable bundle does not ship `mangaka.exe` or `magick`. Those tools stay
-external and are declared in `factory.json` `resourceManifest.requiredTools`.
+external and are declared in `factory.json` `supportingFiles.requiredTools`.
 The bundled `portable-dependencies.json` mirrors that contract for the bounded
 fixture scripts.
 

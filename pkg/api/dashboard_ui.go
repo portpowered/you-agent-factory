@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	dashboardui "github.com/portpowered/agent-factory/ui"
+	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
 )
 

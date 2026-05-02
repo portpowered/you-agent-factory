@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestNoopExecutor_ReturnsAccepted(t *testing.T) {

@@ -6,14 +6,17 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
 	t.Helper()
 
 	dir := t.TempDir()
+	if _, ok := cfg["name"]; !ok {
+		cfg["name"] = "factory"
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal factory config: %v", err)

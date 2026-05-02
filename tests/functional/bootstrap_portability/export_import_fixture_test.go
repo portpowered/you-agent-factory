@@ -7,12 +7,12 @@ import (
 	"reflect"
 	"testing"
 
-	factoryapi "github.com/portpowered/agent-factory/pkg/api/generated"
-	"github.com/portpowered/agent-factory/pkg/config"
-	"github.com/portpowered/agent-factory/pkg/replay"
-	"github.com/portpowered/agent-factory/pkg/service"
-	"github.com/portpowered/agent-factory/pkg/testutil"
-	"github.com/portpowered/agent-factory/tests/functional/internal/support"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
@@ -106,11 +106,10 @@ func buildExportImportFixtureExpectations(
 	}
 }
 
-func (fixture exportImportFixture) namedFactory(name string) factoryapi.NamedFactory {
-	return factoryapi.NamedFactory{
-		Name:    factoryapi.FactoryName(name),
-		Factory: fixture.GeneratedExportFactor,
-	}
+func (fixture exportImportFixture) namedFactory(name string) factoryapi.Factory {
+	namedFactory := fixture.GeneratedExportFactor
+	namedFactory.Name = factoryapi.FactoryName(name)
+	return namedFactory
 }
 
 func (fixture exportImportFixture) persistAs(t *testing.T, rootDir, name string) string {
@@ -153,17 +152,17 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 	}
 
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(current.Factory),
+		comparableExportImportFactory(current),
 		comparableExportImportFactory(fixture.GeneratedExportFactor),
 	) {
 		t.Fatalf(
 			"current named factory readback diverged from fixture export contract\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(current.Factory),
+			comparableExportImportFactory(current),
 			comparableExportImportFactory(fixture.GeneratedExportFactor),
 		)
 	}
 
-	workstations := valueOrEmpty(current.Factory.Workstations)
+	workstations := valueOrEmpty(current.Workstations)
 	gotWorkstationNames := make([]string, 0, len(workstations))
 	for _, workstation := range workstations {
 		gotWorkstationNames = append(gotWorkstationNames, workstation.Name)
@@ -175,9 +174,9 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 
 func comparableExportImportFactory(factory factoryapi.Factory) factoryapi.Factory {
 	comparable := factory
-	comparable.FactoryDir = nil
+	comparable.Name = ""
+	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
-	comparable.WorkflowId = nil
 	comparable.Metadata = nil
 	return comparable
 }
@@ -190,7 +189,7 @@ func valueOrEmpty[T any](value *[]T) []T {
 }
 
 type namedFactoryReadback interface {
-	GetCurrentNamedFactory(context.Context) (factoryapi.NamedFactory, error)
+	GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error)
 }
 
 func buildExportImportFixtureService(t *testing.T, rootDir string) namedFactoryReadback {
@@ -242,12 +241,12 @@ func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthored
 		t.Fatalf("import contract name = %q, want imported-service-simple", importContract.Name)
 	}
 	if !reflect.DeepEqual(
-		comparableExportImportFactory(importContract.Factory),
+		comparableExportImportFactory(importContract),
 		comparableExportImportFactory(fixture.GeneratedExportFactor),
 	) {
 		t.Fatalf(
 			"import contract factory diverged from generated export factory\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(importContract.Factory),
+			comparableExportImportFactory(importContract),
 			comparableExportImportFactory(fixture.GeneratedExportFactor),
 		)
 	}

@@ -218,6 +218,18 @@
   [data-bento-card-id] > .react-resizable-handle-se {
     @apply bottom-0 right-0 h-5 w-5 bg-af-overlay/10;
   }
+
+  [data-chart-container] .recharts-cartesian-axis-tick-text {
+    @apply fill-af-ink/58;
+  }
+
+  [data-chart-container] .recharts-cartesian-grid line {
+    stroke: rgb(from var(--color-af-overlay) r g b / 0.12);
+  }
+
+  [data-chart-container] .recharts-legend-item-text {
+    color: rgb(from var(--color-af-ink) r g b / 0.66) !important;
+  }
 }
 
 @keyframes agent-flow-dash {
@@ -249,5 +261,25 @@
 
   50% {
     opacity: 1;
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+
+  to {
+    height: 0;
   }
 }

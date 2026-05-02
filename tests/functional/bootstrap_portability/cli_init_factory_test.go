@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	initcmd "github.com/portpowered/agent-factory/pkg/cli/init"
-	"github.com/portpowered/agent-factory/pkg/interfaces"
-	"github.com/portpowered/agent-factory/pkg/testutil"
+	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 var retiredInitFactoryContractFields = []string{`"work_types"`, `"work_type"`, `"on_failure"`}
@@ -290,8 +290,8 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantModel, wantProv
 	workerAgents := string(workerAgentsBytes)
 	for _, expected := range []string{
 		"model: " + wantModel,
-		"modelProvider: " + wantProvider,
-		"executorProvider: script_wrap",
+		"modelProvider: " + strings.ToUpper(wantProvider),
+		"executorProvider: SCRIPT_WRAP",
 		"skipPermissions: true",
 		"timeout: 1h",
 		"You are the processor. Complete the task.",
