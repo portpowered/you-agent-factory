@@ -119,6 +119,9 @@ const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>
   "LOGICAL_MOVE",
   "MODEL_WORKSTATION",
 ]);
+const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
+  "INFERENCE_THROTTLE_GUARD",
+]);
 const GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
   "VISIT_COUNT",
   "MATCHES_FIELDS",
@@ -422,7 +425,7 @@ function decodeFactoryGuard(value: unknown, path: string): FactoryRootGuard {
   rejectUnknownKeys(record, FACTORY_GUARD_KEYS, path);
 
   const guard: FactoryRootGuard = {
-    type: readRequiredEnum(record, "type", path, GUARD_TYPE_VALUES),
+    type: readRequiredEnum(record, "type", path, FACTORY_ROOT_GUARD_TYPE_VALUES),
     modelProvider: readRequiredEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES),
     refreshWindow: readRequiredString(record, "refreshWindow", path),
   };

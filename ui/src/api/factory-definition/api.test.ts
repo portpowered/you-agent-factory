@@ -155,6 +155,25 @@ describe("normalizeFactoryDefinition", () => {
     );
   });
 
+  it("rejects unsupported factory-level guard types", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        guards: [
+          {
+            modelProvider: "CLAUDE",
+            refreshWindow: "15m",
+            type: "VISIT_COUNT",
+          },
+        ],
+        name: "legacy-factory",
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.guards[0].type must be one of INFERENCE_THROTTLE_GUARD.",
+      ),
+    );
+  });
+
   it("rejects retired legacy field aliases in the UI boundary", () => {
     expect(() =>
       normalizeFactoryDefinition({
