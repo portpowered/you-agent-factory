@@ -188,6 +188,7 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 	cloned := &interfaces.FactoryConfig{
 		Name:             cfg.Name,
 		Project:          cfg.Project,
+		Guards:           cloneFactoryGuardConfigs(cfg.Guards),
 		InputTypes:       cloneInputTypeConfigs(cfg.InputTypes),
 		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),
 		Resources:        cloneResourceConfigs(cfg.Resources),
@@ -196,6 +197,15 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 		Workstations:     cloneWorkstationConfigs(cfg.Workstations),
 	}
 	return cloned, nil
+}
+
+func cloneFactoryGuardConfigs(configs []interfaces.FactoryGuardConfig) []interfaces.FactoryGuardConfig {
+	if len(configs) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.FactoryGuardConfig, len(configs))
+	copy(cloned, configs)
+	return cloned
 }
 
 // CloneWorkerConfig returns a copy of a worker runtime definition.

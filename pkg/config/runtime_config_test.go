@@ -103,6 +103,62 @@ Implement {{ .WorkID }}.
 	}
 }
 
+func TestLoadRuntimeConfig_PreservesFactoryInferenceThrottleGuards(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"guards": []map[string]any{{
+			"type":          "INFERENCE_THROTTLE_GUARD",
+			"modelProvider": "CLAUDE",
+			"model":         "claude-sonnet-4-5-20250514",
+			"refreshWindow": "3s",
+		}},
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "claude-worker",
+		}},
+		"workstations": []map[string]any{{
+			"name":    "process-claude",
+			"worker":  "claude-worker",
+			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "claude-worker", `---
+type: MODEL_WORKER
+model: claude-sonnet-4-5-20250514
+modelProvider: claude
+stopToken: COMPLETE
+---
+Claude worker.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "process-claude", `---
+type: MODEL_WORKSTATION
+worker: claude-worker
+---
+Process.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	if len(loaded.FactoryConfig().Guards) != 1 {
+		t.Fatalf("expected one preserved factory guard, got %#v", loaded.FactoryConfig().Guards)
+	}
+	guard := loaded.FactoryConfig().Guards[0]
+	if guard.Type != interfaces.GuardTypeInferenceThrottle || guard.ModelProvider != "claude" || guard.Model != "claude-sonnet-4-5-20250514" || guard.RefreshWindow != "3s" {
+		t.Fatalf("preserved factory guard = %#v", guard)
+	}
+}
+
 func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	rootDir := t.TempDir()
 

@@ -2,7 +2,6 @@ package factory
 
 import (
 	"context"
-	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
@@ -21,22 +20,21 @@ type FactoryOption func(*FactoryConfig)
 // Fields are set via functional options (With* functions). The net field
 // is package-private; use GetNet() to read it from outside the package.
 type FactoryConfig struct {
-	net                           *state.Net
-	Scheduler                     scheduler.Scheduler
-	WorkerExecutors               map[string]workers.WorkerExecutor
-	RuntimeConfig                 interfaces.RuntimeDefinitionLookup
-	WorkflowContext               *factory_context.FactoryContext
-	RuntimeMode                   interfaces.RuntimeMode
-	Logger                        logging.Logger
-	Clock                         Clock
-	ProviderThrottlePauseDuration time.Duration
-	EventHistory                  *FactoryEventHistory
-	SubmissionRecorder            SubmissionRecorder
-	FactoryEventRecorder          FactoryEventRecorder
-	SubmissionHooks               []SubmissionHook
-	DispatchRecorder              DispatchRecorder
-	CompletionRecorder            CompletionRecorder
-	CompletionDeliveryPlanner     CompletionDeliveryPlanner
+	net                       *state.Net
+	Scheduler                 scheduler.Scheduler
+	WorkerExecutors           map[string]workers.WorkerExecutor
+	RuntimeConfig             interfaces.RuntimeDefinitionLookup
+	WorkflowContext           *factory_context.FactoryContext
+	RuntimeMode               interfaces.RuntimeMode
+	Logger                    logging.Logger
+	Clock                     Clock
+	EventHistory              *FactoryEventHistory
+	SubmissionRecorder        SubmissionRecorder
+	FactoryEventRecorder      FactoryEventRecorder
+	SubmissionHooks           []SubmissionHook
+	DispatchRecorder          DispatchRecorder
+	CompletionRecorder        CompletionRecorder
+	CompletionDeliveryPlanner CompletionDeliveryPlanner
 	// inlineDispatch enables synchronous dispatch mode through registered
 	// worker executors. When true, dispatches are executed inline during
 	// engine ticks instead of being routed through the async worker pool.
@@ -168,14 +166,6 @@ func WithClock(clock Clock) FactoryOption {
 func WithInlineDispatch() FactoryOption {
 	return func(c *FactoryConfig) {
 		c.inlineDispatch = true
-	}
-}
-
-// WithProviderThrottlePauseDuration overrides the internal runtime pause window
-// used after a normalized throttling failure for a specific provider/model lane.
-func WithProviderThrottlePauseDuration(d time.Duration) FactoryOption {
-	return func(c *FactoryConfig) {
-		c.ProviderThrottlePauseDuration = d
 	}
 }
 

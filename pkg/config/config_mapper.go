@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -233,6 +234,23 @@ func (cm *ConfigMapper) applyFactoryGuards(cfg *interfaces.FactoryConfig, transi
 		if err != nil || refreshWindow <= 0 {
 			continue
 		}
+		watchedTransitionIDs := make(map[string]struct{})
+		for _, transition := range transitions {
+			if transition == nil || transition.WorkerType == "" {
+				continue
+			}
+			worker, ok := factoryConfigWorker(cfg, transition.WorkerType)
+			if !ok || worker == nil {
+				continue
+			}
+			if !strings.EqualFold(worker.ModelProvider, authoredGuard.ModelProvider) {
+				continue
+			}
+			if authoredGuard.Model != "" && worker.Model != authoredGuard.Model {
+				continue
+			}
+			watchedTransitionIDs[transition.ID] = struct{}{}
+		}
 		for _, transition := range transitions {
 			if transition == nil || len(transition.InputArcs) == 0 {
 				continue
@@ -241,13 +259,26 @@ func (cm *ConfigMapper) applyFactoryGuards(cfg *interfaces.FactoryConfig, transi
 				continue
 			}
 			transition.InputArcs[0].Guard = combineArcGuards(transition.InputArcs[0].Guard, &petri.InferenceThrottleGuard{
-				Provider:      authoredGuard.ModelProvider,
-				Model:         authoredGuard.Model,
-				WorkerName:    transition.WorkerType,
-				RefreshWindow: refreshWindow,
+				Provider:             authoredGuard.ModelProvider,
+				Model:                authoredGuard.Model,
+				WorkerName:           transition.WorkerType,
+				RefreshWindow:        refreshWindow,
+				WatchedTransitionIDs: watchedTransitionIDs,
 			})
 		}
 	}
+}
+
+func factoryConfigWorker(cfg *interfaces.FactoryConfig, name string) (*interfaces.WorkerConfig, bool) {
+	if cfg == nil {
+		return nil, false
+	}
+	for i := range cfg.Workers {
+		if cfg.Workers[i].Name == name {
+			return &cfg.Workers[i], true
+		}
+	}
+	return nil, false
 }
 
 // applyInputGuards processes per-input guard declarations on workstation inputs.
