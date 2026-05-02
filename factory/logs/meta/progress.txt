@@ -1,5 +1,9 @@
 ## Codebase Patterns
 
+- When dashboard summary totals look wrong, compare the backend simple-dashboard
+  projection and the UI timeline snapshot together; `failed_count`,
+  `completed_count`, and `*_by_work_type` must share the same customer-scoped
+  counting semantics or the widget will drift.
 - When browser-level UI ask slices merge quickly, re-check the exact merged PR
   history before queueing the next website-quality lane; the right follow-up
   can shift from missing coverage to shared-component consolidation within
@@ -1586,3 +1590,40 @@
 - Queued one new ignored customer-ask-aligned idea at
   `factory/inputs/idea/default/browser-shared-action-primitives.md`
   instead of re-queueing the already-landed browser PNG lane.
+
+## 2026-05-02 14:24:00 -07:00 - meta refresh after functional-lane merge and website follow-up opened
+
+- Ran `git pull` and verified the workspace is synced on `main` at `abcb964`,
+  with `origin/main` at the same commit.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, and live GitHub PR state before choosing work.
+- Verified with `git ls-files factory/inputs/**` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels even though local ignored
+  residue continues to accumulate under `factory/inputs/**`.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `0ea191c`
+  - it still treated PR `#30` as open even though it is now merged
+  - it did not include open PR `#61` `browser-shared-action-primitives`
+  - it still treated the shared-action-primitives website cleanup as the next
+    unclaimed move even though that lane is already in flight
+- Confirmed the current GitHub PR shape on May 2, 2026 is:
+  - open PR `#61` `browser-shared-action-primitives`
+  - merged PR `#30` `prd-functional-test-suite-decomposition`
+  - merged PRs `#60`, `#59`, `#58`, `#57`, `#56`, `#55`, `#54`, `#53`, and
+    `#52`
+- Used sidecar explorers plus direct code inspection to validate the next
+  distinct customer-ask-aligned bug outside PR `#61`:
+  - backend dashboard/session projections count `failed_count` by
+    customer-visible failed dispatch in
+    `pkg/factory/projections/world_view_runtime.go`
+  - the UI timeline snapshot sets `failed_count` from
+    `Object.keys(state.failedWorkItemsByID).length` in
+    `ui/src/state/factoryTimelineStore.ts`
+  - `failed_by_work_type` already uses work-item counting semantics, so total
+    and grouped failure summaries can disagree within the same surface
+  - that mismatch aligns with the checked-in ask example tied to the local
+    `factory/logs/weird-number-summary.jsonl` evidence trace
+- Queued one new ignored customer-ask-aligned idea at
+  `factory/inputs/idea/default/align-dashboard-work-summary-count-semantics.md`
+  instead of re-queueing the already-open shared-action-primitives lane.
