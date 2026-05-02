@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api_test
 
 import (
 	"context"
@@ -33,7 +33,7 @@ func mapValue[K comparable, V any](values *map[K]V) map[K]V {
 	return *values
 }
 
-// portos:func-length-exception owner=agent-factory reason=legacy-service-mode-lifecycle-smoke review=2026-07-19 removal=split-startup-idle-submission-completion-and-cancel-assertions-before-next-service-mode-smoke-change
+// portos:func-length-exception owner=agent-factory reason=service-mode-lifecycle-runtime-api-smoke review=2026-07-19 removal=split-startup-idle-submission-completion-and-cancel-assertions-before-next-service-mode-smoke-change
 func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled(t *testing.T) {
 	skipSlowFunctionalSmokeInShort(t, "slow service-mode lifecycle smoke")
 	dir := scaffoldFactory(t, twoStagePipelineConfig())
@@ -155,7 +155,7 @@ func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayRea
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=legacy-observability-runtime-smoke review=2026-07-19 removal=split-snapshot-dashboard-status-and-event-assertions-before-next-observability-smoke-change
+// portos:func-length-exception owner=agent-factory reason=observability-runtime-api-smoke review=2026-07-19 removal=split-snapshot-dashboard-status-and-event-assertions-before-next-observability-smoke-change
 func TestObservabilitySmoke_CanonicalServiceSnapshotMatchesStateAndDashboardAcrossRuntimeTransitions(t *testing.T) {
 	skipSlowFunctionalSmokeInShort(t, "slow observability smoke")
 	dir := scaffoldFactory(t, twoStagePipelineConfig())
@@ -327,11 +327,7 @@ func (e staticOutcomeExecutor) Execute(_ context.Context, dispatch interfaces.Wo
 	}, nil
 }
 
-func waitForDashboardSnapshot(
-	t *testing.T,
-	timeout time.Duration,
-	check func() (DashboardResponse, bool),
-) DashboardResponse {
+func waitForDashboardSnapshot(t *testing.T, timeout time.Duration, check func() (DashboardResponse, bool)) DashboardResponse {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -462,11 +458,7 @@ func assertDashboardMatchesEngineStateWithTickCheck(
 	}
 }
 
-func waitForStateSnapshot(
-	t *testing.T,
-	timeout time.Duration,
-	check func() (StateResponse, bool),
-) StateResponse {
+func waitForStateSnapshot(t *testing.T, timeout time.Duration, check func() (StateResponse, bool)) StateResponse {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)

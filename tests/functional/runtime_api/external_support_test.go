@@ -1,9 +1,11 @@
-package functional_test
+package runtime_api_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/agent-factory/pkg/interfaces"
@@ -13,7 +15,6 @@ func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Write factory.json.
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal factory config: %v", err)
@@ -22,7 +23,6 @@ func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 		t.Fatalf("write factory.json: %v", err)
 	}
 
-	// Create workstations/<name>/AGENTS.md for each workstation in the config.
 	if workstations, ok := cfg["workstations"].([]map[string]any); ok {
 		for _, ws := range workstations {
 			name, _ := ws["name"].(string)
@@ -45,36 +45,58 @@ func scaffoldFactory(t *testing.T, cfg map[string]any) string {
 
 func twoStagePipelineConfig() map[string]any {
 	return map[string]any{
-		"workTypes": []map[string]any{
-			{
-				"name": "task",
-				"states": []map[string]string{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "processing", "type": "PROCESSING"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "stage1", "type": "PROCESSING"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
 			},
-		},
-		"workers": []map[string]string{
-			{"name": "worker-a"},
-			{"name": "worker-b"},
-		},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}, {"name": "worker-b"}},
 		"workstations": []map[string]any{
 			{
-				"name":      "step-one",
+				"name":      "worker-a",
 				"worker":    "worker-a",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":   []map[string]string{{"workType": "task", "state": "processing"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "stage1"}},
 				"onFailure": map[string]string{"workType": "task", "state": "failed"},
 			},
 			{
-				"name":      "step-two",
+				"name":      "worker-b",
 				"worker":    "worker-b",
-				"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
+				"inputs":    []map[string]string{{"workType": "task", "state": "stage1"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 				"onFailure": map[string]string{"workType": "task", "state": "failed"},
 			},
 		},
 	}
+}
+
+func skipSlowFunctionalSmokeInShort(t *testing.T, reason string) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip(reason)
+	}
+}
+
+type blockingExecutor struct {
+	releaseCh <-chan struct{}
+	mu        *sync.Mutex
+	calls     *int
+}
+
+func (e *blockingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	e.mu.Lock()
+	*e.calls++
+	e.mu.Unlock()
+
+	<-e.releaseCh
+
+	return interfaces.WorkResult{
+		DispatchID:   d.DispatchID,
+		TransitionID: d.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+	}, nil
 }

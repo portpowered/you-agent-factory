@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api_test
 
 import "time"
 

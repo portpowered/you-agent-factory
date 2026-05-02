@@ -30,8 +30,8 @@ evidence for the functional suite decomposition PRD.
   coverage.
 - `tests/functional/internal/support` is the only shared cross-package helper
   seam for decomposed functional coverage.
-- `tests/functional_test/` may remain temporarily for unmigrated behavior tests
-  and the small helper-only compatibility shims they still need to compile.
+- `tests/functional_test/` now remains only for the still-unmigrated replay
+  scheduler smoke plus legacy checked-in fixture data under `testdata/`.
 - New shared helper files must not be added to `tests/functional_test`; move
   that code into `tests/functional/internal/support` instead.
 - Long-lane files stay in the behavior package they validate and must use both

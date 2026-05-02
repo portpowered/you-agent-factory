@@ -67,16 +67,17 @@ coverage that should not join the default command.
 
 ## Migration Compatibility
 
-The existing `tests/functional_test/` suite can coexist temporarily while
-stories migrate coverage into `tests/functional/`. New decomposition work
-should target the behavior-first package tree rather than adding more unrelated
-coverage to the legacy mixed bucket.
+The remaining `tests/functional_test/` coverage is temporary while stories
+finish the last migration gaps. New decomposition work should target the
+behavior-first package tree rather than adding more unrelated coverage to the
+legacy mixed bucket.
 
 Compatibility rules during coexistence:
 
-- `tests/functional_test/` stays open only for unmigrated behavior coverage and
-  the small allowlisted helper-only shims needed to keep those remaining files
-  compiling.
+- `tests/functional_test/` stays open only for the still-unmigrated replay
+  scheduler smoke and the helper seams that it still needs to compile.
+- `tests/functional_test/testdata` remains the checked-in legacy fixture store
+  until fixture ownership is migrated separately.
 - New behavior coverage belongs in `tests/functional/<behavior-package>/`.
 - New shared harnesses, assertions, and fixture seams belong in
   `tests/functional/internal/support`.

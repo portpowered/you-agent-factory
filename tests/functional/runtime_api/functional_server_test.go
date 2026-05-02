@@ -1,4 +1,4 @@
-package functional_test
+package runtime_api_test
 
 import (
 	"bufio"
@@ -26,21 +26,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// FunctionalServer starts the agent-factory with a real HTTP API server backed
-// by the service layer. It allows functional tests to interact via HTTP rather
-// than constructing internal engine or subsystem structs directly.
-//
-// # How to add a new test scenario
-//
-//  1. Scaffold a factory dir:  dir := scaffoldFactory(t, simplePipelineConfig())
-//  2. Start the server:        fs := StartFunctionalServer(t, dir, true /* use mock workers */)
-//  3. Submit work:             traceID := fs.SubmitWork(t, "task", json.RawMessage(`{...}`))
-//  4. Poll runtime state:      state := fs.GetState(t)
-//  5. Assert results:          check state.Categories.Terminal, state.TotalTokens, etc.
-//
-// The server shuts down automatically via t.Cleanup — no manual teardown needed.
-// Use mock workers for happy-path tests that should complete without live providers.
-// Use real executors when you need provider overrides, failure routing, or custom outcomes.
 type FunctionalServer struct {
 	httpSrv *httptest.Server
 	factory factory.APIFactory
@@ -59,7 +44,6 @@ type DashboardStream struct {
 	errs      chan error
 }
 
-// SubmitWork POSTs a work item to POST /work and returns the assigned trace ID.
 func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload json.RawMessage) string {
 	t.Helper()
 	req := factoryapi.SubmitWorkRequest{
@@ -85,8 +69,6 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	return result.TraceId
 }
 
-// GetState fetches the service engine snapshot and maps it into the legacy
-// compatibility response shape.
 func (fs *FunctionalServer) GetState(t *testing.T) StateResponse {
 	t.Helper()
 	snapshot := fs.GetEngineStateSnapshot(t)
@@ -101,7 +83,6 @@ func (fs *FunctionalServer) GetState(t *testing.T) StateResponse {
 	}
 }
 
-// GetDashboard projects the current runtime into the compatibility dashboard shape.
 func (fs *FunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	t.Helper()
 
@@ -268,10 +249,7 @@ func dashboardSessionRuntimeFromWorldView(worldView interfaces.FactoryWorldView)
 	}
 }
 
-func functionalDashboardSessionWorkLabels(
-	worldView interfaces.FactoryWorldView,
-	category string,
-) *[]string {
+func functionalDashboardSessionWorkLabels(worldView interfaces.FactoryWorldView, category string) *[]string {
 	placeCategories := make(map[string]string)
 	for _, node := range worldView.Topology.WorkstationNodesByID {
 		for _, place := range node.InputPlaces {
@@ -674,7 +652,6 @@ func dashboardCompatWorkTypeID(workTypeID string) string {
 	return workTypeID
 }
 
-// ListWork fetches GET /work and returns the parsed response.
 func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
 	resp, err := http.Get(fs.httpSrv.URL + "/work")
@@ -692,8 +669,6 @@ func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	return work
 }
 
-// OpenDashboardStream opens GET /events and projects each canonical event into
-// the compatibility dashboard view used by older functional assertions.
 func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 	t.Helper()
 
@@ -734,8 +709,6 @@ func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 	return stream
 }
 
-// GetEngineStateSnapshot returns the canonical service-level aggregate snapshot
-// so functional tests can compare it directly with HTTP observability surfaces.
 func (fs *FunctionalServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
 	engineState, err := fs.service.GetEngineStateSnapshot(context.Background())
@@ -918,10 +891,6 @@ func lastIndexByte(value string, c byte) int {
 	return -1
 }
 
-// StartFunctionalServerWithConfig builds a FactoryService and exposes it as an
-// HTTP test server, allowing callers to inject service-layer test seams such as
-// provider or script command runners while preserving the real API/runtime
-// wiring.
 func StartFunctionalServerWithConfig(
 	t *testing.T,
 	factoryDir string,
@@ -933,16 +902,13 @@ func StartFunctionalServerWithConfig(
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Capture the API handler via the APIServerStarter callback.
-	// The callback runs inside svc.Run() and receives the live service-facing
-	// factory boundary used by the API server.
 	var handler http.Handler
 	var runtimeFactory apisurface.APISurface
 	readyCh := make(chan struct{})
 
 	cfg := &service.FactoryServiceConfig{
 		Dir:          factoryDir,
-		Port:         1, // non-zero enables APIServerStarter
+		Port:         1,
 		Logger:       zap.NewNop(),
 		ExtraOptions: extraOpts,
 		APIServerStarter: func(ctx context.Context, f apisurface.APISurface, port int, l *zap.Logger) error {
@@ -950,7 +916,6 @@ func StartFunctionalServerWithConfig(
 			apiSrv := api.NewServer(f, 0, l)
 			handler = apiSrv.Handler()
 			close(readyCh)
-			// Block until context is cancelled (required by callback contract).
 			<-ctx.Done()
 			return nil
 		},
@@ -982,7 +947,6 @@ func StartFunctionalServerWithConfig(
 	}
 
 	httpSrv := httptest.NewServer(handler)
-
 	fs := &FunctionalServer{
 		httpSrv: httpSrv,
 		factory: runtimeFactory,
@@ -1025,11 +989,6 @@ func waitForFunctionalServiceRuntime(t *testing.T, svc *service.FactoryService, 
 	t.Fatal("FunctionalServer: timed out waiting for service runtime startup")
 }
 
-// StartFunctionalServer builds a FactoryService and exposes it as an HTTP test
-// server. The factory runs until its context is cancelled or all work completes.
-// When useMockWorkers is true, the service uses default accepted mock-worker execution.
-// Pass factory.WithWorkerExecutor(...) in extraOpts to register mock executors
-// for tests that intentionally bypass service-level mock workers.
 func StartFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool, extraOpts ...factory.FactoryOption) *FunctionalServer {
 	return StartFunctionalServerWithConfig(t, factoryDir, useMockWorkers, nil, extraOpts...)
 }
