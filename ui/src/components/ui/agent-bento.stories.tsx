@@ -1,5 +1,7 @@
 import { expect, userEvent, within } from "storybook/test";
 
+import { NoSelectionDetailCard } from "../../features/current-selection/no-selection-detail-card";
+import { WorkTotalsCard } from "../../features/work-totals/work-totals-card";
 import "../../styles.css";
 import {
   AgentBentoCard,
@@ -13,6 +15,11 @@ const multiCardLayout: AgentBentoLayoutItem[] = [
   { id: "activity", x: 0, y: 0, w: 5, h: 3 },
   { id: "trace", x: 5, y: 0, w: 4, h: 3 },
   { id: "terminal", x: 9, y: 0, w: 3, h: 3 },
+];
+
+const featureBoardLayout: AgentBentoLayoutItem[] = [
+  { id: "work-totals", x: 0, y: 0, w: 4, h: 2 },
+  { id: "current-selection", x: 4, y: 0, w: 8, h: 4 },
 ];
 
 function card(id: string, title: string, body: string) {
@@ -78,6 +85,47 @@ export const MultiCard = {
     await expect(activity).toBeVisible();
     await expect(await canvas.findByRole("article", { name: "Trace grid" })).toBeVisible();
     await expect(await canvas.findByRole("article", { name: "Terminal work" })).toBeVisible();
+  },
+};
+
+export const RealDashboardState = {
+  render: () => (
+    <div style={{ padding: "1rem" }}>
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "work-totals",
+            children: (
+              <WorkTotalsCard
+                completedCount={3}
+                dispatchedCount={5}
+                failedCount={1}
+                inFlightDispatchCount={2}
+              />
+            ),
+          },
+          {
+            id: "current-selection",
+            children: <NoSelectionDetailCard />,
+          },
+        ]}
+        initialWidth={1180}
+        layout={featureBoardLayout}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(await canvas.findByRole("article", { name: "Work totals" })).toBeVisible();
+    await expect(await canvas.findByText("In progress")).toBeVisible();
+    await expect(await canvas.findByRole("article", { name: "Current selection" })).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Undo selection" })).toBeDisabled();
+    await expect(
+      await canvas.findByText(
+        "Select a workstation, work item, or state node to inspect live details.",
+      ),
+    ).toBeVisible();
   },
 };
 
