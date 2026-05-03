@@ -399,3 +399,36 @@
 - Queued one new standalone cleanup idea under the canonical ignored inbox for
   the unqueued route-array contract cleanup, while avoiding duplication of the
   existing import/export helper batch.
+
+## 2026-05-03T15:02:24.6780581-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git reported `main` was already up to date with
+  `origin/main`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while the visible idea files are still ignored operating state.
+- Re-checked recent PR state with `gh pr list`, `gh pr view 69`, and
+  `gh pr view 74`; PR `#69` still owns the array-valued non-success route
+  contract lane and PR `#74` is merged.
+- Inspected the local tracked diffs for `factory/logs/meta/asks.md` and
+  `factory/workstations/cleaner/AGENTS.md`, confirming that the canonical ask
+  surface now explicitly carries the route-array ask and the cleaner prompt now
+  permits multiple non-overlapping items in parallel.
+- Read the live import preview dialog ownership seam and confirmed that
+  `ui/src/features/workflow-activity/dashboard-import-preview-dialog.tsx`
+  remains a thin pass-through wrapper over
+  `ui/src/features/workflow-activity/react-flow-current-activity-card-import.tsx`
+  even though `ui/src/features/bento/dashboard-bento.tsx` already mounts the
+  dashboard dialog directly.
+- Pruned the stale ignored idea
+  `factory/inputs/idea/default/simplify-current-selection-dispatch-detail-surface.md`
+  after its owning PR `#74` merged.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/finish-import-preview-dialog-extraction-from-workflow-activity.md`
+  so the next non-overlapping ask targets the remaining import dialog ownership
+  cleanup without colliding with PR `#69`.
+- Refreshed the checked-in world view to record the updated ask diff, local
+  queue residue, and the new narrow follow-up selection.

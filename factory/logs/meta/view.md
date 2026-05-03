@@ -2,7 +2,7 @@
 
 ## world state
 
-- as of `2026-05-03T14:04:23.2724467-07:00`, local `HEAD` on `main` points to
+- as of `2026-05-03T15:02:24.6780581-07:00`, local `HEAD` on `main` points to
   `0d0f2b5` (`simplify-current-selection-dispatch-detail-surface (#74)`)
   and matches `origin/main`
 - the local worktree is not clean:
@@ -48,7 +48,7 @@
   active ask:
   - `factory/inputs/thoughts/default/import-export-issues.md`
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - `factory/inputs/idea/default/simplify-current-selection-dispatch-detail-surface.md`
+  - `factory/inputs/idea/default/finish-import-preview-dialog-extraction-from-workflow-activity.md`
 - the local repository root also contains untracked planning residue outside the
   canonical inboxes:
   - `factory/scripts/import-export-p0-followups.json`
@@ -78,6 +78,9 @@
   represented in that helper batch:
   - replace singular workstation `onContinue`, `onRejection`, and `onFailure`
     destinations with array-based outputs
+- the tracked local ask diff now makes that route-array contract ask explicit in
+  the canonical backlog file, but it still remains an already-owned lane rather
+  than an unowned queue gap
 - the only remaining import/export P0 contract lane still open on GitHub is
   PR `#69` `workstation-non-success-route-arrays`
 - the live code also shows the route-array ask is real on `main`, but it is no
@@ -127,6 +130,14 @@
   - the ask literally describes a relationship graph and a nested per-dispatch
     inference-attempt list, while `main` currently renders a textual
     relationship list and a consolidated per-dispatch request/response view
+- the next narrow unowned UI cleanup is no longer the broad current-selection
+  lane; it is the still-incomplete import dialog ownership move:
+  - `ui/src/features/workflow-activity/dashboard-import-preview-dialog.tsx`
+    remains a thin pass-through wrapper over
+    `ui/src/features/workflow-activity/react-flow-current-activity-card-import.tsx`
+  - `ui/src/features/bento/dashboard-bento.tsx` already mounts that wrapper
+    directly, so the remaining work is a localized ownership simplification
+    rather than a broader behavior rewrite
 
 ## replay truth
 
@@ -179,8 +190,8 @@
   residue plus open PR `#69`, so queuing another idea for it would be
   duplicative
 - the broad current-selection simplification ask is now merged on `main`, so
-  the ignored local idea file for that lane is stale operating residue rather
-  than live queue truth
+  the ignored local idea file for that lane was stale operating residue rather
+  than live queue truth and has now been pruned locally
 - the earlier local button-wrapper idea has already been consumed by merged
   PR `#73`, so keeping that ignored idea file around would only create stale
   local queue residue
@@ -191,7 +202,10 @@
   longer duplicate top-level panels; it is the gap between the ask's literal
   request for a relationship graph plus per-attempt inference lists and the
   simpler merged textual relationship list plus consolidated dispatch card
+- once the remaining P0 route-array lane is already owned, the best safe
+  dispatch is a narrow, isolated follow-up from the canonical ask surface rather
+  than a second overlapping import/export contract request
 - the right meta action in this iteration is to refresh the checked-in world
   view, record that PR `#74` has merged while PR `#69` remains the only open P0
-  lane, and avoid dispatching another overlapping cleanup request until `#69`
-  merges or a concrete non-duplicate follow-up defect emerges
+  lane, prune stale ignored queue residue, and queue the unfinished import
+  preview dialog extraction as a standalone ignored idea
