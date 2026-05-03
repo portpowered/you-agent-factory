@@ -54,6 +54,28 @@ type ExportDialogState =
   | { status: "error"; message: string }
   | { status: "exporting" };
 
+interface ExportDialogFormState {
+  dialogState: ExportDialogState;
+  exportDisabled: boolean;
+  exportName: string;
+  handleClose: () => void;
+  handleExport: () => Promise<void>;
+  handleImageSelection: (files: FileList | null) => void;
+  handleOpenChange: (open: boolean) => void;
+  imageTouched: boolean;
+  imageValidationId: string;
+  imageValidationMessage: string | null;
+  isExporting: boolean;
+  nameTouched: boolean;
+  nameValidationId: string;
+  nameValidationMessage: string | null;
+  selectedImage: File | null;
+  setDialogState: (state: ExportDialogState) => void;
+  setExportName: (value: string) => void;
+  setImageTouched: (value: boolean) => void;
+  setNameTouched: (value: boolean) => void;
+}
+
 export function ExportFactoryDialog({
   factory,
   initialFactoryName,
@@ -63,6 +85,197 @@ export function ExportFactoryDialog({
   preparationFailure = null,
 }: ExportFactoryDialogProps) {
   const validationIdBase = useId();
+  const formState = useExportFactoryDialogState({
+    factory,
+    initialFactoryName,
+    isOpen,
+    onClose,
+    preparationFailure,
+    validationIdBase,
+  });
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <Dialog onOpenChange={formState.handleOpenChange} open={isOpen}>
+      <DialogContent className={DIALOG_CONTENT_CLASS}>
+        <DialogHeader>
+          <div className="space-y-2">
+            <DialogTitle className={DIALOG_TITLE_CLASS}>
+              Export factory
+            </DialogTitle>
+            <DialogDescription className={DIALOG_BODY_CLASS}>
+              Package the current factory into a PNG artifact without changing the live
+              dashboard state.
+            </DialogDescription>
+          </div>
+        </DialogHeader>
+
+        <p className={DIALOG_HINT_CLASS}>
+          Confirming export keeps the current dashboard state unchanged and downloads
+          a PNG artifact with embedded Port OS factory metadata.
+        </p>
+
+        <ExportFactoryDialogForm formState={formState} />
+        <ExportFactoryDialogMessages
+          dialogState={formState.dialogState}
+          factory={factory}
+          isPreparing={isPreparing}
+          preparationFailure={preparationFailure}
+        />
+
+        <DialogFooter>
+          <Button onClick={formState.handleClose} tone="outline" type="button">
+            Cancel
+          </Button>
+          <Button
+            aria-busy={formState.isExporting ? "true" : undefined}
+            disabled={formState.exportDisabled || isPreparing}
+            onClick={() => {
+              void formState.handleExport();
+            }}
+            type="button"
+          >
+            {formState.dialogState.status === "exporting" ? "Exporting..." : "Export PNG"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ExportFactoryDialogForm({
+  formState,
+}: {
+  formState: ExportDialogFormState;
+}) {
+  return (
+    <div className={DIALOG_FORM_CLASS}>
+      <div className={DIALOG_FIELD_GROUP_CLASS}>
+        <label className={DIALOG_FIELD_LABEL_CLASS} htmlFor="export-factory-name">
+          Factory name
+        </label>
+        <Input
+          aria-describedby={
+            formState.nameValidationMessage ? formState.nameValidationId : undefined
+          }
+          aria-invalid={formState.nameValidationMessage ? "true" : undefined}
+          className={DASHBOARD_BODY_TEXT_CLASS}
+          disabled={formState.isExporting}
+          id="export-factory-name"
+          onBlur={() => {
+            formState.setNameTouched(true);
+          }}
+          onChange={(event) => {
+            if (formState.isExporting) {
+              return;
+            }
+            formState.setDialogState({ status: "idle" });
+            formState.setExportName(event.target.value);
+          }}
+          placeholder="Factory name"
+          type="text"
+          value={formState.exportName}
+        />
+        <p className={DIALOG_FIELD_DESCRIPTION_CLASS}>
+          This name is embedded in the exported PNG metadata and used for the
+          downloaded filename.
+        </p>
+        {formState.nameValidationMessage ? (
+          <p className={DIALOG_VALIDATION_CLASS} id={formState.nameValidationId}>
+            {formState.nameValidationMessage}
+          </p>
+        ) : null}
+      </div>
+
+      <div className={DIALOG_FIELD_GROUP_CLASS}>
+        <label className={DIALOG_FIELD_LABEL_CLASS} htmlFor="export-factory-image">
+          Cover image
+        </label>
+        <input
+          accept="image/*"
+          aria-describedby={
+            formState.imageValidationMessage ? formState.imageValidationId : undefined
+          }
+          aria-invalid={formState.imageValidationMessage ? "true" : undefined}
+          className={DIALOG_FILE_INPUT_CLASS}
+          disabled={formState.isExporting}
+          id="export-factory-image"
+          onChange={(event) => {
+            if (formState.isExporting) {
+              return;
+            }
+            formState.setDialogState({ status: "idle" });
+            formState.handleImageSelection(event.target.files);
+          }}
+          type="file"
+        />
+        <p className={DIALOG_FIELD_DESCRIPTION_CLASS}>
+          Choose the image customers will see when they open the exported PNG.
+        </p>
+        {formState.selectedImage ? (
+          <p className={DIALOG_HINT_CLASS}>Selected image: {formState.selectedImage.name}</p>
+        ) : null}
+        {formState.imageValidationMessage ? (
+          <p className={DIALOG_VALIDATION_CLASS} id={formState.imageValidationId}>
+            {formState.imageValidationMessage}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ExportFactoryDialogMessages({
+  dialogState,
+  factory,
+  isPreparing,
+  preparationFailure,
+}: Pick<ExportDialogFormState, "dialogState"> & {
+  factory: FactoryValue | null;
+  isPreparing: boolean;
+  preparationFailure?: CurrentFactoryExportFailure | null;
+}) {
+  return (
+    <>
+      {isPreparing ? (
+        <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
+          Loading the current authored factory definition.
+        </div>
+      ) : null}
+
+      {preparationFailure && factory === null && !isPreparing ? (
+        <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
+          {preparationFailure.message}
+        </div>
+      ) : null}
+
+      {dialogState.status === "error" ? (
+        <div className={DIALOG_ERROR_PANEL_CLASS} role="alert">
+          {dialogState.message}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function useExportFactoryDialogState({
+  factory,
+  initialFactoryName,
+  isOpen,
+  onClose,
+  preparationFailure,
+  validationIdBase,
+}: {
+  factory: FactoryValue | null;
+  initialFactoryName: string;
+  isOpen: boolean;
+  onClose: () => void;
+  preparationFailure?: CurrentFactoryExportFailure | null;
+  validationIdBase: string;
+}): ExportDialogFormState {
   const [exportName, setExportName] = useState(initialFactoryName);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageSelectionError, setImageSelectionError] = useState<string | null>(null);
@@ -70,30 +283,6 @@ export function ExportFactoryDialog({
   const [imageTouched, setImageTouched] = useState(false);
   const [dialogState, setDialogState] = useState<ExportDialogState>({ status: "idle" });
   const exportAttemptRef = useRef(0);
-
-  const handleClose = () => {
-    exportAttemptRef.current += 1;
-    onClose();
-  };
-
-  useEffect(() => {
-    if (!isOpen) {
-      exportAttemptRef.current += 1;
-      return;
-    }
-
-    setDialogState({ status: "idle" });
-    setExportName(initialFactoryName);
-    setSelectedImage(null);
-    setImageSelectionError(null);
-    setImageTouched(false);
-    setNameTouched(false);
-  }, [initialFactoryName, isOpen]);
-
-  if (!isOpen) {
-    return null;
-  }
-
   const trimmedExportName = exportName.trim();
   const nameValidationMessage =
     nameTouched && trimmedExportName.length === 0
@@ -107,12 +296,24 @@ export function ExportFactoryDialog({
   const nameValidationId = `${validationIdBase}-name-validation`;
   const imageValidationId = `${validationIdBase}-image-validation`;
   const isExporting = dialogState.status === "exporting";
-  const exportDisabled = isExporting || isPreparing || factory === null;
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
-      handleClose();
-    }
+  const exportDisabled = isExporting || factory === null;
+
+  const handleClose = () => {
+    exportAttemptRef.current += 1;
+    onClose();
   };
+
+  useResetExportFactoryDialogState({
+    exportAttemptRef,
+    initialFactoryName,
+    isOpen,
+    setDialogState,
+    setExportName,
+    setImageSelectionError,
+    setImageTouched,
+    setNameTouched,
+    setSelectedImage,
+  });
 
   const handleImageSelection = (files: FileList | null) => {
     setImageTouched(true);
@@ -183,130 +384,79 @@ export function ExportFactoryDialog({
     handleClose();
   };
 
-  return (
-    <Dialog onOpenChange={handleOpenChange} open={isOpen}>
-      <DialogContent className={DIALOG_CONTENT_CLASS}>
-        <DialogHeader>
-          <div className="space-y-2">
-            <DialogTitle className={DIALOG_TITLE_CLASS}>
-              Export factory
-            </DialogTitle>
-            <DialogDescription className={DIALOG_BODY_CLASS}>
-              Package the current factory into a PNG artifact without changing the live
-              dashboard state.
-            </DialogDescription>
-          </div>
-        </DialogHeader>
+  return {
+    dialogState,
+    exportDisabled,
+    exportName,
+    handleClose,
+    handleOpenChange: createHandleOpenChange(handleClose),
+    handleExport,
+    handleImageSelection,
+    imageTouched,
+    imageValidationId,
+    imageValidationMessage,
+    isExporting,
+    nameTouched,
+    nameValidationId,
+    nameValidationMessage,
+    selectedImage,
+    setDialogState,
+    setExportName,
+    setImageTouched,
+    setNameTouched,
+  };
+}
 
-        <p className={DIALOG_HINT_CLASS}>
-          Confirming export keeps the current dashboard state unchanged and downloads
-          a PNG artifact with embedded Port OS factory metadata.
-        </p>
+function createHandleOpenChange(handleClose: () => void) {
+  return (open: boolean) => {
+    if (!open) {
+      handleClose();
+    }
+  };
+}
 
-        <div className={DIALOG_FORM_CLASS}>
-          <div className={DIALOG_FIELD_GROUP_CLASS}>
-            <label className={DIALOG_FIELD_LABEL_CLASS} htmlFor="export-factory-name">
-              Factory name
-            </label>
-            <Input
-              aria-describedby={nameValidationMessage ? nameValidationId : undefined}
-              aria-invalid={nameValidationMessage ? "true" : undefined}
-              className={DASHBOARD_BODY_TEXT_CLASS}
-              disabled={isExporting}
-              id="export-factory-name"
-              onBlur={() => {
-                setNameTouched(true);
-              }}
-              onChange={(event) => {
-                if (isExporting) {
-                  return;
-                }
-                setDialogState({ status: "idle" });
-                setExportName(event.target.value);
-              }}
-              placeholder="Factory name"
-              type="text"
-              value={exportName}
-            />
-            <p className={DIALOG_FIELD_DESCRIPTION_CLASS}>
-              This name is embedded in the exported PNG metadata and used for the
-              downloaded filename.
-            </p>
-            {nameValidationMessage ? (
-              <p className={DIALOG_VALIDATION_CLASS} id={nameValidationId}>
-                {nameValidationMessage}
-              </p>
-            ) : null}
-          </div>
+function useResetExportFactoryDialogState({
+  exportAttemptRef,
+  initialFactoryName,
+  isOpen,
+  setDialogState,
+  setExportName,
+  setImageSelectionError,
+  setImageTouched,
+  setNameTouched,
+  setSelectedImage,
+}: {
+  exportAttemptRef: React.RefObject<number>;
+  initialFactoryName: string;
+  isOpen: boolean;
+  setDialogState: (state: ExportDialogState) => void;
+  setExportName: (value: string) => void;
+  setImageSelectionError: (value: string | null) => void;
+  setImageTouched: (value: boolean) => void;
+  setNameTouched: (value: boolean) => void;
+  setSelectedImage: (value: File | null) => void;
+}) {
+  useEffect(() => {
+    if (!isOpen) {
+      exportAttemptRef.current += 1;
+      return;
+    }
 
-          <div className={DIALOG_FIELD_GROUP_CLASS}>
-            <label className={DIALOG_FIELD_LABEL_CLASS} htmlFor="export-factory-image">
-              Cover image
-            </label>
-            <input
-              accept="image/*"
-              aria-describedby={imageValidationMessage ? imageValidationId : undefined}
-              aria-invalid={imageValidationMessage ? "true" : undefined}
-              className={DIALOG_FILE_INPUT_CLASS}
-              disabled={isExporting}
-              id="export-factory-image"
-              onChange={(event) => {
-                if (isExporting) {
-                  return;
-                }
-                setDialogState({ status: "idle" });
-                handleImageSelection(event.target.files);
-              }}
-              type="file"
-            />
-            <p className={DIALOG_FIELD_DESCRIPTION_CLASS}>
-              Choose the image customers will see when they open the exported PNG.
-            </p>
-            {selectedImage ? (
-              <p className={DIALOG_HINT_CLASS}>Selected image: {selectedImage.name}</p>
-            ) : null}
-            {imageValidationMessage ? (
-              <p className={DIALOG_VALIDATION_CLASS} id={imageValidationId}>
-                {imageValidationMessage}
-              </p>
-            ) : null}
-          </div>
-
-          {isPreparing ? (
-            <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
-              Loading the current authored factory definition.
-            </div>
-          ) : null}
-
-          {preparationFailure && factory === null && !isPreparing ? (
-            <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
-              {preparationFailure.message}
-            </div>
-          ) : null}
-
-          {dialogState.status === "error" ? (
-            <div className={DIALOG_ERROR_PANEL_CLASS} role="alert">
-              {dialogState.message}
-            </div>
-          ) : null}
-        </div>
-
-        <DialogFooter>
-          <Button onClick={handleClose} tone="outline" type="button">
-            Cancel
-          </Button>
-          <Button
-            aria-busy={isExporting ? "true" : undefined}
-            disabled={exportDisabled}
-            onClick={() => {
-              void handleExport();
-            }}
-            type="button"
-          >
-            {dialogState.status === "exporting" ? "Exporting..." : "Export PNG"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+    setDialogState({ status: "idle" });
+    setExportName(initialFactoryName);
+    setSelectedImage(null);
+    setImageSelectionError(null);
+    setImageTouched(false);
+    setNameTouched(false);
+  }, [
+    exportAttemptRef,
+    initialFactoryName,
+    isOpen,
+    setDialogState,
+    setExportName,
+    setImageSelectionError,
+    setImageTouched,
+    setNameTouched,
+    setSelectedImage,
+  ]);
 }

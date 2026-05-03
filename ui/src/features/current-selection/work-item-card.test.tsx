@@ -9,6 +9,7 @@ import {
   workstationRequest,
 } from "./detail-card-test-helpers";
 import { WorkItemDetailCard } from "./work-item-card";
+import { describe, it, expect } from "vitest";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {
   const term = within(container).getByText(label, { selector: "dt" });
@@ -588,7 +589,6 @@ describe("WorkItemDetailCard", () => {
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
     const failureDetails = within(screen.getByRole("region", { name: "Failure details" }));
     const dispatchHistory = within(screen.getByRole("region", { name: "Workstation dispatches" }));
     expect(failureDetails.getAllByText("provider_rate_limit").length).toBeGreaterThan(0);

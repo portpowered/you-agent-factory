@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { create } from "zustand";
 
 import type { AgentBentoLayoutItem } from "../../components/ui";
 
@@ -67,16 +67,25 @@ export interface UseDashboardLayoutResult {
   persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
 }
 
-export function useDashboardLayout(): UseDashboardLayoutResult {
-  const [dashboardLayout, setDashboardLayout] = useState(readStoredDashboardLayout);
+interface DashboardLayoutStoreState {
+  dashboardLayout: AgentBentoLayoutItem[];
+  persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
+}
 
-  const persistDashboardLayout = (layout: AgentBentoLayoutItem[]) => {
-    setDashboardLayout((currentLayout) => {
-      const nextLayout = mergeDashboardLayout(layout, currentLayout);
+const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
+  dashboardLayout: readStoredDashboardLayout(),
+  persistDashboardLayout: (layout) => {
+    set((state) => {
+      const nextLayout = mergeDashboardLayout(layout, state.dashboardLayout);
       writeStoredDashboardLayout(nextLayout);
-      return nextLayout;
+      return { dashboardLayout: nextLayout };
     });
-  };
+  },
+}));
+
+export function useDashboardLayout(): UseDashboardLayoutResult {
+  const dashboardLayout = useDashboardLayoutStore((state) => state.dashboardLayout);
+  const persistDashboardLayout = useDashboardLayoutStore((state) => state.persistDashboardLayout);
 
   return { dashboardLayout, persistDashboardLayout };
 }

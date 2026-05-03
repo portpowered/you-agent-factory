@@ -9,8 +9,11 @@
     "build": "tsc -b && vite build && bun scripts/normalize-dist-output.mjs",
     "capture:heap-snapshot": "node scripts/capture-heap-snapshot.mjs",
     "check:work-outcome-memory": "bun scripts/check-work-outcome-memory.ts",
+    "check": "biome check .",
     "dev": "vite",
+    "format": "biome format --write .",
     "generate-api": "openapi-typescript ../api/openapi.yaml -o src/api/generated/openapi.ts",
+    "lint": "biome lint .",
     "loadtest:agent-fails-memory": "bun scripts/loadtest-agent-fails-memory.ts",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "replay:coverage": "bun scripts/write-replay-coverage-report.ts",
@@ -41,6 +44,7 @@
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
     "@storybook/addon-vitest": "^10.3.5",
     "@storybook/react-vite": "^10.3.5",
     "@tailwindcss/vite": "^4.2.2",
