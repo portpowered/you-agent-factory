@@ -1589,6 +1589,12 @@ describe("App", () => {
         expect(exportProbe.getDownloadedFilename()).toBe("semantic-workflow.png");
       });
       await waitFor(() => {
+        expect(within(exportDialog).getByRole("status").textContent).toContain(
+          "Downloaded semantic-workflow.png.",
+        );
+      });
+      fireEvent.click(within(exportDialog).getByRole("button", { name: "Close" }));
+      await waitFor(() => {
         expect(screen.queryByRole("dialog", { name: "Export factory" })).toBeNull();
       });
 
@@ -1826,6 +1832,12 @@ describe("App", () => {
           image: expect.any(File),
         });
       });
+      await waitFor(() => {
+        expect(within(secondDialog).getByRole("status").textContent).toContain(
+          "Downloaded imported-workflow.png.",
+        );
+      });
+      fireEvent.click(within(secondDialog).getByRole("button", { name: "Close" }));
       await waitFor(() => {
         expect(screen.queryByRole("dialog", { name: "Export factory" })).toBeNull();
       });
@@ -4111,5 +4123,3 @@ describe("App", () => {
     });
   });
 });
-
-
