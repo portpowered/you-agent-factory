@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest";
 import {
   DASHBOARD_RETIRED_TEXT_SIZE_LITERALS,
   DASHBOARD_TYPOGRAPHY_CONTRACT,

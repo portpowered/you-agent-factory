@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import {
   formatDurationMillis,
   formatTraceOutcome,

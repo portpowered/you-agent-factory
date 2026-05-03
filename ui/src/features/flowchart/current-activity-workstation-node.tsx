@@ -5,7 +5,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationNode,
 } from "../../api/dashboard/types";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,

@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import type { ReactNode } from "react";
 import type { DashboardPlaceRef } from "../../api/dashboard/types";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,

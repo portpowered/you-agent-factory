@@ -1,4 +1,4 @@
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import { AgentBentoCard } from "../../components/ui";
 
 interface WorkTotalsCardProps {

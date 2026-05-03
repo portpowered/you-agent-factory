@@ -3,7 +3,7 @@ import {
   DASHBOARD_CHART_SURFACE_CLASS,
   getDashboardChartSemanticStyle,
 } from "./chart-contract";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import {
   formatDurationMillis,
   formatTraceOutcome,

@@ -2,33 +2,37 @@
 
 ## world state
 
-- as of `2026-05-02T21:01:24.4838148-07:00`, `HEAD` and `origin/main` both
-  point to `c42c2ef` (`docs: refresh meta world state`); branch divergence is
-  `0/0`
-- the canonical maintainer ask surface is still
+- as of `2026-05-02T22:01:36.2540358-07:00`, `HEAD` and `origin/main` both
+  point to `bda83e1` (`docs: compact meta state summaries`); branch
+  divergence is `0/0`
+- the canonical maintainer ask surface remains
   `factory/logs/meta/asks.md`
-- the current local ask text says this pass is meta-only: refresh
+- the current checked-in ask text keeps this pass meta-only: refresh
   `view.md` and `progress.txt`, do not submit new tasks
 - the worktree is dirty outside this pass:
   - tracked local edit to `factory/logs/meta/asks.md`
-  - tracked UI edits and helper splits across `ui/**`
-  - untracked local files including `factory/logs/weird-number-summary.jsonl`
+  - tracked and untracked UI helper refactors across `ui/**`
+  - untracked local file `factory/logs/weird-number-summary.jsonl`
 
 ## workflow truth
 
-- `factory/factory.json` defines this checked-in maintainer loop:
+- `factory/factory.json` defines five work types: `thoughts`, `idea`, `plan`,
+  `task`, and `cron-triggers`
+- the checked-in maintainer loop is:
   `thoughts:init -> ideafy -> thoughts:complete`
   `idea:init -> plan -> idea:to-complete + plan:init`
   `plan:init -> setup-workspace -> plan:complete + task:init`
   `task:init -> process -> task:in-review -> review -> task:to-complete`
-  `consume` completes same-name `idea` + `task` pairs after both reach
+  `consume` completes same-name `idea` + `task` pairs once both reach
   `to-complete`
-- the topology also includes:
-  - hourly `cleaner` cron
-  - `executor-loop-breaker` at `process` visit `50`
-  - `review-loop-breaker` at `review` visit `10`
-- `factory/README.md` and `docs/guides/batch-inputs.md` remain aligned with
-  the checked-in workflow contract
+- easy-to-miss topology facts that still matter:
+  - `process` and `review` run in `.claude/worktrees/{{name}}`
+  - shared `executor-slot` capacity is `10`; each workstation requests `1`
+  - hourly `cleaner` cron emits `cron-triggers:complete`
+  - `executor-loop-breaker` fails `task:init` after `process` visit `50`
+  - `review-loop-breaker` fails `task:in-review` after `review` visit `10`
+- `factory/README.md` and `docs/guides/batch-inputs.md` still match the
+  checked-in workflow contract
 
 ## input surface truth
 
@@ -38,22 +42,18 @@
   - `factory/inputs/plan/default/.gitkeep`
   - `factory/inputs/task/default/.gitkeep`
   - `factory/inputs/thoughts/default/.gitkeep`
-- visible markdown under `factory/inputs/**` is local operating residue, not
-  checked-in repo truth
+- visible files under `factory/inputs/**` are ignored local operating residue,
+  not checked-in repo truth
 - `.gitignore` still ignores `factory/inputs/**` except those sentinel paths
 
 ## recent repo movement
 
 - recent merged cleanup PRs on `main`:
-  - `#61` `browser-shared-action-primitives`, merged `2026-05-03T01:06:33Z`
-  - `#62` `align-dashboard-work-summary-count-semantics`, merged
-    `2026-05-02T21:37:06Z`
-  - `#63` `retire-current-selection-inference-duplication`, merged
-    `2026-05-02T22:38:08Z`
-  - `#64` `retire-dashboard-bento-layout-ownership`, merged
-    `2026-05-02T23:37:13Z`
-  - `#65` `retire-dashboard-format-helper-ownership`, merged
-    `2026-05-03T00:39:01Z`
+  - `#61` `browser-shared-action-primitives`
+  - `#65` `retire-dashboard-format-helper-ownership`
+  - `#64` `retire-dashboard-bento-layout-ownership`
+  - `#63` `retire-current-selection-inference-duplication`
+  - `#62` `align-dashboard-work-summary-count-semantics`
 - replay evidence is unchanged:
   - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
   - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
@@ -64,5 +64,5 @@
   state, ignore rules, and the current canonical ask text
 - `factory/inputs/**` must always be reasoned about in two layers:
   checked-in contract vs ignored local operating residue
-- this pass should stay meta-only: refresh compact summaries, leave
+- this pass remains meta-only: refresh compact summaries, leave
   `factory/logs/meta/asks.md` untouched, and do not queue new work

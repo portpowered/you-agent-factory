@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
 
 import type { DashboardPlaceRef } from "../../api/dashboard/types";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import {
   formatDashboardPlaceLabel,
   getDashboardPlaceLabelParts,

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { DashboardButton } from "./button";
+import { describe, it, expect } from "vitest";
 
 describe("DashboardButton", () => {
   it("renders the primary tone with busy semantics for submit actions", () => {

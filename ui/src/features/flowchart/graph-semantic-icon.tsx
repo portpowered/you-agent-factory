@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 
 export const GRAPH_SEMANTIC_ICON_KINDS = [
   "queue",

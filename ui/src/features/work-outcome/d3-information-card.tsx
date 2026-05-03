@@ -1,5 +1,5 @@
 import { getDashboardWorkChartSeriesDefinitions } from "./chart-contract";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import { WORK_CHART_SERIES_DEFINITIONS } from "./trends";
 import type { WorkChartModel } from "./trends";
 import { WorkChart } from "./work-chart";

@@ -5,7 +5,7 @@ import {
   formatWorkstationRunOutcome,
   getProviderSessionLogTarget,
 } from "../../components/ui/formatters";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,

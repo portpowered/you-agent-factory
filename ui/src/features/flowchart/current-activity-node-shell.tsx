@@ -1,7 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 import type { ReactNode } from "react";
 
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 
 export type PlaceNodeType = "constraint" | "resource" | "statePosition";
 

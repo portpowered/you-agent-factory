@@ -1,5 +1,4 @@
-import * as DialogPrimitive from "@radix-ui/react-dialog";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { cx } from "../../lib/cx";
 import {
@@ -7,21 +6,13 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "./typography";
-import { EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS } from "./widget-board";
-import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogOverlay,
-  DialogTitle,
-} from "../ui/dialog";
+} from "../../components/dashboard/typography";
+import { EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS } from "../../components/dashboard/widget-board";
 
-const DIALOG_OVERLAY_CLASS = "z-50 bg-af-canvas/78 backdrop-blur-sm";
+const DIALOG_OVERLAY_CLASS =
+  "z-50 flex items-center justify-center bg-af-canvas/78 p-4 backdrop-blur-sm";
 const DIALOG_PANEL_CLASS =
-  "fixed left-1/2 top-1/2 z-50 w-[min(calc(100vw-2.5rem),68rem)] max-h-[calc(100vh-3rem)] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-[1.6rem] border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
+  "w-full overflow-hidden rounded-[1.6rem] border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
 const DIALOG_HEADER_CLASS = "flex items-start justify-between gap-4";
 const DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const DIALOG_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_BODY_TEXT_CLASS);
@@ -74,74 +65,80 @@ export function DashboardMutationDialog({
   footer,
   media,
   onClose,
-  overlayClassName = "fixed inset-0",
+  overlayClassName = "fixed inset-0 px-5 py-6",
   showCloseButton = true,
   title,
 }: DashboardMutationDialogProps) {
   const canClose = onClose !== undefined && !closeDisabled;
+  const titleId = useId();
+  const descriptionId = useId();
 
   return (
-    <Dialog
-      modal={false}
-      onOpenChange={(open) => {
-        if (!open && canClose) {
-          onClose();
-        }
-      }}
-      open
+    <div
+      className={cx(DIALOG_OVERLAY_CLASS, overlayClassName)}
+      onClick={canClose ? onClose : undefined}
     >
-      <DialogOverlay className={cx(DIALOG_OVERLAY_CLASS, overlayClassName)} />
-      <DialogPrimitive.Content className={DIALOG_PANEL_CLASS}>
+      <section
+        aria-describedby={description ? descriptionId : undefined}
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className={DIALOG_PANEL_CLASS}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+        role="dialog"
+      >
         <div
           className={cx(DIALOG_CONTENT_CLASS, media ? DIALOG_CONTENT_WITH_MEDIA_CLASS : undefined)}
         >
           {media ? <div>{media}</div> : null}
 
           <div className={DIALOG_MAIN_CLASS}>
-            <DialogHeader className={DIALOG_HEADER_CLASS}>
+            <header className={DIALOG_HEADER_CLASS}>
               <div className="grid gap-2">
                 <p className={DIALOG_EYEBROW_CLASS}>Mutation flow</p>
-                <DialogTitle className={DIALOG_TITLE_CLASS}>{title}</DialogTitle>
+                <h2 className={DIALOG_TITLE_CLASS} id={titleId}>
+                  {title}
+                </h2>
                 {description ? (
-                  <DialogDescription className={DIALOG_DESCRIPTION_CLASS}>
+                  <p className={DIALOG_DESCRIPTION_CLASS} id={descriptionId}>
                     {description}
-                  </DialogDescription>
+                  </p>
                 ) : null}
               </div>
 
               {showCloseButton && onClose ? (
-                <DialogClose asChild>
-                  <button
-                    aria-label={closeLabel}
-                    className={DIALOG_CLOSE_BUTTON_CLASS}
-                    disabled={closeDisabled}
-                    type="button"
+                <button
+                  aria-label={closeLabel}
+                  className={DIALOG_CLOSE_BUTTON_CLASS}
+                  disabled={closeDisabled}
+                  onClick={onClose}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    fill="none"
+                    height="18"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                    viewBox="0 0 24 24"
+                    width="18"
                   >
-                    <svg
-                      aria-hidden="true"
-                      fill="none"
-                      height="18"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="1.8"
-                      viewBox="0 0 24 24"
-                      width="18"
-                    >
-                      <path d="M6 6l12 12" />
-                      <path d="M18 6L6 18" />
-                    </svg>
-                  </button>
-                </DialogClose>
+                    <path d="M6 6l12 12" />
+                    <path d="M18 6L6 18" />
+                  </svg>
+                </button>
               ) : null}
-            </DialogHeader>
+            </header>
 
             {children}
-            {footer ? <DialogFooter className={DIALOG_FOOTER_CLASS}>{footer}</DialogFooter> : null}
+            {footer ? <div className={DIALOG_FOOTER_CLASS}>{footer}</div> : null}
           </div>
         </div>
-      </DialogPrimitive.Content>
-    </Dialog>
+      </section>
+    </div>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
 import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
 import {

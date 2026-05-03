@@ -1,8 +1,7 @@
 import { useMemo, type ChangeEvent } from "react";
 
 import { useFactoryTimelineStore } from "../../state/factoryTimelineStore";
-import { Button } from "../ui/button";
-
+import { DashboardButton } from "../../components/dashboard/button";
 import { cx } from "../../lib/cx";
 
 const TICK_SLIDER_SHELL_CLASS =
@@ -91,14 +90,14 @@ export function TickSliderControl() {
           : `Tick ${displayedTick} of ${bounds.maxTick}`}
       </span>
 
-      <Button
+      <DashboardButton
         className={cx(TICK_SLIDER_BUTTON_CLASS, mode === "current" && "opacity-75")}
         disabled={isDisabled || mode === "current"}
         onClick={setCurrentMode}
         tone="secondary"
       >
         Current
-      </Button>
+      </DashboardButton>
     </div>
   );
 }

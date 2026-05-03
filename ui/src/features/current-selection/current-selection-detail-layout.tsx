@@ -1,5 +1,5 @@
 import { useSelectionHistoryStore } from "../../state/selectionHistoryStore";
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../components/dashboard/typography";
 import { DETAIL_CARD_WIDE_CLASS } from "../../components/dashboard/widget-board";
 import { DashboardWidgetFrame } from "../../components/ui";

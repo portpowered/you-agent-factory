@@ -1,4 +1,4 @@
-import { cx } from "../../components/dashboard/classnames";
+import { cx } from "../../lib/cx";
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/dashboard/typography";
 
 export type DashboardChartSemanticRole =
