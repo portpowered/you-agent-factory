@@ -11,6 +11,7 @@ import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "./react-flow-current-activity-card";
+import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
 import {
   type FactoryValue,
   NamedFactoryAPIError,
@@ -782,6 +783,29 @@ describe("ReactFlowCurrentActivityCard", () => {
     expect(screen.getByRole("button", { name: "Select story:blocked state" })).toBeTruthy();
   });
 
+  it("renders React Flow edges for visible topology connections", async () => {
+    const reactFlowErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const layout = await buildGraphLayout(semanticWorkflowDashboardSnapshot.topology);
+      const expectedEdgeCount = buildVisibleGraphEdges(layout).length;
+
+      renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
+
+      expect(await screen.findByRole("region", { name: "Work graph viewport" })).toBeTruthy();
+      await waitFor(() => {
+        expect(document.querySelectorAll(".react-flow__edge")).toHaveLength(expectedEdgeCount);
+      });
+      expect(document.querySelectorAll(".react-flow__edge-path")).toHaveLength(expectedEdgeCount);
+      expect(
+        reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
+          String(firstArg).includes("Couldn't create edge for source handle id"),
+        ),
+      ).toBe(false);
+    } finally {
+      reactFlowErrorSpy.mockRestore();
+    }
+  });
+
   it("renders every graph place family through custom React Flow node types", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 
@@ -1543,4 +1567,3 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
   });
 });
-

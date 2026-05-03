@@ -1,0 +1,60 @@
+{
+  "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Debug Website",
+      "configurations": [
+        "UI Dev Server",
+        "Website (Chrome)"
+      ],
+      "stopAll": true
+    }
+  ],
+  "configurations": [
+    {
+      "name": "UI Dev Server",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "bun run dev -- --host 127.0.0.1 --port 4173 --strictPort",
+      "cwd": "${workspaceFolder}/ui"
+    },
+    {
+      "name": "Website (Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:4173/dashboard/ui/",
+      "webRoot": "${workspaceFolder}/ui",
+      "breakOnLoad": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/ui/**",
+        "!**/node_modules/**"
+      ],
+      "sourceMapPathOverrides": {
+        "/dashboard/ui/src/*": "${webRoot}/src/*",
+        "/dashboard/ui/*": "${webRoot}/*",
+        "/src/*": "${webRoot}/src/*",
+        "vite:///*": "${webRoot}/*",
+        "/*": "${webRoot}/*"
+      }
+    },
+    {
+      "name": "Website (Chrome, existing server)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:4173/dashboard/ui/",
+      "webRoot": "${workspaceFolder}/ui",
+      "breakOnLoad": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/ui/**",
+        "!**/node_modules/**"
+      ],
+      "sourceMapPathOverrides": {
+        "/dashboard/ui/src/*": "${webRoot}/src/*",
+        "/dashboard/ui/*": "${webRoot}/*",
+        "/src/*": "${webRoot}/src/*",
+        "vite:///*": "${webRoot}/*",
+        "/*": "${webRoot}/*"
+      }
+    }
+  ]
+}
