@@ -217,6 +217,7 @@ export async function main() {
   try {
     await waitForStorybookReady({ serverExit });
     await Promise.race([runBun(["run", "storybook:test-runner:ci"]), serverExit]);
+    await Promise.race([runBun(["run", "storybook:responsive-check"]), serverExit]);
   } finally {
     shuttingDown = true;
     await stopServer(server);

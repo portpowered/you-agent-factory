@@ -35,6 +35,6 @@ Use this checklist for the shadcn primitive migration lane and similar dashboard
 Date: `2026-05-03`
 
 - `cd ui && bun run build-storybook` passed.
-- `cd ui && bun run test-storybook` passed in a browser-backed runner, including export and import preview dialog keyboard-reachability stories.
+- `cd ui && bun run test-storybook` passed in a browser-backed runner, including export and import preview dialog keyboard-reachability stories plus the dedicated responsive verification script.
 - `cd ui && bun run build` passed.
-- The built Storybook stories for `ExportFactoryDialog` and `DashboardImportPreviewDialog` passed headless Chromium viewport checks at mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) sizes without dialog overflow or missing controls.
+- `cd ui && bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for `ExportFactoryDialog` and `DashboardImportPreviewDialog`, confirming mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) dialog bounds, visible controls, and no horizontal overflow in headless Chromium.

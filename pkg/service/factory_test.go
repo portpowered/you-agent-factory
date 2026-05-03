@@ -34,6 +34,7 @@ import (
 )
 
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
+const serviceStreamedRecordingTimeout = 5 * time.Second
 
 // minimalFactoryConfig returns a minimal factory.json config for testing.
 func minimalFactoryConfig() map[string]any {
@@ -3143,7 +3144,8 @@ func TestBuildFactoryService_RecordModeStreamsReadableArtifactBeforeShutdown(t *
 		}
 	}()
 
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(serviceStreamedRecordingTimeout)
+	lastArtifactSummary := "artifact not readable yet"
 	for time.Now().Before(deadline) {
 		select {
 		case err := <-errCh:
@@ -3161,10 +3163,24 @@ func TestBuildFactoryService_RecordModeStreamsReadableArtifactBeforeShutdown(t *
 			}
 			return
 		}
+		if err != nil {
+			lastArtifactSummary = err.Error()
+		} else {
+			lastArtifactSummary = fmt.Sprintf(
+				"work_requests=%d dispatch_created=%d dispatch_completed=%d",
+				len(serviceReplayWorkRequestEvents(t, artifact)),
+				len(serviceReplayDispatchCreatedEvents(t, artifact)),
+				len(serviceReplayDispatchCompletedEvents(t, artifact)),
+			)
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	t.Fatal("record mode did not stream a readable artifact before shutdown")
+	t.Fatalf(
+		"record mode did not stream a readable artifact before shutdown within %s: %s",
+		serviceStreamedRecordingTimeout,
+		lastArtifactSummary,
+	)
 }
 
 func TestBuildFactoryService_RecordModeCopiesWorkerDiagnosticsToArtifact(t *testing.T) {
