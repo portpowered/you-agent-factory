@@ -327,7 +327,7 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 		workstations := cfg["workstations"].([]any)
 		workstation := workstations[0].(map[string]any)
 		workstation["type"] = "MODEL_WORKSTATION"
-		workstation["promptTemplate"] = "inline prompt {{ (index .Inputs 0).Name }}"
+		workstation["body"] = "inline prompt {{ (index .Inputs 0).Name }}"
 		workstation["workingDirectory"] = `/inline/{{ (index .Inputs 0).Name }}`
 		workstation["env"] = map[string]any{
 			"INLINE_ONLY":    "true",

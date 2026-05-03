@@ -345,7 +345,7 @@ func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 			"behavior":"REPEATER",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
-			"promptTemplate":"Finish {{ .WorkID }}.",
+			"body":"Finish {{ .WorkID }}.",
 			"inputs":[
 				{"workType":"story","state":"init"},
 				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"story","spawnedBy":"chapter-parser"}]}

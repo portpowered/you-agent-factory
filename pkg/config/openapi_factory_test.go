@@ -25,7 +25,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 			"behavior":"STANDARD",
 			"worker":"executor",
 			"type":"LOGICAL_MOVE",
-			"promptTemplate":"Finish {{ .WorkID }}.",
+			"body":"Finish {{ .WorkID }}.",
 			"inputs":[
 				{"workType":"chapter","state":"init"},
 				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
@@ -87,7 +87,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 			"behavior":"REPEATER",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
-			"promptTemplate":"Finish {{ .WorkID }}.",
+			"body":"Finish {{ .WorkID }}.",
 			"inputs":[
 				{"workType":"chapter","state":"init"},
 				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
@@ -118,8 +118,27 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
 	}
 	workstation := (*generated.Workstations)[0]
-	if workstation.PromptTemplate == nil || *workstation.PromptTemplate != "Finish {{ .WorkID }}." {
-		t.Fatalf("expected generated promptTemplate to survive boundary decode, got %#v", workstation.PromptTemplate)
+	if workstation.Body == nil || *workstation.Body != "Finish {{ .WorkID }}." {
+		t.Fatalf("expected generated body to survive boundary decode, got %#v", workstation.Body)
+	}
+	generatedJSON, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated factory boundary: %v", err)
+	}
+	var serialized struct {
+		Workstations []map[string]any `json:"workstations"`
+	}
+	if err := json.Unmarshal(generatedJSON, &serialized); err != nil {
+		t.Fatalf("unmarshal generated factory boundary JSON: %v", err)
+	}
+	if len(serialized.Workstations) != 1 {
+		t.Fatalf("expected one serialized workstation, got %#v", serialized.Workstations)
+	}
+	if _, ok := serialized.Workstations[0]["promptTemplate"]; ok {
+		t.Fatalf("expected generated workstation JSON to omit promptTemplate, got %#v", serialized.Workstations[0])
+	}
+	if body, ok := serialized.Workstations[0]["body"].(string); !ok || body != "Finish {{ .WorkID }}." {
+		t.Fatalf("expected generated workstation JSON body to stay canonical, got %#v", serialized.Workstations[0])
 	}
 	if workstation.Resources == nil || len(*workstation.Resources) != 1 || (*workstation.Resources)[0].Capacity != 2 {
 		t.Fatalf("expected generated resources capacity 2, got %#v", workstation.Resources)
