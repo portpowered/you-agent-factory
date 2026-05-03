@@ -96,6 +96,9 @@ func TestInit_CreatesDirectoryStructure(t *testing.T) {
 	if !strings.Contains(factoryJSON, `"onFailure"`) {
 		t.Fatalf("generated factory.json = %q, want canonical onFailure key", factoryJSON)
 	}
+	if !strings.Contains(factoryJSON, `"onFailure": [{`) {
+		t.Fatalf("generated factory.json = %q, want array-valued onFailure scaffold", factoryJSON)
+	}
 	if strings.Contains(factoryJSON, `"work_type"`) {
 		t.Fatalf("generated factory.json = %q, should not contain retired work_type keys", factoryJSON)
 	}
@@ -286,6 +289,8 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 		`"name": "execute-story"`,
 		`"name": "execute-story-loop-breaker"`,
 		`"workingDirectory":`,
+		`"onFailure": [{`,
+		`"onContinue": [{`,
 		`"onContinue"`,
 		`"maxVisits": 8`,
 	} {
@@ -604,6 +609,9 @@ func assertInitScaffoldFilesCanonical(t *testing.T, base, wantModel, wantProvide
 	}
 	if !strings.Contains(factoryJSON, `"onFailure"`) {
 		t.Fatalf("generated factory.json = %q, want canonical onFailure key", factoryJSON)
+	}
+	if !strings.Contains(factoryJSON, `"onFailure": [{`) {
+		t.Fatalf("generated factory.json = %q, want array-valued onFailure scaffold", factoryJSON)
 	}
 	for _, retired := range retiredInitFactoryJSONFields {
 		if strings.Contains(factoryJSON, retired) {

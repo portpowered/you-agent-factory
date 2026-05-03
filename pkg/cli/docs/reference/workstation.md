@@ -18,8 +18,8 @@ configured output, continue, rejection, or failure place.
   "worker": "reviewer",
   "inputs": [{ "workType": "story", "state": "in-review" }],
   "outputs": [{ "workType": "story", "state": "complete" }],
-  "onRejection": { "workType": "story", "state": "init" },
-  "onFailure": { "workType": "story", "state": "failed" }
+  "onRejection": [{ "workType": "story", "state": "init" }],
+  "onFailure": [{ "workType": "story", "state": "failed" }]
 }
 ```
 
@@ -32,9 +32,9 @@ configured output, continue, rejection, or failure place.
 | `worker` | Worker name to dispatch when the workstation executes. |
 | `inputs` | Places that must be present before the workstation can fire. |
 | `outputs` | Places produced on accepted completion. |
-| `onContinue` | Place produced on ordinary partial-progress completion. |
-| `onRejection` | Place produced on rejected completion. |
-| `onFailure` | Place produced on failure or timeout. |
+| `onContinue` | Places produced on ordinary partial-progress completion. |
+| `onRejection` | Places produced on rejected completion. |
+| `onFailure` | Places produced on failure or timeout. |
 | `resources` | Resource capacity held while the dispatch is in flight. |
 | `guards` | Workstation-level `VISIT_COUNT` guards. |
 | `CRON` | Schedule configuration for `behavior: "CRON"`. |

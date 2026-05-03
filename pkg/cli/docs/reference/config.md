@@ -33,7 +33,7 @@ The smallest useful config has one work type, one worker, and one workstation:
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{ "workType": "task", "state": "failed" }]
     }
   ]
 }
