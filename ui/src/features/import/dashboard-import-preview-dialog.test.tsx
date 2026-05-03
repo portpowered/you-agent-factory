@@ -71,12 +71,17 @@ describe("DashboardImportPreviewDialog", () => {
       name: "Close import preview",
     });
     const cancelButton = within(previewDialog).getByRole("button", { name: "Cancel import" });
+    const activateButton = within(previewDialog).getByRole("button", {
+      name: "Activating factory...",
+    });
 
     fireEvent.click(closeButton);
     fireEvent.click(cancelButton);
 
     expect(closeButton.getAttribute("disabled")).not.toBeNull();
     expect(cancelButton.getAttribute("disabled")).not.toBeNull();
+    expect(activateButton.getAttribute("aria-busy")).toBe("true");
+    expect(activateButton.getAttribute("disabled")).not.toBeNull();
     expect(onCancel).not.toHaveBeenCalled();
   });
 
@@ -142,6 +147,50 @@ describe("DashboardImportPreviewDialog", () => {
       );
     });
   });
+
+  it.each([
+    [
+      "FACTORY_ALREADY_EXISTS",
+      "Named factory already exists.",
+      "A factory with this name already exists. Rename or remove the existing factory before importing this PNG.",
+    ],
+    [
+      "FACTORY_NOT_IDLE",
+      "Current factory runtime must be idle before activation.",
+      "The current factory runtime is still active. Wait until it becomes idle before switching factories.",
+    ],
+    [
+      "INVALID_FACTORY",
+      "Dropped factory payload was rejected.",
+      "The dropped factory payload was rejected by the activation API.",
+    ],
+    [
+      "INVALID_FACTORY_NAME",
+      "Embedded factory name is invalid.",
+      "The embedded factory name is not valid for activation.",
+    ],
+    [
+      "INTERNAL_ERROR",
+      "Activation failed in an unexpected way.",
+      "Activation failed in an unexpected way.",
+    ],
+  ] as const)(
+    "renders the mapped activation copy for %s errors",
+    async (code, message, expectedCopy) => {
+      renderDialog({
+        activationState: {
+          error: new NamedFactoryAPIError(message, { code }),
+          status: "error",
+        },
+      });
+
+      const previewDialog = await screen.findByRole("dialog", { name: "Review factory import" });
+      const alert = within(previewDialog).getByRole("alert");
+
+      expect(alert.textContent).toContain("Activation failed");
+      expect(alert.textContent).toContain(expectedCopy);
+    },
+  );
 
   it("dismisses the dashboard-owned preview after a successful activation", async () => {
     const activateImport = vi.fn().mockResolvedValue(undefined);

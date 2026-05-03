@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import type { FactoryValue } from "../../api/named-factory";
+import { NamedFactoryAPIError, type FactoryValue } from "../../api/named-factory";
 import { writeFactoryExportPng } from "../export/factory-png-export";
 import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION, readFactoryImportPng } from "./factory-png-import";
 import { useFactoryImportActivation } from "./use-factory-import-activation";
@@ -93,6 +93,152 @@ describe("useFactoryImportActivation", () => {
     expect(importResult.value.schemaVersion).toBe(PORT_OS_FACTORY_PNG_SCHEMA_VERSION);
     expect(result.current.activationState).toEqual({ status: "idle" });
   });
+
+  it("reports a submitting state until activation resolves", async () => {
+    let resolveActivation: ((value: FactoryValue) => void) | null = null;
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .mockImplementation(
+        () =>
+          new Promise<FactoryValue>((resolve) => {
+            resolveActivation = resolve;
+          }),
+      );
+
+    const { result } = renderHook(
+      () => useFactoryImportActivation({ activateFactory }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    let activationPromise: Promise<void> | null = null;
+    await act(async () => {
+      activationPromise = result.current.activateImport({
+        factory: canonicalFactory,
+        previewImageSrc: "blob:factory-roundtrip-preview",
+        revokePreviewImageSrc: vi.fn(),
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.activationState).toEqual({ status: "submitting" });
+    });
+
+    resolveActivation?.(canonicalFactory);
+    await act(async () => {
+      await activationPromise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.activationState).toEqual({ status: "idle" });
+    });
+  });
+
+  it("stores generic activation failures and clears them on request", async () => {
+    const activationError = new Error("Factory name already exists.");
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .mockRejectedValue(
+        Object.assign(activationError, {
+          code: "FACTORY_ALREADY_EXISTS",
+          name: "NamedFactoryAPIError",
+        }),
+      );
+
+    const { result } = renderHook(
+      () => useFactoryImportActivation({ activateFactory }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.activateImport({
+        factory: canonicalFactory,
+        previewImageSrc: "blob:factory-roundtrip-preview",
+        revokePreviewImageSrc: vi.fn(),
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.activationState.status).toBe("error");
+    });
+    if (result.current.activationState.status !== "error") {
+      throw new Error("expected activation failure state");
+    }
+    expect(result.current.activationState.error).toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "Factory name already exists.",
+    });
+
+    act(() => {
+      result.current.clearActivationError();
+    });
+
+    expect(result.current.activationState).toEqual({ status: "idle" });
+  });
+
+  it("preserves explicit named factory api errors from activation failures", async () => {
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .mockRejectedValue(
+        new NamedFactoryAPIError(
+          "Current factory runtime must be idle before activation.",
+          { code: "FACTORY_NOT_IDLE" },
+        ),
+      );
+
+    const { result } = renderHook(
+      () => useFactoryImportActivation({ activateFactory }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.activateImport({
+        factory: canonicalFactory,
+        previewImageSrc: "blob:factory-roundtrip-preview",
+        revokePreviewImageSrc: vi.fn(),
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.activationState.status).toBe("error");
+    });
+    if (result.current.activationState.status !== "error") {
+      throw new Error("expected activation failure state");
+    }
+    expect(result.current.activationState.error).toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+      message: "Current factory runtime must be idle before activation.",
+    });
+  });
+
+  it("normalizes non-error activation failures to a generic internal error", async () => {
+    const activateFactory = vi.fn<(value: FactoryValue) => Promise<FactoryValue>>()
+      .mockRejectedValue("unstructured failure");
+
+    const { result } = renderHook(
+      () => useFactoryImportActivation({ activateFactory }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.activateImport({
+        factory: canonicalFactory,
+        previewImageSrc: "blob:factory-roundtrip-preview",
+        revokePreviewImageSrc: vi.fn(),
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.activationState.status).toBe("error");
+    });
+    if (result.current.activationState.status !== "error") {
+      throw new Error("expected activation failure state");
+    }
+    expect(result.current.activationState.error).toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "Factory activation failed.",
+    });
+  });
 });
 
 function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => ReactNode {
@@ -122,4 +268,3 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   copy.set(bytes);
   return copy.buffer;
 }
-

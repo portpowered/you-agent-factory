@@ -167,6 +167,26 @@ describe("readFactoryImportPng", () => {
     });
   });
 
+  it("rejects truncated PNG payloads before metadata parsing", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: new File([new Uint8Array([137, 80, 78])], "truncated.png", {
+        type: "image/png",
+      }),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        code: "NOT_PNG_FILE",
+        message: "The selected file is not a PNG image.",
+      },
+      ok: false,
+    });
+  });
+
   it("rejects PNG files that are missing the Port OS metadata chunk", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => {
@@ -241,6 +261,31 @@ describe("readFactoryImportPng", () => {
     });
   });
 
+  it("returns an explicit preview failure when the browser cannot create a preview URL", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("preview unavailable");
+      },
+      file: createFactoryPngFile({
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      }),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "PREVIEW_UNAVAILABLE",
+        message: "The browser could not create a preview for the selected image.",
+      },
+      ok: false,
+    });
+  });
+
   it("rejects malformed metadata JSON with an explicit local error code", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => {
@@ -255,6 +300,74 @@ describe("readFactoryImportPng", () => {
         cause: expect.any(SyntaxError),
         code: "PNG_METADATA_INVALID",
         message: "The Port OS factory metadata is not valid JSON.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects metadata payloads that are not JSON objects", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: createFactoryPngFileWithMetadataText(JSON.stringify("not-an-object")),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        code: "PNG_METADATA_INVALID",
+        message: "The Port OS factory metadata must be an object.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects metadata payloads that omit the schema version", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify({
+          name: "Factory Import",
+          workTypes: canonicalFactory.workTypes,
+          workers: canonicalFactory.workers,
+          workstations: canonicalFactory.workstations,
+        }),
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        code: "PNG_METADATA_INVALID",
+        message: "The Port OS factory metadata is missing the schema version.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects metadata payloads that omit the factory name", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify({
+          schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+          workTypes: canonicalFactory.workTypes,
+          workers: canonicalFactory.workers,
+          workstations: canonicalFactory.workstations,
+        }),
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        code: "FACTORY_PAYLOAD_INVALID",
+        message: "The Port OS factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -364,4 +477,3 @@ interface ParsedChunk {
   nextOffset: number;
   type: string;
 }
-
