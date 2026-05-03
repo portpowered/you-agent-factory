@@ -6,17 +6,24 @@
 
 we look generally to make the system amenable to consumption via other customers beyond us. 
 
-## system deficits (P0)
+## Import/Export problems (P0); 
 
-recently, we were trying to test and we had a system outage due to lack of capacity and our system kept retrying without obeying the global resource limits for retries and whatnot for throttles
+### Functionality 
+we are testing out the import and export functionality, and it works generally but there are issues. 
 
-- the problem i think is that we created this entirely separate abstraction for resource guards that block on overall retries due to throttling failures. 
+problems: 
+- the get factory API, is has body vs template, which is strange, we should only have one and remove the other for the workstation. 
+Please remove the promptTemplate. 
 
-what i think we should do generally is try to optimize the overall system flow, that is to say, we should look to optimize th overall code to have less abstractions. 
+- when importing a factory, all the fields are flattened but also expanded at the same time. 
+-- this is confusing, it should be expanded out, and the top level fields at the factory.json should be thinner: 
+--- (Workers) we should shove out all the body into the AGENTS.md file, and the AGENTS.md file should not have anything else besides the body
+--- (workstations) we should shove out all the body into the AGENTS.md file, and the AGENTS.md file should not have anything else besides the body
 
-what i mean is we should remove the separate logic for global throttle limts and instead replace it with a global "guard", and add the same type of input guards, but at a higher level. This shouldn't come by default, but be a config that a customer can set at the factory like factory.guards. This guard new one would be called "INFERENCE_THROTTLE_GUARD", and it would be having a InferenceThrottleGuardConfig, that limits on "modelProvider" + an optional "model" as well as a throttle refresh time ("1h" | "2h" |etc ). The transitioner enablements should not have a separate state, but instead should reference the event log for throttle errors and check current clock time for whether this guard is valid.
+### Dialogues
 
-The logical implementation should be that we flatten this guard doen to the transition guards that we currently have on the petri transition. it should just be treated as any normal guard. The only special thing in our logic is how we do the transformation from the input config into the corresponding itneranal petri transitions/guards.
+The current import/export dialogues that appear when importing a factory is strangely put inside the workflow-activity, it should be exposed as a separate dialogue directly. 
+The buttons should be converged onto the default shadcn buttons styling. 
 
 ## quality (P0)
 - we need to improve our overall system quality, to reduce future rework rates and what not
