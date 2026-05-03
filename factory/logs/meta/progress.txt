@@ -12,6 +12,10 @@
   history before queueing the next website-quality lane; the right follow-up
   can shift from missing coverage to shared-component consolidation within
   hours.
+- When dashboard ownership cleanup converts `components/dashboard/*` files into
+  thin re-export shims, treat the remaining real implementations in that
+  folder as the next website-quality candidates and do not re-queue the shimmed
+  files as live work.
 - After a fresh `git pull`, verify recently changed candidate seams from live
   file reads before queuing work; the codebase-memory graph can lag `HEAD`
   briefly after merges.
@@ -1717,3 +1721,49 @@
 - Queued one new ignored customer-ask-aligned idea at
   `factory/inputs/idea/default/retire-dashboard-bento-layout-ownership.md`
   instead of re-queueing the already-merged current-selection lane.
+
+## 2026-05-02 17:04:40 -07:00 - meta refresh after dashboard layout cleanup landed
+
+- Ran `git pull`; `main` and `origin/main` are both at `e87f9d3`.
+- Re-read the canonical meta backlog, replay artifacts, standards index,
+  workflow contract docs, tracked workflow-input surfaces, ignored local
+  workflow residue, live GitHub PR state, and the current website helper
+  ownership seams before choosing work.
+- Verified with `git ls-files factory/inputs` that the checked-in workflow
+  inboxes still contain only `.gitkeep` sentinels even though ignored local
+  residue continues to accumulate under `factory/inputs/**`.
+- Confirmed the previous checked-in world view had drifted again:
+  - it still described `HEAD` as `f3eade6`
+  - it did not include merged PR `#64`
+    `retire-dashboard-bento-layout-ownership`
+  - it still treated dashboard bento/layout ownership as the next live lane
+    even though that lane is already merged on `main`
+- Revalidated that ignored local residue must keep losing to live merged PR
+  state and direct `HEAD` inspection:
+  - `factory/inputs/idea/default/retire-dashboard-bento-layout-ownership.md`
+    is now solved residue rather than pending work
+  - `ui/src/components/dashboard/bento.tsx`,
+    `widget-board.tsx`, `typography.ts`, and `classnames.ts` are now shim or
+    shared-owner seams rather than the next real implementation target
+- Confirmed the next distinct customer-ask-aligned website cleanup seam
+  outside open PR `#61` is the remaining real helper ownership under
+  `ui/src/components/dashboard/`:
+  - `formatters.ts` still owns shared duration, work-item, trace, and
+    provider-session display helpers used across current selection, trace
+    drilldown, terminal work, work outcome, and app-level tests
+  - `place-labels.ts` still owns shared work-state label shaping used by both
+    flowchart and current-selection detail surfaces
+  - open PR `#61` remains confined to `button.tsx`,
+    `mutation-dialog.tsx`, `tick-slider-control.tsx`, and
+    `react-flow-current-activity-card.tsx`, so the helper-ownership lane stays
+    non-colliding
+- Used a sidecar explorer to cross-check the next website seam and kept the
+  queued move on the stronger real-owner seam instead of a typography-only
+  follow-up because `ui/src/components/dashboard/typography.ts` is already a
+  thin re-export shim on `main`.
+- Left `factory/logs/meta/asks.md` unchanged because it is the canonical ask
+  surface and already has a local workspace modification that this pass did
+  not need to rewrite.
+- Queued one new ignored customer-ask-aligned idea at
+  `factory/inputs/idea/default/retire-dashboard-format-helper-ownership.md`
+  instead of re-queueing the already-merged dashboard-layout lane.

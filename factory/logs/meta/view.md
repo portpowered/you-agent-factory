@@ -2,8 +2,8 @@
 
 ## world state
 
-- after `git pull --rebase --autostash`, repository `main` and `origin/main`
-  are both at `f3eade6` on May 2, 2026 in the local maintainer workspace
+- after `git pull`, repository `main` and `origin/main` are both at `e87f9d3`
+  on May 2, 2026 in the local maintainer workspace
 - the canonical checked-in maintainer backlog is still
   `factory/logs/meta/asks.md`; no item in that file is marked urgent
 - the checked-in workflow inboxes still contain only tracked `.gitkeep`
@@ -23,6 +23,7 @@
     for the already-merged dashboard-summary bug
 - the current GitHub lane state in the maintainer workspace is:
   - open PR `#61` `browser-shared-action-primitives`
+  - merged PR `#64` `retire-dashboard-bento-layout-ownership`
   - merged PR `#63` `retire-current-selection-inference-duplication`
   - merged PR `#62` `align-dashboard-work-summary-count-semantics`
   - merged PR `#60` `browser-integration-png-export-import-roundtrip`
@@ -53,23 +54,33 @@
   - `pkg/factory/subsystems/subsystem_dispatcher.go` no longer synthesizes
     provider/model throttle pauses when no authored inference-throttle guard is
     present
-- direct UI inspection against the checked-in website-quality ask validated the
-  next distinct customer-facing website cleanup seam outside PR `#61` and
-  merged PR `#63`:
-  - live dashboard layout primitives still sit under
-    `ui/src/components/dashboard/`, especially
-    `bento.tsx`, `widget-board.tsx`, and the `components/dashboard/index.ts`
-    export surface
-  - `ui/src/App.tsx` still imports `AgentBentoLayout` from the dashboard
-    component layer
-  - `ui/src/hooks/dashboard/useDashboardLayout.ts` still types layout state
-    against dashboard-owned bento primitives
-  - multiple feature cards still depend on `AgentBentoCard` or
-    `DashboardWidgetFrame`, including work totals, workflow activity, trace
-    drilldown, terminal work, submit work, work outcome, and current-selection
-    layout consumers
-  - that directly matches the checked-in ask to move dashboard components such
-    as the bento grid out of `components/dashboard`
+- direct UI inspection against the checked-in website-quality ask confirmed
+  merged PR `#64` completed the previously queued dashboard-layout lane on
+  `main`:
+  - `ui/src/components/dashboard/bento.tsx`,
+    `ui/src/components/dashboard/widget-board.tsx`, and
+    `ui/src/components/dashboard/typography.ts` are now compatibility shims
+    that re-export from `ui/src/components/ui/`
+  - `ui/src/App.tsx` now imports `AgentBentoLayout` from
+    `ui/src/components/ui`
+  - `docs/processes/development-guide-relevant-files.md` now documents the
+    shared ownership seam and explicitly prefers thin dashboard re-export
+    shims over keeping the primary implementation in `components/dashboard/`
+- direct UI inspection also validated the next distinct customer-facing website
+  cleanup seam outside open PR `#61`:
+  - `ui/src/components/dashboard/formatters.ts` and
+    `ui/src/components/dashboard/place-labels.ts` remain real implementations
+    rather than thin compatibility shims
+  - those helpers are imported across multiple feature surfaces, including
+    `ui/src/features/current-selection/**`,
+    `ui/src/features/flowchart/**`,
+    `ui/src/features/trace-drilldown/**`,
+    `ui/src/features/terminal-work/**`, and
+    `ui/src/features/work-outcome/**`
+  - the open PR `#61` file set is confined to
+    `button.tsx`, `mutation-dialog.tsx`, `tick-slider-control.tsx`, and
+    `react-flow-current-activity-card.tsx`, so formatter and place-label
+    ownership remains a separate non-colliding website-quality slice
 - a smaller reserve backend simplification seam is still live in
   `pkg/interfaces/runtime_lookup.go`, where `FirstRuntimeDefinitionLookup(...)`
   and `FirstRuntimeWorkstationLookup(...)` remain thin duplicate first-non-nil
@@ -85,10 +96,10 @@
 ## current blockers
 
 1. the previous checked-in world model is stale again:
-   - it still described `HEAD` as `c6f37eb`
-   - it did not include merged PR `#63`
-   - it still treated the current-selection duplication bug as the next live
-     customer lane even though that lane is already merged on `main`
+   - it still described `HEAD` as `f3eade6`
+   - it did not include merged PR `#64`
+   - it still treated dashboard bento/layout ownership as the next live lane
+     even though that lane is already merged on `main`
 2. workspace-local ignored residue can drift independently of `main` and must
    not be re-queued blindly
 3. open PR `#61` still occupies the shared dashboard action-primitive lane, so
@@ -114,8 +125,10 @@
 - the website-quality ask still has multiple open slices, but they need to be
   handled one narrow seam at a time:
   - PR `#61` owns shared action primitives
-  - PR `#63` completed the selected-work current-selection duplication
-  - the next distinct live slice is dashboard layout primitive ownership
+  - PR `#64` completed dashboard bento/layout primitive ownership
+  - the next distinct live slice is the remaining real formatter and
+    place-label helper ownership still living under
+    `ui/src/components/dashboard/`
 - ignored local workflow-input residue is now stale in several ways:
   - many idea files map to already-merged PRs
   - some older reserve ideas no longer match live code after later cleanups
@@ -130,10 +143,11 @@
 - update the checked-in meta world model and progress log now
 - leave `factory/logs/meta/asks.md` unchanged; its local wording edit should
   remain intact and the checked-in backlog priority order is still correct
-- queue one new ignored customer-ask-aligned idea for moving the live
-  bento/layout primitive ownership out of `ui/src/components/dashboard/`
-- keep the new lane focused on observable UI behavior and direct import
-  ownership, not on a whole-dashboard redesign, token migration, or
+- queue one new ignored customer-ask-aligned idea for retiring the remaining
+  real formatter and place-label helper ownership under
+  `ui/src/components/dashboard/`
+- keep the new lane focused on observable label/formatting behavior and direct
+  import ownership, not on a whole-dashboard redesign, token migration, or
   cross-feature state reorganization
 
 ## customer asks
@@ -147,7 +161,9 @@
   merged PR `#62`
 - the selected-work duplicate current-inference bug is satisfied on `main`
   through merged PR `#63`
+- the dashboard bento/layout ownership ask slice is satisfied on `main`
+  through merged PR `#64`
 - the website-quality ask remains live, with open PR `#61` covering the shared
   action-primitive slice and the next unchecked narrow customer-facing slice
-  now being dashboard bento/layout primitives that still live under
-  `ui/src/components/dashboard/`
+  now being dashboard-owned formatter and place-label helpers that still live
+  under `ui/src/components/dashboard/`
