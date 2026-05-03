@@ -1485,7 +1485,7 @@ func placeIDsFromGeneratedIOs(values []factoryapi.WorkstationIO) []string {
 	for _, value := range values {
 		ids = append(ids, placeIDFromGeneratedIO(value))
 	}
-	return sortedStrings(ids)
+	return ids
 }
 
 func placeIDsFromGeneratedIOsPtr(values *[]factoryapi.WorkstationIO) []string {

@@ -586,7 +586,6 @@ func arcPlaceIDs(arcs []petri.Arc) []string {
 	for _, arc := range arcs {
 		placeIDs = append(placeIDs, arc.PlaceID)
 	}
-	sort.Strings(placeIDs)
 	return placeIDs
 }
 

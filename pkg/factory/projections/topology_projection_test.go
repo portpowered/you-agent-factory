@@ -55,8 +55,8 @@ func TestProjectInitialStructure_NetOnlyTopology_ProjectsCanonicalPayload(t *tes
 				ID:                "build",
 				Name:              "Build",
 				WorkerID:          "builder",
-				InputPlaceIDs:     []string{"cpu:available", "story:init"},
-				OutputPlaceIDs:    []string{"cpu:available", "story:review"},
+				InputPlaceIDs:     []string{"story:init", "cpu:available"},
+				OutputPlaceIDs:    []string{"story:review", "cpu:available"},
 				RejectionPlaceIDs: []string{"story:init"},
 				FailurePlaceIDs:   []string{"story:failed"},
 			},
@@ -64,8 +64,8 @@ func TestProjectInitialStructure_NetOnlyTopology_ProjectsCanonicalPayload(t *tes
 				ID:             "review",
 				Name:           "Review",
 				WorkerID:       "reviewer",
-				InputPlaceIDs:  []string{"gpu:available", "story:review"},
-				OutputPlaceIDs: []string{"gpu:available", "story:done"},
+				InputPlaceIDs:  []string{"story:review", "gpu:available"},
+				OutputPlaceIDs: []string{"story:done", "gpu:available"},
 			},
 		},
 		Places: []interfaces.FactoryPlace{
@@ -92,6 +92,26 @@ func TestProjectInitialStructure_NetOnlyTopology_ProjectsCanonicalPayload(t *tes
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ProjectInitialStructure() mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestProjectInitialStructure_NetOnlyTopology_PreservesNonSuccessRouteArrayOrder(t *testing.T) {
+	net := projectionNetWithOrderedNonSuccessRoutes()
+
+	got := ProjectInitialStructure(net)
+	if len(got.Workstations) != 1 {
+		t.Fatalf("workstations = %#v, want one projected workstation", got.Workstations)
+	}
+
+	workstation := got.Workstations[0]
+	if !reflect.DeepEqual(workstation.ContinuePlaceIDs, []string{"story:retry", "story:init"}) {
+		t.Fatalf("continue routes = %#v, want authored order", workstation.ContinuePlaceIDs)
+	}
+	if !reflect.DeepEqual(workstation.RejectionPlaceIDs, []string{"story:triage", "story:init"}) {
+		t.Fatalf("rejection routes = %#v, want authored order", workstation.RejectionPlaceIDs)
+	}
+	if !reflect.DeepEqual(workstation.FailurePlaceIDs, []string{"story:failed", "story:abandoned"}) {
+		t.Fatalf("failure routes = %#v, want authored order", workstation.FailurePlaceIDs)
 	}
 }
 
@@ -389,6 +409,55 @@ func assertSingleConstraint(t *testing.T, constraints []interfaces.FactoryConstr
 }
 
 type projectionRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
+
+func projectionNetWithOrderedNonSuccessRoutes() *state.Net {
+	return &state.Net{
+		ID: "projection-net-non-success-routes",
+		Places: map[string]*petri.Place{
+			"story:init":      {ID: "story:init", TypeID: "story", State: "init"},
+			"story:retry":     {ID: "story:retry", TypeID: "story", State: "retry"},
+			"story:triage":    {ID: "story:triage", TypeID: "story", State: "triage"},
+			"story:complete":  {ID: "story:complete", TypeID: "story", State: "complete"},
+			"story:failed":    {ID: "story:failed", TypeID: "story", State: "failed"},
+			"story:abandoned": {ID: "story:abandoned", TypeID: "story", State: "abandoned"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"execute": {
+				ID:         "execute",
+				Name:       "Execute",
+				WorkerType: "executor",
+				InputArcs:  []petri.Arc{{Name: "work", PlaceID: "story:init"}},
+				OutputArcs: []petri.Arc{{PlaceID: "story:complete"}},
+				ContinueArcs: []petri.Arc{
+					{PlaceID: "story:retry"},
+					{PlaceID: "story:init"},
+				},
+				RejectionArcs: []petri.Arc{
+					{PlaceID: "story:triage"},
+					{PlaceID: "story:init"},
+				},
+				FailureArcs: []petri.Arc{
+					{PlaceID: "story:failed"},
+					{PlaceID: "story:abandoned"},
+				},
+			},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"story": {
+				ID:   "story",
+				Name: "Story",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "retry", Category: state.StateCategoryProcessing},
+					{Value: "triage", Category: state.StateCategoryProcessing},
+					{Value: "complete", Category: state.StateCategoryTerminal},
+					{Value: "failed", Category: state.StateCategoryFailed},
+					{Value: "abandoned", Category: state.StateCategoryFailed},
+				},
+			},
+		},
+	}
+}
 
 func representativeProjectionNet() *state.Net {
 	story := &state.WorkType{
