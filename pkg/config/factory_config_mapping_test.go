@@ -277,7 +277,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 			"type":"MODEL_WORKSTATION",
 			"worker":"executor",
 			"promptFile":"prompt.md",
-			"promptTemplate":"Implement {{ .WorkID }}.",
+			"body":"Implement {{ .WorkID }}.",
 			"outputSchema":"schema.json",
 			"onRejection":{"workType":"story","state":"init"},
 			"onFailure":{"workType":"story","state":"failed"},
@@ -815,7 +815,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}],
 			"type":"MODEL_WORKSTATION",
-			"promptTemplate":"Implement {{ .WorkID }}.",
+			"body":"Implement {{ .WorkID }}.",
 			"stopWords":["DONE"]
 		}]
 	}`)
@@ -856,11 +856,11 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 	}
 	workstationsPayload := payload["workstations"].([]any)
 	workstationPayload := workstationsPayload[0].(map[string]any)
-	if _, ok := workstationPayload["promptTemplate"]; !ok {
-		t.Fatalf("expected canonical inline workstation runtime config to use promptTemplate key")
+	if got, ok := workstationPayload["body"].(string); !ok || got != "Implement {{ .WorkID }}." {
+		t.Fatalf("expected canonical inline workstation export body to preserve prompt template, got %#v", workstationPayload["body"])
 	}
-	if _, ok := workstationPayload["prompt_template"]; ok {
-		t.Fatalf("expected canonical inline workstation runtime config not to include prompt_template key")
+	if _, ok := workstationPayload["promptTemplate"]; ok {
+		t.Fatalf("expected canonical inline workstation export not to include promptTemplate")
 	}
 	if _, ok := workstationPayload["definition"]; ok {
 		t.Fatalf("expected canonical inline workstation runtime config to be flattened")
@@ -1038,7 +1038,7 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 			"inputs":[{"workType":"task","state":"ready"}],
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"schedule":"*/5 * * * *","triggerAtStart":true},
-			"promptTemplate":"Refresh {{ .WorkID }}."
+			"body":"Refresh {{ .WorkID }}."
 		}]
 	}`)
 
@@ -1059,6 +1059,23 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 	}
 	if ws.PromptTemplate != "Refresh {{ .WorkID }}." {
 		t.Fatalf("expected prompt template to be retained, got %q", ws.PromptTemplate)
+	}
+}
+
+func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *testing.T) {
+	workstation := interfaces.FactoryWorkstationConfig{
+		Name:           "execute-story",
+		WorkerTypeName: "executor",
+		Type:           interfaces.WorkstationTypeModel,
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
+		Body:           "fallback body that should stay private to authored runtime config",
+		PromptTemplate: "Implement {{ .WorkID }}.",
+	}
+
+	got := WorkstationConfigToOpenAPI(workstation)
+	if got.Body == nil || *got.Body != "Implement {{ .WorkID }}." {
+		t.Fatalf("expected exported workstation body to carry prompt template, got %#v", got.Body)
 	}
 }
 

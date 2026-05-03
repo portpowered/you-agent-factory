@@ -93,7 +93,7 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 			"outputs":        []map[string]string{{"workType": workType, "state": "complete"}},
 			"onFailure":      map[string]string{"workType": workType, "state": "failed"},
 			"type":           "MODEL_WORKSTATION",
-			"promptTemplate": "Do the " + project + " work.",
+			"body": "Do the " + project + " work.",
 		}},
 	})
 	if err != nil {
@@ -119,8 +119,8 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 			{"name":"failed","type":"FAILED"}
 		]}],
 		"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"You are worker ` + name + `."}],
-		"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","promptTemplate":"Do the ` + name + ` work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"complete"}],"onFailure":{"workType":"` + workType + `","state":"failed"}}]
-	}`))
+		"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"Do the ` + name + ` work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"complete"}],"onFailure":{"workType":"` + workType + `","state":"failed"}}]
+		}`))
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(%s): %v", name, err)
 	}

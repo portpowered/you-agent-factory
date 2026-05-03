@@ -1522,7 +1522,7 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 				"behavior":       "STANDARD",
 				"type":           "MODEL_WORKSTATION",
 				"promptFile":     "prompt.md",
-				"promptTemplate": "Finish {{ .WorkID }}",
+				"body": "Finish {{ .WorkID }}",
 				"outputSchema":   "{\"type\":\"object\"}",
 				"inputs": []any{
 					map[string]any{"workType": "story", "state": "init"},

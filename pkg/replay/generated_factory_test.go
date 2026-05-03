@@ -84,8 +84,8 @@ Fallback body.
 		t.Fatalf("generated worker type = %#v, want SCRIPT_WORKER", worker.Type)
 	}
 	workstation := onlyGeneratedWorkstation(t, generated)
-	if workstation.PromptTemplate == nil || *workstation.PromptTemplate != "Implement {{ .WorkID }}." {
-		t.Fatalf("generated workstation prompt template = %#v, want prompt file content", workstation.PromptTemplate)
+	if workstation.Body == nil || *workstation.Body != "Implement {{ .WorkID }}." {
+		t.Fatalf("generated workstation body = %#v, want prompt file content", workstation.Body)
 	}
 	if workstation.Type == nil || *workstation.Type != "MODEL_WORKSTATION" {
 		t.Fatalf("generated workstation runtime type = %#v, want MODEL_WORKSTATION", workstation.Type)
@@ -125,7 +125,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOn
 			"inputs":         []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":        []map[string]string{{"workType": "story", "state": "complete"}},
 			"type":           "MODEL_WORKSTATION",
-			"promptTemplate": "Implement inline {{ .WorkID }}.",
+			"body":           "Implement inline {{ .WorkID }}.",
 			"stopWords":      []string{"DONE"},
 			"limits":         map[string]any{"maxRetries": 2},
 		}},
@@ -145,8 +145,8 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOn
 		t.Fatalf("generated inline worker command = %#v, want echo", worker.Command)
 	}
 	workstation := onlyGeneratedWorkstation(t, generated)
-	if workstation.PromptTemplate == nil || *workstation.PromptTemplate != "Implement inline {{ .WorkID }}." {
-		t.Fatalf("generated inline prompt template = %#v, want inline prompt", workstation.PromptTemplate)
+	if workstation.Body == nil || *workstation.Body != "Implement inline {{ .WorkID }}." {
+		t.Fatalf("generated inline workstation body = %#v, want inline prompt", workstation.Body)
 	}
 	if workstation.Limits == nil || workstation.Limits.MaxRetries == nil || *workstation.Limits.MaxRetries != 2 {
 		t.Fatalf("generated inline limits = %#v, want max retries 2", workstation.Limits)

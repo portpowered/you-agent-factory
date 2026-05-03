@@ -985,8 +985,6 @@ export interface components {
             limits?: components["schemas"]["WorkstationLimits"];
             /** @description Inline workstation instructions or script body when authored directly in factory config. */
             body?: string;
-            /** @description Inline Go template rendered into the prompt for model-oriented workstation execution. */
-            promptTemplate?: string;
             /** @description Cron trigger configuration for workstations whose behavior is CRON. */
             cron?: components["schemas"]["WorkstationCron"];
             /** @description Work states this workstation can consume before it dispatches. */

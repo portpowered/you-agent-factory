@@ -1938,9 +1938,6 @@ components:
         body:
           type: string
           description: Inline workstation instructions or script body when authored directly in factory config.
-        promptTemplate:
-          type: string
-          description: Inline Go template rendered into the prompt for model-oriented workstation execution.
         cron:
           $ref: '#/components/schemas/WorkstationCron'
           description: Cron trigger configuration for workstations whose behavior is CRON.

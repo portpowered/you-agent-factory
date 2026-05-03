@@ -260,8 +260,11 @@ func assertCanonicalFlattenPayload(t *testing.T, payload map[string]any) {
 	if workstation["type"] != "MODEL_WORKSTATION" {
 		t.Fatalf("expected flattened workstation runtime type, got %#v", workstation)
 	}
-	if workstation["promptTemplate"] != "Process {{ (index .Inputs 0).WorkID }}." {
-		t.Fatalf("expected flattened workstation prompt template, got %#v", workstation)
+	if workstation["body"] != "Process {{ (index .Inputs 0).WorkID }}." {
+		t.Fatalf("expected flattened workstation body to preserve prompt content, got %#v", workstation)
+	}
+	if _, ok := workstation["promptTemplate"]; ok {
+		t.Fatalf("expected flattened workstation to omit promptTemplate, got %#v", workstation)
 	}
 	if _, ok := workstation["definition"]; ok {
 		t.Fatalf("expected flattened workstation runtime config to be flat, got %#v", workstation)

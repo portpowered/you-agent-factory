@@ -230,7 +230,7 @@ func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 			"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":        []map[string]string{{"workType": "task", "state": "complete"}},
 			"type":           "MODEL_WORKSTATION",
-			"promptTemplate": "Implement {{ .WorkID }}.",
+			"body": "Implement {{ .WorkID }}.",
 		}},
 	})
 	if err != nil {

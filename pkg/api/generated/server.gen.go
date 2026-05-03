@@ -1140,9 +1140,6 @@ type Workstation struct {
 	// PromptFile Path to a prompt template file loaded for model-oriented workstation execution.
 	PromptFile *string `json:"promptFile,omitempty"`
 
-	// PromptTemplate Inline Go template rendered into the prompt for model-oriented workstation execution.
-	PromptTemplate *string `json:"promptTemplate,omitempty"`
-
 	// Resources Resource capacity this workstation consumes while one dispatch is in flight.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
 

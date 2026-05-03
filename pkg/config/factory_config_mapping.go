@@ -614,7 +614,6 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		Guards:                workstationGuardsInternalFromAPI(workstation.Guards),
 		StopWords:             stringSliceValue(workstation.StopWords),
 		Body:                  stringValue(workstation.Body),
-		PromptTemplate:        stringValue(workstation.PromptTemplate),
 		WorkingDirectory:      stringValue(workstation.WorkingDirectory),
 		Worktree:              stringValue(workstation.Worktree),
 		Env:                   stringMapValue(workstation.Env),
@@ -625,6 +624,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if workstation.Behavior != nil {
 		cfg.Kind = internalFactoryWorkstationKindFromPublic(workstation.Behavior)
 	}
+	normalizeCanonicalWorkstationRuntime(&cfg)
 	return cfg, nil
 }
 
@@ -765,6 +765,10 @@ func guardMatchConfigInternalFromAPI(matchConfig *factoryapi.GuardMatchConfig) *
 func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig) factoryapi.Workstation {
 	normalized := CloneWorkstationConfig(workstation)
 	NormalizeWorkstationExecutionLimit(&normalized)
+	promptBody := normalized.PromptTemplate
+	if promptBody == "" {
+		promptBody = normalized.Body
+	}
 
 	apiWorkstation := factoryapi.Workstation{
 		Name:                  normalized.Name,
@@ -780,11 +784,10 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Guards:                workstationGuardsAPIFromInternal(normalized.Guards),
 		StopWords:             stringSlicePtr(mergeCanonicalStopWords(normalized.StopWords, normalized.RuntimeStopWords)),
 		Env:                   stringMapPtr(normalized.Env),
-		Body:                  stringPtrIfNotEmpty(normalized.Body),
+		Body:                  stringPtrIfNotEmpty(promptBody),
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
-		PromptTemplate:        stringPtrIfNotEmpty(normalized.PromptTemplate),
 		Type:                  workstationTypePtrIfNotEmpty(normalized.Type),
 	}
 	if normalized.ID != "" {
