@@ -2,20 +2,19 @@
 
 ## world state
 
-- as of `2026-05-03T05:04:02.2575711-07:00`, `HEAD` on `fixlines` points to
-  `ce9872f` (`add fixes for edges missing`) while `origin/main` points to
-  `ec20d4c` (`docs: refresh meta world state`); branch divergence versus
-  `origin/main` is `1/0`
-- `origin/fixlines` matches `HEAD`, and the worktree is currently clean
-- the canonical maintainer ask surface remains `factory/logs/meta/asks.md`;
-  unlike the prior pass, the checked-in ask is active and no longer limits this
-  loop to meta-only refresh
+- as of `2026-05-03T07:03:16.3903787-07:00`, `HEAD` on `main` points to
+  `c82b118` (`update the requirements for the ideafy`), matching
+  `origin/main`; the worktree is clean and there are no open PR branches
+  visible through `gh pr list --state open`
+- the canonical maintainer ask surface remains `factory/logs/meta/asks.md`, and
+  the active P0 has shifted from throttle cleanup to import/export contract and
+  UX cleanup
 
 ## workflow truth
 
-- `factory/factory.json` defines five work types: `thoughts`, `idea`, `plan`,
-  `task`, and `cron-triggers`
-- the checked-in maintainer loop is:
+- `factory/factory.json` still defines five work types: `thoughts`, `idea`,
+  `plan`, `task`, and `cron-triggers`
+- the checked-in maintainer loop remains:
   `thoughts:init -> ideafy -> thoughts:complete`
   `idea:init -> plan -> idea:to-complete + plan:init`
   `plan:init -> setup-workspace -> plan:complete + task:init`
@@ -38,66 +37,82 @@
   - `factory/inputs/plan/default/.gitkeep`
   - `factory/inputs/task/default/.gitkeep`
   - `factory/inputs/thoughts/default/.gitkeep`
-- visible folders under `factory/inputs/**`, including the local
-  `factory/inputs/tasks/default` typo path, are ignored operating residue and
-  not checked-in repo truth
-- `.gitignore` still ignores `factory/inputs/**` except the canonical sentinel
-  paths above
-- the watcher still accepts files directly under `factory/inputs/<work-type>/`
-  as the default channel even though the public docs emphasize
-  `factory/inputs/<work_type-or-BATCH>/<channel>/<filename>`
+- `.gitignore` still ignores live workflow submissions under `factory/inputs/**`
+  except those sentinel paths
+- the current checkout also contains ignored operating residue under the
+  canonical inboxes:
+  - `factory/inputs/BATCH/default/import-export-p0-followups.json`
+  - `factory/inputs/thoughts/default/import-export-issues.md`
+- the watcher still accepts direct `factory/inputs/<work-type>/...` paths as
+  the default channel even though the public docs emphasize the
+  `factory/inputs/<work_type-or-BATCH>/<channel>/<filename>` layout
 
 ## customer-ask truth
 
-- the customer’s P0 throttle ask is no longer hypothetical: the repo already
-  contains a root-level `FactoryGuardConfig` with `modelProvider`, optional
-  `model`, and `refreshWindow`, plus runtime lowering into
-  `pkg/petri/inference_throttle_guard.go`
-- recent merged throttle cleanup lineage on `main` includes:
-  - `#48` `retire-legacy-throttle-fallback-after-authored-guard`
-  - `#46` `factory-level-inference-throttle-guard`
-  - `#42` `retire-dispatcher-throttle-pause-map`
-  - `#31` `derive-throttle-windows-from-completed-dispatch-history`
-- the remaining highest-signal throttle legacy seam is
-  `InferenceThrottleGuard.WatchedTransitionIDs`, which still preserves a
-  transition-ID fallback path when runtime worker/provider lookup misses
-- no dedicated checked-in standards-alignment checklist exists yet for
-  `STD-016` / `STD-017`; the current durable tracking surface for that ask is
-  still `factory/logs/meta/progress.txt`
+- the highest-priority live ask is the import/export P0 in
+  `factory/logs/meta/asks.md`, not the older throttle cleanup lane
+- the ignored local batch already decomposes that P0 into five ordered cleanup
+  ideas:
+  - remove exported workstation `promptTemplate`
+  - push worker/workstation body ownership fully into split `AGENTS.md` files
+  - make bundled files disk-backed by default
+  - extract import/export dialogs and standardize button styling
+  - track and close import/export standards gaps
+- the live code still shows the main backend contract seams behind that batch:
+  - `api/openapi.yaml`, `api/components/schemas/data-models/Workstation.yaml`,
+    `pkg/api/generated/server.gen.go`, and
+    `pkg/config/factory_config_mapping.go` still expose workstation
+    `promptTemplate`
+  - `pkg/config/layout.go` still writes expanded worker/workstation `AGENTS.md`
+    through `renderAgentsMarkdown(...)`, preserving frontmatter-driven files
+    instead of body-only prompt ownership
+  - `pkg/config/portable_bundled_files.go` auto-collects supported bundled
+    files during flatten, but `pkg/config/factory_config_mapping.go` still
+    serializes bundled-file inline content into the exported API shape
+- test coverage already exists around these seams, but it currently protects the
+  old contract in several places:
+  - `pkg/api/factory_config_smoke_test.go`
+  - `pkg/config/factory_config_mapping_test.go`
+  - `pkg/config/portable_bundled_files_test.go`
+  - `tests/functional/runtime_api/api_runtime_config_alignment_smoke_test.go`
+  - `tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go`
 
 ## replay truth
 
 - `factory/logs/agent-fails.json` and
   `factory/logs/agent-fails.replay.json` remain the checked-in replay sample
   pair described in `factory/README.md`
-- the replay pair is historical fixture coverage, not an exact copy of the
-  current checked-in workflow contract: the sample still reflects the older
-  topology without `to-complete` hold states, `consume`, or the current
-  `executor-slot` capacity of `10`
+- the replay pair is still historical fixture coverage rather than an exact copy
+  of the current workflow contract; it predates `to-complete` states, `consume`,
+  and the current `executor-slot` capacity of `10`
 - replay outcome counts remain unchanged in the sample:
   - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
   - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
 
 ## recent repo movement
 
-- recent merged cleanup PRs on `main` are now:
+- recent merged PRs on `main` now include:
+  - `#66` `add fixes for edges missing` merged on `2026-05-03`
   - `#65` `retire-dashboard-format-helper-ownership`
   - `#64` `retire-dashboard-bento-layout-ownership`
   - `#63` `retire-current-selection-inference-duplication`
   - `#62` `align-dashboard-work-summary-count-semantics`
   - `#61` `browser-shared-action-primitives`
   - `#60` `browser-integration-png-export-import-roundtrip`
-- the current branch also carries one unmerged UI/test commit ahead of `main`:
-  `ce9872f` `add fixes for edges missing`
+- `main` also moved through two direct post-merge commits relevant to the meta
+  loop:
+  - `ce8ca55` `fix the factory definition to be able to import the config`
+  - `c82b118` `update the requirements for the ideafy`
 
 ## theory of mind
 
-- the authoritative world model must come from live git state plus the
-  checked-in workflow contract, not from the replay sample alone
+- the authoritative world model still comes from live git state plus the
+  checked-in workflow contract, not from replay fixtures alone
 - `factory/inputs/**` must always be reasoned about in two layers:
-  checked-in contract vs ignored local operating residue
-- the authored inference throttle guard design mostly matches the current
-  customer ask already, so the right next move is cleanup of the remaining
-  fallback seam rather than another broad throttle redesign
-- the current standards-quality ask needs explicit checklist tracking in meta
-  progress until the repo gains a dedicated checked-in standards surface
+  checked-in contract versus ignored operating residue
+- the import/export P0 is already decomposed locally into a batch that matches
+  the active customer ask closely enough that the correct next move is to avoid
+  queuing a duplicate backlog item this pass
+- the right durable meta action in this iteration is to refresh the checked-in
+  world view and standards checklist while the local import/export queue owns
+  execution

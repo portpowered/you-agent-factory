@@ -11,52 +11,63 @@
   the live contract includes `to-complete`, `consume`, per-worktree execution,
   shared resource limits, cron cleanup, and loop breakers that replay fixtures
   may not reflect.
-- Treat the customer’s throttle ask as partially implemented repo reality:
-  inspect the current `FactoryGuardConfig`, `InferenceThrottleGuard`, and
-  merged throttle PR lineage before proposing more redesign work.
+- Before queuing new `factory/inputs/**` work for an active ask, inspect ignored
+  local residue in the canonical inboxes so the meta loop does not submit a
+  duplicate batch over work that is already staged for execution.
+- Import/export contract cleanup crosses more than one layer: confirm
+  `api/openapi.yaml`, generated API artifacts, `pkg/config` mapping logic, and
+  runtime/functional tests together before assuming a field has really been
+  retired.
 
 ## Current Summary
 
-- As of `2026-05-03T05:04:02.2575711-07:00`, `HEAD` on `fixlines` points to
-  `ce9872f` while `origin/main` points to `ec20d4c`; branch divergence versus
-  `origin/main` is `1/0`.
+- As of `2026-05-03T07:03:16.3903787-07:00`, `HEAD` on `main` points to
+  `c82b118` and matches `origin/main`; the worktree is clean and there are no
+  open PRs.
 - The canonical ask surface remains `factory/logs/meta/asks.md`, and the
-  current checked-in ask is active again rather than meta-only.
+  active P0 is now import/export cleanup rather than the older throttle lane.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
   execution for `process` and `review`, `executor-slot` capacity `10`, an
   hourly cleaner, and loop breakers.
 - The tracked input surface remains sentinel-only; visible files under
-  `factory/inputs/**`, including `factory/inputs/tasks/default`, are ignored
-  local residue rather than checked-in repo truth.
-- The authored inference throttle guard shape is already checked in, but
-  `InferenceThrottleGuard.WatchedTransitionIDs` still preserves a legacy
-  transition-ID fallback seam.
+  `factory/inputs/**` are ignored local residue rather than checked-in repo
+  truth.
+- The current local residue already includes an import/export thought seed plus
+  an ordered `FACTORY_REQUEST_BATCH` under the canonical inboxes.
+- The live import/export contract still exposes workstation `promptTemplate`,
+  expanded layout still writes frontmatter-driven `AGENTS.md`, and bundled
+  files still serialize inline content in the API contract.
 - No dedicated checked-in standards-alignment checklist exists yet for
   `STD-016` / `STD-017`, so this file remains the active checklist surface.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- The worktree is clean in this pass.
+- A local ignored import/export batch already exists under
+  `factory/inputs/BATCH/default/import-export-p0-followups.json`, and it matches
+  the active P0 ask closely enough that this pass should not submit a duplicate
+  queue item.
 
 ## Standards Alignment Checklist
 
 - Backend:
-  keep throttle behavior aligned with the authored factory guard model and
-  remove remaining legacy fallback seams instead of adding new throttle
-  abstractions.
+  retire exported/imported workstation `promptTemplate` ownership so the public
+  contract has one canonical prompt/body source.
 - Backend:
-  add or tighten automated lint/static-analysis coverage for dead code, magic
-  values, and similar `golangci-lint`-class checks.
+  make worker/workstation authored layout thin by moving body text ownership
+  into split `AGENTS.md` files and keeping `factory.json` structural.
+- Backend:
+  make portable bundled files disk-backed by default and stop preserving inline
+  bundled-file content in imported/exported `factory.json` payloads.
 - Website:
-  continue consolidating shared components and semantic design-token usage
-  toward `STD-016` instead of bespoke component-local patterns.
+  extract import/export dialogs out of workflow-activity ownership and converge
+  controls onto shared shadcn button styling.
 - Website:
-  preserve and extend behavioral integration coverage for timeline tick
-  controls plus PNG export/import flows before adding more UI surface area.
+  keep shared components, semantic tokens, and explicit loading/error states
+  aligned with `STD-016` while the import/export UI is being simplified.
 - Tests and CI:
-  keep functional-test decomposition and runtime-behavior assertions favored
-  over meta topology tests, and add explicit coverage thresholds where the repo
-  decides to enforce them.
+  keep behavioral runtime/API/UI assertions favored over meta topology tests,
+  and update existing contract coverage that currently locks in the legacy
+  prompt-template and inline-bundled-file shape.
 
 ## 2026-05-03T04:03:50.3625396-07:00 - meta state refresh
 
@@ -102,3 +113,27 @@
 - Queued one narrow cleanup request under `factory/inputs/idea/default/` to
   remove the remaining inference-throttle transition-ID fallback seam without
   broadening scope into unrelated projection or dispatcher refactors.
+
+## 2026-05-03T07:03:16.3903787-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; `main` was already current with `origin/main`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, `.gitignore`, and the backend/website standards.
+- Re-validated the tracked versus ignored workflow-input split with
+  `git ls-files`, `Get-ChildItem factory/inputs`, and `git check-ignore`.
+- Confirmed the active customer P0 has moved to import/export cleanup and that
+  the local ignored backlog already contains both a thought seed and an ordered
+  `FACTORY_REQUEST_BATCH` covering the prompt-template, expanded-layout,
+  bundled-file, dialog, and standards lanes.
+- Inspected the live import/export code and verified the batch still matches
+  real remaining seams:
+  `promptTemplate` is still exported through OpenAPI and `pkg/config`
+  mapping, expanded layout still writes frontmatter-driven `AGENTS.md`, and
+  bundled files still serialize inline content in the API contract.
+- Re-checked recent mainline movement, including merged PR `#66` on
+  `2026-05-03` plus direct commits `ce8ca55` and `c82b118`.
+- Updated the checked-in world view to reflect the current import/export lane
+  and deliberately did not enqueue a duplicate cleanup request because the
+  existing local batch already owns that backlog.
