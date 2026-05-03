@@ -432,3 +432,32 @@
   cleanup without colliding with PR `#69`.
 - Refreshed the checked-in world view to record the updated ask diff, local
   queue residue, and the new narrow follow-up selection.
+
+## 2026-05-03T16:02:24.9115382-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `0d0f2b5` to
+  `f803e8d`, which pulled in merged PR `#75`
+  (`trim-submit-work-card-intro-copy`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while the visible idea files remain ignored operating state.
+- Re-checked current PR state with `gh pr list`, `gh pr view 69`, and
+  `gh pr view 76`, confirming that PR `#69` still owns the route-array contract
+  lane and that PR `#76` now owns the import preview dialog extraction seam
+  that earlier meta notes treated as unowned.
+- Indexed the main checkout into the codebase knowledge graph and used graph
+  reads to confirm the remaining current-selection seam is real on `main`:
+  `ui/src/features/current-selection/work-item-card.tsx` still renders a text
+  relationship list and
+  `ui/src/features/current-selection/selected-work-dispatch-history*.tsx`
+  still render consolidated dispatch cards instead of a literal per-dispatch
+  inference-attempt list.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/align-current-selection-relationship-graph-and-dispatch-attempt-details.md`
+  so the next non-overlapping follow-up targets the remaining current-selection
+  interpretation gap without colliding with PR `#69` or PR `#76`.
+- Refreshed the checked-in world view to record merged PR `#75`, open PR `#76`,
+  and the new narrow follow-up selection.

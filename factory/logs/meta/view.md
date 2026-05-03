@@ -2,8 +2,8 @@
 
 ## world state
 
-- as of `2026-05-03T15:02:24.6780581-07:00`, local `HEAD` on `main` points to
-  `0d0f2b5` (`simplify-current-selection-dispatch-detail-surface (#74)`)
+- as of `2026-05-03T16:02:24.9115382-07:00`, local `HEAD` on `main` points to
+  `f803e8d` (`trim-submit-work-card-intro-copy (#75)`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -11,9 +11,9 @@
   - untracked local planning residue exists in
     `factory/scripts/import-export-p0-followups.json`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`, and
-  the only remaining active P0 lane that is still open on GitHub is `#69` for
-  multi-output workstation routes; the selected-work current-selection
-  simplification lane has already merged as PR `#74`
+  the remaining active ask lanes now open on GitHub are:
+  - `#69` for multi-output workstation routes
+  - `#76` for the remaining import preview dialog ownership extraction
 
 ## workflow truth
 
@@ -47,6 +47,7 @@
 - the current checkout also contains ignored operating residue related to the
   active ask:
   - `factory/inputs/thoughts/default/import-export-issues.md`
+  - `factory/inputs/idea/default/align-current-selection-relationship-graph-and-dispatch-attempt-details.md`
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
   - `factory/inputs/idea/default/finish-import-preview-dialog-extraction-from-workflow-activity.md`
 - the local repository root also contains untracked planning residue outside the
@@ -71,6 +72,7 @@
     ownership and converged the controls onto the shared button surface
   - PR `#72` landed the checked-in import/export standards checklist and its
     highest-value gap closures
+  - PR `#75` removed the extra submit-work intro copy from the dashboard card
 - the local helper batch in `factory/scripts/import-export-p0-followups.json`
   is now fully stale as a dispatch surface: every work item it names has either
   already merged or been superseded by merged work
@@ -125,19 +127,22 @@
   - `ui/src/features/current-selection/selected-work-dispatch-history.tsx` and
     `ui/src/features/current-selection/selected-work-dispatch-history-card.tsx`
     now carry the surviving request/response inspection surface
-- one narrower interpretation gap remains for later follow-up consideration,
-  not immediate redispatch:
+- one narrower interpretation gap remains after the broad simplification merge:
   - the ask literally describes a relationship graph and a nested per-dispatch
     inference-attempt list, while `main` currently renders a textual
     relationship list and a consolidated per-dispatch request/response view
-- the next narrow unowned UI cleanup is no longer the broad current-selection
-  lane; it is the still-incomplete import dialog ownership move:
-  - `ui/src/features/workflow-activity/dashboard-import-preview-dialog.tsx`
-    remains a thin pass-through wrapper over
-    `ui/src/features/workflow-activity/react-flow-current-activity-card-import.tsx`
-  - `ui/src/features/bento/dashboard-bento.tsx` already mounts that wrapper
-    directly, so the remaining work is a localized ownership simplification
-    rather than a broader behavior rewrite
+- the import dialog ownership seam is no longer unowned:
+  - open PR `#76`
+    `finish-import-preview-dialog-extraction-from-workflow-activity` now owns
+    the remaining wrapper-removal and dialog-home cleanup
+- the next narrow unowned UI cleanup is the literal current-selection
+  interpretation gap:
+  - `ui/src/features/current-selection/work-item-card.tsx` still shows
+    relationships as a textual list instead of a graph-shaped surface
+  - `ui/src/features/current-selection/selected-work-dispatch-history.tsx` and
+    `ui/src/features/current-selection/selected-work-dispatch-history-card.tsx`
+    still show consolidated dispatch request/response details instead of a
+    nested per-dispatch attempt list
 
 ## replay truth
 
@@ -154,6 +159,7 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#75` `trim-submit-work-card-intro-copy`, merged on `2026-05-03`
   - `#74` `simplify-current-selection-dispatch-detail-surface`, merged on
     `2026-05-03`
   - `#73` `retire-dashboard-button-wrapper`, merged on `2026-05-03`
@@ -172,8 +178,10 @@
   - `#64` `retire-dashboard-bento-layout-ownership`
   - `#63` `retire-current-selection-inference-duplication`
   - `#62` `align-dashboard-work-summary-count-semantics`
-- the open PRs directly tied to the remaining P0 cleanup are:
+- the open PRs directly tied to active ask lanes are:
   - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
+  - `#76` `finish-import-preview-dialog-extraction-from-workflow-activity`,
+    opened on `2026-05-03`
 
 ## theory of mind
 
@@ -185,7 +193,8 @@
   meta loop has to reconcile ignored backlog files against `main` and open PR
   state before dispatching anything new
 - import/export prompt-template, split-layout, bundled-file, dialog, and
-  standards-alignment asks are now landed on `main`
+  standards-alignment asks are now landed on `main`, while the final import
+  preview ownership move is already owned by open PR `#76`
 - the route-array contract cleanup is already actively owned by ignored local
   residue plus open PR `#69`, so queuing another idea for it would be
   duplicative
@@ -206,6 +215,7 @@
   dispatch is a narrow, isolated follow-up from the canonical ask surface rather
   than a second overlapping import/export contract request
 - the right meta action in this iteration is to refresh the checked-in world
-  view, record that PR `#74` has merged while PR `#69` remains the only open P0
-  lane, prune stale ignored queue residue, and queue the unfinished import
-  preview dialog extraction as a standalone ignored idea
+  view, record that PR `#75` has merged, record that PR `#76` now owns the
+  remaining import preview extraction seam, and queue the literal
+  current-selection graph-plus-attempt-detail follow-up as a standalone ignored
+  idea
