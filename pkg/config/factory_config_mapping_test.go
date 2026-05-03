@@ -277,7 +277,7 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 			"type":"MODEL_WORKSTATION",
 			"worker":"executor",
 			"promptFile":"prompt.md",
-			"promptTemplate":"Implement {{ .WorkID }}.",
+			"body":"Implement {{ .WorkID }}.",
 			"outputSchema":"schema.json",
 			"onRejection":{"workType":"story","state":"init"},
 			"onFailure":{"workType":"story","state":"failed"},
@@ -815,7 +815,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}],
 			"type":"MODEL_WORKSTATION",
-			"promptTemplate":"Implement {{ .WorkID }}.",
+			"body":"Implement {{ .WorkID }}.",
 			"stopWords":["DONE"]
 		}]
 	}`)
@@ -1038,7 +1038,7 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 			"inputs":[{"workType":"task","state":"ready"}],
 			"outputs":[{"workType":"task","state":"complete"}],
 			"cron":{"schedule":"*/5 * * * *","triggerAtStart":true},
-			"promptTemplate":"Refresh {{ .WorkID }}."
+			"body":"Refresh {{ .WorkID }}."
 		}]
 	}`)
 
@@ -1076,9 +1076,6 @@ func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *test
 	got := WorkstationConfigToOpenAPI(workstation)
 	if got.Body == nil || *got.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("expected exported workstation body to carry prompt template, got %#v", got.Body)
-	}
-	if got.PromptTemplate != nil {
-		t.Fatalf("expected exported workstation not to expose promptTemplate, got %#v", got.PromptTemplate)
 	}
 }
 

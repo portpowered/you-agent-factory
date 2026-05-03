@@ -612,7 +612,7 @@ func factoryConfigSmokeCanonicalJSON() string {
     "type":"MODEL_WORKSTATION",
     "worker":"executor",
     "promptFile":"prompt.md",
-    "promptTemplate":"Implement {{ .WorkID }}.",
+    "body":"Implement {{ .WorkID }}.",
     "outputSchema":"schema.json",
     "limits":{"maxExecutionTime":"30m"},
     "onRejection":{"workType":"story","state":"init"},

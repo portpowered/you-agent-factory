@@ -343,8 +343,8 @@ func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, auth
 			if workstation.PromptFile == nil {
 				workstation.PromptFile = authoredWorkstation.PromptFile
 			}
-			if workstation.PromptTemplate == nil {
-				workstation.PromptTemplate = authoredWorkstation.PromptTemplate
+			if workstation.Body == nil {
+				workstation.Body = authoredWorkstation.Body
 			}
 			if workstation.StopWords == nil || len(*workstation.StopWords) == 0 {
 				workstation.StopWords = authoredWorkstation.StopWords

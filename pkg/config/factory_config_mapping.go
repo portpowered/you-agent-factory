@@ -614,7 +614,6 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		Guards:                workstationGuardsInternalFromAPI(workstation.Guards),
 		StopWords:             stringSliceValue(workstation.StopWords),
 		Body:                  stringValue(workstation.Body),
-		PromptTemplate:        stringValue(workstation.PromptTemplate),
 		WorkingDirectory:      stringValue(workstation.WorkingDirectory),
 		Worktree:              stringValue(workstation.Worktree),
 		Env:                   stringMapValue(workstation.Env),

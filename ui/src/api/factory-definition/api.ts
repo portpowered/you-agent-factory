@@ -65,7 +65,6 @@ const WORKSTATION_KEYS = new Set([
   "outputSchema",
   "outputs",
   "promptFile",
-  "promptTemplate",
   "resources",
   "stopWords",
   "type",
@@ -338,7 +337,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const outputSchema = readOptionalString(record, "outputSchema", path);
   const limits = readOptionalObject(record, "limits", path, decodeWorkstationLimits);
   const body = readOptionalString(record, "body", path);
-  const promptTemplate = readOptionalString(record, "promptTemplate", path);
   const cron = readOptionalObject(record, "cron", path, decodeWorkstationCron);
   const onRejection = readOptionalObject(record, "onRejection", path, decodeWorkstationIO);
   const onFailure = readOptionalObject(record, "onFailure", path, decodeWorkstationIO);
@@ -370,9 +368,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
   if (body !== undefined) {
     workstation.body = body;
-  }
-  if (promptTemplate !== undefined) {
-    workstation.promptTemplate = promptTemplate;
   }
   if (cron !== undefined) {
     workstation.cron = cron;
@@ -741,4 +736,3 @@ function rejectUnknownKeys(
     );
   }
 }
-

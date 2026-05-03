@@ -25,7 +25,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 			"behavior":"STANDARD",
 			"worker":"executor",
 			"type":"LOGICAL_MOVE",
-			"promptTemplate":"Finish {{ .WorkID }}.",
+			"body":"Finish {{ .WorkID }}.",
 			"inputs":[
 				{"workType":"chapter","state":"init"},
 				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
@@ -87,7 +87,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 			"behavior":"REPEATER",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
-			"promptTemplate":"Finish {{ .WorkID }}.",
+			"body":"Finish {{ .WorkID }}.",
 			"inputs":[
 				{"workType":"chapter","state":"init"},
 				{"workType":"page","state":"complete","guards":[{"type":"ALL_CHILDREN_COMPLETE","parentInput":"chapter","spawnedBy":"chapter-parser"}]}
@@ -118,8 +118,8 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
 	}
 	workstation := (*generated.Workstations)[0]
-	if workstation.PromptTemplate == nil || *workstation.PromptTemplate != "Finish {{ .WorkID }}." {
-		t.Fatalf("expected generated promptTemplate to survive boundary decode, got %#v", workstation.PromptTemplate)
+	if workstation.Body == nil || *workstation.Body != "Finish {{ .WorkID }}." {
+		t.Fatalf("expected generated body to survive boundary decode, got %#v", workstation.Body)
 	}
 	if workstation.Resources == nil || len(*workstation.Resources) != 1 || (*workstation.Resources)[0].Capacity != 2 {
 		t.Fatalf("expected generated resources capacity 2, got %#v", workstation.Resources)

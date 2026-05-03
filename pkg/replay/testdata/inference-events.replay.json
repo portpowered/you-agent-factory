@@ -50,7 +50,7 @@
                   "workType": "task"
                 }
               ],
-              "promptTemplate": "Process {{ .WorkID }}.",
+              "body": "Process {{ .WorkID }}.",
               "type": "MODEL_WORKSTATION",
               "worker": "worker-a"
             }

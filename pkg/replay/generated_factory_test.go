@@ -87,9 +87,6 @@ Fallback body.
 	if workstation.Body == nil || *workstation.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("generated workstation body = %#v, want prompt file content", workstation.Body)
 	}
-	if workstation.PromptTemplate != nil {
-		t.Fatalf("generated workstation should not expose promptTemplate, got %#v", workstation.PromptTemplate)
-	}
 	if workstation.Type == nil || *workstation.Type != "MODEL_WORKSTATION" {
 		t.Fatalf("generated workstation runtime type = %#v, want MODEL_WORKSTATION", workstation.Type)
 	}
@@ -128,7 +125,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOn
 			"inputs":         []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":        []map[string]string{{"workType": "story", "state": "complete"}},
 			"type":           "MODEL_WORKSTATION",
-			"promptTemplate": "Implement inline {{ .WorkID }}.",
+			"body":           "Implement inline {{ .WorkID }}.",
 			"stopWords":      []string{"DONE"},
 			"limits":         map[string]any{"maxRetries": 2},
 		}},
@@ -150,9 +147,6 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOn
 	workstation := onlyGeneratedWorkstation(t, generated)
 	if workstation.Body == nil || *workstation.Body != "Implement inline {{ .WorkID }}." {
 		t.Fatalf("generated inline workstation body = %#v, want inline prompt", workstation.Body)
-	}
-	if workstation.PromptTemplate != nil {
-		t.Fatalf("generated inline workstation should not expose promptTemplate, got %#v", workstation.PromptTemplate)
 	}
 	if workstation.Limits == nil || workstation.Limits.MaxRetries == nil || *workstation.Limits.MaxRetries != 2 {
 		t.Fatalf("generated inline limits = %#v, want max retries 2", workstation.Limits)

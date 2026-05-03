@@ -50,7 +50,7 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 				"limits":{"maxRetries":2,"maxExecutionTime":"30m"},
 				"stopWords":["DONE"],
 				"body":"This body stays in AGENTS.md.",
-				"promptTemplate":"Complete {{ .WorkID }} deterministically."
+				"body":"Complete {{ .WorkID }} deterministically."
 			}
 		}]
 	}`)
@@ -131,7 +131,7 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	if workstationDef.OutputSchema != "schema.json" || workstationDef.Limits.MaxRetries != 2 || workstationDef.Limits.MaxExecutionTime != "30m" || workstationDef.Timeout != "" {
 		t.Fatalf("expanded workstation definition did not preserve frontmatter: %#v", workstationDef)
 	}
-	if workstationDef.Body != "This body stays in AGENTS.md." {
+	if workstationDef.Body != "Complete {{ .WorkID }} deterministically." {
 		t.Fatalf("expanded workstation body = %q", workstationDef.Body)
 	}
 	if workstationDef.PromptTemplate != "Complete {{ .WorkID }} deterministically." {

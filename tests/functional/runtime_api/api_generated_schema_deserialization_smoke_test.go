@@ -275,9 +275,6 @@ func assertGeneratedSmokeRuntimeDefinitions(t *testing.T, generated factoryapi.F
 		if !strings.Contains(stringValueFromFunctionalPtr(workstation.Body), "Do the work.") {
 			t.Fatalf("runtime boundary workstation %q body = %q, want split runtime prompt", workstation.Name, stringValueFromFunctionalPtr(workstation.Body))
 		}
-		if workstation.PromptTemplate != nil {
-			t.Fatalf("runtime boundary workstation %q should not expose promptTemplate, got %#v", workstation.Name, workstation.PromptTemplate)
-		}
 	}
 }
 

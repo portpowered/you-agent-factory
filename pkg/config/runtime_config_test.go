@@ -589,7 +589,7 @@ type: MODEL_WORKSTATION
 worker: executor
 promptFile: prompt.md
 ---
-Fallback prompt.
+	Implement {{ .WorkID }}.
 `)
 	if err := os.WriteFile(filepath.Join(factoryDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
 		t.Fatalf("write prompt file: %v", err)
@@ -1022,7 +1022,7 @@ func TestLoadRuntimeConfig_LoadsInlineRuntimeDefinitionsWithoutAgentsFiles(t *te
 				"outputs":        []map[string]string{{"workType": "story", "state": "complete"}},
 				"type":           "MODEL_WORKSTATION",
 				"stopWords":      []string{"DONE"},
-				"promptTemplate": "Implement {{ .WorkID }}.",
+				"body": "Implement {{ .WorkID }}.",
 			},
 		},
 	})
@@ -1099,8 +1099,7 @@ func TestLoadRuntimeConfig_NormalizesInlineWorkstationRuntimeFieldsIntoCanonical
 				"outputSchema":     "schema.json",
 				"limits":           map[string]any{"maxRetries": 2, "maxExecutionTime": "30m"},
 				"stopWords":        []string{"DONE"},
-				"body":             "Fallback prompt",
-				"promptTemplate":   "Implement {{ .WorkID }}.",
+				"body":             "Implement {{ .WorkID }}.",
 				"workingDirectory": "/repo/{{ .WorkID }}",
 				"worktree":         "worktrees/{{ .WorkID }}",
 				"env":              map[string]string{"PROJECT": "{{ .Project }}"},
@@ -1142,7 +1141,7 @@ func TestLoadRuntimeConfig_MergesSplitRuntimeWorkstationOverInlineRuntimeFields(
 				"inputs":           []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs":          []map[string]string{{"workType": "story", "state": "complete"}},
 				"type":             "MODEL_WORKSTATION",
-				"promptTemplate":   "Inline prompt {{ (index .Inputs 0).Name }}.",
+				"body":             "Inline prompt {{ (index .Inputs 0).Name }}.",
 				"workingDirectory": "/inline/{{ (index .Inputs 0).Name }}",
 				"env":              map[string]string{"SHARED": "inline", "INLINE_ONLY": "true"},
 			},
@@ -1338,8 +1337,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["outputSchema"] = "schema.json"
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["limits"] = map[string]any{"maxRetries": 2, "maxExecutionTime": "30m"}
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["stopWords"] = []string{"DONE"}
-	inlineConfig["workstations"].([]any)[0].(map[string]any)["body"] = "Fallback prompt."
-	inlineConfig["workstations"].([]any)[0].(map[string]any)["promptTemplate"] = "Implement {{ .WorkID }}."
+	inlineConfig["workstations"].([]any)[0].(map[string]any)["body"] = "Implement {{ .WorkID }}."
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["workingDirectory"] = "/repo/{{ .WorkID }}"
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["worktree"] = "worktrees/{{ .WorkID }}"
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"PROJECT": "{{ .Project }}"}
@@ -1360,7 +1358,7 @@ worktree: "worktrees/{{ .WorkID }}"
 env:
   PROJECT: "{{ .Project }}"
 ---
-Fallback prompt.
+Implement {{ .WorkID }}.
 `)
 	if err := os.WriteFile(filepath.Join(splitDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
 		t.Fatalf("write split prompt file: %v", err)
@@ -1713,7 +1711,7 @@ func assertCanonicalInlineRuntimeFields(t *testing.T, workstation *interfaces.Fa
 	if len(workstation.StopWords) != 1 || workstation.StopWords[0] != "DONE" {
 		t.Fatalf("expected stop words [DONE], got %#v", workstation.StopWords)
 	}
-	if workstation.Body != "Fallback prompt" || workstation.PromptTemplate != "Implement {{ .WorkID }}." {
+	if workstation.Body != "Implement {{ .WorkID }}." || workstation.PromptTemplate != "Implement {{ .WorkID }}." {
 		t.Fatalf("expected body and prompt template, got body=%q prompt=%q", workstation.Body, workstation.PromptTemplate)
 	}
 	if workstation.WorkingDirectory != "/repo/{{ .WorkID }}" || workstation.Worktree != "worktrees/{{ .WorkID }}" {
@@ -1828,7 +1826,7 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 				"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":        []map[string]string{{"workType": "task", "state": "complete"}},
 				"type":           "MODEL_WORKSTATION",
-				"promptTemplate": "Implement {{ .WorkID }}.",
+				"body": "Implement {{ .WorkID }}.",
 			},
 		},
 	}

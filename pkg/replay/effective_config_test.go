@@ -107,9 +107,6 @@ Fallback body.
 	if workstation.Body == nil || *workstation.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("generated workstation body = %#v, want prompt file content", workstation.Body)
 	}
-	if workstation.PromptTemplate != nil {
-		t.Fatalf("generated workstation should not expose promptTemplate, got %#v", workstation.PromptTemplate)
-	}
 	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)

@@ -107,7 +107,7 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 				"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":        []map[string]string{{"workType": "task", "state": "complete"}},
 				"type":           "MODEL_WORKSTATION",
-				"promptTemplate": "Implement {{ .WorkID }}.",
+				"body": "Implement {{ .WorkID }}.",
 			},
 		},
 	})
