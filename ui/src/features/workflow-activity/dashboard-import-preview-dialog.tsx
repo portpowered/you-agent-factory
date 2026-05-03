@@ -1,5 +1,5 @@
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
-import { FactoryImportPreviewDialog } from "./react-flow-current-activity-card-import";
+import { FactoryImportPreviewDialog } from "../import";
 
 interface DashboardImportPreviewDialogProps {
   importController: CurrentActivityImportController;
