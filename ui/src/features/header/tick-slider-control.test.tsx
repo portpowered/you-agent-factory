@@ -52,9 +52,10 @@ describe("TickSliderControl", () => {
       true,
     );
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Current" }).disabled).toBe(
-      true,
-    );
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", { name: "Current" });
+
+    expect(currentButton.disabled).toBe(true);
+    expect(currentButton.className).toContain("bg-af-accent/10");
   });
 
   it("switches between fixed and current mode through the rendered controls", async () => {
@@ -68,6 +69,8 @@ describe("TickSliderControl", () => {
     expect(slider.value).toBe("9");
     expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
     expect(currentButton.disabled).toBe(true);
+    expect(currentButton.className).toContain("bg-af-accent/10");
+    expect(currentButton.className).toContain("opacity-75");
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
 
     fireEvent.change(slider, { target: { value: "2" } });
@@ -76,6 +79,7 @@ describe("TickSliderControl", () => {
       expect(screen.getByText("Tick 2 of 9")).toBeTruthy();
     });
     expect(currentButton.disabled).toBe(false);
+    expect(currentButton.className).not.toContain("opacity-75");
     expect(useFactoryTimelineStore.getState().mode).toBe("fixed");
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(2);
 
@@ -89,4 +93,3 @@ describe("TickSliderControl", () => {
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(9);
   });
 });
-
