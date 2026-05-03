@@ -1,45 +1,45 @@
 ## Codebase Patterns
 
-- Confirm canonical maintainer surfaces with `git ls-files` before trusting
-  sibling files under `factory/logs/meta/**` or `factory/inputs/**`.
-- Treat ignored `factory/inputs/**` files as local residue unless they are
-  tracked or a checked-in maintainer doc explicitly promotes them.
-- After `git pull`, re-check live merged/open PR state before queueing work;
-  recent UI cleanup lanes can land faster than the checked-in meta logs update.
-- Compare any future cleanup candidate against `gh pr view <number> --json
-  files` for open PRs so the maintainer loop does not duplicate active work.
-- When dashboard ownership cleanup moves helpers into `ui/src/components/ui/`,
-  verify whether `ui/src/components/dashboard/*` became thin shims before
-  treating those files as live implementation seams.
-- If `factory/logs/meta/asks.md` says not to submit new tasks, treat meta-state
-  cleanup as the only active lane for that pass.
+- Re-check tracked `factory/inputs/**` with `git ls-files` before assuming the
+  inboxes only contain `.gitkeep`; this repo now checks in real idea, plan,
+  and task artifacts there.
+- Treat `factory/logs/meta/asks.md` as the canonical maintainer-routing
+  surface and let it decide whether new queue submissions are allowed.
+- Use live git branch state plus merged PR history to correct stale meta prose;
+  compact summaries can go stale within hours.
+- Before attempting branch reconciliation, inspect the worktree for unrelated
+  local UI edits because they can block a safe pull/merge even when the meta
+  task itself is small.
 
 ## Current Summary
 
-- `main` and `origin/main` are synced at `9e8d917`.
+- As of `2026-05-02T19:01:28.0034145-07:00`, `origin/main` is at `4583faf`
+  and local `main` is diverged at `bef1664` (`ahead 2, behind 6`).
 - The canonical ask surface is still `factory/logs/meta/asks.md`, and its
-  current local guidance is to clean meta state only and avoid new task
-  submission.
-- The tracked workflow inboxes still contain only `.gitkeep` sentinels.
-- The only live PR lane is `#61` `browser-shared-action-primitives`.
-- PR `#65` already landed the previous dashboard formatter/place-label cleanup
-  seam, so that lane is solved residue now.
-- Local non-canonical dirt remains limited to `factory/logs/meta/asks.md` and
-  `factory/logs/weird-number-summary.jsonl`.
-- Replay summary:
+  current instruction is to clean meta state only and not submit new tasks.
+- The checked-in workflow input surface is not empty starter scaffolding
+  anymore; tracked idea, task, and plan artifacts exist under
+  `factory/inputs/**`.
+- PRs `#61` through `#65` relevant to the recent dashboard cleanup wave are
+  already merged.
+- Replay summary remains:
   - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
   - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
+- The local worktree is dirty beyond the meta files because several dashboard
+  and workflow-activity UI files are already modified.
 
-## 2026-05-02 18:02:06 -07:00 - meta summary compaction
+## 2026-05-02T19:01:28.0034145-07:00 - meta state refresh
 
-- Ran `git pull`; `main` and `origin/main` are both at `9e8d917`.
 - Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
-  `factory/logs/meta/asks.md`, replay artifacts, `docs/standards/STANDARDS.md`,
-  `factory/README.md`, `docs/guides/batch-inputs.md`, tracked
-  `factory/inputs/**`, and live PR history before choosing work.
-- Confirmed the canonical ask surface currently says to clean meta state and
-  not submit new tasks, so no new idea file or batch request was appropriate.
-- Confirmed PR `#65` merged the previously queued dashboard formatter and
-  place-label ownership lane; that seam is no longer pending on `main`.
-- Replaced the accumulated long-form meta history with a compact current-state
-  summary to reduce maintainer context usage.
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `docs/standards/STANDARDS.md`,
+  `docs/standards/code/code-review-standards.md`,
+  `docs/standards/code/planning-standards.md`, `factory/README.md`, and
+  `docs/guides/batch-inputs.md`.
+- Re-checked tracked files under `factory/inputs/**` and confirmed the old
+  `.gitkeep`-only assumption is obsolete.
+- Re-checked recent PR history and confirmed PR `#61` is already merged on
+  `origin/main`, along with PRs `#62` through `#65`.
+- Updated the meta world model to match the live repo and kept the pass scoped
+  to meta-state cleanup because `factory/logs/meta/asks.md` explicitly says
+  not to submit new tasks right now.
