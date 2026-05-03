@@ -59,6 +59,7 @@ const WORKSTATION_KEYS = new Set([
   "behavior",
   "limits",
   "name",
+  "onContinue",
   "onFailure",
   "onRejection",
   "outputSchema",
@@ -733,6 +734,8 @@ function rejectUnknownKeys(
     if (allowedKeys.has(key)) {
       continue;
     }
+    console.log(`linvalid key for object ${path}.${key}`);
+    
     throw new FactoryDefinitionAPIError(
       `${path}.${key} is not allowed by the generated factory contract.`,
     );

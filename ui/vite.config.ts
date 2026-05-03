@@ -3,12 +3,16 @@ import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
 
 const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
-const apiProxy = {
-  "/events": {
-    target: apiOrigin,
-    changeOrigin: true,
-  },
-};
+const proxiedAPIPaths = ["/events", "/factory", "/work"] as const;
+const apiProxy = Object.fromEntries(
+  proxiedAPIPaths.map((path) => [
+    path,
+    {
+      target: apiOrigin,
+      changeOrigin: true,
+    },
+  ]),
+);
 
 export default defineConfig({
   base: "/dashboard/ui/",
