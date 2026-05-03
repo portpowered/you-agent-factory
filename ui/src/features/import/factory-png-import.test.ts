@@ -187,6 +187,29 @@ describe("readFactoryImportPng", () => {
     });
   });
 
+  it("returns a file read failure when the browser cannot read the dropped image bytes", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: {
+        arrayBuffer: async () => {
+          throw new Error("disk read failed");
+        },
+      } as unknown as Blob,
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "FILE_READ_FAILED",
+        message: "The selected image could not be read.",
+      },
+      ok: false,
+    });
+  });
+
   it("rejects PNG files that are missing the Port OS metadata chunk", async () => {
     const result = await readFactoryImportPng({
       createPreviewImageSrc: () => {
