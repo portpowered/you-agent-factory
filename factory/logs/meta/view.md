@@ -2,12 +2,11 @@
 
 ## world state
 
-- as of `2026-05-03T10:03:19.3588030-07:00`, local `HEAD` on `main` points to
-  `a47afae` (`Merge pull request #70 from
-  portpowered/ralph/import-export-bundled-files-disk-backed-roundtrip`) and
-  matches `origin/main`; there are two open PRs relevant to the active ask:
-  `#69` `workstation-non-success-route-arrays` and `#71`
-  `dashboard-import-export-dialog-extraction-and-button-standardization`
+- as of `2026-05-03T11:03:56.9236801-07:00`, local `HEAD` on `main` points to
+  `4af58c2` (`dashboard-import-export-dialog-extraction-and-button-standardization (#71)`)
+  and matches `origin/main`; there are two open PRs relevant to the active ask:
+  `#69` `workstation-non-success-route-arrays` and `#72`
+  `import-export-standards-alignment-checklist-and-gap-closure`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
     `factory/workstations/cleaner/AGENTS.md`
@@ -50,6 +49,7 @@
   active ask:
   - `factory/inputs/thoughts/default/import-export-issues.md`
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
+  - `factory/inputs/idea/default/retire-dashboard-button-wrapper.md`
 - the local repository root also contains untracked planning residue outside the
   canonical inboxes:
   - `factory/scripts/import-export-p0-followups.json`
@@ -77,12 +77,11 @@
   - replace singular workstation `onContinue`, `onRejection`, and `onFailure`
     destinations with array-based outputs
 - the remaining import/export seams on `main` are now narrower:
-  - the dashboard import/export dialog and button-standardization lane is now
-    actively owned by open PR `#71` on branch
-    `ralph/dashboard-import-export-dialog-extraction-and-button-standardization`
-  - the standards-alignment checklist and gap-closure lane remains open in the
-    ask surface, is still tracked in `factory/logs/meta/progress.txt`, and does
-    not yet have a corresponding open PR
+  - the dashboard import/export dialog and button-standardization lane has now
+    landed on `main` via PR `#71`
+  - the standards-alignment checklist and gap-closure lane is now actively
+    owned by open PR `#72` on branch
+    `ralph/import-export-standards-alignment-checklist-and-gap-closure`
 - the live code also shows the route-array ask is real on `main`, but it is no
   longer unowned:
   - `api/components/schemas/data-models/Workstation.yaml`,
@@ -132,6 +131,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#71` `dashboard-import-export-dialog-extraction-and-button-standardization`,
+    merged on `2026-05-03`
   - `#70` `import-export-bundled-files-disk-backed-roundtrip`, merged on
     `2026-05-03`
   - `#68` `import-export-expanded-agents-layout-for-workers-and-workstations`
@@ -145,7 +146,7 @@
   - `#62` `align-dashboard-work-summary-count-semantics`
 - there are two open PRs directly tied to the remaining P0 cleanup:
   - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
-  - `#71` `dashboard-import-export-dialog-extraction-and-button-standardization`,
+  - `#72` `import-export-standards-alignment-checklist-and-gap-closure`,
     opened on `2026-05-03`
 
 ## theory of mind
@@ -163,12 +164,17 @@
 - the route-array contract cleanup is already actively owned by ignored local
   residue plus open PR `#69`, so queuing another idea for it would be
   duplicative
-- the dialog/button cleanup is also already actively owned by open PR `#71`, so
-  queuing another idea for it would likewise be duplicative
-- the only remaining P0 import/export follow-up that still appears unowned is
-  the standards-alignment checklist and gap-closure lane, but the existing
-  helper batch for that lane is outside the canonical watched inbox and partly
-  stale
-- the right durable meta action in this iteration is to refresh the checked-in
-  world view and progress surfaces only, leaving execution with the existing
-  import/export branches and PRs rather than duplicating queue work
+- the dialog/button cleanup has landed on `main`, while the standards-alignment
+  lane is now actively owned by open PR `#72`, so the import/export P0 no
+  longer has an unowned narrow cleanup seam worth queueing
+- the broad remaining asks in `factory/logs/meta/asks.md` are still too mixed
+  in scope to queue directly without another decomposition pass
+- a separate narrow website-quality seam is now visible on `main` and does not
+  overlap the import/export PRs:
+  `ui/src/components/dashboard/button.tsx` is a thin wrapper over the shared
+  `ui/src/components/ui/button.tsx` and has collapsed to a single production
+  caller in `ui/src/features/header/tick-slider-control.tsx`
+- the right meta action in this iteration is to refresh the checked-in world
+  view, record the newly opened standards PR, and queue one standalone ignored
+  idea to retire that redundant dashboard button wrapper without broadening into
+  a larger button-restyling batch
