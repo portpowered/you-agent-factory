@@ -56,7 +56,7 @@ export function DashboardBento() {
     (state) => state.worldViewCache[state.selectedTick]?.workstationRequestsByDispatchID,
   );
   const selectedSnapshot = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick]?.dashboard,
+    (state) => state.worldViewCache[state.selectedTick],
   );
   const snapshot = selectedSnapshot ?? EMPTY_DASHBOARD_SNAPSHOT;
 

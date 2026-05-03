@@ -3,7 +3,7 @@ import { act, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../api/dashboard";
 import type { EventSourceLike } from "../api/events/api";
 import type { FactoryEvent } from "../api/events";
-import type { FactoryTimelineSnapshot } from "../features/timeline/state/factoryTimelineStore";
+import type { WorldState } from "../features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import { loadReplayFixtureEvents, type ReplayFixtureID } from "./replay-fixtures";
 
@@ -53,7 +53,7 @@ export class ReplayEventSource implements EventSourceLike {
 
 function seedTimelineSnapshot(
   snapshot: DashboardSnapshot,
-  tracesByWorkID: FactoryTimelineSnapshot["tracesByWorkID"] = {},
+  tracesByWorkID: WorldState["tracesByWorkID"] = {},
 ): void {
   useFactoryTimelineStore.setState({
     events: [],
@@ -62,15 +62,29 @@ function seedTimelineSnapshot(
     receivedEventIDs: [],
     selectedTick: snapshot.tick_count,
     worldViewCache: {
-      [snapshot.tick_count]: {
-        dashboard: snapshot,
-        relationsByWorkID: {},
+      [snapshot.tick_count]: timelineSnapshotFromDashboardSnapshot(snapshot, {
         tracesByWorkID,
-        workstationRequestsByDispatchID: {},
-        workRequestsByID: {},
-      },
+      }),
     },
   });
+}
+
+function timelineSnapshotFromDashboardSnapshot(
+  snapshot: DashboardSnapshot,
+  overrides: Partial<
+    Pick<
+      WorldState,
+      "relationsByWorkID" | "tracesByWorkID" | "workstationRequestsByDispatchID" | "workRequestsByID"
+    >
+  > = {},
+): WorldState {
+  return {
+    ...snapshot,
+    relationsByWorkID: overrides.relationsByWorkID ?? {},
+    tracesByWorkID: overrides.tracesByWorkID ?? {},
+    workstationRequestsByDispatchID: overrides.workstationRequestsByDispatchID ?? {},
+    workRequestsByID: overrides.workRequestsByID ?? {},
+  };
 }
 
 export interface ReplayHarness {
@@ -122,13 +136,7 @@ export function createReplayHarness(): ReplayHarness {
       receivedEventIDs: [],
       selectedTick: snapshot.tick_count,
       worldViewCache: {
-        [snapshot.tick_count]: {
-          dashboard: snapshot,
-          relationsByWorkID: {},
-          tracesByWorkID: {},
-          workstationRequestsByDispatchID: {},
-          workRequestsByID: {},
-        },
+        [snapshot.tick_count]: timelineSnapshotFromDashboardSnapshot(snapshot),
       },
     });
 

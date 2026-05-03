@@ -11,13 +11,14 @@ import {
 import { projectRuntimeWorkstationRequests } from "./projectWorkstationRequests";
 import { uniqueSorted } from "./shared";
 import { isSystemTimePlace, isSystemTimeWorkItem } from "./systemTime";
-import type { WorldDispatch, WorldState } from "./types";
+import type { ReplayWorldState, WorldDispatch } from "./types";
 import { workRef } from "./workItemRef";
 
-export function projectRuntime(state: WorldState): DashboardRuntime {
+export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
   const activeDispatches = Object.values(state.activeDispatches);
   const customerActiveDispatches = activeDispatches.filter(dispatchHasCustomerWork);
   const customerCompletedDispatches = state.completedDispatches.filter(dispatchHasCustomerWork);
+  const failedWorkItems = projectFailedWorkItems(state);
   const activeExecutions = Object.fromEntries(
     customerActiveDispatches.map((dispatch) => [
       dispatch.dispatchID,
@@ -59,13 +60,13 @@ export function projectRuntime(state: WorldState): DashboardRuntime {
         ),
       ),
       dispatched_count: activeDispatchIDs.length + customerCompletedDispatches.length,
-      failed_by_work_type: countFailedByWorkType(state.failedWorkItemsByID),
-      failed_count: countFailedWorkItems(state.failedWorkItemsByID),
+      failed_by_work_type: countFailedByWorkType(failedWorkItems),
+      failed_count: countFailedWorkItems(failedWorkItems),
       failed_work_details_by_work_id: cloneFailedWorkDetailsByWorkID(
         state.failedWorkDetailsByWorkID,
       ),
       failed_work_labels: uniqueSorted(
-        Object.values(state.failedWorkItemsByID).map(
+        failedWorkItems.map(
           (work) => work.display_name ?? work.id,
         ),
       ),
@@ -83,7 +84,7 @@ function dispatchHasCustomerWork(dispatch: WorldDispatch): boolean {
   return !dispatch.systemOnly;
 }
 
-function projectCurrentWorkItemsByPlaceID(state: WorldState): DashboardRuntime["current_work_items_by_place_id"] {
+function projectCurrentWorkItemsByPlaceID(state: ReplayWorldState): DashboardRuntime["current_work_items_by_place_id"] {
   const workTypeIDs = new Set((state.topology.work_types ?? []).map((workType) => workType.id));
   const entries = (state.topology.places ?? [])
     .filter((place) => workTypeIDs.has(place.type_id))
@@ -103,7 +104,7 @@ function projectCurrentWorkItemsByPlaceID(state: WorldState): DashboardRuntime["
 }
 
 function projectOccupancyWorkItemsByPlaceID(
-  state: WorldState,
+  state: ReplayWorldState,
 ): DashboardRuntime["place_occupancy_work_items_by_place_id"] {
   const entries = (state.topology.places ?? [])
     .sort((left, right) => left.id.localeCompare(right.id))
@@ -155,11 +156,56 @@ function projectActivity(
   );
 }
 
+function projectFailedWorkItems(state: ReplayWorldState): FactoryWorkItem[] {
+  const itemsByKey = new Map<string, FactoryWorkItem>();
+
+  for (const item of Object.values(state.failedWorkItemsByID)) {
+    if (isSystemTimeWorkItem(item)) {
+      continue;
+    }
+    itemsByKey.set(failedWorkDedupKey(item), item);
+  }
+
+  for (const place of state.topology.places ?? []) {
+    if (place.category !== "FAILED") {
+      continue;
+    }
+
+    const occupancy = state.occupancyByID[place.id];
+    for (const workID of occupancy?.workItemIDs ?? []) {
+      const item = state.workItemsByID[workID];
+      if (!item || isSystemTimeWorkItem(item)) {
+        continue;
+      }
+      const key = failedWorkDedupKey(item);
+      if (!itemsByKey.has(key)) {
+        itemsByKey.set(key, item);
+      }
+    }
+  }
+
+  return [...itemsByKey.values()].sort((left, right) => {
+    const leftLabel = left.display_name ?? left.id;
+    const rightLabel = right.display_name ?? right.id;
+    if (leftLabel !== rightLabel) {
+      return leftLabel.localeCompare(rightLabel);
+    }
+    if (left.work_type_id !== right.work_type_id) {
+      return left.work_type_id.localeCompare(right.work_type_id);
+    }
+    return left.id.localeCompare(right.id);
+  });
+}
+
+function failedWorkDedupKey(item: FactoryWorkItem): string {
+  return `${item.work_type_id}|${item.display_name ?? item.id}`;
+}
+
 function countFailedByWorkType(
-  values: Record<string, FactoryWorkItem>,
+  values: FactoryWorkItem[],
 ): Record<string, number> | undefined {
   const counts: Record<string, number> = {};
-  for (const item of Object.values(values)) {
+  for (const item of values) {
     if (isSystemTimeWorkItem(item)) {
       continue;
     }
@@ -169,10 +215,10 @@ function countFailedByWorkType(
 }
 
 function countFailedWorkItems(
-  values: Record<string, FactoryWorkItem>,
+  values: FactoryWorkItem[],
 ): number {
   let count = 0;
-  for (const item of Object.values(values)) {
+  for (const item of values) {
     if (isSystemTimeWorkItem(item)) {
       continue;
     }

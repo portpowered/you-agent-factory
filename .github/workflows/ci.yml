@@ -35,12 +35,10 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dashboard dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
+        run: make ui-deps
 
       - name: Run dashboard typecheck
-        working-directory: ui
-        run: bun run tsc
+        run: make typecheck
 
   verify-build-contracts:
     name: Build, Lint, and API
@@ -67,8 +65,7 @@ jobs:
           node-version: lts/*
 
       - name: Install dashboard dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
+        run: make ui-deps
 
       - name: Build embedded dashboard assets
         run: make ui-build
@@ -102,15 +99,22 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dashboard dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
+        run: make ui-deps
 
       - name: Install Playwright browser for dashboard integration tests
-        working-directory: ui
-        run: bunx playwright install chromium
+        run: make ui-install-playwright
 
       - name: Run repository website tests
         run: make ui-test
 
-      - name: Run repository backend tests
-        run: make test
+      - name: Run repository website coverage lane
+        run: make ui-test-coverage
+
+      - name: Run replay coverage metadata checks
+        run: make ui-replay-coverage-check
+
+      - name: Run repository backend coverage lane
+        run: make test-coverage-go
+
+      - name: Run repository backend functional tests
+        run: make test-functional

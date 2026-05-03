@@ -16,9 +16,9 @@ export const Default = {
 
     await expect(canvas.getByRole("button", { name: "Primary action" })).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Disabled action" })).toBeDisabled();
-    await expect(canvas.getByRole("textbox", { name: "Showcase request name" })).toBeVisible();
-    await expect(canvas.getByRole("textbox", { name: "Showcase request text" })).toBeVisible();
-    await expect(canvas.getByRole("combobox", { name: "Showcase work type" })).toBeVisible();
+    await expect(canvas.getByRole("textbox", { name: "Request name" })).toBeVisible();
+    await expect(canvas.getByRole("textbox", { name: "Request text" })).toBeVisible();
+    await expect(canvas.getByRole("combobox", { name: "Work type" })).toBeVisible();
     await expect(canvas.getByRole("img", { name: "Primitive chart showcase" })).toBeVisible();
     await expect(
       canvas.getByRole("table", { name: "Primitive table foundation for trace and detail surfaces." }),

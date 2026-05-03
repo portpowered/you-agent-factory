@@ -11,6 +11,7 @@ import type {
   RunRequestPayload,
 } from "../../api/events/index";
 import { FACTORY_EVENT_TYPES } from "../../api/events";
+import type { WorldState } from "../timeline/state/factoryTimelineStore";
 import {
   buildWorkChartModel,
   recordThroughputSample,
@@ -57,7 +58,7 @@ export function useWorkOutcomeChart({
 }: {
   selectedTimelineTick: number;
   timelineEvents: FactoryEvent[];
-  worldViewCache: Record<number, { dashboard: DashboardSnapshot } | unknown>;
+  worldViewCache: Record<number, WorldState | DashboardSnapshot | unknown>;
 }) {
   const workOutcomeSamples = useMemo(
     () => {
@@ -138,7 +139,7 @@ function compareFactoryEvents(left: FactoryEvent, right: FactoryEvent): number {
 }
 
 function buildWorkOutcomeTimelineSamplesFromCachedSnapshots(
-  worldViewCache: Record<number, { dashboard: DashboardSnapshot } | unknown>,
+  worldViewCache: Record<number, WorldState | DashboardSnapshot | unknown>,
   selectedTick: number,
 ): ThroughputSample[] {
   const ticks = Object.keys(worldViewCache)
@@ -147,8 +148,7 @@ function buildWorkOutcomeTimelineSamplesFromCachedSnapshots(
     .sort((left, right) => left - right);
 
   return ticks.reduce<ThroughputSample[]>((samples, tick, index) => {
-    const snapshot = (worldViewCache[tick] as { dashboard?: DashboardSnapshot } | undefined)
-      ?.dashboard;
+    const snapshot = worldViewCache[tick] as DashboardSnapshot | undefined;
     if (!snapshot) {
       return samples;
     }
@@ -415,4 +415,5 @@ function firstMatchingInitialPlaceID(
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.length > 0))].sort();
 }
+
 

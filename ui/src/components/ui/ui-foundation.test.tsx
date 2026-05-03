@@ -20,9 +20,9 @@ describe("UIFoundationShowcase", () => {
     expect(screen.getByRole("button", { name: "Disabled action" }).hasAttribute("disabled")).toBe(
       true,
     );
-    expect(screen.getByRole("textbox", { name: "Showcase request name" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Showcase request text" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Showcase work type" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Request name" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Request text" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Work type" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Primitive chart showcase" })).toBeTruthy();
     expect(
       screen.getByRole("table", {

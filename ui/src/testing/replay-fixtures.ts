@@ -8,7 +8,7 @@ import weirdNumberSummaryReplayFixtureText from "../../integration/fixtures/weir
 import type { FactoryEvent } from "../api/events";
 import {
   buildFactoryTimelineSnapshot,
-  type FactoryTimelineSnapshot,
+  type WorldState,
 } from "../features/timeline/state/factoryTimelineStore";
 import type { ReplayFixtureID } from "./replay-fixture-catalog";
 
@@ -45,7 +45,7 @@ export function loadReplayFixtureEvents(fixtureID: ReplayFixtureID): FactoryEven
 export function buildReplayFixtureTimelineSnapshot(
   fixtureID: ReplayFixtureID,
   selectedTick?: number,
-): FactoryTimelineSnapshot {
+): WorldState {
   const events = loadReplayFixtureEvents(fixtureID);
   const resolvedTick =
     selectedTick ?? events.reduce((latestTick, event) => Math.max(latestTick, event.context.tick), 0);

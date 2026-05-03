@@ -5,8 +5,8 @@ import { buildFactoryTimelineSnapshot as buildProjectedTimelineSnapshot } from "
 export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 import { reconstructWorldState } from "./timeline/replayWorldState";
 import { orderedEvents } from "./timeline/shared";
-export type { FactoryTimelineSnapshot } from "./timeline/snapshotTypes";
-import type { FactoryTimelineSnapshot } from "./timeline/snapshotTypes";
+export type { WorldState } from "./timeline/types";
+import type { WorldState } from "./timeline/types";
 import {
   appendTimelineEvents,
   emptyTimelineState,
@@ -21,7 +21,7 @@ export type { FactoryTimelineMode } from "./timeline/storeState";
 export function buildFactoryTimelineSnapshot(
   events: FactoryEvent[],
   selectedTick: number,
-): FactoryTimelineSnapshot {
+): WorldState {
   return buildProjectedTimelineSnapshot(events, selectedTick, reconstructWorldState);
 }
 

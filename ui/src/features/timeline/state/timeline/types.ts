@@ -1,4 +1,6 @@
 import type {
+  DashboardSnapshot,
+  DashboardRuntime,
   DashboardFailedWorkDetail,
   DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
@@ -7,6 +9,7 @@ import type {
   DashboardTraceToken,
   DashboardWorkDiagnostics,
   DashboardWorkItemRef,
+  DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
 import type {
   FactoryPlace,
@@ -128,10 +131,9 @@ export interface ProjectedInitialStructure {
   places?: FactoryPlace[];
 }
 
-export interface WorldState {
+export interface TimelineWorldViewBase {
   activeDispatches: Record<string, WorldDispatch>;
   completedDispatches: WorldCompletion[];
-  factoryState: string;
   failedWorkDetailsByWorkID: Record<string, DashboardFailedWorkDetail>;
   failedWorkItemsByID: Record<string, FactoryWorkItem>;
   inferenceAttemptsByDispatchID: Record<
@@ -147,11 +149,38 @@ export interface WorldState {
     Record<string, WorldScriptResponse>
   >;
   terminalWorkByID: Record<string, FactoryTerminalWork>;
-  tick: number;
-  topology: ProjectedInitialStructure;
   tracesByID: Record<string, DashboardTrace>;
+  tracesByWorkID: Record<string, DashboardTrace>;
   workItemsByID: Record<string, FactoryWorkItem>;
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;
   workRequestsByID: Record<string, TimelineWorkRequestPayload>;
+}
+
+export interface ReplayWorldState extends TimelineWorldViewBase {
+  factory_state: string;
+  runtime: DashboardRuntime;
+  tick_count: number;
+  topology: ProjectedInitialStructure;
+  uptime_seconds: number;
+}
+
+export interface WorldState extends DashboardSnapshot {
+  relationsByWorkID: Record<string, FactoryRelation[]>;
+  tracesByWorkID: Record<string, DashboardTrace>;
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;
+  workRequestsByID: Record<string, TimelineWorkRequestPayload>;
+}
+
+export function emptyWorldRuntime(): DashboardRuntime {
+  return {
+    in_flight_dispatch_count: 0,
+    session: {
+      completed_count: 0,
+      dispatched_count: 0,
+      failed_count: 0,
+      has_data: false,
+    },
+  };
 }
 
 

@@ -26,7 +26,7 @@ export function useDashboardSnapshot({
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
   const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
   const snapshot = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick]?.dashboard,
+    (state) => state.worldViewCache[state.selectedTick],
   );
   const streamState = useDashboardStreamStore((state) => state.streamState);
   const resetStreamState = useDashboardStreamStore((state) => state.resetStreamState);

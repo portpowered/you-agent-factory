@@ -4,7 +4,10 @@ import type { DashboardSnapshot } from "../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../api/events";
 import { createReplayHarness } from "../../testing/replay-harness";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../timeline/state/factoryTimelineDebug";
-import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
+import {
+  type WorldState,
+  useFactoryTimelineStore,
+} from "../timeline/state/factoryTimelineStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
@@ -39,6 +42,16 @@ const REFRESHED_SNAPSHOT: DashboardSnapshot = {
   tick_count: 1,
   uptime_seconds: 1,
 };
+
+function timelineSnapshot(snapshot: DashboardSnapshot): WorldState {
+  return {
+    ...snapshot,
+    relationsByWorkID: {},
+    tracesByWorkID: {},
+    workstationRequestsByDispatchID: {},
+    workRequestsByID: {},
+  };
+}
 
 const CANONICAL_SELECTED_TICK_EVENTS = [
   {
@@ -232,13 +245,7 @@ describe("useDashboardSnapshot", () => {
       receivedEventIDs: [],
       selectedTick: SEEDED_SNAPSHOT.tick_count,
       worldViewCache: {
-        [SEEDED_SNAPSHOT.tick_count]: {
-          dashboard: SEEDED_SNAPSHOT,
-          relationsByWorkID: {},
-          tracesByWorkID: {},
-          workstationRequestsByDispatchID: {},
-          workRequestsByID: {},
-        },
+        [SEEDED_SNAPSHOT.tick_count]: timelineSnapshot(SEEDED_SNAPSHOT),
       },
     });
   });
@@ -325,7 +332,7 @@ describe("useDashboardSnapshot", () => {
       },
       workstation_name: "Review",
     });
-    expect(snapshot?.dashboard.runtime.session.provider_sessions).toMatchObject([
+    expect(snapshot?.runtime.session.provider_sessions).toMatchObject([
       {
         dispatch_id: "dispatch-story-1",
         outcome: "ACCEPTED",
@@ -437,4 +444,5 @@ describe("useDashboardSnapshot", () => {
     expect(window.__agentFactoryTimelineDebug__?.summarize().selectedTick).toBe(4);
   });
 });
+
 

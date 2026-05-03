@@ -1,0 +1,103 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for integration/fixtures/event-stream-replay.jsonl</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">integration/fixtures</a> event-stream-replay.jsonl</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line low'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">{"context":{"eventTime":"2026-04-23T21:34:04.9548842-07:00","sequence":0,"tick":0},"id":"factory-event/run-started","payload":{"factory":{"resources":[{"capacity":10,"name":"executor-slot"}],"workTypes":[{"name":"__system_time","states":[{"name":"pending","type":"PROCESSING"}]},{"name":"cron-triggers","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"idea","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"plan","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"in-review","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"thoughts","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"workers":[{"executorProvider":"SCRIPT_WRAP","modelProvider":"CODEX","name":"processor","type":"MODEL_WORKER"},{"name":"workspace-setup","type":"SCRIPT_WORKER"}],"workstations":[{"id":"__system_time:expire","inputs":[{"state":"pending","workType":"__system_time"}],"name":"__system_time:expire","outputs":[],"worker":""},{"id":"cleaner","inputs":[{"state":"pending","workType":"__system_time"},{"state":"available","workType":"executor-slot"}],"behavior":"CRON","name":"cleaner","outputs":[{"state":"complete","workType":"cron-triggers"},{"state":"available","workType":"executor-slot"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"executor-loop-breaker","inputs":[{"state":"init","workType":"task"}],"name":"executor-loop-breaker","onFailure":{"state":"failed","workType":"task"},"onRejection":{"state":"failed","workType":"task"},"outputs":[{"state":"failed","workType":"task"}],"type":"LOGICAL_MOVE","worker":""},{"id":"ideafy","inputs":[{"state":"available","workType":"executor-slot"},{"state":"init","workType":"thoughts"}],"name":"ideafy","onFailure":{"state":"failed","workType":"thoughts"},"onRejection":{"state":"failed","workType":"thoughts"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"complete","workType":"thoughts"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"plan","inputs":[{"state":"available","workType":"executor-slot"},{"state":"init","workType":"idea"}],"name":"plan","onFailure":{"state":"failed","workType":"idea"},"onRejection":{"state":"failed","workType":"idea"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"complete","workType":"idea"},{"state":"init","workType":"plan"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"process","inputs":[{"state":"available","workType":"executor-slot"},{"state":"init","workType":"task"}],"behavior":"REPEATER","name":"process","onFailure":{"state":"failed","workType":"task"},"onContinue":{"state":"init","workType":"task"},"onRejection":{"state":"init","workType":"task"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"in-review","workType":"task"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"review","inputs":[{"state":"available","workType":"executor-slot"},{"state":"in-review","workType":"task"}],"name":"review","onFailure":{"state":"failed","workType":"task"},"onRejection":{"state":"init","workType":"task"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"complete","workType":"task"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"review-loop-breaker","inputs":[{"state":"in-review","workType":"task"}],"name":"review-loop-breaker","onFailure":{"state":"failed","workType":"task"},"onRejection":{"state":"failed","workType":"task"},"outputs":[{"state":"failed","workType":"task"}],"type":"LOGICAL_MOVE","worker":""},{"id":"setup-workspace","inputs":[{"state":"init","workType":"plan"}],"name":"setup-workspace","onFailure":{"state":"failed","workType":"plan"},"onRejection":{"state":"failed","workType":"plan"},"outputs":[{"state":"complete","workType":"plan"},{"state":"init","workType":"task"}],"type":"MODEL_WORKSTATION","worker":"workspace-setup"}]},"recordedAt":"2026-04-23T21:34:04.9548842-07:00"},"schemaVersion":"agent-factory.event.v1","type":"RUN_REQUEST"}
+{"context":{"eventTime":"2026-04-23T21:34:04.9553959-07:00","sequence":1,"tick":0},"id":"factory-event/initial-structure/0","payload":{"factory":{"resources":[{"capacity":10,"name":"executor-slot"}],"workTypes":[{"name":"__system_time","states":[{"name":"pending","type":"PROCESSING"}]},{"name":"cron-triggers","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"idea","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"plan","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"in-review","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},{"name":"thoughts","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"workers":[{"executorProvider":"SCRIPT_WRAP","modelProvider":"CODEX","name":"processor","type":"MODEL_WORKER"},{"name":"workspace-setup","type":"SCRIPT_WORKER"}],"workstations":[{"id":"__system_time:expire","inputs":[{"state":"pending","workType":"__system_time"}],"name":"__system_time:expire","outputs":[],"worker":""},{"id":"cleaner","inputs":[{"state":"pending","workType":"__system_time"},{"state":"available","workType":"executor-slot"}],"behavior":"CRON","name":"cleaner","outputs":[{"state":"complete","workType":"cron-triggers"},{"state":"available","workType":"executor-slot"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"executor-loop-breaker","inputs":[{"state":"init","workType":"task"}],"name":"executor-loop-breaker","onFailure":{"state":"failed","workType":"task"},"onRejection":{"state":"failed","workType":"task"},"outputs":[{"state":"failed","workType":"task"}],"type":"LOGICAL_MOVE","worker":""},{"id":"ideafy","inputs":[{"state":"available","workType":"executor-slot"},{"state":"init","workType":"thoughts"}],"name":"ideafy","onFailure":{"state":"failed","workType":"thoughts"},"onRejection":{"state":"failed","workType":"thoughts"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"complete","workType":"thoughts"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"plan","inputs":[{"state":"available","workType":"executor-slot"},{"state":"init","workType":"idea"}],"name":"plan","onFailure":{"state":"failed","workType":"idea"},"onRejection":{"state":"failed","workType":"idea"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"complete","workType":"idea"},{"state":"init","workType":"plan"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"process","inputs":[{"state":"available","workType":"executor-slot"},{"state":"init","workType":"task"}],"behavior":"REPEATER","name":"process","onFailure":{"state":"failed","workType":"task"},"onContinue":{"state":"init","workType":"task"},"onRejection":{"state":"init","workType":"task"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"in-review","workType":"task"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"review","inputs":[{"state":"available","workType":"executor-slot"},{"state":"in-review","workType":"task"}],"name":"review","onFailure":{"state":"failed","workType":"task"},"onRejection":{"state":"init","workType":"task"},"outputs":[{"state":"available","workType":"executor-slot"},{"state":"complete","workType":"task"}],"type":"MODEL_WORKSTATION","worker":"processor"},{"id":"review-loop-breaker","inputs":[{"state":"in-review","workType":"task"}],"name":"review-loop-breaker","onFailure":{"state":"failed","workType":"task"},"onRejection":{"state":"failed","workType":"task"},"outputs":[{"state":"failed","workType":"task"}],"type":"LOGICAL_MOVE","worker":""},{"id":"setup-workspace","inputs":[{"state":"init","workType":"plan"}],"name":"setup-workspace","onFailure":{"state":"failed","workType":"plan"},"onRejection":{"state":"failed","workType":"plan"},"outputs":[{"state":"complete","workType":"plan"},{"state":"init","workType":"task"}],"type":"MODEL_WORKSTATION","worker":"workspace-setup"}]}},"schemaVersion":"agent-factory.event.v1","type":"INITIAL_STRUCTURE_REQUEST"}
+{"context":{"eventTime":"2026-04-23T21:34:04.9559279-07:00","sequence":2,"tick":0},"id":"factory-event/factory-state-change/0/RUNNING","payload":{"previousState":"IDLE","reason":"run started","state":"RUNNING"},"schemaVersion":"agent-factory.event.v1","type":"FACTORY_STATE_RESPONSE"}
+{"context":{"eventTime":"2026-04-23T22:22:12.4387409-07:00","requestId":"request-df75c2d381eaa8399faf78981e0b716a","sequence":3,"source":"external-submit","tick":2,"traceIds":["trace-d26034c44bd9a83bbdada0682c9429ed"],"workIds":["batch-request-df75c2d381eaa8399faf78981e0b716a-work-1"]},"id":"factory-event/work-request/request-df75c2d381eaa8399faf78981e0b716a","payload":{"source":"external-submit","type":"FACTORY_REQUEST_BATCH","works":[{"current_chaining_trace_id":"trace-d26034c44bd9a83bbdada0682c9429ed","name":"work-1","tags":{"_work_name":"work-1","_work_type":"idea"},"trace_id":"trace-d26034c44bd9a83bbdada0682c9429ed","work_id":"batch-request-df75c2d381eaa8399faf78981e0b716a-work-1","work_type_name":"idea"}]},"schemaVersion":"agent-factory.event.v1","type":"WORK_REQUEST"}
+{"context":{"dispatchId":"416bc225-87f8-4abd-b127-86178b023759","eventTime":"2026-04-23T22:22:12.4402914-07:00","requestId":"request-df75c2d381eaa8399faf78981e0b716a","sequence":4,"tick":2,"traceIds":["trace-d26034c44bd9a83bbdada0682c9429ed"],"workIds":["batch-request-df75c2d381eaa8399faf78981e0b716a-work-1"]},"id":"factory-event/dispatch-created/416bc225-87f8-4abd-b127-86178b023759","payload":{"currentChainingTraceId":"trace-d26034c44bd9a83bbdada0682c9429ed","inputs":[{"workId":"batch-request-df75c2d381eaa8399faf78981e0b716a-work-1"}],"metadata":{"replayKey":"plan/trace-d26034c44bd9a83bbdada0682c9429ed/batch-request-df75c2d381eaa8399faf78981e0b716a-work-1"},"previousChainingTraceIds":["trace-d26034c44bd9a83bbdada0682c9429ed"],"resources":[{"capacity":10,"name":"executor-slot"}],"transitionId":"plan"},"schemaVersion":"agent-factory.event.v1","type":"DISPATCH_REQUEST"}
+{"context":{"dispatchId":"416bc225-87f8-4abd-b127-86178b023759","eventTime":"2026-04-23T22:22:12.4428591-07:00","requestId":"request-df75c2d381eaa8399faf78981e0b716a","sequence":5,"tick":2,"traceIds":["trace-d26034c44bd9a83bbdada0682c9429ed"],"workIds":["batch-request-df75c2d381eaa8399faf78981e0b716a-work-1"]},"id":"factory-event/inference-request/416bc225-87f8-4abd-b127-86178b023759/inference-request/1","payload":{"attempt":1,"inferenceRequestId":"416bc225-87f8-4abd-b127-86178b023759/inference-request/1","prompt":"You are processing work item batch-request-df75c2d381eaa8399faf78981e0b716a-work-1 of type idea.\nYour job is to generate product requirement docs/plans such that customers can implement the software.\n\nNote that you are working in autonomous mode, do not ask any questions to the customer.\n\n# steps\n## step 1 \nYour work for prds in the final ralph file MUST be compliant to the standards outlined in \\docs\\standards\\documentation\\product-requirement-doc-standards.md. \n\nread the file\n\n## step 2\nread the /prd and /ralph skills. \n\nPlease convert the file into the corresponding C:\\Users\\user\\work\\factory\\portos-backend\\tasks/todo/work-1.json, as well as corresponding C:\\Users\\user\\work\\factory\\portos-backend\\tasks/todo/work-1.md for the correpsonding prd.\n\nPlease ensure that the prd.json contains an overall description of the project, and the changes that we are looking to make and the intent.\n\n## step 3\nWhen you are done, respond with exactly: \"\u003cCOMPLETE\u003e\".\n\n# Customer ask \nThe customer ask is as follows: \n\n\"the current submit work card is fine in the way it looks but the text formatting and input are too literal, \\nmake it less literal and more customer facing. \\n\\n- remove queue one customer -authored work,\\n- remove the \\\"selected work type and request are ready for the dashboard submit flow\\\"\\n- add a field to the request that sets the name of the request, right now we can only set the request payload\\n- the button formatting is strange, we should use the formatting of all the other components, use one generic button component and rewrite to use that instead. \"","workingDirectory":"","worktree":""},"schemaVersion":"agent-factory.event.v1","type":"INFERENCE_REQUEST"}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-05-03T09:46:34.125Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

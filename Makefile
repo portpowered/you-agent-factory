@@ -40,8 +40,9 @@ ifdef IS_WORKTREE
 endif
 
 GO_TEST_TIMEOUT ?= 300s
+GO_COVERAGE_MIN ?= 68.9
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-lint ui-build ui-test ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -97,6 +98,9 @@ test-functional:
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-coverage-go:
+	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_TEST_TIMEOUT)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
@@ -158,6 +162,15 @@ ui-build:
 
 ui-test:
 	cd ui && $(BUN) run test
+
+ui-test-coverage:
+	cd ui && $(BUN) run test:coverage
+
+ui-replay-coverage-check:
+	cd ui && $(BUN) run replay:coverage:check
+
+ui-install-playwright:
+	cd ui && $(BUN) x playwright install chromium
 
 ui-storybook:
 	cd ui && $(BUN) run build-storybook

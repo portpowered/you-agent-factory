@@ -32,7 +32,7 @@ describe("replay fixture helpers", () => {
     expect(Object.keys(snapshot.tracesByWorkID).sort()).toEqual(
       expect.arrayContaining(["work-task-1", "work-task-2"]),
     );
-    expect(snapshot.dashboard.runtime.workstation_requests_by_dispatch_id).toHaveProperty(
+    expect(snapshot.runtime.workstation_requests_by_dispatch_id).toHaveProperty(
       "17c38f40-de4e-4d5f-bd44-649a2bf4a284",
     );
   });
@@ -44,27 +44,28 @@ describe("replay fixture helpers", () => {
     );
 
     expect(
-      snapshot.dashboard.topology.workstation_nodes_by_id.cleaner?.workstation_kind,
+      snapshot.topology.workstation_nodes_by_id.cleaner?.workstation_kind,
     ).toBe("CRON");
     expect(
-      snapshot.dashboard.topology.workstation_nodes_by_id.process?.workstation_kind,
+      snapshot.topology.workstation_nodes_by_id.process?.workstation_kind,
     ).toBe("REPEATER");
   });
 
   it("replays the weird-number-summary regression through the canonical timeline seam", () => {
     const snapshot = buildReplayFixtureTimelineSnapshot("weirdNumberSummary", 4);
 
-    expect(snapshot.dashboard.runtime.session.dispatched_count).toBe(1);
-    expect(snapshot.dashboard.runtime.session.completed_count).toBe(0);
-    expect(snapshot.dashboard.runtime.session.failed_count).toBe(3);
-    expect(snapshot.dashboard.runtime.session.failed_by_work_type).toEqual({
+    expect(snapshot.runtime.session.dispatched_count).toBe(1);
+    expect(snapshot.runtime.session.completed_count).toBe(0);
+    expect(snapshot.runtime.session.failed_count).toBe(3);
+    expect(snapshot.runtime.session.failed_by_work_type).toEqual({
       story: 3,
     });
-    expect(snapshot.dashboard.runtime.session.failed_work_labels).toEqual([
+    expect(snapshot.runtime.session.failed_work_labels).toEqual([
       "Blocked Story",
       "Rejected Story",
       "Reworked Story",
     ]);
   });
 });
+
 

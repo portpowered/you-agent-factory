@@ -60,7 +60,7 @@ import { useExportDialogStore } from "./features/export/state/exportDialogStore"
 import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
-import type { FactoryTimelineSnapshot } from "./features/timeline/state/factoryTimelineStore";
+import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
 import { expect, vi, describe, beforeEach, afterEach, it } from "vitest";
 
 class MockEventSource {
@@ -1085,6 +1085,20 @@ const currentNamedFactoryExportResponse = {
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
 
+function timelineSnapshot(
+  snapshot: DashboardSnapshot,
+  tracesByWorkID: Record<string, DashboardTrace> = {},
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> = {},
+): WorldState {
+  return {
+    ...snapshot,
+    relationsByWorkID: {},
+    tracesByWorkID,
+    workstationRequestsByDispatchID,
+    workRequestsByID: {},
+  };
+}
+
 function seedTimelineSnapshot(
   snapshot: DashboardSnapshot,
   tracesByWorkID: Record<string, DashboardTrace> = {},
@@ -1097,13 +1111,11 @@ function seedTimelineSnapshot(
     receivedEventIDs: [],
     selectedTick: snapshot.tick_count,
     worldViewCache: {
-      [snapshot.tick_count]: {
-        dashboard: snapshot,
-        relationsByWorkID: {},
+      [snapshot.tick_count]: timelineSnapshot(
+        snapshot,
         tracesByWorkID,
         workstationRequestsByDispatchID,
-        workRequestsByID: {},
-      },
+      ),
     },
   });
 }
@@ -1114,13 +1126,7 @@ function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
       (snapshot) =>
         [
           snapshot.tick_count,
-          {
-            dashboard: snapshot,
-            relationsByWorkID: {},
-            tracesByWorkID: {},
-            workstationRequestsByDispatchID: {},
-            workRequestsByID: {},
-          } satisfies FactoryTimelineSnapshot,
+          timelineSnapshot(snapshot) satisfies WorldState,
         ] as const,
     ),
   );
@@ -2373,7 +2379,7 @@ describe("App", () => {
       }),
     ).toBeTruthy();
     expect(
-      useFactoryTimelineStore.getState().worldViewCache[11]?.dashboard.runtime
+      useFactoryTimelineStore.getState().worldViewCache[11]?.runtime
         .workstation_requests_by_dispatch_id,
     ).toMatchObject(runtimeDetailsBackendWorkstationRequestsByDispatchID);
 
@@ -2461,7 +2467,7 @@ describe("App", () => {
     expect(slider.value).toBe("14");
     expect(screen.getByText("Tick 14 of 14")).toBeTruthy();
     expect(
-      useFactoryTimelineStore.getState().worldViewCache[14]?.dashboard.runtime
+      useFactoryTimelineStore.getState().worldViewCache[14]?.runtime
         .workstation_requests_by_dispatch_id,
     ).toMatchObject(scriptDashboardIntegrationBackendWorkstationRequestsByDispatchID);
 
@@ -3989,7 +3995,7 @@ describe("App", () => {
 
     const snapshot = useFactoryTimelineStore.getState().worldViewCache[8];
     expect(
-      snapshot?.dashboard.runtime.workstation_requests_by_dispatch_id?.["dispatch-implement"]?.request?.input_work_items,
+      snapshot?.runtime.workstation_requests_by_dispatch_id?.["dispatch-implement"]?.request?.input_work_items,
     ).toEqual([
       {
         current_chaining_trace_id: "chain-b",
@@ -4007,7 +4013,7 @@ describe("App", () => {
       },
     ]);
     expect(
-      snapshot?.dashboard.runtime.workstation_requests_by_dispatch_id?.["dispatch-implement"]?.response?.output_work_items,
+      snapshot?.runtime.workstation_requests_by_dispatch_id?.["dispatch-implement"]?.response?.output_work_items,
     ).toEqual([
       {
         current_chaining_trace_id: "chain-a",
@@ -4105,4 +4111,5 @@ describe("App", () => {
     });
   });
 });
+
 

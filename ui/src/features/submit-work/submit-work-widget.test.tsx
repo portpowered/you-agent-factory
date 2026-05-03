@@ -20,7 +20,7 @@ describe("SubmitWorkWidget", () => {
 
     const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request text" });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
     const submitButton = screen.getByRole<HTMLButtonElement>("button", { name: "Submit work" });
 
     expect(submitButton.disabled).toBe(true);
@@ -82,7 +82,7 @@ describe("SubmitWorkWidget", () => {
 
     const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request text" });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
 
     fireEvent.change(workType, { target: { value: "story" } });
     fireEvent.change(requestName, { target: { value: "Driver incident review" } });
@@ -142,7 +142,7 @@ describe("SubmitWorkWidget", () => {
     );
 
     const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request text" });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
 
     fireEvent.change(workType, { target: { value: "story" } });
     fireEvent.change(requestText, { target: { value: "Review the queue and summarize the failure." } });
@@ -172,7 +172,7 @@ describe("SubmitWorkWidget", () => {
 
     const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request text" });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
 
     fireEvent.change(workType, { target: { value: "story" } });
     fireEvent.change(requestName, { target: { value: "Retry dashboard request" } });
@@ -190,7 +190,7 @@ describe("SubmitWorkWidget", () => {
 
     const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request text" });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
     const submitButton = screen.getByRole<HTMLButtonElement>("button", { name: "Submit work" });
 
     expect(workType.disabled).toBe(true);

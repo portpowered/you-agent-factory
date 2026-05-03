@@ -27,7 +27,7 @@ const SESSION_METADATA_CLASS = cx(
 
 export function DashboardHeader() {
   const snapshot = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick]?.dashboard,
+    (state) => state.worldViewCache[state.selectedTick],
   );
   const streamState = useDashboardStreamStore((state) => state.streamState);
   const isExportDialogOpen = useExportDialogStore((state) => state.isExportDialogOpen);

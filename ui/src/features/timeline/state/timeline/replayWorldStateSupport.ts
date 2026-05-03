@@ -10,10 +10,10 @@ import type {
 } from "../../../../api/events";
 import type { LegacyDispatchResponsePayloadCompat } from "./replayWorldStateTypes";
 import type {
+  ReplayWorldState,
   WorldCompletion,
   WorldScriptRequest,
   WorldScriptResponse,
-  WorldState,
 } from "./types";
 
 interface CompletedAttemptSyncHelpers {
@@ -22,7 +22,7 @@ interface CompletedAttemptSyncHelpers {
 }
 
 export function inferenceAttemptsForDispatch(
-  state: WorldState,
+  state: ReplayWorldState,
   dispatchID: string,
 ): Record<string, DashboardInferenceAttempt> {
   const existing = state.inferenceAttemptsByDispatchID[dispatchID];
@@ -35,7 +35,7 @@ export function inferenceAttemptsForDispatch(
 }
 
 export function resolveDispatchTransitionID(
-  state: WorldState,
+  state: ReplayWorldState,
   dispatchID: string,
 ): string | undefined {
   const activeTransitionID = state.activeDispatches[dispatchID]?.transitionID;
@@ -52,7 +52,7 @@ export function resolveDispatchTransitionID(
 }
 
 export function syncCompletedDispatchAttempt(
-  state: WorldState,
+  state: ReplayWorldState,
   dispatchID: string,
   attempt: DashboardInferenceAttempt,
   helpers: CompletedAttemptSyncHelpers,
@@ -147,7 +147,7 @@ export function legacyInferencePayloadTransitionID(
 }
 
 export function scriptRequestsForDispatch(
-  state: WorldState,
+  state: ReplayWorldState,
   dispatchID: string,
 ): Record<string, WorldScriptRequest> {
   const existing = state.scriptRequestsByDispatchID[dispatchID];
@@ -160,7 +160,7 @@ export function scriptRequestsForDispatch(
 }
 
 export function scriptResponsesForDispatch(
-  state: WorldState,
+  state: ReplayWorldState,
   dispatchID: string,
 ): Record<string, WorldScriptResponse> {
   const existing = state.scriptResponsesByDispatchID[dispatchID];
@@ -179,7 +179,7 @@ export function legacyDispatchResponsePayload(
 }
 
 export function applyScriptRequest(
-  state: WorldState,
+  state: ReplayWorldState,
   event: {
     payload: {
       dispatchId?: string;
@@ -209,7 +209,7 @@ export function applyScriptRequest(
 }
 
 export function applyScriptResponse(
-  state: WorldState,
+  state: ReplayWorldState,
   event: {
     payload: {
       dispatchId?: string;

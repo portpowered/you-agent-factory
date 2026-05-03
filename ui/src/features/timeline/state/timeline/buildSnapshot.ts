@@ -1,13 +1,12 @@
 import type { FactoryEvent } from "../../../../api/events";
 import { projectSnapshot } from "./projectSnapshot";
-import type { FactoryTimelineSnapshot } from "./snapshotTypes";
-import type { WorldState } from "./types";
+import type { ReplayWorldState, WorldState } from "./types";
 
 export function buildFactoryTimelineSnapshot(
   events: FactoryEvent[],
   selectedTick: number,
-  reconstructWorldState: (events: FactoryEvent[], selectedTick: number) => WorldState,
-): FactoryTimelineSnapshot {
+  reconstructWorldState: (events: FactoryEvent[], selectedTick: number) => ReplayWorldState,
+): WorldState {
   return projectSnapshot(reconstructWorldState(events, selectedTick));
 }
 

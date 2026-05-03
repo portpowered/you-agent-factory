@@ -10,7 +10,7 @@ import type {
   WorkstationIO,
 } from "../../../../api/events";
 import { dashboardWorkstationName, isSystemTimeWorkType, isSystemTimeWorkstation, SYSTEM_TIME_PENDING_PLACE_ID } from "./systemTime";
-import type { ProjectedInitialStructure, WorldState } from "./types";
+import type { ProjectedInitialStructure, ReplayWorldState } from "./types";
 
 function factoryWorkTypes(factory: FactoryDefinition): FactoryWorkType[] {
   return factory.workTypes ?? [];
@@ -147,8 +147,13 @@ export function normalizeFactoryPayload(
 }
 
 export function seedResourceOccupancy(
-  state: WorldState,
-  addToken: (state: WorldState, placeID: string | undefined, tokenID: string, workItemID?: string) => void,
+  state: ReplayWorldState,
+  addToken: (
+    state: ReplayWorldState,
+    placeID: string | undefined,
+    tokenID: string,
+    workItemID?: string,
+  ) => void,
   resourceTokenID: (resourceID: string, index: number) => string,
 ): void {
   for (const resource of state.topology.resources ?? []) {
@@ -202,7 +207,7 @@ export function topologyWorker(
 }
 
 export function factoryWorkToItem(
-  state: WorldState,
+  state: ReplayWorldState,
   work: FactoryWork | { workId: string },
   placeIDOverride?: string,
 ): FactoryWorkItem {
@@ -249,7 +254,7 @@ export function eventWorkTypeID(work: FactoryWork): string | undefined {
 }
 
 export function initialPlaceForWork(
-  state: WorldState,
+  state: ReplayWorldState,
   workTypeID: string,
 ): string | undefined {
   return state.topology.places?.find(

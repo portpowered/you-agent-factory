@@ -765,7 +765,7 @@ async function assertFactoryExportRoundTrip() {
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
-    await importDialog.getByRole("img", { name: `${exportName} preview image` }).waitFor({
+    await importDialog.getByRole("img", { name: `${exportName} preview` }).waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });

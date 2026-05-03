@@ -8,7 +8,7 @@ import type { FactoryRelation, FactoryResource, FactoryWorkItem } from "../../..
 import { uniqueSortedWorkRefs } from "./cloneTimelineSnapshot";
 import { uniqueSorted } from "./shared";
 import { dashboardPlaceID, dashboardWorkTypeID } from "./systemTime";
-import type { ResourceUnit, WorldCompletion, WorldState } from "./types";
+import type { ReplayWorldState, ResourceUnit, WorldCompletion } from "./types";
 import { workRef } from "./workItemRef";
 
 interface RelationKeyFields {
@@ -75,7 +75,7 @@ function emptyTrace(traceID: string): DashboardTrace {
   };
 }
 
-export function addTraceWork(state: WorldState, item: FactoryWorkItem): void {
+export function addTraceWork(state: ReplayWorldState, item: FactoryWorkItem): void {
   if (!item.trace_id) {
     return;
   }
@@ -86,7 +86,7 @@ export function addTraceWork(state: WorldState, item: FactoryWorkItem): void {
 }
 
 export function addTraceRequest(
-  state: WorldState,
+  state: ReplayWorldState,
   traceID: string | undefined,
   requestID: string,
 ): void {
@@ -99,7 +99,7 @@ export function addTraceRequest(
 }
 
 function addTraceRelation(
-  state: WorldState,
+  state: ReplayWorldState,
   traceID: string | undefined,
   relation: FactoryRelation,
 ): void {
@@ -111,7 +111,7 @@ function addTraceRelation(
   state.tracesByID[traceID] = trace;
 }
 
-export function addRelation(state: WorldState, relation: FactoryRelation): void {
+export function addRelation(state: ReplayWorldState, relation: FactoryRelation): void {
   const targetWorkID =
     relation.targetWorkId ??
     (relation as FactoryRelation & { target_work_id?: string }).target_work_id;
@@ -130,7 +130,7 @@ export function addRelation(state: WorldState, relation: FactoryRelation): void 
 }
 
 export function addTraceDispatch(
-  state: WorldState,
+  state: ReplayWorldState,
   traceID: string,
   completion: WorldCompletion,
   completionToTraceDispatch: (completion: WorldCompletion) => DashboardTraceDispatch,
@@ -149,7 +149,7 @@ export function addTraceDispatch(
 }
 
 export function addToken(
-  state: WorldState,
+  state: ReplayWorldState,
   placeID: string | undefined,
   tokenID: string,
   workItemID?: string,
@@ -172,7 +172,7 @@ export function addToken(
   state.occupancyByID[placeID] = occupancy;
 }
 
-export function removeWorkToken(state: WorldState, workID: string): void {
+export function removeWorkToken(state: ReplayWorldState, workID: string): void {
   const placeID = state.workItemsByID[workID]?.place_id;
   if (!placeID) {
     return;
@@ -188,7 +188,11 @@ export function removeWorkToken(state: WorldState, workID: string): void {
   }
 }
 
-function removeResourceToken(state: WorldState, placeID: string, tokenID: string): void {
+function removeResourceToken(
+  state: ReplayWorldState,
+  placeID: string,
+  tokenID: string,
+): void {
   const occupancy = state.occupancyByID[placeID];
   if (!occupancy) {
     return;
@@ -201,7 +205,7 @@ function removeResourceToken(state: WorldState, placeID: string, tokenID: string
 }
 
 function firstAvailableResourceTokenID(
-  state: WorldState,
+  state: ReplayWorldState,
   resourceAvailablePlaceID: (resourceID: string) => string,
   resourceID: string,
 ): string | undefined {
@@ -221,7 +225,7 @@ function resourceIDsFromEvent(resources: FactoryResource[] | undefined): string[
 }
 
 export function consumeResourceUnits(
-  state: WorldState,
+  state: ReplayWorldState,
   resources: FactoryResource[] | undefined,
 ): ResourceUnit[] {
   return resourceIDsFromEvent(resources).map((resourceID) => {
@@ -235,7 +239,7 @@ export function consumeResourceUnits(
 }
 
 export function releaseResourceUnits(
-  state: WorldState,
+  state: ReplayWorldState,
   consumed: ResourceUnit[],
   resources: FactoryResource[] | undefined,
 ): void {

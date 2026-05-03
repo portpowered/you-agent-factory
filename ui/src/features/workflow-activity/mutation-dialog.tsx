@@ -12,7 +12,7 @@ import { EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS } from "../../components/d
 const DIALOG_OVERLAY_CLASS =
   "z-50 flex items-center justify-center bg-af-canvas/78 p-4 backdrop-blur-sm";
 const DIALOG_PANEL_CLASS =
-  "w-full overflow-hidden rounded-[1.6rem] border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
+  "pointer-events-auto relative z-10 w-full overflow-hidden rounded-[1.6rem] border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
 const DIALOG_HEADER_CLASS = "flex items-start justify-between gap-4";
 const DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const DIALOG_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_BODY_TEXT_CLASS);
@@ -74,11 +74,11 @@ export function DashboardMutationDialog({
   const descriptionId = useId();
 
   return (
-    <div className={cx(DIALOG_OVERLAY_CLASS, "relative", overlayClassName)}>
+    <div className={cx(DIALOG_OVERLAY_CLASS, "pointer-events-none relative", overlayClassName)}>
       {canClose ? (
         <button
           aria-label={closeLabel}
-          className="absolute inset-0"
+          className="pointer-events-auto absolute inset-0"
           onClick={onClose}
           type="button"
         />

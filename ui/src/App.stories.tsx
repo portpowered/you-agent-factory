@@ -270,7 +270,7 @@ async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
   const submitWorkScope = within(submitWorkCard);
   const workTypeField = submitWorkScope.getByRole("combobox", { name: "Work type" });
   const requestNameField = submitWorkScope.getByRole("textbox", { name: "Request name" });
-  const requestField = submitWorkScope.getByRole("textbox", { name: "Request text" });
+  const requestField = submitWorkScope.getByRole("textbox", { name: "Request" });
 
   return {
     requestNameField,
@@ -667,7 +667,7 @@ export const DashboardImprovementsSmoke = {
       within(submitWorkCard).getByRole("textbox", { name: "Request name" }),
     ).toBeVisible();
     await expect(
-      within(submitWorkCard).getByRole("textbox", { name: "Request text" }),
+      within(submitWorkCard).getByRole("textbox", { name: "Request" }),
     ).toBeVisible();
     await expect(
       within(submitWorkCard).getByRole("button", { name: "Submit work" }),

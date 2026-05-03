@@ -1,6 +1,6 @@
 import type { DashboardSnapshot } from "../../../../api/dashboard";
 import type { FactoryEvent } from "../../../../api/events";
-import type { FactoryTimelineSnapshot } from "./snapshotTypes";
+import { emptyWorldRuntime, type WorldState } from "./types";
 
 export type FactoryTimelineMode = "current" | "fixed";
 
@@ -10,7 +10,7 @@ export interface FactoryTimelineState {
   mode: FactoryTimelineMode;
   receivedEventIDs: string[];
   selectedTick: number;
-  worldViewCache: Record<number, FactoryTimelineSnapshot>;
+  worldViewCache: Record<number, WorldState>;
   appendEvent: (event: FactoryEvent) => void;
   appendEvents: (events: FactoryEvent[]) => void;
   replaceEvents: (events: FactoryEvent[]) => void;
@@ -23,22 +23,14 @@ export interface TimelineStoreStateDeps {
   buildFactoryTimelineSnapshot: (
     events: FactoryEvent[],
     selectedTick: number,
-  ) => FactoryTimelineSnapshot;
+  ) => WorldState;
   orderedEvents: (events: FactoryEvent[]) => FactoryEvent[];
 }
 
 export function emptyDashboardSnapshot(): DashboardSnapshot {
   return {
     factory_state: "UNKNOWN",
-    runtime: {
-      in_flight_dispatch_count: 0,
-      session: {
-        completed_count: 0,
-        dispatched_count: 0,
-        failed_count: 0,
-        has_data: false,
-      },
-    },
+    runtime: emptyWorldRuntime(),
     tick_count: 0,
     topology: {
       edges: [],
@@ -47,6 +39,16 @@ export function emptyDashboardSnapshot(): DashboardSnapshot {
       workstation_nodes_by_id: {},
     },
     uptime_seconds: 0,
+  };
+}
+
+function emptyTimelineSnapshot(): WorldState {
+  return {
+    ...emptyDashboardSnapshot(),
+    relationsByWorkID: {},
+    tracesByWorkID: {},
+    workstationRequestsByDispatchID: {},
+    workRequestsByID: {},
   };
 }
 
@@ -61,23 +63,17 @@ export function emptyTimelineState(): Pick<
     receivedEventIDs: [],
     selectedTick: 0,
     worldViewCache: {
-      0: {
-        dashboard: emptyDashboardSnapshot(),
-        relationsByWorkID: {},
-        tracesByWorkID: {},
-        workstationRequestsByDispatchID: {},
-        workRequestsByID: {},
-      },
+      0: emptyTimelineSnapshot(),
     },
   };
 }
 
 export function cacheWithSnapshot(
   events: FactoryEvent[],
-  cache: Record<number, FactoryTimelineSnapshot>,
+  cache: Record<number, WorldState>,
   tick: number,
   deps: TimelineStoreStateDeps,
-): Record<number, FactoryTimelineSnapshot> {
+): Record<number, WorldState> {
   return cache[tick]
     ? cache
     : { ...cache, [tick]: deps.buildFactoryTimelineSnapshot(events, tick) };

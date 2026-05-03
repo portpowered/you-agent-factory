@@ -44,7 +44,7 @@ export const Configured = {
 
     const workType = scope.getByRole("combobox", { name: "Work type" });
     const requestName = scope.getByRole("textbox", { name: "Request name" });
-    const requestText = scope.getByRole("textbox", { name: "Request text" });
+    const requestText = scope.getByRole("textbox", { name: "Request" });
     const submitButton = scope.getByRole("button", { name: "Submit work" });
 
     await expect(submitButton).toBeDisabled();
@@ -66,7 +66,7 @@ export const Unconfigured = {
 
     await expect(scope.getByRole("combobox", { name: "Work type" })).toBeDisabled();
     await expect(scope.getByRole("textbox", { name: "Request name" })).toBeDisabled();
-    await expect(scope.getByRole("textbox", { name: "Request text" })).toBeDisabled();
+    await expect(scope.getByRole("textbox", { name: "Request" })).toBeDisabled();
     await expect(scope.getByRole("button", { name: "Submit work" })).toBeDisabled();
     await expect(scope.getByText("No work types are available to submit right now.")).toBeVisible();
   },
@@ -100,7 +100,7 @@ export const FailureRetry = {
     await expect(scope.getByRole("textbox", { name: "Request name" })).toHaveValue(
       "Retry dashboard request",
     );
-    await expect(scope.getByRole("textbox", { name: "Request text" })).toHaveValue(
+    await expect(scope.getByRole("textbox", { name: "Request" })).toHaveValue(
       "Retry the broken submission.",
     );
     await expect(scope.getByText("work_type_name is required")).toBeVisible();

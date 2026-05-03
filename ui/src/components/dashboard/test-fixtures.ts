@@ -78,6 +78,6 @@ export const twentyNodeDashboardSnapshot: DashboardSnapshot = buildDashboardSnap
 export const twentyNodeDashboardTopology = twentyNodeDashboardSnapshot.topology;
 
 export function resourceOccupancySnapshotForTick(tick: number): DashboardSnapshot {
-  return buildFactoryTimelineSnapshot(resourceCountTimelineEvents, tick).dashboard;
+  return buildFactoryTimelineSnapshot(resourceCountTimelineEvents, tick);
 }
 

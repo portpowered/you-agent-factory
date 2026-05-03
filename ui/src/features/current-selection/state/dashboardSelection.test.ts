@@ -101,7 +101,7 @@ describe("resolveDashboardSelection", () => {
     };
     const resolved = resolveDashboardSelection({
       selection,
-      snapshot: activeTick.dashboard,
+      snapshot: activeTick,
       workstationRequestsByDispatchID: activeTick.workstationRequestsByDispatchID,
     });
 
@@ -130,11 +130,12 @@ describe("resolveDashboardSelection", () => {
         nodeId: request.workstation_node_id,
         request,
       },
-      snapshot: beforeDispatch.dashboard,
+      snapshot: beforeDispatch,
       workstationRequestsByDispatchID: beforeDispatch.workstationRequestsByDispatchID,
     });
 
     expect(resolved).toEqual({ kind: "node", nodeId: "review" });
   });
 });
+
 

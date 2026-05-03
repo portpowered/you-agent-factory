@@ -499,7 +499,7 @@ describe("useCurrentSelection", () => {
       8,
     );
     const selectedWorkItem =
-      replaySnapshot.dashboard.runtime.active_executions_by_dispatch_id?.[
+      replaySnapshot.runtime.active_executions_by_dispatch_id?.[
         "062f0677-3b56-42f7-9a04-dc92997c7bf7"
       ]?.work_items?.[0];
 
@@ -529,7 +529,7 @@ describe("useCurrentSelection", () => {
 
     render(
       <SelectionHarness
-        snapshot={replaySnapshot.dashboard}
+        snapshot={replaySnapshot}
         workstationRequestsByDispatchID={replaySnapshot.workstationRequestsByDispatchID}
       />,
     );
@@ -549,4 +549,5 @@ describe("useCurrentSelection", () => {
     });
   });
 });
+
 

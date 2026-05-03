@@ -7,10 +7,10 @@ import {
 import { projectWorkstationDispatchRequestsByID } from "./projectWorkstationRequests";
 import { projectRuntime } from "./projectRuntime";
 import { projectTopology } from "./projectTopology";
-import type { FactoryTimelineSnapshot } from "./snapshotTypes";
-import type { WorldState } from "./types";
+import { isSystemTimeWorkType } from "./systemTime";
+import type { ReplayWorldState, WorldState } from "./types";
 
-export function projectSnapshot(state: WorldState): FactoryTimelineSnapshot {
+export function projectSnapshot(state: ReplayWorldState): WorldState {
   const runtime = projectRuntime(state);
 
   const tracesByWorkID = Object.fromEntries(
@@ -18,15 +18,30 @@ export function projectSnapshot(state: WorldState): FactoryTimelineSnapshot {
       trace.work_ids.map((workID) => [workID, trace] as const),
     ),
   );
+  const workRequestsByID = cloneWorkRequestsByID(state.workRequestsByID);
+
+  for (const request of Object.values(workRequestsByID)) {
+    if (!request.work_items) {
+      continue;
+    }
+    request.work_items = request.work_items.filter(
+      (item) => !isSystemTimeWorkType(item.work_type_id),
+    );
+  }
+
+  const publicWorkRequestsByID = Object.fromEntries(
+    Object.entries(workRequestsByID).filter(([, request]) => {
+      const workItems = request.work_items ?? [];
+      return workItems.length > 0;
+    }),
+  );
 
   return {
-    dashboard: {
-      factory_state: state.factoryState,
-      runtime,
-      tick_count: state.tick,
-      topology: projectTopology(state.topology),
-      uptime_seconds: 0,
-    },
+    factory_state: state.factory_state,
+    runtime,
+    tick_count: state.tick_count,
+    topology: projectTopology(state.topology),
+    uptime_seconds: state.uptime_seconds,
     relationsByWorkID: cloneRelationsByWorkID(state.relationsByWorkID),
     tracesByWorkID: cloneTracesByWorkID(tracesByWorkID),
     workstationRequestsByDispatchID: cloneWorkstationDispatchRequestsByID(
@@ -37,10 +52,10 @@ export function projectSnapshot(state: WorldState): FactoryTimelineSnapshot {
         runtimeRequestsByDispatchID: runtime.workstation_requests_by_dispatch_id ?? {},
         scriptRequestsByDispatchID: state.scriptRequestsByDispatchID,
         scriptResponsesByDispatchID: state.scriptResponsesByDispatchID,
-        workRequestsByID: state.workRequestsByID,
+        workRequestsByID: publicWorkRequestsByID,
       }),
     ),
-    workRequestsByID: cloneWorkRequestsByID(state.workRequestsByID),
+    workRequestsByID: publicWorkRequestsByID,
   };
 }
 

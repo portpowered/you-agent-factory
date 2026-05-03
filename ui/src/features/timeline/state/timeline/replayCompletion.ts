@@ -29,7 +29,7 @@ import {
   isSystemTimeWorkItem,
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
 } from "./systemTime";
-import type { WorldCompletion, WorldDispatch, WorldState } from "./types";
+import type { ReplayWorldState, WorldCompletion, WorldDispatch } from "./types";
 import { workRef } from "./workItemRef";
 
 export interface LegacyDispatchRequestPayloadCompat {
@@ -106,12 +106,12 @@ export function firstRequestID(works: FactoryWork[] | undefined): string | undef
   return works?.find((work) => work.requestId)?.requestId;
 }
 
-function placeCategory(state: WorldState, placeIDValue: string | undefined): string | undefined {
+function placeCategory(state: ReplayWorldState, placeIDValue: string | undefined): string | undefined {
   return state.topology.places?.find((place) => place.id === placeIDValue)?.category;
 }
 
 function terminalWorkFromItems(
-  state: WorldState,
+  state: ReplayWorldState,
   items: FactoryWorkItem[],
   outcome: string,
 ): FactoryTerminalWork | undefined {
@@ -128,7 +128,7 @@ function terminalWorkFromItems(
 }
 
 export function responseCompletion(
-  state: WorldState,
+  state: ReplayWorldState,
   event: FactoryEvent<DispatchResponsePayload>,
   active: WorldDispatch | undefined,
   dispatchID: string,
@@ -213,7 +213,10 @@ export function responseCompletion(
   };
 }
 
-export function recordFailedCompletion(state: WorldState, completion: WorldCompletion): void {
+export function recordFailedCompletion(
+  state: ReplayWorldState,
+  completion: WorldCompletion,
+): void {
   const workItems =
     completion.outputItems.length > 0
       ? completion.outputItems

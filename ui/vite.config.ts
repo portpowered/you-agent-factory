@@ -38,6 +38,16 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    globals: true
-  }
+    globals: true,
+    testTimeout: 15000,
+    coverage: {
+      provider: "v8",
+      thresholds: {
+        statements: 88.17,
+        branches: 76.91,
+        functions: 92.58,
+        lines: 88,
+      },
+    },
+  },
 });

@@ -60,45 +60,51 @@ import {
 } from "./replayGraphState";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
-import type {
-  WorldState,
-} from "./types";
+import { emptyWorldRuntime, type ReplayWorldState } from "./types";
 import { workRef } from "./workItemRef";
 
-function emptyWorldState(tick: number): WorldState {
+function emptyWorldState(tick: number): ReplayWorldState {
   return {
     activeDispatches: {},
     completedDispatches: [],
-    factoryState: "UNKNOWN",
+    factory_state: "UNKNOWN",
     failedWorkDetailsByWorkID: {},
     failedWorkItemsByID: {},
     inferenceAttemptsByDispatchID: {},
     occupancyByID: {},
     providerSessions: [],
     relationsByWorkID: {},
+    runtime: emptyWorldRuntime(),
     scriptRequestsByDispatchID: {},
     scriptResponsesByDispatchID: {},
     terminalWorkByID: {},
-    tick,
+    tick_count: tick,
     topology: {},
     tracesByID: {},
+    tracesByWorkID: {},
+    uptime_seconds: 0,
     workItemsByID: {},
+    workstationRequestsByDispatchID: {},
     workRequestsByID: {},
   };
 }
 
-function seedResourceOccupancy(state: WorldState): void {
+function seedResourceOccupancy(state: ReplayWorldState): void {
   seedResourceOccupancyBase(state, addToken, resourceTokenID);
 }
 
-function addTraceDispatch(state: WorldState, traceID: string, completion: Parameters<typeof completionToTraceDispatch>[0]): void {
+function addTraceDispatch(
+  state: ReplayWorldState,
+  traceID: string,
+  completion: Parameters<typeof completionToTraceDispatch>[0],
+): void {
   addTraceDispatchBase(state, traceID, completion, completionToTraceDispatch);
 }
 
 export function reconstructWorldState(
   events: FactoryEvent[],
   selectedTick: number,
-): WorldState {
+): ReplayWorldState {
   const state = emptyWorldState(selectedTick);
   for (const event of orderedEvents(events)) {
     if (event.context.tick <= selectedTick) {
@@ -108,7 +114,7 @@ export function reconstructWorldState(
   return state;
 }
 
-function applyEvent(state: WorldState, event: FactoryEvent): void {
+function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
   switch (event.type) {
     case FACTORY_EVENT_TYPES.runRequest:
       state.topology = normalizeFactoryPayload((event as RunRequestEvent).payload);
@@ -145,12 +151,12 @@ function applyEvent(state: WorldState, event: FactoryEvent): void {
       applyResponse(state, event as DispatchResponseEvent);
       return;
     case FACTORY_EVENT_TYPES.factoryStateResponse:
-      state.factoryState = (event as FactoryStateResponseEvent).payload.state;
+      state.factory_state = (event as FactoryStateResponseEvent).payload.state;
       return;
   }
 }
 
-function applyWorkRequest(state: WorldState, event: WorkRequestEvent): void {
+function applyWorkRequest(state: ReplayWorldState, event: WorkRequestEvent): void {
   const requestID = event.context.requestId ?? firstRequestID(event.payload.works) ?? "";
   const traceID = event.context.traceIds?.[0];
   const workItems = (event.payload.works ?? []).map((work) =>
@@ -174,7 +180,10 @@ function applyWorkRequest(state: WorldState, event: WorkRequestEvent): void {
   }
 }
 
-function applyRelationshipChange(state: WorldState, event: RelationshipChangeRequestEvent): void {
+function applyRelationshipChange(
+  state: ReplayWorldState,
+  event: RelationshipChangeRequestEvent,
+): void {
   const relation = event.payload.relation as FactoryRelation;
   const targetWorkID =
     relation.targetWorkId ??
@@ -189,7 +198,7 @@ function applyRelationshipChange(state: WorldState, event: RelationshipChangeReq
   });
 }
 
-function applyRequest(state: WorldState, event: DispatchRequestEvent): void {
+function applyRequest(state: ReplayWorldState, event: DispatchRequestEvent): void {
   const legacyPayload = legacyDispatchRequestPayload(event.payload);
   const worker = topologyWorker(state.topology, event.payload.transitionId);
   const dispatchID =
@@ -247,7 +256,10 @@ function applyRequest(state: WorldState, event: DispatchRequestEvent): void {
   };
 }
 
-function applyInferenceRequest(state: WorldState, event: InferenceRequestEvent): void {
+function applyInferenceRequest(
+  state: ReplayWorldState,
+  event: InferenceRequestEvent,
+): void {
   const { payload } = event;
   const dispatchID =
     event.context.dispatchId ?? legacyInferencePayloadDispatchID(payload);
@@ -276,7 +288,10 @@ function applyInferenceRequest(state: WorldState, event: InferenceRequestEvent):
   };
 }
 
-function applyInferenceResponse(state: WorldState, event: InferenceResponseEvent): void {
+function applyInferenceResponse(
+  state: ReplayWorldState,
+  event: InferenceResponseEvent,
+): void {
   const { payload } = event;
   const dispatchID =
     event.context.dispatchId ?? legacyInferencePayloadDispatchID(payload);
@@ -315,7 +330,10 @@ function applyInferenceResponse(state: WorldState, event: InferenceResponseEvent
   });
 }
 
-function applyResponse(state: WorldState, event: DispatchResponseEvent): void {
+function applyResponse(
+  state: ReplayWorldState,
+  event: DispatchResponseEvent,
+): void {
   const legacyPayload = legacyDispatchResponsePayload(event.payload);
   const dispatchID =
     event.context.dispatchId ??
