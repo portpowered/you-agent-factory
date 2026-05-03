@@ -1,20 +1,25 @@
-import { formatList, formatWorkItemLabel } from "../../components/ui/formatters";
-import { DASHBOARD_SECTION_HEADING_CLASS, DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/dashboard/typography";
+import type {
+  DashboardTrace,
+  DashboardWorkRelation,
+} from "../../api/dashboard/types";
+import {
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABEL_CLASS,
+} from "../../components/dashboard/typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
-import type { DashboardTrace, DashboardWorkRelation } from "../../api/dashboard/types";
+import {
+  formatList,
+  formatWorkItemLabel,
+} from "../../components/ui/formatters";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
-import type { WorkItemDetailCardProps } from "./detail-card-types";
 import { WORK_SELECTION_BUTTON_CLASS } from "./detail-card-shared";
-import { ExecutionDetailsSection } from "./execution-details";
+import type { WorkItemDetailCardProps } from "./detail-card-types";
 import { SelectedWorkDispatchHistorySection } from "./selected-work-dispatch-history";
 
 export function WorkItemDetailCard({
   activeTraceID,
   dispatchAttempts,
   executionDetails,
-  failureMessage,
-  failureReason,
-  now,
   onSelectTraceID,
   onSelectWorkID,
   selectedNode,
@@ -24,11 +29,16 @@ export function WorkItemDetailCard({
   traceTargetId = "trace",
   widgetId = "current-selection",
 }: WorkItemDetailCardProps) {
-  const workRelationships = buildWorkRelationships(selectedTrace, selection.workItem.work_id);
+  const workRelationships = buildWorkRelationships(
+    selectedTrace,
+    selection.workItem.work_id,
+  );
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <p className={WIDGET_SUBTITLE_CLASS}>{formatWorkItemLabel(selection.workItem)}</p>
+      <p className={WIDGET_SUBTITLE_CLASS}>
+        {formatWorkItemLabel(selection.workItem)}
+      </p>
       <dl>
         <div>
           <dt>Work ID</dt>
@@ -40,7 +50,11 @@ export function WorkItemDetailCard({
         </div>
         <div>
           <dt>Workstation</dt>
-          <dd>{selectedNode?.workstation_name ?? executionDetails.workstationName ?? "Unavailable"}</dd>
+          <dd>
+            {selectedNode?.workstation_name ??
+              executionDetails.workstationName ??
+              "Unavailable"}
+          </dd>
         </div>
 
         <div>
@@ -57,33 +71,6 @@ export function WorkItemDetailCard({
           <dd>{dispatchAttempts.length}</dd>
         </div>
       </dl>
-      {failureReason || failureMessage ? (
-        <section aria-label="Failure details" className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
-          <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Failure details</h4>
-          <dl>
-            {failureReason ? (
-              <div>
-                <dt>Failure reason</dt>
-                <dd>{failureReason}</dd>
-              </div>
-            ) : null}
-            {failureMessage ? (
-              <div>
-                <dt>Failure message</dt>
-                <dd>{failureMessage}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </section>
-      ) : null}
-      <ExecutionDetailsSection
-        activeTraceID={activeTraceID}
-        details={executionDetails}
-        now={now}
-        onSelectTraceID={onSelectTraceID}
-        showInferenceAttempts={false}
-        traceTargetId={traceTargetId}
-      />
       <WorkRelationshipsSection
         onSelectWorkID={onSelectWorkID}
         relationships={workRelationships}
@@ -118,7 +105,10 @@ function WorkRelationshipsSection({
   relationships: RelatedWorkItem[];
 }) {
   return (
-    <section aria-label="Work relationships" className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
+    <section
+      aria-label="Work relationships"
+      className="mt-4 grid gap-[0.65rem] [&_h4]:m-0"
+    >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Work relationships</h4>
       {relationships.length > 0 ? (
         <ul className="m-0 grid list-none gap-[0.55rem] p-0">
@@ -127,7 +117,9 @@ function WorkRelationshipsSection({
               className="grid gap-[0.3rem] rounded-lg border border-af-overlay/8 bg-af-overlay/4 p-[0.85rem]"
               key={relationship.key}
             >
-              <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{relationship.description}</span>
+              <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+                {relationship.description}
+              </span>
               {onSelectWorkID ? (
                 <button
                   aria-label={`Select related work item ${relationship.workLabel}`}
@@ -145,7 +137,8 @@ function WorkRelationshipsSection({
         </ul>
       ) : (
         <p className="m-0 text-sm text-af-ink/68">
-          No parent, child, or dependency relationships are available for this work item.
+          No parent, child, or dependency relationships are available for this
+          work item.
         </p>
       )}
     </section>
@@ -158,7 +151,11 @@ function buildWorkRelationships(
 ): RelatedWorkItem[] {
   return (trace?.relations ?? [])
     .flatMap((relation) => buildRelationshipItems(relation, selectedWorkID))
-    .sort((left, right) => left.description.localeCompare(right.description) || left.workLabel.localeCompare(right.workLabel));
+    .sort(
+      (left, right) =>
+        left.description.localeCompare(right.description) ||
+        left.workLabel.localeCompare(right.workLabel),
+    );
 }
 
 function buildRelationshipItems(
@@ -167,7 +164,9 @@ function buildRelationshipItems(
 ): RelatedWorkItem[] {
   const items: RelatedWorkItem[] = [];
   const relationType = relation.type.trim().toUpperCase();
-  const stateSuffix = relation.required_state ? ` (${relation.required_state})` : "";
+  const stateSuffix = relation.required_state
+    ? ` (${relation.required_state})`
+    : "";
 
   if (relation.source_work_id === selectedWorkID && relation.target_work_id) {
     items.push({
@@ -209,4 +208,3 @@ function reverseRelationshipLabel(relationType: string): string {
   }
   return relationType.toLowerCase().replace(/_/g, " ");
 }
-

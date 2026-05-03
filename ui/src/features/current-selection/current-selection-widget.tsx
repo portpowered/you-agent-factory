@@ -2,7 +2,6 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../api/dashboard/types";
-import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -10,6 +9,7 @@ import {
   WorkstationDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { CurrentSelectionState } from "./useCurrentSelection";
 
 export interface CurrentSelectionWidgetProps {
@@ -20,7 +20,6 @@ export interface CurrentSelectionWidgetProps {
   onSelectTraceID?: (traceID: string) => void;
   selectedTrace?: DashboardTrace;
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
-  terminalWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
   widgetId?: string;
 }
 
@@ -57,17 +56,6 @@ export function CurrentSelectionWidget({
       <WorkItemDetailCard
         activeTraceID={activeTraceID}
         executionDetails={selectedWorkExecutionDetails}
-        failureMessage={
-          currentSelection.terminalWorkDetail?.traceWorkID === selection.workItem.work_id
-            ? currentSelection.terminalWorkDetail.failureMessage
-            : failedWorkDetailsByWorkID?.[selection.workItem.work_id]?.failure_message
-        }
-        failureReason={
-          currentSelection.terminalWorkDetail?.traceWorkID === selection.workItem.work_id
-            ? currentSelection.terminalWorkDetail.failureReason
-            : failedWorkDetailsByWorkID?.[selection.workItem.work_id]?.failure_reason
-        }
-        now={now}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={selectWorkByID}
         dispatchAttempts={selectedWorkDispatchAttempts}
@@ -94,7 +82,9 @@ export function CurrentSelectionWidget({
       <StateNodeDetailCard
         currentWorkItems={selectedStateCurrentWorkItems}
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
-        onSelectWorkItem={(workItem) => selectStateWorkItem(selectedStatePlace, workItem)}
+        onSelectWorkItem={(workItem) =>
+          selectStateWorkItem(selectedStatePlace, workItem)
+        }
         place={selectedStatePlace}
         terminalHistoryWorkItems={selectedStateTerminalHistoryWorkItems}
         tokenCount={selectedStateTokenCount}
@@ -122,4 +112,3 @@ export function CurrentSelectionWidget({
 
   return <NoSelectionDetailCard widgetId={widgetId} />;
 }
-

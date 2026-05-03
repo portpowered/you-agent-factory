@@ -72,7 +72,9 @@ const liveWorkOutcomeSnapshot = workOutcomeSnapshot(
     queued: 3,
   },
 );
-const inferenceDetailsSnapshot = withInferenceDetails(semanticWorkflowDashboardSnapshot);
+const inferenceDetailsSnapshot = withInferenceDetails(
+  semanticWorkflowDashboardSnapshot,
+);
 const markdownReadyWorkstationRequest: DashboardWorkstationRequest = {
   ...dashboardWorkstationRequestFixtures.ready,
   prompt: [
@@ -168,25 +170,26 @@ function withInferenceDetails(source: DashboardSnapshot): DashboardSnapshot {
       },
       session: {
         ...source.runtime.session,
-        provider_sessions: (source.runtime.session.provider_sessions ?? []).map((attempt) =>
-          attempt.dispatch_id === "dispatch-review-active"
-            ? {
-                ...attempt,
-                diagnostics: {
-                  provider: {
-                    model: "gpt-5.4",
-                    provider: "codex",
-                    request_metadata: {
-                      prompt_source: "factory-renderer",
+        provider_sessions: (source.runtime.session.provider_sessions ?? []).map(
+          (attempt) =>
+            attempt.dispatch_id === "dispatch-review-active"
+              ? {
+                  ...attempt,
+                  diagnostics: {
+                    provider: {
+                      model: "gpt-5.4",
+                      provider: "codex",
+                      request_metadata: {
+                        prompt_source: "factory-renderer",
+                      },
+                    },
+                    rendered_prompt: {
+                      system_prompt_hash: "sha256:system-runtime",
+                      user_message_hash: "sha256:user-runtime",
                     },
                   },
-                  rendered_prompt: {
-                    system_prompt_hash: "sha256:system-runtime",
-                    user_message_hash: "sha256:user-runtime",
-                  },
-                },
-              }
-            : attempt,
+                }
+              : attempt,
         ),
       },
     },
@@ -204,7 +207,8 @@ const failedStoryTrace: DashboardTrace = {
       transition_id: "repair",
       workstation_name: "Repair",
       outcome: "FAILED",
-      failure_message: "Provider rate limit exceeded while generating the repair.",
+      failure_message:
+        "Provider rate limit exceeded while generating the repair.",
       failure_reason: "provider_rate_limit",
       start_time: "2026-04-08T12:00:00Z",
       end_time: "2026-04-08T12:00:01Z",
@@ -225,7 +229,9 @@ async function expectGraphWorkstation(
     await canvas.findByRole("region", { name: "Work graph viewport" }),
   ).toBeVisible();
 
-  const workstation = await canvas.findByRole("button", { name: workstationName });
+  const workstation = await canvas.findByRole("button", {
+    name: workstationName,
+  });
   await expect(workstation).toBeVisible();
 
   return workstation;
@@ -233,14 +239,19 @@ async function expectGraphWorkstation(
 
 function expectCurrentSelectionCardID(canvasElement: HTMLElement): void {
   const canvas = within(canvasElement);
-  const currentSelection = canvas.getByRole("article", { name: "Current selection" });
+  const currentSelection = canvas.getByRole("article", {
+    name: "Current selection",
+  });
   expect(
-    currentSelection.closest<HTMLElement>("[data-bento-card-id]")?.dataset.bentoCardId,
+    currentSelection.closest<HTMLElement>("[data-bento-card-id]")?.dataset
+      .bentoCardId,
   ).toBe("current-selection");
 }
 
 function currentSelectionCard(canvasElement: HTMLElement): HTMLElement {
-  return within(canvasElement).getByRole("article", { name: "Current selection" });
+  return within(canvasElement).getByRole("article", {
+    name: "Current selection",
+  });
 }
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
@@ -255,7 +266,10 @@ function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
   const documentElement = canvasElement.ownerDocument.documentElement;
   const overflowTolerance = 1;
 
-  expect(documentElement.scrollWidth <= documentElement.clientWidth + overflowTolerance).toBe(true);
+  expect(
+    documentElement.scrollWidth <=
+      documentElement.clientWidth + overflowTolerance,
+  ).toBe(true);
 }
 
 async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
@@ -266,11 +280,19 @@ async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
   workTypeField: HTMLElement;
 }> {
   const canvas = within(canvasElement);
-  const submitWorkCard = await canvas.findByRole("article", { name: "Submit work" });
+  const submitWorkCard = await canvas.findByRole("article", {
+    name: "Submit work",
+  });
   const submitWorkScope = within(submitWorkCard);
-  const workTypeField = submitWorkScope.getByRole("combobox", { name: "Work type" });
-  const requestNameField = submitWorkScope.getByRole("textbox", { name: "Request name" });
-  const requestField = submitWorkScope.getByRole("textbox", { name: "Request" });
+  const workTypeField = submitWorkScope.getByRole("combobox", {
+    name: "Work type",
+  });
+  const requestNameField = submitWorkScope.getByRole("textbox", {
+    name: "Request name",
+  });
+  const requestField = submitWorkScope.getByRole("textbox", {
+    name: "Request",
+  });
 
   return {
     requestNameField,
@@ -310,7 +332,9 @@ async function fillSubmitWorkCard(
   };
 }
 
-async function expectTypographyRegressionSurface(canvasElement: HTMLElement): Promise<void> {
+async function expectTypographyRegressionSurface(
+  canvasElement: HTMLElement,
+): Promise<void> {
   const canvas = within(canvasElement);
   const heading = await canvas.findByRole("heading", { name: "Agent Factory" });
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
@@ -324,12 +348,18 @@ async function expectTypographyRegressionSurface(canvasElement: HTMLElement): Pr
   expect(summaryList.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
   expect(summaryList.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
 
-  await userEvent.click(await canvas.findByRole("button", { name: "Select Review workstation" }));
+  await userEvent.click(
+    await canvas.findByRole("button", { name: "Select Review workstation" }),
+  );
 
   const currentSelection = currentSelectionCard(canvasElement);
   const currentSelectionScope = within(currentSelection);
-  const activeWorkHeading = currentSelectionScope.getByRole("heading", { name: "Active work" });
-  const activeWorkCard = currentSelectionScope.getByText("Active Story").closest("li");
+  const activeWorkHeading = currentSelectionScope.getByRole("heading", {
+    name: "Active work",
+  });
+  const activeWorkCard = currentSelectionScope
+    .getByText("Active Story")
+    .closest("li");
   const runHistorySection = currentSelectionScope
     .getByRole("heading", { name: "Run history" })
     .closest("section");
@@ -338,19 +368,26 @@ async function expectTypographyRegressionSurface(canvasElement: HTMLElement): Pr
     throw new Error("expected current-selection run history section");
   }
 
-  expect(activeWorkHeading.className).toContain(DASHBOARD_SECTION_HEADING_CLASS);
+  expect(activeWorkHeading.className).toContain(
+    DASHBOARD_SECTION_HEADING_CLASS,
+  );
   expect(activeWorkCard?.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
   expect(within(runHistorySection).getByText("2 runs").className).toContain(
     DASHBOARD_SUPPORTING_TEXT_CLASS,
   );
-  expect(toolbar.textContent).toContain(String(semanticWorkflowDashboardSnapshot.factory_state));
+  expect(toolbar.textContent).toContain(
+    String(semanticWorkflowDashboardSnapshot.factory_state),
+  );
 }
 
 async function selectWorkstationRequest(
   canvasElement: HTMLElement,
   request: DashboardWorkstationRequest,
 ): Promise<void> {
-  await selectWorkstationRequestByDispatchID(canvasElement, request.dispatch_id);
+  await selectWorkstationRequestByDispatchID(
+    canvasElement,
+    request.dispatch_id,
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -383,7 +420,9 @@ async function selectWorkstationRequestByDispatchID(
     ?.closest("section");
   if (requestHistorySection instanceof HTMLElement) {
     const requestHistoryScope = within(requestHistorySection);
-    const collapsedButton = requestHistoryScope.queryByRole("button", { name: "Expand" });
+    const collapsedButton = requestHistoryScope.queryByRole("button", {
+      name: "Expand",
+    });
     if (collapsedButton) {
       await userEvent.click(collapsedButton);
     }
@@ -402,7 +441,9 @@ async function selectWorkstationRequestByDispatchID(
     .closest("section");
   if (runHistorySection instanceof HTMLElement) {
     const runHistoryScope = within(runHistorySection);
-    const collapsedButton = runHistoryScope.queryByRole("button", { name: "Expand" });
+    const collapsedButton = runHistoryScope.queryByRole("button", {
+      name: "Expand",
+    });
     if (collapsedButton) {
       await userEvent.click(collapsedButton);
     }
@@ -416,10 +457,14 @@ async function selectWorkstationRequestByDispatchID(
     }
   }
 
-  throw new Error(`unable to find workstation request controls for ${dispatchID}`);
+  throw new Error(
+    `unable to find workstation request controls for ${dispatchID}`,
+  );
 }
 
-function workstationRequestStoryParameters(request: DashboardWorkstationRequest) {
+function workstationRequestStoryParameters(
+  request: DashboardWorkstationRequest,
+) {
   return {
     dashboardApi: {
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -504,7 +549,10 @@ function selectedWorkDispatchHistoryStoryParameters() {
   };
 }
 
-function dispatchHistoryCard(container: HTMLElement, dispatchId: string): HTMLElement {
+function dispatchHistoryCard(
+  container: HTMLElement,
+  dispatchId: string,
+): HTMLElement {
   const dispatchBadge = within(container).getByText(dispatchId);
   const card = dispatchBadge.closest("article");
 
@@ -516,10 +564,18 @@ function dispatchHistoryCard(container: HTMLElement, dispatchId: string): HTMLEl
 }
 
 function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
-  expect(outcomeChart.querySelector('[data-chart-series="queued"]')).not.toBeNull();
-  expect(outcomeChart.querySelector('[data-chart-series="inFlight"]')).not.toBeNull();
-  expect(outcomeChart.querySelector('[data-chart-series="completed"]')).not.toBeNull();
-  expect(outcomeChart.querySelector('[data-chart-series="failed"]')).not.toBeNull();
+  expect(
+    outcomeChart.querySelector('[data-chart-series="queued"]'),
+  ).not.toBeNull();
+  expect(
+    outcomeChart.querySelector('[data-chart-series="inFlight"]'),
+  ).not.toBeNull();
+  expect(
+    outcomeChart.querySelector('[data-chart-series="completed"]'),
+  ).not.toBeNull();
+  expect(
+    outcomeChart.querySelector('[data-chart-series="failed"]'),
+  ).not.toBeNull();
 }
 
 export default {
@@ -541,9 +597,13 @@ export const SemanticGraphComposition = {
     const canvas = within(canvasElement);
 
     await expectGraphWorkstation(canvasElement, "Select Review workstation");
-    expect((await canvas.findAllByText("dispatch-review-active")).length).toBeGreaterThan(0);
+    expect(
+      (await canvas.findAllByText("dispatch-review-active")).length,
+    ).toBeGreaterThan(0);
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Select Implement workstation" }),
+      await canvas.findByRole("button", {
+        name: "Select Implement workstation",
+      }),
     );
     const runHistorySection = within(currentSelectionCard(canvasElement))
       .getByRole("heading", { name: "Run history" })
@@ -552,8 +612,12 @@ export const SemanticGraphComposition = {
       runHistorySection,
       "expected implement workstation run history section",
     );
-    await userEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
-    await expect(within(resolvedRunHistorySection).getByText("Retry Story")).toBeVisible();
+    await userEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }),
+    );
+    await expect(
+      within(resolvedRunHistorySection).getByText("Retry Story"),
+    ).toBeVisible();
     await expect(await canvas.findByText("Failed Story")).toBeVisible();
   },
 };
@@ -585,7 +649,9 @@ export const MediumWorkflowGraph = {
 
     await expectGraphWorkstation(canvasElement, "Select Implement workstation");
     await expect(
-      await canvas.findByRole("button", { name: "Select Document workstation" }),
+      await canvas.findByRole("button", {
+        name: "Select Document workstation",
+      }),
     ).toBeVisible();
     await expect(
       await canvas.findByRole("button", { name: "Select Review workstation" }),
@@ -605,7 +671,9 @@ export const TwentyNodeWorkflowGraph = {
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const viewport = await canvas.findByRole("region", { name: "Work graph viewport" });
+    const viewport = await canvas.findByRole("region", {
+      name: "Work graph viewport",
+    });
     const station20 = await expectGraphWorkstation(
       canvasElement,
       "Select Station 20 workstation",
@@ -639,7 +707,9 @@ export const TwentyNodeWorkflowGraph = {
 
     await userEvent.click(station20);
     await expect(station20).toHaveAttribute("aria-pressed", "true");
-    await expect(canvas.getByRole("article", { name: "Current selection" })).toBeVisible();
+    await expect(
+      canvas.getByRole("article", { name: "Current selection" }),
+    ).toBeVisible();
   },
 };
 
@@ -656,8 +726,12 @@ export const DashboardImprovementsSmoke = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    const graphCard = await canvas.findByRole("article", { name: "Factory graph" });
-    const submitWorkCard = await canvas.findByRole("article", { name: "Submit work" });
+    const graphCard = await canvas.findByRole("article", {
+      name: "Factory graph",
+    });
+    const submitWorkCard = await canvas.findByRole("article", {
+      name: "Submit work",
+    });
     await expect(graphCard).toBeVisible();
     await expect(submitWorkCard).toBeVisible();
     await expect(
@@ -680,24 +754,40 @@ export const DashboardImprovementsSmoke = {
     const workTotalsItem = canvasElement.querySelector<HTMLElement>(
       '[data-bento-card-id="work-totals"]',
     );
-    expect(workTotalsItem?.querySelector(".react-resizable-handle-e")).not.toBeNull();
-    expect(workTotalsItem?.querySelector(".react-resizable-handle-s")).not.toBeNull();
-    expect(workTotalsItem?.querySelector(".react-resizable-handle-se")).not.toBeNull();
+    expect(
+      workTotalsItem?.querySelector(".react-resizable-handle-e"),
+    ).not.toBeNull();
+    expect(
+      workTotalsItem?.querySelector(".react-resizable-handle-s"),
+    ).not.toBeNull();
+    expect(
+      workTotalsItem?.querySelector(".react-resizable-handle-se"),
+    ).not.toBeNull();
 
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Select Implement workstation" }),
+      await canvas.findByRole("button", {
+        name: "Select Implement workstation",
+      }),
     );
-    await expect(within(currentSelectionCard(canvasElement)).getByText("Implement")).toBeVisible();
-    expectCurrentSelectionCardID(canvasElement);
-
-    await userEvent.click(await canvas.findByRole("button", { name: /Active Story/ }));
     await expect(
-      within(currentSelectionCard(canvasElement)).getByText("work-active-story"),
+      within(currentSelectionCard(canvasElement)).getByText("Implement"),
     ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
 
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Select story:implemented state" }),
+      await canvas.findByRole("button", { name: /Active Story/ }),
+    );
+    await expect(
+      within(currentSelectionCard(canvasElement)).getByText(
+        "work-active-story",
+      ),
+    ).toBeVisible();
+    expectCurrentSelectionCardID(canvasElement);
+
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Select story:implemented state",
+      }),
     );
     await expect(
       within(currentSelectionCard(canvasElement)).getByText("Current work"),
@@ -706,7 +796,9 @@ export const DashboardImprovementsSmoke = {
       within(currentSelectionCard(canvasElement)).getByText("Active Story"),
     ).toBeVisible();
     await expect(
-      within(currentSelectionCard(canvasElement)).getByText("work-active-story"),
+      within(currentSelectionCard(canvasElement)).getByText(
+        "work-active-story",
+      ),
     ).toBeVisible();
     await userEvent.click(
       await canvas.findByRole("button", { name: "Select story:blocked state" }),
@@ -724,7 +816,9 @@ export const DashboardImprovementsSmoke = {
     expect(canvas.queryByRole("article", { name: /Retry|Rework/i })).toBeNull();
     expect(canvas.queryByRole("article", { name: /Timing/i })).toBeNull();
 
-    const outcomeChart = await canvas.findByRole("article", { name: "Work outcome chart" });
+    const outcomeChart = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
     await expect(outcomeChart).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
     await expect(
@@ -751,15 +845,21 @@ export const DashboardImprovementsSmokeNarrow = {
     const canvas = within(canvasElement);
     const frame = canvasElement.firstElementChild;
 
-    await expect(await canvas.findByRole("article", { name: "Submit work" })).toBeVisible();
-    await userEvent.click((await canvas.findAllByRole("button", { name: /Active Story/ }))[0]);
+    await expect(
+      await canvas.findByRole("article", { name: "Submit work" }),
+    ).toBeVisible();
+    await userEvent.click(
+      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
 
     const dashboardGrid = await canvas.findByRole("region", {
       name: "Agent Factory bento board",
     });
     const dashboardScope = within(dashboardGrid);
 
-    await expect(dashboardScope.getByRole("article", { name: "Submit work" })).toBeVisible();
+    await expect(
+      dashboardScope.getByRole("article", { name: "Submit work" }),
+    ).toBeVisible();
     await expect(
       dashboardScope.getByRole("article", { name: "Current selection" }),
     ).toBeVisible();
@@ -792,22 +892,35 @@ export const DashboardSubmitWorkIntegrationSmoke = {
   render: () => <App />,
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const { requestField, requestNameField, scope, submitButton, workTypeField } =
-      await submitWorkCardControls(canvasElement);
+    const {
+      requestField,
+      requestNameField,
+      scope,
+      submitButton,
+      workTypeField,
+    } = await submitWorkCardControls(canvasElement);
 
     expect(
-      Array.from((workTypeField as HTMLSelectElement).options, (option) => option.value),
+      Array.from(
+        (workTypeField as HTMLSelectElement).options,
+        (option) => option.value,
+      ),
     ).toContain("story");
     await expect(submitButton).toBeDisabled();
     await userEvent.type(requestNameField, "Dashboard smoke request");
     await expect(submitButton).toBeDisabled();
-    await userEvent.type(requestField, "Review the failed dashboard submission smoke.");
+    await userEvent.type(
+      requestField,
+      "Review the failed dashboard submission smoke.",
+    );
     await expect(submitButton).toBeDisabled();
     await userEvent.selectOptions(workTypeField, "story");
     await expect(submitButton).toBeEnabled();
     await userEvent.click(submitButton);
     await expect(
-      await scope.findByText("Your request was submitted. Trace ID: trace-submit-story."),
+      await scope.findByText(
+        "Your request was submitted. Trace ID: trace-submit-story.",
+      ),
     ).toBeVisible();
     await expect(requestNameField).toHaveValue("");
     await expect(requestField).toHaveValue("");
@@ -840,14 +953,13 @@ export const DashboardSubmitWorkRetryableFailure = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const requestText = "Retry the broken submission from the dashboard shell.";
     const requestName = "Retry dashboard request";
-    const { requestField, requestNameField, scope, workTypeField } = await fillSubmitWorkCard(
-      canvasElement,
-      requestName,
-      requestText,
-    );
+    const { requestField, requestNameField, scope, workTypeField } =
+      await fillSubmitWorkCard(canvasElement, requestName, requestText);
 
     await userEvent.click(scope.getByRole("button", { name: "Submit work" }));
-    await expect(await scope.findByText("work_type_name is required")).toBeVisible();
+    await expect(
+      await scope.findByText("work_type_name is required"),
+    ).toBeVisible();
     await expect(workTypeField).toHaveValue("story");
     await expect(requestNameField).toHaveValue(requestName);
     await expect(requestField).toHaveValue(requestText);
@@ -855,10 +967,15 @@ export const DashboardSubmitWorkRetryableFailure = {
 };
 
 export const WorkstationRequestSelection = {
-  parameters: workstationRequestStoryParameters(markdownReadyWorkstationRequest),
+  parameters: workstationRequestStoryParameters(
+    markdownReadyWorkstationRequest,
+  ),
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await selectWorkstationRequest(canvasElement, markdownReadyWorkstationRequest);
+    await selectWorkstationRequest(
+      canvasElement,
+      markdownReadyWorkstationRequest,
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
     await expect(
@@ -868,21 +985,37 @@ export const WorkstationRequestSelection = {
       currentSelection.getByRole("heading", { name: "Response details" }),
     ).toBeVisible();
     await expect(
-      currentSelection.getAllByText(markdownReadyWorkstationRequest.dispatch_id).length,
+      currentSelection.getAllByText(markdownReadyWorkstationRequest.dispatch_id)
+        .length,
     ).toBeGreaterThan(0);
-    await expect(currentSelection.getAllByText("request-ready-story").length).toBeGreaterThan(0);
-    expect(currentSelection.queryByRole("heading", { name: "Active work" })).toBeNull();
-    expect(currentSelection.queryByRole("heading", { name: "Execution details" })).toBeNull();
-    expect(currentSelection.queryByRole("heading", { name: "Workstation dispatches" })).toBeNull();
+    await expect(
+      currentSelection.getAllByText("request-ready-story").length,
+    ).toBeGreaterThan(0);
+    expect(
+      currentSelection.queryByRole("heading", { name: "Active work" }),
+    ).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Execution details" }),
+    ).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", {
+        name: "Workstation dispatches",
+      }),
+    ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
 
 export const WorkstationRequestSelectionNoResponse = {
-  parameters: workstationRequestStoryParameters(dashboardWorkstationRequestFixtures.noResponse),
+  parameters: workstationRequestStoryParameters(
+    dashboardWorkstationRequestFixtures.noResponse,
+  ),
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await selectWorkstationRequest(canvasElement, dashboardWorkstationRequestFixtures.noResponse);
+    await selectWorkstationRequest(
+      canvasElement,
+      dashboardWorkstationRequestFixtures.noResponse,
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
     await expect(
@@ -898,53 +1031,91 @@ export const WorkstationRequestSelectionNoResponse = {
         "Response metadata is not available for this workstation request yet.",
       ),
     ).toBeVisible();
-    await expect(currentSelection.getByRole("heading", { name: "Response details" })).toBeVisible();
-    expect(currentSelection.queryByRole("heading", { name: "Execution details" })).toBeNull();
+    await expect(
+      currentSelection.getByRole("heading", { name: "Response details" }),
+    ).toBeVisible();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Execution details" }),
+    ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
 
 export const WorkstationRequestSelectionRejected = {
-  parameters: workstationRequestStoryParameters(dashboardWorkstationRequestFixtures.rejected),
+  parameters: workstationRequestStoryParameters(
+    dashboardWorkstationRequestFixtures.rejected,
+  ),
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await selectWorkstationRequest(canvasElement, dashboardWorkstationRequestFixtures.rejected);
+    await selectWorkstationRequest(
+      canvasElement,
+      dashboardWorkstationRequestFixtures.rejected,
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    const responseDetails = within(currentSelection.getByRole("region", { name: "Response details" }));
+    const responseDetails = within(
+      currentSelection.getByRole("region", { name: "Response details" }),
+    );
 
-    expect(currentSelection.getAllByText("request-rejected-story").length).toBeGreaterThan(0);
+    expect(
+      currentSelection.getAllByText("request-rejected-story").length,
+    ).toBeGreaterThan(0);
     await expect(
       currentSelection.getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeVisible();
     await expect(
-      responseDetails.getByText("The active story needs revision before it can continue."),
+      responseDetails.getByText(
+        "The active story needs revision before it can continue.",
+      ),
     ).toBeVisible();
-    await expect(currentSelection.getByRole("heading", { name: "Response details" })).toBeVisible();
-    expect(currentSelection.queryByRole("heading", { name: "Active work" })).toBeNull();
-    expect(currentSelection.queryByRole("heading", { name: "Execution details" })).toBeNull();
-    expect(currentSelection.queryByRole("heading", { name: "Error details" })).toBeNull();
+    await expect(
+      currentSelection.getByRole("heading", { name: "Response details" }),
+    ).toBeVisible();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Active work" }),
+    ).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Execution details" }),
+    ).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Error details" }),
+    ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
 
 export const WorkstationRequestSelectionErrored = {
-  parameters: workstationRequestStoryParameters(dashboardWorkstationRequestFixtures.errored),
+  parameters: workstationRequestStoryParameters(
+    dashboardWorkstationRequestFixtures.errored,
+  ),
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await selectWorkstationRequest(canvasElement, dashboardWorkstationRequestFixtures.errored);
+    await selectWorkstationRequest(
+      canvasElement,
+      dashboardWorkstationRequestFixtures.errored,
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    const errorDetails = within(currentSelection.getByRole("region", { name: "Error details" }));
+    const errorDetails = within(
+      currentSelection.getByRole("region", { name: "Error details" }),
+    );
 
-    expect(currentSelection.getAllByText("request-error-story").length).toBeGreaterThan(0);
+    expect(
+      currentSelection.getAllByText("request-error-story").length,
+    ).toBeGreaterThan(0);
     await expect(
-      currentSelection.getByText("Review the blocked story and explain the failure."),
+      currentSelection.getByText(
+        "Review the blocked story and explain the failure.",
+      ),
     ).toBeVisible();
-    await expect(currentSelection.getByRole("heading", { name: "Inference attempts" })).toBeVisible();
-    expect(currentSelection.getAllByText("provider_rate_limit").length).toBeGreaterThan(0);
+    await expect(
+      currentSelection.getByRole("heading", { name: "Inference attempts" }),
+    ).toBeVisible();
+    expect(
+      currentSelection.getAllByText("provider_rate_limit").length,
+    ).toBeGreaterThan(0);
     await expect(
       errorDetails.getByText(
         "Provider rate limit exceeded while reviewing the story.",
@@ -960,8 +1131,12 @@ export const WorkstationRequestSelectionErrored = {
         "Response metadata is unavailable because this workstation request ended with an error.",
       ),
     ).toBeVisible();
-    expect(currentSelection.queryByRole("heading", { name: "Active work" })).toBeNull();
-    expect(currentSelection.queryByRole("heading", { name: "Execution details" })).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Active work" }),
+    ).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Execution details" }),
+    ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
@@ -972,7 +1147,9 @@ export const SelectedWorkDispatchHistorySmoke = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    await userEvent.click(await canvas.findByRole("button", { name: "Select Review workstation" }));
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Select Review workstation" }),
+    );
     await userEvent.click(
       within(currentSelectionCard(canvasElement)).getByRole("button", {
         name: "Select work item Active Story",
@@ -984,9 +1161,17 @@ export const SelectedWorkDispatchHistorySmoke = {
       name: "Workstation dispatches",
     });
 
-    await expect(currentSelection.getByRole("heading", { name: "Workstation dispatches" })).toBeVisible();
-    expect(currentSelection.queryByRole("heading", { name: "Work session runs list" })).toBeNull();
-    await expect(within(dispatchHistory).getByText("6 dispatches")).toBeVisible();
+    await expect(
+      currentSelection.getByRole("heading", { name: "Workstation dispatches" }),
+    ).toBeVisible();
+    expect(
+      currentSelection.queryByRole("heading", {
+        name: "Work session runs list",
+      }),
+    ).toBeNull();
+    await expect(
+      within(dispatchHistory).getByText("6 dispatches"),
+    ).toBeVisible();
     [
       "dispatch-review-active",
       dashboardWorkstationRequestFixtures.errored.dispatch_id,
@@ -998,13 +1183,20 @@ export const SelectedWorkDispatchHistorySmoke = {
       expect(dispatchHistoryCard(dispatchHistory, dispatchId)).toBeTruthy();
     });
 
-    const activeCard = dispatchHistoryCard(dispatchHistory, "dispatch-review-active");
-    await expect(within(activeCard).getByText("Current dispatch")).toBeVisible();
+    const activeCard = dispatchHistoryCard(
+      dispatchHistory,
+      "dispatch-review-active",
+    );
+    await expect(
+      within(activeCard).getByText("Current dispatch"),
+    ).toBeVisible();
     await expect(
       within(activeCard).getByText("No response yet for this dispatch."),
     ).toBeVisible();
     await expect(
-      within(activeCard).getByRole("button", { name: "Select work item Active Story" }),
+      within(activeCard).getByRole("button", {
+        name: "Select work item Active Story",
+      }),
     ).toBeVisible();
 
     const erroredCard = dispatchHistoryCard(
@@ -1012,7 +1204,9 @@ export const SelectedWorkDispatchHistorySmoke = {
       dashboardWorkstationRequestFixtures.errored.dispatch_id,
     );
     await expect(
-      within(erroredCard).getByText("Provider rate limit exceeded while reviewing the story."),
+      within(erroredCard).getByText(
+        "Provider rate limit exceeded while reviewing the story.",
+      ),
     ).toBeVisible();
     expect(within(erroredCard).queryByText("Current dispatch")).toBeNull();
 
@@ -1026,70 +1220,115 @@ export const SelectedWorkDispatchHistorySmoke = {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
     );
-    await expect(within(scriptSuccessCard).getByText("script-tool")).toBeVisible();
-    await expect(within(scriptSuccessCard).getByText("script success stdout")).toBeVisible();
-    expect(within(scriptSuccessCard).queryByText("Current dispatch")).toBeNull();
+    await expect(
+      within(scriptSuccessCard).getByText("script-tool"),
+    ).toBeVisible();
+    await expect(
+      within(scriptSuccessCard).getByText("script success stdout"),
+    ).toBeVisible();
+    expect(
+      within(scriptSuccessCard).queryByText("Current dispatch"),
+    ).toBeNull();
 
     const scriptFailedCard = dispatchHistoryCard(
       dispatchHistory,
       dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
     );
-    expect(within(scriptFailedCard).getAllByText("TIMEOUT").length).toBeGreaterThan(0);
-    await expect(within(scriptFailedCard).getByText("script timed out")).toBeVisible();
+    expect(
+      within(scriptFailedCard).getAllByText("TIMEOUT").length,
+    ).toBeGreaterThan(0);
+    await expect(
+      within(scriptFailedCard).getByText("script timed out"),
+    ).toBeVisible();
     expect(within(scriptFailedCard).queryByText("Current dispatch")).toBeNull();
 
-    await expect(canvas.getByRole("article", { name: "Trace drill-down" })).toBeVisible();
+    await expect(
+      canvas.getByRole("article", { name: "Trace drill-down" }),
+    ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
 
 export const WorkstationRequestSelectionScriptPending = {
-  parameters: workstationRequestStoryParameters(dashboardWorkstationRequestFixtures.scriptPending),
+  parameters: workstationRequestStoryParameters(
+    dashboardWorkstationRequestFixtures.scriptPending,
+  ),
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await selectWorkstationRequest(canvasElement, dashboardWorkstationRequestFixtures.scriptPending);
+    await selectWorkstationRequest(
+      canvasElement,
+      dashboardWorkstationRequestFixtures.scriptPending,
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    await expect(currentSelection.getAllByText("request-script-pending-story").length).toBeGreaterThan(0);
+    await expect(
+      currentSelection.getAllByText("request-script-pending-story").length,
+    ).toBeGreaterThan(0);
     await expect(currentSelection.getByText("script-tool")).toBeVisible();
     await expect(
       currentSelection.getByText(
         "Script response details are not available for this workstation request yet.",
       ),
     ).toBeVisible();
-    expect(currentSelection.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
 
 export const WorkstationRequestSelectionScriptSuccess = {
-  parameters: workstationRequestStoryParameters(dashboardWorkstationRequestFixtures.scriptSuccess),
+  parameters: workstationRequestStoryParameters(
+    dashboardWorkstationRequestFixtures.scriptSuccess,
+  ),
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await selectWorkstationRequest(canvasElement, dashboardWorkstationRequestFixtures.scriptSuccess);
+    await selectWorkstationRequest(
+      canvasElement,
+      dashboardWorkstationRequestFixtures.scriptSuccess,
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    await expect(currentSelection.getAllByText("request-script-success-story").length).toBeGreaterThan(0);
-    await expect(currentSelection.getByText("script success stdout")).toBeVisible();
-    await expect(currentSelection.getAllByText("SUCCEEDED").length).toBeGreaterThan(0);
-    await expect(currentSelection.getAllByText("222ms").length).toBeGreaterThan(0);
-    expect(currentSelection.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
+    await expect(
+      currentSelection.getAllByText("request-script-success-story").length,
+    ).toBeGreaterThan(0);
+    await expect(
+      currentSelection.getByText("script success stdout"),
+    ).toBeVisible();
+    await expect(
+      currentSelection.getAllByText("SUCCEEDED").length,
+    ).toBeGreaterThan(0);
+    await expect(currentSelection.getAllByText("222ms").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      currentSelection.queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
 
 export const WorkstationRequestSelectionScriptFailed = {
-  parameters: workstationRequestStoryParameters(dashboardWorkstationRequestFixtures.scriptFailed),
+  parameters: workstationRequestStoryParameters(
+    dashboardWorkstationRequestFixtures.scriptFailed,
+  ),
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await selectWorkstationRequest(canvasElement, dashboardWorkstationRequestFixtures.scriptFailed);
+    await selectWorkstationRequest(
+      canvasElement,
+      dashboardWorkstationRequestFixtures.scriptFailed,
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    await expect(currentSelection.getAllByText("request-script-failed-story").length).toBeGreaterThan(0);
+    await expect(
+      currentSelection.getAllByText("request-script-failed-story").length,
+    ).toBeGreaterThan(0);
     await expect(currentSelection.getByText("script_timeout")).toBeVisible();
     await expect(currentSelection.getByText("TIMEOUT")).toBeVisible();
     await expect(currentSelection.getByText("script timed out")).toBeVisible();
-    expect(currentSelection.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
@@ -1097,7 +1336,10 @@ export const WorkstationRequestSelectionScriptFailed = {
 export const WorkChartTimelineVerification = {
   parameters: {
     dashboardApi: {
-      timelineSnapshots: [historicalWorkOutcomeSnapshot, liveWorkOutcomeSnapshot],
+      timelineSnapshots: [
+        historicalWorkOutcomeSnapshot,
+        liveWorkOutcomeSnapshot,
+      ],
     },
   },
   render: () => <App />,
@@ -1109,7 +1351,9 @@ export const WorkChartTimelineVerification = {
 
     await expect(outcomeChart).toBeVisible();
     await expect(
-      within(outcomeChart).getByRole("img", { name: "Work outcome chart for Session" }),
+      within(outcomeChart).getByRole("img", {
+        name: "Work outcome chart for Session",
+      }),
     ).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
 
@@ -1121,7 +1365,9 @@ export const WorkChartTimelineVerification = {
     await expect(await canvas.findByText("Tick 2 of 5")).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
 
-    await userEvent.click(await canvas.findByRole("button", { name: "Current" }));
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Current" }),
+    );
 
     await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
@@ -1142,7 +1388,9 @@ export const SelectedPositionCurrentWork = {
     const canvas = within(canvasElement);
 
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Select story:implemented state" }),
+      await canvas.findByRole("button", {
+        name: "Select story:implemented state",
+      }),
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
@@ -1170,7 +1418,9 @@ export const SelectedEmptyPosition = {
     const currentSelection = within(currentSelectionCard(canvasElement));
     await expect(currentSelection.getByText("Current work")).toBeVisible();
     await expect(
-      currentSelection.getByText("No work is recorded for this place at the selected tick."),
+      currentSelection.getByText(
+        "No work is recorded for this place at the selected tick.",
+      ),
     ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
@@ -1189,18 +1439,25 @@ export const InferenceCurrentSelectionDetails = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    await userEvent.click((await canvas.findAllByRole("button", { name: /Active Story/ }))[0]);
+    await userEvent.click(
+      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    expect(currentSelection.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
-    await expect(currentSelection.getByRole("heading", { name: "Workstation dispatches" }))
-      .toBeVisible();
+    expect(
+      currentSelection.queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
+    await expect(
+      currentSelection.getByRole("heading", { name: "Workstation dispatches" }),
+    ).toBeVisible();
     await expect(currentSelection.getByText("Current dispatch")).toBeVisible();
     expect(currentSelection.getAllByText(/codex/).length).toBeGreaterThan(0);
-    expect(currentSelection.getAllByText(/factory-renderer/).length).toBeGreaterThan(0);
-    expect(currentSelection.getAllByText(/sha256:system-runtime/).length).toBeGreaterThan(0);
+    expect(currentSelection.queryByText(/factory-renderer/)).toBeNull();
+    expect(currentSelection.queryByText(/sha256:system-runtime/)).toBeNull();
     expect(
-      currentSelection.queryByText(/Model details are not available for this selected run/),
+      currentSelection.queryByText(
+        /Model details are not available for this selected run/,
+      ),
     ).toBeNull();
     expect(currentSelection.queryByText("sha256:user-runtime")).toBeNull();
     expectCurrentSelectionCardID(canvasElement);
@@ -1220,16 +1477,21 @@ export const TerminalFailureDetails = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    await userEvent.click(await canvas.findByRole("button", { name: "Failed Story" }));
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Failed Story" }),
+    );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
     await expect(currentSelection.getByText("Failed Story")).toBeVisible();
-    await expect(currentSelection.getByText("Failure reason")).toBeVisible();
-    await expect(currentSelection.getByText("provider_rate_limit")).toBeVisible();
-    await expect(currentSelection.getByText("Failure message")).toBeVisible();
     await expect(
-      currentSelection.getByText("Provider rate limit exceeded while generating the repair."),
+      currentSelection.getByRole("heading", { name: "Workstation dispatches" }),
     ).toBeVisible();
+    await expect(currentSelection.getByText("Current dispatch")).toBeVisible();
+    await expect(
+      currentSelection.getByText("Session log unavailable"),
+    ).toBeVisible();
+    expect(currentSelection.queryByText("Failure reason")).toBeNull();
+    expect(currentSelection.queryByText("Failure message")).toBeNull();
     expect(
       currentSelection.queryByText(
         "Terminal summaries are reconstructed from retained runtime state.",
@@ -1249,16 +1511,26 @@ export const FailureAnalysisEventReplaySmoke = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    const slider = await canvas.findByRole<HTMLInputElement>("slider", { name: "Timeline tick" });
+    const slider = await canvas.findByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
     expect(slider.value).toBe("4");
     await expect(await canvas.findByText("Tick 4 of 4")).toBeVisible();
 
-    await userEvent.click(await canvas.findByRole("button", { name: "Blocked Analysis Story" }));
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Blocked Analysis Story" }),
+    );
 
     const failedSelection = within(currentSelectionCard(canvasElement));
-    await expect(failedSelection.getByText("Failure reason")).toBeVisible();
-    expect(failedSelection.getAllByText("provider_rate_limit").length).toBeGreaterThan(0);
-    await expect(failedSelection.getByText("Failure message")).toBeVisible();
+    await expect(
+      failedSelection.getByRole("heading", { name: "Error details" }),
+    ).toBeVisible();
+    expect(
+      failedSelection.getAllByText("provider_rate_limit").length,
+    ).toBeGreaterThan(0);
+    await expect(
+      failedSelection.getByText(/codex \/ session_id \/ sess-blocked-analysis/),
+    ).toBeVisible();
     expect(
       failedSelection.getAllByText(
         "Provider rate limit exceeded while generating the analysis.",
@@ -1270,12 +1542,18 @@ export const FailureAnalysisEventReplaySmoke = {
       ),
     ).toBeNull();
 
-    await userEvent.click(await canvas.findByRole("button", { name: "Select story:new state" }));
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Select story:new state" }),
+    );
 
     const positionSelection = within(currentSelectionCard(canvasElement));
     await expect(positionSelection.getByText("Current work")).toBeVisible();
-    await expect(positionSelection.getByText("Queued Analysis Story")).toBeVisible();
-    await expect(positionSelection.getByText("work-queued-analysis")).toBeVisible();
+    await expect(
+      positionSelection.getByText("Queued Analysis Story"),
+    ).toBeVisible();
+    await expect(
+      positionSelection.getByText("work-queued-analysis"),
+    ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
@@ -1290,19 +1568,27 @@ export const ResourceCountEventReplaySmoke = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    const slider = await canvas.findByRole<HTMLInputElement>("slider", { name: "Timeline tick" });
+    const slider = await canvas.findByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
     await expect(await canvas.findByText("Tick 4 of 4")).toBeVisible();
-    await expect(await canvas.findByLabelText("2 resource tokens")).toBeVisible();
+    await expect(
+      await canvas.findByLabelText("2 resource tokens"),
+    ).toBeVisible();
 
     fireEvent.change(slider, { target: { value: "3" } });
 
     await expect(await canvas.findByText("Tick 3 of 4")).toBeVisible();
-    await expect(await canvas.findByLabelText("1 resource tokens")).toBeVisible();
+    await expect(
+      await canvas.findByLabelText("1 resource tokens"),
+    ).toBeVisible();
 
     fireEvent.change(slider, { target: { value: "1" } });
 
     await expect(await canvas.findByText("Tick 1 of 4")).toBeVisible();
-    await expect(await canvas.findByLabelText("2 resource tokens")).toBeVisible();
+    await expect(
+      await canvas.findByLabelText("2 resource tokens"),
+    ).toBeVisible();
   },
 };
 
@@ -1343,4 +1629,3 @@ export const TypographyRegressionNarrow = {
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };
-

@@ -2,14 +2,11 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { buildDashboardWorkstationRequestFixture } from "../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
+import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
 import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
-import { CurrentSelectionWidget } from "./current-selection-widget";
+import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import type { CurrentSelectionState } from "./useCurrentSelection";
-import type {
-  DashboardSelection,
-  TerminalWorkDetail,
-} from "./types";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -53,20 +50,25 @@ function buildCurrentSelection(
 function buildSelectedWorkItemFixture() {
   const snapshot = semanticWorkflowDashboardSnapshot;
   const dispatchId = snapshot.runtime.active_dispatch_ids?.[0] ?? "";
-  const execution = snapshot.runtime.active_executions_by_dispatch_id?.[dispatchId];
+  const execution =
+    snapshot.runtime.active_executions_by_dispatch_id?.[dispatchId];
   const workItem = execution?.work_items?.[0];
   const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-  const providerSessions = snapshot.runtime.session.provider_sessions?.filter((attempt) =>
-    attempt.work_items?.some((candidate) => candidate.work_id === workItem?.work_id),
+  const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
+    (attempt) =>
+      attempt.work_items?.some(
+        (candidate) => candidate.work_id === workItem?.work_id,
+      ),
   );
-  const selectedWorkRequestHistory = snapshot.runtime.workstation_requests_by_dispatch_id?.[
-    dispatchId
-  ]
+  const selectedWorkRequestHistory = snapshot.runtime
+    .workstation_requests_by_dispatch_id?.[dispatchId]
     ? [snapshot.runtime.workstation_requests_by_dispatch_id[dispatchId]]
     : [];
 
   if (!execution || !workItem || !selectedNode) {
-    throw new Error("expected semantic workflow fixture to include an active selected work item");
+    throw new Error(
+      "expected semantic workflow fixture to include an active selected work item",
+    );
   }
 
   const selection: DashboardSelection = {
@@ -81,11 +83,13 @@ function buildSelectedWorkItemFixture() {
     executionDetails: selectWorkItemExecutionDetails({
       activeExecution: execution,
       dispatchID: dispatchId,
-      inferenceAttemptsByDispatchID: snapshot.runtime.inference_attempts_by_dispatch_id,
+      inferenceAttemptsByDispatchID:
+        snapshot.runtime.inference_attempts_by_dispatch_id,
       providerSessions: providerSessions ?? [],
       selectedNode,
       workItem,
-      workstationRequestsByDispatchID: snapshot.runtime.workstation_requests_by_dispatch_id,
+      workstationRequestsByDispatchID:
+        snapshot.runtime.workstation_requests_by_dispatch_id,
     }),
     providerSessions: providerSessions ?? [],
     selectedWorkRequestHistory,
@@ -113,8 +117,7 @@ describe("CurrentSelectionWidget", () => {
       selectedWorkRequestHistory,
       selection,
       workItem,
-    } =
-      buildSelectedWorkItemFixture();
+    } = buildSelectedWorkItemFixture();
     const terminalWorkDetail: TerminalWorkDetail = {
       attempts: providerSessions,
       label: workItem.display_name ?? workItem.work_id,
@@ -135,20 +138,33 @@ describe("CurrentSelectionWidget", () => {
         })}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={executionDetails}
-        terminalWorkExecutionDetails={executionDetails}
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
     expect(within(currentSelection).getByText(workItem.work_id)).toBeTruthy();
-    expect(within(currentSelection).getByRole("heading", { name: "Execution details" })).toBeTruthy();
-    expect(within(currentSelection).queryByRole("heading", { name: "Inference attempts" })).toBeNull();
     expect(
-      within(currentSelection).getByRole("heading", { name: "Workstation dispatches" }),
+      within(currentSelection).queryByRole("heading", {
+        name: "Execution details",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).queryByRole("heading", {
+        name: "Inference attempts",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByRole("heading", {
+        name: "Workstation dispatches",
+      }),
     ).toBeTruthy();
     expect(within(currentSelection).getByText("Current dispatch")).toBeTruthy();
     expect(
-      within(currentSelection).queryByRole("heading", { name: "Work session runs list" }),
+      within(currentSelection).queryByRole("heading", {
+        name: "Work session runs list",
+      }),
     ).toBeNull();
   });
 
@@ -160,8 +176,7 @@ describe("CurrentSelectionWidget", () => {
       selectedWorkRequestHistory,
       selection,
       workItem,
-    } =
-      buildSelectedWorkItemFixture();
+    } = buildSelectedWorkItemFixture();
 
     render(
       <CurrentSelectionWidget
@@ -175,20 +190,33 @@ describe("CurrentSelectionWidget", () => {
         })}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={executionDetails}
-        terminalWorkExecutionDetails={null}
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
     expect(within(currentSelection).getByText(workItem.work_id)).toBeTruthy();
-    expect(within(currentSelection).getByRole("heading", { name: "Execution details" })).toBeTruthy();
-    expect(within(currentSelection).queryByRole("heading", { name: "Inference attempts" })).toBeNull();
     expect(
-      within(currentSelection).getByRole("heading", { name: "Workstation dispatches" }),
+      within(currentSelection).queryByRole("heading", {
+        name: "Execution details",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).queryByRole("heading", {
+        name: "Inference attempts",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByRole("heading", {
+        name: "Workstation dispatches",
+      }),
     ).toBeTruthy();
     expect(within(currentSelection).getByText("Current dispatch")).toBeTruthy();
     expect(
-      within(currentSelection).queryByRole("heading", { name: "Work session runs list" }),
+      within(currentSelection).queryByRole("heading", {
+        name: "Work session runs list",
+      }),
     ).toBeNull();
   });
 
@@ -200,7 +228,9 @@ describe("CurrentSelectionWidget", () => {
       ) ?? null;
 
     if (!selectedStatePlace) {
-      throw new Error("expected semantic workflow fixture to include a terminal state place");
+      throw new Error(
+        "expected semantic workflow fixture to include a terminal state place",
+      );
     }
 
     render(
@@ -216,15 +246,19 @@ describe("CurrentSelectionWidget", () => {
             },
           ],
           selectedStateTokenCount: 1,
-          selection: { kind: "state-node", placeId: selectedStatePlace.place_id },
+          selection: {
+            kind: "state-node",
+            placeId: selectedStatePlace.place_id,
+          },
         })}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
-        terminalWorkExecutionDetails={null}
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
     expect(within(currentSelection).getByTitle("story:complete")).toBeTruthy();
     expect(within(currentSelection).getByText("Current work")).toBeTruthy();
     expect(within(currentSelection).getByText("Done Story")).toBeTruthy();
@@ -239,7 +273,9 @@ describe("CurrentSelectionWidget", () => {
     const selectStateWorkItem = vi.fn();
 
     if (!selectedStatePlace) {
-      throw new Error("expected semantic workflow fixture to include a terminal state place");
+      throw new Error(
+        "expected semantic workflow fixture to include a terminal state place",
+      );
     }
 
     render(
@@ -256,15 +292,19 @@ describe("CurrentSelectionWidget", () => {
             },
           ],
           selectedStateTokenCount: 1,
-          selection: { kind: "state-node", placeId: selectedStatePlace.place_id },
+          selection: {
+            kind: "state-node",
+            placeId: selectedStatePlace.place_id,
+          },
         })}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
-        terminalWorkExecutionDetails={null}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Select work item Done Story" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select work item Done Story" }),
+    );
 
     expect(selectStateWorkItem).toHaveBeenCalledWith(selectedStatePlace, {
       display_name: "Done Story",
@@ -292,13 +332,18 @@ describe("CurrentSelectionWidget", () => {
         })}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
-        terminalWorkExecutionDetails={null}
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
-    expect(within(currentSelection).getByRole("heading", { name: "Active work" })).toBeTruthy();
-    expect(within(currentSelection).getByRole("heading", { name: "Run history" })).toBeTruthy();
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    expect(
+      within(currentSelection).getByRole("heading", { name: "Active work" }),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).getByRole("heading", { name: "Run history" }),
+    ).toBeTruthy();
   });
 
   it("renders workstation request details when a workstation request is selected", () => {
@@ -322,7 +367,9 @@ describe("CurrentSelectionWidget", () => {
     render(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
-          selectedNode: semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review,
+          selectedNode:
+            semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id
+              .review,
           selectedWorkstationRequest,
           selection: {
             dispatchId: selectedWorkstationRequest.dispatch_id,
@@ -333,18 +380,28 @@ describe("CurrentSelectionWidget", () => {
         })}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
-        terminalWorkExecutionDetails={null}
       />,
     );
 
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
-    expect(within(currentSelection).getAllByText("request-markdown-story").length).toBeGreaterThan(0);
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
     expect(
-      within(currentSelection).getByRole("heading", { level: 2, name: "Review checklist" }),
+      within(currentSelection).getAllByText("request-markdown-story").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(currentSelection).getByRole("heading", {
+        level: 2,
+        name: "Review checklist",
+      }),
     ).toBeTruthy();
     expect(within(currentSelection).getByRole("list")).toBeTruthy();
-    expect(within(currentSelection).getByText("Check the latest diff")).toBeTruthy();
-    expect(within(currentSelection).queryByRole("heading", { name: "Active work" })).toBeNull();
+    expect(
+      within(currentSelection).getByText("Check the latest diff"),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).queryByRole("heading", { name: "Active work" }),
+    ).toBeNull();
   });
 
   it("renders the empty current-selection guidance when nothing is selected", () => {
@@ -353,11 +410,14 @@ describe("CurrentSelectionWidget", () => {
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
-        terminalWorkExecutionDetails={null}
       />,
     );
 
-    expect(screen.getByText("Select a workstation, work item, or state node to inspect live details.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Select a workstation, work item, or state node to inspect live details.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders disabled undo and redo controls in the shared current-selection header by default", () => {
@@ -366,16 +426,18 @@ describe("CurrentSelectionWidget", () => {
         currentSelection={buildCurrentSelection()}
         now={DETAIL_CARD_NOW}
         selectedWorkExecutionDetails={null}
-        terminalWorkExecutionDetails={null}
       />,
     );
 
     expect(
-      screen.getByRole("button", { name: "Undo selection" }).getAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Undo selection" })
+        .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
-      screen.getByRole("button", { name: "Redo selection" }).getAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Redo selection" })
+        .getAttribute("disabled"),
     ).not.toBeNull();
   });
 });
-

@@ -10,8 +10,8 @@ import type {
   DashboardRuntimeWorkstationRequest,
   DashboardTrace,
   DashboardWorkItemRef,
-  DashboardWorkstationRequest,
   DashboardWorkstationNode,
+  DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { DashboardWorkItemSelection } from "./types";
@@ -80,9 +80,6 @@ export interface WorkItemDetailCardProps {
   activeTraceID?: string | null;
   dispatchAttempts: DashboardProviderSessionAttempt[];
   executionDetails: SelectedWorkItemExecutionDetails;
-  failureMessage?: string;
-  failureReason?: string;
-  now: number;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedNode?: DashboardWorkstationNode | null;
@@ -143,7 +140,8 @@ export interface ProviderSessionAttemptsProps {
   title?: string;
 }
 
-export interface CollapsibleProviderSessionAttemptsProps extends ProviderSessionAttemptsProps {
+export interface CollapsibleProviderSessionAttemptsProps
+  extends ProviderSessionAttemptsProps {
   resetKey: string;
 }
 
@@ -192,4 +190,3 @@ export interface MetadataSectionProps {
   metadata: Record<string, string> | undefined;
   title: string;
 }
-

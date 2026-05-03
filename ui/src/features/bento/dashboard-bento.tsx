@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../api/dashboard/types";
-import { type AgentBentoLayoutCard, AgentBentoLayout } from "./agent-bento";
 import {
   CurrentSelectionWidget,
   useCurrentSelection,
@@ -9,6 +8,7 @@ import {
 } from "../current-selection";
 import { SubmitWorkWidget } from "../submit-work";
 import { TerminalWorkWidget } from "../terminal-work";
+import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { TraceDrilldownWidget, useTraceDrilldown } from "../trace-drilldown";
 import { useWorkOutcomeChart, WorkOutcomeWidget } from "../work-outcome";
 import { WorkTotalsWidget } from "../work-totals";
@@ -17,13 +17,10 @@ import {
   useCurrentActivityImportController,
   WorkflowActivityWidget,
 } from "../workflow-activity";
-import {
-  DASHBOARD_WIDGET_IDS,
-  useDashboardLayout,
-} from "./useDashboardLayout";
-import { useDashboardNow } from "./useDashboardNow";
-import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
+import { AgentBentoLayout, type AgentBentoLayoutCard } from "./agent-bento";
 import { useDashboardBentoStore } from "./state/dashboardBentoStore";
+import { DASHBOARD_WIDGET_IDS, useDashboardLayout } from "./useDashboardLayout";
+import { useDashboardNow } from "./useDashboardNow";
 
 const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
   factory_state: "IDLE",
@@ -49,15 +46,28 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
 export function DashboardBento() {
   const { dashboardLayout, persistDashboardLayout } = useDashboardLayout();
   const now = useDashboardNow();
-  const incrementRefreshToken = useDashboardBentoStore((state) => state.incrementRefreshToken);
-  const resetSelectedTraceID = useDashboardBentoStore((state) => state.resetSelectedTraceID);
-  const selectedTraceID = useDashboardBentoStore((state) => state.selectedTraceID);
-  const setSelectedTraceID = useDashboardBentoStore((state) => state.setSelectedTraceID);
+  const incrementRefreshToken = useDashboardBentoStore(
+    (state) => state.incrementRefreshToken,
+  );
+  const resetSelectedTraceID = useDashboardBentoStore(
+    (state) => state.resetSelectedTraceID,
+  );
+  const selectedTraceID = useDashboardBentoStore(
+    (state) => state.selectedTraceID,
+  );
+  const setSelectedTraceID = useDashboardBentoStore(
+    (state) => state.setSelectedTraceID,
+  );
   const timelineEvents = useFactoryTimelineStore((state) => state.events);
-  const selectedTimelineTick = useFactoryTimelineStore((state) => state.selectedTick);
-  const worldViewCache = useFactoryTimelineStore((state) => state.worldViewCache);
+  const selectedTimelineTick = useFactoryTimelineStore(
+    (state) => state.selectedTick,
+  );
+  const worldViewCache = useFactoryTimelineStore(
+    (state) => state.worldViewCache,
+  );
   const workstationRequestsByDispatchID = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick]?.workstationRequestsByDispatchID,
+    (state) =>
+      state.worldViewCache[state.selectedTick]?.workstationRequestsByDispatchID,
   );
   const selectedSnapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
@@ -80,14 +90,12 @@ export function DashboardBento() {
     currentSelection.selectedWorkID,
     selectedTraceID,
   );
-  const {
-    selectedWorkExecutionDetails,
-    terminalWorkExecutionDetails,
-  } = useCurrentSelectionDetails({
+  const { selectedWorkExecutionDetails } = useCurrentSelectionDetails({
     currentSelection,
     selectedTrace,
     snapshot,
-    workstationRequestsByDispatchID: snapshot.runtime.workstation_requests_by_dispatch_id,
+    workstationRequestsByDispatchID:
+      snapshot.runtime.workstation_requests_by_dispatch_id,
   });
   const workChartModel = useWorkOutcomeChart({
     selectedTimelineTick,
@@ -103,7 +111,6 @@ export function DashboardBento() {
     selectedWorkExecutionDetails,
     setSelectedTraceID,
     snapshot,
-    terminalWorkExecutionDetails,
     traceGridState,
     workChartModel,
   });
@@ -135,9 +142,6 @@ interface DashboardCardBuilderArgs {
   >["selectedWorkExecutionDetails"];
   setSelectedTraceID: (traceID: string | null) => void;
   snapshot: DashboardSnapshot;
-  terminalWorkExecutionDetails: ReturnType<
-    typeof useCurrentSelectionDetails
-  >["terminalWorkExecutionDetails"];
   traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
   workChartModel: ReturnType<typeof useWorkOutcomeChart>;
 }
@@ -151,7 +155,6 @@ function buildDashboardCards({
   selectedWorkExecutionDetails,
   setSelectedTraceID,
   snapshot,
-  terminalWorkExecutionDetails,
   traceGridState,
   workChartModel,
 }: DashboardCardBuilderArgs): AgentBentoLayoutCard[] {
@@ -201,12 +204,13 @@ function buildDashboardCards({
         <CurrentSelectionWidget
           activeTraceID={selectedTraceID ?? selectedTrace?.trace_id ?? null}
           currentSelection={currentSelection}
-          failedWorkDetailsByWorkID={snapshot.runtime.session.failed_work_details_by_work_id}
+          failedWorkDetailsByWorkID={
+            snapshot.runtime.session.failed_work_details_by_work_id
+          }
           now={now}
           onSelectTraceID={setSelectedTraceID}
           selectedTrace={selectedTrace}
           selectedWorkExecutionDetails={selectedWorkExecutionDetails}
-          terminalWorkExecutionDetails={terminalWorkExecutionDetails}
           widgetId={DASHBOARD_WIDGET_IDS.currentSelection}
         />
       ),
@@ -214,7 +218,9 @@ function buildDashboardCards({
     {
       id: DASHBOARD_WIDGET_IDS.submitWork,
       children: (
-        <SubmitWorkWidget submitWorkTypes={snapshot.topology.submit_work_types} />
+        <SubmitWorkWidget
+          submitWorkTypes={snapshot.topology.submit_work_types}
+        />
       ),
     },
     {
