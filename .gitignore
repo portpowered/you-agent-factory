@@ -31,6 +31,7 @@ factory/inputs/**
 
 .claude
 
+ui/coverage/*
 factory/logs/complete
 factory/logs/meta/*
 !factory/logs/meta/asks.md
