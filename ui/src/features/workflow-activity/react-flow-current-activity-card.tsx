@@ -15,7 +15,11 @@ import type { DashboardActiveExecution, DashboardSnapshot, DashboardWorkItemRef 
 import type { FactoryValue } from "../../api/named-factory";
 import { cx } from "../../lib/cx";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
-import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
+import {
+  FactoryImportPreviewDialog,
+  type FactoryPngImportValue,
+  type ReadFactoryImportFile,
+} from "../import";
 import { CURRENT_ACTIVITY_NODE_TYPES, type CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
 import {
@@ -39,7 +43,6 @@ import {
   currentActivityTopologyKey,
 } from "./react-flow-current-activity-card-keys";
 import {
-  FactoryImportPreviewDialog,
   GraphDropOverlay,
   graphDropStateAttribute,
   GraphImportErrorPanel,

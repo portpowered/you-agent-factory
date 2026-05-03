@@ -2,6 +2,9 @@ import { useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../api/dashboard/types";
 import {
+  DashboardImportPreviewDialog,
+} from "../import";
+import {
   CurrentSelectionWidget,
   useCurrentSelection,
   useCurrentSelectionDetails,
@@ -13,7 +16,6 @@ import { TraceDrilldownWidget, useTraceDrilldown } from "../trace-drilldown";
 import { useWorkOutcomeChart, WorkOutcomeWidget } from "../work-outcome";
 import { WorkTotalsWidget } from "../work-totals";
 import {
-  DashboardImportPreviewDialog,
   useCurrentActivityImportController,
   WorkflowActivityWidget,
 } from "../workflow-activity";
@@ -126,7 +128,17 @@ export function DashboardBento() {
         layout={dashboardLayout}
         onLayoutChange={persistDashboardLayout}
       />
-      <DashboardImportPreviewDialog importController={importController} />
+      <DashboardImportPreviewDialog
+        activationState={importController.activationState}
+        importPreviewState={importController.importPreviewState}
+        onCancel={() => {
+          importController.clearActivationError();
+          importController.closeImportPreview();
+        }}
+        onConfirm={(value) => {
+          void importController.activateImport(value);
+        }}
+      />
     </>
   );
 }
