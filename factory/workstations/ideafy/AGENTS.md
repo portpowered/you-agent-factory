@@ -23,19 +23,19 @@ standalone ideas or one ordered batch request:
 - use a batch only when one submission must create multiple work items together
 - use a batch when the follow-up needs dependency ordering, parent-child
   membership, or mixed work types
-- write batch files to `factory/inputs/BATCH/default/{request_id}.json`
+- write batch files to `factory/inputs/BATCH/default/{requestId}.json`
 - the filename must end in `.json`
 - the request body must set `type` to exactly `FACTORY_REQUEST_BATCH`
-- the request body must include a stable `request_id`
+- the request body must include a stable `requestId`
 - every work item in a `BATCH` file must set a unique `name` and explicit
-  `work_type_name`
+  `workTypeName`
 - use `DEPENDS_ON` when one sibling work item must wait for another sibling
   work item
 - use `PARENT_CHILD` when one work item should belong to a parent's child set
-- in `DEPENDS_ON`, `source_work_name` is the blocked work item and
-  `target_work_name` is the prerequisite work item
-- in `PARENT_CHILD`, `source_work_name` is the child work item and
-  `target_work_name` is the parent work item
+- in `DEPENDS_ON`, `sourceWorkName` is the blocked work item and
+  `targetWorkName` is the prerequisite work item
+- in `PARENT_CHILD`, `sourceWorkName` is the child work item and
+  `targetWorkName` is the parent work item
 - use a parent `state` only when you intentionally need the parent to start in
   a waiting state consumed by parent-aware fan-in
 - relation names must match declared work item names exactly
@@ -56,18 +56,18 @@ For the default case, write one markdown file to
 If the request needs dependency ordering or multiple related work items with
 different work types, create the canonical batch JSON in a temp directory, then
 copy it into
-`factory/inputs/BATCH/default/{request_id}.json`.
+`factory/inputs/BATCH/default/{requestId}.json`.
 
 The batch JSON should use this shape:
 
 ```json
 {
-  "request_id": "your-request-id",
+  "requestId": "your-request-id",
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
       "name": "work-name",
-      "work_type_name": "work-type",
+      "workTypeName": "work-type",
       "state": "waiting",
       "payload": {},
       "tags": {}
@@ -76,9 +76,9 @@ The batch JSON should use this shape:
   "relations": [
     {
       "type": "DEPENDS_ON",
-      "source_work_name": "blocked-work",
-      "target_work_name": "prerequisite-work",
-      "required_state": "complete"
+      "sourceWorkName": "blocked-work",
+      "targetWorkName": "prerequisite-work",
+      "requiredState": "complete"
     }
   ]
 }
