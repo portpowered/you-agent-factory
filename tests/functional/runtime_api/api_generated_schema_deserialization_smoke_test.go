@@ -230,6 +230,7 @@ func assertGeneratedSmokeTopologyBoundary(t *testing.T, generated factoryapi.Fac
 	if generated.Workstations == nil || len(*generated.Workstations) != 2 {
 		t.Fatalf("file boundary workstations = %#v, want two workstations", generated.Workstations)
 	}
+	assertGeneratedSmokeSerializedWorkstationBoundary(t, generated, false)
 	assertGeneratedSmokeWorkstationBoundary(t, *generated.Workstations, "step-one", "worker-a")
 	assertGeneratedSmokeWorkstationBoundary(t, *generated.Workstations, "step-two", "worker-b")
 }
@@ -260,6 +261,7 @@ func assertGeneratedSmokeTransportBoundary(t *testing.T, generated factoryapi.Fa
 			t.Fatalf("runtime boundary workstation %q type = %q, want %q", workstation.Name, stringValueFromFunctionalPtr(workstation.Type), interfaces.WorkstationTypeModel)
 		}
 	}
+	assertGeneratedSmokeSerializedWorkstationBoundary(t, generated, false)
 }
 
 func assertGeneratedSmokeRuntimeDefinitions(t *testing.T, generated factoryapi.Factory) {
@@ -268,12 +270,47 @@ func assertGeneratedSmokeRuntimeDefinitions(t *testing.T, generated factoryapi.F
 	if generated.Workstations == nil {
 		t.Fatal("runtime boundary workstations = nil")
 	}
+	assertGeneratedSmokeSerializedWorkstationBoundary(t, generated, true)
 	for _, workstation := range *generated.Workstations {
 		if workstation.Name != "step-one" && workstation.Name != "step-two" {
 			continue
 		}
 		if !strings.Contains(stringValueFromFunctionalPtr(workstation.Body), "Do the work.") {
 			t.Fatalf("runtime boundary workstation %q body = %q, want split runtime prompt", workstation.Name, stringValueFromFunctionalPtr(workstation.Body))
+		}
+	}
+}
+
+func assertGeneratedSmokeSerializedWorkstationBoundary(t *testing.T, generated factoryapi.Factory, requireBody bool) {
+	t.Helper()
+
+	data, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated factory boundary: %v", err)
+	}
+	var serialized struct {
+		Workstations []map[string]any `json:"workstations"`
+	}
+	if err := json.Unmarshal(data, &serialized); err != nil {
+		t.Fatalf("unmarshal generated factory boundary JSON: %v", err)
+	}
+	if len(serialized.Workstations) == 0 {
+		t.Fatalf("serialized generated factory boundary missing workstations: %s", string(data))
+	}
+	for _, workstation := range serialized.Workstations {
+		name, _ := workstation["name"].(string)
+		if name != "step-one" && name != "step-two" {
+			continue
+		}
+		if _, ok := workstation["promptTemplate"]; ok {
+			t.Fatalf("expected serialized generated workstation %q to omit promptTemplate, got %#v", name, workstation)
+		}
+		if !requireBody {
+			continue
+		}
+		body, ok := workstation["body"].(string)
+		if !ok || !strings.Contains(body, "Do the work.") {
+			t.Fatalf("expected serialized generated workstation %q body to preserve canonical prompt content, got %#v", name, workstation)
 		}
 	}
 }

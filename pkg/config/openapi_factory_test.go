@@ -121,6 +121,25 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t
 	if workstation.Body == nil || *workstation.Body != "Finish {{ .WorkID }}." {
 		t.Fatalf("expected generated body to survive boundary decode, got %#v", workstation.Body)
 	}
+	generatedJSON, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated factory boundary: %v", err)
+	}
+	var serialized struct {
+		Workstations []map[string]any `json:"workstations"`
+	}
+	if err := json.Unmarshal(generatedJSON, &serialized); err != nil {
+		t.Fatalf("unmarshal generated factory boundary JSON: %v", err)
+	}
+	if len(serialized.Workstations) != 1 {
+		t.Fatalf("expected one serialized workstation, got %#v", serialized.Workstations)
+	}
+	if _, ok := serialized.Workstations[0]["promptTemplate"]; ok {
+		t.Fatalf("expected generated workstation JSON to omit promptTemplate, got %#v", serialized.Workstations[0])
+	}
+	if body, ok := serialized.Workstations[0]["body"].(string); !ok || body != "Finish {{ .WorkID }}." {
+		t.Fatalf("expected generated workstation JSON body to stay canonical, got %#v", serialized.Workstations[0])
+	}
 	if workstation.Resources == nil || len(*workstation.Resources) != 1 || (*workstation.Resources)[0].Capacity != 2 {
 		t.Fatalf("expected generated resources capacity 2, got %#v", workstation.Resources)
 	}
