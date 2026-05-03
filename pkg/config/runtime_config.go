@@ -237,12 +237,33 @@ func hasInlineRuntimeDefinitions(cfg *interfaces.FactoryConfig) bool {
 		return false
 	}
 
+	for _, worker := range cfg.Workers {
+		if workerHasInlineRuntimeDefinitionFields(worker) {
+			return true
+		}
+	}
 	for _, workstation := range cfg.Workstations {
 		if workstationHasInlineRuntimeDefinitionFields(workstation) {
 			return true
 		}
 	}
 	return false
+}
+
+func workerHasInlineRuntimeDefinitionFields(worker interfaces.WorkerConfig) bool {
+	return strings.TrimSpace(worker.Type) != "" ||
+		worker.Model != "" ||
+		worker.ModelProvider != "" ||
+		worker.ExecutorProvider != "" ||
+		worker.SessionID != "" ||
+		worker.Command != "" ||
+		len(worker.Args) > 0 ||
+		len(worker.Resources) > 0 ||
+		worker.Concurrency != 0 ||
+		worker.Timeout != "" ||
+		worker.StopToken != "" ||
+		worker.SkipPermissions ||
+		worker.Body != ""
 }
 
 func workerConfigFromInlineConfig(def *interfaces.WorkerConfig) (*interfaces.WorkerConfig, error) {

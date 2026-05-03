@@ -225,6 +225,109 @@ Execute {{ .WorkID }}.
 	}
 }
 
+func TestLoadRuntimeConfig_RejectsMissingBodyOnlyWorkerAgentsFileForSplitAuthoredLayout(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name":          "executor",
+				"type":          "MODEL_WORKER",
+				"model":         "claude-sonnet-4-20250514",
+				"modelProvider": "CLAUDE",
+				"stopToken":     "COMPLETE",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			},
+		},
+	})
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+---
+Execute {{ .WorkID }}.
+`)
+	if err := os.MkdirAll(filepath.Join(factoryDir, "workers", "executor"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(workerDir): %v", err)
+	}
+
+	_, err := LoadRuntimeConfig(factoryDir, nil)
+	if err == nil {
+		t.Fatal("expected missing body-only worker AGENTS.md to fail")
+	}
+	if !strings.Contains(err.Error(), `load worker "executor" config`) {
+		t.Fatalf("expected worker path context in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `worker "executor" is missing body-only AGENTS.md content required by the split authored layout`) {
+		t.Fatalf("expected missing body-only worker error, got %v", err)
+	}
+}
+
+func TestLoadRuntimeConfig_RejectsMissingBodyOnlyWorkstationAgentsFileForSplitAuthoredLayout(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name":  "executor",
+				"type":  "MODEL_WORKER",
+				"body":  "You are the inline worker.",
+				"model": "claude-sonnet-4-20250514",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"env":     map[string]string{"PROJECT": "demo"},
+			},
+		},
+	})
+	if err := os.MkdirAll(filepath.Join(factoryDir, "workstations", "execute-story"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(workstationDir): %v", err)
+	}
+
+	_, err := LoadRuntimeConfig(factoryDir, nil)
+	if err == nil {
+		t.Fatal("expected missing body-only workstation AGENTS.md to fail")
+	}
+	if !strings.Contains(err.Error(), `load workstation "execute-story" config`) {
+		t.Fatalf("expected workstation path context in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `workstation "execute-story" is missing body-only AGENTS.md content required by the split authored layout`) {
+		t.Fatalf("expected missing body-only workstation error, got %v", err)
+	}
+}
+
 func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	rootDir := t.TempDir()
 

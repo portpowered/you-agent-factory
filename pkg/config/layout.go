@@ -859,6 +859,8 @@ func runtimeWorkerDefinition(factoryDir string, worker interfaces.WorkerConfig, 
 		}
 		if bodyFound {
 			inlineWorker.Body = body
+		} else if requireSplitDefinition && strings.TrimSpace(inlineWorker.Body) == "" && splitRuntimeEntityDirExists(workerDir) {
+			return nil, fmt.Errorf("worker %q is missing body-only AGENTS.md content required by the split authored layout", worker.Name)
 		}
 		return inlineWorker, nil
 	}
@@ -890,9 +892,17 @@ func runtimeWorkstationDefinition(factoryDir string, workstation interfaces.Fact
 		if err != nil {
 			return nil, err
 		}
+		segment, err := safeFactoryLayoutSegment("workstation", workstation.Name)
+		if err != nil {
+			return nil, err
+		}
+		workstationDir := filepath.Join(factoryDir, interfaces.WorkstationsDir, segment)
 		splitDef, err := splitWorkstationRuntimeDefinition(factoryDir, workstation, false, loader)
 		if err != nil {
 			return nil, err
+		}
+		if splitDef == nil && requireSplitDefinition && strings.TrimSpace(inlineDef.Body) == "" && splitRuntimeEntityDirExists(workstationDir) {
+			return nil, fmt.Errorf("workstation %q is missing body-only AGENTS.md content required by the split authored layout", workstation.Name)
 		}
 		return mergeRuntimeWorkstationDefinitions(inlineDef, splitDef)
 	}
@@ -1062,6 +1072,11 @@ func safePromptFilePath(workstationDir, promptFile string) (string, error) {
 		return "", fmt.Errorf("prompt file %q cannot escape the workstation directory", promptFile)
 	}
 	return filepath.Join(workstationDir, cleaned), nil
+}
+
+func splitRuntimeEntityDirExists(dir string) bool {
+	info, err := os.Stat(dir)
+	return err == nil && info.IsDir()
 }
 
 type workerFrontmatter struct {
