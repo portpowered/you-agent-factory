@@ -65,7 +65,11 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, hook
 	if err != nil {
 		return "", fmt.Errorf("%w: parse factory %q config: %v", ErrInvalidNamedFactory, segment, err)
 	}
-	canonical, err := mapper.Flatten(factoryCfg)
+	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(factoryCfg)
+	if err != nil {
+		return "", fmt.Errorf("%w: normalize authored factory %q config: %v", ErrInvalidNamedFactory, segment, err)
+	}
+	canonical, err := mapper.Flatten(authoredFactoryCfg)
 	if err != nil {
 		return "", fmt.Errorf("%w: normalize factory %q config: %v", ErrInvalidNamedFactory, segment, err)
 	}

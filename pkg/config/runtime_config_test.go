@@ -351,6 +351,52 @@ func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 		}
 	}
 
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	workerPayloads, ok := payload["workers"].([]any)
+	if !ok || len(workerPayloads) != 1 {
+		t.Fatalf("expected one persisted worker payload, got %#v", payload["workers"])
+	}
+	workerPayload, ok := workerPayloads[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected persisted worker payload object, got %#v", workerPayloads[0])
+	}
+	if _, ok := workerPayload["body"]; ok {
+		t.Fatalf("expected persisted worker payload to omit inline body, got %#v", workerPayload)
+	}
+	workstationPayloads, ok := payload["workstations"].([]any)
+	if !ok || len(workstationPayloads) != 1 {
+		t.Fatalf("expected one persisted workstation payload, got %#v", payload["workstations"])
+	}
+	workstationPayload, ok := workstationPayloads[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected persisted workstation payload object, got %#v", workstationPayloads[0])
+	}
+	if _, ok := workstationPayload["body"]; ok {
+		t.Fatalf("expected persisted workstation payload to omit inline body, got %#v", workstationPayload)
+	}
+
+	workerAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
+	}
+	if got := string(workerAgents); got != "You are the executor.\n" {
+		t.Fatalf("persisted worker AGENTS.md = %q, want body-only worker content", got)
+	}
+	workstationAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(workstation AGENTS.md): %v", err)
+	}
+	if got := string(workstationAgents); got != "Implement {{ .WorkID }}.\n" {
+		t.Fatalf("persisted workstation AGENTS.md = %q, want body-only workstation content", got)
+	}
+
 	loaded, err := LoadRuntimeConfig(factoryDir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(persisted named factory): %v", err)
@@ -1184,14 +1230,14 @@ func TestLoadRuntimeConfig_LoadsInlineRuntimeDefinitionsWithoutAgentsFiles(t *te
 		},
 		"workstations": []map[string]any{
 			{
-				"id":             "execute-story",
-				"name":           "execute-story",
-				"worker":         "executor",
-				"inputs":         []map[string]string{{"workType": "story", "state": "init"}},
-				"outputs":        []map[string]string{{"workType": "story", "state": "complete"}},
-				"type":           "MODEL_WORKSTATION",
-				"stopWords":      []string{"DONE"},
-				"body": "Implement {{ .WorkID }}.",
+				"id":        "execute-story",
+				"name":      "execute-story",
+				"worker":    "executor",
+				"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+				"type":      "MODEL_WORKSTATION",
+				"stopWords": []string{"DONE"},
+				"body":      "Implement {{ .WorkID }}.",
 			},
 		},
 	})
@@ -1979,12 +2025,12 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 		},
 		"workstations": []map[string]any{
 			{
-				"name":           "execute-" + project,
-				"worker":         "executor",
-				"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":        []map[string]string{{"workType": "task", "state": "complete"}},
-				"type":           "MODEL_WORKSTATION",
-				"body": "Implement {{ .WorkID }}.",
+				"name":    "execute-" + project,
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"body":    "Implement {{ .WorkID }}.",
 			},
 		},
 	}
