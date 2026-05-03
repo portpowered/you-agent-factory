@@ -66,7 +66,9 @@ export const MixedOutcomes = {
   render: () => <SelectableTerminalWorkStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const terminalWork = await canvas.findByLabelText("Terminal work outcomes");
+    const terminalWork = await canvas.findByRole("group", {
+      name: "Terminal work outcomes",
+    });
     const terminalScope = within(terminalWork);
 
     await expect(await terminalScope.findByRole("button", { name: "Failed Story" })).toBeVisible();
@@ -110,4 +112,3 @@ export const Empty = {
     widgetId: "terminal-work-empty-story",
   },
 };
-

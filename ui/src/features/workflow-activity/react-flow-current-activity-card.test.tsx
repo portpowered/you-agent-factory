@@ -26,6 +26,7 @@ import {
   workstationKindParityExpectations,
   workstationKindParityDashboardSnapshot,
 } from "../../components/dashboard/test-fixtures";
+import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import type {
   DashboardActiveExecution,
@@ -37,6 +38,7 @@ import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore"
 
 interface RenderCurrentActivityOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
+  importController?: CurrentActivityImportController;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
@@ -95,6 +97,7 @@ function expectFixedWorkstationNodeDimensions(node: Element | null) {
 
 function renderCurrentActivity({
   activateFactory,
+  importController,
   onFactoryActivated,
   onFactoryImportReady,
   readFactoryImportFile,
@@ -115,6 +118,7 @@ function renderCurrentActivity({
   renderWithQueryClient(
     <ReactFlowCurrentActivityCard
       activateFactory={activateFactory}
+      importController={importController}
       now={Date.parse("2026-04-08T12:00:04Z")}
       onFactoryActivated={onFactoryActivated}
       onFactoryImportReady={onFactoryImportReady}
@@ -157,6 +161,25 @@ function createFactoryImportValue(): FactoryPngImportValue {
     previewImageSrc: "blob:factory-preview",
     revokePreviewImageSrc: vi.fn(),
     schemaVersion: "portos.agent-factory.png.v1",
+  };
+}
+
+function createImportController(
+  overrides: Partial<CurrentActivityImportController> = {},
+): CurrentActivityImportController {
+  return {
+    activateImport: vi.fn().mockResolvedValue(undefined),
+    activationState: { status: "idle" },
+    clearActivationError: vi.fn(),
+    clearError: vi.fn(),
+    closeImportPreview: vi.fn(),
+    dropState: { status: "idle" },
+    importPreviewState: { status: "idle" },
+    onDragEnter: vi.fn(),
+    onDragLeave: vi.fn(),
+    onDragOver: vi.fn(),
+    onDrop: vi.fn(),
+    ...overrides,
   };
 }
 
@@ -554,6 +577,22 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
     expect(importValue.revokePreviewImageSrc).toHaveBeenCalledTimes(1);
     expect(onFactoryImportReady).toHaveBeenCalledWith(importValue, file);
+  });
+
+  it("does not render the import preview inside the graph card when a dashboard controller owns it", () => {
+    renderCurrentActivity({
+      importController: createImportController({
+        importPreviewState: {
+          file: new File(["png"], "factory-import.png", { type: "image/png" }),
+          status: "ready",
+          value: createFactoryImportValue(),
+        },
+      }),
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Review factory import" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Work graph viewport" })).toBeTruthy();
   });
 
   it("renders a clear local alert when dropped PNG validation fails", async () => {

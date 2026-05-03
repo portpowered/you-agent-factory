@@ -1,10 +1,22 @@
 import type { NamedFactoryAPIError } from "../../api/named-factory";
 import {
-  DashboardButton,
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard";
 import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui";
+import { cx } from "../../lib/cx";
+import {
   DashboardMessagePanel,
-  DashboardMutationDialog,
 } from "./mutation-dialog";
 import type {
   FactoryImportActivationState,
@@ -17,6 +29,15 @@ const GRAPH_DROP_HINT = "Drop a Port OS factory PNG onto this graph to start imp
 const GRAPH_IMPORT_ERROR_TITLE = "Factory import failed";
 const GRAPH_IMPORT_LOADING_TITLE = "Validating factory PNG";
 const GRAPH_IMPORT_PREVIEW_TITLE = "Review factory import";
+const IMPORT_DIALOG_CONTENT_CLASS =
+  "w-[min(92vw,60rem)] gap-6 p-5 max-[900px]:p-4 min-[901px]:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
+const IMPORT_DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
+const IMPORT_DIALOG_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_BODY_TEXT_CLASS);
+const IMPORT_DIALOG_HINT_CLASS = cx("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
+const IMPORT_DIALOG_LABEL_CLASS = cx(
+  "text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent",
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+);
 
 type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { status: "ready" }>;
 
@@ -122,9 +143,9 @@ export function GraphImportErrorPanel({
   return (
     <DashboardMessagePanel
       action={(
-        <DashboardButton onClick={onDismiss} tone="secondary" type="button">
+        <Button onClick={onDismiss} tone="outline" type="button">
           Dismiss
-        </DashboardButton>
+        </Button>
       )}
       ariaLive="assertive"
       className="mt-4 min-h-0 px-5 py-4"
@@ -164,39 +185,29 @@ export function FactoryImportPreviewDialog({
   previewState,
 }: FactoryImportPreviewDialogProps) {
   const isSubmitting = activationState.status === "submitting";
+  const handleOpenChange = (open: boolean) => {
+    if (!open && !isSubmitting) {
+      onCancel();
+    }
+  };
 
   return (
-    <DashboardMutationDialog
-      closeDisabled={isSubmitting}
-      closeLabel="Close import preview"
-      description={(
-        <>
-          Review the dropped factory before activation. Confirming this import in the next
-          step will switch the current factory to{" "}
-          <span className="font-semibold text-af-ink">{previewState.value.factory.name}</span>.
-        </>
-      )}
-      footer={(
-        <>
-          <DashboardButton
-            disabled={isSubmitting}
-            onClick={onCancel}
-            tone="secondary"
-            type="button"
-          >
-            Cancel import
-          </DashboardButton>
-          <DashboardButton
-            busy={isSubmitting}
-            disabled={isSubmitting}
-            onClick={onConfirm}
-            type="button"
-          >
-            {isSubmitting ? "Activating factory..." : "Activate factory"}
-          </DashboardButton>
-        </>
-      )}
-      media={(
+    <Dialog onOpenChange={handleOpenChange} open={true}>
+      <DialogContent
+        className={IMPORT_DIALOG_CONTENT_CLASS}
+        closeDisabled={isSubmitting}
+        closeLabel="Close import preview"
+        onEscapeKeyDown={(event) => {
+          if (isSubmitting) {
+            event.preventDefault();
+          }
+        }}
+        onInteractOutside={(event) => {
+          if (isSubmitting) {
+            event.preventDefault();
+          }
+        }}
+      >
         <div className="overflow-hidden rounded-[1.25rem] border border-af-overlay/10 bg-af-overlay/4 p-3">
           <img
             alt={`${previewState.value.factory.name} preview`}
@@ -204,32 +215,65 @@ export function FactoryImportPreviewDialog({
             src={previewState.value.previewImageSrc}
           />
         </div>
-      )}
-      onClose={onCancel}
-      overlayClassName="absolute inset-0 z-20 bg-af-ink/16 backdrop-blur-[6px]"
-      title={GRAPH_IMPORT_PREVIEW_TITLE}
-    >
-      <p className="m-0 text-base font-semibold text-af-ink">{previewState.value.factory.name}</p>
+        <div className="grid content-start gap-5">
+          <DialogHeader className="grid gap-3">
+            <p className={IMPORT_DIALOG_LABEL_CLASS}>Mutation flow</p>
+            <div className="grid gap-2">
+              <DialogTitle className={IMPORT_DIALOG_TITLE_CLASS}>
+                {GRAPH_IMPORT_PREVIEW_TITLE}
+              </DialogTitle>
+              <DialogDescription className={IMPORT_DIALOG_DESCRIPTION_CLASS}>
+                Review the dropped factory before activation. Confirming this import in the
+                next step will switch the current factory to{" "}
+                <span className="font-semibold text-af-ink">
+                  {previewState.value.factory.name}
+                </span>
+                .
+              </DialogDescription>
+            </div>
+          </DialogHeader>
 
-      <dl className="grid gap-3 rounded-[1.1rem] border border-af-overlay/10 bg-af-overlay/4 p-4 text-sm text-af-ink/80">
-        <div className="grid gap-1">
-          <dt className="text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent">
-            Dropped file
-          </dt>
-          <dd className="m-0 font-semibold text-af-ink">{previewState.file.name}</dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent">
-            Embedded factory
-          </dt>
-          <dd className="m-0 font-semibold text-af-ink">{previewState.value.factory.name}</dd>
-        </div>
-      </dl>
+          <p className="m-0 text-base font-semibold text-af-ink">
+            {previewState.value.factory.name}
+          </p>
 
-      {activationState.status === "error" ? (
-        <FactoryImportActivationErrorPanel error={activationState.error} />
-      ) : null}
-    </DashboardMutationDialog>
+          <dl className="grid gap-3 rounded-[1.1rem] border border-af-overlay/10 bg-af-overlay/4 p-4 text-sm text-af-ink/80">
+            <div className="grid gap-1">
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>Dropped file</dt>
+              <dd className="m-0 font-semibold text-af-ink">{previewState.file.name}</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>Embedded factory</dt>
+              <dd className="m-0 font-semibold text-af-ink">
+                {previewState.value.factory.name}
+              </dd>
+            </div>
+          </dl>
+
+          <p className={IMPORT_DIALOG_HINT_CLASS}>
+            Activating the import switches the current dashboard factory to the embedded
+            authored definition from this PNG.
+          </p>
+
+          {activationState.status === "error" ? (
+            <FactoryImportActivationErrorPanel error={activationState.error} />
+          ) : null}
+
+          <DialogFooter>
+            <Button disabled={isSubmitting} onClick={onCancel} tone="outline" type="button">
+              Cancel import
+            </Button>
+            <Button
+              aria-busy={isSubmitting ? "true" : undefined}
+              disabled={isSubmitting}
+              onClick={onConfirm}
+              type="button"
+            >
+              {isSubmitting ? "Activating factory..." : "Activate factory"}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
-

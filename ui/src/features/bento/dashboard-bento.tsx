@@ -12,7 +12,11 @@ import { TerminalWorkWidget } from "../terminal-work";
 import { TraceDrilldownWidget, useTraceDrilldown } from "../trace-drilldown";
 import { useWorkOutcomeChart, WorkOutcomeWidget } from "../work-outcome";
 import { WorkTotalsWidget } from "../work-totals";
-import { WorkflowActivityWidget } from "../workflow-activity";
+import {
+  DashboardImportPreviewDialog,
+  useCurrentActivityImportController,
+  WorkflowActivityWidget,
+} from "../workflow-activity";
 import {
   DASHBOARD_WIDGET_IDS,
   useDashboardLayout,
@@ -64,6 +68,9 @@ export function DashboardBento() {
     snapshot,
     workstationRequestsByDispatchID,
   });
+  const importController = useCurrentActivityImportController({
+    onFactoryActivated: incrementRefreshToken,
+  });
 
   useEffect(() => {
     resetSelectedTraceID();
@@ -89,7 +96,7 @@ export function DashboardBento() {
   });
   const cards = buildDashboardCards({
     currentSelection,
-    incrementRefreshToken,
+    importController,
     now,
     selectedTrace,
     selectedTraceID,
@@ -106,17 +113,20 @@ export function DashboardBento() {
   }
 
   return (
-    <AgentBentoLayout
-      cards={cards}
-      layout={dashboardLayout}
-      onLayoutChange={persistDashboardLayout}
-    />
+    <>
+      <AgentBentoLayout
+        cards={cards}
+        layout={dashboardLayout}
+        onLayoutChange={persistDashboardLayout}
+      />
+      <DashboardImportPreviewDialog importController={importController} />
+    </>
   );
 }
 
 interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
-  incrementRefreshToken: () => void;
+  importController: ReturnType<typeof useCurrentActivityImportController>;
   now: number;
   selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
   selectedTraceID: string | null;
@@ -134,7 +144,7 @@ interface DashboardCardBuilderArgs {
 
 function buildDashboardCards({
   currentSelection,
-  incrementRefreshToken,
+  importController,
   now,
   selectedTrace,
   selectedTraceID,
@@ -154,8 +164,8 @@ function buildDashboardCards({
       id: DASHBOARD_WIDGET_IDS.workGraph,
       children: (
         <WorkflowActivityWidget
+          importController={importController}
           now={now}
-          onFactoryActivated={incrementRefreshToken}
           onSelectStateNode={currentSelection.selectStateNode}
           onSelectWorkItem={currentSelection.selectWorkItem}
           onSelectWorkstation={currentSelection.selectWorkstation}

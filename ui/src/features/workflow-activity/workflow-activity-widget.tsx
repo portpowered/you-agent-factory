@@ -4,11 +4,12 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import type { DashboardSelection } from "../current-selection";
+import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 
 export interface WorkflowActivityWidgetProps {
+  importController: CurrentActivityImportController;
   now: number;
-  onFactoryActivated?: () => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkItem: (
     dispatchId: string,
@@ -22,8 +23,8 @@ export interface WorkflowActivityWidgetProps {
 }
 
 export function WorkflowActivityWidget({
+  importController,
   now,
-  onFactoryActivated,
   onSelectStateNode,
   onSelectWorkItem,
   onSelectWorkstation,
@@ -32,8 +33,8 @@ export function WorkflowActivityWidget({
 }: WorkflowActivityWidgetProps) {
   return (
     <WorkflowActivityBentoCard
+      importController={importController}
       now={now}
-      onFactoryActivated={onFactoryActivated}
       selection={selection}
       snapshot={snapshot}
       onSelectWorkItem={onSelectWorkItem}
@@ -42,4 +43,3 @@ export function WorkflowActivityWidget({
     />
   );
 }
-

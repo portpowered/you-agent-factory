@@ -15,13 +15,7 @@ import type { DashboardActiveExecution, DashboardSnapshot, DashboardWorkItemRef 
 import type { FactoryValue } from "../../api/named-factory";
 import { cx } from "../../lib/cx";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
-import {
-  type FactoryPngImportValue,
-  type ReadFactoryImportFile,
-  useFactoryImportActivation,
-  useFactoryImportPreview,
-  useFactoryPngDrop,
-} from "../import";
+import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
 import { CURRENT_ACTIVITY_NODE_TYPES, type CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
 import {
@@ -50,6 +44,10 @@ import {
   graphDropStateAttribute,
   GraphImportErrorPanel,
 } from "./react-flow-current-activity-card-import";
+import {
+  type CurrentActivityImportController,
+  useCurrentActivityImportController,
+} from "./current-activity-import-controller";
 
 export {
   currentActivityGraphKey,
@@ -88,6 +86,7 @@ export type CurrentActivitySelection =
 
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
+  importController?: CurrentActivityImportController;
   now: number;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
@@ -147,53 +146,6 @@ function useGraphLayout(snapshot: DashboardSnapshot) {
   }, [layoutTopology, topologyKey]);
 
   return graphLayout;
-}
-
-function useCurrentActivityImport({
-  activateFactory,
-  onFactoryActivated,
-  onFactoryImportReady,
-  readFactoryImportFile,
-}: Pick<
-  ReactFlowCurrentActivityCardProps,
-  "activateFactory" | "onFactoryActivated" | "onFactoryImportReady" | "readFactoryImportFile"
->) {
-  const {
-    closePreview: closeImportPreview,
-    openPreview,
-    previewState: importPreviewState,
-  } = useFactoryImportPreview({
-    onPreviewReady: onFactoryImportReady,
-  });
-  const handleFactoryActivated = useCallback(() => {
-    closeImportPreview();
-    onFactoryActivated?.();
-  }, [closeImportPreview, onFactoryActivated]);
-  const {
-    activateImport,
-    activationState,
-    clearActivationError,
-  } = useFactoryImportActivation({
-    activateFactory,
-    onActivated: handleFactoryActivated,
-  });
-  const handleImportPreviewReady = useCallback((value: FactoryPngImportValue, file: File) => {
-    clearActivationError();
-    openPreview(value, file);
-  }, [clearActivationError, openPreview]);
-  const drop = useFactoryPngDrop({
-    onImportReady: handleImportPreviewReady,
-    readFactoryImportFile,
-  });
-
-  return {
-    activateImport,
-    activationState,
-    clearActivationError,
-    closeImportPreview,
-    importPreviewState,
-    ...drop,
-  };
 }
 
 function useCurrentActivityGraphViewModel({
@@ -338,7 +290,14 @@ function EmptyCurrentActivityCard() {
 
 export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCardProps) {
   const graph = useCurrentActivityGraphViewModel(props);
-  const imports = useCurrentActivityImport(props);
+  const fallbackImportController = useCurrentActivityImportController({
+    activateFactory: props.activateFactory,
+    onFactoryActivated: props.onFactoryActivated,
+    onFactoryImportReady: props.onFactoryImportReady,
+    readFactoryImportFile: props.readFactoryImportFile,
+  });
+  const imports = props.importController ?? fallbackImportController;
+  const shouldRenderImportPreviewDialog = props.importController === undefined;
 
   if (props.snapshot.topology.workstation_node_ids.length === 0) {
     return <EmptyCurrentActivityCard />;
@@ -405,7 +364,7 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
           </ReactFlow>
           <GraphDropOverlay dropState={imports.dropState} />
         </section>
-        {readyImportPreviewState ? (
+        {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
           <FactoryImportPreviewDialog
             activationState={imports.activationState}
             onCancel={() => {
@@ -429,4 +388,3 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
     </section>
   );
 }
-

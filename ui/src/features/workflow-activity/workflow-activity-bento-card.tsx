@@ -5,14 +5,15 @@ import type {
 } from "../../api/dashboard/types";
 import { AgentBentoCard } from "../../components/ui";
 import type { DashboardSelection } from "../current-selection";
+import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import {
   ReactFlowCurrentActivityCard,
   type CurrentActivitySelection,
 } from "./react-flow-current-activity-card";
 
 interface WorkflowActivityBentoCardProps {
+  importController: CurrentActivityImportController;
   now: number;
-  onFactoryActivated?: () => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
   onSelectWorkItem: (
@@ -28,8 +29,8 @@ interface WorkflowActivityBentoCardProps {
 const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0";
 
 export function WorkflowActivityBentoCard({
+  importController,
   now,
-  onFactoryActivated,
   selection,
   snapshot,
   onSelectWorkItem,
@@ -40,8 +41,8 @@ export function WorkflowActivityBentoCard({
     <AgentBentoCard title="Factory graph">
       <section className={GRAPH_PANEL_SHELL_CLASS}>
         <ReactFlowCurrentActivityCard
+          importController={importController}
           now={now}
-          onFactoryActivated={onFactoryActivated}
           selection={toCurrentActivitySelection(selection)}
           snapshot={snapshot}
           onSelectWorkItem={onSelectWorkItem}
@@ -71,4 +72,3 @@ function toCurrentActivitySelection(
     workID: selection.workItem.work_id,
   };
 }
-

@@ -27,8 +27,13 @@ export function DialogOverlay({
 export function DialogContent({
   children,
   className,
+  closeDisabled = false,
+  closeLabel = "Close dialog",
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content>) {
+}: ComponentProps<typeof DialogPrimitive.Content> & {
+  closeDisabled?: boolean;
+  closeLabel?: string;
+}) {
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -40,24 +45,47 @@ export function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close
-          aria-label="Close dialog"
-          className={buttonVariants({
-            className: "absolute right-4 top-4 min-h-9 w-9 rounded-full p-0",
-            size: "icon",
-            tone: "ghost",
-          })}
-        >
-          <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
-            <path
-              d="M6 6l12 12M18 6L6 18"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-            />
-          </svg>
-        </DialogPrimitive.Close>
+        {closeDisabled ? (
+          <button
+            aria-label={closeLabel}
+            className={buttonVariants({
+              className: "absolute right-4 top-4 min-h-9 w-9 rounded-full p-0",
+              size: "icon",
+              tone: "ghost",
+            })}
+            disabled
+            type="button"
+          >
+            <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+              <path
+                d="M6 6l12 12M18 6L6 18"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+            </svg>
+          </button>
+        ) : (
+          <DialogPrimitive.Close
+            aria-label={closeLabel}
+            className={buttonVariants({
+              className: "absolute right-4 top-4 min-h-9 w-9 rounded-full p-0",
+              size: "icon",
+              tone: "ghost",
+            })}
+          >
+            <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+              <path
+                d="M6 6l12 12M18 6L6 18"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+              />
+            </svg>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPortal>
   );
@@ -89,4 +117,3 @@ export function DialogDescription({
 }: ComponentProps<typeof DialogPrimitive.Description>) {
   return <DialogPrimitive.Description className={cn("text-sm leading-6 text-af-ink/72", className)} {...props} />;
 }
-

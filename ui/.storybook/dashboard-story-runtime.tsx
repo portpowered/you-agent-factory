@@ -7,11 +7,11 @@ import type {
   DashboardWorkstationRequest,
 } from "../src/api/dashboard";
 import type { FactoryEvent } from "../src/api/events";
-import { resetSelectionHistoryStore } from "../src/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "../src/features/current-selection/state/selectionHistoryStore";
 import {
   useFactoryTimelineStore,
-  type FactoryTimelineSnapshot,
-} from "../src/state/factoryTimelineStore";
+} from "../src/features/timeline/state/factoryTimelineStore";
+import type { WorldState } from "../src/features/timeline/state/timeline/types";
 
 const DASHBOARD_STORYBOOK_BASE_PATH = "/dashboard/ui/";
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -133,6 +133,14 @@ function seedDashboardStorySnapshot(
   tracesByWorkID: Record<string, DashboardTrace>,
   workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>,
 ): void {
+  const worldState: WorldState = {
+    ...snapshot,
+    relationsByWorkID: {},
+    tracesByWorkID,
+    workstationRequestsByDispatchID,
+    workRequestsByID: {},
+  };
+
   useFactoryTimelineStore.setState({
     events: [],
     latestTick: snapshot.tick_count,
@@ -140,13 +148,7 @@ function seedDashboardStorySnapshot(
     receivedEventIDs: [],
     selectedTick: snapshot.tick_count,
     worldViewCache: {
-      [snapshot.tick_count]: {
-        dashboard: snapshot,
-        relationsByWorkID: {},
-        tracesByWorkID,
-        workstationRequestsByDispatchID,
-        workRequestsByID: {},
-      } satisfies FactoryTimelineSnapshot,
+      [snapshot.tick_count]: worldState,
     },
   });
 }
@@ -175,13 +177,13 @@ function seedDashboardStorySnapshots(
           [
             snapshot.tick_count,
             {
-              dashboard: snapshot,
+              ...snapshot,
               relationsByWorkID: {},
               tracesByWorkID: snapshot.tick_count === latestTick ? tracesByWorkID : {},
               workstationRequestsByDispatchID:
                 snapshot.tick_count === latestTick ? workstationRequestsByDispatchID : {},
               workRequestsByID: {},
-            } satisfies FactoryTimelineSnapshot,
+            } satisfies WorldState,
           ] as const,
       ),
     ),
