@@ -7,6 +7,9 @@ node_modules/
 storybook-static/
 *.tsbuildinfo
 *.exe
+ui/dist/
+ui/dist_embed_generated.go
+ui/dist_stamp.go
 
 tasks/todo
 factory/inputs/**

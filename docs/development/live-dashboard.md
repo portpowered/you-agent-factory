@@ -21,7 +21,7 @@ The dashboard consists of four connected pieces:
    - `GET /events` for canonical factory event SSE replay and live updates
    - `/dashboard/ui` for the embedded SPA shell
 3. `ui/` contains the standalone React application. New timeline work should consume `/events` and project selected ticks from canonical factory history.
-4. `pkg/api/dashboard_ui.go` embeds `ui/dist/` into the Go binary for production-style serving.
+4. `pkg/api/dashboard_ui.go` serves the generated `ui/dist/` bundle through the `ui` package's embed registration when `make ui-build` has refreshed the local dashboard assets.
 
 ## Current Constraints
 
@@ -157,7 +157,7 @@ bun run build-storybook
 bun run test-storybook
 ```
 
-`bun run build` is required whenever shipped UI assets change because `pkg/api` embeds `ui/dist/`.
+`bun run build` or `make ui-build` is required whenever shipped UI assets change because the Go dashboard route consumes the generated `ui/dist/` output through a local embed-registration file.
 For acceptance verification, prefer the embedded `/dashboard/ui` route from a local factory server after rebuilding `ui/dist/`. This serves the fresh dashboard deployment from the same origin as the API and avoids the Vite proxy entirely. If a separate static deployment is necessary, build with `VITE_AGENT_FACTORY_API_ORIGIN=http://127.0.0.1:<factory-port>` so the browser client calls the local factory server directly.
 
 Avoid `ui/package.json`'s `vite preview` path for review sign-off in worktrees because it is a long-running server and can leave a child process behind after the agent work is otherwise done. The preview configuration intentionally disables proxy fallback and uses `--strictPort` so accidental direct preview runs fail loudly instead of silently attaching to a different port or backend.

@@ -7,7 +7,8 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const uiDir = path.resolve(scriptDir, "..");
 const distDir = path.join(uiDir, "dist");
 const assetsDir = path.join(distDir, "assets");
-const distStampPath = path.join(uiDir, "dist_stamp.go");
+const distEmbedPath = path.join(uiDir, "dist_embed_generated.go");
+const legacyDistStampPath = path.join(uiDir, "dist_stamp.go");
 
 async function listFiles(rootDir, currentDir = rootDir) {
   const entries = await readdir(currentDir, { withFileTypes: true });
@@ -53,7 +54,7 @@ async function rewriteIndexHtml() {
   }
 }
 
-async function writeDistStamp() {
+async function writeDistEmbedRegistration() {
   const hash = createHash("sha256");
   for (const relativePath of await listFiles(distDir)) {
     const absolutePath = path.join(distDir, relativePath);
@@ -69,12 +70,33 @@ async function writeDistStamp() {
   }
 
   await writeFile(
-    distStampPath,
-    `package ui\n\n// distBuildStamp keeps Go's build cache aligned with embedded dist asset changes.\nconst distBuildStamp = "${hash.digest("hex")}"\n`,
+    distEmbedPath,
+    `package ui
+
+import (
+	"embed"
+	"io/fs"
+)
+
+var (
+	// distBuildStamp keeps Go's build cache aligned with embedded dist asset changes.
+	distBuildStamp = "${hash.digest("hex")}"
+
+	//go:embed dist dist/*
+	generatedDist embed.FS
+)
+
+func init() {
+	distFSProvider = func() (fs.FS, error) {
+		return fs.Sub(generatedDist, "dist")
+	}
+}
+`,
   );
 }
 
 await normalizeSingleAsset(".js", "index.js");
 await normalizeSingleAsset(".css", "index.css");
 await rewriteIndexHtml();
-await writeDistStamp();
+await rm(legacyDistStampPath, { force: true });
+await writeDistEmbedRegistration();

@@ -21,7 +21,7 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 - `pkg/api/` serves runtime HTTP endpoints and the embedded dashboard shell.
 - `pkg/workers/` owns worker execution contracts, provider calls, script command execution, and work-scoped metadata.
 - `pkg/replay/` owns record/replay artifact construction, side-effect matching, and deterministic replay behavior.
-- `ui/` is the Vite dashboard source. `ui/dist/` contains committed embedded assets.
+- `ui/` is the Vite dashboard source. `ui/dist/` is generated local build output, and `make ui-build` refreshes the ignored embed registration that wires those assets into Go builds.
 - `tests/functional_test/` contains workflow fixtures and smoke coverage.
 
 ## Development Commands
@@ -208,7 +208,7 @@ behavior explicit inside the test that needs it.
 
 ## Local Gotchas
 
-- Embedded dashboard builds are committed artifacts. Rebuild `ui/dist/` with `make ui-build` or `make dashboard-verify` after dashboard source changes.
+- Embedded dashboard builds are generated local artifacts. Rebuild `ui/dist/` with `make ui-build` or `make dashboard-verify` after dashboard source changes so Go picks up the refreshed embed registration.
 - Do not run `ui-build` in parallel with Go vet, build, or test commands; Vite rotates hashed files under `ui/dist/assets`.
 - Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/api/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.
 - Apply that same generated-schema boundary to replay and event-carried factory config: when `RUN_REQUEST.payload.factory` is decoded back from JSON, route the nested factory payload through `config.GeneratedFactoryFromOpenAPIJSON(...)` instead of relying on permissive struct unmarshalling.

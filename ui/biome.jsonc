@@ -8,6 +8,7 @@
   "files": {
     "includes": [
       "**",
+      "!coverage",
       "!dist",
       "!storybook-static"
     ]
