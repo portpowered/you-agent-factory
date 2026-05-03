@@ -20,6 +20,9 @@
 - Reconcile ignored helper backlog files with open PRs and freshly merged
   branches before dispatching more cleanup work; local planning residue can be
   stale even when its scope still matches the ask surface.
+- Before dispatching a fresh idea for a customer ask, inspect open PR bodies
+  and changed-file ownership; an ignored local idea may already have advanced
+  into an in-flight branch even if `main` has not merged it yet.
 - Prune ignored local idea files once their owning PR has merged; otherwise the
   canonical inbox can retain stale residue that no longer represents an
   actionable backlog item.
@@ -33,14 +36,15 @@
 
 ## Current Summary
 
-- As of `2026-05-03T12:04:54.7627289-07:00`, `HEAD` on `main` points to
-  `1c2a49c` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T13:01:50.9382865-07:00`, `HEAD` on `main` points to
+  `cd59b4c` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and `factory/scripts/import-export-p0-followups.json`
   remains untracked planning residue.
 - The canonical ask surface remains `factory/logs/meta/asks.md`, and the
-  active P0 is now the open route-array contract cleanup plus broader website
-  quality follow-ups rather than the older throttle lane.
+  active P0 is now represented by two already-owned open PR lanes:
+  `#69` for the route-array contract cleanup and `#74` for current-selection
+  simplification, rather than the older throttle lane.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
   execution for `process` and `review`, `executor-slot` capacity `10`, an
@@ -59,6 +63,8 @@
   PR `#73` landed the dashboard button-wrapper retirement on `main`.
 - The remaining import/export seam is now the route-array contract cleanup
   owned by open PR `#69`.
+- The broad current-selection cleanup is now also owned by open PR `#74`
+  (`ralph/simplify-current-selection-dispatch-detail-surface`).
 - The ask surface now also includes a separate workstation-route contract gap:
   `outputs` is array-valued, but public `onContinue`, `onRejection`, and
   `onFailure` remain singular across schema, mapping, replay/projection, and UI
@@ -66,6 +72,9 @@
 - That route-array gap is already actively owned by open PR `#69`
   (`ralph/workstation-non-success-route-arrays`), so a fresh dispatch would be
   duplicate queue work.
+- The older duplicate-detail current-selection ask is no longer unowned either:
+  PR `#74` already removes the top-level duplicated panels, so another broad
+  current-selection dispatch would also be duplicate queue work.
 - The import/export dialog extraction, standards alignment, and wrapper-removal
   lanes have already landed on `main`, so duplicating them would now be
   counterproductive.
@@ -76,7 +85,39 @@
 - A separate narrow customer-ask-aligned UI cleanup lane is now queued locally:
   simplify the current-selection dispatch detail surface by removing duplicated
   request/response panels across execution details and selected dispatch detail
-  views.
+  views; that lane has now advanced into open PR `#74`.
+
+## 2026-05-03T13:01:50.9382865-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git reported the branch was already up to date with
+  `origin/main`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the visible
+  `factory/inputs/**` residue, and the queued
+  `simplify-current-selection-dispatch-detail-surface.md` idea.
+- Re-validated the tracked versus ignored workflow-input split with
+  `git ls-files factory/inputs` and `Get-ChildItem factory/inputs`, confirming
+  the repo still tracks only sentinels while the visible ideas remain ignored
+  operating state.
+- Re-checked recent PR ownership with `gh pr list` plus direct PR inspection and
+  confirmed the two live P0 lanes are already owned by open PR `#69`
+  (`workstation-non-success-route-arrays`) and open PR `#74`
+  (`simplify-current-selection-dispatch-detail-surface`).
+- Used delegated PR inspection to confirm `#69` fully owns the array-valued
+  workstation-route ask across schema, generated artifacts, config mapping,
+  replay/projection, and UI import surfaces, so dispatching another route-array
+  idea would be duplicate work.
+- Used delegated PR inspection to confirm `#74` owns the broad current-selection
+  simplification ask by removing the top-level duplicate execution/request
+  panels and making the selected-work surface dispatch-centric.
+- Recorded one narrower remaining seam for later follow-up consideration:
+  `#74` does not appear to add a nested per-dispatch inference-attempt list in
+  the surviving dispatch detail card, even though the customer ask describes
+  that deeper inspection shape.
+- Refreshed the checked-in world view and deliberately did not queue another
+  cleanup request in this pass because both active P0 asks are already in
+  flight and a fresh broad idea would overlap open PR ownership.
 
 ## Standards Alignment Checklist
 

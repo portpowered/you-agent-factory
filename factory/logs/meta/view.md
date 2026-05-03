@@ -2,8 +2,8 @@
 
 ## world state
 
-- as of `2026-05-03T12:04:54.7627289-07:00`, local `HEAD` on `main` points to
-  `1c2a49c` (`Merge pull request #72 from portpowered/ralph/import-export-standards-alignment-checklist-and-gap-closure`)
+- as of `2026-05-03T13:01:50.9382865-07:00`, local `HEAD` on `main` points to
+  `cd59b4c` (`Merge pull request #73 from portpowered/ralph/retire-dashboard-button-wrapper`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -11,8 +11,9 @@
   - untracked local planning residue exists in
     `factory/scripts/import-export-p0-followups.json`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`, and
-  the active P0 is now split between the open multi-output workstation-route
-  contract ask and the broader website-quality follow-up asks
+  the active P0 is now represented by two already-owned open PR lanes:
+  `#69` for multi-output workstation routes and `#74` for selected-work
+  current-selection simplification
 
 ## workflow truth
 
@@ -112,17 +113,15 @@
   - `pkg/cli/init/init_test.go`
   - `ui/src/api/factory-definition/api.test.ts`
   - `ui/src/features/timeline/state/factoryTimelineStore.test.ts`
-- the highest-value unowned customer-ask seam visible after those merges now
-  sits in the current-selection website surface:
-  - `ui/src/features/current-selection/execution-details.tsx` still renders a
-    workstation request projection with prompt, working-directory, worktree,
-    response text, and failure metadata
-  - `ui/src/features/current-selection/workstation-request-detail.tsx` renders
-    overlapping request/response content again inside the selected dispatch
-    detail card
-  - `ui/src/features/current-selection/selected-work-dispatch-history.tsx`
-    still composes the dispatch list separately, so the current-selection view
-    remains more fragmented than the simplified customer ask intends
+- the broad current-selection simplification ask is no longer unowned:
+  - open PR `#74` `simplify-current-selection-dispatch-detail-surface` already
+    removes the top-level duplicated execution/request panels and makes the
+    selected-work surface dispatch-centric
+  - the remaining visible gap is narrower than the original ask:
+    `ui/src/features/current-selection/selected-work-dispatch-history-card.tsx`
+    still appears to show dispatch-level request/response data without a nested
+    per-dispatch list of inference attempts, even though the customer ask
+    describes that deeper inspection shape
 
 ## replay truth
 
@@ -155,8 +154,10 @@
   - `#64` `retire-dashboard-bento-layout-ownership`
   - `#63` `retire-current-selection-inference-duplication`
   - `#62` `align-dashboard-work-summary-count-semantics`
-- the only open PR directly tied to the remaining P0 cleanup is:
+- the open PRs directly tied to the remaining P0 cleanup are:
   - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
+  - `#74` `simplify-current-selection-dispatch-detail-surface`, opened on
+    `2026-05-03`
 
 ## theory of mind
 
@@ -172,16 +173,19 @@
 - the route-array contract cleanup is already actively owned by ignored local
   residue plus open PR `#69`, so queuing another idea for it would be
   duplicative
+- the broad current-selection simplification ask is now also actively owned by
+  ignored local residue plus open PR `#74`, so a second broad cleanup idea for
+  that surface would also be duplicative
 - the earlier local button-wrapper idea has already been consumed by merged
   PR `#73`, so keeping that ignored idea file around would only create stale
   local queue residue
-- the broad remaining asks in `factory/logs/meta/asks.md` still need
-  decomposition, but the current-selection detail stack now exposes one narrow
-  customer-facing quality seam:
-  collapse duplicated request/response detail rendering around the dispatch
-  history view so the selected-work experience becomes dispatch-centric instead
-  of repeating prompt and response content across multiple panels
+- broad ask ownership and narrow ask completeness are different checks:
+  an open PR can fully own the customer lane even if one literal acceptance
+  detail still looks under-served
+- the narrow remaining seam visible after reconciling `#74` is no longer
+  duplicate top-level panels; it is the absence of a nested per-dispatch
+  inference-attempt list in the surviving dispatch detail card
 - the right meta action in this iteration is to refresh the checked-in world
-  view, record the merged `#72` and `#73` lanes, prune the stale local
-  button-wrapper idea, and queue one standalone ignored idea for the
-  current-selection simplification without colliding with open PR `#69`
+  view, record that both live P0 asks are already owned by open PRs `#69` and
+  `#74`, and avoid dispatching another overlapping cleanup request until one of
+  those lanes merges or reveals a concrete follow-up defect
