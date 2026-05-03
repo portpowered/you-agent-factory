@@ -1,5 +1,9 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import type {
+  DashboardTrace,
+  DashboardWorkItemRef,
+} from "../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../components/dashboard/fixtures";
 import {
   DETAIL_CARD_NOW,
@@ -20,6 +24,44 @@ function getDetailRow(container: HTMLElement, label: string): HTMLElement {
   }
 
   return row;
+}
+
+function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
+  return {
+    dispatches: [],
+    relations: [
+      {
+        source_work_id: "work-parent-story",
+        source_work_name: "Parent Story",
+        target_work_id: workItem.work_id,
+        type: "PARENT",
+      },
+      {
+        required_state: "ready",
+        source_work_id: workItem.work_id,
+        target_work_id: "work-dependency-story",
+        target_work_name: "Dependency Story",
+        type: "DEPENDS_ON",
+      },
+      {
+        required_state: "approved",
+        source_work_id: "work-blocked-story",
+        source_work_name: "Blocked Story",
+        target_work_id: workItem.work_id,
+        type: "DEPENDS_ON",
+      },
+      {
+        source_work_id: workItem.work_id,
+        target_work_id: "work-child-story",
+        target_work_name: "Child Story",
+        type: "PARENT",
+      },
+    ],
+    trace_id: workItem.trace_id ?? "trace-active-story",
+    transition_ids: [],
+    work_ids: [workItem.work_id],
+    workstation_sequence: [],
+  };
 }
 
 describe("WorkItemDetailCard summary", () => {
@@ -423,6 +465,129 @@ describe("WorkItemDetailCard summary", () => {
     ).toBeTruthy();
   });
 
+  it("renders work relationships as a graph-shaped surface and keeps related work selectable", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        selectedTrace={buildSelectedTrace(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipGraph = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
+    expect(within(relationshipGraph).getByText("Active Story")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Parent relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Depends on relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Required by relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Child relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Parent relationships",
+        }),
+      ).getByText("Parent Story"),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Depends on (ready)"),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Required by (approved)"),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Child relationships",
+        }),
+      ).getByText("Child Story"),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(relationshipGraph).getByRole("button", {
+        name: "Select related work item Dependency Story",
+      }),
+    );
+
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
+  });
+
+  it("renders an explicit empty state when no work relationships are available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(
+      within(relationshipSection).getByText(
+        "No parent, child, or dependency relationships are available for this work item.",
+      ),
+    ).toBeTruthy();
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
+  });
+
   it("omits the model row while preserving other execution details for historical selections", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
@@ -685,7 +850,6 @@ describe("WorkItemDetailCard summary", () => {
     ).toHaveLength(1);
     expect(within(dispatchCard).queryByText("## Review checklist")).toBeNull();
   });
-
 });
 
 describe("WorkItemDetailCard dispatch diagnostics", () => {
