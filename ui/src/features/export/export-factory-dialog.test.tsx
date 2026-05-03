@@ -128,4 +128,34 @@ describe("ExportFactoryDialog", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("shows a visible export failure without closing the shared dialog", async () => {
+    vi.mocked(writeFactoryExportPng).mockResolvedValue({
+      error: new Error("PNG encoding failed"),
+      ok: false,
+    });
+    const onClose = vi.fn();
+    render(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Factory Aurora"
+        isOpen
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Cover image"), {
+      target: {
+        files: [new File(["binary"], "cover.png", { type: "image/png" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+
+    const errorPanel = await screen.findByRole("alert");
+    expect(errorPanel.textContent).toContain("PNG encoding failed");
+    expect(screen.getByRole("dialog", { name: "Export factory" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(downloadBlobAsFile).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
