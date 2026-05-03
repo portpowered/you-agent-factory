@@ -17,6 +17,9 @@
 - Before queuing new `factory/inputs/**` work for an active ask, inspect ignored
   local residue in the canonical inboxes so the meta loop does not submit a
   duplicate batch over work that is already staged for execution.
+- Reconcile ignored helper backlog files with open PRs and freshly merged
+  branches before dispatching more cleanup work; local planning residue can be
+  stale even when its scope still matches the ask surface.
 - Import/export contract cleanup crosses more than one layer: confirm
   `api/openapi.yaml`, generated API artifacts, `pkg/config` mapping logic, and
   runtime/functional tests together before assuming a field has really been
@@ -24,9 +27,11 @@
 
 ## Current Summary
 
-- As of `2026-05-03T07:03:16.3903787-07:00`, `HEAD` on `main` points to
-  `c82b118` and matches `origin/main`; the worktree is clean and there are no
-  open PRs.
+- As of `2026-05-03T09:02:23.4813925-07:00`, `HEAD` on `main` points to
+  `c9bcbcf` and matches `origin/main`; the worktree is not clean because
+  `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
+  tracked local edits and `factory/scripts/import-export-p0-followups.json`
+  remains untracked planning residue.
 - The canonical ask surface remains `factory/logs/meta/asks.md`, and the
   active P0 is now import/export cleanup rather than the older throttle lane.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
@@ -36,32 +41,39 @@
 - The tracked input surface remains sentinel-only; visible files under
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
-- The current local residue already includes an import/export thought seed plus
-  a helper `FACTORY_REQUEST_BATCH` outside the canonical inboxes.
-- The live import/export contract still exposes workstation `promptTemplate`,
-  expanded layout still writes frontmatter-driven `AGENTS.md`, and bundled
-  files still serialize inline content in the API contract.
+- The current ignored/local residue includes an import/export thought seed, a
+  standalone route-array idea file, and a helper `FACTORY_REQUEST_BATCH`
+  outside the canonical inboxes.
+- PR `#67` removed exported workstation `promptTemplate` from the public
+  contract, and PR `#68` landed the split body-only `AGENTS.md` layout for
+  workers and workstations.
+- The remaining import/export backend seam on `main` is bundled-file
+  disk-backed round-trip behavior; the remaining UI/meta seams are dialog
+  extraction, button standardization, and standards-gap closure.
 - The ask surface now also includes a separate workstation-route contract gap:
   `outputs` is array-valued, but public `onContinue`, `onRejection`, and
   `onFailure` remain singular across schema, mapping, replay/projection, and UI
   import surfaces.
+- That route-array gap is already actively owned by open PR `#69`
+  (`ralph/workstation-non-success-route-arrays`), so a fresh dispatch would be
+  duplicate queue work.
 - No dedicated checked-in standards-alignment checklist exists yet for
   `STD-016` / `STD-017`, so this file remains the active checklist surface.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- A local ignored import/export batch already exists under
-  `factory/inputs/BATCH/default/import-export-p0-followups.json`, and it matches
-  the active P0 ask closely enough that this pass should not submit a duplicate
-  queue item.
+- The helper batch under `factory/scripts/import-export-p0-followups.json` is
+  now partially stale because it still lists two lanes that are already merged.
 
 ## Standards Alignment Checklist
 
 - Backend:
-  retire exported/imported workstation `promptTemplate` ownership so the public
-  contract has one canonical prompt/body source.
+  exported/imported workstation `promptTemplate` ownership has landed on
+  `main`; keep regression coverage aligned so the duplicate public field does
+  not reappear.
 - Backend:
-  make worker/workstation authored layout thin by moving body text ownership
-  into split `AGENTS.md` files and keeping `factory.json` structural.
+  split worker/workstation body ownership into body-only `AGENTS.md` files has
+  landed on `main`; keep authored-layout regression coverage aligned with that
+  thinner structure.
 - Backend:
   make portable bundled files disk-backed by default and stop preserving inline
   bundled-file content in imported/exported `factory.json` payloads.
@@ -79,6 +91,33 @@
   and update existing contract coverage that currently locks in the legacy
   prompt-template and inline-bundled-file shape.
   Do the same for the singular `onContinue`/`onRejection`/`onFailure` shape.
+
+## 2026-05-03T09:02:23.4813925-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash`; Git reported the branch was already up
+  to date with `origin/main`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, `.gitignore`, `docs/guides/batch-inputs.md`, and the
+  backend/website standards.
+- Re-validated the tracked versus ignored workflow-input split with
+  `git ls-files`, `Get-ChildItem factory/inputs`, and `git check-ignore`,
+  confirming that the visible route-array idea file and import/export thought
+  seed remain ignored local residue rather than checked-in queue truth.
+- Re-checked recent repo movement and confirmed that PR `#67`
+  (`import-export-api-contract-remove-workstation-prompt-template`) and PR
+  `#68` (`import-export-expanded-agents-layout-for-workers-and-workstations`)
+  are now merged on `main`, while PR `#69`
+  (`workstation-non-success-route-arrays`) is open and owns the remaining
+  non-success-route contract cleanup.
+- Used delegated inspection plus direct code reads to confirm `main` still
+  models `onContinue`, `onRejection`, and `onFailure` as singular across the
+  schema, mapping, projection, and UI import layers, but that queuing another
+  route-array idea would duplicate existing local residue and the active PR.
+- Refreshed the checked-in world view and standards checklist to reflect the
+  merged prompt-template/split-layout work and the currently owned route-array
+  lane, and deliberately did not dispatch another cleanup request in this pass.
 
 ## 2026-05-03T04:03:50.3625396-07:00 - meta state refresh
 

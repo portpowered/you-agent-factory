@@ -2,10 +2,11 @@
 
 ## world state
 
-- as of `2026-05-03T08:05:06.9683608-07:00`, local `HEAD` on `main` points to
-  `0393c72` (`update the ideafy instructions`) while `origin/main` still points
-  to `1852bc1` (`docs: refresh meta world state`); there are no open PR
-  branches visible through `gh pr list --state open`
+- as of `2026-05-03T09:02:23.4813925-07:00`, local `HEAD` on `main` points to
+  `c9bcbcf` (`Merge pull request #68 from
+  portpowered/ralph/import-export-expanded-agents-layout-for-workers-and-workstations`)
+  and matches `origin/main`; there is one open PR relevant to the active ask:
+  `#69` `workstation-non-success-route-arrays`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
     `factory/workstations/cleaner/AGENTS.md`
@@ -47,6 +48,7 @@
 - the current checkout also contains ignored operating residue related to the
   active ask:
   - `factory/inputs/thoughts/default/import-export-issues.md`
+  - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
 - the local repository root also contains untracked planning residue outside the
   canonical inboxes:
   - `factory/scripts/import-export-p0-followups.json`
@@ -58,29 +60,29 @@
 
 - the highest-priority live ask is the import/export P0 in
   `factory/logs/meta/asks.md`, not the older throttle cleanup lane
+- two earlier import/export cleanup requests have now landed on `main`:
+  - PR `#67` removed exported workstation `promptTemplate` from the public
+    contract
+  - PR `#68` moved worker/workstation body ownership into split body-only
+    `AGENTS.md` files with a thinner authored layout
 - the local helper batch in `factory/scripts/import-export-p0-followups.json`
-  already decomposes most of that P0 into five ordered cleanup ideas:
-  - remove exported workstation `promptTemplate`
-  - push worker/workstation body ownership fully into split `AGENTS.md` files
-  - make bundled files disk-backed by default
-  - extract import/export dialogs and standardize button styling
-  - track and close import/export standards gaps
-- `factory/logs/meta/asks.md` now also contains a new backend contract ask that
-  is not represented in that helper batch:
+  is now partially stale: it still lists the prompt-template and split-layout
+  lanes even though those changes are merged, while its bundled-file, dialog,
+  and standards items remain relevant
+- `factory/logs/meta/asks.md` also contains a backend contract ask that is not
+  represented in that helper batch:
   - replace singular workstation `onContinue`, `onRejection`, and `onFailure`
     destinations with array-based outputs
-- the live code still shows the main backend contract seams behind that batch:
-  - `api/openapi.yaml`, `api/components/schemas/data-models/Workstation.yaml`,
-    `pkg/api/generated/server.gen.go`, and
-    `pkg/config/factory_config_mapping.go` still expose workstation
-    `promptTemplate`
-  - `pkg/config/layout.go` still writes expanded worker/workstation `AGENTS.md`
-    through `renderAgentsMarkdown(...)`, preserving frontmatter-driven files
-    instead of body-only prompt ownership
+- the remaining import/export seams on `main` are now narrower:
   - `pkg/config/portable_bundled_files.go` auto-collects supported bundled
     files during flatten, but `pkg/config/factory_config_mapping.go` still
     serializes bundled-file inline content into the exported API shape
-- the live code also shows the new route-array ask is real and still open:
+  - the dashboard import/export dialog and button-standardization lane remains
+    open in the ask surface and is not yet represented by a merged PR
+  - the standards-alignment checklist lane remains open and is still tracked in
+    `factory/logs/meta/progress.txt`
+- the live code also shows the route-array ask is real on `main`, but it is no
+  longer unowned:
   - `api/components/schemas/data-models/Workstation.yaml`,
     `api/openapi.yaml`, `pkg/api/generated/server.gen.go`,
     `pkg/generatedclient/client.gen.go`, and
@@ -95,6 +97,8 @@
     to one public `WorkstationIO`
   - `ui/src/api/factory-definition/api.ts` still parses `onRejection` and
     `onFailure` as singular objects and currently drops `onContinue` on import
+  - open PR `#69` already carries the corresponding cross-layer fix on branch
+    `ralph/workstation-non-success-route-arrays`
 - test coverage already exists around these seams, but it currently protects the
   old contract in several places:
   - `pkg/api/factory_config_smoke_test.go`
@@ -126,19 +130,17 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#68` `import-export-expanded-agents-layout-for-workers-and-workstations`
+    merged on `2026-05-03`
+  - `#67` `import-export-api-contract-remove-workstation-prompt-template`
+    merged on `2026-05-03`
   - `#66` `add fixes for edges missing` merged on `2026-05-03`
   - `#65` `retire-dashboard-format-helper-ownership`
   - `#64` `retire-dashboard-bento-layout-ownership`
   - `#63` `retire-current-selection-inference-duplication`
   - `#62` `align-dashboard-work-summary-count-semantics`
-  - `#61` `browser-shared-action-primitives`
-  - `#60` `browser-integration-png-export-import-roundtrip`
-- `main` also moved through two direct post-merge commits relevant to the meta
-  loop:
-  - `ce8ca55` `fix the factory definition to be able to import the config`
-  - `c82b118` `update the requirements for the ideafy`
-- local `main` has advanced one unpublished commit past `origin/main`:
-  - `0393c72` `update the ideafy instructions`
+- there is one open PR directly tied to the remaining P0 contract cleanup:
+  - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
 
 ## theory of mind
 
@@ -146,14 +148,15 @@
   checked-in workflow contract, not from replay fixtures alone
 - `factory/inputs/**` must always be reasoned about in two layers:
   checked-in contract versus ignored operating residue
-- the import/export P0 is only partially decomposed locally:
-  the helper batch covers the prompt-template, split-layout, bundled-file,
-  dialog, and standards lanes, but not the newly added array-based
-  continue/rejection/failure contract cleanup
-- the correct next move in this iteration is to refresh the checked-in world
-  view and queue one narrow standalone cleanup idea for the unqueued
-  multi-output route contract instead of duplicating the existing import/export
-  helper batch
+- helper planning residue can go stale quickly once related PRs merge, so the
+  meta loop has to reconcile ignored backlog files against `main` and open PR
+  state before dispatching anything new
+- the prompt-template and split-layout asks are now landed on `main`; the
+  remaining import/export backlog is bundled files, dialog/button cleanup,
+  standards alignment, and the array-based non-success route contract
+- the route-array contract cleanup is already actively owned by ignored local
+  residue plus open PR `#69`, so queuing another idea for it would be
+  duplicative
 - the right durable meta action in this iteration is to refresh the checked-in
-  world view and standards checklist while the local import/export queue owns
-  execution
+  world view and progress surfaces only, leaving execution with the existing
+  import/export branches and PRs
