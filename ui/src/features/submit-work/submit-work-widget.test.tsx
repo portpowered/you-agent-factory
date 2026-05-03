@@ -1,11 +1,33 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { SubmitWorkWidget } from "./submit-work-widget";
 
 describe("SubmitWorkWidget", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("keeps the submit-work card focused on the form without the redundant subtitle", () => {
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        submitWorkTypes={[
+          { work_type_name: "story" },
+          { work_type_name: "task" },
+        ]}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Submit work" });
+
+    expect(screen.queryByText("Send a new request to the current factory from the dashboard.")).toBeNull();
+    expect(within(card).getByRole("combobox", { name: "Work type" })).toBeTruthy();
+    expect(within(card).getByRole("textbox", { name: "Request name" })).toBeTruthy();
+    expect(within(card).getByRole("textbox", { name: "Request" })).toBeTruthy();
+    expect(
+      within(card).getByText("Choose a work type and describe what you need to get started."),
+    ).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Submit work" })).toBeTruthy();
   });
 
   it("disables submission until a configured work type and request text are present", () => {
@@ -218,4 +240,3 @@ function renderSubmitWorkWidget(element: React.ReactElement) {
 
   return render(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>);
 }
-

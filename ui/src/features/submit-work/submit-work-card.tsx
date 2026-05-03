@@ -5,7 +5,6 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard/typography";
 import { Button, DashboardWidgetFrame, Input, Select, Textarea } from "../../components/ui";
-import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 
 export interface SubmitWorkDraft {
   requestName: string;
@@ -84,12 +83,6 @@ export function SubmitWorkCard({
           onSubmit();
         }}
       >
-        <div className={FIELD_GROUP_CLASS}>
-          <p className={WIDGET_SUBTITLE_CLASS}>
-            Send a new request to the current factory from the dashboard.
-          </p>
-        </div>
-
         <div className={FIELD_GROUP_CLASS}>
           <label className={FIELD_LABEL_CLASS} htmlFor={workTypeID}>
             Work type
@@ -174,4 +167,3 @@ export function SubmitWorkCard({
     </DashboardWidgetFrame>
   );
 }
-
