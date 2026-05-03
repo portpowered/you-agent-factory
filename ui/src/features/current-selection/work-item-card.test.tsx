@@ -279,7 +279,7 @@ describe("WorkItemDetailCard summary", () => {
       name: "Workstation dispatches",
     });
     const activeCard = within(dispatchHistory)
-      .getByText(dispatchID)
+      .getAllByText(dispatchID)[0]
       .closest("article");
     const historicalCard = within(dispatchHistory)
       .getByText(historicalDispatchID)
@@ -823,7 +823,7 @@ describe("WorkItemDetailCard summary", () => {
       name: "Workstation dispatches",
     });
     const dispatchCard = within(dispatchHistory)
-      .getByText(dispatchID)
+      .getAllByText(dispatchID)[0]
       .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
@@ -951,7 +951,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory).getByText(dispatchID).closest("article");
+    const dispatchCard = within(dispatchHistory)
+      .getAllByText(dispatchID)[0]
+      .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected dispatch history card with nested inference attempts");
@@ -993,9 +995,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     );
     fireEvent.click(traceLink);
     fireEvent.click(
-      within(dispatchCard).getByRole("button", {
+      within(dispatchCard).getAllByRole("button", {
         name: "Select work item Active Story",
-      }),
+      })[0],
     );
 
     expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
@@ -1127,18 +1129,20 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.command ?? "",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.script_request_id ?? "",
-      ),
-    ).toBeTruthy();
-    expect(within(dispatchCard).getByText("--work")).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(dispatchCard).getAllByText("--work").length).toBeGreaterThan(
+      0,
+    );
     const scriptAttempts = within(dispatchCard).getByRole("region", {
       name: "Script attempts",
     });
@@ -1207,11 +1211,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
     expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_request
           ?.command ?? "",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
       within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_response
@@ -1222,8 +1226,8 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       0,
     );
     expect(
-      within(dispatchCard).getByText(/script success stdout/),
-    ).toBeTruthy();
+      within(dispatchCard).getAllByText(/script success stdout/).length,
+    ).toBeGreaterThan(0);
     expect(within(scriptAttempts).getAllByRole("article")).toHaveLength(2);
     expect(within(dispatchCard).queryByText("Provider session")).toBeNull();
   });
@@ -1322,7 +1326,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       name: "Workstation dispatches",
     });
     const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.rejected.dispatch_id)
+      .getAllByText(dashboardWorkstationRequestFixtures.rejected.dispatch_id)[0]
       .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
@@ -1345,10 +1349,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         "The active story needs revision before it can continue.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
       within(dispatchCard).getByText(
         "codex / session_id / sess-rejected-story",

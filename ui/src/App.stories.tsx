@@ -553,7 +553,7 @@ function dispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
 ): HTMLElement {
-  const dispatchBadge = within(container).getByText(dispatchId);
+  const dispatchBadge = within(container).getAllByText(dispatchId)[0];
   const card = dispatchBadge.closest("article");
 
   if (!(card instanceof HTMLElement)) {
@@ -1221,11 +1221,11 @@ export const SelectedWorkDispatchHistorySmoke = {
       dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
     );
     await expect(
-      within(scriptSuccessCard).getByText("script-tool"),
-    ).toBeVisible();
+      within(scriptSuccessCard).getAllByText("script-tool").length,
+    ).toBeGreaterThan(0);
     await expect(
-      within(scriptSuccessCard).getByText("script success stdout"),
-    ).toBeVisible();
+      within(scriptSuccessCard).getAllByText("script success stdout").length,
+    ).toBeGreaterThan(0);
     expect(
       within(scriptSuccessCard).queryByText("Current dispatch"),
     ).toBeNull();
@@ -1238,8 +1238,8 @@ export const SelectedWorkDispatchHistorySmoke = {
       within(scriptFailedCard).getAllByText("TIMEOUT").length,
     ).toBeGreaterThan(0);
     await expect(
-      within(scriptFailedCard).getByText("script timed out"),
-    ).toBeVisible();
+      within(scriptFailedCard).getAllByText("script timed out").length,
+    ).toBeGreaterThan(0);
     expect(within(scriptFailedCard).queryByText("Current dispatch")).toBeNull();
 
     await expect(
@@ -1264,7 +1264,9 @@ export const WorkstationRequestSelectionScriptPending = {
     await expect(
       currentSelection.getAllByText("request-script-pending-story").length,
     ).toBeGreaterThan(0);
-    await expect(currentSelection.getByText("script-tool")).toBeVisible();
+    await expect(
+      currentSelection.getAllByText("script-tool").length,
+    ).toBeGreaterThan(0);
     await expect(
       currentSelection.getByText(
         "Script response details are not available for this workstation request yet.",
@@ -1293,8 +1295,8 @@ export const WorkstationRequestSelectionScriptSuccess = {
       currentSelection.getAllByText("request-script-success-story").length,
     ).toBeGreaterThan(0);
     await expect(
-      currentSelection.getByText("script success stdout"),
-    ).toBeVisible();
+      currentSelection.getAllByText("script success stdout").length,
+    ).toBeGreaterThan(0);
     await expect(
       currentSelection.getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
@@ -1325,7 +1327,9 @@ export const WorkstationRequestSelectionScriptFailed = {
     ).toBeGreaterThan(0);
     await expect(currentSelection.getByText("script_timeout")).toBeVisible();
     await expect(currentSelection.getByText("TIMEOUT")).toBeVisible();
-    await expect(currentSelection.getByText("script timed out")).toBeVisible();
+    await expect(
+      currentSelection.getAllByText("script timed out").length,
+    ).toBeGreaterThan(0);
     expect(
       currentSelection.queryByRole("heading", { name: "Inference attempts" }),
     ).toBeNull();

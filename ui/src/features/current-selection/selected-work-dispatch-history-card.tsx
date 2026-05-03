@@ -1,6 +1,5 @@
 import { cx } from "../../lib/cx";
 import {
-  DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard/typography";
@@ -13,7 +12,6 @@ import {
 import {
   EXECUTION_PILL_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptCard,
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
   RequestAuthoredText,
@@ -21,6 +19,10 @@ import {
   normalizeDetailText,
 } from "./detail-card-shared";
 import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
+import {
+  DispatchInferenceAttemptsSection,
+  DispatchScriptAttemptsSection,
+} from "./selected-work-dispatch-attempt-sections";
 import {
   DispatchDetailList,
   DispatchDetailSection,
@@ -110,9 +112,17 @@ export function DispatchHistoryCard({
         view={view}
       />
       {view.sortedInferenceAttempts.length > 0 ? (
-        <DispatchInferenceAttemptsSection view={view} />
+        <DispatchInferenceAttemptsSection attempts={view.sortedInferenceAttempts} />
       ) : null}
-      {view.isScriptBackedRequest ? <DispatchScriptAttemptsSection request={request} view={view} /> : null}
+      {view.isScriptBackedRequest ? (
+        <DispatchScriptAttemptsSection
+          normalizedStderr={view.normalizedScriptStderr}
+          normalizedStdout={view.normalizedScriptStdout}
+          request={request}
+          scriptRequest={view.scriptRequest}
+          scriptResponse={view.scriptResponse}
+        />
+      ) : null}
       {view.hasFailureDetails ? <DispatchFailureSection view={view} /> : null}
     </article>
   );
@@ -409,181 +419,6 @@ function ScriptResponseContent({
         value={view.normalizedScriptStderr}
       />
     </>
-  );
-}
-
-function DispatchScriptAttemptsSection({
-  request,
-  view,
-}: {
-  request: SelectedWorkRequestHistoryItem;
-  view: DispatchHistoryView;
-}) {
-  return (
-    <section
-      aria-label="Script attempts"
-      className="mt-[0.75rem] grid gap-[0.45rem] border-t border-af-overlay/8 pt-[0.75rem]"
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Script attempts</h4>
-      <div className="grid gap-[0.65rem]">
-        {view.scriptRequest ? (
-          <ScriptRequestAttemptCard
-            model={requestModel(request)}
-            provider={requestProvider(request)}
-            scriptRequest={view.scriptRequest}
-            workingDirectory={requestWorkingDirectory(request)}
-            worktree={requestWorktree(request)}
-          />
-        ) : null}
-        {view.scriptResponse ? (
-          <ScriptResponseAttemptCard
-            fallbackAttemptNumber={scriptAttemptNumber(view.scriptRequest)}
-            model={requestModel(request)}
-            normalizedStderr={view.normalizedScriptStderr}
-            normalizedStdout={view.normalizedScriptStdout}
-            provider={requestProvider(request)}
-            scriptResponse={view.scriptResponse}
-            workingDirectory={requestWorkingDirectory(request)}
-            worktree={requestWorktree(request)}
-          />
-        ) : (
-          <p className={DETAIL_COPY_CLASS}>No script response attempt has been recorded yet.</p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ScriptRequestAttemptCard({
-  model,
-  provider,
-  scriptRequest,
-  workingDirectory,
-  worktree,
-}: {
-  model: string | undefined;
-  provider: string | undefined;
-  scriptRequest: NonNullable<DispatchHistoryView["scriptRequest"]>;
-  workingDirectory: string | undefined;
-  worktree: string | undefined;
-}) {
-  const attemptNumber = scriptAttemptNumber(scriptRequest);
-  const requestID = scriptRequestID(scriptRequest);
-
-  return (
-    <article className={PROVIDER_SESSION_CARD_CLASS}>
-      <div className="flex items-start justify-between gap-[0.8rem]">
-        <div className="grid min-w-0 gap-[0.18rem]">
-          <strong>Request attempt {attemptNumber ?? "pending"}</strong>
-          <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>PENDING</p>
-        </div>
-        <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-request"}</span>
-      </div>
-      <dl className={cx("mt-[0.65rem]", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
-        <InferenceAttemptDetail label="Script request ID" code value={requestID} />
-        <InferenceAttemptDetail
-          label="Script attempt"
-          value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
-        />
-        <InferenceAttemptDetail label="Provider" code value={provider} />
-        <InferenceAttemptDetail label="Model" code value={model} />
-        <InferenceAttemptDetail label="Working directory" code value={workingDirectory} />
-        <InferenceAttemptDetail label="Worktree" code value={worktree} />
-        <InferenceAttemptDetail label="Command" code value={scriptRequest.command} />
-      </dl>
-      <ScriptArgsSection args={scriptRequest.args} />
-    </article>
-  );
-}
-
-function ScriptResponseAttemptCard({
-  fallbackAttemptNumber,
-  model,
-  normalizedStderr,
-  normalizedStdout,
-  provider,
-  scriptResponse,
-  workingDirectory,
-  worktree,
-}: {
-  fallbackAttemptNumber: number | undefined;
-  model: string | undefined;
-  normalizedStderr: string | undefined;
-  normalizedStdout: string | undefined;
-  provider: string | undefined;
-  scriptResponse: NonNullable<DispatchHistoryView["scriptResponse"]>;
-  workingDirectory: string | undefined;
-  worktree: string | undefined;
-}) {
-  const attemptNumber = scriptAttemptNumber(scriptResponse) ?? fallbackAttemptNumber;
-  const requestID = scriptRequestID(scriptResponse);
-  const durationMillis = scriptResponseDurationMillis(scriptResponse);
-  const exitCode = scriptResponseExitCode(scriptResponse);
-  const failureType = scriptResponseFailureType(scriptResponse);
-
-  return (
-    <article className={PROVIDER_SESSION_CARD_CLASS}>
-      <div className="flex items-start justify-between gap-[0.8rem]">
-        <div className="grid min-w-0 gap-[0.18rem]">
-          <strong>Response attempt {attemptNumber ?? "completed"}</strong>
-          <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-            {scriptResponse.outcome ?? "RECORDED"}
-          </p>
-        </div>
-        <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-response"}</span>
-      </div>
-      <dl className={cx("mt-[0.65rem]", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
-        <InferenceAttemptDetail label="Script request ID" code value={requestID} />
-        <InferenceAttemptDetail
-          label="Script attempt"
-          value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
-        />
-        <InferenceAttemptDetail label="Provider" code value={provider} />
-        <InferenceAttemptDetail label="Model" code value={model} />
-        <InferenceAttemptDetail label="Working directory" code value={workingDirectory} />
-        <InferenceAttemptDetail label="Worktree" code value={worktree} />
-        <InferenceAttemptDetail label="Outcome" value={scriptResponse.outcome} />
-        <InferenceAttemptDetail
-          label="Duration"
-          value={durationMillis !== undefined ? formatDurationMillis(durationMillis) : undefined}
-        />
-        <InferenceAttemptDetail
-          label="Exit code"
-          value={exitCode !== undefined ? String(exitCode) : undefined}
-        />
-        <InferenceAttemptDetail label="Failure type" code value={failureType} />
-      </dl>
-      <ScriptOutputSection
-        emptyMessage="No stdout was recorded for this script response."
-        label="Stdout"
-        value={normalizedStdout}
-      />
-      <ScriptOutputSection
-        emptyMessage="No stderr was recorded for this script response."
-        label="Stderr"
-        value={normalizedStderr}
-      />
-    </article>
-  );
-}
-
-function DispatchInferenceAttemptsSection({
-  view,
-}: {
-  view: DispatchHistoryView;
-}) {
-  return (
-    <section
-      aria-label="Inference attempts"
-      className="mt-[0.75rem] grid gap-[0.45rem] border-t border-af-overlay/8 pt-[0.75rem]"
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Inference attempts</h4>
-      <div className="grid gap-[0.65rem]">
-        {view.sortedInferenceAttempts.map((attempt) => (
-          <InferenceAttemptCard attempt={attempt} key={attempt.inference_request_id} />
-        ))}
-      </div>
-    </section>
   );
 }
 

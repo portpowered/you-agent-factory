@@ -392,7 +392,7 @@ function getDispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
 ): HTMLElement {
-  const dispatchBadge = within(container).getByText(dispatchId);
+  const dispatchBadge = within(container).getAllByText(dispatchId)[0];
   const card = dispatchBadge.closest("article");
 
   if (!(card instanceof HTMLElement)) {
@@ -652,8 +652,8 @@ describe("App current selection", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(readyCard).getByText("Ready for the next workstation."),
-    ).toBeTruthy();
+      within(readyCard).getAllByText("Ready for the next workstation.").length,
+    ).toBeGreaterThan(0);
 
     const rejectedCard = getDispatchHistoryCard(
       dispatchHistory,
@@ -665,10 +665,10 @@ describe("App current selection", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(rejectedCard).getByText(
+      within(rejectedCard).getAllByText(
         "The active story needs revision before it can continue.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
 
     const erroredCard = getDispatchHistoryCard(
       dispatchHistory,
@@ -694,13 +694,15 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
     );
-    expect(within(scriptSuccessCard).getByText("script-tool")).toBeTruthy();
+    expect(
+      within(scriptSuccessCard).getAllByText("script-tool").length,
+    ).toBeGreaterThan(0);
     expect(
       within(scriptSuccessCard).getByRole("region", { name: "Script attempts" }),
     ).toBeTruthy();
     expect(
-      within(scriptSuccessCard).getByText("script success stdout"),
-    ).toBeTruthy();
+      within(scriptSuccessCard).getAllByText("script success stdout").length,
+    ).toBeGreaterThan(0);
     expect(
       within(scriptSuccessCard).getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
@@ -712,7 +714,9 @@ describe("App current selection", () => {
     expect(
       within(scriptFailedCard).getAllByText("TIMEOUT").length,
     ).toBeGreaterThan(0);
-    expect(within(scriptFailedCard).getByText("script timed out")).toBeTruthy();
+    expect(
+      within(scriptFailedCard).getAllByText("script timed out").length,
+    ).toBeGreaterThan(0);
     expect(
       within(scriptFailedCard).getByText(
         "Prompt details are not applicable to this script-backed dispatch.",

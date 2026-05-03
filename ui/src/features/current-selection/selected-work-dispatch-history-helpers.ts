@@ -1,8 +1,11 @@
 import type {
-  DashboardInferenceAttempt,
   SelectedWorkRequestHistoryItem,
 } from "./detail-card-types";
-import type { DashboardScriptRequest, DashboardScriptResponse } from "../../api/dashboard/types";
+import type {
+  DashboardInferenceAttempt,
+  DashboardScriptRequest,
+  DashboardScriptResponse,
+} from "../../api/dashboard/types";
 
 export function isProjectedWorkstationRequest(
   request: SelectedWorkRequestHistoryItem,
