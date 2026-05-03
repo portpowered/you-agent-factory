@@ -28,12 +28,27 @@ function ioWorkType(io: { workType?: string }): string {
   return io.workType ?? "";
 }
 
-function workstationFailureIO(workstation: FactoryWorkstation): WorkstationIO | undefined {
-  return workstation.onFailure;
+function workstationRouteIOs(
+  value: WorkstationIO[] | WorkstationIO | null | undefined,
+): WorkstationIO[] {
+  if (!value) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
 }
 
-function workstationRejectionIO(workstation: FactoryWorkstation): WorkstationIO | undefined {
-  return workstation.onRejection;
+function workstationFailureIO(workstation: FactoryWorkstation): WorkstationIO[] {
+  return workstationRouteIOs(
+    (workstation as FactoryWorkstation & { onFailure?: WorkstationIO[] | WorkstationIO | null })
+      .onFailure,
+  );
+}
+
+function workstationRejectionIO(workstation: FactoryWorkstation): WorkstationIO[] {
+  return workstationRouteIOs(
+    (workstation as FactoryWorkstation & { onRejection?: WorkstationIO[] | WorkstationIO | null })
+      .onRejection,
+  );
 }
 
 function workstationSchedulingKind(workstation: FactoryWorkstation): string | undefined {
@@ -61,18 +76,17 @@ function projectWorkstationTopology(
 ): NonNullable<ProjectedInitialStructure["workstations"]>[number] {
   const inputs = workstation.inputs.filter(isPublicWorkstationIO);
   const outputs = workstation.outputs.filter(isPublicWorkstationIO);
-  const failure = workstationFailureIO(workstation);
-  const rejection = workstationRejectionIO(workstation);
+  const failure = workstationFailureIO(workstation).filter(isPublicWorkstationIO);
+  const rejection = workstationRejectionIO(workstation).filter(isPublicWorkstationIO);
 
   return {
-    failure_place_ids: failure && isPublicWorkstationIO(failure) ? [placeIDFromIO(failure)] : undefined,
+    failure_place_ids: failure.length > 0 ? failure.map(placeIDFromIO) : undefined,
     id: workstation.id ?? workstation.name,
     input_place_ids: inputs.map(placeIDFromIO),
     kind: workstationSchedulingKind(workstation),
     name: workstation.name,
     output_place_ids: outputs.map(placeIDFromIO),
-    rejection_place_ids:
-      rejection && isPublicWorkstationIO(rejection) ? [placeIDFromIO(rejection)] : undefined,
+    rejection_place_ids: rejection.length > 0 ? rejection.map(placeIDFromIO) : undefined,
     worker_id: workstation.worker,
   };
 }
@@ -105,13 +119,11 @@ export function normalizeFactoryPayload(
     }
   }
   for (const workstation of factoryWorkstations(factory)) {
-    const failure = workstationFailureIO(workstation);
-    const rejection = workstationRejectionIO(workstation);
     for (const io of [
       ...workstation.inputs,
       ...workstation.outputs,
-      ...(failure ? [failure] : []),
-      ...(rejection ? [rejection] : []),
+      ...workstationFailureIO(workstation),
+      ...workstationRejectionIO(workstation),
     ]) {
       const workTypeID = ioWorkType(io);
       if (workTypeIDs.has(workTypeID) || isSystemTimeWorkType(workTypeID)) {
@@ -300,5 +312,3 @@ export function outputPlaceForWorkstation(
   }
   return outputPlaceForProjectedWorkstation(topology, transitionID, outcome, workTypeID);
 }
-
-

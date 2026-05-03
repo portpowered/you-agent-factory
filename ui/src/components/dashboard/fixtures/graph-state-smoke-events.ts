@@ -23,7 +23,7 @@ const reviewWorkstation = {
   id: "review",
   inputs: [{ state: "new", workType: "story" }],
   name: "Review",
-  onFailure: { state: "failed", workType: "story" },
+  onFailure: [{ state: "failed", workType: "story" }],
   outputs: [{ state: "done", workType: "story" }],
   worker: "reviewer",
 };
@@ -205,4 +205,3 @@ graphStateSmokeTimelineEvents[8].context.workIds = ["work-smoke-complete-two"];
 graphStateSmokeTimelineEvents[9].context.dispatchId = "dispatch-smoke-complete-two";
 graphStateSmokeTimelineEvents[9].context.traceIds = ["trace-smoke-complete-two"];
 graphStateSmokeTimelineEvents[9].context.workIds = ["work-smoke-complete-two"];
-

@@ -36,7 +36,7 @@ export const failureAnalysisTimelineEvents: FactoryEvent[] = [
           id: "review",
           inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          onFailure: { state: "failed", workType: "story" },
+          onFailure: [{ state: "failed", workType: "story" }],
           outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
@@ -76,7 +76,7 @@ export const failureAnalysisTimelineEvents: FactoryEvent[] = [
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "review", workType: "story" }],
       worker: "reviewer",
     },
@@ -103,7 +103,7 @@ export const failureAnalysisTimelineEvents: FactoryEvent[] = [
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "review", workType: "story" }],
       worker: "reviewer",
     },
@@ -122,4 +122,3 @@ failureAnalysisTimelineEvents[3].context.workIds = ["work-blocked-analysis"];
 failureAnalysisTimelineEvents[4].context.dispatchId = "dispatch-blocked-analysis";
 failureAnalysisTimelineEvents[4].context.traceIds = ["trace-blocked-analysis"];
 failureAnalysisTimelineEvents[4].context.workIds = ["work-blocked-analysis"];
-
