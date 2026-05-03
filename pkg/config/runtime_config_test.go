@@ -1293,16 +1293,11 @@ func TestLoadRuntimeConfig_DerivesCanonicalWorkstationTypeFromWorkerAcrossInline
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"SHARED": "inline"}
 
 	writeRuntimeFactoryJSON(t, inlineDir, inlineConfig)
-	writeRuntimeFactoryJSON(t, splitDir, topology)
-	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", `---
-worker: executor
-limits:
-  maxExecutionTime: 15m
-env:
-  SHARED: inline
----
-Inline fallback prompt.
-`)
+	splitConfig := cloneJSONMap(t, topology)
+	splitConfig["workstations"].([]any)[0].(map[string]any)["limits"] = map[string]any{"maxExecutionTime": "15m"}
+	splitConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"SHARED": "inline"}
+	writeRuntimeFactoryJSON(t, splitDir, splitConfig)
+	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Inline fallback prompt.\n")
 
 	inlineLoaded, err := LoadRuntimeConfig(inlineDir, nil)
 	if err != nil {
@@ -1409,23 +1404,17 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"PROJECT": "{{ .Project }}"}
 
 	writeRuntimeFactoryJSON(t, inlineDir, inlineConfig)
-	writeRuntimeFactoryJSON(t, splitDir, topology)
-	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", `---
-type: MODEL_WORKSTATION
-worker: executor
-promptFile: prompt.md
-outputSchema: schema.json
-limits:
-  maxRetries: 2
-  maxExecutionTime: 30m
-stopWords: ["DONE"]
-workingDirectory: "/repo/{{ .WorkID }}"
-worktree: "worktrees/{{ .WorkID }}"
-env:
-  PROJECT: "{{ .Project }}"
----
-Implement {{ .WorkID }}.
-`)
+	splitConfig := cloneJSONMap(t, topology)
+	splitConfig["workstations"].([]any)[0].(map[string]any)["type"] = "MODEL_WORKSTATION"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["promptFile"] = "prompt.md"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["outputSchema"] = "schema.json"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["limits"] = map[string]any{"maxRetries": 2, "maxExecutionTime": "30m"}
+	splitConfig["workstations"].([]any)[0].(map[string]any)["stopWords"] = []string{"DONE"}
+	splitConfig["workstations"].([]any)[0].(map[string]any)["workingDirectory"] = "/repo/{{ .WorkID }}"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["worktree"] = "worktrees/{{ .WorkID }}"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"PROJECT": "{{ .Project }}"}
+	writeRuntimeFactoryJSON(t, splitDir, splitConfig)
+	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Implement {{ .WorkID }}.\n")
 	if err := os.WriteFile(filepath.Join(splitDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
 		t.Fatalf("write split prompt file: %v", err)
 	}

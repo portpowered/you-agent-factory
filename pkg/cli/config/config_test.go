@@ -121,37 +121,29 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 
 	workstationAgentsPath := filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
 	workstationAgents := readCLITestFile(t, workstationAgentsPath)
-	if !strings.Contains(string(workstationAgents), "type: MODEL_WORKSTATION") {
-		t.Fatalf("expected workstation AGENTS.md to be loadable MODEL_WORKSTATION, got:\n%s", string(workstationAgents))
+	if got := string(workstationAgents); got != "Complete {{ .WorkID }} deterministically.\n" {
+		t.Fatalf("expanded workstation AGENTS.md = %q, want body-only workstation content", got)
 	}
-	if !strings.Contains(string(workstationAgents), "worker: executor") {
-		t.Fatalf("expected workstation AGENTS.md to reference executor, got:\n%s", string(workstationAgents))
+	workstationsPayload, ok := payload["workstations"].([]any)
+	if !ok || len(workstationsPayload) != 1 {
+		t.Fatalf("expected one workstation in expanded factory.json, got %#v", payload["workstations"])
 	}
-	assertExpandedAgentsFrontmatterUsesCamelCase(t, string(workstationAgents), []string{
-		"promptFile: prompt.md",
-		"outputSchema: schema.json",
-		"maxRetries: 2",
-		"maxExecutionTime: 30m",
-		"stopWords:",
-	}, []string{
-		"prompt_file:",
-		"output_schema:",
-		"max_retries:",
-		"max_execution_time:",
-		"stop_words:",
-	})
-	workstationDef, err := factoryconfig.LoadWorkstationConfig(filepath.Join(dir, "workstations", "execute-story"))
-	if err != nil {
-		t.Fatalf("LoadWorkstationConfig: %v", err)
+	workstationPayload, ok := workstationsPayload[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected workstation payload object, got %#v", workstationsPayload[0])
 	}
-	if workstationDef.OutputSchema != "schema.json" || workstationDef.Limits.MaxRetries != 2 || workstationDef.Limits.MaxExecutionTime != "30m" || workstationDef.Timeout != "" {
-		t.Fatalf("expanded workstation definition did not preserve frontmatter: %#v", workstationDef)
+	for key, want := range map[string]any{
+		"type":         "MODEL_WORKSTATION",
+		"worker":       "executor",
+		"promptFile":   "prompt.md",
+		"outputSchema": "schema.json",
+	} {
+		if workstationPayload[key] != want {
+			t.Fatalf("expanded workstation %s = %#v, want %#v", key, workstationPayload[key], want)
+		}
 	}
-	if workstationDef.Body != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded workstation body = %q", workstationDef.Body)
-	}
-	if workstationDef.PromptTemplate != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded workstation prompt template = %q", workstationDef.PromptTemplate)
+	if _, ok := workstationPayload["body"]; ok {
+		t.Fatalf("expected expanded factory.json workstation to omit inline body, got %#v", workstationPayload)
 	}
 	promptContent := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "prompt.md"))
 	if string(promptContent) != "Complete {{ .WorkID }} deterministically." {
@@ -180,8 +172,18 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	if _, ok := loaded.Worker("executor"); !ok {
 		t.Fatal("expected expanded worker definition to load")
 	}
-	if _, ok := loaded.Workstation("execute-story"); !ok {
+	workstationDef, ok := loaded.Workstation("execute-story")
+	if !ok {
 		t.Fatal("expected expanded workstation definition to load")
+	}
+	if workstationDef.OutputSchema != "schema.json" || workstationDef.Limits.MaxRetries != 2 || workstationDef.Limits.MaxExecutionTime != "30m" || workstationDef.Timeout != "" {
+		t.Fatalf("expanded workstation definition did not preserve inline runtime fields: %#v", workstationDef)
+	}
+	if workstationDef.Body != "Complete {{ .WorkID }} deterministically." {
+		t.Fatalf("expanded workstation body = %q", workstationDef.Body)
+	}
+	if workstationDef.PromptTemplate != "Complete {{ .WorkID }} deterministically." {
+		t.Fatalf("expanded workstation prompt template = %q", workstationDef.PromptTemplate)
 	}
 
 	before := map[string][]byte{
@@ -244,9 +246,13 @@ func TestExpandFactoryConfig_WritesPromptFileFromBodyWhenPromptTemplateMissing(t
 		t.Fatalf("prompt file content = %q", string(promptContent))
 	}
 
-	workstationDef, err := factoryconfig.LoadWorkstationConfig(filepath.Join(dir, "workstations", "execute-story"))
+	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
-		t.Fatalf("LoadWorkstationConfig: %v", err)
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	workstationDef, ok := loaded.Workstation("execute-story")
+	if !ok {
+		t.Fatal("expected expanded workstation definition to load")
 	}
 	if workstationDef.PromptTemplate != "Use {{ .WorkID }} as the prompt." {
 		t.Fatalf("expanded workstation prompt template = %q", workstationDef.PromptTemplate)
@@ -656,21 +662,8 @@ Existing workstation body.
 			}
 
 			workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
-			assertExpandedAgentsFrontmatterUsesCamelCase(t, workstationAgents, []string{
-				"type: MODEL_WORKSTATION",
-				"worker: executor",
-				"promptFile: prompts/task.md",
-				"maxRetries: 3",
-				"maxExecutionTime: 15m",
-				"stopWords:",
-			}, []string{
-				"prompt_file:",
-				"max_retries:",
-				"max_execution_time:",
-				"stop_words:",
-			})
-			if !strings.Contains(workstationAgents, "Existing workstation body.") {
-				t.Fatalf("expected expanded workstation AGENTS.md body to be preserved:\n%s", workstationAgents)
+			if workstationAgents != "Existing workstation body.\n" {
+				t.Fatalf("expected expanded workstation AGENTS.md body to be preserved, got %q", workstationAgents)
 			}
 			if got := string(readCLITestFile(t, promptPath)); got != "Preserve {{ .WorkID }}.\n" {
 				t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
@@ -687,9 +680,9 @@ Existing workstation body.
 			if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
 				t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
 			}
-			workstationDef, err := factoryconfig.LoadWorkstationConfig(filepath.Join(dir, "workstations", "execute-story"))
-			if err != nil {
-				t.Fatalf("LoadWorkstationConfig: %v", err)
+			workstationDef, ok := loaded.Workstation("execute-story")
+			if !ok {
+				t.Fatal("expected runtime workstation definition")
 			}
 			if workstationDef.Limits.MaxRetries != 3 || workstationDef.PromptTemplate != "Preserve {{ .WorkID }}.\n" {
 				t.Fatalf("expected existing workstation definition to be preserved, got %#v", workstationDef)
@@ -832,21 +825,8 @@ Existing workstation body.
 			}
 
 			workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
-			assertExpandedAgentsFrontmatterUsesCamelCase(t, workstationAgents, []string{
-				"type: MODEL_WORKSTATION",
-				"worker: executor",
-				"promptFile: prompts/task.md",
-				"maxRetries: 3",
-				"maxExecutionTime: 15m",
-				"stopWords:",
-			}, []string{
-				"prompt_file:",
-				"max_retries:",
-				"max_execution_time:",
-				"stop_words:",
-			})
-			if !strings.Contains(workstationAgents, "Existing workstation body.") {
-				t.Fatalf("expected expanded workstation AGENTS.md body to be preserved:\n%s", workstationAgents)
+			if workstationAgents != "Existing workstation body.\n" {
+				t.Fatalf("expected expanded workstation AGENTS.md body to be preserved, got %q", workstationAgents)
 			}
 			if got := string(readCLITestFile(t, promptPath)); got != "Preserve {{ .WorkID }}.\n" {
 				t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
@@ -863,9 +843,9 @@ Existing workstation body.
 			if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
 				t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
 			}
-			workstationDef, err := factoryconfig.LoadWorkstationConfig(filepath.Join(dir, "workstations", "execute-story"))
-			if err != nil {
-				t.Fatalf("LoadWorkstationConfig: %v", err)
+			workstationDef, ok := loaded.Workstation("execute-story")
+			if !ok {
+				t.Fatal("expected runtime workstation definition")
 			}
 			if workstationDef.Limits.MaxRetries != 3 || workstationDef.PromptTemplate != "Preserve {{ .WorkID }}.\n" {
 				t.Fatalf("expected existing workstation definition to be preserved, got %#v", workstationDef)

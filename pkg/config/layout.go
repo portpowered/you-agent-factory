@@ -542,9 +542,12 @@ func writeExpandedWorkstationFiles(targetDir string, workstationConfigs []interf
 			}
 		}
 		def, promptFileContent := workstationDefForExpansion(workstationCfg)
-		agents, err := renderAgentsMarkdown(workstationFrontmatterForExpansion(def), def.Body)
-		if err != nil {
-			return fmt.Errorf("render workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+		agents := renderAgentsBody(def.Body)
+		if !hasInlineWorkstationRuntime(workstationCfg) {
+			agents, err = renderAgentsMarkdown(workstationFrontmatterForExpansion(def), def.Body)
+			if err != nil {
+				return fmt.Errorf("render workstation %q AGENTS.md: %w", workstationCfg.Name, err)
+			}
 		}
 		promptPath := ""
 		if def.PromptFile != "" {
@@ -913,6 +916,15 @@ func splitWorkstationRuntimeDefinition(factoryDir string, workstation interfaces
 		return nil, err
 	}
 	workstationDir := filepath.Join(factoryDir, interfaces.WorkstationsDir, segment)
+	if hasInlineWorkstationRuntime(workstation) {
+		def, found, err := inlineBodyOnlyWorkstationRuntimeDefinition(workstationDir, workstation)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			return def, nil
+		}
+	}
 	def, err := LoadWorkstationConfig(workstationDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -924,6 +936,33 @@ func splitWorkstationRuntimeDefinition(factoryDir string, workstation interfaces
 		return nil, err
 	}
 	return def, nil
+}
+
+func inlineBodyOnlyWorkstationRuntimeDefinition(workstationDir string, workstation interfaces.FactoryWorkstationConfig) (*interfaces.FactoryWorkstationConfig, bool, error) {
+	body, found, err := loadWorkstationBody(workstationDir)
+	if err != nil || !found {
+		return nil, found, err
+	}
+
+	def, err := workstationRuntimeDefinitionFromInline(workstation)
+	if err != nil {
+		return nil, false, err
+	}
+	if def == nil {
+		return nil, false, nil
+	}
+
+	def.Body = body
+	if def.PromptFile != "" {
+		promptTemplate, err := loadWorkstationPromptTemplate(workstationDir, def.PromptFile)
+		if err != nil {
+			return nil, false, err
+		}
+		def.PromptTemplate = promptTemplate
+	} else {
+		def.PromptTemplate = body
+	}
+	return def, true, nil
 }
 
 func mergeRuntimeWorkstationDefinitions(inlineDef, splitDef *interfaces.FactoryWorkstationConfig) (*interfaces.FactoryWorkstationConfig, error) {
@@ -1215,6 +1254,10 @@ func authoredFactoryConfigForExpandedLayout(cfg *interfaces.FactoryConfig) (*int
 	for i := range authored.Workers {
 		authored.Workers[i].Body = ""
 	}
+	for i := range authored.Workstations {
+		authored.Workstations[i].Body = ""
+		authored.Workstations[i].PromptTemplate = ""
+	}
 	return authored, nil
 }
 
@@ -1254,6 +1297,24 @@ func loadWorkerBody(dir string) (string, bool, error) {
 		return "", false, fmt.Errorf("load worker body from %s: %w", dir, err)
 	}
 	return body, true, nil
+}
+
+func loadWorkstationBody(dir string) (string, bool, error) {
+	agentsPath := filepath.Join(dir, interfaces.FactoryAgentsFileName)
+	data, err := os.ReadFile(agentsPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("load workstation body from %s: %w", dir, err)
+	}
+
+	content := string(data)
+	if strings.HasPrefix(content, "---\n") || strings.HasPrefix(content, "---\r\n") {
+		return "", false, nil
+	}
+
+	return strings.TrimSpace(content), true, nil
 }
 
 func writeAgentsFile(dir string, content []byte) error {
