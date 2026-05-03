@@ -50,6 +50,32 @@ describe("ExportFactoryDialog", () => {
     expect(writeFactoryExportPng).not.toHaveBeenCalled();
   });
 
+  it("validates cleared and non-image file selections before export", async () => {
+    render(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Factory Aurora"
+        isOpen
+        onClose={() => {}}
+      />,
+    );
+
+    const imageInput = screen.getByLabelText("Cover image");
+    fireEvent.change(imageInput, { target: { files: [] } });
+
+    expect(await screen.findByText("Choose a cover image before exporting.")).toBeTruthy();
+    expect(imageInput.getAttribute("aria-invalid")).toBe("true");
+
+    fireEvent.change(imageInput, {
+      target: {
+        files: [new File(["notes"], "notes.txt", { type: "text/plain" })],
+      },
+    });
+
+    expect(await screen.findByText("Choose an image file before exporting.")).toBeTruthy();
+    expect(writeFactoryExportPng).not.toHaveBeenCalled();
+  });
+
   it("disables actions while the export is being prepared", () => {
     render(
       <ExportFactoryDialog
