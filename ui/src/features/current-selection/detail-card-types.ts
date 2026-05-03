@@ -13,7 +13,7 @@ import type {
   DashboardWorkstationRequest,
   DashboardWorkstationNode,
 } from "../../api/dashboard/types";
-import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { DashboardWorkItemSelection } from "./types";
 
 export interface SelectionDetailLayoutProps {
@@ -192,3 +192,4 @@ export interface MetadataSectionProps {
   metadata: Record<string, string> | undefined;
   title: string;
 }
+

@@ -95,3 +95,4 @@ describe("DashboardFlowAxisLegend", () => {
     expect(collapseButton.className).toContain("dashboard-eyebrow");
   });
 });
+

@@ -85,3 +85,4 @@ describe("dashboard fixture catalog", () => {
     expect(dashboardWorkstationRequestFixtures.rejected.outcome).toBe("REJECTED");
   });
 });
+

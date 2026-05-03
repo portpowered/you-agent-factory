@@ -110,3 +110,4 @@ describe("workstationIconMetadata", () => {
     });
   });
 });
+

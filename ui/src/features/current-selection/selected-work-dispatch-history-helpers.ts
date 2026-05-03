@@ -158,3 +158,4 @@ export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
 export function dedupeWorkItems<TWorkItem extends { work_id: string }>(workItems: TWorkItem[]) {
   return [...new Map(workItems.map((workItem) => [workItem.work_id, workItem])).values()];
 }
+

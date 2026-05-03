@@ -53,3 +53,4 @@ describe("RequestAuthoredText", () => {
     expect(container.textContent).toContain('<script>alert("xss")</script>');
   });
 });
+

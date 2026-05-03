@@ -40,3 +40,4 @@ export const Vocabulary = {
     await expect(canvas.getByRole("img", { name: "Unknown graph semantic" })).toBeVisible();
   },
 };
+

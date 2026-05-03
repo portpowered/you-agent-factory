@@ -9,7 +9,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
 import { buildEmptyDashboardRuntimeFixture } from "../../components/dashboard/fixtures/runtime";
-import { resetSelectionHistoryStore, useSelectionHistoryStore } from "../../state/selectionHistoryStore";
+import { resetSelectionHistoryStore, useSelectionHistoryStore } from "./state/selectionHistoryStore";
 import { buildReplayFixtureTimelineSnapshot } from "../../testing/replay-fixtures";
 import { useCurrentSelection } from "./useCurrentSelection";
 
@@ -549,3 +549,4 @@ describe("useCurrentSelection", () => {
     });
   });
 });
+

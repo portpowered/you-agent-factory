@@ -31,3 +31,4 @@ describe("DashboardButton", () => {
     expect(button.className).toContain("bg-af-accent/10");
   });
 });
+

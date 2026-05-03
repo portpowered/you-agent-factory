@@ -56,3 +56,4 @@ describe("dashboard chart contract", () => {
     ]);
   });
 });
+

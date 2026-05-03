@@ -77,3 +77,4 @@ export function workstationIconMetadata(
 ): WorkstationIconMetadata {
   return WORKSTATION_ICON_METADATA_BY_KIND[workstationSemanticKind(workstation)];
 }
+

@@ -306,3 +306,4 @@ describe("isCanonicalFactoryDefinition", () => {
     ).toBe(false);
   });
 });
+

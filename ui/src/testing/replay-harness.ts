@@ -3,8 +3,8 @@ import { act, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../api/dashboard";
 import type { EventSourceLike } from "../api/events/api";
 import type { FactoryEvent } from "../api/events";
-import type { FactoryTimelineSnapshot } from "../state/factoryTimelineStore";
-import { useFactoryTimelineStore } from "../state/factoryTimelineStore";
+import type { FactoryTimelineSnapshot } from "../features/timeline/state/factoryTimelineStore";
+import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import { loadReplayFixtureEvents, type ReplayFixtureID } from "./replay-fixtures";
 
 const REPLAY_SETTLE_TIMEOUT_MS = 10_000;
@@ -186,3 +186,4 @@ export function createReplayHarness(): ReplayHarness {
     reset,
   };
 }
+

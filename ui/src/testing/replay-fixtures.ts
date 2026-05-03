@@ -9,7 +9,7 @@ import type { FactoryEvent } from "../api/events";
 import {
   buildFactoryTimelineSnapshot,
   type FactoryTimelineSnapshot,
-} from "../state/factoryTimelineStore";
+} from "../features/timeline/state/factoryTimelineStore";
 import type { ReplayFixtureID } from "./replay-fixture-catalog";
 
 export { replayFixtureCatalog, type ReplayFixtureID } from "./replay-fixture-catalog";
@@ -52,3 +52,4 @@ export function buildReplayFixtureTimelineSnapshot(
 
   return buildFactoryTimelineSnapshot(events, resolvedTick);
 }
+

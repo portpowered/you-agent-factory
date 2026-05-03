@@ -62,3 +62,4 @@ export const DASHBOARD_TYPOGRAPHY_CONTRACT: readonly DashboardTypographyContract
     usage: ["metadata labels", "chart-axis/supporting labels"],
   },
 ] as const;
+

@@ -293,3 +293,4 @@ function WorkstationRequestProjectionSection({
     </section>
   );
 }
+

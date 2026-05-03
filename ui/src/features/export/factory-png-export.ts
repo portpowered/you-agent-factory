@@ -343,3 +343,4 @@ function buildCrc32Table(): Uint32Array {
 
   return table;
 }
+

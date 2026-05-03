@@ -84,3 +84,4 @@ async function parseErrorResponse(response: Response): Promise<ErrorResponse | n
 export function isSubmitWorkAPIError(error: unknown): error is SubmitWorkAPIError {
   return error instanceof SubmitWorkAPIError;
 }
+

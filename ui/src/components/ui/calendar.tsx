@@ -37,3 +37,4 @@ export function Calendar({ className, classNames, showOutsideDays = true, ...pro
     />
   );
 }
+

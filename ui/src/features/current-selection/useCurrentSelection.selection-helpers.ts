@@ -12,7 +12,7 @@ import type {
 import {
   findWorkItemReference,
   findWorkstationNodeIDForPlace,
-} from "../../state/dashboardSelection";
+} from "./state/dashboardSelection";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
@@ -317,3 +317,4 @@ function isScriptBackedWorkstationRequest(
     request.response?.script_response !== undefined
   );
 }
+

@@ -50,3 +50,4 @@ export function InferenceAttemptCard({ attempt }: InferenceAttemptCardProps) {
     </article>
   );
 }
+

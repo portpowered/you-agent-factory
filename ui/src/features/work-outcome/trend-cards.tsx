@@ -355,3 +355,4 @@ function TrendAxes() {
 function isThroughputRangeID(value: string): value is ThroughputRangeID {
   return THROUGHPUT_RANGE_OPTIONS.some((option) => option.id === value);
 }
+

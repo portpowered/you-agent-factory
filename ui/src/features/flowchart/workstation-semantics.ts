@@ -8,3 +8,4 @@ export function isExhaustionWorkstation(workstation: DashboardWorkstationNode): 
     ((workstation.workstation_kind ?? "") === "" && (workstation.worker_type ?? "") === "")
   );
 }
+

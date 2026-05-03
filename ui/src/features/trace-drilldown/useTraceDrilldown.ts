@@ -1,5 +1,5 @@
 import type { TraceGridState } from "./trace-grid-card";
-import { useDashboardTrace } from "../../hooks/dashboard/useTrace";
+import { useDashboardTrace } from "./useTrace";
 
 export interface UseTraceDrilldownResult {
   selectedTrace: ReturnType<typeof useDashboardTrace>["data"];
@@ -36,3 +36,4 @@ export function useTraceDrilldown(
 
   return { selectedTrace, traceGridState };
 }
+

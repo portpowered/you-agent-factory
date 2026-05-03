@@ -8,7 +8,7 @@ import type {
 import type {
   GraphNodePosition,
   GraphNodePositions,
-} from "../../state/currentActivityGraphStore";
+} from "./state/currentActivityGraphStore";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import type {
@@ -457,3 +457,4 @@ export function initialFocusNodes(graphLayout: GraphLayout): FitViewOptions["nod
     .filter((node): node is PositionedPlaceNode | PositionedWorkstationNode => node !== undefined)
     .map((node) => ({ id: node.nodeId }));
 }
+

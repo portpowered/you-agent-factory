@@ -179,3 +179,4 @@ function fileFromDragEvent(event: Pick<DragEvent, "dataTransfer">): File | null 
   const firstFile = files[0];
   return firstFile instanceof File ? firstFile : null;
 }
+

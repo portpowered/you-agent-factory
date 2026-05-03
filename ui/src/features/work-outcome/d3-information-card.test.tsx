@@ -173,3 +173,4 @@ describe("D3CompletionInformationCard", () => {
     ).toBeNull();
   });
 });
+

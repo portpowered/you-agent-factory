@@ -209,3 +209,4 @@ function reverseRelationshipLabel(relationType: string): string {
   }
   return relationType.toLowerCase().replace(/_/g, " ");
 }
+

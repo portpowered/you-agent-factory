@@ -71,3 +71,4 @@ function toCurrentActivitySelection(
     workID: selection.workItem.work_id,
   };
 }
+

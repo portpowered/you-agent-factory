@@ -15,3 +15,4 @@ export function WorkTotalsWidget({ snapshot }: WorkTotalsWidgetProps) {
     />
   );
 }
+

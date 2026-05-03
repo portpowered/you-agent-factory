@@ -1,9 +1,11 @@
 import type { NamedFactoryAPIError } from "../../api/named-factory";
 import {
   DashboardButton,
+} from "../../components/dashboard";
+import {
   DashboardMessagePanel,
   DashboardMutationDialog,
-} from "../../components/dashboard";
+} from "./mutation-dialog";
 import type {
   FactoryImportActivationState,
   FactoryImportPreviewState,
@@ -230,3 +232,4 @@ export function FactoryImportPreviewDialog({
     </DashboardMutationDialog>
   );
 }
+

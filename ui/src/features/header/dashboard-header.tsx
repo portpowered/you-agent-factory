@@ -1,7 +1,4 @@
-import type {
-  DashboardSnapshot,
-  DashboardStreamState,
-} from "../../api/dashboard/types";
+import type { DashboardStreamState } from "../../api/dashboard/types";
 import { TickSliderControl } from "../../components/dashboard";
 import { cx } from "../../components/ui";
 import {
@@ -9,7 +6,9 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { useDashboardAppStore } from "../../state/dashboardAppStore";
+import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
+import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
+import { useExportDialogStore } from "../export/state/exportDialogStore";
 
 const PANEL_CLASS =
   "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
@@ -26,17 +25,17 @@ const SESSION_METADATA_CLASS = cx(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 
-interface DashboardHeaderProps {
-  snapshot: DashboardSnapshot;
-  streamState: DashboardStreamState;
-}
+export function DashboardHeader() {
+  const snapshot = useFactoryTimelineStore(
+    (state) => state.worldViewCache[state.selectedTick]?.dashboard,
+  );
+  const streamState = useDashboardStreamStore((state) => state.streamState);
+  const isExportDialogOpen = useExportDialogStore((state) => state.isExportDialogOpen);
+  const openExportDialog = useExportDialogStore((state) => state.openExportDialog);
 
-export function DashboardHeader({
-  snapshot,
-  streamState,
-}: DashboardHeaderProps) {
-  const isExportDialogOpen = useDashboardAppStore((state) => state.isExportDialogOpen);
-  const openExportDialog = useDashboardAppStore((state) => state.openExportDialog);
+  if (!snapshot) {
+    return null;
+  }
 
   return (
     <section className={DASHBOARD_TOOLBAR_CLASS} aria-label="dashboard summary">
@@ -88,3 +87,4 @@ function streamBadgeClassName(status: DashboardStreamState["status"]): string {
     status === "offline" && "bg-af-danger/15 text-af-danger-ink",
   );
 }
+

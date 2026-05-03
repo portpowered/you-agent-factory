@@ -7,7 +7,7 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
-import { useSelectionHistoryStore } from "../../state/selectionHistoryStore";
+import { useSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
@@ -153,3 +153,4 @@ export function useCurrentSelection({
     undoSelection: store.undoSelection,
   };
 }
+

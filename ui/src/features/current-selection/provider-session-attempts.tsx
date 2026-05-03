@@ -271,3 +271,4 @@ function ProviderSessionLogAccess({ session, startedAt }: ProviderSessionLogAcce
     </div>
   );
 }
+

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DashboardActiveExecution, DashboardSnapshot, DashboardWorkItemRef } from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
 import { cx } from "../../lib/cx";
-import { useCurrentActivityGraphStore } from "../../state/currentActivityGraphStore";
+import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 import {
   type FactoryPngImportValue,
   type ReadFactoryImportFile,
@@ -429,3 +429,4 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
     </section>
   );
 }
+

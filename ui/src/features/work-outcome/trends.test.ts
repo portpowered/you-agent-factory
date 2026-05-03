@@ -147,3 +147,4 @@ describe("buildWorkChartModel", () => {
     expect(first).toEqual(second);
   });
 });
+

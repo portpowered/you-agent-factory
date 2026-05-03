@@ -56,3 +56,4 @@ export function WorkChartCard({
 }
 
 export const D3CompletionInformationCard = WorkChartCard;
+

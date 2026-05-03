@@ -158,3 +158,4 @@ export const FailureTrendConstrainedWidth = {
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
+

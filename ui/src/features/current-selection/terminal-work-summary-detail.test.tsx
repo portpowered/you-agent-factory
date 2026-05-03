@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { DETAIL_CARD_NOW } from "./detail-card-test-helpers";
 import { TerminalWorkSummaryCard } from "./terminal-work-summary-detail";
 
@@ -95,3 +95,4 @@ describe("TerminalWorkSummaryCard", () => {
     );
   });
 });
+

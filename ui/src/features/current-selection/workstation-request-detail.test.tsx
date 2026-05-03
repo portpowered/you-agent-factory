@@ -341,3 +341,4 @@ describe("WorkstationRequestDetailCard", () => {
     expect(errorDetails.getByText("Script timed out.")).toBeTruthy();
   });
 });
+

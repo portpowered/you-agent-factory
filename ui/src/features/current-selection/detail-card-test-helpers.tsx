@@ -43,3 +43,4 @@ export function workstationRequest(
 ): DashboardWorkstationRequest {
   return buildDashboardWorkstationRequestFixture(dispatchID, overrides);
 }
+

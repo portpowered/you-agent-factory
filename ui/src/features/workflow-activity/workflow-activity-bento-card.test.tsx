@@ -52,3 +52,4 @@ describe("WorkflowActivityBentoCard", () => {
     expect(screen.queryByRole("button", { name: "Collapse inspector" })).toBeNull();
   });
 });
+

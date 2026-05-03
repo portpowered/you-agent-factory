@@ -96,3 +96,4 @@ resourceCountTimelineEvents[2].context.workIds = ["work-resource-count"];
 resourceCountTimelineEvents[3].context.dispatchId = "dispatch-resource-count";
 resourceCountTimelineEvents[3].context.traceIds = ["trace-resource-count"];
 resourceCountTimelineEvents[3].context.workIds = ["work-resource-count"];
+

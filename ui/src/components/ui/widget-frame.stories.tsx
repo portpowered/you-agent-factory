@@ -28,3 +28,4 @@ export const CurrentSelectionEmptyState = {
     ).toBeVisible();
   },
 };
+

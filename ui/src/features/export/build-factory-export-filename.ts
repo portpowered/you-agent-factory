@@ -9,3 +9,4 @@ export function buildFactoryExportFilename(factoryName: string): string {
 
   return `${slug || EXPORT_NAME_FALLBACK}.png`;
 }
+

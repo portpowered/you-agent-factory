@@ -11,3 +11,4 @@ export function factoryAPIURL(path: string): string {
   }
   return `${origin}${path.startsWith("/") ? path : `/${path}`}`;
 }
+

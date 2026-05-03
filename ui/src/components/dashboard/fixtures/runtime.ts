@@ -264,3 +264,4 @@ export const dashboardSemanticSnapshotFixtures = {
     rejectedOutcomeRuntimeOverlay,
   ]),
 } satisfies Record<string, DashboardSnapshot>;
+

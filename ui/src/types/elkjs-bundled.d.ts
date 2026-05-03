@@ -49,3 +49,4 @@ declare module "elkjs/lib/elk.bundled.js" {
 
   export default ElkConstructor;
 }
+

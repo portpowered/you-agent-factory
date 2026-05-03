@@ -218,3 +218,4 @@ function renderSubmitWorkWidget(element: React.ReactElement) {
 
   return render(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>);
 }
+

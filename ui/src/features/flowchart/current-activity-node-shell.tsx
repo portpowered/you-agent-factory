@@ -62,3 +62,4 @@ export function ActivityGraphNodeShell({
 function handlePosition(index: number, count: number): string {
   return `${((index + 1) * 100) / (count + 1)}%`;
 }
+

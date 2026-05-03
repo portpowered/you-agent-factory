@@ -261,3 +261,4 @@ describe("WorkChart", () => {
     expect(screen.queryByRole("img", { name: "Work chart malformed" })).toBeNull();
   });
 });
+

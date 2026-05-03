@@ -13,3 +13,4 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 ) {
   return <input className={cn(INPUT_CLASS, className)} ref={ref} type={type} {...props} />;
 });
+

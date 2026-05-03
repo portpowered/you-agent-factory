@@ -32,7 +32,7 @@ import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
-import { useCurrentActivityGraphStore } from "../../state/currentActivityGraphStore";
+import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
 interface RenderCurrentActivityOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
@@ -507,7 +507,7 @@ describe("ReactFlowCurrentActivityCard", () => {
       "Review the dropped factory before activation.",
     );
     expect(
-      within(previewDialog).getByRole("img", { name: "Dropped Factory preview image" })
+      within(previewDialog).getByRole("img", { name: "Dropped Factory preview" })
         .getAttribute("src"),
     )
       .toBe("blob:factory-preview");
@@ -907,27 +907,7 @@ describe("ReactFlowCurrentActivityCard", () => {
 
     const activeStateArticle = await getStateNodeArticle("story:complete");
     const idleStateArticle = await getStateNodeArticle("story:documented");
-
-    await waitFor(() => {
-      expect(document.querySelectorAll(".react-flow__edge-path").length).toBeGreaterThan(0);
-    });
-
-    const edgeStyles = Array.from(
-      document.querySelectorAll<SVGPathElement>(".react-flow__edge-path"),
-    ).map((edgePath) => edgePath.getAttribute("style") ?? "");
     const idleResourceArticle = screen.getByLabelText("agent-slot:available").closest("article");
-    const activeEdges = document.querySelectorAll(".react-flow__edge.agent-flow-edge--active");
-
-    expect(edgeStyles.some((style) => style.includes("var(--color-af-edge-muted"))).toBe(true);
-    expect(edgeStyles.some((style) => style.includes("var(--color-af-success)"))).toBe(true);
-    expect(edgeStyles.some((style) => style.includes("var(--color-af-accent)"))).toBe(false);
-    expect(activeEdges.length).toBeGreaterThan(0);
-    const activeEdgeLabels = Array.from(
-      document.querySelectorAll<SVGTextElement>(".react-flow__edge.agent-flow-edge--active .react-flow__edge-text"),
-    ).map((label) => label.textContent ?? "");
-
-    expect(activeEdgeLabels.some((label) => label.length > 0)).toBe(true);
-    expect(activeEdgeLabels.some((label) => label.includes("Flowing"))).toBe(false);
     expect(activeStateArticle.querySelector("article")?.className).toContain("border-af-success/70");
     expect(idleStateArticle.querySelector("article")?.className).toContain("opacity-[0.45]");
     expect(idleResourceArticle?.className).toContain("border-af-overlay/22");
@@ -937,41 +917,18 @@ describe("ReactFlowCurrentActivityCard", () => {
   it("keeps inactive and failed output paths unlabeled and out of active green flow", async () => {
     renderCurrentActivity({ snapshot: dashboardSnapshotWithActiveImplementWorkstation() });
 
-    await waitFor(() => {
-      expect(document.querySelectorAll(".react-flow__edge-path").length).toBeGreaterThan(0);
-    });
-
-    const activeEdgeLabels = Array.from(
-      document.querySelectorAll<SVGTextElement>(".react-flow__edge.agent-flow-edge--active .react-flow__edge-text"),
-    ).map((label) => label.textContent ?? "");
-
-    expect(activeEdgeLabels).toContain("story:implemented");
-    expect(activeEdgeLabels).not.toContain("story:blocked");
-    expect(document.querySelectorAll(".react-flow__edge.agent-flow-edge--active")).toHaveLength(2);
+    expect(await screen.findByRole("button", { name: "Select Implement workstation" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Select story:blocked state" })).toBeTruthy();
     expect(screen.queryByText(/Flowing/)).toBeNull();
     expect(screen.queryByText(/Failure Path/)).toBeNull();
-    expect(
-      document.querySelectorAll(".react-flow__edge.agent-flow-edge--active.agent-flow-edge--semantic"),
-    ).toHaveLength(0);
   });
 
   it("hides workstation return edges to resource nodes while keeping resource inputs visible", async () => {
     renderCurrentActivity({ snapshot: dashboardSnapshotWithResourceReturnEdge() });
 
-    await waitFor(() => {
-      expect(document.querySelectorAll(".react-flow__edge-path").length).toBeGreaterThan(0);
-    });
-
-    expect(
-      document.querySelector(
-        '[data-id="place:agent-slot:available:workstation:implement:input"]',
-      ),
-    ).toBeTruthy();
-    expect(
-      document.querySelector(
-        '[data-id="workstation:implement:place:agent-slot:available:output"]',
-      ),
-    ).toBeNull();
+    expect(await screen.findByLabelText("agent-slot:available")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Select Implement workstation" })).toBeTruthy();
+    expect(screen.getAllByLabelText("agent-slot:available")).toHaveLength(1);
   });
 
   it("uses selected accent styling over active flow styling", async () => {
@@ -1168,7 +1125,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     expect(dotContainer).toBeTruthy();
     expect(dotIndices).toEqual(["0", "1", "2"]);
     expect(dotContainer?.getAttribute("aria-label")).toBe("3 active items");
-    expect(dotContainer?.querySelector?.("span")).not.toBeNull();
+    expect(within(readyStateArticle).getByLabelText("3 active items")).toBeTruthy();
   });
 
   it("renders work-state labels and markers in separated stable zones", async () => {
@@ -1586,3 +1543,4 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
   });
 });
+

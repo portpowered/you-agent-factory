@@ -7,8 +7,8 @@ import type {
   DashboardTrace,
   DashboardWorkstationNode,
 } from "../../api/dashboard/types";
-import { selectWorkItemExecutionDetails } from "../../state/executionDetails";
-import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
+import { selectWorkItemExecutionDetails } from "./state/executionDetails";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { CurrentSelectionState } from "./useCurrentSelection";
 
 export interface UseCurrentSelectionDetailsParams {
@@ -117,3 +117,4 @@ function findWorkstationNodeForAttempt(
     (node) => node.workstation_name === attempt.workstation_name,
   );
 }
+

@@ -1,9 +1,9 @@
 import { ExportFactoryDialog, useCurrentFactoryExport } from "../export";
-import { useDashboardAppStore } from "../../state/dashboardAppStore";
+import { useExportDialogStore } from "../export/state/exportDialogStore";
 
 export function DashboardExportDialog() {
-  const closeExportDialog = useDashboardAppStore((state) => state.closeExportDialog);
-  const isExportDialogOpen = useDashboardAppStore((state) => state.isExportDialogOpen);
+  const closeExportDialog = useExportDialogStore((state) => state.closeExportDialog);
+  const isExportDialogOpen = useExportDialogStore((state) => state.isExportDialogOpen);
   const { currentFactoryExport, isPreparing } = useCurrentFactoryExport(isExportDialogOpen);
 
   return (
@@ -19,3 +19,4 @@ export function DashboardExportDialog() {
     />
   );
 }
+

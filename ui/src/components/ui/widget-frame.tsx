@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { AgentBentoCard } from "./agent-bento";
+import { AgentBentoCard } from "../../features/bento/agent-bento";
 import { cx } from "./classnames";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
@@ -44,3 +44,4 @@ export function DashboardWidgetFrame({
     </AgentBentoCard>
   );
 }
+

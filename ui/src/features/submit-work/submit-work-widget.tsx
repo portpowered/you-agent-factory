@@ -33,3 +33,4 @@ export function SubmitWorkWidget({ submitWorkTypes = [] }: SubmitWorkWidgetProps
     />
   );
 }
+

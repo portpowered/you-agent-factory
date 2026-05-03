@@ -331,3 +331,4 @@ function requestFailureMessage(request: DispatchWorkstationRequest): string | un
 function requestDiagnostics(request: DispatchWorkstationRequest) {
   return "request" in request ? request.response?.diagnostics : undefined;
 }
+

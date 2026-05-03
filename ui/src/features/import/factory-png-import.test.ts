@@ -364,3 +364,4 @@ interface ParsedChunk {
   nextOffset: number;
   type: string;
 }
+

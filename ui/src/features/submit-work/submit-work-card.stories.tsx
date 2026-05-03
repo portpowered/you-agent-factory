@@ -107,3 +107,4 @@ export const FailureRetry = {
     await expect(scope.getByRole("button", { name: "Submit work" })).toBeEnabled();
   },
 };
+

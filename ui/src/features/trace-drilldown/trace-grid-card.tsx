@@ -364,3 +364,4 @@ function resolveTraceWorkItems(trace: DashboardTrace): DashboardWorkItemRef[] {
 
   return [...itemsByID.values()].sort((left, right) => left.work_id.localeCompare(right.work_id));
 }
+

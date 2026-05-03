@@ -9,3 +9,4 @@ export {
   INFERENCE_RESPONSE_LABEL,
   WORKSTATION_RESPONSE_TEXT_LABEL,
 } from "./detail-card-shared";
+

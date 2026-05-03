@@ -133,3 +133,4 @@ export const Narrow = {
     await expect(canvas.getByText("Exhaustion rule")).toBeVisible();
   },
 };
+

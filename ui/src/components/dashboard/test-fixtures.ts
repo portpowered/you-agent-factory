@@ -1,7 +1,7 @@
 import type { DashboardSnapshot } from "../../api/dashboard/types";
 import type { WorkstationIconMetadata } from "../../features/flowchart";
 import { workstationIconMetadata } from "../../features/flowchart";
-import { buildFactoryTimelineSnapshot } from "../../state/factoryTimelineStore";
+import { buildFactoryTimelineSnapshot } from "../../features/timeline/state/factoryTimelineStore";
 import {
   activeWorkRuntimeOverlay,
   buildDashboardSnapshotFixture,
@@ -80,3 +80,4 @@ export const twentyNodeDashboardTopology = twentyNodeDashboardSnapshot.topology;
 export function resourceOccupancySnapshotForTick(tick: number): DashboardSnapshot {
   return buildFactoryTimelineSnapshot(resourceCountTimelineEvents, tick).dashboard;
 }
+

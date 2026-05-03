@@ -66,3 +66,4 @@ export const Preparing = {
     await expect(scope.getByText("Loading the current authored factory definition.")).toBeVisible();
   },
 };
+

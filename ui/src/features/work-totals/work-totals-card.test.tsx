@@ -17,3 +17,4 @@ describe("WorkTotalsCard", () => {
     expect(screen.getByText("Dispatched")).toBeTruthy();
   });
 });
+

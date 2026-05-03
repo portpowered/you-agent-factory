@@ -53,3 +53,4 @@ function StatCard({ label, value, tone }: StatCardProps) {
     </article>
   );
 }
+

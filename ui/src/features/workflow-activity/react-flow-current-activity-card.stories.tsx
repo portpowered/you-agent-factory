@@ -906,3 +906,4 @@ export const NarrowViewport = {
     expect(frame?.getBoundingClientRect().width ?? 0).toBeLessThanOrEqual(360);
   },
 };
+

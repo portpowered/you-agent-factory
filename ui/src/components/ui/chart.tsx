@@ -140,3 +140,4 @@ export function ChartLegendContent({
     </div>
   );
 }
+

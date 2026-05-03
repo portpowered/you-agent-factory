@@ -326,3 +326,4 @@ export function validateReplayCoverageReport(report: ReplayCoverageReport): stri
 
   return issues;
 }
+

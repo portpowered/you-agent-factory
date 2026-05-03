@@ -312,3 +312,4 @@ runtimeDetailsTimelineEvents[11].context.workIds = [runtimeDetailsFixtureIDs.fai
 runtimeDetailsTimelineEvents[12].context.dispatchId = runtimeDetailsFixtureIDs.failedDispatchID;
 runtimeDetailsTimelineEvents[12].context.traceIds = [runtimeDetailsFixtureIDs.failedTraceID];
 runtimeDetailsTimelineEvents[12].context.workIds = [runtimeDetailsFixtureIDs.failedWorkID];
+

@@ -5,3 +5,4 @@ export const resourceCountBackendWorldViewCountsByTick: Record<number, Record<st
   3: { [resourceCountAvailablePlaceID]: 1 },
   4: { [resourceCountAvailablePlaceID]: 2 },
 };
+

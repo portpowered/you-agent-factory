@@ -270,3 +270,4 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
     </div>
   );
 }
+

@@ -132,3 +132,4 @@ export function getDashboardWorkChartSeriesDefinitions<
     ...getDashboardWorkChartSeriesStyle(definition.key),
   }));
 }
+

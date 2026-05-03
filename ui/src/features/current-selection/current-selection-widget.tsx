@@ -2,7 +2,7 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../api/dashboard/types";
-import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -122,3 +122,4 @@ export function CurrentSelectionWidget({
 
   return <NoSelectionDetailCard widgetId={widgetId} />;
 }
+

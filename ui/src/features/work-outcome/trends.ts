@@ -394,3 +394,4 @@ function areStringRecordsEqual(
 function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => right[index] === value);
 }
+

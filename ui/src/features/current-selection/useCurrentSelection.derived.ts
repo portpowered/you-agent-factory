@@ -5,7 +5,7 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
-import { resolveDashboardSelection } from "../../state/dashboardSelection";
+import { resolveDashboardSelection } from "./state/dashboardSelection";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import {
   activeExecutionsForSelectedWorkstation,
@@ -268,3 +268,4 @@ export function useTerminalWorkDetailCleanup({
     terminalWorkDetail,
   ]);
 }
+

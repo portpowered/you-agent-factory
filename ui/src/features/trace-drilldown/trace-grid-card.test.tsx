@@ -209,3 +209,4 @@ describe("TraceGridBentoCard", () => {
     expect(screen.getByText("network failed")).toBeTruthy();
   });
 });
+

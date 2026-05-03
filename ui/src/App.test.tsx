@@ -17,7 +17,7 @@ import {
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "./components/dashboard";
-import { reloadDashboardLayoutFromStorage } from "./hooks/dashboard/useDashboardLayout";
+import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
 import {
   buildDashboardSnapshotFixture,
   dashboardWorkstationRequestFixtures,
@@ -51,11 +51,16 @@ import type {
 import { FACTORY_EVENT_TYPES } from "./api/events";
 import type { FactoryEvent } from "./api/events";
 import type { FactoryValue } from "./api/named-factory";
+import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
+import {
+  createDefaultDashboardStreamState,
+  useDashboardStreamStore,
+} from "./features/dashboard/state/dashboardStreamStore";
+import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
-import { useDashboardAppStore } from "./state/dashboardAppStore";
-import { useFactoryTimelineStore } from "./state/factoryTimelineStore";
-import type { FactoryTimelineSnapshot } from "./state/factoryTimelineStore";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+import type { FactoryTimelineSnapshot } from "./features/timeline/state/factoryTimelineStore";
 import { expect, vi, describe, beforeEach, afterEach, it } from "vitest";
 
 class MockEventSource {
@@ -1189,7 +1194,7 @@ function submitWorkCardControls() {
       name: "Request name",
     }),
     requestText: submitWorkScope.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request text",
+      name: "Request",
     }),
     submitButton: submitWorkScope.getByRole<HTMLButtonElement>("button", {
       name: "Submit work",
@@ -1423,10 +1428,15 @@ describe("App", () => {
       queryClient.clear();
     }
     cleanup();
-    useDashboardAppStore.setState({
-      isExportDialogOpen: false,
+    useDashboardBentoStore.setState({
       refreshToken: 0,
       selectedTraceID: null,
+    });
+    useExportDialogStore.setState({
+      isExportDialogOpen: false,
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
     });
     useFactoryTimelineStore.getState().reset();
     restoreBrowserTestShims?.();
@@ -3745,7 +3755,7 @@ describe("App", () => {
       name: "Request name",
     });
     const requestText = submitWorkScope.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request text",
+      name: "Request",
     });
 
     expect(Array.from(workType.options, (option) => option.value)).toContain("story");
@@ -3802,7 +3812,7 @@ describe("App", () => {
       name: "Request name",
     });
     const requestText = submitWorkScope.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request text",
+      name: "Request",
     });
 
     fireEvent.change(workType, { target: { value: "story" } });
@@ -4095,3 +4105,4 @@ describe("App", () => {
     });
   });
 });
+

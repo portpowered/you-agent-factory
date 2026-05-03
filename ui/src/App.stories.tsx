@@ -1343,3 +1343,4 @@ export const TypographyRegressionNarrow = {
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };
+

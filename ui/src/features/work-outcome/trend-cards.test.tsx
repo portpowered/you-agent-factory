@@ -184,3 +184,4 @@ describe("dashboard trend cards", () => {
     );
   });
 });
+

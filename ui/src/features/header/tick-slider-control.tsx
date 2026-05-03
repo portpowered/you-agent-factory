@@ -1,6 +1,6 @@
 import { useMemo, type ChangeEvent } from "react";
 
-import { useFactoryTimelineStore } from "../../state/factoryTimelineStore";
+import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { DashboardButton } from "../../components/dashboard/button";
 import { cx } from "../../lib/cx";
 
@@ -101,3 +101,4 @@ export function TickSliderControl() {
     </div>
   );
 }
+

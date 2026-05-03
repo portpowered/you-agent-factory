@@ -11,7 +11,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard/typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
-import type { ExecutionDetailValue, ModelDetailValue } from "../../state/executionDetails";
+import type { ExecutionDetailValue, ModelDetailValue } from "./state/executionDetails";
 import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
@@ -422,3 +422,4 @@ function stableListKeys(items: string[]): Array<{ item: string; key: string }> {
     };
   });
 }
+

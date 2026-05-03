@@ -279,3 +279,4 @@ function inferCodexSessionLogPath(
   const day = `${timestamp.getDate()}`.padStart(2, "0");
   return `~/.codex/sessions/${year}/${month}/${day}/rollout-${normalizedSessionID}.jsonl`;
 }
+

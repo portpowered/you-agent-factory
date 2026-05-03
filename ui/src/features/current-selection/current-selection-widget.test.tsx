@@ -2,8 +2,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { buildDashboardWorkstationRequestFixture } from "../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { selectWorkItemExecutionDetails } from "../../state/executionDetails";
-import { resetSelectionHistoryStore } from "../../state/selectionHistoryStore";
+import { selectWorkItemExecutionDetails } from "./state/executionDetails";
+import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import type { CurrentSelectionState } from "./useCurrentSelection";
 import type {
@@ -378,3 +378,4 @@ describe("CurrentSelectionWidget", () => {
     ).not.toBeNull();
   });
 });
+

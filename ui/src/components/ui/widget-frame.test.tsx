@@ -32,3 +32,4 @@ describe("DashboardWidgetFrame", () => {
     expect(emptyHeading.parentElement?.className).toContain(EMPTY_STATE_CLASS);
   });
 });
+

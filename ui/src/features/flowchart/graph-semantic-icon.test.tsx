@@ -43,3 +43,4 @@ describe("GraphSemanticIcon", () => {
     expect(screen.getByRole("img", { name: "Replay gate" })).toBeTruthy();
   });
 });
+

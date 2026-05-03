@@ -141,3 +141,4 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(screen.getByText("No failed work recorded yet.")).toBeTruthy();
   });
 });
+

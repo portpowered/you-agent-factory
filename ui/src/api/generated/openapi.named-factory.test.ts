@@ -75,3 +75,4 @@ describe("generated factory OpenAPI types", () => {
     ]);
   });
 });
+

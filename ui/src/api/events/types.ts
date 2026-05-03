@@ -143,3 +143,4 @@ export interface FactoryTerminalWork {
   status: string;
   work_item: FactoryWorkItem;
 }
+

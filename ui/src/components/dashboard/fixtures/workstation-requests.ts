@@ -408,3 +408,4 @@ export const dashboardWorkstationRequestFixtures = {
   scriptPending: scriptPendingWorkstationRequestFixture,
   scriptSuccess: scriptSuccessWorkstationRequestFixture,
 } satisfies Record<string, DashboardWorkstationRequest>;
+

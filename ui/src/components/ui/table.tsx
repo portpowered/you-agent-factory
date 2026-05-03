@@ -70,3 +70,4 @@ export const TableCaption = forwardRef<HTMLTableCaptionElement, HTMLAttributes<H
     return <caption className={cn("mt-4 text-sm text-af-ink/58", className)} ref={ref} {...props} />;
   },
 );
+

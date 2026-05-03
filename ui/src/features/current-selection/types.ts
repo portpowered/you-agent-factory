@@ -7,7 +7,7 @@ export type {
   DashboardSelection,
   DashboardWorkItemSelection,
   DashboardWorkstationRequestSelection,
-} from "../../state/dashboardSelection";
+} from "./state/dashboardSelection";
 
 export interface TerminalWorkDetail {
   attempts?: DashboardProviderSessionAttempt[];
@@ -18,3 +18,4 @@ export interface TerminalWorkDetail {
   traceWorkID: string;
   workItem?: DashboardWorkItemRef;
 }
+

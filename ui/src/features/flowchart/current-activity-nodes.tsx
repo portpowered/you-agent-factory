@@ -25,3 +25,4 @@ const NODE_TYPES = {
 export { NODE_TYPES as CURRENT_ACTIVITY_NODE_TYPES };
 export type CurrentActivityNode = CurrentActivityWorkstationNode | CurrentActivityPlaceNode;
 export type { ConstraintNodeData, ResourceNodeData, StatePositionNodeData, WorkstationNodeData };
+

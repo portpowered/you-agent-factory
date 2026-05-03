@@ -6,3 +6,4 @@ declare function setImmediate(
 ): number;
 
 declare function clearImmediate(handle: number): void;
+

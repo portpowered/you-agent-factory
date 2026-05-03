@@ -13,3 +13,4 @@ describe("buildFactoryExportFilename", () => {
     expect(buildFactoryExportFilename("!!!")).toBe("agent-factory.png");
   });
 });
+

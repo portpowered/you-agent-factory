@@ -54,3 +54,4 @@ describe("dashboard typography contract", () => {
     expect(getRole("supportingText").minimumRem).toBeGreaterThan(0.78);
   });
 });
+

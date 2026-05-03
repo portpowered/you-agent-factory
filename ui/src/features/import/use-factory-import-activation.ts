@@ -86,3 +86,4 @@ function normalizeActivationError(error: unknown): NamedFactoryAPIError {
 
   return new NamedFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
 }
+

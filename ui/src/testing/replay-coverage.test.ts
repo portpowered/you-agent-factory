@@ -56,3 +56,4 @@ describe("replay coverage reporting", () => {
     expect(validateReplayCoverageReport(buildReplayCoverageReport())).toEqual([]);
   });
 });
+

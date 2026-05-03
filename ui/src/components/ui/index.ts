@@ -1,4 +1,4 @@
-export * from "./agent-bento";
+export * from "../../features/bento/agent-bento";
 export * from "./button";
 export * from "./calendar";
 export * from "./chart";
@@ -16,3 +16,4 @@ export * from "./skeleton";
 export * from "./table";
 export * from "./textarea";
 export * from "./widget-frame";
+

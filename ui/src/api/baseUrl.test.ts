@@ -16,3 +16,4 @@ describe("factoryAPIURL", () => {
     expect(factoryAPIURL("events")).toBe("http://127.0.0.1:7437/events");
   });
 });
+

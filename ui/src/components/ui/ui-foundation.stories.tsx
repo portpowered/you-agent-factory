@@ -42,3 +42,4 @@ export const Default = {
     await expect(canvas.getByRole("button", { name: "Primary action" })).toHaveFocus();
   },
 };
+

@@ -257,11 +257,11 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
   if (remainingCount > WORKSTATION_SUMMARY_DOT_LIMIT) {
     return (
       <span
+        aria-label={`${totalCount} active items`}
         className="mt-[0.45rem] flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success/25 bg-af-success/12 px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-af-success-ink"
         data-workstation-work-progress="numeric"
         role="status"
       >
-        <span className="sr-only">{`${totalCount} active items`}</span>
         {totalCount}
       </span>
     );
@@ -269,11 +269,11 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
 
   return (
     <span
+      aria-label={`${totalCount} active items`}
       className="mt-[0.45rem] flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success/18 bg-af-success/10 px-2"
       data-workstation-work-progress="dots"
       role="status"
     >
-      <span className="sr-only">{`${totalCount} active items`}</span>
       {Array.from({ length: remainingCount }, (_, dotNumber) => dotNumber + 1).map((dotNumber) => (
         <span
           key={`${remainingCount}-${dotNumber}`}
@@ -316,3 +316,4 @@ function workItemLabelClassName(label: string): string {
     textSizeClassName,
   );
 }
+

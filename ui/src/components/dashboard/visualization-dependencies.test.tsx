@@ -96,3 +96,4 @@ describe("dashboard visualization dependencies", () => {
     expect(screen.getByText("Target")).toBeTruthy();
   });
 });
+

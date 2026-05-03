@@ -126,3 +126,4 @@ export const runtimeDetailsBackendWorkstationRequestsByDispatchID = {
     workstation_name: "Review",
   },
 } satisfies Record<string, DashboardRuntimeWorkstationRequest>;
+

@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { dashboardWorkstationRequestFixtures } from "../../components/dashboard/fixtures";
-import { selectWorkItemExecutionDetails } from "../../state/executionDetails";
-import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
+import { selectWorkItemExecutionDetails } from "./state/executionDetails";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
@@ -797,3 +797,4 @@ describe("WorkItemDetailCard", () => {
   });
 
 });
+

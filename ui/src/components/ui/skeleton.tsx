@@ -10,3 +10,4 @@ export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>
     />
   );
 }
+

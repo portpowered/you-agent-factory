@@ -70,3 +70,4 @@ describe("dashboard runtime fixtures", () => {
     expect(snapshot.runtime.session.failed_count).toBe(1);
   });
 });
+
