@@ -60,7 +60,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
       "definition": {
         "type": "MODEL_WORKSTATION",
         "worker": "executor",
-        "promptTemplate": "Complete {{ (index .Inputs 0).WorkID }}.",
+        "body": "Complete {{ (index .Inputs 0).WorkID }}.",
         "stopWords": ["DONE"]
       }
     }
@@ -87,18 +87,12 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 	if _, err := os.Stat(filepath.Join(dir, "workstations", "execute-task", "AGENTS.md")); err != nil {
 		t.Fatalf("expected expand to create workstation AGENTS.md: %v", err)
 	}
-	expandedWorker, err := factoryconfig.LoadWorkerConfig(filepath.Join(dir, "workers", "executor"))
+	workerAgents, err := os.ReadFile(filepath.Join(dir, "workers", "executor", "AGENTS.md"))
 	if err != nil {
-		t.Fatalf("expanded worker AGENTS.md should load: %v", err)
+		t.Fatalf("read expanded worker AGENTS.md: %v", err)
 	}
-	if expandedWorker.Model != "claude-sonnet-4-20250514" || expandedWorker.ModelProvider != "claude" || expandedWorker.StopToken != "COMPLETE" {
-		t.Fatalf("expanded worker definition did not preserve canonical fields: %#v", expandedWorker)
-	}
-	if len(expandedWorker.Resources) != 1 || expandedWorker.Resources[0].Name != "agent-slot" || expandedWorker.Resources[0].Capacity != 1 {
-		t.Fatalf("expanded worker resources = %#v, want agent-slot capacity 1", expandedWorker.Resources)
-	}
-	if expandedWorker.Body != "You are the portable factory executor." {
-		t.Fatalf("expanded worker body = %q", expandedWorker.Body)
+	if got := string(workerAgents); got != "You are the portable factory executor.\n" {
+		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
 	}
 	expandedWorkstation, err := factoryconfig.LoadWorkstationConfig(filepath.Join(dir, "workstations", "execute-task"))
 	if err != nil {
@@ -127,8 +121,18 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 	if err != nil {
 		t.Fatalf("expanded factory should load through runtime config: %v", err)
 	}
-	if _, ok := loaded.Worker("executor"); !ok {
+	workerDef, ok := loaded.Worker("executor")
+	if !ok {
 		t.Fatal("expected expanded fat-factory worker definition to load")
+	}
+	if workerDef.Model != "claude-sonnet-4-20250514" || workerDef.ModelProvider != "claude" || workerDef.StopToken != "COMPLETE" {
+		t.Fatalf("expanded worker definition did not preserve canonical fields: %#v", workerDef)
+	}
+	if len(workerDef.Resources) != 1 || workerDef.Resources[0].Name != "agent-slot" || workerDef.Resources[0].Capacity != 1 {
+		t.Fatalf("expanded worker resources = %#v, want agent-slot capacity 1", workerDef.Resources)
+	}
+	if workerDef.Body != "You are the portable factory executor." {
+		t.Fatalf("expanded worker body = %q", workerDef.Body)
 	}
 	if _, ok := loaded.Workstation("execute-task"); !ok {
 		t.Fatal("expected expanded fat-factory workstation definition to load")
@@ -261,7 +265,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
       "definition": {
         "type": "MODEL_WORKSTATION",
         "worker": "executor",
-        "promptTemplate": "Complete {{ (index .Inputs 0).WorkID }}.",
+        "body": "Complete {{ (index .Inputs 0).WorkID }}.",
         "stopWords": ["DONE"]
       }
     }
@@ -328,7 +332,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
       "definition": {
         "type": "MODEL_WORKSTATION",
         "worker": "executor",
-        "promptTemplate": "Complete {{ (index .Inputs 0).WorkID }}.",
+        "body": "Complete {{ (index .Inputs 0).WorkID }}.",
         "stopWords": ["DONE"]
       }
     }
@@ -405,7 +409,7 @@ func writeInlineScriptBackedFactoryFixture(t *testing.T) string {
       "outputs": [{ "workType": "task", "state": "complete" }],
       "onFailure": { "workType": "task", "state": "failed" },
       "type": "MODEL_WORKSTATION",
-      "promptTemplate": "Execute {{ (index .Inputs 0).Payload }}.",
+      "body": "Execute {{ (index .Inputs 0).Payload }}.",
       "workingDirectory": "/repo/{{ (index .Inputs 0).WorkID }}",
       "env": {
         "SCRIPT_MODE": "portable"

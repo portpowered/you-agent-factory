@@ -159,6 +159,175 @@ Process.
 	}
 }
 
+func TestLoadRuntimeConfig_MergesInlineWorkerMetadataWithBodyOnlyAgentsFile(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name":             "executor",
+				"type":             "MODEL_WORKER",
+				"model":            "claude-sonnet-4-20250514",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
+				"stopToken":        "COMPLETE",
+				"timeout":          "20m",
+				"skipPermissions":  true,
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			},
+		},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "executor", "You are the body-only worker.\n")
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+---
+Execute {{ .WorkID }}.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	workerDef, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected executor worker definition")
+	}
+	if workerDef.Type != interfaces.WorkerTypeModel || workerDef.Model != "claude-sonnet-4-20250514" {
+		t.Fatalf("worker type/model = %#v", workerDef)
+	}
+	if workerDef.ModelProvider != "claude" || workerDef.ExecutorProvider != "script_wrap" {
+		t.Fatalf("worker providers = %#v", workerDef)
+	}
+	if workerDef.StopToken != "COMPLETE" || workerDef.Timeout != "20m" || !workerDef.SkipPermissions {
+		t.Fatalf("worker runtime fields = %#v", workerDef)
+	}
+	if workerDef.Body != "You are the body-only worker." {
+		t.Fatalf("worker body = %q", workerDef.Body)
+	}
+}
+
+func TestLoadRuntimeConfig_RejectsMissingBodyOnlyWorkerAgentsFileForSplitAuthoredLayout(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name":          "executor",
+				"type":          "MODEL_WORKER",
+				"model":         "claude-sonnet-4-20250514",
+				"modelProvider": "CLAUDE",
+				"stopToken":     "COMPLETE",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			},
+		},
+	})
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+---
+Execute {{ .WorkID }}.
+`)
+	if err := os.MkdirAll(filepath.Join(factoryDir, "workers", "executor"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(workerDir): %v", err)
+	}
+
+	_, err := LoadRuntimeConfig(factoryDir, nil)
+	if err == nil {
+		t.Fatal("expected missing body-only worker AGENTS.md to fail")
+	}
+	if !strings.Contains(err.Error(), `load worker "executor" config`) {
+		t.Fatalf("expected worker path context in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `worker "executor" is missing body-only AGENTS.md content required by the split authored layout`) {
+		t.Fatalf("expected missing body-only worker error, got %v", err)
+	}
+}
+
+func TestLoadRuntimeConfig_RejectsMissingBodyOnlyWorkstationAgentsFileForSplitAuthoredLayout(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name":  "executor",
+				"type":  "MODEL_WORKER",
+				"body":  "You are the inline worker.",
+				"model": "claude-sonnet-4-20250514",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"env":     map[string]string{"PROJECT": "demo"},
+			},
+		},
+	})
+	if err := os.MkdirAll(filepath.Join(factoryDir, "workstations", "execute-story"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(workstationDir): %v", err)
+	}
+
+	_, err := LoadRuntimeConfig(factoryDir, nil)
+	if err == nil {
+		t.Fatal("expected missing body-only workstation AGENTS.md to fail")
+	}
+	if !strings.Contains(err.Error(), `load workstation "execute-story" config`) {
+		t.Fatalf("expected workstation path context in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `workstation "execute-story" is missing body-only AGENTS.md content required by the split authored layout`) {
+		t.Fatalf("expected missing body-only workstation error, got %v", err)
+	}
+}
+
 func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -180,6 +349,52 @@ func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected persisted named-factory path %s: %v", path, err)
 		}
+	}
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	workerPayloads, ok := payload["workers"].([]any)
+	if !ok || len(workerPayloads) != 1 {
+		t.Fatalf("expected one persisted worker payload, got %#v", payload["workers"])
+	}
+	workerPayload, ok := workerPayloads[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected persisted worker payload object, got %#v", workerPayloads[0])
+	}
+	if _, ok := workerPayload["body"]; ok {
+		t.Fatalf("expected persisted worker payload to omit inline body, got %#v", workerPayload)
+	}
+	workstationPayloads, ok := payload["workstations"].([]any)
+	if !ok || len(workstationPayloads) != 1 {
+		t.Fatalf("expected one persisted workstation payload, got %#v", payload["workstations"])
+	}
+	workstationPayload, ok := workstationPayloads[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected persisted workstation payload object, got %#v", workstationPayloads[0])
+	}
+	if _, ok := workstationPayload["body"]; ok {
+		t.Fatalf("expected persisted workstation payload to omit inline body, got %#v", workstationPayload)
+	}
+
+	workerAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
+	}
+	if got := string(workerAgents); got != "You are the executor.\n" {
+		t.Fatalf("persisted worker AGENTS.md = %q, want body-only worker content", got)
+	}
+	workstationAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(workstation AGENTS.md): %v", err)
+	}
+	if got := string(workstationAgents); got != "Implement {{ .WorkID }}.\n" {
+		t.Fatalf("persisted workstation AGENTS.md = %q, want body-only workstation content", got)
 	}
 
 	loaded, err := LoadRuntimeConfig(factoryDir, nil)
@@ -1015,14 +1230,14 @@ func TestLoadRuntimeConfig_LoadsInlineRuntimeDefinitionsWithoutAgentsFiles(t *te
 		},
 		"workstations": []map[string]any{
 			{
-				"id":             "execute-story",
-				"name":           "execute-story",
-				"worker":         "executor",
-				"inputs":         []map[string]string{{"workType": "story", "state": "init"}},
-				"outputs":        []map[string]string{{"workType": "story", "state": "complete"}},
-				"type":           "MODEL_WORKSTATION",
-				"stopWords":      []string{"DONE"},
-				"body": "Implement {{ .WorkID }}.",
+				"id":        "execute-story",
+				"name":      "execute-story",
+				"worker":    "executor",
+				"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+				"type":      "MODEL_WORKSTATION",
+				"stopWords": []string{"DONE"},
+				"body":      "Implement {{ .WorkID }}.",
 			},
 		},
 	})
@@ -1227,16 +1442,11 @@ func TestLoadRuntimeConfig_DerivesCanonicalWorkstationTypeFromWorkerAcrossInline
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"SHARED": "inline"}
 
 	writeRuntimeFactoryJSON(t, inlineDir, inlineConfig)
-	writeRuntimeFactoryJSON(t, splitDir, topology)
-	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", `---
-worker: executor
-limits:
-  maxExecutionTime: 15m
-env:
-  SHARED: inline
----
-Inline fallback prompt.
-`)
+	splitConfig := cloneJSONMap(t, topology)
+	splitConfig["workstations"].([]any)[0].(map[string]any)["limits"] = map[string]any{"maxExecutionTime": "15m"}
+	splitConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"SHARED": "inline"}
+	writeRuntimeFactoryJSON(t, splitDir, splitConfig)
+	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Inline fallback prompt.\n")
 
 	inlineLoaded, err := LoadRuntimeConfig(inlineDir, nil)
 	if err != nil {
@@ -1343,23 +1553,17 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 	inlineConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"PROJECT": "{{ .Project }}"}
 
 	writeRuntimeFactoryJSON(t, inlineDir, inlineConfig)
-	writeRuntimeFactoryJSON(t, splitDir, topology)
-	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", `---
-type: MODEL_WORKSTATION
-worker: executor
-promptFile: prompt.md
-outputSchema: schema.json
-limits:
-  maxRetries: 2
-  maxExecutionTime: 30m
-stopWords: ["DONE"]
-workingDirectory: "/repo/{{ .WorkID }}"
-worktree: "worktrees/{{ .WorkID }}"
-env:
-  PROJECT: "{{ .Project }}"
----
-Implement {{ .WorkID }}.
-`)
+	splitConfig := cloneJSONMap(t, topology)
+	splitConfig["workstations"].([]any)[0].(map[string]any)["type"] = "MODEL_WORKSTATION"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["promptFile"] = "prompt.md"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["outputSchema"] = "schema.json"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["limits"] = map[string]any{"maxRetries": 2, "maxExecutionTime": "30m"}
+	splitConfig["workstations"].([]any)[0].(map[string]any)["stopWords"] = []string{"DONE"}
+	splitConfig["workstations"].([]any)[0].(map[string]any)["workingDirectory"] = "/repo/{{ .WorkID }}"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["worktree"] = "worktrees/{{ .WorkID }}"
+	splitConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"PROJECT": "{{ .Project }}"}
+	writeRuntimeFactoryJSON(t, splitDir, splitConfig)
+	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Implement {{ .WorkID }}.\n")
 	if err := os.WriteFile(filepath.Join(splitDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
 		t.Fatalf("write split prompt file: %v", err)
 	}
@@ -1821,12 +2025,12 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 		},
 		"workstations": []map[string]any{
 			{
-				"name":           "execute-" + project,
-				"worker":         "executor",
-				"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":        []map[string]string{{"workType": "task", "state": "complete"}},
-				"type":           "MODEL_WORKSTATION",
-				"body": "Implement {{ .WorkID }}.",
+				"name":    "execute-" + project,
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"body":    "Implement {{ .WorkID }}.",
 			},
 		},
 	}
