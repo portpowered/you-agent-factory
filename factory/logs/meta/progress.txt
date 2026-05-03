@@ -3,6 +3,9 @@
 - Validate repo-truth claims about `factory/inputs/**` with `git ls-files`
   before trusting visible local files; the repo tracks sentinels while live
   work items are ignored.
+- Distinguish canonical queue state from helper planning residue: files under
+  `factory/scripts/` can describe intended follow-up batches, but they do not
+  satisfy the canonical watched submission surface under `factory/inputs/**`.
 - Read `factory/logs/meta/asks.md` before submitting cleanup ideas; it is the
   canonical maintainer-routing surface and can explicitly forbid queue work.
 - Refresh the meta model from live git state, not stale summaries; merge state,
@@ -34,10 +37,14 @@
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
 - The current local residue already includes an import/export thought seed plus
-  an ordered `FACTORY_REQUEST_BATCH` under the canonical inboxes.
+  a helper `FACTORY_REQUEST_BATCH` outside the canonical inboxes.
 - The live import/export contract still exposes workstation `promptTemplate`,
   expanded layout still writes frontmatter-driven `AGENTS.md`, and bundled
   files still serialize inline content in the API contract.
+- The ask surface now also includes a separate workstation-route contract gap:
+  `outputs` is array-valued, but public `onContinue`, `onRejection`, and
+  `onFailure` remain singular across schema, mapping, replay/projection, and UI
+  import surfaces.
 - No dedicated checked-in standards-alignment checklist exists yet for
   `STD-016` / `STD-017`, so this file remains the active checklist surface.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
@@ -64,10 +71,14 @@
 - Website:
   keep shared components, semantic tokens, and explicit loading/error states
   aligned with `STD-016` while the import/export UI is being simplified.
+- Backend and UI contract:
+  align non-success workstation routes with array-based outputs and remove
+  lossy single-destination projection/parsing behavior.
 - Tests and CI:
   keep behavioral runtime/API/UI assertions favored over meta topology tests,
   and update existing contract coverage that currently locks in the legacy
   prompt-template and inline-bundled-file shape.
+  Do the same for the singular `onContinue`/`onRejection`/`onFailure` shape.
 
 ## 2026-05-03T04:03:50.3625396-07:00 - meta state refresh
 
@@ -137,3 +148,28 @@
 - Updated the checked-in world view to reflect the current import/export lane
   and deliberately did not enqueue a duplicate cleanup request because the
   existing local batch already owns that backlog.
+
+## 2026-05-03T08:05:06.9683608-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git reported the branch was already up to date,
+  then re-checked branch state and confirmed local `main` is actually one
+  unpublished commit ahead of `origin/main` (`0393c72` vs `1852bc1`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, the backend/website standards, and the live
+  branch/input state.
+- Confirmed the canonical ask surface gained a new P0 backend contract item:
+  workstation `onContinue`, `onRejection`, and `onFailure` should become
+  array-valued outputs instead of singular destinations.
+- Verified the existing local helper batch in
+  `factory/scripts/import-export-p0-followups.json` still covers the
+  prompt-template, split-layout, bundled-file, dialog, and standards lanes, but
+  it does not cover the new multi-output route contract.
+- Inspected the live code and confirmed the route-array gap is real across the
+  schema, generated artifacts, mapping layer, replay/public projection helpers,
+  and UI parser; `ui/src/api/factory-definition/api.ts` still drops
+  `onContinue` during import.
+- Queued one new standalone cleanup idea under the canonical ignored inbox for
+  the unqueued route-array contract cleanup, while avoiding duplication of the
+  existing import/export helper batch.
