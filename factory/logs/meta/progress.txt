@@ -36,15 +36,15 @@
 
 ## Current Summary
 
-- As of `2026-05-03T13:01:50.9382865-07:00`, `HEAD` on `main` points to
-  `cd59b4c` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T14:04:23.2724467-07:00`, `HEAD` on `main` points to
+  `0d0f2b5` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and `factory/scripts/import-export-p0-followups.json`
   remains untracked planning residue.
 - The canonical ask surface remains `factory/logs/meta/asks.md`, and the
-  active P0 is now represented by two already-owned open PR lanes:
-  `#69` for the route-array contract cleanup and `#74` for current-selection
-  simplification, rather than the older throttle lane.
+  remaining open P0 lane is now `#69` for the route-array contract cleanup;
+  PR `#74` has already merged the broad current-selection simplification lane,
+  rather than the repo still carrying the older throttle lane.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
   execution for `process` and `review`, `executor-slot` capacity `10`, an
@@ -59,11 +59,12 @@
   contract, PR `#68` landed the split body-only `AGENTS.md` layout for workers
   and workstations, PR `#70` landed the bundled-files disk-backed round-trip
   behavior, PR `#71` landed the dashboard import/export dialog extraction,
-  PR `#72` landed the import/export standards checklist and gap closures, and
-  PR `#73` landed the dashboard button-wrapper retirement on `main`.
+  PR `#72` landed the import/export standards checklist and gap closures,
+  PR `#73` landed the dashboard button-wrapper retirement, and PR `#74` landed
+  the selected-work dispatch-detail simplification on `main`.
 - The remaining import/export seam is now the route-array contract cleanup
   owned by open PR `#69`.
-- The broad current-selection cleanup is now also owned by open PR `#74`
+- The broad current-selection cleanup is now merged on `main` through PR `#74`
   (`ralph/simplify-current-selection-dispatch-detail-surface`).
 - The ask surface now also includes a separate workstation-route contract gap:
   `outputs` is array-valued, but public `onContinue`, `onRejection`, and
@@ -72,9 +73,10 @@
 - That route-array gap is already actively owned by open PR `#69`
   (`ralph/workstation-non-success-route-arrays`), so a fresh dispatch would be
   duplicate queue work.
-- The older duplicate-detail current-selection ask is no longer unowned either:
-  PR `#74` already removes the top-level duplicated panels, so another broad
-  current-selection dispatch would also be duplicate queue work.
+- The older duplicate-detail current-selection ask is no longer an open
+  dispatch lane either: PR `#74` already removed the top-level duplicated
+  panels, so another broad current-selection dispatch would now be stale
+  overlap rather than progress.
 - The import/export dialog extraction, standards alignment, and wrapper-removal
   lanes have already landed on `main`, so duplicating them would now be
   counterproductive.
@@ -82,10 +84,10 @@
   workflow shape than the current checked-in contract.
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
   now fully stale because every lane it names is already merged.
-- A separate narrow customer-ask-aligned UI cleanup lane is now queued locally:
-  simplify the current-selection dispatch detail surface by removing duplicated
-  request/response panels across execution details and selected dispatch detail
-  views; that lane has now advanced into open PR `#74`.
+- The remaining current-selection question is narrower than the merged lane:
+  whether the textual work-relationship list and consolidated dispatch card are
+  sufficient, or whether a later follow-up should restore a literal
+  relationship graph and nested per-dispatch inference-attempt list.
 
 ## 2026-05-03T13:01:50.9382865-07:00 - meta state refresh
 
@@ -118,6 +120,41 @@
 - Refreshed the checked-in world view and deliberately did not queue another
   cleanup request in this pass because both active P0 asks are already in
   flight and a fresh broad idea would overlap open PR ownership.
+
+## 2026-05-03T14:04:23.2724467-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git fast-forwarded `main`
+  from `6b58adc` to `0d0f2b5`, which pulled in merged PR `#74`
+  (`simplify-current-selection-dispatch-detail-surface`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the tracked
+  versus visible `factory/inputs/**` surface, and recent PR state.
+- Re-validated that tracked workflow inputs remain sentinel-only with
+  `git ls-files factory/inputs`, while visible idea files under
+  `factory/inputs/idea/default/` remain ignored operating residue rather than
+  checked-in queue truth.
+- Confirmed with `gh pr list` and `gh pr view` that PR `#69`
+  (`workstation-non-success-route-arrays`) is now the only open PR directly
+  tied to the active P0 asks and that PR `#74` is merged as of `2026-05-03`.
+- Used delegated inspection plus direct code reads to confirm the array-valued
+  non-success-route ask is still real on `main` across schema, generated
+  artifacts, config mapping, replay/public projection, and UI import surfaces,
+  but that the work is already owned by PR `#69`, so another cleanup idea would
+  be duplicate work.
+- Used delegated inspection plus direct code reads to confirm the broad
+  selected-work current-selection ask has now materially landed on `main`:
+  the work-item detail card is dispatch-centric and the old duplicated
+  execution/request sections are no longer part of the selected-work path.
+- Recorded one narrower follow-up seam for later judgment rather than immediate
+  dispatch: the merged selected-work view uses a textual relationship list and
+  consolidated per-dispatch request/response details, while the ask literally
+  describes a relationship graph and nested per-dispatch inference-attempt
+  lists.
+- Refreshed the checked-in world view and deliberately did not queue another
+  cleanup request in this pass because PR `#69` already owns the only remaining
+  open P0 contract lane and the merged PR `#74` removed the prior broad UI
+  duplication problem.
 
 ## Standards Alignment Checklist
 
