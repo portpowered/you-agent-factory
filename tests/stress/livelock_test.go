@@ -44,8 +44,8 @@ func TestLivelockInfiniteLoop(t *testing.T) {
 				Name: "step-b", WorkerTypeName: "worker-b",
 				Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
 				Outputs:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-				OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
-				OnFailure:   &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 			},
 			guardedLoopBreakerWorkstation(
 				"loop-exhausted",
@@ -137,8 +137,8 @@ func TestLivelockTriangleLoop(t *testing.T) {
 				Name: "step-3", WorkerTypeName: "worker-3",
 				Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage-b"}},
 				Outputs:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-				OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
-				OnFailure:   &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 			},
 			guardedLoopBreakerWorkstation(
 				"triangle-exhausted",
@@ -228,8 +228,8 @@ func TestLivelockExecutionTimeout(t *testing.T) {
 					Name: "step-b", WorkerTypeName: "wb",
 					Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
 					Outputs:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-					OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
-					OnFailure:   &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+					OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+					OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 				},
 				guardedLoopBreakerWorkstation(
 					"exhausted",
@@ -270,7 +270,7 @@ func TestLivelockExecutionTimeout(t *testing.T) {
 			Workstations: []interfaces.FactoryWorkstationConfig{
 				{Name: "s1", WorkerTypeName: "w1", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}},
 				{Name: "s2", WorkerTypeName: "w2", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}},
-				{Name: "s3", WorkerTypeName: "w3", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"}, OnFailure: &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"}},
+				{Name: "s3", WorkerTypeName: "w3", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 				guardedLoopBreakerWorkstation(
 					"ex",
 					"s1",

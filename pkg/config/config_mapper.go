@@ -128,9 +128,9 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 				TransitionID: t.ID,
 			})
 		}
-		if ws.OnContinue != nil {
-			placeID := mapToID(*ws.OnContinue)
-			name := fmt.Sprintf("%s:%s:continue:%s", ws.OnContinue.WorkTypeName, ws.OnContinue.StateName, t.Name)
+		for _, route := range ws.OnContinue {
+			placeID := mapToID(route)
+			name := fmt.Sprintf("%s:%s:continue:%s", route.WorkTypeName, route.StateName, t.Name)
 			t.ContinueArcs = append(t.ContinueArcs, petri.Arc{
 				ID:           uuid.NewString(),
 				Name:         name,
@@ -138,9 +138,9 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 				TransitionID: t.ID,
 			})
 		}
-		if ws.OnRejection != nil {
-			placeID := mapToID(*ws.OnRejection)
-			name := fmt.Sprintf("%s:%s:rejection:%s", ws.OnRejection.WorkTypeName, ws.OnRejection.StateName, t.Name)
+		for _, route := range ws.OnRejection {
+			placeID := mapToID(route)
+			name := fmt.Sprintf("%s:%s:rejection:%s", route.WorkTypeName, route.StateName, t.Name)
 			t.RejectionArcs = append(t.RejectionArcs, petri.Arc{
 				ID:           uuid.NewString(),
 				Name:         name,
@@ -148,9 +148,9 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 				TransitionID: t.ID,
 			})
 		}
-		if ws.OnFailure != nil {
-			placeID := mapToID(*ws.OnFailure)
-			name := fmt.Sprintf("%s:%s:failure:%s", ws.OnFailure.WorkTypeName, ws.OnFailure.StateName, t.Name)
+		for _, route := range ws.OnFailure {
+			placeID := mapToID(route)
+			name := fmt.Sprintf("%s:%s:failure:%s", route.WorkTypeName, route.StateName, t.Name)
 			t.FailureArcs = append(t.FailureArcs, petri.Arc{
 				ID:           uuid.NewString(),
 				Name:         name,

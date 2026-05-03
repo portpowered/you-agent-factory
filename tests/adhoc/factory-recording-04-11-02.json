@@ -131,10 +131,12 @@
               ],
               "limits": {},
               "name": "ideafy",
-              "onFailure": {
-                "state": "failed",
-                "workType": "thoughts"
-              },
+              "onFailure": [
+                {
+                  "state": "failed",
+                  "workType": "thoughts"
+                }
+              ],
               "outputs": [
                 {
                   "state": "complete",
@@ -162,14 +164,18 @@
               ],
               "limits": {},
               "name": "plan",
-              "onFailure": {
-                "state": "failed",
-                "workType": "idea"
-              },
-              "onRejection": {
-                "state": "failed",
-                "workType": "idea"
-              },
+              "onFailure": [
+                {
+                  "state": "failed",
+                  "workType": "idea"
+                }
+              ],
+              "onRejection": [
+                {
+                  "state": "failed",
+                  "workType": "idea"
+                }
+              ],
               "outputs": [
                 {
                   "state": "complete",
@@ -200,10 +206,12 @@
               ],
               "limits": {},
               "name": "setup-workspace",
-              "onFailure": {
-                "state": "failed",
-                "workType": "plan"
-              },
+              "onFailure": [
+                {
+                  "state": "failed",
+                  "workType": "plan"
+                }
+              ],
               "outputs": [
                 {
                   "state": "complete",
@@ -229,14 +237,18 @@
               "behavior": "REPEATER",
               "limits": {},
               "name": "process",
-              "onFailure": {
-                "state": "failed",
-                "workType": "task"
-              },
-              "onRejection": {
-                "state": "init",
-                "workType": "task"
-              },
+              "onFailure": [
+                {
+                  "state": "failed",
+                  "workType": "task"
+                }
+              ],
+              "onRejection": [
+                {
+                  "state": "init",
+                  "workType": "task"
+                }
+              ],
               "outputs": [
                 {
                   "state": "in-review",
@@ -266,14 +278,18 @@
               ],
               "limits": {},
               "name": "review",
-              "onFailure": {
-                "state": "failed",
-                "workType": "task"
-              },
-              "onRejection": {
-                "state": "init",
-                "workType": "task"
-              },
+              "onFailure": [
+                {
+                  "state": "failed",
+                  "workType": "task"
+                }
+              ],
+              "onRejection": [
+                {
+                  "state": "init",
+                  "workType": "task"
+                }
+              ],
               "outputs": [
                 {
                   "state": "complete",

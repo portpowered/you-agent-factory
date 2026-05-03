@@ -569,9 +569,9 @@ func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places 
 			Type:        interfaces.GeneratedPublicFactoryWorkstationTypePtr(workstation.Config["type"]),
 			Inputs:      generatedWorkstationIOs(workstation.InputPlaceIDs, placesByID),
 			Outputs:     generatedWorkstationIOs(workstation.OutputPlaceIDs, placesByID),
-			OnContinue:  generatedWorkstationIOPtr(workstation.ContinuePlaceIDs, placesByID),
-			OnRejection: generatedWorkstationIOPtr(workstation.RejectionPlaceIDs, placesByID),
-			OnFailure:   generatedWorkstationIOPtr(workstation.FailurePlaceIDs, placesByID),
+			OnContinue:  generatedWorkstationIOsPtr(workstation.ContinuePlaceIDs, placesByID),
+			OnRejection: generatedWorkstationIOsPtr(workstation.RejectionPlaceIDs, placesByID),
+			OnFailure:   generatedWorkstationIOsPtr(workstation.FailurePlaceIDs, placesByID),
 		}
 		if workstation.Kind != "" {
 			converted.Behavior = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
@@ -594,12 +594,12 @@ func generatedWorkstationIOs(placeIDs []string, places map[string]interfaces.Fac
 	return out
 }
 
-func generatedWorkstationIOPtr(placeIDs []string, places map[string]interfaces.FactoryPlace) *factoryapi.WorkstationIO {
+func generatedWorkstationIOsPtr(placeIDs []string, places map[string]interfaces.FactoryPlace) *[]factoryapi.WorkstationIO {
 	ios := generatedWorkstationIOs(placeIDs, places)
 	if len(ios) == 0 {
 		return nil
 	}
-	return &ios[0]
+	return &ios
 }
 
 func splitPlaceID(placeID string) (string, string) {

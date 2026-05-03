@@ -348,7 +348,7 @@ func TestInit_RalphTypeCreatesDistinctScaffold(t *testing.T) {
 	if executor.WorkingDirectory != "." {
 		t.Fatalf("execute-story workingDirectory = %q, want %q", executor.WorkingDirectory, ".")
 	}
-	if executor.OnContinue == nil || executor.OnContinue.WorkTypeName != "story" || executor.OnContinue.StateName != "init" {
+	if len(executor.OnContinue) != 1 || executor.OnContinue[0].WorkTypeName != "story" || executor.OnContinue[0].StateName != "init" {
 		t.Fatalf("execute-story onContinue = %#v, want story:init", executor.OnContinue)
 	}
 

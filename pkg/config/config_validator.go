@@ -277,27 +277,36 @@ func rulePlaceReferences(cfg *interfaces.FactoryConfig) []Finding {
 				})
 			}
 		}
-		if ws.OnContinue != nil && !validPlaces[mapToID(*ws.OnContinue)] {
+		for oi, route := range ws.OnContinue {
+			if validPlaces[mapToID(route)] {
+				continue
+			}
 			findings = append(findings, Finding{
 				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_continue", wi, ws.Name),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", ws.OnContinue.StateName, ws.OnContinue.WorkTypeName),
+				Path:     fmt.Sprintf("workstations[%d](%s).on_continue[%d]", wi, ws.Name, oi),
+				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
 				Rule:     "workstation-on-continue-ref",
 			})
 		}
-		if ws.OnRejection != nil && !validPlaces[mapToID(*ws.OnRejection)] {
+		for oi, route := range ws.OnRejection {
+			if validPlaces[mapToID(route)] {
+				continue
+			}
 			findings = append(findings, Finding{
 				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_rejection", wi, ws.Name),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", ws.OnRejection.StateName, ws.OnRejection.WorkTypeName),
+				Path:     fmt.Sprintf("workstations[%d](%s).on_rejection[%d]", wi, ws.Name, oi),
+				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
 				Rule:     "workstation-on-rejection-ref",
 			})
 		}
-		if ws.OnFailure != nil && !validPlaces[mapToID(*ws.OnFailure)] {
+		for oi, route := range ws.OnFailure {
+			if validPlaces[mapToID(route)] {
+				continue
+			}
 			findings = append(findings, Finding{
 				Severity: SeverityError,
-				Path:     fmt.Sprintf("workstations[%d](%s).on_failure", wi, ws.Name),
-				Message:  fmt.Sprintf("references non-existent state %q of work type %q", ws.OnFailure.StateName, ws.OnFailure.WorkTypeName),
+				Path:     fmt.Sprintf("workstations[%d](%s).on_failure[%d]", wi, ws.Name, oi),
+				Message:  fmt.Sprintf("references non-existent state %q of work type %q", route.StateName, route.WorkTypeName),
 				Rule:     "workstation-on-failure-ref",
 			})
 		}

@@ -230,9 +230,9 @@ func CloneWorkstationConfig(def interfaces.FactoryWorkstationConfig) interfaces.
 		cron := *def.Cron
 		def.Cron = &cron
 	}
-	def.OnContinue = cloneIOConfigPtr(def.OnContinue)
-	def.OnRejection = cloneIOConfigPtr(def.OnRejection)
-	def.OnFailure = cloneIOConfigPtr(def.OnFailure)
+	def.OnContinue = cloneIOConfigs(def.OnContinue)
+	def.OnRejection = cloneIOConfigs(def.OnRejection)
+	def.OnFailure = cloneIOConfigs(def.OnFailure)
 	if def.Env != nil {
 		env := make(map[string]string, len(def.Env))
 		for key, value := range def.Env {
@@ -306,14 +306,6 @@ func cloneIOConfig(cfg interfaces.IOConfig) interfaces.IOConfig {
 	cloned := cfg
 	cloned.Guard = cloneInputGuardConfigPtr(cfg.Guard)
 	return cloned
-}
-
-func cloneIOConfigPtr(cfg *interfaces.IOConfig) *interfaces.IOConfig {
-	if cfg == nil {
-		return nil
-	}
-	cloned := cloneIOConfig(*cfg)
-	return &cloned
 }
 
 func cloneInputGuardConfigPtr(cfg *interfaces.InputGuardConfig) *interfaces.InputGuardConfig {
@@ -1104,9 +1096,9 @@ type workstationFrontmatter struct {
 	Cron             *cronFrontmatter             `yaml:"cron,omitempty"`
 	Inputs           []ioFrontmatter              `yaml:"inputs,omitempty"`
 	Outputs          []ioFrontmatter              `yaml:"outputs,omitempty"`
-	OnContinue       *ioFrontmatter               `yaml:"onContinue,omitempty"`
-	OnRejection      *ioFrontmatter               `yaml:"onRejection,omitempty"`
-	OnFailure        *ioFrontmatter               `yaml:"onFailure,omitempty"`
+	OnContinue       []ioFrontmatter              `yaml:"onContinue,omitempty"`
+	OnRejection      []ioFrontmatter              `yaml:"onRejection,omitempty"`
+	OnFailure        []ioFrontmatter              `yaml:"onFailure,omitempty"`
 	Resources        []interfaces.ResourceConfig  `yaml:"resources,omitempty"`
 	Guards           []guardFrontmatter           `yaml:"guards,omitempty"`
 	StopWords        []string                     `yaml:"stopWords,omitempty"`
@@ -1163,9 +1155,9 @@ func workstationFrontmatterForExpansion(def interfaces.FactoryWorkstationConfig)
 		Limits:           workstationLimitsFrontmatter{MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime},
 		Inputs:           ioFrontmatterSlice(def.Inputs),
 		Outputs:          ioFrontmatterSlice(def.Outputs),
-		OnContinue:       ioFrontmatterPtr(def.OnContinue),
-		OnRejection:      ioFrontmatterPtr(def.OnRejection),
-		OnFailure:        ioFrontmatterPtr(def.OnFailure),
+		OnContinue:       ioFrontmatterSlice(def.OnContinue),
+		OnRejection:      ioFrontmatterSlice(def.OnRejection),
+		OnFailure:        ioFrontmatterSlice(def.OnFailure),
 		Resources:        append([]interfaces.ResourceConfig(nil), def.Resources...),
 		Guards:           guardFrontmatterSlice(def.Guards),
 		StopWords:        append([]string(nil), def.StopWords...),
@@ -1221,18 +1213,6 @@ func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatte
 		SkipPermissions:  def.SkipPermissions,
 	}
 }
-
-func ioFrontmatterPtr(cfg *interfaces.IOConfig) *ioFrontmatter {
-	if cfg == nil {
-		return nil
-	}
-	return &ioFrontmatter{
-		WorkType: cfg.WorkTypeName,
-		State:    cfg.StateName,
-		Guard:    inputGuardFrontmatterPtr(cfg.Guard),
-	}
-}
-
 func inputGuardFrontmatterPtr(cfg *interfaces.InputGuardConfig) *inputGuardFrontmatter {
 	if cfg == nil {
 		return nil

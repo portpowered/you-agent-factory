@@ -53,7 +53,7 @@ func TestPoisonTokenMalformedSubmissions(t *testing.T) {
 		h := testutil.NewServiceTestHarness(t, dir)
 		h.MockWorker("w")
 
-		requireSubmitRejected(t, h, "", []byte(`{"test": "empty-type"}`), "missing work_type_name")
+		requireSubmitRejected(t, h, "", []byte(`{"test": "empty-type"}`), "missing workTypeName")
 
 		assertNoWorkTokens(t, h, "empty WorkTypeID")
 	})
@@ -127,7 +127,7 @@ func TestPoisonTokenMalformedSubmissions(t *testing.T) {
 
 		// Submit a mix of rejected and valid work. Invalid submissions are
 		// rejected at the boundary and must not poison later valid work.
-		requireSubmitRejected(t, h, "", []byte(`{"bad": 1}`), "missing work_type_name")
+		requireSubmitRejected(t, h, "", []byte(`{"bad": 1}`), "missing workTypeName")
 		requireSubmitRejected(t, h, "nonexistent", []byte(`{"bad": 2}`), "unknown work type")
 		h.SubmitWork("task", []byte(`{"good": 1}`))
 		requireSubmitRejected(t, h, "also-nonexistent", []byte(`{"bad": 3}`), "unknown work type")
@@ -284,7 +284,7 @@ func TestPoisonTokenMalformedExecutorResults(t *testing.T) {
 					Name: "process", WorkerTypeName: "spawn-worker",
 					Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 					Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-					OnFailure: &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+					OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 				},
 				{
 					Name: "child-process", WorkerTypeName: "child-worker",
@@ -370,7 +370,7 @@ func TestPoisonTokenValidWorkUnaffected(t *testing.T) {
 	for i := range validItems {
 		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
 			{WorkTypeID: "", Payload: []byte(`{"poison":true}`)},
-		}, "missing work_type_name")
+		}, "missing workTypeName")
 		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
 			{WorkTypeID: "bogus", Payload: []byte(`{"poison":true}`)},
 		}, "unknown work type")
@@ -559,7 +559,7 @@ func TestPoisonTokenNoPanic(t *testing.T) {
 			if pv.typeID == "" || pv.typeID == "no-such-type" {
 				wantErr := "unknown work type"
 				if pv.typeID == "" {
-					wantErr = "missing work_type_name"
+					wantErr = "missing workTypeName"
 				}
 				requireSubmitRejected(t, h, pv.typeID, pv.payload, wantErr)
 				assertNoWorkTokens(t, h, pv.name)
@@ -642,7 +642,7 @@ func poisonExecCfg(workerName string) *interfaces.FactoryConfig {
 			Name: "process", WorkerTypeName: workerName,
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			OnFailure: &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	}
 }

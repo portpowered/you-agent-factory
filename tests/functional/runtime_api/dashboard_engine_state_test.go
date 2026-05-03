@@ -74,7 +74,7 @@ func scaffoldDashboardWorldViewFunctionalDir(t *testing.T) string {
 			Name: "process", WorkerTypeName: "worker-a",
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			OnFailure: &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	})
 	writeDashboardWorldViewAgents(t, filepath.Join(dir, "workers", "worker-a"), "MODEL_WORKER")

@@ -923,7 +923,7 @@ func initialStructureEvent(eventTime time.Time) factoryapi.FactoryEvent {
 				Worker:    "reviewer",
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
-				OnFailure: &factoryapi.WorkstationIO{WorkType: "task", State: "failed"},
+				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 			}},
 		},
 	}
@@ -953,7 +953,7 @@ func runRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
 				Worker:    "reviewer",
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
-				OnFailure: &factoryapi.WorkstationIO{WorkType: "task", State: "failed"},
+				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 			}},
 		},
 	}

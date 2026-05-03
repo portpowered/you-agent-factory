@@ -1573,11 +1573,11 @@ components:
               - workType: story
                 state: inReview
             onRejection:
-              workType: story
-              state: init
+              - workType: story
+                state: init
             onFailure:
-              workType: story
-              state: failed
+              - workType: story
+                state: failed
           - name: review-loop-breaker
             worker: review-loop-breaker
             type: LOGICAL_MOVE
@@ -1952,14 +1952,20 @@ components:
           items:
             $ref: '#/components/schemas/WorkstationIO'
         onContinue:
-          $ref: '#/components/schemas/WorkstationIO'
+          type: array
           description: Optional destination emitted when the workstation makes partial progress and should continue iterating.
+          items:
+            $ref: '#/components/schemas/WorkstationIO'
         onRejection:
-          $ref: '#/components/schemas/WorkstationIO'
+          type: array
           description: Optional destination emitted when the worker rejects the current work without a hard failure.
+          items:
+            $ref: '#/components/schemas/WorkstationIO'
         onFailure:
-          $ref: '#/components/schemas/WorkstationIO'
+          type: array
           description: Optional destination emitted when the workstation fails permanently.
+          items:
+            $ref: '#/components/schemas/WorkstationIO'
         resources:
           type: array
           description: Resource capacity this workstation consumes while one dispatch is in flight.
