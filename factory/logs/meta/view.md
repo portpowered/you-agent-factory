@@ -2,19 +2,14 @@
 
 ## world state
 
-- as of `2026-05-03T04:03:50.3625396-07:00`, `HEAD` and `origin/main` both
-  point to `7c98bd7` (`update the coverage to not generated`); branch
-  divergence is `0/0`
-- the canonical maintainer ask surface remains
-  `factory/logs/meta/asks.md`; the current checked-in ask text is still
-  meta-only and explicitly says not to submit new tasks
-- the worktree is dirty outside this pass:
-  - tracked local edit to `factory/logs/meta/asks.md`
-  - tracked local backend edits under `pkg/factory/projections/**`
-  - tracked local UI edits under `ui/src/**`
-  - untracked local files including `button-colors.md`,
-    `factory/logs/weird-number-summary.jsonl`,
-    `pkg/factory/projections/testdata/`, and `test-release.jsonl`
+- as of `2026-05-03T05:04:02.2575711-07:00`, `HEAD` on `fixlines` points to
+  `ce9872f` (`add fixes for edges missing`) while `origin/main` points to
+  `ec20d4c` (`docs: refresh meta world state`); branch divergence versus
+  `origin/main` is `1/0`
+- `origin/fixlines` matches `HEAD`, and the worktree is currently clean
+- the canonical maintainer ask surface remains `factory/logs/meta/asks.md`;
+  unlike the prior pass, the checked-in ask is active and no longer limits this
+  loop to meta-only refresh
 
 ## workflow truth
 
@@ -43,18 +38,32 @@
   - `factory/inputs/plan/default/.gitkeep`
   - `factory/inputs/task/default/.gitkeep`
   - `factory/inputs/thoughts/default/.gitkeep`
-- visible files or folders under `factory/inputs/**`, including the local
+- visible folders under `factory/inputs/**`, including the local
   `factory/inputs/tasks/default` typo path, are ignored operating residue and
   not checked-in repo truth
 - `.gitignore` still ignores `factory/inputs/**` except the canonical sentinel
   paths above
-- the public checked-in maintainer contract uses canonical inboxes
-  `BATCH`, `idea`, `plan`, `task`, and `thoughts`, but older `story` or
-  `tasks` wording still exists in some repo docs and CLI help
-- the watcher accepts a slightly wider path surface than the public docs show:
-  files directly under `factory/inputs/<work-type>/` are treated as the
-  default channel even though the docs emphasize the
-  `factory/inputs/<work_type-or-BATCH>/<channel>/<filename>` shape
+- the watcher still accepts files directly under `factory/inputs/<work-type>/`
+  as the default channel even though the public docs emphasize
+  `factory/inputs/<work_type-or-BATCH>/<channel>/<filename>`
+
+## customer-ask truth
+
+- the customer’s P0 throttle ask is no longer hypothetical: the repo already
+  contains a root-level `FactoryGuardConfig` with `modelProvider`, optional
+  `model`, and `refreshWindow`, plus runtime lowering into
+  `pkg/petri/inference_throttle_guard.go`
+- recent merged throttle cleanup lineage on `main` includes:
+  - `#48` `retire-legacy-throttle-fallback-after-authored-guard`
+  - `#46` `factory-level-inference-throttle-guard`
+  - `#42` `retire-dispatcher-throttle-pause-map`
+  - `#31` `derive-throttle-windows-from-completed-dispatch-history`
+- the remaining highest-signal throttle legacy seam is
+  `InferenceThrottleGuard.WatchedTransitionIDs`, which still preserves a
+  transition-ID fallback path when runtime worker/provider lookup misses
+- no dedicated checked-in standards-alignment checklist exists yet for
+  `STD-016` / `STD-017`; the current durable tracking surface for that ask is
+  still `factory/logs/meta/progress.txt`
 
 ## replay truth
 
@@ -78,6 +87,8 @@
   - `#62` `align-dashboard-work-summary-count-semantics`
   - `#61` `browser-shared-action-primitives`
   - `#60` `browser-integration-png-export-import-roundtrip`
+- the current branch also carries one unmerged UI/test commit ahead of `main`:
+  `ce9872f` `add fixes for edges missing`
 
 ## theory of mind
 
@@ -85,5 +96,8 @@
   checked-in workflow contract, not from the replay sample alone
 - `factory/inputs/**` must always be reasoned about in two layers:
   checked-in contract vs ignored local operating residue
-- the checked-in ask still forbids queueing follow-up work, so this pass should
-  refresh meta state only and leave `factory/logs/meta/asks.md` untouched
+- the authored inference throttle guard design mostly matches the current
+  customer ask already, so the right next move is cleanup of the remaining
+  fallback seam rather than another broad throttle redesign
+- the current standards-quality ask needs explicit checklist tracking in meta
+  progress until the repo gains a dedicated checked-in standards surface

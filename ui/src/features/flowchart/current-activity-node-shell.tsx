@@ -30,11 +30,12 @@ export function ActivityGraphNodeShell({
     >
       {Array.from({ length: incomingHandleCount }, (_, handleNumber) => {
         const top = handlePosition(handleNumber, incomingHandleCount);
+        const handleId = `in-${handleNumber}`;
         return (
           <Handle
             className="opacity-0"
-            id={`in-${handleNumber}`}
-            key={`in-${handleNumber}`}
+            id={handleId}
+            key={`incoming-${top}`}
             position={Position.Left}
             style={{ top }}
             type="target"
@@ -43,11 +44,12 @@ export function ActivityGraphNodeShell({
       })}
       {Array.from({ length: outgoingHandleCount }, (_, handleNumber) => {
         const top = handlePosition(handleNumber, outgoingHandleCount);
+        const handleId = `out-${handleNumber}`;
         return (
           <Handle
             className="opacity-0"
-            id={`out-${handleNumber}`}
-            key={`out-${handleNumber}`}
+            id={handleId}
+            key={`outgoing-${top}`}
             position={Position.Right}
             style={{ top }}
             type="source"
