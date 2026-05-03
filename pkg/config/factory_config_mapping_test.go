@@ -856,11 +856,11 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesInlineRuntimeDefinitions(t
 	}
 	workstationsPayload := payload["workstations"].([]any)
 	workstationPayload := workstationsPayload[0].(map[string]any)
-	if _, ok := workstationPayload["promptTemplate"]; !ok {
-		t.Fatalf("expected canonical inline workstation runtime config to use promptTemplate key")
+	if got, ok := workstationPayload["body"].(string); !ok || got != "Implement {{ .WorkID }}." {
+		t.Fatalf("expected canonical inline workstation export body to preserve prompt template, got %#v", workstationPayload["body"])
 	}
-	if _, ok := workstationPayload["prompt_template"]; ok {
-		t.Fatalf("expected canonical inline workstation runtime config not to include prompt_template key")
+	if _, ok := workstationPayload["promptTemplate"]; ok {
+		t.Fatalf("expected canonical inline workstation export not to include promptTemplate")
 	}
 	if _, ok := workstationPayload["definition"]; ok {
 		t.Fatalf("expected canonical inline workstation runtime config to be flattened")
@@ -1059,6 +1059,26 @@ func TestFactoryConfigMapper_ExpandParsesCanonicalWorkstationKindAndRuntimeType(
 	}
 	if ws.PromptTemplate != "Refresh {{ .WorkID }}." {
 		t.Fatalf("expected prompt template to be retained, got %q", ws.PromptTemplate)
+	}
+}
+
+func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *testing.T) {
+	workstation := interfaces.FactoryWorkstationConfig{
+		Name:           "execute-story",
+		WorkerTypeName: "executor",
+		Type:           interfaces.WorkstationTypeModel,
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
+		Body:           "fallback body that should stay private to authored runtime config",
+		PromptTemplate: "Implement {{ .WorkID }}.",
+	}
+
+	got := WorkstationConfigToOpenAPI(workstation)
+	if got.Body == nil || *got.Body != "Implement {{ .WorkID }}." {
+		t.Fatalf("expected exported workstation body to carry prompt template, got %#v", got.Body)
+	}
+	if got.PromptTemplate != nil {
+		t.Fatalf("expected exported workstation not to expose promptTemplate, got %#v", got.PromptTemplate)
 	}
 }
 

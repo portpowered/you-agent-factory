@@ -215,7 +215,7 @@ type generatedSchemaRuntimeWorkstationSummary struct {
 	name            string
 	workerTypeName  string
 	workstationType string
-	promptTemplate  string
+	body            string
 }
 
 func assertGeneratedSmokeTopologyBoundary(t *testing.T, generated factoryapi.Factory) {
@@ -272,8 +272,11 @@ func assertGeneratedSmokeRuntimeDefinitions(t *testing.T, generated factoryapi.F
 		if workstation.Name != "step-one" && workstation.Name != "step-two" {
 			continue
 		}
-		if !strings.Contains(stringValueFromFunctionalPtr(workstation.PromptTemplate), "Do the work.") {
-			t.Fatalf("runtime boundary workstation %q prompt template = %q, want split runtime prompt", workstation.Name, stringValueFromFunctionalPtr(workstation.PromptTemplate))
+		if !strings.Contains(stringValueFromFunctionalPtr(workstation.Body), "Do the work.") {
+			t.Fatalf("runtime boundary workstation %q body = %q, want split runtime prompt", workstation.Name, stringValueFromFunctionalPtr(workstation.Body))
+		}
+		if workstation.PromptTemplate != nil {
+			t.Fatalf("runtime boundary workstation %q should not expose promptTemplate, got %#v", workstation.Name, workstation.PromptTemplate)
 		}
 	}
 }
@@ -329,7 +332,7 @@ func requireGeneratedSchemaRuntimeWorkstationSummary(
 		name:            workstation.Name,
 		workerTypeName:  workstation.WorkerTypeName,
 		workstationType: workstation.Type,
-		promptTemplate:  workstation.PromptTemplate,
+		body:            workstation.Body,
 	}
 }
 
