@@ -67,7 +67,7 @@ describe("ExportFactoryDialog", () => {
     expect(screen.getByText("Loading the current authored factory definition.")).toBeTruthy();
   });
 
-  it("exports the selected image with the trimmed factory name and closes the dialog", async () => {
+  it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {
     let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null = null;
     vi.mocked(writeFactoryExportPng).mockImplementation(
       () =>
@@ -124,7 +124,8 @@ describe("ExportFactoryDialog", () => {
         filename: "factory-aurora.png",
       });
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status").textContent).toContain("Downloaded factory-aurora.png.");
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
-

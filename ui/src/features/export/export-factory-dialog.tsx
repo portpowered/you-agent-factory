@@ -38,6 +38,8 @@ const DIALOG_FIELD_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS
 const DIALOG_VALIDATION_CLASS = "m-0 text-sm font-medium text-af-danger-ink";
 const DIALOG_ERROR_PANEL_CLASS =
   "rounded-2xl border border-af-danger/30 bg-af-danger/10 px-4 py-3 text-sm text-af-danger-ink";
+const DIALOG_SUCCESS_PANEL_CLASS =
+  "rounded-2xl border border-af-success/30 bg-af-success/12 px-4 py-3 text-sm text-af-success-ink";
 const DIALOG_CONTENT_CLASS = "w-[min(92vw,42rem)] gap-6";
 
 export interface ExportFactoryDialogProps {
@@ -52,7 +54,8 @@ export interface ExportFactoryDialogProps {
 type ExportDialogState =
   | { status: "idle" }
   | { status: "error"; message: string }
-  | { status: "exporting" };
+  | { status: "exporting" }
+  | { status: "success"; filename: string };
 
 interface ExportDialogFormState {
   dialogState: ExportDialogState;
@@ -128,7 +131,7 @@ export function ExportFactoryDialog({
 
         <DialogFooter>
           <Button onClick={formState.handleClose} tone="outline" type="button">
-            Cancel
+            {formState.dialogState.status === "success" ? "Close" : "Cancel"}
           </Button>
           <Button
             aria-busy={formState.isExporting ? "true" : undefined}
@@ -257,6 +260,13 @@ function ExportFactoryDialogMessages({
           {dialogState.message}
         </div>
       ) : null}
+
+      {dialogState.status === "success" ? (
+        <div aria-live="polite" className={DIALOG_SUCCESS_PANEL_CLASS} role="status">
+          Downloaded {dialogState.filename}. You can close this dialog or export another
+          PNG with a different name or cover image.
+        </div>
+      ) : null}
     </>
   );
 }
@@ -315,26 +325,6 @@ function useExportFactoryDialogState({
     setSelectedImage,
   });
 
-  const handleImageSelection = (files: FileList | null) => {
-    setImageTouched(true);
-
-    const selectedFile = files?.item?.(0) ?? files?.[0] ?? null;
-    if (!selectedFile) {
-      setSelectedImage(null);
-      setImageSelectionError("Choose a cover image before exporting.");
-      return;
-    }
-
-    if (selectedFile.type && !selectedFile.type.startsWith("image/")) {
-      setSelectedImage(null);
-      setImageSelectionError("Choose an image file before exporting.");
-      return;
-    }
-
-    setSelectedImage(selectedFile);
-    setImageSelectionError(null);
-  };
-
   const handleExport = async () => {
     setNameTouched(true);
     setImageTouched(true);
@@ -377,11 +367,15 @@ function useExportFactoryDialogState({
       return;
     }
 
+    const filename = buildFactoryExportFilename(trimmedExportName);
     downloadBlobAsFile({
       blob: result.blob,
-      filename: buildFactoryExportFilename(trimmedExportName),
+      filename,
     });
-    handleClose();
+    setDialogState({
+      filename,
+      status: "success",
+    });
   };
 
   return {
@@ -391,7 +385,11 @@ function useExportFactoryDialogState({
     handleClose,
     handleOpenChange: createHandleOpenChange(handleClose),
     handleExport,
-    handleImageSelection,
+    handleImageSelection: createHandleImageSelection({
+      setImageSelectionError,
+      setImageTouched,
+      setSelectedImage,
+    }),
     imageTouched,
     imageValidationId,
     imageValidationMessage,
@@ -404,6 +402,35 @@ function useExportFactoryDialogState({
     setExportName,
     setImageTouched,
     setNameTouched,
+  };
+}
+
+function createHandleImageSelection({
+  setImageSelectionError,
+  setImageTouched,
+  setSelectedImage,
+}: {
+  setImageSelectionError: (value: string | null) => void;
+  setImageTouched: (value: boolean) => void;
+  setSelectedImage: (value: File | null) => void;
+}) {
+  return (files: FileList | null) => {
+    setImageTouched(true);
+    const selectedFile = files?.item?.(0) ?? files?.[0] ?? null;
+    if (!selectedFile) {
+      setSelectedImage(null);
+      setImageSelectionError("Choose a cover image before exporting.");
+      return;
+    }
+
+    if (selectedFile.type && !selectedFile.type.startsWith("image/")) {
+      setSelectedImage(null);
+      setImageSelectionError("Choose an image file before exporting.");
+      return;
+    }
+
+    setSelectedImage(selectedFile);
+    setImageSelectionError(null);
   };
 }
 
@@ -460,4 +487,3 @@ function useResetExportFactoryDialogState({
     setSelectedImage,
   ]);
 }
-
