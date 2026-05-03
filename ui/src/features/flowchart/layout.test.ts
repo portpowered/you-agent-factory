@@ -4,7 +4,6 @@ import {
   oneNodeDashboardTopology,
 } from "../../components/dashboard/fixtures";
 import { buildGraphLayout } from "./layout";
-import { twentyNodeDashboardTopology } from "../../components/dashboard/test-fixtures";
 import { describe, it, expect } from "vitest";
 
 describe("buildGraphLayout", () => {

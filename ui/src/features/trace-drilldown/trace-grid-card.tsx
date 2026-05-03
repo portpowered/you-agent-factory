@@ -147,7 +147,7 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
 
   useEffect(() => {
     setWorkItemsExpanded(false);
-  }, [trace.trace_id]);
+  }, []);
 
   return (
     <div className="grid min-w-0 w-full gap-[0.8rem]">

@@ -108,8 +108,7 @@ export function ExecutionDetailsSection({
           <dt>Trace IDs</dt>
           <dd className="grid gap-[0.35rem]">
             {hasTraceIDs ? (
-              <>
-                {details.traceIDs.map((traceID) => (
+              details.traceIDs.map((traceID) => (
                   <a
                     className={TRACE_ACTION_LINK_CLASS}
                     href={`#${traceTargetId}`}
@@ -119,8 +118,7 @@ export function ExecutionDetailsSection({
                     {traceID}
                     {activeTraceID === traceID ? " (selected)" : ""}
                   </a>
-                ))}
-              </>
+                ))
             ) : (
               <span className={RUNTIME_DETAIL_VALUE_CLASS}>
                 Trace details are not available for this selected run.

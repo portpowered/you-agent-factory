@@ -9,7 +9,7 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../api/dashboard";
-import type { FactoryProviderSession, FactoryWorkItem } from "../../api/events";
+import type { FactoryProviderSession, } from "../../api/events";
 import { uniqueSorted } from "./shared";
 import type {
   TimelineWorkRequestPayload,
@@ -208,7 +208,7 @@ export function outputWorkItemsFromCompletion(
   );
   for (const mutation of completion.outputMutations) {
     const token = mutation.resulting_token;
-    if (!token || !token.work_id || token.work_type_id === DASHBOARD_TIME_WORK_TYPE_ID) {
+    if (!token?.work_id || token.work_type_id === DASHBOARD_TIME_WORK_TYPE_ID) {
       continue;
     }
     workItems[token.work_id] = {

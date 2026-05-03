@@ -29,7 +29,7 @@ import {
   isSystemTimeWorkItem,
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
 } from "./systemTime";
-import type { ProjectedInitialStructure, WorldCompletion, WorldDispatch, WorldState } from "./types";
+import type { WorldCompletion, WorldDispatch, WorldState } from "./types";
 import { workRef } from "./workItemRef";
 
 export interface LegacyDispatchRequestPayloadCompat {

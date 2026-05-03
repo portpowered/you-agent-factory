@@ -212,10 +212,11 @@ function statePositionMarkers(count: number): ReactNode {
   if (count > STATE_NODE_DOT_LIMIT) {
     return (
       <span
-        aria-label={activeItemCountLabel(count)}
         className="inline-flex min-h-5 min-w-7 items-center justify-center rounded-full border border-af-success/25 bg-af-success/12 px-2 font-mono text-[0.76rem] font-bold leading-none text-af-success-ink"
         data-state-work-progress="numeric"
+        role="status"
       >
+        <span className="sr-only">{activeItemCountLabel(count)}</span>
         {count}
       </span>
     );
@@ -223,16 +224,17 @@ function statePositionMarkers(count: number): ReactNode {
 
   return (
     <span
-      aria-label={activeItemCountLabel(count)}
       className="inline-grid grid-cols-[repeat(5,0.5rem)] justify-center gap-1"
       data-state-work-progress="dots"
+      role="status"
     >
-      {Array.from({ length: count }).map((_, index) => (
+      <span className="sr-only">{activeItemCountLabel(count)}</span>
+      {Array.from({ length: count }, (_, dotNumber) => dotNumber + 1).map((dotNumber) => (
         <span
-          key={`${index}-${count}`}
+          key={`${count}-${dotNumber}`}
           aria-hidden="true"
           className="h-2 w-2 rounded-full bg-af-success"
-          data-state-work-progress-dot={String(index)}
+          data-state-work-progress-dot={String(dotNumber - 1)}
         />
       ))}
     </span>
@@ -251,10 +253,11 @@ function tokenCountLabel(place: DashboardPlaceRef, count: number): string {
 function placeTokenCountDisplay(place: DashboardPlaceRef, count: number): ReactNode {
   return (
     <span
-      aria-label={tokenCountLabel(place, count)}
       className="inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/8 px-2 py-[0.1rem] font-mono text-[0.68rem] text-af-ink/64"
       data-place-token-count
+      role="status"
     >
+      <span className="sr-only">{tokenCountLabel(place, count)}</span>
       {count}
     </span>
   );
@@ -349,11 +352,7 @@ function StaticPlaceNodeContent({
 
   if (place.kind !== "resource") {
     return (
-      <div
-        className="grid min-w-0 gap-[0.1rem] overflow-hidden"
-        aria-label={label}
-        data-place-label-container
-      >
+      <div className="grid min-w-0 gap-[0.1rem] overflow-hidden" data-place-label-container>
         <span
           className="flex min-w-0 items-center gap-1.5 overflow-hidden"
           data-place-label-zone
@@ -376,11 +375,7 @@ function StaticPlaceNodeContent({
   }
 
   return (
-    <div
-      className={RESOURCE_CONTENT_CONTAINER_CLASSNAME}
-      aria-label={label}
-      data-place-label-container
-    >
+    <div className={RESOURCE_CONTENT_CONTAINER_CLASSNAME} data-place-label-container>
       <span
         className="grid h-[1.5rem] max-h-[1.5rem] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
         data-place-label-zone

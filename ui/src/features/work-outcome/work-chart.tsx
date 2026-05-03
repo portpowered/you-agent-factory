@@ -325,7 +325,7 @@ function buildWorkChartData(
 }
 
 function hasSeriesValue(row: WorkChartRow, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(row, key) && typeof row[key] === "number";
+  return  Object.hasOwn(row, key) && typeof row[key] === "number";
 }
 
 function formatAxisNumber(value: number): string {

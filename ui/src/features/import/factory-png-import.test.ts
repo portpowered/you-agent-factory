@@ -107,7 +107,6 @@ describe("readFactoryImportPng", () => {
         JSON.stringify({
           exhaustion_rules: [],
           project: "legacy-factory",
-          name: "legacy-factory",
           name: "Invalid Factory Import",
           schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
         }),

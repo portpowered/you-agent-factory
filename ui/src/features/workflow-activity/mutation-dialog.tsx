@@ -74,18 +74,20 @@ export function DashboardMutationDialog({
   const descriptionId = useId();
 
   return (
-    <div
-      className={cx(DIALOG_OVERLAY_CLASS, overlayClassName)}
-      onClick={canClose ? onClose : undefined}
-    >
+    <div className={cx(DIALOG_OVERLAY_CLASS, "relative", overlayClassName)}>
+      {canClose ? (
+        <button
+          aria-label={closeLabel}
+          className="absolute inset-0"
+          onClick={onClose}
+          type="button"
+        />
+      ) : null}
       <section
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
         className={DIALOG_PANEL_CLASS}
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
         role="dialog"
       >
         <div

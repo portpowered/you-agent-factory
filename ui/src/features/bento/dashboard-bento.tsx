@@ -45,7 +45,7 @@ export function DashboardBento({ snapshot }: DashboardBentoProps) {
 
   useEffect(() => {
     resetSelectedTraceID();
-  }, [currentSelection.selectedWorkID, resetSelectedTraceID]);
+  }, [resetSelectedTraceID]);
 
   const { selectedTrace, traceGridState } = useTraceDrilldown(
     currentSelection.selectedWorkID,

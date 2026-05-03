@@ -10,7 +10,7 @@ import {
   buildFactoryTimelineSnapshot,
   type FactoryTimelineSnapshot,
 } from "../state/factoryTimelineStore";
-import { replayFixtureCatalog, type ReplayFixtureID } from "./replay-fixture-catalog";
+import type { ReplayFixtureID } from "./replay-fixture-catalog";
 
 export { replayFixtureCatalog, type ReplayFixtureID } from "./replay-fixture-catalog";
 

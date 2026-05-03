@@ -106,6 +106,14 @@ const populatedTrace: DashboardTrace = {
   workstation_sequence: ["Plan", "Implement"],
 };
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 describe("TraceGridBentoCard", () => {
   let restoreBrowserShims: (() => void) | undefined;
 
@@ -154,11 +162,11 @@ describe("TraceGridBentoCard", () => {
     const workItemsSection = within(card)
       .getByText("Work items")
       .closest("div");
-    expect(workItemsSection).toBeTruthy();
-    const expandButton = within(workItemsSection!).getByRole("button", { name: "Expand" });
+    const resolvedWorkItemsSection = requireValue(workItemsSection, "expected work items section");
+    const expandButton = within(resolvedWorkItemsSection).getByRole("button", { name: "Expand" });
     expect(expandButton.getAttribute("aria-expanded")).toBe("false");
     expect(
-      within(workItemsSection!).queryByText('story:"Implemented Story"'),
+      within(resolvedWorkItemsSection).queryByText('story:"Implemented Story"'),
     ).toBeNull();
 
     fireEvent.click(expandButton);

@@ -8,7 +8,6 @@ import {
 import type {
   DashboardSessionRuntime,
   DashboardSnapshot,
-  DashboardTrace,
 } from "../../api/dashboard/types";
 
 function session(

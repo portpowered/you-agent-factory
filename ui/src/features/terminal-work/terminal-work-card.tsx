@@ -107,7 +107,8 @@ export function CompletedFailedWorkstationCard({
 
   return (
     <AgentBentoCard className={cardClassName} title={title}>
-      <div className={TERMINAL_ROWS_CLASS} aria-label="Terminal work outcomes">
+      <fieldset className={TERMINAL_ROWS_CLASS}>
+        <legend className="sr-only">Terminal work outcomes</legend>
         <TerminalWorkRow
           emptyMessage="No completed work recorded yet."
           expanded={completedExpanded}
@@ -128,7 +129,7 @@ export function CompletedFailedWorkstationCard({
           status="failed"
           title="Failed"
         />
-      </div>
+      </fieldset>
     </AgentBentoCard>
   );
 }

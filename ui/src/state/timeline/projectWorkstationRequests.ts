@@ -13,8 +13,6 @@ import {
 import {
   attemptHasError,
   attemptHasResponse,
-  dashboardScriptRequest,
-  dashboardScriptResponse,
   dispatchHasCustomerWork,
   latestWorkstationAttempt,
   latestWorkstationScriptResponse,

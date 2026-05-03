@@ -1559,7 +1559,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     );
     expect(screen.getByRole("img", { name: "Queue" }).getAttribute("data-graph-semantic-icon"))
       .toBe("queue");
-    const legend = await expandGraphLegend();
+    const _legend = await expandGraphLegend();
     expect(
       within(screen.getByLabelText("Graph legend"))
         .getByRole("img", { name: "Standard workstation legend icon" })

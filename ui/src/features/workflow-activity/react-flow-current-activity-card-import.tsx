@@ -197,7 +197,7 @@ export function FactoryImportPreviewDialog({
       media={(
         <div className="overflow-hidden rounded-[1.25rem] border border-af-overlay/10 bg-af-overlay/4 p-3">
           <img
-            alt={`${previewState.value.factory.name} preview image`}
+            alt={`${previewState.value.factory.name} preview`}
             className="block h-full max-h-[24rem] w-full rounded-[1rem] object-contain"
             src={previewState.value.previewImageSrc}
           />

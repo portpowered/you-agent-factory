@@ -42,7 +42,6 @@ export function WorkChartCard({
         aria-label="Work outcome chart region"
         className={WORK_CHART_REGION_CLASS}
         id={chartRegionID}
-        role="region"
       >
         <WorkChart
           ariaLabel={`Work outcome chart for ${model.rangeLabel}`}

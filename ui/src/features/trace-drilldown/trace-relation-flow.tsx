@@ -122,7 +122,7 @@ export function TraceRelationFlow({
     return () => {
       cancelled = true;
     };
-  }, [graph.edges, graph.nodes, graphDimensions, layoutKey]);
+  }, [graph.edges, graph.nodes, graphDimensions]);
 
   const baseNodes = useMemo<RelationFlowNode[]>(() => {
     const positionsByID = new Map(
@@ -210,6 +210,12 @@ export function TraceRelationFlow({
 function RelationWorkNode({
   data,
 }: NodeProps<RelationFlowNode>) {
+  const handleSelectWork = () => {
+    if (data.workID && data.onSelectWorkID) {
+      data.onSelectWorkID(data.workID);
+    }
+  };
+
   const content = (
     <>
       <Handle className="opacity-0" position={Position.Left} type="target" />
@@ -227,7 +233,7 @@ function RelationWorkNode({
     return (
       <button
         className={cx(RELATION_NODE_CLASS, RELATION_NODE_ACTIVE_CLASS)}
-        onClick={() => data.onSelectWorkID?.(data.workID!)}
+        onClick={handleSelectWork}
         title={data.workID}
         type="button"
       >

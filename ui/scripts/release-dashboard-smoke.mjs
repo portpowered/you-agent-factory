@@ -73,7 +73,7 @@ async function main() {
     });
 
     const response = await page.goto(dashboardURL, { waitUntil: "domcontentloaded" });
-    if (!response || !response.ok()) {
+    if (!response?.ok()) {
       throw new Error(`dashboard navigation failed with status ${response?.status() ?? "unknown"}`);
     }
 

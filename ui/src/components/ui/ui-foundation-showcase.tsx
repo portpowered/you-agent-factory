@@ -68,6 +68,9 @@ export interface UIFoundationShowcaseProps {
 export function UIFoundationShowcase({ includeResizable = true }: UIFoundationShowcaseProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [collapseOpen, setCollapseOpen] = useState(true);
+  const requestNameID = "ui-foundation-showcase-request-name";
+  const requestTextID = "ui-foundation-showcase-request-text";
+  const workTypeID = "ui-foundation-showcase-work-type";
 
   return (
     <div className="grid gap-6 rounded-[1.8rem] border border-af-overlay/10 bg-af-surface/52 p-6 text-af-ink">
@@ -88,29 +91,29 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
-        <label className="grid gap-2">
-          <span className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58">
+        <div className="grid gap-2">
+          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58" htmlFor={requestNameID}>
             Request name
-          </span>
-          <Input aria-label="Showcase request name" placeholder="Name this request" />
-        </label>
+          </label>
+          <Input id={requestNameID} placeholder="Name this request" />
+        </div>
 
-        <label className="grid gap-2">
-          <span className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58">
+        <div className="grid gap-2">
+          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58" htmlFor={workTypeID}>
             Work type
-          </span>
-          <Select aria-label="Showcase work type" defaultValue="story">
+          </label>
+          <Select defaultValue="story" id={workTypeID}>
             <option value="story">story</option>
             <option value="task">task</option>
           </Select>
-        </label>
+        </div>
 
-        <label className="grid gap-2 md:col-span-2">
-          <span className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58">
+        <div className="grid gap-2 md:col-span-2">
+          <label className="text-xs font-bold uppercase tracking-[0.08em] text-af-ink/58" htmlFor={requestTextID}>
             Request text
-          </span>
-          <Textarea aria-label="Showcase request text" placeholder="Describe the work to run" />
-        </label>
+          </label>
+          <Textarea id={requestTextID} placeholder="Describe the work to run" />
+        </div>
       </section>
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">

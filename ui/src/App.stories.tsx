@@ -243,6 +243,14 @@ function currentSelectionCard(canvasElement: HTMLElement): HTMLElement {
   return within(canvasElement).getByRole("article", { name: "Current selection" });
 }
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
   const documentElement = canvasElement.ownerDocument.documentElement;
   const overflowTolerance = 1;
@@ -540,9 +548,12 @@ export const SemanticGraphComposition = {
     const runHistorySection = within(currentSelectionCard(canvasElement))
       .getByRole("heading", { name: "Run history" })
       .closest("section");
-    expect(runHistorySection).toBeTruthy();
-    await userEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
-    await expect(within(runHistorySection!).getByText("Retry Story")).toBeVisible();
+    const resolvedRunHistorySection = requireValue(
+      runHistorySection,
+      "expected implement workstation run history section",
+    );
+    await userEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
+    await expect(within(resolvedRunHistorySection).getByText("Retry Story")).toBeVisible();
     await expect(await canvas.findByText("Failed Story")).toBeVisible();
   },
 };

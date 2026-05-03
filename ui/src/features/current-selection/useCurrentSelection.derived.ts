@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 
 import type {
-  DashboardProviderSessionAttempt,
   DashboardSnapshot,
   DashboardWorkstationNode,
   DashboardWorkstationRequest,

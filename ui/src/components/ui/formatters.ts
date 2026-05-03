@@ -201,7 +201,7 @@ export function getProviderSessionLogTarget(
   }
 
   const localJSONLPath = normalizeNonEmptyText(session?.local_jsonl_path);
-  if (localJSONLPath && localJSONLPath.toLowerCase().endsWith(LOCAL_JSONL_EXTENSION)) {
+  if (localJSONLPath?.toLowerCase().endsWith(LOCAL_JSONL_EXTENSION)) {
     return {
       display: localJSONLPath,
       href: localPathToFileHref(localJSONLPath),

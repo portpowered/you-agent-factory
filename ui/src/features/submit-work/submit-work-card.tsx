@@ -68,6 +68,9 @@ export function SubmitWorkCard({
   const hasRequestText = draft.requestText.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
   const canSubmit = hasConfiguredWorkTypes && hasSelectedWorkType && hasRequestText && !isSubmitting;
+  const requestNameID = `${widgetId}-request-name`;
+  const requestTextID = `${widgetId}-request-text`;
+  const workTypeID = `${widgetId}-work-type`;
   const workTypeErrorID = `${widgetId}-work-type-error`;
   const requestTextErrorID = `${widgetId}-request-text-error`;
   const statusID = `${widgetId}-status`;
@@ -87,14 +90,16 @@ export function SubmitWorkCard({
           </p>
         </div>
 
-        <label className={FIELD_GROUP_CLASS}>
-          <span className={FIELD_LABEL_CLASS}>Work type</span>
+        <div className={FIELD_GROUP_CLASS}>
+          <label className={FIELD_LABEL_CLASS} htmlFor={workTypeID}>
+            Work type
+          </label>
           <Select
-            aria-label="Work type"
             aria-describedby={validationErrors?.workTypeName ? workTypeErrorID : undefined}
             aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
+            id={workTypeID}
             onChange={(event) => onWorkTypeNameChange(event.target.value)}
             value={draft.workTypeName}
           >
@@ -110,29 +115,33 @@ export function SubmitWorkCard({
               {validationErrors.workTypeName}
             </p>
           ) : null}
-        </label>
+        </div>
 
-        <label className={FIELD_GROUP_CLASS}>
-          <span className={FIELD_LABEL_CLASS}>Request name</span>
+        <div className={FIELD_GROUP_CLASS}>
+          <label className={FIELD_LABEL_CLASS} htmlFor={requestNameID}>
+            Request name
+          </label>
           <Input
-            aria-label="Request name"
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
+            id={requestNameID}
             onChange={(event) => onRequestNameChange(event.target.value)}
             placeholder="Add an optional label for this request."
             type="text"
             value={draft.requestName}
           />
-        </label>
+        </div>
 
-        <label className={FIELD_GROUP_CLASS}>
-          <span className={FIELD_LABEL_CLASS}>Request</span>
+        <div className={FIELD_GROUP_CLASS}>
+          <label className={FIELD_LABEL_CLASS} htmlFor={requestTextID}>
+            Request
+          </label>
           <Textarea
-            aria-label="Request text"
             aria-describedby={validationErrors?.requestText ? requestTextErrorID : undefined}
             aria-invalid={validationErrors?.requestText ? "true" : undefined}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
+            id={requestTextID}
             onChange={(event) => onRequestTextChange(event.target.value)}
             placeholder="Describe what you want this request to accomplish."
             value={draft.requestText}
@@ -142,7 +151,7 @@ export function SubmitWorkCard({
               {validationErrors.requestText}
             </p>
           ) : null}
-        </label>
+        </div>
 
         <div className={ACTION_ROW_CLASS}>
           <p

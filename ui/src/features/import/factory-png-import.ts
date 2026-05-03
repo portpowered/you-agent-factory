@@ -485,7 +485,7 @@ function stripMetadataSchemaVersion(metadata: FactoryPngMetadata): CanonicalFact
   return factory;
 }
 
-function isStringMap(value: unknown): value is Record<string, string> | undefined {
+function _isStringMap(value: unknown): value is Record<string, string> | undefined {
   if (value === undefined) {
     return true;
   }
@@ -497,7 +497,7 @@ function isStringMap(value: unknown): value is Record<string, string> | undefine
   return Object.values(value).every((entry) => typeof entry === "string");
 }
 
-function isOptionalArray<T>(value: unknown, predicate: (entry: unknown) => boolean): value is T[] | undefined {
+function _isOptionalArray<T>(value: unknown, predicate: (entry: unknown) => boolean): value is T[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((entry) => predicate(entry)));
 }
 

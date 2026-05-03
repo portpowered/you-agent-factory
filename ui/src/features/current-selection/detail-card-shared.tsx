@@ -351,8 +351,8 @@ function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) 
     case "ordered-list":
       return (
         <ol key={`ordered-list-${index}`}>
-          {block.items.map((item, itemIndex) => (
-            <li className="whitespace-pre-wrap" key={`ordered-list-item-${index}-${itemIndex}`}>
+          {stableListKeys(block.items).map(({ item, key }) => (
+            <li className="whitespace-pre-wrap" key={`ordered-list-item-${index}-${key}`}>
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -361,8 +361,8 @@ function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) 
     case "unordered-list":
       return (
         <ul key={`unordered-list-${index}`}>
-          {block.items.map((item, itemIndex) => (
-            <li className="whitespace-pre-wrap" key={`unordered-list-item-${index}-${itemIndex}`}>
+          {stableListKeys(block.items).map(({ item, key }) => (
+            <li className="whitespace-pre-wrap" key={`unordered-list-item-${index}-${key}`}>
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -399,11 +399,26 @@ function renderInlineMarkdown(value: string): ReactNode[] {
     segments.push(value.slice(lastIndex));
   }
 
-  return segments.map((segment, index) => {
+  const seenStringSegments = new Map<string, number>();
+  return segments.map((segment) => {
     if (typeof segment === "string") {
-      return <Fragment key={`inline-text-${index}`}>{segment}</Fragment>;
+      const occurrence = (seenStringSegments.get(segment) ?? 0) + 1;
+      seenStringSegments.set(segment, occurrence);
+      return <Fragment key={`inline-text-${segment}-${occurrence}`}>{segment}</Fragment>;
     }
 
     return segment;
+  });
+}
+
+function stableListKeys(items: string[]): Array<{ item: string; key: string }> {
+  const occurrences = new Map<string, number>();
+  return items.map((item) => {
+    const occurrence = (occurrences.get(item) ?? 0) + 1;
+    occurrences.set(item, occurrence);
+    return {
+      item,
+      key: `${item}-${occurrence}`,
+    };
   });
 }

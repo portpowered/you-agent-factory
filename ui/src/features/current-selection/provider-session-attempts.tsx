@@ -49,7 +49,7 @@ export function CollapsibleProviderSessionAttempts({
 
   useEffect(() => {
     setExpanded(false);
-  }, [resetKey]);
+  }, []);
 
   return (
     <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-[0.65rem]">

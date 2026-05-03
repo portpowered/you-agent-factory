@@ -5,7 +5,6 @@ import type {
 } from "../../api/dashboard";
 import type {
   DispatchResponsePayload,
-  FactoryWorkDiagnostics,
   InferenceRequestPayload,
   InferenceResponsePayload,
 } from "../../api/events";

@@ -370,6 +370,14 @@ function getWorkstationNodeByLabel(label: string): HTMLElement {
   return node;
 }
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 function expectFixedReviewWorkstationDimensions(): void {
   const reviewNode = getWorkstationNodeByLabel("Review");
 
@@ -418,7 +426,7 @@ function workstationRequestSection(selection: HTMLElement): HTMLElement {
   return section;
 }
 
-function expectRenderedWorkstationRequest(
+function _expectRenderedWorkstationRequest(
   selection: HTMLElement,
   expected: DashboardRuntimeWorkstationRequest,
 ): void {
@@ -1380,10 +1388,13 @@ async function selectWorkstationRequest(dispatchId: string): Promise<void> {
   const requestHistorySection = within(currentSelection)
     .getByRole("heading", { name: "Request history" })
     .closest("section");
-  expect(requestHistorySection).toBeTruthy();
-  fireEvent.click(within(requestHistorySection!).getByRole("button", { name: "Expand" }));
+  const resolvedRequestHistorySection = requireValue(
+    requestHistorySection,
+    "expected request history section",
+  );
+  fireEvent.click(within(resolvedRequestHistorySection).getByRole("button", { name: "Expand" }));
   fireEvent.click(
-    within(requestHistorySection!).getByRole("button", {
+    within(resolvedRequestHistorySection).getByRole("button", {
       name: new RegExp(`\\(${escapeRegExp(dispatchId)}\\)$`),
     }),
   );
@@ -3060,8 +3071,10 @@ describe("App", () => {
   it("shows active executions from the selected workstation instead of provider history", async () => {
     const reviewExecution =
       activeSnapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
-
-    expect(reviewExecution).toBeDefined();
+    const resolvedReviewExecution = requireValue(
+      reviewExecution,
+      "expected active review execution fixture",
+    );
 
     const snapshot = {
       ...activeSnapshot,
@@ -3070,7 +3083,7 @@ describe("App", () => {
         active_dispatch_ids: ["dispatch-review-active", "dispatch-plan-active"],
         active_executions_by_dispatch_id: {
           "dispatch-plan-active": {
-            ...reviewExecution!,
+            ...resolvedReviewExecution,
             dispatch_id: "dispatch-plan-active",
             started_at: "2026-04-08T12:00:01Z",
             trace_ids: ["trace-plan-active"],
@@ -3087,7 +3100,7 @@ describe("App", () => {
             ],
           },
           "dispatch-review-active": {
-            ...reviewExecution!,
+            ...resolvedReviewExecution,
             transition_id: "review",
             workstation_name: "Review",
             workstation_node_id: "legacy-review-node",

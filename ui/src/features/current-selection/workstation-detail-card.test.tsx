@@ -15,6 +15,14 @@ import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/te
 import { DETAIL_CARD_NOW } from "./detail-card-test-helpers";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 describe("WorkstationDetailCard", () => {
   it("renders selected workstation detail with active workstation runs", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
@@ -27,14 +35,20 @@ describe("WorkstationDetailCard", () => {
         attempt.workstation_name === selectedNode.workstation_name,
     );
 
-    expect(activeExecution).toBeDefined();
-    expect(providerSessions).toBeDefined();
+    const resolvedActiveExecution = requireValue(
+      activeExecution,
+      "expected active workstation execution fixture",
+    );
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected workstation provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
-        activeExecutions={[activeExecution!]}
+        activeExecutions={[resolvedActiveExecution]}
         now={DETAIL_CARD_NOW}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
       />,
     );
@@ -42,21 +56,24 @@ describe("WorkstationDetailCard", () => {
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
     expect(screen.getAllByText(selectedNode.workstation_name).length).toBeGreaterThan(0);
     const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    expect(activeWorkSection).toBeTruthy();
-    expect(within(activeWorkSection!).getByText("Active Story")).toBeTruthy();
-    expect(within(activeWorkSection!).getByText("work-active-story")).toBeTruthy();
-    expect(within(activeWorkSection!).getAllByText("dispatch-review-active").length).toBeGreaterThan(
+    const resolvedActiveWorkSection = requireValue(
+      activeWorkSection,
+      "expected active work section",
+    );
+    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
+    expect(within(resolvedActiveWorkSection).getByText("work-active-story")).toBeTruthy();
+    expect(within(resolvedActiveWorkSection).getAllByText("dispatch-review-active").length).toBeGreaterThan(
       0,
     );
-    expect(within(activeWorkSection!).getByText("4s")).toBeTruthy();
+    expect(within(resolvedActiveWorkSection).getByText("4s")).toBeTruthy();
 
     const summaryHeading = screen.getByRole("heading", { name: "Workstation summary" });
     const runHistoryHeading = screen.getByRole("heading", { name: "Run history" });
     expect(
-      activeWorkSection!.compareDocumentPosition(summaryHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+      resolvedActiveWorkSection.compareDocumentPosition(summaryHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      activeWorkSection!.compareDocumentPosition(runHistoryHeading) &
+      resolvedActiveWorkSection.compareDocumentPosition(runHistoryHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Expand" }).getAttribute("aria-expanded")).toBe(
@@ -65,13 +82,13 @@ describe("WorkstationDetailCard", () => {
     expect(screen.queryByText("Rejected Story")).toBeNull();
 
     const summarySection = summaryHeading.closest("section");
-    expect(summarySection).toBeTruthy();
-    expect(within(summarySection!).getByText("Input work types")).toBeTruthy();
-    expect(within(summarySection!).getByText("Output work types")).toBeTruthy();
-    expect(within(summarySection!).getByText("Active runs")).toBeTruthy();
-    expect(within(summarySection!).getByText("Historical runs")).toBeTruthy();
-    expect(within(summarySection!).getByText("1")).toBeTruthy();
-    expect(within(summarySection!).getByText("2")).toBeTruthy();
+    const resolvedSummarySection = requireValue(summarySection, "expected workstation summary section");
+    expect(within(resolvedSummarySection).getByText("Input work types")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Output work types")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Active runs")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Historical runs")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("1")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("2")).toBeTruthy();
   });
 
   it("renders work selection affordances for active runs and run history", () => {
@@ -86,33 +103,39 @@ describe("WorkstationDetailCard", () => {
     );
     const onSelectWorkID = vi.fn();
 
-    expect(activeExecution).toBeDefined();
-    expect(providerSessions).toBeDefined();
+    const resolvedActiveExecution = requireValue(
+      activeExecution,
+      "expected active workstation execution fixture",
+    );
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected workstation provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
-        activeExecutions={[activeExecution!]}
+        activeExecutions={[resolvedActiveExecution]}
         now={DETAIL_CARD_NOW}
         onSelectWorkID={onSelectWorkID}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
       />,
     );
 
     const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    expect(activeWorkSection).toBeTruthy();
+    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
     fireEvent.click(
-      within(activeWorkSection!).getByRole("button", {
+      within(resolvedActiveWorkSection).getByRole("button", {
         name: "Select work item Active Story",
       }),
     );
     expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
     fireEvent.click(
-      within(runHistorySection!).getByRole("button", {
+      within(resolvedRunHistorySection).getByRole("button", {
         name: "Select work item Rejected Story",
       }),
     );
@@ -171,24 +194,30 @@ describe("WorkstationDetailCard", () => {
       },
     ];
 
-    expect(activeExecution).toBeDefined();
-    expect(providerSessions).toBeDefined();
+    const resolvedActiveExecution = requireValue(
+      activeExecution,
+      "expected active workstation execution fixture",
+    );
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected workstation provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
-        activeExecutions={[activeExecution!]}
+        activeExecutions={[resolvedActiveExecution]}
         now={DETAIL_CARD_NOW}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
         workstationRequests={workstationRequests}
       />,
     );
 
     const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    expect(activeWorkSection).toBeTruthy();
+    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
     fireEvent.click(
-      within(activeWorkSection!).getByRole("button", {
+      within(resolvedActiveWorkSection).getByRole("button", {
         name: "Select workstation request dispatch-review-active",
       }),
     );
@@ -197,10 +226,13 @@ describe("WorkstationDetailCard", () => {
     const requestHistorySection = screen
       .getByRole("heading", { name: "Request history" })
       .closest("section");
-    expect(requestHistorySection).toBeTruthy();
-    fireEvent.click(within(requestHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRequestHistorySection = requireValue(
+      requestHistorySection,
+      "expected request history section",
+    );
+    fireEvent.click(within(resolvedRequestHistorySection).getByRole("button", { name: "Expand" }));
     fireEvent.click(
-      within(requestHistorySection!).getByRole("button", {
+      within(resolvedRequestHistorySection).getByRole("button", {
         name: "Select request Rejected Story (dispatch-review-rejected)",
       }),
     );
@@ -213,10 +245,13 @@ describe("WorkstationDetailCard", () => {
     const activeExecution =
       snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
 
-    expect(activeExecution).toBeDefined();
+    const resolvedActiveExecution = requireValue(
+      activeExecution,
+      "expected active workstation execution fixture",
+    );
 
     const executionWithoutWork = {
-      ...activeExecution!,
+      ...resolvedActiveExecution,
       work_items: undefined,
     };
 
@@ -237,7 +272,7 @@ describe("WorkstationDetailCard", () => {
 
     rerender(
       <WorkstationDetailCard
-        activeExecutions={[activeExecution!]}
+        activeExecutions={[resolvedActiveExecution]}
         now={DETAIL_CARD_NOW}
         providerSessions={[]}
         selectedNode={selectedNode}
@@ -253,11 +288,14 @@ describe("WorkstationDetailCard", () => {
     const activeExecution =
       snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
 
-    expect(activeExecution).toBeDefined();
+    const resolvedActiveExecution = requireValue(
+      activeExecution,
+      "expected active workstation execution fixture",
+    );
 
     render(
       <WorkstationDetailCard
-        activeExecutions={[{ ...activeExecution!, work_items: undefined }]}
+        activeExecutions={[{ ...resolvedActiveExecution, work_items: undefined }]}
         now={DETAIL_CARD_NOW}
         providerSessions={[]}
         selectedNode={selectedNode}
@@ -265,9 +303,9 @@ describe("WorkstationDetailCard", () => {
     );
 
     const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    expect(activeWorkSection).toBeTruthy();
+    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
     expect(
-      within(activeWorkSection!).getByText("Work details unavailable for dispatch", {
+      within(resolvedActiveWorkSection).getByText("Work details unavailable for dispatch", {
         exact: false,
       }),
     ).toBeTruthy();
@@ -284,49 +322,55 @@ describe("WorkstationDetailCard", () => {
         attempt.workstation_name === selectedNode.workstation_name,
     );
 
-    expect(activeExecution).toBeDefined();
-    expect(providerSessions).toBeDefined();
+    const resolvedActiveExecution = requireValue(
+      activeExecution,
+      "expected active workstation execution fixture",
+    );
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected workstation provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
-        activeExecutions={[activeExecution!]}
+        activeExecutions={[resolvedActiveExecution]}
         now={DETAIL_CARD_NOW}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
       />,
     );
 
     const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    expect(activeWorkSection).toBeTruthy();
-    expect(within(activeWorkSection!).getByText("Active Story")).toBeTruthy();
+    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
+    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("Rejected Story")).toBeNull();
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    const expandButton = within(runHistorySection!).getByRole("button", { name: "Expand" });
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    const expandButton = within(resolvedRunHistorySection).getByRole("button", { name: "Expand" });
     fireEvent.click(expandButton);
 
     expect(
-      within(runHistorySection!).getByRole("button", { name: "Collapse" }).getAttribute(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Collapse" }).getAttribute(
         "aria-expanded",
       ),
     ).toBe("true");
-    expect(within(runHistorySection!).getByText("Active Story")).toBeTruthy();
-    expect(within(runHistorySection!).getByText("Rejected Story")).toBeTruthy();
-    expect(within(runHistorySection!).getAllByText("dispatch-review-active").length).toBeGreaterThan(
+    expect(within(resolvedRunHistorySection).getByText("Active Story")).toBeTruthy();
+    expect(within(resolvedRunHistorySection).getByText("Rejected Story")).toBeTruthy();
+    expect(within(resolvedRunHistorySection).getAllByText("dispatch-review-active").length).toBeGreaterThan(
       0,
     );
-    expect(within(activeWorkSection!).getByText("Active Story")).toBeTruthy();
+    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
 
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Collapse" }));
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Collapse" }));
 
     expect(
-      within(runHistorySection!).getByRole("button", { name: "Expand" }).getAttribute(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }).getAttribute(
         "aria-expanded",
       ),
     ).toBe("false");
     expect(screen.queryByText("Rejected Story")).toBeNull();
-    expect(within(activeWorkSection!).getByText("Active Story")).toBeTruthy();
+    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
   });
 
   it("renders explicit Codex session log links from local JSONL metadata", () => {
@@ -364,17 +408,17 @@ describe("WorkstationDetailCard", () => {
     );
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
 
-    const sessionLogLink = within(runHistorySection!).getByRole("link", {
+    const sessionLogLink = within(resolvedRunHistorySection).getByRole("link", {
       name: "Codex session log",
     });
     expect(sessionLogLink.getAttribute("href")).toBe(
       "file:///C:/Users/operator/codex/sess-jsonl.jsonl",
     );
-    expect(within(runHistorySection!).getByText(/codex \/ session_id \/ sess-jsonl/)).toBeTruthy();
-    expect(within(runHistorySection!).queryByText("Session log unavailable")).toBeNull();
+    expect(within(resolvedRunHistorySection).getByText(/codex \/ session_id \/ sess-jsonl/)).toBeTruthy();
+    expect(within(resolvedRunHistorySection).queryByText("Session log unavailable")).toBeNull();
   });
 
   it("falls back to secondary provider metadata when no explicit session log exists", () => {
@@ -386,28 +430,31 @@ describe("WorkstationDetailCard", () => {
         attempt.workstation_name === selectedNode.workstation_name,
     );
 
-    expect(providerSessions).toBeDefined();
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected workstation provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
         activeExecutions={[]}
         now={DETAIL_CARD_NOW}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
       />,
     );
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
 
-    expect(within(runHistorySection!).getAllByText("Session log unavailable").length).toBeGreaterThan(
+    expect(within(resolvedRunHistorySection).getAllByText("Session log unavailable").length).toBeGreaterThan(
       0,
     );
     expect(
-      within(runHistorySection!).getByText(/codex \/ session_id \/ sess-rejected-story/),
+      within(resolvedRunHistorySection).getByText(/codex \/ session_id \/ sess-rejected-story/),
     ).toBeTruthy();
-    expect(within(runHistorySection!).queryByRole("link", { name: "Codex session log" })).toBeNull();
+    expect(within(resolvedRunHistorySection).queryByRole("link", { name: "Codex session log" })).toBeNull();
   });
 
   it("renders repeater rejected history as repeated work while preserving the raw outcome", () => {
@@ -417,23 +464,26 @@ describe("WorkstationDetailCard", () => {
       (attempt) => attempt.outcome === "REJECTED",
     );
 
-    expect(providerSessions).toBeDefined();
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected rejected provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
         activeExecutions={[]}
         now={DETAIL_CARD_NOW}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
       />,
     );
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
 
-    expect(within(runHistorySection!).getByText("Repeated work")).toBeTruthy();
-    expect(within(runHistorySection!).getByText("Raw outcome: REJECTED")).toBeTruthy();
+    expect(within(resolvedRunHistorySection).getByText("Repeated work")).toBeTruthy();
+    expect(within(resolvedRunHistorySection).getByText("Raw outcome: REJECTED")).toBeTruthy();
   });
 
   it("keeps non-repeater rejected history labeled as rejected", () => {
@@ -465,12 +515,12 @@ describe("WorkstationDetailCard", () => {
     );
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
 
-    expect(within(runHistorySection!).getByText("Rejected")).toBeTruthy();
-    expect(within(runHistorySection!).queryByText("Repeated work")).toBeNull();
-    expect(within(runHistorySection!).queryByText("Raw outcome: REJECTED")).toBeNull();
+    expect(within(resolvedRunHistorySection).getByText("Rejected")).toBeTruthy();
+    expect(within(resolvedRunHistorySection).queryByText("Repeated work")).toBeNull();
+    expect(within(resolvedRunHistorySection).queryByText("Raw outcome: REJECTED")).toBeNull();
   });
 
   it("renders selected workstation historical empty state only after expansion", () => {
@@ -491,11 +541,11 @@ describe("WorkstationDetailCard", () => {
     ).toBeNull();
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
 
     expect(
-      within(runHistorySection!).getByText(
+      within(resolvedRunHistorySection).getByText(
         "No workstation runs have been recorded for this workstation yet.",
       ),
     ).toBeTruthy();
@@ -530,23 +580,26 @@ describe("WorkstationDetailCard", () => {
     const summarySection = screen.getByRole("heading", { name: "Workstation summary" }).closest(
       "section",
     );
-    expect(summarySection).toBeTruthy();
-    expect(within(summarySection!).getByText("Historical requests")).toBeTruthy();
-    expect(within(summarySection!).getByText("2")).toBeTruthy();
+    const resolvedSummarySection = requireValue(summarySection, "expected workstation summary section");
+    expect(within(resolvedSummarySection).getByText("Historical requests")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("2")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Run history" })).toBeNull();
 
     const requestHistorySection = screen
       .getByRole("heading", { name: "Request history" })
       .closest("section");
-    expect(requestHistorySection).toBeTruthy();
-    fireEvent.click(within(requestHistorySection!).getByRole("button", { name: "Expand" }));
+    const resolvedRequestHistorySection = requireValue(
+      requestHistorySection,
+      "expected request history section",
+    );
+    fireEvent.click(within(resolvedRequestHistorySection).getByRole("button", { name: "Expand" }));
 
-    expect(within(requestHistorySection!).getByText("request-script-success-story")).toBeTruthy();
-    expect(within(requestHistorySection!).getByText("Script command script-tool")).toBeTruthy();
-    expect(within(requestHistorySection!).getByText("dispatch-review-script-success")).toBeTruthy();
+    expect(within(resolvedRequestHistorySection).getByText("request-script-success-story")).toBeTruthy();
+    expect(within(resolvedRequestHistorySection).getByText("Script command script-tool")).toBeTruthy();
+    expect(within(resolvedRequestHistorySection).getByText("dispatch-review-script-success")).toBeTruthy();
 
     fireEvent.click(
-      within(requestHistorySection!).getByRole("button", {
+      within(resolvedRequestHistorySection).getByRole("button", {
         name: "Select request request-script-success-story (dispatch-review-script-success)",
       }),
     );
@@ -573,29 +626,29 @@ describe("WorkstationDetailCard", () => {
       <WorkstationDetailCard
         activeExecutions={[]}
         now={DETAIL_CARD_NOW}
-        providerSessions={reviewProviderSessions ?? []}
+        providerSessions={requireValue(reviewProviderSessions, "expected review provider sessions fixture")}
         selectedNode={reviewNode}
       />,
     );
 
     let runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
-    expect(within(runHistorySection!).getByText("Rejected Story")).toBeTruthy();
+    let resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
+    expect(within(resolvedRunHistorySection).getByText("Rejected Story")).toBeTruthy();
 
     rerender(
       <WorkstationDetailCard
         activeExecutions={[]}
         now={DETAIL_CARD_NOW}
-        providerSessions={implementProviderSessions ?? []}
+        providerSessions={requireValue(implementProviderSessions, "expected implement provider sessions fixture")}
         selectedNode={implementNode}
       />,
     );
 
     runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
+    resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
     expect(
-      within(runHistorySection!).getByRole("button", { name: "Expand" }).getAttribute(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }).getAttribute(
         "aria-expanded",
       ),
     ).toBe("false");
@@ -610,44 +663,47 @@ describe("WorkstationDetailCard", () => {
       (attempt) => attempt.transition_id === selectedNode.transition_id,
     );
 
-    expect(providerSessions).toBeDefined();
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected workstation provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
         activeExecutions={[]}
         now={DETAIL_CARD_NOW}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
       />,
     );
 
     const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    expect(activeWorkSection).toBeTruthy();
+    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
     expect(
-      within(activeWorkSection!).getByText("No active work is running on this workstation."),
+      within(resolvedActiveWorkSection).getByText("No active work is running on this workstation."),
     ).toBeTruthy();
 
     const summarySection = screen.getByRole("heading", { name: "Workstation summary" }).closest(
       "section",
     );
-    expect(summarySection).toBeTruthy();
-    expect(within(summarySection!).getByText("Active runs")).toBeTruthy();
-    expect(within(summarySection!).getByText("Historical runs")).toBeTruthy();
-    expect(within(summarySection!).getByText("0")).toBeTruthy();
-    expect(within(summarySection!).getByText("1")).toBeTruthy();
+    const resolvedSummarySection = requireValue(summarySection, "expected workstation summary section");
+    expect(within(resolvedSummarySection).getByText("Active runs")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("Historical runs")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("0")).toBeTruthy();
+    expect(within(resolvedSummarySection).getByText("1")).toBeTruthy();
 
     const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    expect(runHistorySection).toBeTruthy();
+    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
     expect(
-      within(runHistorySection!).getByRole("button", { name: "Expand" }).getAttribute(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }).getAttribute(
         "aria-expanded",
       ),
     ).toBe("false");
 
-    fireEvent.click(within(runHistorySection!).getByRole("button", { name: "Expand" }));
+    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
 
-    expect(within(runHistorySection!).getByText("Retry Story")).toBeTruthy();
-    expect(within(runHistorySection!).getByText("Session log unavailable")).toBeTruthy();
+    expect(within(resolvedRunHistorySection).getByText("Retry Story")).toBeTruthy();
+    expect(within(resolvedRunHistorySection).getByText("Session log unavailable")).toBeTruthy();
   });
 
   it("applies shared typography helpers to workstation drill-down cards", () => {
@@ -661,14 +717,20 @@ describe("WorkstationDetailCard", () => {
         attempt.workstation_name === selectedNode.workstation_name,
     );
 
-    expect(activeExecution).toBeDefined();
-    expect(providerSessions).toBeDefined();
+    const resolvedActiveExecution = requireValue(
+      activeExecution,
+      "expected active workstation execution fixture",
+    );
+    const resolvedProviderSessions = requireValue(
+      providerSessions,
+      "expected workstation provider sessions fixture",
+    );
 
     render(
       <WorkstationDetailCard
-        activeExecutions={[activeExecution!]}
+        activeExecutions={[resolvedActiveExecution]}
         now={DETAIL_CARD_NOW}
-        providerSessions={providerSessions ?? []}
+        providerSessions={resolvedProviderSessions}
         selectedNode={selectedNode}
       />,
     );

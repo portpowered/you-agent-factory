@@ -97,7 +97,6 @@ export function DispatchHistoryCard({
         activeTraceID={activeTraceID}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
-        request={request}
         selectedWorkID={selectedWorkID}
         traceTargetId={traceTargetId}
         view={view}
@@ -293,7 +292,6 @@ function DispatchResponseSection({
   activeTraceID,
   onSelectTraceID,
   onSelectWorkID,
-  request,
   selectedWorkID,
   traceTargetId,
   view,
@@ -301,7 +299,6 @@ function DispatchResponseSection({
   activeTraceID?: string | null;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
-  request: SelectedWorkRequestHistoryItem;
   selectedWorkID: string;
   traceTargetId: string;
   view: DispatchHistoryView;

@@ -7,6 +7,7 @@ import {
   type TooltipContentProps,
 } from "recharts";
 import type { Props as RechartsLegendContentProps, LegendPayload } from "recharts/types/component/DefaultLegendContent";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 import { cn } from "../../lib/cn";
 
@@ -72,7 +73,7 @@ export function ChartTooltipContent({
   className,
   label,
   payload,
-}: TooltipContentProps<any, any> & { className?: string }) {
+}: TooltipContentProps<ValueType, NameType> & { className?: string }) {
   const config = useChartConfig();
 
   if (!active || !payload?.length) {

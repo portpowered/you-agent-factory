@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DashboardStreamState } from "../../api/dashboard/types";
 import type { FactoryEvent } from "../../api/events";
@@ -37,7 +37,7 @@ export function useDashboardSnapshot({
   const hasOpenedStreamRef = useRef(false);
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
 
-  const flushQueuedEvents = () => {
+  const flushQueuedEvents = useCallback(() => {
     flushHandleRef.current = null;
     if (queuedEventsRef.current.length === 0) {
       return;
@@ -45,9 +45,9 @@ export function useDashboardSnapshot({
     const events = queuedEventsRef.current;
     queuedEventsRef.current = [];
     appendEvents(events);
-  };
+  }, [appendEvents]);
 
-  const scheduleQueuedFlush = () => {
+  const scheduleQueuedFlush = useCallback(() => {
     if (flushHandleRef.current !== null) {
       return;
     }
@@ -60,10 +60,10 @@ export function useDashboardSnapshot({
     flushHandleRef.current = window.setTimeout(() => {
       flushQueuedEvents();
     }, 16);
-  };
+  }, [flushQueuedEvents]);
 
   useEffect(() => {
-    if (hasOpenedStreamRef.current) {
+    if (hasOpenedStreamRef.current || refreshToken !== 0) {
       queuedEventsRef.current = [];
       resetTimeline();
       setStreamState(DEFAULT_STREAM_STATE);
@@ -94,7 +94,7 @@ export function useDashboardSnapshot({
       flushQueuedEvents();
       stream?.close();
     };
-  }, [appendEvents, debugOptions, refreshToken, resetTimeline]);
+  }, [debugOptions, resetTimeline, flushQueuedEvents, refreshToken, scheduleQueuedFlush]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !debugOptions.memoryDebug) {
@@ -120,7 +120,7 @@ export function useDashboardSnapshot({
       window,
     );
     persistFactoryTimelineMemorySummary(window.localStorage, summary);
-  }, [debugOptions, eventCount, selectedTick]);
+  }, [debugOptions, eventCount]);
 
   const isInitialLoading = selectedTick === 0 && eventCount === 0;
 

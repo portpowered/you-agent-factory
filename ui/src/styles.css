@@ -228,7 +228,7 @@
   }
 
   [data-chart-container] .recharts-legend-item-text {
-    color: rgb(from var(--color-af-ink) r g b / 0.66) !important;
+    color: rgb(from var(--color-af-ink) r g b / 0.66);
   }
 }
 

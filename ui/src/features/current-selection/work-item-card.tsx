@@ -1,4 +1,4 @@
-import { formatDurationFromISO, formatList, formatWorkItemLabel } from "../../components/ui/formatters";
+import { formatList, formatWorkItemLabel } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS, DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/dashboard/typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import type { DashboardTrace, DashboardWorkRelation } from "../../api/dashboard/types";

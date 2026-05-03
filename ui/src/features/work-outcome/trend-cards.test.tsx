@@ -9,6 +9,7 @@ import {
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "./typography";
 import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "./trends";
+import { describe, it, vi, expect } from "vitest";
 
 const failureTrend: FailureTrendModel = {
   currentFailed: 3,
@@ -45,6 +46,14 @@ const timingTrend: TimingTrendModel = {
   ],
   slowestDurationMillis: 3_000,
 };
+
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
 
 describe("dashboard trend cards", () => {
   it("renders the failure trend card with range changes and cause groups", () => {
@@ -140,13 +149,13 @@ describe("dashboard trend cards", () => {
       .getByRole("heading", { name: "Timing trend" })
       .closest("article");
 
-    expect(failureCard).toBeTruthy();
-    expect(reworkCard).toBeTruthy();
-    expect(timingCard).toBeTruthy();
+    const resolvedFailureCard = requireValue(failureCard, "expected failure trend card");
+    const resolvedReworkCard = requireValue(reworkCard, "expected rework trend card");
+    const resolvedTimingCard = requireValue(timingCard, "expected timing trend card");
 
-    const failureScope = within(failureCard!);
-    const reworkScope = within(reworkCard!);
-    const timingScope = within(timingCard!);
+    const failureScope = within(resolvedFailureCard);
+    const reworkScope = within(resolvedReworkCard);
+    const timingScope = within(resolvedTimingCard);
 
     expect(failureScope.getByText("Time range").className).toContain(
       DASHBOARD_SUPPORTING_LABEL_CLASS,

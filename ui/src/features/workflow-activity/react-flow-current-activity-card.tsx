@@ -109,7 +109,7 @@ function useGraphLayout(snapshot: DashboardSnapshot) {
     () => currentActivityTopologyKey(snapshot.topology),
     [snapshot.topology],
   );
-  const layoutTopology = useMemo(() => snapshot.topology, [topologyKey]);
+  const layoutTopology = useMemo(() => snapshot.topology, [snapshot.topology]);
   const [graphLayout, setGraphLayout] = useState<GraphLayout>(EMPTY_GRAPH_LAYOUT);
 
   useEffect(() => {
@@ -360,7 +360,7 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
       />
 
       <div className="relative min-h-0 flex-1">
-        <div
+        <section
           aria-label="Work graph viewport"
           className={cx(
             "relative h-full min-h-0 overflow-hidden rounded-[1.4rem] border transition-colors",
@@ -375,7 +375,6 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
           onDragLeave={imports.onDragLeave}
           onDragOver={imports.onDragOver}
           onDrop={imports.onDrop}
-          role="region"
         >
           <ReactFlow
             edges={graph.edges}
@@ -405,7 +404,7 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
             />
           </ReactFlow>
           <GraphDropOverlay dropState={imports.dropState} />
-        </div>
+        </section>
         {readyImportPreviewState ? (
           <FactoryImportPreviewDialog
             activationState={imports.activationState}

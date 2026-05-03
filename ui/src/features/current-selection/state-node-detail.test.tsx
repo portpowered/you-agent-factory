@@ -4,6 +4,14 @@ import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/dashboard/typ
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { StateNodeDetailCard } from "./state-node-detail";
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 describe("StateNodeDetailCard", () => {
   it("renders selected state node detail with current work item references", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
@@ -11,7 +19,7 @@ describe("StateNodeDetailCard", () => {
       (place) => place.place_id === "story:implemented",
     );
 
-    expect(selectedState).toBeDefined();
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
 
     render(
       <StateNodeDetailCard
@@ -23,7 +31,7 @@ describe("StateNodeDetailCard", () => {
             work_type_id: "story",
           },
         ]}
-        place={selectedState!}
+        place={resolvedSelectedState}
         tokenCount={1}
       />,
     );
@@ -49,9 +57,9 @@ describe("StateNodeDetailCard", () => {
       (place) => place.place_id === "story:implemented",
     );
 
-    expect(selectedState).toBeDefined();
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
 
-    render(<StateNodeDetailCard currentWorkItems={[]} place={selectedState!} tokenCount={0} />);
+    render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
 
     const header = screen.getByTitle("story:implemented");
     const workType = within(header).getByText("story", { selector: "span" });
@@ -67,9 +75,9 @@ describe("StateNodeDetailCard", () => {
       (place) => place.place_id === "story:implemented",
     );
 
-    expect(selectedState).toBeDefined();
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
 
-    render(<StateNodeDetailCard currentWorkItems={[]} place={selectedState!} tokenCount={0} />);
+    render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
 
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
     expect(screen.getByText("State")).toBeTruthy();
@@ -86,12 +94,12 @@ describe("StateNodeDetailCard", () => {
       (place) => place.place_id === "story:complete",
     );
 
-    expect(selectedState).toBeDefined();
+    const resolvedSelectedState = requireValue(selectedState, "expected terminal state fixture");
 
     render(
       <StateNodeDetailCard
         currentWorkItems={[]}
-        place={selectedState!}
+        place={resolvedSelectedState}
         terminalHistoryWorkItems={[
           {
             display_name: "Done Story",
@@ -123,7 +131,7 @@ describe("StateNodeDetailCard", () => {
       (place) => place.place_id === "story:blocked",
     );
 
-    expect(selectedState).toBeDefined();
+    const resolvedSelectedState = requireValue(selectedState, "expected failed state fixture");
 
     render(
       <StateNodeDetailCard
@@ -142,7 +150,7 @@ describe("StateNodeDetailCard", () => {
             },
           },
         }}
-        place={selectedState!}
+        place={resolvedSelectedState}
         terminalHistoryWorkItems={[
           {
             display_name: "Failed Story",
@@ -173,16 +181,16 @@ describe("StateNodeDetailCard", () => {
       (place) => place.place_id === "story:complete",
     );
 
-    expect(selectedState).toBeDefined();
+    const resolvedSelectedState = requireValue(selectedState, "expected terminal state fixture");
 
     const { rerender } = render(
-      <StateNodeDetailCard currentWorkItems={[]} place={selectedState!} tokenCount={0} />,
+      <StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />,
     );
 
     expect(screen.getByText("No work is recorded for this place at the selected tick.")).toBeTruthy();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
 
-    rerender(<StateNodeDetailCard currentWorkItems={[]} place={selectedState!} tokenCount={1} />);
+    rerender(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={1} />);
 
     expect(screen.getByText("Represented work is unavailable for this place at the selected tick.")).toBeTruthy();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
@@ -195,7 +203,7 @@ describe("StateNodeDetailCard", () => {
     );
     const onSelectWorkItem = vi.fn();
 
-    expect(selectedState).toBeDefined();
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
 
     render(
       <StateNodeDetailCard
@@ -208,7 +216,7 @@ describe("StateNodeDetailCard", () => {
           },
         ]}
         onSelectWorkItem={onSelectWorkItem}
-        place={selectedState!}
+        place={resolvedSelectedState}
         tokenCount={1}
       />,
     );

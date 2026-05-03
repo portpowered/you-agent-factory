@@ -1,6 +1,5 @@
 import type {
   DashboardSnapshot,
-  DashboardTrace,
 } from "../../api/dashboard/types";
 
 export type ThroughputRangeID = "5m" | "15m" | "session";
@@ -132,7 +131,7 @@ export interface TimingTrendModel {
 }
 
 const TREND_WIDTH = 320;
-const TREND_HEIGHT = 120;
+const _TREND_HEIGHT = 120;
 const TREND_PADDING = 14;
 const MAX_RETAINED_SAMPLE_AGE_MILLIS = 60 * 60 * 1000;
 
@@ -294,7 +293,7 @@ function selectVisibleSamples(
   return visibleSamples.length > 0 ? visibleSamples : samples.slice(-1);
 }
 
-function buildTrendPoints<Value>(
+function _buildTrendPoints<Value>(
   samples: ThroughputSample[],
   selectValue: (sample: ThroughputSample, index: number) => Value,
 ): { value: Value; x: number }[] {
@@ -364,13 +363,13 @@ function countQueuedWork(snapshot: DashboardSnapshot): number {
   );
 }
 
-function buildPath(points: { x: number; y: number }[]): string {
+function _buildPath(points: { x: number; y: number }[]): string {
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
     .join(" ");
 }
 
-function isReworkDispatch(outcome: string): boolean {
+function _isReworkDispatch(outcome: string): boolean {
   const normalizedOutcome = outcome.toLowerCase();
   return (
     normalizedOutcome.includes("reject") ||

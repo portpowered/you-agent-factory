@@ -172,7 +172,7 @@ function dedupeRelations(relations: DashboardWorkRelation[]): DashboardWorkRelat
 }
 
 function uniqueNonEmptyStrings(values: Array<string | undefined>): string[] {
-  return [...new Set(values.filter((value): value is string => Boolean(value && value.trim())))];
+  return [...new Set(values.filter((value): value is string => Boolean(value?.trim())))];
 }
 
 function sortedUniqueNonEmptyStrings(values: Array<string | undefined>): string[] {

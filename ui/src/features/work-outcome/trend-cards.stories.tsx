@@ -74,6 +74,14 @@ function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
   expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
 }
 
+function requireValue<T>(value: T | null | undefined, message: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
 export default {
   title: "Agent Factory/Dashboard/Trend Cards",
   component: FailureTrendCard,
@@ -105,12 +113,12 @@ export const TypographyScale = {
     const timingCard = canvas.getByRole("heading", { name: "Timing trend" }).closest("article");
     const failureChart = canvas.getByRole("img", { name: "Failed work trend for 15m" });
 
-    expect(failureCard).toBeTruthy();
-    expect(timingCard).toBeTruthy();
+    const resolvedFailureCard = requireValue(failureCard, "expected failure trend card");
+    const resolvedTimingCard = requireValue(timingCard, "expected timing trend card");
     expectTrendChartContract(failureChart, "failureTrend");
 
-    const failureScope = within(failureCard!);
-    const timingScope = within(timingCard!);
+    const failureScope = within(resolvedFailureCard);
+    const timingScope = within(resolvedTimingCard);
 
     expect(failureScope.getByText("Time range").className).toContain(
       DASHBOARD_SUPPORTING_LABEL_CLASS,

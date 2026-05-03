@@ -73,6 +73,7 @@ export function WorkstationDetailCard({
       />
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
+          key={selectedNode.node_id}
           now={now}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
           requests={workstationRequests}
@@ -80,6 +81,7 @@ export function WorkstationDetailCard({
         />
       ) : (
         <CollapsibleProviderSessionAttempts
+          key={selectedNode.node_id}
           attempts={providerSessions}
           emptyMessage="No workstation runs have been recorded for this workstation yet."
           onSelectWorkID={onSelectWorkID}
@@ -152,7 +154,7 @@ function CollapsibleWorkstationRequests({
 
   useEffect(() => {
     setExpanded(false);
-  }, [resetKey]);
+  }, []);
 
   return (
     <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-[0.65rem]">
@@ -261,7 +263,7 @@ function WorkstationActiveWorkList({
                 ? execution.work_items
                 : [undefined];
 
-            return workItems.map((workItem, index) => {
+            return workItems.map((workItem) => {
               const request = workstationRequestsByDispatchID?.[execution.dispatch_id];
               const traceID = workItem?.trace_id ?? execution.trace_ids?.[0];
               const workIdentifier = workItem?.work_id ?? traceID ?? "Unavailable";
@@ -274,7 +276,7 @@ function WorkstationActiveWorkList({
                     "grid min-w-0 gap-[0.45rem] rounded-lg border border-af-info/20 bg-af-info/8 px-3 py-2",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
-                  key={`${execution.dispatch_id}-${workIdentifier}-${index}`}
+                  key={`${execution.dispatch_id}-${workIdentifier}`}
                 >
                   <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
                   <dl

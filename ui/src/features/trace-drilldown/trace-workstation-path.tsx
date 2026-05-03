@@ -121,7 +121,7 @@ export function TraceWorkstationPath({
     return () => {
       cancelled = true;
     };
-  }, [graph.edges, graph.nodes, graphDimensions, layoutKey]);
+  }, [graph.edges, graph.nodes, graphDimensions]);
 
   const baseNodes = useMemo(() => {
     const positionsByID = new Map(

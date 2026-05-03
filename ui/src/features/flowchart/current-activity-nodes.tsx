@@ -1,13 +1,10 @@
-import type { Node } from "@xyflow/react";
+
 
 import type { WorkstationNodeData } from "./current-activity-workstation-node";
 import {
   ConstraintNodeView,
   type ConstraintNodeData,
-  type CurrentActivityConstraintNode,
   type CurrentActivityPlaceNode,
-  type CurrentActivityResourceNode,
-  type CurrentActivityStatePositionNode,
   ResourceNodeView,
   type ResourceNodeData,
   StatePositionNodeView,

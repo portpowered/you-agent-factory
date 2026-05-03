@@ -28,26 +28,32 @@ export function ActivityGraphNodeShell({
       )}
       data-current-activity-node-type={nodeType}
     >
-      {Array.from({ length: incomingHandleCount }).map((_, index) => (
-        <Handle
-          className="opacity-0"
-          id={`in-${index}`}
-          key={`in-${index}`}
-          position={Position.Left}
-          style={{ top: handlePosition(index, incomingHandleCount) }}
-          type="target"
-        />
-      ))}
-      {Array.from({ length: outgoingHandleCount }).map((_, index) => (
-        <Handle
-          className="opacity-0"
-          id={`out-${index}`}
-          key={`out-${index}`}
-          position={Position.Right}
-          style={{ top: handlePosition(index, outgoingHandleCount) }}
-          type="source"
-        />
-      ))}
+      {Array.from({ length: incomingHandleCount }, (_, handleNumber) => {
+        const top = handlePosition(handleNumber, incomingHandleCount);
+        return (
+          <Handle
+            className="opacity-0"
+            id={`in-${top}`}
+            key={`in-${top}`}
+            position={Position.Left}
+            style={{ top }}
+            type="target"
+          />
+        );
+      })}
+      {Array.from({ length: outgoingHandleCount }, (_, handleNumber) => {
+        const top = handlePosition(handleNumber, outgoingHandleCount);
+        return (
+          <Handle
+            className="opacity-0"
+            id={`out-${top}`}
+            key={`out-${top}`}
+            position={Position.Right}
+            style={{ top }}
+            type="source"
+          />
+        );
+      })}
       {children}
     </article>
   );
