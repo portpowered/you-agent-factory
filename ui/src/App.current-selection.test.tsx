@@ -696,6 +696,9 @@ describe("App current selection", () => {
     );
     expect(within(scriptSuccessCard).getByText("script-tool")).toBeTruthy();
     expect(
+      within(scriptSuccessCard).getByRole("region", { name: "Script attempts" }),
+    ).toBeTruthy();
+    expect(
       within(scriptSuccessCard).getByText("script success stdout"),
     ).toBeTruthy();
     expect(

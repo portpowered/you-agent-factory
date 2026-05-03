@@ -2,6 +2,7 @@ import type {
   DashboardInferenceAttempt,
   SelectedWorkRequestHistoryItem,
 } from "./detail-card-types";
+import type { DashboardScriptRequest, DashboardScriptResponse } from "../../api/dashboard/types";
 
 export function isProjectedWorkstationRequest(
   request: SelectedWorkRequestHistoryItem,
@@ -157,6 +158,30 @@ export function requestInferenceAttempts(
 
     return left.inference_request_id.localeCompare(right.inference_request_id);
   });
+}
+
+export function scriptAttemptNumber(
+  script: DashboardScriptRequest | DashboardScriptResponse | undefined,
+) {
+  return script?.attempt;
+}
+
+export function scriptRequestID(
+  script: DashboardScriptRequest | DashboardScriptResponse | undefined,
+) {
+  return script?.script_request_id ?? script?.scriptRequestId;
+}
+
+export function scriptResponseDurationMillis(response: DashboardScriptResponse | undefined) {
+  return response?.duration_millis ?? response?.durationMillis;
+}
+
+export function scriptResponseExitCode(response: DashboardScriptResponse | undefined) {
+  return response?.exit_code ?? response?.exitCode;
+}
+
+export function scriptResponseFailureType(response: DashboardScriptResponse | undefined) {
+  return response?.failure_type ?? response?.failureType;
 }
 
 export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {

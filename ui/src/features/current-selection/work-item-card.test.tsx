@@ -1139,6 +1139,16 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(within(dispatchCard).getByText("--work")).toBeTruthy();
+    const scriptAttempts = within(dispatchCard).getByRole("region", {
+      name: "Script attempts",
+    });
+    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
+    expect(within(scriptAttempts).getByText("PENDING")).toBeTruthy();
+    expect(
+      within(scriptAttempts).getByText(
+        "No script response attempt has been recorded yet.",
+      ),
+    ).toBeTruthy();
     expect(
       within(dispatchCard).getByText(
         "No script response yet for this dispatch.",
@@ -1191,6 +1201,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
+    const scriptAttempts = within(dispatchCard).getByRole("region", {
+      name: "Script attempts",
+    });
+    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
+    expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
     expect(
       within(dispatchCard).getByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_request
@@ -1209,6 +1224,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getByText(/script success stdout/),
     ).toBeTruthy();
+    expect(within(scriptAttempts).getAllByRole("article")).toHaveLength(2);
     expect(within(dispatchCard).queryByText("Provider session")).toBeNull();
   });
 
@@ -1252,6 +1268,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getAllByText("TIMED_OUT").length,
     ).toBeGreaterThan(0);
+    const scriptAttempts = within(dispatchCard).getByRole("region", {
+      name: "Script attempts",
+    });
+    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
+    expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
     expect(within(dispatchCard).getAllByText("TIMEOUT").length).toBeGreaterThan(
       0,
     );
