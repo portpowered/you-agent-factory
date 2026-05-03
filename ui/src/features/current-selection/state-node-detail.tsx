@@ -1,8 +1,8 @@
-import { formatWorkItemLabel } from "../../components/dashboard/formatters";
+import { formatWorkItemLabel } from "../../components/ui/formatters";
 import {
   formatDashboardPlaceLabel,
   getDashboardPlaceLabelParts,
-} from "../../components/dashboard/place-labels";
+} from "../../components/ui/place-labels";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,

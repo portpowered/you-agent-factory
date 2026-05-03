@@ -3,7 +3,7 @@ import {
   useState,
 } from "react";
 
-import { formatDurationFromISO, formatList, formatWorkItemLabel } from "../../components/dashboard/formatters";
+import { formatDurationFromISO, formatList, formatWorkItemLabel } from "../../components/ui/formatters";
 import { cx } from "../../components/dashboard/classnames";
 import {
   DASHBOARD_BODY_TEXT_CLASS,

@@ -6,7 +6,7 @@ import { cx } from "../../components/dashboard/classnames";
 import {
   formatProviderSession,
   formatTraceOutcome,
-} from "../../components/dashboard/formatters";
+} from "../../components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,

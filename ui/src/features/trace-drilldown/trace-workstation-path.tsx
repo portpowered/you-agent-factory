@@ -24,7 +24,7 @@ import {
 import {
   formatTraceOutcome,
   formatTypedWorkItemLabel,
-} from "../../components/dashboard/formatters";
+} from "../../components/ui/formatters";
 import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,

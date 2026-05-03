@@ -34,7 +34,7 @@ import {
   runtimeDetailsFixtureIDs,
   runtimeDetailsTimelineEvents,
 } from "./components/dashboard/fixtures";
-import { formatDurationMillis } from "./components/dashboard/formatters";
+import { formatDurationMillis } from "./components/ui/formatters";
 import {
   semanticWorkflowDashboardSnapshot,
   twentyNodeDashboardSnapshot,

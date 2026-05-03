@@ -5,7 +5,7 @@ import {
   formatDurationMillis,
   formatTraceOutcome,
   formatTypedWorkItemLabel,
-} from "../../components/dashboard/formatters";
+} from "../../components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
