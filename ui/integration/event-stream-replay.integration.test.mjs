@@ -730,6 +730,15 @@ async function assertFactoryExportRoundTrip() {
     await writeFile(downloadPath, new Uint8Array(download.bytes));
 
     expect(download.filename).toBe("roundtrip-browser-export.png");
+    await exportDialog
+      .getByText(
+        "Downloaded roundtrip-browser-export.png. You can close this dialog or export another PNG with a different name or cover image.",
+      )
+      .waitFor({
+        state: "visible",
+        timeout: uiInteractionTimeoutMs,
+      });
+    await exportDialog.getByRole("button", { exact: true, name: "Close" }).click();
     await page.getByRole("heading", { name: "Export factory" }).waitFor({
       state: "hidden",
       timeout: uiInteractionTimeoutMs,

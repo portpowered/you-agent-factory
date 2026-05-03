@@ -50,6 +50,32 @@ describe("ExportFactoryDialog", () => {
     expect(writeFactoryExportPng).not.toHaveBeenCalled();
   });
 
+  it("validates cleared and non-image file selections before export", async () => {
+    render(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Factory Aurora"
+        isOpen
+        onClose={() => {}}
+      />,
+    );
+
+    const imageInput = screen.getByLabelText("Cover image");
+    fireEvent.change(imageInput, { target: { files: [] } });
+
+    expect(await screen.findByText("Choose a cover image before exporting.")).toBeTruthy();
+    expect(imageInput.getAttribute("aria-invalid")).toBe("true");
+
+    fireEvent.change(imageInput, {
+      target: {
+        files: [new File(["notes"], "notes.txt", { type: "text/plain" })],
+      },
+    });
+
+    expect(await screen.findByText("Choose an image file before exporting.")).toBeTruthy();
+    expect(writeFactoryExportPng).not.toHaveBeenCalled();
+  });
+
   it("disables actions while the export is being prepared", () => {
     render(
       <ExportFactoryDialog
@@ -67,7 +93,7 @@ describe("ExportFactoryDialog", () => {
     expect(screen.getByText("Loading the current authored factory definition.")).toBeTruthy();
   });
 
-  it("exports the selected image with the trimmed factory name and closes the dialog", async () => {
+  it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {
     let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null = null;
     vi.mocked(writeFactoryExportPng).mockImplementation(
       () =>
@@ -124,7 +150,38 @@ describe("ExportFactoryDialog", () => {
         filename: "factory-aurora.png",
       });
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status").textContent).toContain("Downloaded factory-aurora.png.");
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("shows a visible export failure without closing the shared dialog", async () => {
+    vi.mocked(writeFactoryExportPng).mockResolvedValue({
+      error: new Error("PNG encoding failed"),
+      ok: false,
+    });
+    const onClose = vi.fn();
+    render(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Factory Aurora"
+        isOpen
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Cover image"), {
+      target: {
+        files: [new File(["binary"], "cover.png", { type: "image/png" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+
+    const errorPanel = await screen.findByRole("alert");
+    expect(errorPanel.textContent).toContain("PNG encoding failed");
+    expect(screen.getByRole("dialog", { name: "Export factory" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(downloadBlobAsFile).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
-

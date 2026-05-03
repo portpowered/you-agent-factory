@@ -1,4 +1,4 @@
-import { expect, fireEvent, within } from "storybook/test";
+import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { ExportFactoryDialog } from "./export-factory-dialog";
 
@@ -10,6 +10,7 @@ const factory = {
 export default {
   title: "Agent Factory/Dashboard/Export Factory Dialog",
   component: ExportFactoryDialog,
+  tags: ["test"],
 };
 
 export const Ready = {
@@ -23,11 +24,22 @@ export const Ready = {
     const canvas = within(canvasElement.ownerDocument.body);
     const dialog = await canvas.findByRole("dialog", { name: "Export factory" });
     const scope = within(dialog);
+    const nameInput = scope.getByRole("textbox", { name: "Factory name" });
+    const imageInput = scope.getByLabelText("Cover image");
+    const cancelButton = scope.getByRole("button", { name: "Cancel" });
+    const exportButton = scope.getByRole("button", { name: "Export PNG" });
 
-    await expect(scope.getByRole("textbox", { name: "Factory name" })).toHaveValue(
-      "Factory Aurora",
-    );
-    await expect(scope.getByRole("button", { name: "Export PNG" })).toBeEnabled();
+    await expect(nameInput).toHaveValue("Factory Aurora");
+    await expect(exportButton).toBeEnabled();
+
+    nameInput.focus();
+    await expect(nameInput).toHaveFocus();
+    await userEvent.tab();
+    await expect(imageInput).toHaveFocus();
+    await userEvent.tab();
+    await expect(cancelButton).toHaveFocus();
+    await userEvent.tab();
+    await expect(exportButton).toHaveFocus();
   },
 };
 
@@ -66,4 +78,3 @@ export const Preparing = {
     await expect(scope.getByText("Loading the current authored factory definition.")).toBeVisible();
   },
 };
-

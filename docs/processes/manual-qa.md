@@ -23,7 +23,8 @@ After the preview server starts, open `http://127.0.0.1:4173` in a browser and s
 Use this checklist for the shadcn primitive migration lane and similar dashboard-control changes.
 
 - Submit work card: request name, request text, and work type stay labeled, keyboard-focusable, and preserve disabled and busy states.
-- Export PNG flow: export trigger opens the dialog, validation text renders when input is invalid, and export actions keep disabled and busy states.
+- Export PNG flow: export trigger opens the dialog, validation text renders when input is invalid, export actions keep disabled and busy states, and a successful download leaves a visible success acknowledgment before dismissal.
+- Import preview flow: preview image, dropped filename, cancel, activate, and close controls stay keyboard-reachable, and the dialog remains readable at mobile, tablet, and desktop viewport widths.
 - Completed and failed work card: expand and collapse controls remain keyboard-operable and selected work rows still update the current-selection panel.
 - Trace drill-down card: selectable work-item controls still update the trace detail surface and dispatch grid.
 - Work outcome chart: loading, empty, error, and ready states render explicitly, and sparse series do not appear as fabricated zero-value lines.
@@ -31,9 +32,9 @@ Use this checklist for the shadcn primitive migration lane and similar dashboard
 
 ## Latest Evidence
 
-Date: `2026-05-01`
+Date: `2026-05-03`
 
 - `cd ui && bun run build-storybook` passed.
-- `cd ui && bun run test-storybook` passed in a browser-backed runner.
+- `cd ui && bun run test-storybook` passed in a browser-backed runner, including export and import preview dialog keyboard-reachability stories plus the dedicated responsive verification script.
 - `cd ui && bun run build` passed.
-- `cd ui && bun run preview` served the migrated dashboard locally for viewport spot checks.
+- `cd ui && bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for `ExportFactoryDialog` and `DashboardImportPreviewDialog`, confirming mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) dialog bounds, visible controls, and no horizontal overflow in headless Chromium.
