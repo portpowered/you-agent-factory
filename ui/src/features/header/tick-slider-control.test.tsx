@@ -7,6 +7,8 @@ import { FACTORY_EVENT_TYPES } from "../../api/events";
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { describe, afterEach, it, expect } from "vitest";
 
+type TimelineWorldState = ReturnType<typeof useFactoryTimelineStore.getState>["worldViewCache"][number];
+
 function timelineEvent(
   id: string,
   tick: number,
@@ -91,5 +93,54 @@ describe("TickSliderControl", () => {
     expect(currentButton.disabled).toBe(true);
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(9);
+  });
+
+  it("falls back to zero bounds when no timeline ticks are available", () => {
+    useFactoryTimelineStore.setState({
+      events: [],
+      latestTick: 0,
+      mode: "fixed",
+      selectedTick: 7,
+      worldViewCache: {} as Record<number, TimelineWorldState>,
+    });
+
+    render(<TickSliderControl />);
+
+    const slider = screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" });
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", { name: "Current" });
+
+    expect(slider.disabled).toBe(true);
+    expect(slider.min).toBe("0");
+    expect(slider.max).toBe("0");
+    expect(slider.value).toBe("0");
+    expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
+    expect(currentButton.disabled).toBe(true);
+  });
+
+  it("ignores non-numeric cached ticks and clamps the selected tick to cached bounds", () => {
+    useFactoryTimelineStore.setState({
+      events: [],
+      latestTick: 0,
+      mode: "fixed",
+      selectedTick: 9,
+      worldViewCache: {
+        2: {} as TimelineWorldState,
+        4: {} as TimelineWorldState,
+        NaN: {} as TimelineWorldState,
+      } as Record<number, TimelineWorldState>,
+    });
+
+    render(<TickSliderControl />);
+
+    const slider = screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" });
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", { name: "Current" });
+
+    expect(slider.disabled).toBe(false);
+    expect(slider.min).toBe("2");
+    expect(slider.max).toBe("4");
+    expect(slider.value).toBe("4");
+    expect(screen.getByText("Tick 4 of 4")).toBeTruthy();
+    expect(currentButton.disabled).toBe(false);
+    expect(currentButton.className).not.toContain("opacity-75");
   });
 });
