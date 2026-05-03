@@ -33,8 +33,8 @@ export function ActivityGraphNodeShell({
         return (
           <Handle
             className="opacity-0"
-            id={`in-${top}`}
-            key={`in-${top}`}
+            id={`in-${handleNumber}`}
+            key={`in-${handleNumber}`}
             position={Position.Left}
             style={{ top }}
             type="target"
@@ -46,8 +46,8 @@ export function ActivityGraphNodeShell({
         return (
           <Handle
             className="opacity-0"
-            id={`out-${top}`}
-            key={`out-${top}`}
+            id={`out-${handleNumber}`}
+            key={`out-${handleNumber}`}
             position={Position.Right}
             style={{ top }}
             type="source"
