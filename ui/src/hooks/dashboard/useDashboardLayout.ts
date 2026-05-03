@@ -117,6 +117,12 @@ function mergeDashboardLayout(
   });
 }
 
+export function reloadDashboardLayoutFromStorage(): void {
+  useDashboardLayoutStore.setState({
+    dashboardLayout: readStoredDashboardLayout(),
+  });
+}
+
 function migrateDashboardLayout(layout: AgentBentoLayoutItem[]): AgentBentoLayoutItem[] {
   const normalizedLayout = migrateTraceLayout(migrateWorkOutcomeLayout(layout));
 

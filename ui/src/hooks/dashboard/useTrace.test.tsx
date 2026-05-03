@@ -1,423 +1,153 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { FACTORY_EVENT_TYPES } from "../../api/events";
-import type { FactoryEvent } from "../../api/events";
-import { TraceWorkstationPath } from "../../features/trace-drilldown/trace-workstation-path";
-import { buildFactoryTimelineSnapshot } from "../../state/factoryTimelineStore";
-import { buildReplayFixtureTimelineSnapshot } from "../../testing/replay-fixtures";
 import { expandTraceWithCausalPredecessors } from "./useTrace";
+import type { DashboardTrace } from "../../api/dashboard/types";
+import { describe, expect, it } from "vitest";
 
-vi.mock("../../features/trace-drilldown/trace-elk-layout", () => ({
-  getCachedTraceGraphLayout: () => null,
-  async layoutTraceGraphWithElk<TNode>(nodes: TNode[]): Promise<TNode[]> {
-    return nodes;
-  },
-  traceGraphLayoutKey: () => "trace-layout-test",
-}));
-
-vi.mock("@xyflow/react", async () => {
+function buildTrace(
+  traceID: string,
+  overrides: Partial<DashboardTrace> = {},
+): DashboardTrace {
   return {
-    Background: () => null,
-    Controls: () => null,
-    Handle: () => null,
-    MarkerType: { ArrowClosed: "arrowclosed" },
-    Position: { Left: "left", Right: "right" },
-    ReactFlow: ({
-      edges,
-      nodes,
-    }: {
-      edges: Array<{ id: string; source: string; target: string }>;
-      nodes: Array<{ id: string }>;
-    }) => (
-      <div
-        data-edges={JSON.stringify(edges)}
-        data-node-ids={JSON.stringify(nodes.map((node) => node.id))}
-        data-testid="trace-react-flow"
-      />
-    ),
-    applyNodeChanges: (
-      _changes: Array<Record<string, unknown>>,
-      nodes: Array<Record<string, unknown>>,
-    ) => nodes,
-  };
-});
-
-const baseEventTime = Date.parse("2026-04-22T18:00:00Z");
-const reviewWorkstation = {
-  id: "review",
-  inputs: [{ state: "new", work_type: "story" }],
-  name: "Review",
-  outputs: [{ state: "review", work_type: "story" }],
-  worker: "reviewer",
-};
-const completeWorkstation = {
-  id: "complete",
-  inputs: [{ state: "review", work_type: "story" }],
-  name: "Complete",
-  outputs: [{ state: "done", work_type: "story" }],
-  worker: "completer",
-};
-
-function timelineEvent(
-  id: string,
-  tick: number,
-  type: FactoryEvent["type"],
-  payload: FactoryEvent["payload"],
-): FactoryEvent {
-  return {
-    context: {
-      eventTime: new Date(baseEventTime + tick * 1_000).toISOString(),
-      sequence: tick,
-      tick,
-    },
-    id,
-    payload,
-    type,
+    dispatches: [],
+    relations: [],
+    request_ids: [],
+    trace_id: traceID,
+    transition_ids: [],
+    work_ids: [],
+    work_items: [],
+    workstation_sequence: [],
+    ...overrides,
   };
 }
 
-function withContext(
-  event: FactoryEvent,
-  context: Partial<FactoryEvent["context"]>,
-): FactoryEvent {
-  return {
-    ...event,
-    context: {
-      ...event.context,
-      ...context,
-    },
-  };
-}
-
-function renderedEdgePairs(): string[] {
-  const edgePayload = screen.getByTestId("trace-react-flow").getAttribute("data-edges");
-  if (!edgePayload) {
-    throw new Error("Expected mock React Flow edges to be captured.");
-  }
-
-  return (JSON.parse(edgePayload) as Array<{ source: string; target: string }>)
-    .map((edge) => `${edge.source}->${edge.target}`)
-    .sort();
-}
-
-function buildInitialStructureEvent(): FactoryEvent {
-  return timelineEvent("event-initial-structure", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-    factory: {
-      work_types: [
+describe("expandTraceWithCausalPredecessors", () => {
+  it("returns the original trace when no indexed predecessors exist", () => {
+    const trace = buildTrace("trace-current", {
+      dispatches: [
         {
-          name: "story",
-          states: [
-            { name: "new", type: "INITIAL" },
-            { name: "review", type: "PROCESSING" },
-            { name: "done", type: "TERMINAL" },
-          ],
+          dispatch_id: "dispatch-current",
+          end_time: "2026-04-22T18:00:02.000Z",
+          outcome: "ACCEPTED",
+          previous_chaining_trace_ids: ["trace-missing"],
+          start_time: "2026-04-22T18:00:01.000Z",
+          transition_id: "review",
         },
       ],
-      workstations: [reviewWorkstation, completeWorkstation],
-    },
+      request_ids: ["request-current"],
+      transition_ids: ["review"],
+      work_ids: ["work-current"],
+      workstation_sequence: ["Review"],
+    });
+
+    expect(expandTraceWithCausalPredecessors(trace, {})).toBe(trace);
   });
-}
 
-function buildFanInTimelineEvents(): FactoryEvent[] {
-  const workRequest = withContext(
-    timelineEvent("event-work-request", 2, FACTORY_EVENT_TYPES.workRequest, {
-      source: "api",
-      type: "FACTORY_REQUEST_BATCH",
-      works: [
+  it("merges predecessor traces into a single ordered trace view", () => {
+    const predecessorTrace = buildTrace("trace-b", {
+      dispatches: [
         {
-          current_chaining_trace_id: "chain-a",
-          name: "Plan Input",
-          trace_id: "chain-a",
-          work_id: "work-plan-input",
-          work_type_id: "story",
-        },
-        {
-          current_chaining_trace_id: "chain-b",
-          name: "Research Input",
-          trace_id: "chain-b",
-          work_id: "work-research-input",
-          work_type_id: "story",
+          dispatch_id: "dispatch-b",
+          end_time: "2026-04-22T18:00:02.000Z",
+          outcome: "ACCEPTED",
+          start_time: "2026-04-22T18:00:01.000Z",
+          transition_id: "research",
+          workstation_name: "Research",
         },
       ],
-    }),
-    {
-      requestId: "request-chain",
-      traceIds: ["chain-a", "chain-b"],
-      workIds: ["work-plan-input", "work-research-input"],
-    },
-  );
-  const planDispatchRequest = withContext(
-    timelineEvent("event-plan-dispatch-request", 3, FACTORY_EVENT_TYPES.dispatchRequest, {
-      current_chaining_trace_id: "chain-a",
-      dispatchId: "dispatch-plan",
-      inputs: [
+      request_ids: ["request-b"],
+      relations: [
         {
-          current_chaining_trace_id: "chain-a",
-          name: "Plan Input",
-          trace_id: "chain-a",
-          work_id: "work-plan-input",
-          work_type_id: "story",
+          target_work_id: "work-b",
+          type: "blocks",
         },
       ],
-      transitionId: "review",
-      workstation: reviewWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-plan",
-      traceIds: ["chain-a"],
-      workIds: ["work-plan-input"],
-    },
-  );
-  const planDispatchResponse = withContext(
-    timelineEvent("event-plan-dispatch-response", 4, FACTORY_EVENT_TYPES.dispatchResponse, {
-      current_chaining_trace_id: "chain-a",
-      dispatchId: "dispatch-plan",
-      durationMillis: 450,
-      outcome: "ACCEPTED",
-      outputWork: [
+      transition_ids: ["research"],
+      work_ids: ["work-b"],
+      workstation_sequence: ["Research"],
+    });
+    const currentTrace = buildTrace("trace-a", {
+      dispatches: [
         {
-          current_chaining_trace_id: "chain-a",
-          name: "Reviewed Story",
-          trace_id: "chain-a",
-          work_id: "work-reviewed-story",
-          work_type_id: "story",
+          dispatch_id: "dispatch-a",
+          end_time: "2026-04-22T18:00:04.000Z",
+          input_items: [
+            {
+              display_name: "Research context",
+              previous_chaining_trace_ids: ["trace-b"],
+              work_id: "work-b",
+              work_type_id: "story",
+            },
+          ],
+          outcome: "ACCEPTED",
+          start_time: "2026-04-22T18:00:03.000Z",
+          transition_id: "implement",
+          workstation_name: "Implement",
         },
       ],
-      transitionId: "review",
-      workstation: reviewWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-plan",
-      traceIds: ["chain-a"],
-      workIds: ["work-plan-input"],
-    },
-  );
-  const researchDispatchRequest = withContext(
-    timelineEvent("event-research-dispatch-request", 5, FACTORY_EVENT_TYPES.dispatchRequest, {
-      current_chaining_trace_id: "chain-b",
-      dispatchId: "dispatch-research",
-      inputs: [
-        {
-          current_chaining_trace_id: "chain-b",
-          name: "Research Input",
-          trace_id: "chain-b",
-          work_id: "work-research-input",
-          work_type_id: "story",
-        },
-      ],
-      transitionId: "review",
-      workstation: reviewWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-research",
-      traceIds: ["chain-b"],
-      workIds: ["work-research-input"],
-    },
-  );
-  const researchDispatchResponse = withContext(
-    timelineEvent("event-research-dispatch-response", 6, FACTORY_EVENT_TYPES.dispatchResponse, {
-      current_chaining_trace_id: "chain-b",
-      dispatchId: "dispatch-research",
-      durationMillis: 420,
-      outcome: "ACCEPTED",
-      outputWork: [
-        {
-          current_chaining_trace_id: "chain-b",
-          name: "Research Context",
-          trace_id: "chain-b",
-          work_id: "work-research-context",
-          work_type_id: "story",
-        },
-      ],
-      transitionId: "review",
-      workstation: reviewWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-research",
-      traceIds: ["chain-b"],
-      workIds: ["work-research-input"],
-    },
-  );
-  const implementDispatchRequest = withContext(
-    timelineEvent("event-implement-dispatch-request", 7, FACTORY_EVENT_TYPES.dispatchRequest, {
-      current_chaining_trace_id: "chain-a",
-      dispatchId: "dispatch-implement",
-      inputs: [
-        {
-          current_chaining_trace_id: "chain-a",
-          name: "Reviewed Story",
-          trace_id: "chain-a",
-          work_id: "work-reviewed-story",
-          work_type_id: "story",
-        },
-        {
-          current_chaining_trace_id: "chain-b",
-          name: "Research Context",
-          trace_id: "chain-b",
-          work_id: "work-research-context",
-          work_type_id: "story",
-        },
-      ],
-      previous_chaining_trace_ids: ["chain-a", "chain-b"],
-      transitionId: "complete",
-      workstation: completeWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-implement",
-      traceIds: ["chain-a", "chain-b"],
-      workIds: ["work-reviewed-story", "work-research-context"],
-    },
-  );
-  const implementDispatchResponse = withContext(
-    timelineEvent("event-implement-dispatch-response", 8, FACTORY_EVENT_TYPES.dispatchResponse, {
-      current_chaining_trace_id: "chain-a",
-      dispatchId: "dispatch-implement",
-      durationMillis: 900,
-      outcome: "ACCEPTED",
-      outputWork: [
-        {
-          current_chaining_trace_id: "chain-a",
-          name: "Implemented Story",
-          previous_chaining_trace_ids: ["chain-a", "chain-b"],
-          trace_id: "chain-a",
-          work_id: "work-result",
-          work_type_id: "story",
-        },
-      ],
-      previous_chaining_trace_ids: ["chain-a", "chain-b"],
-      transitionId: "complete",
-      workstation: completeWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-implement",
-      traceIds: ["chain-a", "chain-b"],
-      workIds: ["work-reviewed-story", "work-research-context"],
-    },
-  );
+      request_ids: ["request-a"],
+      transition_ids: ["implement"],
+      work_ids: ["work-a"],
+      workstation_sequence: ["Implement"],
+    });
 
-  return [
-    buildInitialStructureEvent(),
-    workRequest,
-    planDispatchRequest,
-    planDispatchResponse,
-    researchDispatchRequest,
-    researchDispatchResponse,
-    implementDispatchRequest,
-    implementDispatchResponse,
-  ];
-}
+    const expanded = expandTraceWithCausalPredecessors(currentTrace, {
+      "work-a": currentTrace,
+      "work-b": predecessorTrace,
+    });
 
-function buildLegacyTimelineEvents(): FactoryEvent[] {
-  const workRequest = withContext(
-    timelineEvent("event-legacy-work-request", 2, FACTORY_EVENT_TYPES.workRequest, {
-      source: "api",
-      type: "FACTORY_REQUEST_BATCH",
-      works: [
-        {
-          name: "Legacy Story",
-          trace_id: "trace-legacy",
-          work_id: "work-legacy",
-          work_type_id: "story",
-        },
-      ],
-    }),
-    {
-      requestId: "request-legacy",
-      traceIds: ["trace-legacy"],
-      workIds: ["work-legacy"],
-    },
-  );
-  const reviewDispatchRequest = withContext(
-    timelineEvent("event-legacy-review-request", 3, FACTORY_EVENT_TYPES.dispatchRequest, {
-      dispatchId: "dispatch-legacy-review",
-      inputs: [
-        {
-          name: "Legacy Story",
-          trace_id: "trace-legacy",
-          work_id: "work-legacy",
-          work_type_id: "story",
-        },
-      ],
-      transitionId: "review",
-      workstation: reviewWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-legacy-review",
-      traceIds: ["trace-legacy"],
-      workIds: ["work-legacy"],
-    },
-  );
-  const reviewDispatchResponse = withContext(
-    timelineEvent("event-legacy-review-response", 4, FACTORY_EVENT_TYPES.dispatchResponse, {
-      dispatchId: "dispatch-legacy-review",
-      durationMillis: 360,
-      outcome: "ACCEPTED",
-      outputWork: [
-        {
-          name: "Legacy Review",
-          trace_id: "trace-legacy",
-          work_id: "work-legacy-reviewed",
-          work_type_id: "story",
-        },
-      ],
-      transitionId: "review",
-      workstation: reviewWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-legacy-review",
-      traceIds: ["trace-legacy"],
-      workIds: ["work-legacy"],
-    },
-  );
-  const completeDispatchRequest = withContext(
-    timelineEvent("event-legacy-complete-request", 5, FACTORY_EVENT_TYPES.dispatchRequest, {
-      dispatchId: "dispatch-legacy-complete",
-      inputs: [
-        {
-          name: "Legacy Review",
-          trace_id: "trace-legacy",
-          work_id: "work-legacy-reviewed",
-          work_type_id: "story",
-        },
-      ],
-      transitionId: "complete",
-      workstation: completeWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-legacy-complete",
-      traceIds: ["trace-legacy"],
-      workIds: ["work-legacy-reviewed"],
-    },
-  );
-  const completeDispatchResponse = withContext(
-    timelineEvent("event-legacy-complete-response", 6, FACTORY_EVENT_TYPES.dispatchResponse, {
-      dispatchId: "dispatch-legacy-complete",
-      durationMillis: 640,
-      outcome: "ACCEPTED",
-      outputWork: [
-        {
-          name: "Legacy Done",
-          trace_id: "trace-legacy",
-          work_id: "work-legacy-done",
-          work_type_id: "story",
-        },
-      ],
-      transitionId: "complete",
-      workstation: completeWorkstation,
-    }),
-    {
-      dispatchId: "dispatch-legacy-complete",
-      traceIds: ["trace-legacy"],
-      workIds: ["work-legacy-reviewed"],
-    },
-  );
+    expect(expanded).toMatchObject({
+      request_ids: ["request-a", "request-b"],
+      transition_ids: ["implement", "research"],
+      work_ids: ["work-a", "work-b"],
+      workstation_sequence: ["Research", "Implement"],
+    });
+    expect(expanded?.dispatches.map((dispatch) => dispatch.dispatch_id)).toEqual([
+      "dispatch-b",
+      "dispatch-a",
+    ]);
+    expect(expanded?.work_items).toBeUndefined();
+  });
 
-  return [
-    buildInitialStructureEvent(),
-    workRequest,
-    reviewDispatchRequest,
-    reviewDispatchResponse,
-    completeDispatchRequest,
-    completeDispatchResponse,
-  ];
-}
+  it("deduplicates repeated predecessor dispatches and relations", () => {
+    const sharedRelation = {
+      request_id: "request-shared",
+      source_work_id: "work-b",
+      target_work_id: "work-a",
+      type: "blocks" as const,
+    };
+    const predecessorTrace = buildTrace("trace-b", {
+      dispatches: [
+        {
+          dispatch_id: "dispatch-b",
+          end_time: "2026-04-22T18:00:02.000Z",
+          outcome: "ACCEPTED",
+          start_time: "2026-04-22T18:00:01.000Z",
+          transition_id: "review",
+        },
+      ],
+      relations: [sharedRelation],
+      work_ids: ["work-b"],
+    });
+    const currentTrace = buildTrace("trace-a", {
+      dispatches: [
+        {
+          dispatch_id: "dispatch-b",
+          end_time: "2026-04-22T18:00:02.000Z",
+          outcome: "ACCEPTED",
+          previous_chaining_trace_ids: ["trace-b"],
+          start_time: "2026-04-22T18:00:01.000Z",
+          transition_id: "review",
+        },
+      ],
+      relations: [sharedRelation],
+      work_ids: ["work-a"],
+    });
+
+    const expanded = expandTraceWithCausalPredecessors(currentTrace, {
+      "work-a": currentTrace,
+      "work-b": predecessorTrace,
+    });
+
+    expect(expanded?.dispatches).toHaveLength(1);
+    expect(expanded?.relations).toEqual([sharedRelation]);
+  });
+});

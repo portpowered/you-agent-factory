@@ -17,6 +17,7 @@ import {
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "./components/dashboard";
+import { reloadDashboardLayoutFromStorage } from "./hooks/dashboard/useDashboardLayout";
 import {
   buildDashboardSnapshotFixture,
   dashboardWorkstationRequestFixtures,
@@ -52,6 +53,7 @@ import type { FactoryEvent } from "./api/events";
 import type { FactoryValue } from "./api/named-factory";
 import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
+import { useDashboardAppStore } from "./state/dashboardAppStore";
 import { buildFactoryTimelineSnapshot, useFactoryTimelineStore } from "./state/factoryTimelineStore";
 import type { FactoryTimelineSnapshot } from "./state/factoryTimelineStore";
 import { expect, vi, describe, beforeEach, afterEach, it } from "vitest";
@@ -1151,6 +1153,7 @@ function renderApp({
 
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("EventSource", MockEventSource);
+  reloadDashboardLayoutFromStorage();
   if (timelineEvents) {
     useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
   } else if (timelineSnapshots) {
@@ -1409,6 +1412,11 @@ describe("App", () => {
       queryClient.clear();
     }
     cleanup();
+    useDashboardAppStore.setState({
+      isExportDialogOpen: false,
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
     useFactoryTimelineStore.getState().reset();
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
