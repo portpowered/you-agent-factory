@@ -86,6 +86,7 @@ func TestPortableBundledFiles_LoadRuntimeConfigMaterializesStandalonePortableCon
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableBundledRoundTripScriptExecutable(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"))
 	assertPortableBundledLoadedWorker(t, loaded)
+	assertPortableBundledLoadedManifest(t, loaded.FactoryConfig())
 }
 
 func seedPortableBundledRoundTripFactory(t *testing.T) (string, string) {
@@ -141,6 +142,20 @@ func assertPortableBundledLoadedWorker(t *testing.T, loaded *factoryconfig.Loade
 	if len(worker.Args) != 2 || worker.Args[1] != "scripts/execute-story.ps1" {
 		t.Fatalf("loaded worker args = %#v", worker.Args)
 	}
+}
+
+func assertPortableBundledLoadedManifest(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	if cfg == nil || cfg.ResourceManifest == nil {
+		t.Fatal("expected loaded config to include resourceManifest")
+	}
+	if len(cfg.ResourceManifest.BundledFiles) != 3 {
+		t.Fatalf("expected 3 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
+	}
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
 }
 
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {

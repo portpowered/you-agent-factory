@@ -95,9 +95,23 @@ type portableBundledLayout struct {
 
 func portableBundledLayoutForFactoryDir(factoryDir string) (portableBundledLayout, bool) {
 	cleanFactoryDir := filepath.Clean(factoryDir)
-	if filepath.Base(cleanFactoryDir) != portableFactoryDirName {
+	if filepath.Base(cleanFactoryDir) == portableFactoryDirName {
+		return portableBundledLayout{
+			projectRoot:   filepath.Dir(cleanFactoryDir),
+			factoryDir:    cleanFactoryDir,
+			factoryPrefix: portableFactoryDirName,
+		}, true
+	}
+
+	if err := requireFactoryConfig(cleanFactoryDir); err != nil {
 		return portableBundledLayout{}, false
 	}
+
+	currentFactoryPointerPath := filepath.Join(filepath.Dir(cleanFactoryDir), interfaces.CurrentFactoryPointerFile)
+	if _, err := os.Stat(currentFactoryPointerPath); err != nil {
+		return portableBundledLayout{}, false
+	}
+
 	return portableBundledLayout{
 		projectRoot:   filepath.Dir(cleanFactoryDir),
 		factoryDir:    cleanFactoryDir,

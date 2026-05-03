@@ -33,6 +33,8 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
+
 // minimalFactoryConfig returns a minimal factory.json config for testing.
 func minimalFactoryConfig() map[string]any {
 	return map[string]any{
@@ -87,13 +89,13 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 			"body": "You are worker " + project + ".",
 		}},
 		"workstations": []map[string]any{{
-			"name":           "process",
-			"worker":         "worker-a",
-			"inputs":         []map[string]string{{"workType": workType, "state": "init"}},
-			"outputs":        []map[string]string{{"workType": workType, "state": "complete"}},
-			"onFailure":      map[string]string{"workType": workType, "state": "failed"},
-			"type":           "MODEL_WORKSTATION",
-			"body": "Do the " + project + " work.",
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": workType, "state": "init"}},
+			"outputs":   []map[string]string{{"workType": workType, "state": "complete"}},
+			"onFailure": map[string]string{"workType": workType, "state": "failed"},
+			"type":      "MODEL_WORKSTATION",
+			"body":      "Do the " + project + " work.",
 		}},
 	})
 	if err != nil {
@@ -539,6 +541,47 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	}
 }
 
+func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledFilesFromDisk(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(rootDir, "Makefile"), "test:\n\tgo test ./...\n")
+	writePortableServiceBundledFile(t, filepath.Join(rootDir, "README.md"), "outside allowlist\n")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
+	}
+	if current.SupportingFiles == nil {
+		t.Fatal("expected current factory to include supportingFiles")
+	}
+	if current.SupportingFiles.BundledFiles == nil || len(*current.SupportingFiles.BundledFiles) != 3 {
+		t.Fatalf("expected 3 bundled files, got %#v", current.SupportingFiles.BundledFiles)
+	}
+	bundledFiles := *current.SupportingFiles.BundledFiles
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+}
+
 func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
@@ -567,6 +610,32 @@ func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointer
 	}
 	if svc.runtimeCfg == nil || svc.runtimeCfg.FactoryDir() != rootDir {
 		t.Fatalf("service runtime dir = %q, want %q", svc.runtimeCfg.FactoryDir(), rootDir)
+	}
+}
+
+func writePortableServiceBundledFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
+func assertServiceBundledFactoryEntry(t *testing.T, bundledFile factoryapi.BundledFile, wantType factoryapi.BundledFileType, wantPath, wantContent string) {
+	t.Helper()
+	if bundledFile.Type != wantType {
+		t.Fatalf("bundled file type = %q, want %q", bundledFile.Type, wantType)
+	}
+	if bundledFile.TargetPath != wantPath {
+		t.Fatalf("bundled file targetPath = %q, want %q", bundledFile.TargetPath, wantPath)
+	}
+	if bundledFile.Content.Encoding != factoryapi.Utf8 {
+		t.Fatalf("bundled file %q encoding = %q, want %q", wantPath, bundledFile.Content.Encoding, factoryapi.Utf8)
+	}
+	if bundledFile.Content.Inline != wantContent {
+		t.Fatalf("bundled file %q content = %q, want %q", wantPath, bundledFile.Content.Inline, wantContent)
 	}
 }
 
