@@ -83,6 +83,9 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	if err := materializePortableBundledFiles(resolvedFactoryDir, factoryCfg); err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
+	if err := rehydrateSupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg); err != nil {
+		return nil, fmt.Errorf("rehydrate portable bundled files: %w", err)
+	}
 	if err := applySupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
@@ -229,7 +232,7 @@ func loadFactoryConfig(factoryDir string) (*interfaces.FactoryConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := validatePortableResourceManifestOnPath(cfg); err != nil {
+	if err := validatePortableResourceManifestOnPath(factoryDir, cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil

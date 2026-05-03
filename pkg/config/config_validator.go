@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -174,13 +175,19 @@ func ValidateRequiredTools(cfg *interfaces.FactoryConfig, checker RequiredToolCh
 // rules. Load boundaries can use this narrower pass without re-running the full
 // topology validator.
 func ValidatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker RequiredToolChecker) *ValidationResult {
+	return validatePortableResourceManifest(cfg, checker, ruleBundledFiles)
+}
+
+func validatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker RequiredToolChecker, bundledFileRule func(*interfaces.FactoryConfig) []Finding) *ValidationResult {
 	result := ValidateRequiredTools(cfg, checker)
-	result.Findings = append(result.Findings, ruleBundledFiles(cfg)...)
+	result.Findings = append(result.Findings, bundledFileRule(cfg)...)
 	return result
 }
 
-func validatePortableResourceManifestOnPath(cfg *interfaces.FactoryConfig) error {
-	result := ValidatePortableResourceManifest(cfg, requiredToolCheckerFunc(checkRequiredToolOnPath))
+func validatePortableResourceManifestOnPath(factoryDir string, cfg *interfaces.FactoryConfig) error {
+	result := validatePortableResourceManifest(cfg, requiredToolCheckerFunc(checkRequiredToolOnPath), func(cfg *interfaces.FactoryConfig) []Finding {
+		return ruleBundledFilesOnPath(factoryDir, cfg)
+	})
 	if !result.HasErrors() {
 		return nil
 	}
@@ -746,6 +753,18 @@ func ruleRequiredTools(checker RequiredToolChecker) validationRule {
 // --- Rule: portable bundled-file validation ---
 
 func ruleBundledFiles(cfg *interfaces.FactoryConfig) []Finding {
+	return ruleBundledFilesWithContentValidator(cfg, func(basePath string, file interfaces.BundledFileConfig) []Finding {
+		return validateBundledFileContent(basePath, file)
+	})
+}
+
+func ruleBundledFilesOnPath(factoryDir string, cfg *interfaces.FactoryConfig) []Finding {
+	return ruleBundledFilesWithContentValidator(cfg, func(basePath string, file interfaces.BundledFileConfig) []Finding {
+		return validateBundledFileContentOnPath(factoryDir, basePath, file)
+	})
+}
+
+func ruleBundledFilesWithContentValidator(cfg *interfaces.FactoryConfig, validateContent func(basePath string, file interfaces.BundledFileConfig) []Finding) []Finding {
 	if cfg == nil || cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) == 0 {
 		return nil
 	}
@@ -755,7 +774,7 @@ func ruleBundledFiles(cfg *interfaces.FactoryConfig) []Finding {
 		basePath := fmt.Sprintf("resourceManifest.bundledFiles[%d]", i)
 		findings = append(findings, validateBundledFileType(basePath, file)...)
 		findings = append(findings, validateBundledFileTarget(basePath, file)...)
-		findings = append(findings, validateBundledFileContent(basePath, file)...)
+		findings = append(findings, validateContent(basePath, file)...)
 	}
 
 	return findings
@@ -852,6 +871,19 @@ func validateBundledFileContent(basePath string, file interfaces.BundledFileConf
 	return findings
 }
 
+func validateBundledFileContentOnPath(factoryDir, basePath string, file interfaces.BundledFileConfig) []Finding {
+	if strings.TrimSpace(file.Content.Encoding) != "" || strings.TrimSpace(file.Content.Inline) != "" {
+		return validateBundledFileContent(basePath, file)
+	}
+	if sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, file); ok {
+		info, err := os.Stat(sourcePath)
+		if err == nil && !info.IsDir() {
+			return nil
+		}
+	}
+	return validateBundledFileContent(basePath, file)
+}
+
 // --- Helpers ---
 
 func checkRequiredToolOnPath(tool interfaces.RequiredToolConfig) RequiredToolCheckResult {
@@ -902,6 +934,21 @@ func isSupportedBundledFileType(fileType string) bool {
 	default:
 		return false
 	}
+}
+
+func isSupportedPortableBundledFile(file interfaces.BundledFileConfig) bool {
+	if !isSupportedBundledFileType(file.Type) {
+		return false
+	}
+	targetPath := strings.TrimSpace(file.TargetPath)
+	if targetPath == "" {
+		return false
+	}
+	if file.Type == interfaces.BundledFileTypeRootHelper {
+		return isSupportedPortableBundledRootHelperTarget(targetPath)
+	}
+	expectedRoot := bundledFileRootForType(file.Type)
+	return expectedRoot != "" && strings.HasPrefix(targetPath, expectedRoot)
 }
 
 func bundledFileRootForType(fileType string) string {

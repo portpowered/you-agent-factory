@@ -1273,6 +1273,14 @@ func authoredFactoryConfigForExpandedLayout(cfg *interfaces.FactoryConfig) (*int
 		authored.Workstations[i].Body = ""
 		authored.Workstations[i].PromptTemplate = ""
 	}
+	if authored.ResourceManifest != nil {
+		for i := range authored.ResourceManifest.BundledFiles {
+			if !isSupportedPortableBundledFile(authored.ResourceManifest.BundledFiles[i]) {
+				continue
+			}
+			authored.ResourceManifest.BundledFiles[i].Content = interfaces.BundledFileContentConfig{}
+		}
+	}
 	return authored, nil
 }
 
