@@ -2,19 +2,17 @@
 
 ## world state
 
-- as of `2026-05-03T11:03:56.9236801-07:00`, local `HEAD` on `main` points to
-  `4af58c2` (`dashboard-import-export-dialog-extraction-and-button-standardization (#71)`)
-  and matches `origin/main`; there are two open PRs relevant to the active ask:
-  `#69` `workstation-non-success-route-arrays` and `#72`
-  `import-export-standards-alignment-checklist-and-gap-closure`
+- as of `2026-05-03T12:04:54.7627289-07:00`, local `HEAD` on `main` points to
+  `1c2a49c` (`Merge pull request #72 from portpowered/ralph/import-export-standards-alignment-checklist-and-gap-closure`)
+  and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
     `factory/workstations/cleaner/AGENTS.md`
   - untracked local planning residue exists in
     `factory/scripts/import-export-p0-followups.json`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`, and
-  the active P0 remains import/export and contract cleanup, now expanded with a
-  separate multi-output workstation-route ask
+  the active P0 is now split between the open multi-output workstation-route
+  contract ask and the broader website-quality follow-up asks
 
 ## workflow truth
 
@@ -49,7 +47,7 @@
   active ask:
   - `factory/inputs/thoughts/default/import-export-issues.md`
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - `factory/inputs/idea/default/retire-dashboard-button-wrapper.md`
+  - `factory/inputs/idea/default/simplify-current-selection-dispatch-detail-surface.md`
 - the local repository root also contains untracked planning residue outside the
   canonical inboxes:
   - `factory/scripts/import-export-p0-followups.json`
@@ -61,27 +59,26 @@
 
 - the highest-priority live ask is the import/export P0 in
   `factory/logs/meta/asks.md`, not the older throttle cleanup lane
-- three earlier import/export cleanup requests have now landed on `main`:
+- the import/export P0 has materially advanced on `main`:
   - PR `#67` removed exported workstation `promptTemplate` from the public
     contract
   - PR `#68` moved worker/workstation body ownership into split body-only
     `AGENTS.md` files with a thinner authored layout
   - PR `#70` made supported bundled-file import/export round-trips disk-backed
     by default
+  - PR `#71` moved the dashboard import/export dialog into direct dialog
+    ownership and converged the controls onto the shared button surface
+  - PR `#72` landed the checked-in import/export standards checklist and its
+    highest-value gap closures
 - the local helper batch in `factory/scripts/import-export-p0-followups.json`
-  is now more stale: it still lists the prompt-template, split-layout, and
-  bundled-file lanes even though those changes are merged, while its dialog and
-  standards items remain relevant
+  is now fully stale as a dispatch surface: every work item it names has either
+  already merged or been superseded by merged work
 - `factory/logs/meta/asks.md` also contains a backend contract ask that is not
   represented in that helper batch:
   - replace singular workstation `onContinue`, `onRejection`, and `onFailure`
     destinations with array-based outputs
-- the remaining import/export seams on `main` are now narrower:
-  - the dashboard import/export dialog and button-standardization lane has now
-    landed on `main` via PR `#71`
-  - the standards-alignment checklist and gap-closure lane is now actively
-    owned by open PR `#72` on branch
-    `ralph/import-export-standards-alignment-checklist-and-gap-closure`
+- the only remaining import/export P0 contract lane still open on GitHub is
+  PR `#69` `workstation-non-success-route-arrays`
 - the live code also shows the route-array ask is real on `main`, but it is no
   longer unowned:
   - `api/components/schemas/data-models/Workstation.yaml`,
@@ -115,6 +112,17 @@
   - `pkg/cli/init/init_test.go`
   - `ui/src/api/factory-definition/api.test.ts`
   - `ui/src/features/timeline/state/factoryTimelineStore.test.ts`
+- the highest-value unowned customer-ask seam visible after those merges now
+  sits in the current-selection website surface:
+  - `ui/src/features/current-selection/execution-details.tsx` still renders a
+    workstation request projection with prompt, working-directory, worktree,
+    response text, and failure metadata
+  - `ui/src/features/current-selection/workstation-request-detail.tsx` renders
+    overlapping request/response content again inside the selected dispatch
+    detail card
+  - `ui/src/features/current-selection/selected-work-dispatch-history.tsx`
+    still composes the dispatch list separately, so the current-selection view
+    remains more fragmented than the simplified customer ask intends
 
 ## replay truth
 
@@ -131,6 +139,9 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#73` `retire-dashboard-button-wrapper`, merged on `2026-05-03`
+  - `#72` `import-export-standards-alignment-checklist-and-gap-closure`,
+    merged on `2026-05-03`
   - `#71` `dashboard-import-export-dialog-extraction-and-button-standardization`,
     merged on `2026-05-03`
   - `#70` `import-export-bundled-files-disk-backed-roundtrip`, merged on
@@ -144,10 +155,8 @@
   - `#64` `retire-dashboard-bento-layout-ownership`
   - `#63` `retire-current-selection-inference-duplication`
   - `#62` `align-dashboard-work-summary-count-semantics`
-- there are two open PRs directly tied to the remaining P0 cleanup:
+- the only open PR directly tied to the remaining P0 cleanup is:
   - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
-  - `#72` `import-export-standards-alignment-checklist-and-gap-closure`,
-    opened on `2026-05-03`
 
 ## theory of mind
 
@@ -158,23 +167,21 @@
 - helper planning residue can go stale quickly once related PRs merge, so the
   meta loop has to reconcile ignored backlog files against `main` and open PR
   state before dispatching anything new
-- the prompt-template, split-layout, and bundled-file asks are now landed on
-  `main`; the remaining import/export backlog is dialog/button cleanup,
-  standards alignment, and the array-based non-success route contract
+- import/export prompt-template, split-layout, bundled-file, dialog, and
+  standards-alignment asks are now landed on `main`
 - the route-array contract cleanup is already actively owned by ignored local
   residue plus open PR `#69`, so queuing another idea for it would be
   duplicative
-- the dialog/button cleanup has landed on `main`, while the standards-alignment
-  lane is now actively owned by open PR `#72`, so the import/export P0 no
-  longer has an unowned narrow cleanup seam worth queueing
-- the broad remaining asks in `factory/logs/meta/asks.md` are still too mixed
-  in scope to queue directly without another decomposition pass
-- a separate narrow website-quality seam is now visible on `main` and does not
-  overlap the import/export PRs:
-  `ui/src/components/dashboard/button.tsx` is a thin wrapper over the shared
-  `ui/src/components/ui/button.tsx` and has collapsed to a single production
-  caller in `ui/src/features/header/tick-slider-control.tsx`
+- the earlier local button-wrapper idea has already been consumed by merged
+  PR `#73`, so keeping that ignored idea file around would only create stale
+  local queue residue
+- the broad remaining asks in `factory/logs/meta/asks.md` still need
+  decomposition, but the current-selection detail stack now exposes one narrow
+  customer-facing quality seam:
+  collapse duplicated request/response detail rendering around the dispatch
+  history view so the selected-work experience becomes dispatch-centric instead
+  of repeating prompt and response content across multiple panels
 - the right meta action in this iteration is to refresh the checked-in world
-  view, record the newly opened standards PR, and queue one standalone ignored
-  idea to retire that redundant dashboard button wrapper without broadening into
-  a larger button-restyling batch
+  view, record the merged `#72` and `#73` lanes, prune the stale local
+  button-wrapper idea, and queue one standalone ignored idea for the
+  current-selection simplification without colliding with open PR `#69`

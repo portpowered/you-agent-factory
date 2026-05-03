@@ -20,6 +20,9 @@
 - Reconcile ignored helper backlog files with open PRs and freshly merged
   branches before dispatching more cleanup work; local planning residue can be
   stale even when its scope still matches the ask surface.
+- Prune ignored local idea files once their owning PR has merged; otherwise the
+  canonical inbox can retain stale residue that no longer represents an
+  actionable backlog item.
 - Import/export contract cleanup crosses more than one layer: confirm
   `api/openapi.yaml`, generated API artifacts, `pkg/config` mapping logic, and
   runtime/functional tests together before assuming a field has really been
@@ -30,13 +33,14 @@
 
 ## Current Summary
 
-- As of `2026-05-03T11:03:56.9236801-07:00`, `HEAD` on `main` points to
-  `4af58c2` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T12:04:54.7627289-07:00`, `HEAD` on `main` points to
+  `1c2a49c` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and `factory/scripts/import-export-p0-followups.json`
   remains untracked planning residue.
 - The canonical ask surface remains `factory/logs/meta/asks.md`, and the
-  active P0 is now import/export cleanup rather than the older throttle lane.
+  active P0 is now the open route-array contract cleanup plus broader website
+  quality follow-ups rather than the older throttle lane.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
   execution for `process` and `review`, `executor-slot` capacity `10`, an
@@ -45,16 +49,16 @@
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
 - The current ignored/local residue includes an import/export thought seed, a
-  standalone route-array idea file, a standalone dashboard-button-wrapper idea
+  standalone route-array idea file, a standalone current-selection cleanup idea
   file, and a helper `FACTORY_REQUEST_BATCH` outside the canonical inboxes.
 - PR `#67` removed exported workstation `promptTemplate` from the public
   contract, PR `#68` landed the split body-only `AGENTS.md` layout for workers
   and workstations, PR `#70` landed the bundled-files disk-backed round-trip
-  behavior, and PR `#71` landed the dashboard import/export dialog extraction
-  on `main`.
-- The remaining import/export seams are now the route-array contract cleanup
-  owned by open PR `#69` and the standards-gap closure lane owned by open PR
-  `#72`.
+  behavior, PR `#71` landed the dashboard import/export dialog extraction,
+  PR `#72` landed the import/export standards checklist and gap closures, and
+  PR `#73` landed the dashboard button-wrapper retirement on `main`.
+- The remaining import/export seam is now the route-array contract cleanup
+  owned by open PR `#69`.
 - The ask surface now also includes a separate workstation-route contract gap:
   `outputs` is array-valued, but public `onContinue`, `onRejection`, and
   `onFailure` remain singular across schema, mapping, replay/projection, and UI
@@ -62,18 +66,17 @@
 - That route-array gap is already actively owned by open PR `#69`
   (`ralph/workstation-non-success-route-arrays`), so a fresh dispatch would be
   duplicate queue work.
-- The import/export dialog extraction lane has already landed on `main`, so
-  duplicating that work would now be counterproductive.
-- No dedicated checked-in standards-alignment checklist exists on `main` yet
-  for `STD-016` / `STD-017`, but open PR `#72` now owns that lane.
+- The import/export dialog extraction, standards alignment, and wrapper-removal
+  lanes have already landed on `main`, so duplicating them would now be
+  counterproductive.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
-  now more stale because it still lists four lanes that are already merged or
-  already owned elsewhere.
-- A separate narrow UI cleanup lane is now queued locally: retire the
-  dashboard-only button wrapper that has collapsed to one production caller in
-  the tick-slider header control.
+  now fully stale because every lane it names is already merged.
+- A separate narrow customer-ask-aligned UI cleanup lane is now queued locally:
+  simplify the current-selection dispatch detail surface by removing duplicated
+  request/response panels across execution details and selected dispatch detail
+  views.
 
 ## Standards Alignment Checklist
 
@@ -89,12 +92,13 @@
   portable bundled files are now disk-backed on `main`; keep regression
   coverage aligned so inline bundled-file payload content does not regress.
 - Website:
-  import/export dialog extraction and shared button alignment have landed on
-  `main` via PR `#71`; re-check the landed UI against `STD-016` while PR `#72`
-  carries the remaining standards checklist work.
+  import/export dialog extraction, shared button alignment, and the checked-in
+  standards checklist have landed on `main`; keep future UI follow-ups aligned
+  with `STD-016` instead of reopening those merged seams.
 - Website:
   keep shared components, semantic tokens, and explicit loading/error states
-  aligned with `STD-016` while the import/export UI is being simplified.
+  aligned with `STD-016` while the current-selection and other remaining
+  dashboard UI surfaces are simplified.
 - Backend and UI contract:
   align non-success workstation routes with array-based outputs and remove
   lossy single-destination projection/parsing behavior; this lane is actively
@@ -104,6 +108,38 @@
   and update existing contract coverage so the legacy prompt-template and inline
   bundled-file shape do not regress.
   Do the same for the singular `onContinue`/`onRejection`/`onFailure` shape.
+
+## 2026-05-03T12:04:54.7627289-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `34dcea1` to
+  `1c2a49c`, which pulled in merged PR `#72`
+  (`import-export-standards-alignment-checklist-and-gap-closure`) and merged
+  PR `#73` (`retire-dashboard-button-wrapper`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, `.gitignore`,
+  the ignored/local `factory/inputs/**` residue, the stale helper batch under
+  `factory/scripts/import-export-p0-followups.json`, and the relevant current
+  selection UI files under `ui/src/features/current-selection/`.
+- Re-validated the tracked versus ignored workflow-input split with
+  `git ls-files factory/inputs` and `Get-ChildItem factory/inputs`, confirming
+  the repo still tracks only sentinels while local idea files remain ignored
+  operating state.
+- Re-checked current PR state with `gh pr list` and confirmed the only
+  remaining open PR tied to the active P0 ask is `#69`
+  (`workstation-non-success-route-arrays`).
+- Verified that the previously queued local button-wrapper idea is stale
+  because PR `#73` already merged its implementation, then pruned that ignored
+  idea file so the canonical inbox no longer points at already-landed work.
+- Inspected the current-selection surface and confirmed the customer ask is
+  still materially open there: `execution-details.tsx` renders workstation
+  request prompt/response details, `workstation-request-detail.tsx` renders
+  overlapping request/response content again for a selected dispatch, and
+  `selected-work-dispatch-history.tsx` keeps the dispatch list as a separate
+  surface instead of making the view dispatch-centric.
+- Queued one new standalone ignored idea under `factory/inputs/idea/default/`
+  to simplify the current-selection dispatch detail surface without colliding
+  with open PR `#69` or reopening already-merged import/export lanes.
 
 ## 2026-05-03T10:03:19.3588030-07:00 - meta state refresh
 
