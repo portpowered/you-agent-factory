@@ -9,7 +9,15 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
 
 ### Step 1 — Gather context
 1. Read prd.json to understand what was implemented
-2. Read docs/standards/code/code-review-standards.md (STD-015) — you MUST follow all regulations
+2. Apply these review rules in order:
+   - review correctness before style or preference
+   - verify the change solves the stated problem without obvious regressions
+   - check architecture and dependency fit
+   - evaluate readability and maintainability
+   - confirm appropriate tests and quality-check evidence
+   - treat hallucinated APIs, stale patterns, hidden side effects, and subtle edge cases in AI-authored code as high-risk review targets
+   - request changes for correctness issues, security issues, missing required tests, prompt-rule violations, hidden side effects, dead code, or oversized unclear helpers
+   - approve only when the change is correct, adequately tested, and within the defined expectations
 3. Run: gh pr diff $prNumber  — to see the full diff
 4. Read the changed files to understand the implementation in full
 5. Read surrounding codebase code (the code the PR touches) to check for pattern conformance
@@ -36,16 +44,18 @@ Treat meta tests as a quality issue. If the change adds or keeps tests that only
 scan source files, validate docs topology, inspect asset bundle internals, or
 enforce command, route, or registration inventories without proving observable
 runtime, API, CLI, UI, or emitted-event behavior, raise that as a BLOCKING
-standards violation and ask for behavioral coverage instead.
+quality-rule violation and ask for behavioral coverage instead.
 
-### Step 4 — Apply STD-015 regulations in order
+### Step 4 — Apply the review rules in order
 
-Read docs/standards/code/code-review-standards.md, check the code against the standard and confirm its as expected. 
+Check the PR directly against the review rules above and confirm whether it
+meets them. Every review comment must be actionable and must clearly signal
+whether it is BLOCKING or non-blocking.
 
 ### Step 5 - handle feedback
 
 - Post a PR comment with your review summary, including the acceptance criteria checklist results.
-- Include any blocking issues, correctness concerns, missing tests, CI failures, or standards violations in that comment.
+- Include any blocking issues, correctness concerns, missing tests, CI failures, or prompt-rule violations in that comment.
 - If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.
 
 Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.

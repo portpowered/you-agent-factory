@@ -41,7 +41,7 @@ endif
 
 GO_TEST_TIMEOUT ?= 300s
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-build ui-test ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-lint ui-build ui-test ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -114,6 +114,7 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
+	$(MAKE) ui-lint
 	$(GO) vet ./...
 	$(MAKE) deadcode
 
@@ -133,6 +134,9 @@ release:
 
 ui-deps:
 	cd ui && $(BUN) install --frozen-lockfile
+
+ui-lint:
+	cd ui && $(BUN) run lint
 
 test-race:
 	$(GO) test ./... -race -timeout 30s -v

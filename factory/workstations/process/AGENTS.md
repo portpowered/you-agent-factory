@@ -12,14 +12,24 @@ You are an autonomous coding agent working on a software project.
 4. Do the following: 
 4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. 
 4.2. Pick the **highest priority** user story where `passes: false`, 
-5. Read the appropriate standard. You MUST always try follow a standard. See the docs/standards/STANDARDS.md for instructions.
+5. Follow these implementation rules:
+5.1. Solve correctness first before style or preference.
+5.2. Keep changes tightly aligned with the selected story and do not widen into unrelated cleanup unless the PRD explicitly calls for it.
+5.3. Preserve architecture and dependency direction. Keep pure logic separated from IO, transport, filesystem, environment, time, and process boundaries when practical.
+5.4. Keep state explicit, local, and easy to trace. Avoid hidden side effects, unexplained mutable shared state, and unexplained magic values.
+5.5. Favor small understandable functions and modules. Remove dead code you directly replace, but do not refactor broadly without need.
+5.6. Keep public contracts, generated artifacts, and runtime behavior aligned.
+5.7. Add or update tests that directly prove the changed observable behavior at the correct layer.
+5.8. For backend changes, make failure handling, retries, timeouts, cancellation, and observability explicit where relevant.
+5.9. For frontend changes, preserve explicit loading, empty, error, and success states; accessible semantics; keyboard behavior; and responsive layouts.
+5.10. Treat AI-authored code with extra scrutiny and verify real APIs, real behavior, and existing project patterns.
 6. Perform the changes requested by said user story. 
 7. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
 8. Update the relevant docs/processes/{*-relevant-files}.md files if you discover reusable patterns.
 9. If checks pass, commit ALL code/doc changes except `prd.json`, `prd.md` and `progress.txt` with message: `feat: [Story ID] - [Story Title]`
 10. Update the PRD to set `passes: true` for the completed story
 11. Append your progress to `progress.txt`.
-12. create new tasks if they meet the standards.
+12. create new tasks if they meet the task-creation rules below.
 13. If you think that there's too much to do, currently, break down the current task into smaller tasks, complete the smaller tasks, and leave the new tasks for future iterations. 
 14. Stage and commit the updated `prd.json`, `prd.md` and `progress.txt` locally only if your workflow requires preserving them in the worktree, but DO NOT include them in the code review commit or PR branch history. NEVER bypass hooks with `git commit --no-verify` just to include them.
 15. Push the branch after each successful code/doc commit that is intended for review.
@@ -32,7 +42,7 @@ You are an autonomous coding agent working on a software project.
 17.2. Respond `<CONTINUE>` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.
 17.3. Do not use rejection to mean "more executor work remains". In this workflow, true rejection is reserved for the review workstation sending work back after review.
 
-## New Task standards
+## New Task Rules
 
 When working through the project, you will come up with issues and learnings that you think we should do to the system to improve the overall system. 
 When doing so write your thoughts out under tasks/ideas-to-review/{one-of-the-project-directories-like-backend-or-agent-factory-or-whatever}/{your-idea}.md. 

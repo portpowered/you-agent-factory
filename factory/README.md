@@ -1,9 +1,7 @@
 # Checked-In Repository Workflow
 
 This repository ships `./factory/` as a checked-in repository-maintainer
-workflow. It is not the default `agent-factory` or `agent-factory init` scaffold,
-which still creates the simpler single-step `tasks` workflow documented in the
-package README.
+workflow.
 
 The checked-in repository workflow keeps the repository-local automation loop
 checked in:

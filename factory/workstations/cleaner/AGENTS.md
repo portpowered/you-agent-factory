@@ -20,7 +20,26 @@ run git pull and make the workspace be up to date to remote
 
 ## Step 1 - read
 0. read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`, `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`, and `factory/logs/agent-fails.replay.json` to understand the current repository-maintainer workflow state before proposing cleanup work
-1. read `docs/standards/STANDARDS.md`, `factory/README.md`,  `docs/guides/batch-inputs.md` so your cleanup ideas stay aligned with the repository's public workflow contract
+1. read `factory/README.md` so your cleanup ideas stay aligned with the repository's public workflow contract. While doing so, preserve these principles directly:
+   - keep cleanup ideas narrow, concrete, and implementation-ready
+   - prefer simplification over additional guard layers or extra abstractions
+   - remove dead code, duplication, redundant legacy handling, and overlapping structures where the public workflow allows it
+   - preserve intended public behavior unless the cleanup explicitly aims to change that behavior
+   - when cleanup touches tests, prefer behavioral runtime, API, CLI, UI, or emitted-event assertions instead of meta tests about file layout, docs topology, bundle internals, or command/route inventories
+   - default to one standalone cleanup idea file
+   - use a batch only when one submission must create multiple work items together because the follow-up needs dependency ordering, parent-child membership, or mixed work types
+   - batch files must be written to `factory/inputs/BATCH/default/{request_id}.json`
+   - batch filenames must end in `.json`
+   - batch request bodies must set `type` to exactly `FACTORY_REQUEST_BATCH`
+   - batch request bodies must include a stable `request_id`
+   - every work item in a `BATCH` file must set a unique `name` and explicit `work_type_name`
+   - use `DEPENDS_ON` when one sibling work item must wait for another sibling work item
+   - use `PARENT_CHILD` when one work item should belong to a parent's child set
+   - in `DEPENDS_ON`, `source_work_name` is the blocked work item and `target_work_name` is the prerequisite work item
+   - in `PARENT_CHILD`, `source_work_name` is the child work item and `target_work_name` is the parent work item
+   - use a parent `state` only when you intentionally need the parent to start in a waiting state consumed by parent-aware fan-in
+   - relation names must match declared work item names exactly
+   - do not create dependency cycles
 2. read the code under `./`, read recent PRs associated with your previous requests, and inspect the current checked-in workflow inputs under `factory/inputs/` to see any previous cleanup attempts that have already been made
 
 ## Step 2 - based on the above results decide on one of the following:
@@ -67,7 +86,11 @@ runtime, API, CLI, UI, or emitted-event outcomes instead.
 
 ## Step 3 - write a file
 1. default to one standalone cleanup idea file. Write one markdown file to `{project-git-root-directory}/factory/inputs/idea/default/{your-idea}.md`; that inbox is the checked-in surface and is kept present by `factory/inputs/idea/default/.gitkeep`.
-2. only use a batch submission when the follow-up needs dependency ordering or mixed work types. In that case, follow `docs/guides/batch-inputs.md` and write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`.
+2. only use a batch submission when the follow-up needs dependency ordering, parent-child membership, or mixed work types. In that case, write the canonical `FACTORY_REQUEST_BATCH` JSON to `{project-git-root-directory}/factory/inputs/BATCH/default/{request_id}.json`.
+3. batch JSON must include `request_id`, `type`, and `works`, and may include `relations`.
+4. set `type` to exactly `FACTORY_REQUEST_BATCH`.
+5. every work item must have a unique `name`; every work item in `inputs/BATCH` must also set `work_type_name`.
+6. use `DEPENDS_ON` relations for sibling prerequisite ordering and `PARENT_CHILD` relations for parent-aware child membership.
 
 ## general notes
 
