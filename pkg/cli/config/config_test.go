@@ -77,24 +77,40 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 
 	workerAgentsPath := filepath.Join(dir, "workers", "executor", "AGENTS.md")
 	workerAgents := readCLITestFile(t, workerAgentsPath)
-	if !strings.Contains(string(workerAgents), "type: MODEL_WORKER") {
-		t.Fatalf("expected worker AGENTS.md to be loadable MODEL_WORKER, got:\n%s", string(workerAgents))
+	if got := string(workerAgents); got != "You are the expanded executor.\n" {
+		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
 	}
-	assertExpandedAgentsFrontmatterUsesCamelCase(t, string(workerAgents), []string{
-		"modelProvider: CLAUDE",
-		"executorProvider: SCRIPT_WRAP",
-		"stopToken: COMPLETE",
-		"skipPermissions: true",
-	}, []string{
-		"model_provider:",
-		"provider:",
-		"concurrency:",
-		"stop_token:",
-		"skip_permissions:",
-	})
-	workerDef, err := factoryconfig.LoadWorkerConfig(filepath.Join(dir, "workers", "executor"))
+	workersPayload, ok := payload["workers"].([]any)
+	if !ok || len(workersPayload) != 1 {
+		t.Fatalf("expected one worker in expanded factory.json, got %#v", payload["workers"])
+	}
+	workerPayload, ok := workersPayload[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected worker payload object, got %#v", workersPayload[0])
+	}
+	for key, want := range map[string]any{
+		"type":             "MODEL_WORKER",
+		"model":            "claude-sonnet-4-20250514",
+		"modelProvider":    "CLAUDE",
+		"executorProvider": "SCRIPT_WRAP",
+		"stopToken":        "COMPLETE",
+		"timeout":          "20m",
+		"skipPermissions":  true,
+	} {
+		if workerPayload[key] != want {
+			t.Fatalf("expanded worker %s = %#v, want %#v", key, workerPayload[key], want)
+		}
+	}
+	if _, ok := workerPayload["body"]; ok {
+		t.Fatalf("expected expanded factory.json worker to omit inline body, got %#v", workerPayload)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
-		t.Fatalf("LoadWorkerConfig: %v", err)
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	workerDef, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected runtime worker definition")
 	}
 	if workerDef.Model != "claude-sonnet-4-20250514" || workerDef.ModelProvider != "claude" || workerDef.ExecutorProvider != "script_wrap" {
 		t.Fatalf("expanded worker definition did not preserve model/provider fields: %#v", workerDef)
@@ -157,7 +173,7 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 		t.Fatalf("flattened workstation runtime fields = %#v", flattenedWorkstation)
 	}
 
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	loaded, err = factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
 		t.Fatalf("expanded layout should load through runtime config: %v", err)
 	}
@@ -635,14 +651,8 @@ Existing workstation body.
 			}
 
 			workerAgents := string(readCLITestFile(t, workerAgentsPath))
-			assertExpandedAgentsFrontmatterUsesCamelCase(t, workerAgents, []string{
-				"type: SCRIPT_WORKER",
-				"stopToken: DONE",
-			}, []string{
-				"stop_token:",
-			})
-			if !strings.Contains(workerAgents, "Existing worker body.") {
-				t.Fatalf("expected expanded worker AGENTS.md body to be preserved:\n%s", workerAgents)
+			if workerAgents != "Existing worker body.\n" {
+				t.Fatalf("expected expanded worker AGENTS.md body to be preserved, got %q", workerAgents)
 			}
 
 			workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
@@ -666,9 +676,13 @@ Existing workstation body.
 				t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
 			}
 
-			workerDef, err := factoryconfig.LoadWorkerConfig(filepath.Join(dir, "workers", "executor"))
+			loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 			if err != nil {
-				t.Fatalf("LoadWorkerConfig: %v", err)
+				t.Fatalf("LoadRuntimeConfig: %v", err)
+			}
+			workerDef, ok := loaded.Worker("executor")
+			if !ok {
+				t.Fatal("expected runtime worker definition")
 			}
 			if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
 				t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
@@ -813,14 +827,8 @@ Existing workstation body.
 			}
 
 			workerAgents := string(readCLITestFile(t, workerAgentsPath))
-			assertExpandedAgentsFrontmatterUsesCamelCase(t, workerAgents, []string{
-				"type: SCRIPT_WORKER",
-				"stopToken: DONE",
-			}, []string{
-				"stop_token:",
-			})
-			if !strings.Contains(workerAgents, "Existing worker body.") {
-				t.Fatalf("expected expanded worker AGENTS.md body to be preserved:\n%s", workerAgents)
+			if workerAgents != "Existing worker body.\n" {
+				t.Fatalf("expected expanded worker AGENTS.md body to be preserved, got %q", workerAgents)
 			}
 
 			workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
@@ -844,9 +852,13 @@ Existing workstation body.
 				t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
 			}
 
-			workerDef, err := factoryconfig.LoadWorkerConfig(filepath.Join(dir, "workers", "executor"))
+			loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 			if err != nil {
-				t.Fatalf("LoadWorkerConfig: %v", err)
+				t.Fatalf("LoadRuntimeConfig: %v", err)
+			}
+			workerDef, ok := loaded.Worker("executor")
+			if !ok {
+				t.Fatal("expected runtime worker definition")
 			}
 			if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
 				t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)

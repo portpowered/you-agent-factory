@@ -159,6 +159,72 @@ Process.
 	}
 }
 
+func TestLoadRuntimeConfig_MergesInlineWorkerMetadataWithBodyOnlyAgentsFile(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name":             "executor",
+				"type":             "MODEL_WORKER",
+				"model":            "claude-sonnet-4-20250514",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
+				"stopToken":        "COMPLETE",
+				"timeout":          "20m",
+				"skipPermissions":  true,
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-story",
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			},
+		},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "executor", "You are the body-only worker.\n")
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+---
+Execute {{ .WorkID }}.
+`)
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	workerDef, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected executor worker definition")
+	}
+	if workerDef.Type != interfaces.WorkerTypeModel || workerDef.Model != "claude-sonnet-4-20250514" {
+		t.Fatalf("worker type/model = %#v", workerDef)
+	}
+	if workerDef.ModelProvider != "claude" || workerDef.ExecutorProvider != "script_wrap" {
+		t.Fatalf("worker providers = %#v", workerDef)
+	}
+	if workerDef.StopToken != "COMPLETE" || workerDef.Timeout != "20m" || !workerDef.SkipPermissions {
+		t.Fatalf("worker runtime fields = %#v", workerDef)
+	}
+	if workerDef.Body != "You are the body-only worker." {
+		t.Fatalf("worker body = %q", workerDef.Body)
+	}
+}
+
 func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	rootDir := t.TempDir()
 

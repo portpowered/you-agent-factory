@@ -130,6 +130,24 @@ func LoadWorkstationConfig(dir string) (*interfaces.FactoryWorkstationConfig, er
 	return &cfg, nil
 }
 
+func loadAgentsBody(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	content := string(data)
+	if strings.HasPrefix(content, "---\n") || strings.HasPrefix(content, "---\r\n") {
+		_, body, err := parseAgentsMD(path)
+		if err != nil {
+			return "", err
+		}
+		return body, nil
+	}
+
+	return strings.TrimSpace(content), nil
+}
+
 func normalizeWorkstationPublicEnums(cfg *interfaces.FactoryWorkstationConfig) {
 	if cfg == nil {
 		return
