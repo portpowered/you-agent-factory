@@ -44,6 +44,13 @@ function workstationFailureIO(workstation: FactoryWorkstation): WorkstationIO[] 
   );
 }
 
+function workstationContinueIO(workstation: FactoryWorkstation): WorkstationIO[] {
+  return workstationRouteIOs(
+    (workstation as FactoryWorkstation & { onContinue?: WorkstationIO[] | WorkstationIO | null })
+      .onContinue,
+  );
+}
+
 function workstationRejectionIO(workstation: FactoryWorkstation): WorkstationIO[] {
   return workstationRouteIOs(
     (workstation as FactoryWorkstation & { onRejection?: WorkstationIO[] | WorkstationIO | null })
@@ -76,10 +83,13 @@ function projectWorkstationTopology(
 ): NonNullable<ProjectedInitialStructure["workstations"]>[number] {
   const inputs = workstation.inputs.filter(isPublicWorkstationIO);
   const outputs = workstation.outputs.filter(isPublicWorkstationIO);
+  const continuation = workstationContinueIO(workstation).filter(isPublicWorkstationIO);
   const failure = workstationFailureIO(workstation).filter(isPublicWorkstationIO);
   const rejection = workstationRejectionIO(workstation).filter(isPublicWorkstationIO);
 
   return {
+    continue_place_ids:
+      continuation.length > 0 ? continuation.map(placeIDFromIO) : undefined,
     failure_place_ids: failure.length > 0 ? failure.map(placeIDFromIO) : undefined,
     id: workstation.id ?? workstation.name,
     input_place_ids: inputs.map(placeIDFromIO),
@@ -122,6 +132,7 @@ export function normalizeFactoryPayload(
     for (const io of [
       ...workstation.inputs,
       ...workstation.outputs,
+      ...workstationContinueIO(workstation),
       ...workstationFailureIO(workstation),
       ...workstationRejectionIO(workstation),
     ]) {
@@ -285,7 +296,9 @@ function outputPlaceForProjectedWorkstation(
     return undefined;
   }
   const routePlaceIDs =
-    outcome === "FAILED" && workstation.failure_place_ids?.length
+    outcome === "CONTINUE" && workstation.continue_place_ids?.length
+      ? workstation.continue_place_ids
+      : outcome === "FAILED" && workstation.failure_place_ids?.length
       ? workstation.failure_place_ids
       : outcome === "REJECTED" && workstation.rejection_place_ids?.length
         ? workstation.rejection_place_ids

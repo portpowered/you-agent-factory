@@ -93,6 +93,14 @@ function buildTopologyEdges(
       ),
       ...buildTopologyEdgesForPlaces(
         workstation.id,
+        workstation.continue_place_ids ?? [],
+        "continue",
+        inputsByPlace,
+        placesByID,
+        seen,
+      ),
+      ...buildTopologyEdgesForPlaces(
+        workstation.id,
         workstation.rejection_place_ids ?? [],
         "rejected",
         inputsByPlace,
@@ -158,6 +166,7 @@ function projectWorkstation(
 ): DashboardSnapshot["topology"]["workstation_nodes_by_id"][string] {
   const outputPlaceIDs = [
     ...(workstation.output_place_ids ?? []),
+    ...(workstation.continue_place_ids ?? []),
     ...(workstation.rejection_place_ids ?? []),
     ...(workstation.failure_place_ids ?? []),
   ];
@@ -231,5 +240,4 @@ function workTypeIDsForPlaces(
       .filter((id) => workTypeIDs.has(id)),
   );
 }
-
 

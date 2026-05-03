@@ -119,6 +119,7 @@ export interface ProjectedInitialStructure {
     states?: { category: string; value: string }[];
   }[];
   workstations?: {
+    continue_place_ids?: string[];
     failure_place_ids?: string[];
     id: string;
     input_place_ids?: string[];
@@ -182,5 +183,4 @@ export function emptyWorldRuntime(): DashboardRuntime {
     },
   };
 }
-
 

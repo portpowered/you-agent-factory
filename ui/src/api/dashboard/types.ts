@@ -9,7 +9,11 @@ export type DashboardPlaceKind =
   | "resource"
   | "constraint"
   | "limit";
-export type DashboardEdgeOutcomeKind = "accepted" | "rejected" | "failed";
+export type DashboardEdgeOutcomeKind =
+  | "accepted"
+  | "continue"
+  | "rejected"
+  | "failed";
 
 export interface DashboardPlaceRef {
   place_id: string;
@@ -425,4 +429,3 @@ export interface DashboardWorkRelation {
   request_id?: string;
   trace_id?: string;
 }
-
