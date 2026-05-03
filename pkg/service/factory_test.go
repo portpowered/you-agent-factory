@@ -109,6 +109,76 @@ func serviceNamedFactoryContract(t *testing.T, name string) factoryapi.Factory {
 	return serviceNamedFactoryContractWithWorkType(t, name, "task")
 }
 
+func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) factoryapi.Factory {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]any{
+		"name": name,
+		"id":   name,
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "worker-a",
+			"type": "MODEL_WORKER",
+			"body": "You are worker " + name + ".",
+		}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": map[string]string{"workType": "task", "state": "failed"},
+			"type":      "MODEL_WORKSTATION",
+			"body":      "Do the " + name + " work.",
+		}},
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{
+				{
+					"type":       "ROOT_HELPER",
+					"targetPath": "Makefile",
+					"content": map[string]any{
+						"encoding": "UTF8",
+						"inline":   "test:\n\tgo test ./...\n",
+					},
+				},
+				{
+					"type":       "DOC",
+					"targetPath": "factory/docs/README.md",
+					"content": map[string]any{
+						"encoding": "UTF8",
+						"inline":   "# Portable factory\n",
+					},
+				},
+				{
+					"type":       "SCRIPT",
+					"targetPath": "factory/scripts/execute-story.ps1",
+					"content": map[string]any{
+						"encoding": "UTF8",
+						"inline":   servicePortableBundledScriptBody,
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal bundled named factory payload: %v", err)
+	}
+
+	generated, err := config.GeneratedFactoryFromOpenAPIJSON(payload)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(%s bundled files): %v", name, err)
+	}
+
+	generated.Name = factoryapi.FactoryName(name)
+	return generated
+}
+
 func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string) factoryapi.Factory {
 	t.Helper()
 
@@ -438,6 +508,79 @@ func TestFactoryService_CreateNamedFactory_ActivatesPersistedFactoryFromDefaultR
 	}
 }
 
+func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledFiles(t *testing.T) {
+	rootDir := t.TempDir()
+	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, serviceNamedFactoryPayload(t, "root-runtime"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", factoryPath, err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	created, err := svc.CreateNamedFactory(context.Background(), serviceNamedFactoryContractWithBundledFiles(t, "beta"))
+	if err != nil {
+		t.Fatalf("CreateNamedFactory(beta): %v", err)
+	}
+	if created.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("created factory name = %q, want beta", created.Name)
+	}
+	if created.SupportingFiles == nil || created.SupportingFiles.BundledFiles == nil {
+		t.Fatalf("created factory supportingFiles = %#v, want bundled files", created.SupportingFiles)
+	}
+	if len(*created.SupportingFiles.BundledFiles) != 3 {
+		t.Fatalf("created factory bundled files = %#v, want 3 entries", created.SupportingFiles.BundledFiles)
+	}
+	bundledFiles := *created.SupportingFiles.BundledFiles
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+
+	importedDir := filepath.Join(rootDir, "beta")
+	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
+	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "docs", "README.md"), "# Portable factory\n")
+	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+
+	factoryJSON, err := os.ReadFile(filepath.Join(importedDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	supportingFiles, ok := payload["supportingFiles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
+	}
+	persistedBundledFiles, ok := supportingFiles["bundledFiles"].([]any)
+	if !ok || len(persistedBundledFiles) != 3 {
+		t.Fatalf("expected three bundled files, got %#v", supportingFiles["bundledFiles"])
+	}
+	for _, entry := range persistedBundledFiles {
+		bundledFile, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file object, got %#v", entry)
+		}
+		content, ok := bundledFile["content"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file content object, got %#v", bundledFile["content"])
+		}
+		if got := content["inline"]; got != "" {
+			t.Fatalf("expected persisted bundled file inline content to be empty, got %#v", content)
+		}
+		if got := content["encoding"]; got != "" {
+			t.Fatalf("expected persisted bundled file encoding to be empty, got %#v", content)
+		}
+	}
+}
+
 func TestFactoryService_CreateNamedFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
@@ -620,6 +763,18 @@ func writePortableServiceBundledFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
+func assertPortableServiceBundledFile(t *testing.T, path, want string) {
+	t.Helper()
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(got) != want {
+		t.Fatalf("file %s = %q, want %q", path, string(got), want)
 	}
 }
 
