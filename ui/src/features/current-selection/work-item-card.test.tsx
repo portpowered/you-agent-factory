@@ -1,5 +1,9 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type {
+  DashboardTrace,
+  DashboardWorkItemRef,
+} from "../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../components/dashboard/fixtures";
 import {
   DETAIL_CARD_NOW,
@@ -20,6 +24,44 @@ function getDetailRow(container: HTMLElement, label: string): HTMLElement {
   }
 
   return row;
+}
+
+function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
+  return {
+    dispatches: [],
+    relations: [
+      {
+        source_work_id: "work-parent-story",
+        source_work_name: "Parent Story",
+        target_work_id: workItem.work_id,
+        type: "PARENT",
+      },
+      {
+        required_state: "ready",
+        source_work_id: workItem.work_id,
+        target_work_id: "work-dependency-story",
+        target_work_name: "Dependency Story",
+        type: "DEPENDS_ON",
+      },
+      {
+        required_state: "approved",
+        source_work_id: "work-blocked-story",
+        source_work_name: "Blocked Story",
+        target_work_id: workItem.work_id,
+        type: "DEPENDS_ON",
+      },
+      {
+        source_work_id: workItem.work_id,
+        target_work_id: "work-child-story",
+        target_work_name: "Child Story",
+        type: "PARENT",
+      },
+    ],
+    trace_id: workItem.trace_id ?? "trace-active-story",
+    transition_ids: [],
+    work_ids: [workItem.work_id],
+    workstation_sequence: [],
+  };
 }
 
 describe("WorkItemDetailCard summary", () => {
@@ -237,7 +279,7 @@ describe("WorkItemDetailCard summary", () => {
       name: "Workstation dispatches",
     });
     const activeCard = within(dispatchHistory)
-      .getByText(dispatchID)
+      .getAllByText(dispatchID)[0]
       .closest("article");
     const historicalCard = within(dispatchHistory)
       .getByText(historicalDispatchID)
@@ -421,6 +463,129 @@ describe("WorkItemDetailCard summary", () => {
     expect(
       within(currentSelection).getByText("Session log unavailable"),
     ).toBeTruthy();
+  });
+
+  it("renders work relationships as a graph-shaped surface and keeps related work selectable", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        selectedTrace={buildSelectedTrace(workItem)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipGraph = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
+    expect(within(relationshipGraph).getByText("Active Story")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Parent relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Depends on relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Required by relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByRole("region", {
+        name: "Child relationships",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Parent relationships",
+        }),
+      ).getByText("Parent Story"),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Depends on (ready)"),
+    ).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Required by (approved)"),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(relationshipGraph).getByRole("region", {
+          name: "Child relationships",
+        }),
+      ).getByText("Child Story"),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(relationshipGraph).getByRole("button", {
+        name: "Select related work item Dependency Story",
+      }),
+    );
+
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
+  });
+
+  it("renders an explicit empty state when no work relationships are available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[]}
+      />,
+    );
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+
+    expect(
+      within(relationshipSection).getByText(
+        "No parent, child, or dependency relationships are available for this work item.",
+      ),
+    ).toBeTruthy();
+    expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
   });
 
   it("omits the model row while preserving other execution details for historical selections", () => {
@@ -658,7 +823,7 @@ describe("WorkItemDetailCard summary", () => {
       name: "Workstation dispatches",
     });
     const dispatchCard = within(dispatchHistory)
-      .getByText(dispatchID)
+      .getAllByText(dispatchID)[0]
       .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
@@ -685,10 +850,160 @@ describe("WorkItemDetailCard summary", () => {
     ).toHaveLength(1);
     expect(within(dispatchCard).queryByText("## Review checklist")).toBeNull();
   });
-
 });
 
 describe("WorkItemDetailCard dispatch diagnostics", () => {
+  it("renders nested inference attempts in order and preserves dispatch drilldowns", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectTraceID = vi.fn();
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectTraceID={onSelectTraceID}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(dispatchID, {
+            inference_attempts: [
+              inferenceAttempt(dispatchID, {
+                attempt: 2,
+                diagnostics: {
+                  provider: {
+                    model: "gpt-5.4",
+                    provider: "codex",
+                  },
+                },
+                duration_millis: 740,
+                inference_request_id: `${dispatchID}/inference-request/2`,
+                outcome: "SUCCEEDED",
+                prompt: "Retry the review with the latest context.",
+                provider_session: {
+                  id: "sess-ready-request",
+                  kind: "session_id",
+                  provider: "codex",
+                },
+                response: "Ready for the next workstation.",
+                response_time: "2026-04-08T12:00:04Z",
+              }),
+              inferenceAttempt(dispatchID, {
+                attempt: 1,
+                diagnostics: {
+                  provider: {
+                    model: "gpt-5.4-mini",
+                    provider: "codex",
+                  },
+                },
+                error_class: "provider_rate_limit",
+                inference_request_id: `${dispatchID}/inference-request/1`,
+                outcome: "FAILED",
+                prompt: "Review the active story and return a concise result.",
+                response_time: "2026-04-08T12:00:02Z",
+              }),
+            ],
+            model: "gpt-5.4",
+            outcome: "ACCEPTED",
+            prompt: "Review the active story and decide whether it is ready.",
+            provider: "codex",
+            provider_session: {
+              id: "sess-ready-request",
+              kind: "session_id",
+              provider: "codex",
+            },
+            responded_request_count: 1,
+            response: "Ready for the next workstation.",
+            response_view: {
+              duration_millis: 63_000,
+              outcome: "ACCEPTED",
+              output_work_items: [workItem],
+              provider_session: {
+                id: "sess-ready-request",
+                kind: "session_id",
+                provider: "codex",
+              },
+              response_text: "Ready for the next workstation.",
+            },
+            total_duration_millis: 63_000,
+            trace_ids: ["trace-active-story"],
+            working_directory: "C:\\work\\portos",
+            worktree: "C:\\work\\portos\\.worktrees\\active-story",
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getAllByText(dispatchID)[0]
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected dispatch history card with nested inference attempts");
+    }
+
+    const inferenceAttempts = within(dispatchCard).getByRole("region", {
+      name: "Inference attempts",
+    });
+    const attemptCards = within(inferenceAttempts).getAllByRole("article");
+
+    expect(attemptCards).toHaveLength(2);
+    expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();
+    expect(within(attemptCards[1]).getByText("Attempt 2")).toBeTruthy();
+    expect(
+      within(attemptCards[0]).getByText(`${dispatchID}/inference-request/1`),
+    ).toBeTruthy();
+    expect(within(attemptCards[0]).getByText("gpt-5.4-mini")).toBeTruthy();
+    expect(within(attemptCards[1]).getByText("codex")).toBeTruthy();
+    expect(
+      within(attemptCards[1]).getByText("codex / session_id / sess-ready-request"),
+    ).toBeTruthy();
+    expect(within(attemptCards[1]).getByText("740ms")).toBeTruthy();
+    expect(
+      within(attemptCards[1]).getByText("Retry the review with the latest context."),
+    ).toBeTruthy();
+    expect(
+      within(attemptCards[1]).getByText("Ready for the next workstation."),
+    ).toBeTruthy();
+
+    const traceLink = within(dispatchCard).getByRole("link", {
+      name: "trace-active-story",
+    });
+    traceLink.addEventListener(
+      "click",
+      (event) => {
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    fireEvent.click(traceLink);
+    fireEvent.click(
+      within(dispatchCard).getAllByRole("button", {
+        name: "Select work item Active Story",
+      })[0],
+    );
+
+    expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
+    expect(onSelectWorkID).toHaveBeenCalledWith(workItem.work_id);
+  });
+
   it("renders completed failed dispatch-history details from the same row", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
@@ -814,18 +1129,30 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.command ?? "",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.script_request_id ?? "",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(dispatchCard).getAllByText("--work").length).toBeGreaterThan(
+      0,
+    );
+    const scriptAttempts = within(dispatchCard).getByRole("region", {
+      name: "Script attempts",
+    });
+    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
+    expect(within(scriptAttempts).getByText("PENDING")).toBeTruthy();
+    expect(
+      within(scriptAttempts).getByText(
+        "No script response attempt has been recorded yet.",
       ),
     ).toBeTruthy();
-    expect(within(dispatchCard).getByText("--work")).toBeTruthy();
     expect(
       within(dispatchCard).getByText(
         "No script response yet for this dispatch.",
@@ -878,12 +1205,17 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
+    const scriptAttempts = within(dispatchCard).getByRole("region", {
+      name: "Script attempts",
+    });
+    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
+    expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_request
           ?.command ?? "",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
       within(dispatchCard).getAllByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_response
@@ -894,8 +1226,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       0,
     );
     expect(
-      within(dispatchCard).getByText(/script success stdout/),
-    ).toBeTruthy();
+      within(dispatchCard).getAllByText(/script success stdout/).length,
+    ).toBeGreaterThan(0);
+    expect(within(scriptAttempts).getAllByRole("article")).toHaveLength(2);
     expect(within(dispatchCard).queryByText("Provider session")).toBeNull();
   });
 
@@ -939,6 +1272,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getAllByText("TIMED_OUT").length,
     ).toBeGreaterThan(0);
+    const scriptAttempts = within(dispatchCard).getByRole("region", {
+      name: "Script attempts",
+    });
+    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
+    expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
     expect(within(dispatchCard).getAllByText("TIMEOUT").length).toBeGreaterThan(
       0,
     );
@@ -988,7 +1326,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       name: "Workstation dispatches",
     });
     const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.rejected.dispatch_id)
+      .getAllByText(dashboardWorkstationRequestFixtures.rejected.dispatch_id)[0]
       .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
@@ -1011,10 +1349,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(dispatchCard).getAllByText(
         "The active story needs revision before it can continue.",
-      ),
-    ).toBeTruthy();
+      ).length,
+    ).toBeGreaterThan(0);
     expect(
       within(dispatchCard).getByText(
         "codex / session_id / sess-rejected-story",

@@ -20,6 +20,10 @@ import {
 } from "./detail-card-shared";
 import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
 import {
+  DispatchInferenceAttemptsSection,
+  DispatchScriptAttemptsSection,
+} from "./selected-work-dispatch-attempt-sections";
+import {
   DispatchDetailList,
   DispatchDetailSection,
   ScriptArgsSection,
@@ -35,6 +39,7 @@ import {
   requestErrorClass,
   requestFailureMessage,
   requestFailureReason,
+  requestInferenceAttempts,
   requestInputWorkItems,
   requestModel,
   requestOutcome,
@@ -49,6 +54,11 @@ import {
   requestTraceIDs,
   requestWorkingDirectory,
   requestWorktree,
+  scriptAttemptNumber,
+  scriptRequestID,
+  scriptResponseDurationMillis,
+  scriptResponseExitCode,
+  scriptResponseFailureType,
 } from "./selected-work-dispatch-history-helpers";
 
 interface DispatchHistoryCardProps {
@@ -101,6 +111,18 @@ export function DispatchHistoryCard({
         traceTargetId={traceTargetId}
         view={view}
       />
+      {view.sortedInferenceAttempts.length > 0 ? (
+        <DispatchInferenceAttemptsSection attempts={view.sortedInferenceAttempts} />
+      ) : null}
+      {view.isScriptBackedRequest ? (
+        <DispatchScriptAttemptsSection
+          normalizedStderr={view.normalizedScriptStderr}
+          normalizedStdout={view.normalizedScriptStdout}
+          request={request}
+          scriptRequest={view.scriptRequest}
+          scriptResponse={view.scriptResponse}
+        />
+      ) : null}
       {view.hasFailureDetails ? <DispatchFailureSection view={view} /> : null}
     </article>
   );
@@ -127,6 +149,7 @@ interface DispatchHistoryView {
   responseUnavailableCopy: string;
   scriptRequest: ReturnType<typeof requestScriptRequest>;
   scriptResponse: ReturnType<typeof requestScriptResponse>;
+  sortedInferenceAttempts: ReturnType<typeof requestInferenceAttempts>;
   traceIDs: string[];
 }
 
@@ -147,7 +170,7 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
     errorClass,
     failureMessage,
     failureReason,
-    failureType: normalizeDetailText(scriptResponse?.failure_type),
+    failureType: normalizeDetailText(scriptResponseFailureType(scriptResponse)),
     hasFailureDetails,
     inputWorkItems: dedupeWorkItems(requestInputWorkItems(request)),
     isScriptBackedRequest,
@@ -171,6 +194,7 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
           : "No response yet for this dispatch.",
     scriptRequest,
     scriptResponse,
+    sortedInferenceAttempts: requestInferenceAttempts(request),
     traceIDs: requestTraceIDs(request),
   };
 }
@@ -356,30 +380,32 @@ function ScriptResponseContent({
         entries={[
           {
             label: "Script request ID",
-            value: view.scriptResponse.script_request_id,
+            value: scriptRequestID(view.scriptResponse),
             code: true,
           },
           {
             label: "Script attempt",
             value:
-              view.scriptResponse.attempt !== undefined ? String(view.scriptResponse.attempt) : undefined,
+              scriptAttemptNumber(view.scriptResponse) !== undefined
+                ? String(scriptAttemptNumber(view.scriptResponse))
+                : undefined,
           },
           { label: "Outcome", value: view.scriptResponse.outcome },
           {
             label: "Duration",
             value:
-              view.scriptResponse.duration_millis !== undefined
-                ? formatDurationMillis(view.scriptResponse.duration_millis)
+              scriptResponseDurationMillis(view.scriptResponse) !== undefined
+                ? formatDurationMillis(scriptResponseDurationMillis(view.scriptResponse) ?? 0)
                 : undefined,
           },
           {
             label: "Exit code",
             value:
-              view.scriptResponse.exit_code !== undefined
-                ? String(view.scriptResponse.exit_code)
+              scriptResponseExitCode(view.scriptResponse) !== undefined
+                ? String(scriptResponseExitCode(view.scriptResponse))
                 : undefined,
           },
-          { label: "Failure type", value: view.scriptResponse.failure_type },
+          { label: "Failure type", value: scriptResponseFailureType(view.scriptResponse) },
         ]}
       />
       <ScriptOutputSection
@@ -414,4 +440,3 @@ function DispatchFailureSection({
     </DispatchDetailSection>
   );
 }
-

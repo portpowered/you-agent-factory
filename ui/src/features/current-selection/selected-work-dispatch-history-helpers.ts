@@ -1,6 +1,11 @@
 import type {
   SelectedWorkRequestHistoryItem,
 } from "./detail-card-types";
+import type {
+  DashboardInferenceAttempt,
+  DashboardScriptRequest,
+  DashboardScriptResponse,
+} from "../../api/dashboard/types";
 
 export function isProjectedWorkstationRequest(
   request: SelectedWorkRequestHistoryItem,
@@ -142,6 +147,46 @@ export function requestScriptResponse(request: SelectedWorkRequestHistoryItem) {
     : request.response?.script_response;
 }
 
+export function requestInferenceAttempts(
+  request: SelectedWorkRequestHistoryItem,
+): DashboardInferenceAttempt[] {
+  if (!isProjectedWorkstationRequest(request)) {
+    return [];
+  }
+
+  return [...request.inference_attempts].sort((left, right) => {
+    if (left.attempt !== right.attempt) {
+      return left.attempt - right.attempt;
+    }
+
+    return left.inference_request_id.localeCompare(right.inference_request_id);
+  });
+}
+
+export function scriptAttemptNumber(
+  script: DashboardScriptRequest | DashboardScriptResponse | undefined,
+) {
+  return script?.attempt;
+}
+
+export function scriptRequestID(
+  script: DashboardScriptRequest | DashboardScriptResponse | undefined,
+) {
+  return script?.script_request_id ?? script?.scriptRequestId;
+}
+
+export function scriptResponseDurationMillis(response: DashboardScriptResponse | undefined) {
+  return response?.duration_millis ?? response?.durationMillis;
+}
+
+export function scriptResponseExitCode(response: DashboardScriptResponse | undefined) {
+  return response?.exit_code ?? response?.exitCode;
+}
+
+export function scriptResponseFailureType(response: DashboardScriptResponse | undefined) {
+  return response?.failure_type ?? response?.failureType;
+}
+
 export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
   return Boolean(
     requestOutcome(request) ||
@@ -158,4 +203,3 @@ export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
 export function dedupeWorkItems<TWorkItem extends { work_id: string }>(workItems: TWorkItem[]) {
   return [...new Map(workItems.map((workItem) => [workItem.work_id, workItem])).values()];
 }
-
