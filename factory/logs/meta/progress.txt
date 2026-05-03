@@ -8,38 +8,49 @@
 - Refresh the meta model from live git state, not stale summaries; merge state,
   ignore rules, and local dirtiness can change within hours.
 - Check `factory/factory.json` directly when summarizing the workflow because
-  the maintainer loop includes `to-complete`, `consume`, per-worktree
-  execution, shared resource limits, cron cleanup, and loop breakers that are
-  easy to omit in compact prose.
+  the live contract includes `to-complete`, `consume`, per-worktree execution,
+  shared resource limits, cron cleanup, and loop breakers that replay fixtures
+  may not reflect.
 
 ## Current Summary
 
-- As of `2026-05-02T22:01:36.2540358-07:00`, `HEAD` and `origin/main` both
-  point to `bda83e1`; branch divergence is `0/0`.
+- As of `2026-05-03T04:03:50.3625396-07:00`, `HEAD` and `origin/main` both
+  point to `7c98bd7`; branch divergence is `0/0`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`, and the
-  current local ask text scopes this pass to compact meta-log cleanup only.
-- The checked-in maintainer workflow is still
-  `thoughts -> idea -> plan -> task`, with `process`/`review` repeaters in
-  `.claude/worktrees/{{name}}`, `to-complete` holding states, a same-name
-  `consume` join, an hourly cleaner, a shared `executor-slot` capacity of `10`,
-  and loop breakers.
+  current checked-in ask still scopes this pass to compact meta-log cleanup
+  only.
+- The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
+  with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
+  execution for `process` and `review`, `executor-slot` capacity `10`, an
+  hourly cleaner, and loop breakers.
 - The tracked input surface remains sentinel-only; visible files under
-  `factory/inputs/**` are ignored local residue.
-- Recent merged cleanup PRs remain `#61`, `#65`, `#64`, `#63`, and `#62`.
-- The worktree is dirty outside this pass because of local UI edits, a local
-  edit to `factory/logs/meta/asks.md`, and untracked helper files.
+  `factory/inputs/**`, including `factory/inputs/tasks/default`, are ignored
+  local residue rather than checked-in repo truth.
+- Some older repo docs and CLI help still reference `story` or `tasks`
+  surfaces even though the checked-in maintainer workflow uses
+  `BATCH`, `idea`, `plan`, `task`, and `thoughts`.
+- The replay fixtures remain useful smoke artifacts, but they reflect an older
+  workflow shape than the current checked-in contract.
+- The worktree is dirty outside this pass because of a local edit to
+  `factory/logs/meta/asks.md`, tracked backend and UI edits, and several
+  untracked local files.
 
-## 2026-05-02T22:01:36.2540358-07:00 - meta state refresh
+## 2026-05-03T04:03:50.3625396-07:00 - meta state refresh
 
-- Ran `git pull`; the branch was already up to date with `origin/main`.
+- Ran `git pull --ff-only`; the branch was already up to date with
+  `origin/main`.
 - Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
   `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
-  `factory/logs/agent-fails.replay.json`, `docs/standards/STANDARDS.md`,
-  `factory/README.md`, `docs/guides/batch-inputs.md`, `factory/factory.json`,
-  and `.gitignore`.
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `docs/guides/batch-inputs.md`, `factory/factory.json`, `.gitignore`, and the
+  relevant code standards.
 - Re-checked tracked versus ignored workflow inputs with `git ls-files`,
   `Get-ChildItem`, and `git check-ignore`.
-- Re-checked recent merge history and merged PR metadata for `#61`, `#65`,
-  `#64`, `#63`, `#62`, and `#60`.
+- Verified that the watcher accepts direct `factory/inputs/<work-type>/...`
+  paths as the default channel even though the public docs describe the
+  three-segment watched layout.
+- Re-checked recent mainline movement and merged PR metadata through `#65`.
+- Refreshed the world model to distinguish the current checked-in factory
+  contract from the historical replay fixture topology.
 - Confirmed the checked-in ask still forbids new task submissions, so this
-  iteration only refreshed the meta world model and did not queue cleanup work.
+  iteration refreshed meta state only and did not queue cleanup work.
