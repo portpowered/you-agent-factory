@@ -86,6 +86,40 @@ func TestPortableBundledFiles_LoadRuntimeConfigMaterializesStandalonePortableCon
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableBundledRoundTripScriptExecutable(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"))
 	assertPortableBundledLoadedWorker(t, loaded)
+	assertPortableBundledLoadedManifest(t, loaded.FactoryConfig())
+}
+
+func TestPortableBundledFiles_LoadRuntimeConfigAcceptsThinDiskBackedManifest(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-roundtrip-factory",
+  "supportingFiles":{
+    "bundledFiles":[
+      {"type":"ROOT_HELPER","targetPath":"Makefile","content":{}},
+      {"type":"DOC","targetPath":"factory/docs/README.md","content":{}},
+      {"type":"SCRIPT","targetPath":"factory/scripts/execute-story.ps1","content":{}}
+    ]
+  },
+  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "workers": [{"name":"executor"}],
+  "workstations": [{
+    "name":"execute-story",
+    "worker":"executor",
+    "inputs":[{"workType":"task","state":"init"}],
+    "outputs":[{"workType":"task","state":"complete"}],
+    "onFailure":{"workType":"task","state":"failed"}
+  }]
+}`)
+	writePortableBundledRoundTripFile(t, filepath.Join(projectDir, "Makefile"), "test:\n\tgo test ./...\n")
+
+	loaded, err := factoryconfig.LoadRuntimeConfig(sourceDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(thin disk-backed manifest): %v", err)
+	}
+
+	assertPortableBundledLoadedWorker(t, loaded)
+	assertPortableBundledLoadedManifest(t, loaded.FactoryConfig())
 }
 
 func seedPortableBundledRoundTripFactory(t *testing.T) (string, string) {
@@ -141,6 +175,20 @@ func assertPortableBundledLoadedWorker(t *testing.T, loaded *factoryconfig.Loade
 	if len(worker.Args) != 2 || worker.Args[1] != "scripts/execute-story.ps1" {
 		t.Fatalf("loaded worker args = %#v", worker.Args)
 	}
+}
+
+func assertPortableBundledLoadedManifest(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	if cfg == nil || cfg.ResourceManifest == nil {
+		t.Fatal("expected loaded config to include resourceManifest")
+	}
+	if len(cfg.ResourceManifest.BundledFiles) != 3 {
+		t.Fatalf("expected 3 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
+	}
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
+	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
 }
 
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {

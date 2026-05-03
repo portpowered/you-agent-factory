@@ -406,6 +406,60 @@ func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	}
 }
 
+func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJSON(t *testing.T) {
+	rootDir := t.TempDir()
+
+	factoryDir, err := PersistNamedFactory(rootDir, "alpha", namedFactoryPayloadWithBundledFiles(t, "alpha"))
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "Makefile"), "test:\n\tgo test ./...\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "docs", "README.md"), "# Portable factory\n")
+	assertRuntimeFactoryFileContent(t, filepath.Join(factoryDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(factoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	resourceManifest, ok := payload["supportingFiles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
+	}
+	bundledFiles, ok := resourceManifest["bundledFiles"].([]any)
+	if !ok || len(bundledFiles) != 3 {
+		t.Fatalf("expected three bundled files, got %#v", resourceManifest["bundledFiles"])
+	}
+	for _, entry := range bundledFiles {
+		bundledFile, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file object, got %#v", entry)
+		}
+		content, ok := bundledFile["content"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file content object, got %#v", bundledFile["content"])
+		}
+		if got := content["inline"]; got != "" {
+			t.Fatalf("expected persisted bundled file inline content to be empty, got %#v", content)
+		}
+		if got := content["encoding"]; got != "" {
+			t.Fatalf("expected persisted bundled file encoding to be empty, got %#v", content)
+		}
+	}
+
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(persisted thin bundled-file layout): %v", err)
+	}
+	if loaded.FactoryConfig().ResourceManifest == nil || len(loaded.FactoryConfig().ResourceManifest.BundledFiles) != 3 {
+		t.Fatalf("loaded bundled files = %#v, want 3 supported bundled files", loaded.FactoryConfig().ResourceManifest)
+	}
+}
+
 func TestPersistNamedFactory_RejectsDuplicateNames(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -2040,6 +2094,86 @@ func namedFactoryPayload(t *testing.T, project string) []byte {
 		t.Fatalf("Marshal(namedFactoryPayload): %v", err)
 	}
 	return data
+}
+
+func namedFactoryPayloadWithBundledFiles(t *testing.T, project string) []byte {
+	t.Helper()
+
+	cfg := map[string]any{
+		"name": project,
+		"id":   project,
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{
+				{
+					"type":       "ROOT_HELPER",
+					"targetPath": "Makefile",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "test:\n\tgo test ./...\n",
+					},
+				},
+				{
+					"type":       "DOC",
+					"targetPath": "factory/docs/README.md",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "# Portable factory\n",
+					},
+				},
+				{
+					"type":       "SCRIPT",
+					"targetPath": "factory/scripts/execute-story.ps1",
+					"content": map[string]string{
+						"encoding": "utf-8",
+						"inline":   "Write-Output 'portable script'\n",
+					},
+				},
+			},
+		},
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "executor",
+				"type": "MODEL_WORKER",
+				"body": "You are the executor.",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":    "execute-" + project,
+				"worker":  "executor",
+				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+				"type":    "MODEL_WORKSTATION",
+				"body":    "Implement {{ .WorkID }}.",
+			},
+		},
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal(namedFactoryPayloadWithBundledFiles): %v", err)
+	}
+	return data
+}
+
+func assertRuntimeFactoryFileContent(t *testing.T, path, want string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(got) != want {
+		t.Fatalf("%s content = %q, want %q", path, string(got), want)
+	}
 }
 
 func writeRuntimeWorkerAgentsMD(t *testing.T, factoryDir, workerName, content string) {
