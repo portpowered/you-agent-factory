@@ -27,8 +27,8 @@
 
 ## Current Summary
 
-- As of `2026-05-03T09:02:23.4813925-07:00`, `HEAD` on `main` points to
-  `c9bcbcf` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T10:03:19.3588030-07:00`, `HEAD` on `main` points to
+  `a47afae` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and `factory/scripts/import-export-p0-followups.json`
   remains untracked planning residue.
@@ -45,11 +45,12 @@
   standalone route-array idea file, and a helper `FACTORY_REQUEST_BATCH`
   outside the canonical inboxes.
 - PR `#67` removed exported workstation `promptTemplate` from the public
-  contract, and PR `#68` landed the split body-only `AGENTS.md` layout for
-  workers and workstations.
-- The remaining import/export backend seam on `main` is bundled-file
-  disk-backed round-trip behavior; the remaining UI/meta seams are dialog
-  extraction, button standardization, and standards-gap closure.
+  contract, PR `#68` landed the split body-only `AGENTS.md` layout for workers
+  and workstations, and PR `#70` landed the bundled-files disk-backed
+  round-trip behavior on `main`.
+- The remaining import/export seams are now the dialog/button cleanup owned by
+  open PR `#71`, the route-array contract cleanup owned by open PR `#69`, and
+  the still-unowned standards-gap closure lane.
 - The ask surface now also includes a separate workstation-route contract gap:
   `outputs` is array-valued, but public `onContinue`, `onRejection`, and
   `onFailure` remain singular across schema, mapping, replay/projection, and UI
@@ -57,12 +58,15 @@
 - That route-array gap is already actively owned by open PR `#69`
   (`ralph/workstation-non-success-route-arrays`), so a fresh dispatch would be
   duplicate queue work.
+- The import/export dialog extraction and button-standardization lane is also
+  already actively owned by open PR `#71`
+  (`ralph/dashboard-import-export-dialog-extraction-and-button-standardization`).
 - No dedicated checked-in standards-alignment checklist exists yet for
   `STD-016` / `STD-017`, so this file remains the active checklist surface.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
-  now partially stale because it still lists two lanes that are already merged.
+  now more stale because it still lists three lanes that are already merged.
 
 ## Standards Alignment Checklist
 
@@ -75,22 +79,53 @@
   landed on `main`; keep authored-layout regression coverage aligned with that
   thinner structure.
 - Backend:
-  make portable bundled files disk-backed by default and stop preserving inline
-  bundled-file content in imported/exported `factory.json` payloads.
+  portable bundled files are now disk-backed on `main`; keep regression
+  coverage aligned so inline bundled-file payload content does not regress.
 - Website:
-  extract import/export dialogs out of workflow-activity ownership and converge
-  controls onto shared shadcn button styling.
+  import/export dialog extraction and shared button alignment are actively owned
+  by PR `#71`; re-check the landed UI against `STD-016` once that branch merges.
 - Website:
   keep shared components, semantic tokens, and explicit loading/error states
   aligned with `STD-016` while the import/export UI is being simplified.
 - Backend and UI contract:
   align non-success workstation routes with array-based outputs and remove
-  lossy single-destination projection/parsing behavior.
+  lossy single-destination projection/parsing behavior; this lane is actively
+  owned by PR `#69`.
 - Tests and CI:
   keep behavioral runtime/API/UI assertions favored over meta topology tests,
-  and update existing contract coverage that currently locks in the legacy
-  prompt-template and inline-bundled-file shape.
+  and update existing contract coverage so the legacy prompt-template and inline
+  bundled-file shape do not regress.
   Do the same for the singular `onContinue`/`onRejection`/`onFailure` shape.
+
+## 2026-05-03T10:03:19.3588030-07:00 - meta state refresh
+
+- Ran `git pull`; Git reported the branch was already up to date with
+  `origin/main`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, `.gitignore`, the backend/website standards, the
+  helper batch under `factory/scripts/import-export-p0-followups.json`, and the
+  ignored route-array idea under `factory/inputs/idea/default/`.
+- Re-validated the tracked versus ignored workflow-input split with
+  `git ls-files` and `Get-ChildItem factory/inputs`, confirming that tracked
+  repo truth remains sentinel-only while the visible thought seed and route
+  array idea remain ignored local residue.
+- Re-checked recent repo movement and confirmed that PR `#70`
+  (`import-export-bundled-files-disk-backed-roundtrip`) is now merged on
+  `main`, while PR `#69` (`workstation-non-success-route-arrays`) and PR `#71`
+  (`dashboard-import-export-dialog-extraction-and-button-standardization`) are
+  open and already own the remaining concrete import/export contract and UI
+  cleanup lanes.
+- Used delegated inspection plus direct code reads to confirm the helper batch
+  is now more stale than before: its prompt-template, split-layout, and
+  bundled-files lanes are merged, its dialog lane is now owned by PR `#71`, and
+  only the standards-alignment checklist and gap-closure lane still appears
+  unowned.
+- Refreshed the checked-in world view and standards checklist to match the
+  current `main` state and deliberately did not queue new cleanup work in this
+  pass because duplicating the already-owned PR `#69` or PR `#71` lanes would
+  be counterproductive.
 
 ## 2026-05-03T09:02:23.4813925-07:00 - meta state refresh
 

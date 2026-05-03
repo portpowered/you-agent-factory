@@ -2,11 +2,12 @@
 
 ## world state
 
-- as of `2026-05-03T09:02:23.4813925-07:00`, local `HEAD` on `main` points to
-  `c9bcbcf` (`Merge pull request #68 from
-  portpowered/ralph/import-export-expanded-agents-layout-for-workers-and-workstations`)
-  and matches `origin/main`; there is one open PR relevant to the active ask:
-  `#69` `workstation-non-success-route-arrays`
+- as of `2026-05-03T10:03:19.3588030-07:00`, local `HEAD` on `main` points to
+  `a47afae` (`Merge pull request #70 from
+  portpowered/ralph/import-export-bundled-files-disk-backed-roundtrip`) and
+  matches `origin/main`; there are two open PRs relevant to the active ask:
+  `#69` `workstation-non-success-route-arrays` and `#71`
+  `dashboard-import-export-dialog-extraction-and-button-standardization`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
     `factory/workstations/cleaner/AGENTS.md`
@@ -60,27 +61,28 @@
 
 - the highest-priority live ask is the import/export P0 in
   `factory/logs/meta/asks.md`, not the older throttle cleanup lane
-- two earlier import/export cleanup requests have now landed on `main`:
+- three earlier import/export cleanup requests have now landed on `main`:
   - PR `#67` removed exported workstation `promptTemplate` from the public
     contract
   - PR `#68` moved worker/workstation body ownership into split body-only
     `AGENTS.md` files with a thinner authored layout
+  - PR `#70` made supported bundled-file import/export round-trips disk-backed
+    by default
 - the local helper batch in `factory/scripts/import-export-p0-followups.json`
-  is now partially stale: it still lists the prompt-template and split-layout
-  lanes even though those changes are merged, while its bundled-file, dialog,
-  and standards items remain relevant
+  is now more stale: it still lists the prompt-template, split-layout, and
+  bundled-file lanes even though those changes are merged, while its dialog and
+  standards items remain relevant
 - `factory/logs/meta/asks.md` also contains a backend contract ask that is not
   represented in that helper batch:
   - replace singular workstation `onContinue`, `onRejection`, and `onFailure`
     destinations with array-based outputs
 - the remaining import/export seams on `main` are now narrower:
-  - `pkg/config/portable_bundled_files.go` auto-collects supported bundled
-    files during flatten, but `pkg/config/factory_config_mapping.go` still
-    serializes bundled-file inline content into the exported API shape
-  - the dashboard import/export dialog and button-standardization lane remains
-    open in the ask surface and is not yet represented by a merged PR
-  - the standards-alignment checklist lane remains open and is still tracked in
-    `factory/logs/meta/progress.txt`
+  - the dashboard import/export dialog and button-standardization lane is now
+    actively owned by open PR `#71` on branch
+    `ralph/dashboard-import-export-dialog-extraction-and-button-standardization`
+  - the standards-alignment checklist and gap-closure lane remains open in the
+    ask surface, is still tracked in `factory/logs/meta/progress.txt`, and does
+    not yet have a corresponding open PR
 - the live code also shows the route-array ask is real on `main`, but it is no
   longer unowned:
   - `api/components/schemas/data-models/Workstation.yaml`,
@@ -130,6 +132,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#70` `import-export-bundled-files-disk-backed-roundtrip`, merged on
+    `2026-05-03`
   - `#68` `import-export-expanded-agents-layout-for-workers-and-workstations`
     merged on `2026-05-03`
   - `#67` `import-export-api-contract-remove-workstation-prompt-template`
@@ -139,8 +143,10 @@
   - `#64` `retire-dashboard-bento-layout-ownership`
   - `#63` `retire-current-selection-inference-duplication`
   - `#62` `align-dashboard-work-summary-count-semantics`
-- there is one open PR directly tied to the remaining P0 contract cleanup:
+- there are two open PRs directly tied to the remaining P0 cleanup:
   - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
+  - `#71` `dashboard-import-export-dialog-extraction-and-button-standardization`,
+    opened on `2026-05-03`
 
 ## theory of mind
 
@@ -151,12 +157,18 @@
 - helper planning residue can go stale quickly once related PRs merge, so the
   meta loop has to reconcile ignored backlog files against `main` and open PR
   state before dispatching anything new
-- the prompt-template and split-layout asks are now landed on `main`; the
-  remaining import/export backlog is bundled files, dialog/button cleanup,
+- the prompt-template, split-layout, and bundled-file asks are now landed on
+  `main`; the remaining import/export backlog is dialog/button cleanup,
   standards alignment, and the array-based non-success route contract
 - the route-array contract cleanup is already actively owned by ignored local
   residue plus open PR `#69`, so queuing another idea for it would be
   duplicative
+- the dialog/button cleanup is also already actively owned by open PR `#71`, so
+  queuing another idea for it would likewise be duplicative
+- the only remaining P0 import/export follow-up that still appears unowned is
+  the standards-alignment checklist and gap-closure lane, but the existing
+  helper batch for that lane is outside the canonical watched inbox and partly
+  stale
 - the right durable meta action in this iteration is to refresh the checked-in
   world view and progress surfaces only, leaving execution with the existing
-  import/export branches and PRs
+  import/export branches and PRs rather than duplicating queue work
