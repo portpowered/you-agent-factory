@@ -54,6 +54,7 @@ import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
 import { buildFactoryTimelineSnapshot, useFactoryTimelineStore } from "./state/factoryTimelineStore";
 import type { FactoryTimelineSnapshot } from "./state/factoryTimelineStore";
+import { expect, vi, describe, beforeEach, afterEach, it } from "vitest";
 
 class MockEventSource {
   public static instances: MockEventSource[] = [];
