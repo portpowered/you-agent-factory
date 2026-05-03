@@ -54,7 +54,7 @@ import type { FactoryValue } from "./api/named-factory";
 import type { FactoryPngImportValue } from "./features/import";
 import { TraceDrilldownWidget, useTraceDrilldown } from "./features/trace-drilldown";
 import { useDashboardAppStore } from "./state/dashboardAppStore";
-import { buildFactoryTimelineSnapshot, useFactoryTimelineStore } from "./state/factoryTimelineStore";
+import { useFactoryTimelineStore } from "./state/factoryTimelineStore";
 import type { FactoryTimelineSnapshot } from "./state/factoryTimelineStore";
 import { expect, vi, describe, beforeEach, afterEach, it } from "vitest";
 

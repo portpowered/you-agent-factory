@@ -151,8 +151,7 @@
     },
     {
       "includes": [
-        "src/api/factory-definition/api.ts",
-        "src/state/factoryTimelineStore.ts"
+        "src/api/factory-definition/api.ts"
       ],
       "linter": {
         "rules": {
