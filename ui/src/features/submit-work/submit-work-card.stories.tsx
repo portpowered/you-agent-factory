@@ -42,6 +42,9 @@ export const Configured = {
     const card = await canvas.findByRole("article", { name: "Submit work" });
     const scope = within(card);
 
+    await expect(
+      scope.queryByText("Send a new request to the current factory from the dashboard."),
+    ).toBeNull();
     const workType = scope.getByRole("combobox", { name: "Work type" });
     const requestName = scope.getByRole("textbox", { name: "Request name" });
     const requestText = scope.getByRole("textbox", { name: "Request" });
@@ -107,4 +110,3 @@ export const FailureRetry = {
     await expect(scope.getByRole("button", { name: "Submit work" })).toBeEnabled();
   },
 };
-
