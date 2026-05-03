@@ -1,4 +1,4 @@
-import { formatDurationMillis, formatProviderSession } from "../../components/dashboard/formatters";
+import { formatDurationMillis, formatProviderSession } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/dashboard/typography";
 import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";

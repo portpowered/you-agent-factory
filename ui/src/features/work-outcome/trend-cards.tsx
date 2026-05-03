@@ -7,7 +7,7 @@ import { cx } from "../../components/dashboard/classnames";
 import {
   formatDurationMillis,
   formatTraceOutcome,
-} from "../../components/dashboard/formatters";
+} from "../../components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,

@@ -1,7 +1,7 @@
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkExtendedEdge, ElkNode, LayoutOptions } from "elkjs/lib/elk.bundled.js";
 
-import { formatDashboardPlaceLabel } from "../../components/dashboard/place-labels";
+import { formatDashboardPlaceLabel } from "../../components/ui/place-labels";
 import type {
   DashboardEdgeOutcomeKind,
   DashboardPlaceKind,

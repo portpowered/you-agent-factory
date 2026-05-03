@@ -2,7 +2,7 @@ import {
   formatDurationFromISO,
   formatDurationMillis,
   getProviderSessionLogTarget,
-} from "../../components/dashboard/formatters";
+} from "../../components/ui/formatters";
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,

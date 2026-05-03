@@ -2,11 +2,11 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { ReactNode } from "react";
 
 import { cx } from "../../components/dashboard/classnames";
-import { formatDurationFromISO, formatWorkItemLabel } from "../../components/dashboard/formatters";
+import { formatDurationFromISO, formatWorkItemLabel } from "../../components/ui/formatters";
 import {
   formatDashboardPlaceLabel,
   getDashboardPlaceLabelParts,
-} from "../../components/dashboard/place-labels";
+} from "../../components/ui/place-labels";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 import type { GraphSemanticIconKind } from "./graph-semantic-icon";
 import { workstationIconMetadata } from "./workstation-icon-metadata";
