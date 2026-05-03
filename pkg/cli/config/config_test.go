@@ -910,20 +910,6 @@ func writeCLIRequiredToolExecutable(t *testing.T, dir, baseName string) string {
 	return baseName
 }
 
-func assertExpandedAgentsFrontmatterUsesCamelCase(t *testing.T, content string, want []string, disallowed []string) {
-	t.Helper()
-	for _, expected := range want {
-		if !strings.Contains(content, expected) {
-			t.Fatalf("expanded AGENTS.md missing %q:\n%s", expected, content)
-		}
-	}
-	for _, retired := range disallowed {
-		if strings.Contains(content, retired) {
-			t.Fatalf("expanded AGENTS.md should not contain retired %q:\n%s", retired, content)
-		}
-	}
-}
-
 func mustReadCanonicalFactoryPayload(t *testing.T, path string) map[string]any {
 	t.Helper()
 	return mustDecodeCanonicalFactoryPayload(t, readCLITestFile(t, path))
