@@ -1,4 +1,5 @@
 import type {
+  DashboardInferenceAttempt,
   SelectedWorkRequestHistoryItem,
 } from "./detail-card-types";
 
@@ -142,6 +143,22 @@ export function requestScriptResponse(request: SelectedWorkRequestHistoryItem) {
     : request.response?.script_response;
 }
 
+export function requestInferenceAttempts(
+  request: SelectedWorkRequestHistoryItem,
+): DashboardInferenceAttempt[] {
+  if (!isProjectedWorkstationRequest(request)) {
+    return [];
+  }
+
+  return [...request.inference_attempts].sort((left, right) => {
+    if (left.attempt !== right.attempt) {
+      return left.attempt - right.attempt;
+    }
+
+    return left.inference_request_id.localeCompare(right.inference_request_id);
+  });
+}
+
 export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
   return Boolean(
     requestOutcome(request) ||
@@ -158,4 +175,3 @@ export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
 export function dedupeWorkItems<TWorkItem extends { work_id: string }>(workItems: TWorkItem[]) {
   return [...new Map(workItems.map((workItem) => [workItem.work_id, workItem])).values()];
 }
-

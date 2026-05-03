@@ -1,5 +1,6 @@
 import { cx } from "../../lib/cx";
 import {
+  DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard/typography";
@@ -12,6 +13,7 @@ import {
 import {
   EXECUTION_PILL_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
+  InferenceAttemptCard,
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
   RequestAuthoredText,
@@ -35,6 +37,7 @@ import {
   requestErrorClass,
   requestFailureMessage,
   requestFailureReason,
+  requestInferenceAttempts,
   requestInputWorkItems,
   requestModel,
   requestOutcome,
@@ -101,6 +104,9 @@ export function DispatchHistoryCard({
         traceTargetId={traceTargetId}
         view={view}
       />
+      {view.sortedInferenceAttempts.length > 0 ? (
+        <DispatchInferenceAttemptsSection view={view} />
+      ) : null}
       {view.hasFailureDetails ? <DispatchFailureSection view={view} /> : null}
     </article>
   );
@@ -127,6 +133,7 @@ interface DispatchHistoryView {
   responseUnavailableCopy: string;
   scriptRequest: ReturnType<typeof requestScriptRequest>;
   scriptResponse: ReturnType<typeof requestScriptResponse>;
+  sortedInferenceAttempts: ReturnType<typeof requestInferenceAttempts>;
   traceIDs: string[];
 }
 
@@ -171,6 +178,7 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
           : "No response yet for this dispatch.",
     scriptRequest,
     scriptResponse,
+    sortedInferenceAttempts: requestInferenceAttempts(request),
     traceIDs: requestTraceIDs(request),
   };
 }
@@ -396,6 +404,26 @@ function ScriptResponseContent({
   );
 }
 
+function DispatchInferenceAttemptsSection({
+  view,
+}: {
+  view: DispatchHistoryView;
+}) {
+  return (
+    <section
+      aria-label="Inference attempts"
+      className="mt-[0.75rem] grid gap-[0.45rem] border-t border-af-overlay/8 pt-[0.75rem]"
+    >
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Inference attempts</h4>
+      <div className="grid gap-[0.65rem]">
+        {view.sortedInferenceAttempts.map((attempt) => (
+          <InferenceAttemptCard attempt={attempt} key={attempt.inference_request_id} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DispatchFailureSection({
   view,
 }: {
@@ -414,4 +442,3 @@ function DispatchFailureSection({
     </DispatchDetailSection>
   );
 }
-

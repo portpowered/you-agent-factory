@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   DashboardTrace,
   DashboardWorkItemRef,
@@ -853,6 +853,155 @@ describe("WorkItemDetailCard summary", () => {
 });
 
 describe("WorkItemDetailCard dispatch diagnostics", () => {
+  it("renders nested inference attempts in order and preserves dispatch drilldowns", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectTraceID = vi.fn();
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        onSelectTraceID={onSelectTraceID}
+        onSelectWorkID={onSelectWorkID}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(dispatchID, {
+            inference_attempts: [
+              inferenceAttempt(dispatchID, {
+                attempt: 2,
+                diagnostics: {
+                  provider: {
+                    model: "gpt-5.4",
+                    provider: "codex",
+                  },
+                },
+                duration_millis: 740,
+                inference_request_id: `${dispatchID}/inference-request/2`,
+                outcome: "SUCCEEDED",
+                prompt: "Retry the review with the latest context.",
+                provider_session: {
+                  id: "sess-ready-request",
+                  kind: "session_id",
+                  provider: "codex",
+                },
+                response: "Ready for the next workstation.",
+                response_time: "2026-04-08T12:00:04Z",
+              }),
+              inferenceAttempt(dispatchID, {
+                attempt: 1,
+                diagnostics: {
+                  provider: {
+                    model: "gpt-5.4-mini",
+                    provider: "codex",
+                  },
+                },
+                error_class: "provider_rate_limit",
+                inference_request_id: `${dispatchID}/inference-request/1`,
+                outcome: "FAILED",
+                prompt: "Review the active story and return a concise result.",
+                response_time: "2026-04-08T12:00:02Z",
+              }),
+            ],
+            model: "gpt-5.4",
+            outcome: "ACCEPTED",
+            prompt: "Review the active story and decide whether it is ready.",
+            provider: "codex",
+            provider_session: {
+              id: "sess-ready-request",
+              kind: "session_id",
+              provider: "codex",
+            },
+            responded_request_count: 1,
+            response: "Ready for the next workstation.",
+            response_view: {
+              duration_millis: 63_000,
+              outcome: "ACCEPTED",
+              output_work_items: [workItem],
+              provider_session: {
+                id: "sess-ready-request",
+                kind: "session_id",
+                provider: "codex",
+              },
+              response_text: "Ready for the next workstation.",
+            },
+            total_duration_millis: 63_000,
+            trace_ids: ["trace-active-story"],
+            working_directory: "C:\\work\\portos",
+            worktree: "C:\\work\\portos\\.worktrees\\active-story",
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory).getByText(dispatchID).closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected dispatch history card with nested inference attempts");
+    }
+
+    const inferenceAttempts = within(dispatchCard).getByRole("region", {
+      name: "Inference attempts",
+    });
+    const attemptCards = within(inferenceAttempts).getAllByRole("article");
+
+    expect(attemptCards).toHaveLength(2);
+    expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();
+    expect(within(attemptCards[1]).getByText("Attempt 2")).toBeTruthy();
+    expect(
+      within(attemptCards[0]).getByText(`${dispatchID}/inference-request/1`),
+    ).toBeTruthy();
+    expect(within(attemptCards[0]).getByText("gpt-5.4-mini")).toBeTruthy();
+    expect(within(attemptCards[1]).getByText("codex")).toBeTruthy();
+    expect(
+      within(attemptCards[1]).getByText("codex / session_id / sess-ready-request"),
+    ).toBeTruthy();
+    expect(within(attemptCards[1]).getByText("740ms")).toBeTruthy();
+    expect(
+      within(attemptCards[1]).getByText("Retry the review with the latest context."),
+    ).toBeTruthy();
+    expect(
+      within(attemptCards[1]).getByText("Ready for the next workstation."),
+    ).toBeTruthy();
+
+    const traceLink = within(dispatchCard).getByRole("link", {
+      name: "trace-active-story",
+    });
+    traceLink.addEventListener(
+      "click",
+      (event) => {
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    fireEvent.click(traceLink);
+    fireEvent.click(
+      within(dispatchCard).getByRole("button", {
+        name: "Select work item Active Story",
+      }),
+    );
+
+    expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
+    expect(onSelectWorkID).toHaveBeenCalledWith(workItem.work_id);
+  });
+
   it("renders completed failed dispatch-history details from the same row", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
