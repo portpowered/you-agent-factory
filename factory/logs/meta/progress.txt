@@ -1,47 +1,43 @@
 ## Codebase Patterns
 
-- Re-check tracked `factory/inputs/**` with `git ls-files` before inferring
-  repo truth from local residue; this repo keeps the inbox surface in git with
-  `.gitkeep` sentinels while real work items are ignored by default.
-- Treat `factory/logs/meta/asks.md` as the canonical maintainer-routing
-  surface and let it decide whether new queue submissions are allowed.
-- Use live git branch state plus merged PR history to correct stale meta prose;
-  compact summaries can go stale within hours.
-- Before attempting branch reconciliation, inspect the worktree for unrelated
-  local UI edits because they can block a safe pull/merge even when the meta
-  task itself is small.
+- Validate repo-truth claims about `factory/inputs/**` with `git ls-files`
+  before trusting visible local files; the repo tracks sentinels while live
+  work items are ignored.
+- Read `factory/logs/meta/asks.md` before submitting cleanup ideas; it is the
+  canonical maintainer-routing surface and can explicitly forbid queue work.
+- Refresh the meta model from live git state, not stale summaries; merge state,
+  ignore rules, and local dirtiness can change within hours.
+- Check `factory/factory.json` directly when summarizing the workflow because
+  the maintainer loop includes `to-complete`, `consume`, cron cleanup, and loop
+  breakers that are easy to omit in compact prose.
 
 ## Current Summary
 
-- As of `2026-05-02T20:02:32.8868149-07:00`, `HEAD` and `origin/main` both
-  point to `38f6f50`; branch divergence is `0/0`.
-- The canonical ask surface is still `factory/logs/meta/asks.md`, and its
-  current instruction is to clean meta state only and not submit new tasks.
-- The checked-in workflow input surface is sentinel-only right now; local
-  `factory/inputs/**` artifacts are ignored operating residue rather than
-  tracked repo content.
-- PRs `#61` through `#65` relevant to the recent dashboard cleanup wave are
-  already merged.
-- Replay summary remains:
-  - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
-  - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
-- The local worktree is dirty beyond the meta files because tracked UI edits,
-  helper splits, and ignored workflow inputs are already present.
+- As of `2026-05-02T21:01:24.4838148-07:00`, `HEAD` and `origin/main` both
+  point to `c42c2ef`; branch divergence is `0/0`.
+- The canonical ask surface remains `factory/logs/meta/asks.md`, and the
+  current local ask text scopes this pass to compact meta-log cleanup only.
+- The checked-in maintainer workflow is still
+  `thoughts -> idea -> plan -> task`, with `process`/`review` repeaters,
+  `to-complete` holding states, a same-name `consume` join, an hourly cleaner,
+  and loop breakers.
+- The tracked input surface remains sentinel-only; visible files under
+  `factory/inputs/**` are ignored local residue.
+- Recent merged cleanup PRs remain `#61` through `#65`.
+- The worktree is dirty outside this pass because of local UI edits, a local
+  edit to `factory/logs/meta/asks.md`, and untracked helper files.
 
-## 2026-05-02T20:02:32.8868149-07:00 - meta state refresh
+## 2026-05-02T21:01:24.4838148-07:00 - meta state refresh
 
+- Ran `git pull`; the branch was already up to date with `origin/main`.
 - Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
   `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
   `factory/logs/agent-fails.replay.json`, `docs/standards/STANDARDS.md`,
-  `factory/README.md`, `docs/guides/batch-inputs.md`, `.gitignore`, and
-  `factory/factory.json`.
-- Re-ran `git pull --rebase --autostash origin main`; the branch was already up
-  to date.
-- Re-checked `git ls-files factory/inputs` and `git check-ignore` and confirmed
-  that checked-in inboxes remain `.gitkeep` sentinels while local queue files
-  under `factory/inputs/**` are ignored by `.gitignore`.
-- Re-checked recent merge history and confirmed PRs `#61` through `#65` are
-  already merged on `main`.
-- Updated the meta world model to match the live repo and kept the pass scoped
-  to meta-state cleanup because `factory/logs/meta/asks.md` explicitly says
-  not to submit new tasks right now.
+  `factory/README.md`, `docs/guides/batch-inputs.md`, `factory/factory.json`,
+  and `.gitignore`.
+- Re-checked tracked versus ignored workflow inputs with `git ls-files`,
+  `Get-ChildItem`, and `git check-ignore`.
+- Re-checked recent merge history and PR metadata for `#61` through `#65`.
+- Updated the meta summaries to reflect the live repo and kept the pass scoped
+  to meta-only work because the canonical ask text forbids new task
+  submissions.

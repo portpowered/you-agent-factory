@@ -2,70 +2,67 @@
 
 ## world state
 
-- as of `2026-05-02T20:02:32.8868149-07:00`, `HEAD` and `origin/main` both
-  point to `38f6f50` (`docs: refresh meta world state`)
-- local branch status is aligned with remote; the repo is dirty because of
-  local tracked UI edits, a local edit to `factory/logs/meta/asks.md`, and
-  untracked helper files
-- the canonical checked-in maintainer ask surface remains
+- as of `2026-05-02T21:01:24.4838148-07:00`, `HEAD` and `origin/main` both
+  point to `c42c2ef` (`docs: refresh meta world state`); branch divergence is
+  `0/0`
+- the canonical maintainer ask surface is still
   `factory/logs/meta/asks.md`
-- the current ask guidance says to clean up meta summaries only and not submit
-  new cleanup tasks on this pass
-- replay evidence remains stable:
-  - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
-  - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
+- the current local ask text says this pass is meta-only: refresh
+  `view.md` and `progress.txt`, do not submit new tasks
+- the worktree is dirty outside this pass:
+  - tracked local edit to `factory/logs/meta/asks.md`
+  - tracked UI edits and helper splits across `ui/**`
+  - untracked local files including `factory/logs/weird-number-summary.jsonl`
 
-## repo truth
+## workflow truth
 
-- `factory/README.md` still describes a checked-in repository-maintainer
-  workflow with canonical inboxes under `factory/inputs/{BATCH,idea,plan,task,thoughts}/default/`
-- tracked `factory/inputs/**` content is sentinel-only right now:
+- `factory/factory.json` defines this checked-in maintainer loop:
+  `thoughts:init -> ideafy -> thoughts:complete`
+  `idea:init -> plan -> idea:to-complete + plan:init`
+  `plan:init -> setup-workspace -> plan:complete + task:init`
+  `task:init -> process -> task:in-review -> review -> task:to-complete`
+  `consume` completes same-name `idea` + `task` pairs after both reach
+  `to-complete`
+- the topology also includes:
+  - hourly `cleaner` cron
+  - `executor-loop-breaker` at `process` visit `50`
+  - `review-loop-breaker` at `review` visit `10`
+- `factory/README.md` and `docs/guides/batch-inputs.md` remain aligned with
+  the checked-in workflow contract
+
+## input surface truth
+
+- tracked `factory/inputs/**` content is still sentinel-only:
   - `factory/inputs/BATCH/default/.gitkeep`
   - `factory/inputs/idea/default/.gitkeep`
   - `factory/inputs/plan/default/.gitkeep`
   - `factory/inputs/task/default/.gitkeep`
   - `factory/inputs/thoughts/default/.gitkeep`
-- real workflow items currently visible under `factory/inputs/**` are local
-  gitignored residue, not checked-in repo truth
-- `docs/guides/batch-inputs.md` remains the contract for canonical
-  `FACTORY_REQUEST_BATCH` submissions when mixed work types or dependency
-  ordering are needed
-- `factory/factory.json` still models the maintainer loop as
-  `thoughts -> idea -> plan -> task`, with `process` and `review` repeaters,
-  a logical `consume` step, and loop breakers
-- recent maintainer-request branches already merged on `main` still include:
-  - PR `#61` `browser-shared-action-primitives`
-  - PR `#62` `align-dashboard-work-summary-count-semantics`
-  - PR `#63` `retire-current-selection-inference-duplication`
-  - PR `#64` `retire-dashboard-bento-layout-ownership`
-  - PR `#65` `retire-dashboard-format-helper-ownership`
+- visible markdown under `factory/inputs/**` is local operating residue, not
+  checked-in repo truth
+- `.gitignore` still ignores `factory/inputs/**` except those sentinel paths
 
-## local workspace reality
+## recent repo movement
 
-- `factory/logs/meta/asks.md` is already locally modified and should remain
-  untouched on this pass
-- `factory/logs/weird-number-summary.jsonl` remains untracked local evidence
-- the dirty UI worktree is broader than the last summary and currently spans:
-  - dashboard component/test edits
-  - current-selection refactors and helper splits
-  - workflow-activity, trace-drilldown, and work-outcome edits
-  - new shared UI helper files such as `ui/src/lib/cx.ts`
+- recent merged cleanup PRs on `main`:
+  - `#61` `browser-shared-action-primitives`, merged `2026-05-03T01:06:33Z`
+  - `#62` `align-dashboard-work-summary-count-semantics`, merged
+    `2026-05-02T21:37:06Z`
+  - `#63` `retire-current-selection-inference-duplication`, merged
+    `2026-05-02T22:38:08Z`
+  - `#64` `retire-dashboard-bento-layout-ownership`, merged
+    `2026-05-02T23:37:13Z`
+  - `#65` `retire-dashboard-format-helper-ownership`, merged
+    `2026-05-03T00:39:01Z`
+- replay evidence is unchanged:
+  - `process`: `9 ACCEPTED <COMPLETE>`, `27 CONTINUE <CONTINUE>`
+  - `review`: `5 ACCEPTED <COMPLETE>`, `4 REJECTED <REJECTED>`
 
 ## theory of mind
 
-- the authoritative maintainer model must come from tracked files, live git
-  state, and current factory topology, not from stale compact summaries
-- `factory/inputs/**` should be reasoned about in two layers:
-  - checked-in contract: sentinel directories preserved in git
-  - local operating residue: ignored work items used by the workflow
-- the current ask surface intentionally narrows this pass to meta-hygiene, so
-  updating `view.md` and `progress.txt` is the correct move
-
-## next best move
-
-- keep `factory/logs/meta/view.md` and `factory/logs/meta/progress.txt`
-  compact and current
-- leave `factory/logs/meta/asks.md` unchanged
-- do not submit new work under `factory/inputs/**` on this pass
-- if a later pass needs queue cleanup or code cleanup, start from the current
-  dirty-worktree reality instead of assuming the repo itself is diverged
+- the authoritative world model comes from tracked workflow files, live git
+  state, ignore rules, and the current canonical ask text
+- `factory/inputs/**` must always be reasoned about in two layers:
+  checked-in contract vs ignored local operating residue
+- this pass should stay meta-only: refresh compact summaries, leave
+  `factory/logs/meta/asks.md` untouched, and do not queue new work
