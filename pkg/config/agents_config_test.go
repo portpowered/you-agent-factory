@@ -208,6 +208,65 @@ Given the following request:
 	}
 }
 
+func TestLoadWorkstationConfig_PreservesNonSuccessRouteArrays(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKSTATION
+worker: swe
+inputs:
+  - workType: story
+    state: init
+outputs:
+  - workType: story
+    state: complete
+onContinue:
+  - workType: story
+    state: retry
+  - workType: story
+    state: complete
+onRejection:
+  - workType: story
+    state: init
+  - workType: story
+    state: review
+onFailure:
+  - workType: story
+    state: failed
+  - workType: story
+    state: review
+---
+
+Route work based on execution outcome.
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWorkstationConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := len(cfg.OnContinue); got != 2 {
+		t.Fatalf("onContinue length = %d, want 2", got)
+	}
+	if got := len(cfg.OnRejection); got != 2 {
+		t.Fatalf("onRejection length = %d, want 2", got)
+	}
+	if got := len(cfg.OnFailure); got != 2 {
+		t.Fatalf("onFailure length = %d, want 2", got)
+	}
+	if cfg.OnContinue[0].StateName != "retry" || cfg.OnContinue[1].StateName != "complete" {
+		t.Fatalf("unexpected onContinue routes: %#v", cfg.OnContinue)
+	}
+	if cfg.OnRejection[0].StateName != "init" || cfg.OnRejection[1].StateName != "review" {
+		t.Fatalf("unexpected onRejection routes: %#v", cfg.OnRejection)
+	}
+	if cfg.OnFailure[0].StateName != "failed" || cfg.OnFailure[1].StateName != "review" {
+		t.Fatalf("unexpected onFailure routes: %#v", cfg.OnFailure)
+	}
+}
+
 type workstationRetiredAliasCase struct {
 	name        string
 	frontmatter string
@@ -250,6 +309,15 @@ resource_usage:
 worker: swe
 prompt_file: prompt.md`,
 		want: "frontmatter.prompt_file is not supported; use promptFile",
+	},
+	{
+		name: "on continue alias",
+		frontmatter: `type: MODEL_WORKSTATION
+worker: swe
+on_continue:
+  - workType: story
+    state: retry`,
+		want: "frontmatter.on_continue is not supported; use onContinue",
 	},
 	{
 		name: "cron trigger at start",
@@ -296,6 +364,33 @@ guards:
     workstation: swe
     max_visits: 2`,
 		want: "frontmatter.guards[0].max_visits is not supported; use maxVisits",
+	},
+	{
+		name: "on continue route entry alias",
+		frontmatter: `type: MODEL_WORKSTATION
+worker: swe
+onContinue:
+  - work_type: story
+    state: retry`,
+		want: "frontmatter.onContinue[0].work_type is not supported; use workType",
+	},
+	{
+		name: "on rejection route entry alias",
+		frontmatter: `type: MODEL_WORKSTATION
+worker: swe
+onRejection:
+  - work_type: story
+    state: rejected`,
+		want: "frontmatter.onRejection[0].work_type is not supported; use workType",
+	},
+	{
+		name: "on failure route entry alias",
+		frontmatter: `type: MODEL_WORKSTATION
+worker: swe
+onFailure:
+  - work_type: story
+    state: failed`,
+		want: "frontmatter.onFailure[0].work_type is not supported; use workType",
 	},
 }
 

@@ -240,6 +240,7 @@ func rejectRetiredWorkstationFrontmatterAliases(frontmatter map[string]any) erro
 		{key: "runtime_type", replacement: "use type"},
 		{key: "prompt_file", replacement: "use promptFile"},
 		{key: "output_schema", replacement: "use outputSchema"},
+		{key: "on_continue", replacement: "use onContinue"},
 		{key: "on_rejection", replacement: "use onRejection"},
 		{key: "on_failure", replacement: "use onFailure"},
 		{key: "resourceUsage", replacement: "use resources"},
@@ -269,10 +270,13 @@ func rejectRetiredWorkstationFrontmatterAliases(frontmatter map[string]any) erro
 	if err := rejectRetiredIOFrontmatterListAliases(frontmatter["outputs"], "frontmatter.outputs"); err != nil {
 		return err
 	}
-	if err := rejectRetiredIOFrontmatterAliases(frontmatter["onRejection"], "frontmatter.onRejection"); err != nil {
+	if err := rejectRetiredIOFrontmatterListAliases(frontmatter["onContinue"], "frontmatter.onContinue"); err != nil {
 		return err
 	}
-	if err := rejectRetiredIOFrontmatterAliases(frontmatter["onFailure"], "frontmatter.onFailure"); err != nil {
+	if err := rejectRetiredIOFrontmatterListAliases(frontmatter["onRejection"], "frontmatter.onRejection"); err != nil {
+		return err
+	}
+	if err := rejectRetiredIOFrontmatterListAliases(frontmatter["onFailure"], "frontmatter.onFailure"); err != nil {
 		return err
 	}
 	return rejectRetiredGuardFrontmatterAliases(frontmatter["guards"], "frontmatter.guards")
