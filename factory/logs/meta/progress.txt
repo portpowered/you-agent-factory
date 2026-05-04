@@ -77,7 +77,7 @@
 
 ## Current Summary
 
-- As of `2026-05-04T08:02:51.5432975-07:00`, `HEAD` on `main` points to `e35682b`
+- As of `2026-05-04T09:04:04.2336456-07:00`, `HEAD` on `main` points to `8029392`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -104,6 +104,8 @@
   `main`.
 - Merged PR `#89` closed the remaining replay trace-dispatch projection
   duplication lane on `main`.
+- Merged PR `#93` closed the supported portable bundled-file portability lane
+  on `main`.
 - Merged PR `#92` closed the stale OpenAPI cron post-processing compatibility
   seam on `main`.
 - Merged PR `#91` closed the hidden singular non-success route compatibility
@@ -118,16 +120,14 @@
   closed on `main` through merged PR `#69`.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- The portable bundled-file portion of the import/export ask is still live on
-  `main`: `pkg/config/layout.go` still collects supported bundled files into
-  inline `resourceManifest.bundledFiles[*].content.inline` during canonical
-  export, `pkg/config/runtime_config.go` still rehydrates those files back into
-  inline content during runtime load, and
-  `pkg/config/config_validator_test.go` still protects the inline-content
-  requirement for declared bundled files.
-- The next safe dispatch is a single standalone customer-visible idea to
-  canonicalize portable bundled files without inline content in exported
-  `factory.json`.
+- The import/export P0 lane is now materially closed on `main` for the
+  supported portable subset: canonical export omits supported portable inline
+  bundled-file content, runtime loading stays disk-backed, validation accepts
+  thin portable entries, and round-trip coverage protects the behavior.
+- There is no remaining narrow customer-visible ask gap on `main`; the next
+  safe dispatch is a small replay cleanup that removes the remaining
+  `legacyDispatchRequestPayload` / `legacyDispatchResponsePayload` cast wrappers
+  from the live timeline replay path.
 
 ## Standards Alignment Checklist
 
@@ -145,9 +145,43 @@
   `main` through PR `#91`.
 - Backend: the stale OpenAPI cron post-processing helper path is now closed on
   `main` through PR `#92`.
-- Backend: the next customer-visible portability seam is retiring inline
-  bundled-file ownership from canonical export, runtime load, and validator
-  expectations.
+- Backend: the supported portable bundled-file portability seam is now closed
+  on `main` through PR `#93`.
+- Website/backend: the next narrow simplification candidate is removing the
+  remaining replay dispatch payload cast wrappers after the broader replay
+  compat lanes closed through PR `#88` and PR `#89`.
+
+## 2026-05-04T09:04:04.2336456-07:00 - meta state refresh
+
+- Ran `git pull`; Git fast-forwarded `main` from `04bcab1` to `8029392`, which
+  pulled in merged PR `#93`
+  (`canonicalize-portable-bundled-files-without-inline-content`) on
+  `2026-05-04T15:53:47Z` while preserving the pre-existing local tracked edits
+  in `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, recent PR state, the tracked-versus-ignored
+  `factory/inputs/**` surface, and the live portability plus replay code.
+- Re-validated with `gh pr list --state all --limit 12`, `gh pr view 93`,
+  `git log --oneline -12`, graph reads, direct code reads, and a delegated
+  explorer pass that PR `#93` fully closed the supported portable bundled-file
+  portability seam previously recorded in the meta view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/canonicalize-portable-bundled-files-without-inline-content.md`
+  is now stale because PR `#93` already landed that exact work on `main`, then
+  replaced that ignored queue residue with one new standalone replay cleanup
+  request.
+- Used direct reads plus delegated inspection to confirm there is no remaining
+  narrow customer-visible ask gap on `main`; the unresolved items in
+  `factory/logs/meta/asks.md` are now broad program asks rather than one more
+  concrete feature lane.
+- Identified the next narrow cleanup seam on `main`: the live replay path in
+  `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
+  `ui/src/features/timeline/state/timeline/replayWorldState.ts` still carries
+  one-line `legacyDispatchRequestPayload` /
+  `legacyDispatchResponsePayload` cast wrappers even though the actual legacy
+  snake_case fallback behavior is already consumed inline at the callers.
 
 ## 2026-05-04T08:02:51.5432975-07:00 - meta state refresh
 

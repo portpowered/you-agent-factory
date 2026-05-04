@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T08:02:51.5432975-07:00`, local `HEAD` on `main` points to
-  `e35682b`
-  (`Merge pull request #92 from portpowered/ralph/retire-openapi-cron-compatibility-patch`)
+- as of `2026-05-04T09:04:04.2336456-07:00`, local `HEAD` on `main` points to
+  `8029392`
+  (`Merge pull request #93 from portpowered/ralph/canonicalize-portable-bundled-files-without-inline-content`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -47,26 +47,24 @@
   channel fallback
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
   merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`,
-  merged PR `#89`, merged PR `#90`, merged PR `#91`, and merged PR `#92`, the
-  only ignored operating submission should remain one standalone idea under
-  `factory/inputs/idea/default/`
+  merged PR `#89`, merged PR `#90`, merged PR `#91`, merged PR `#92`, and
+  merged PR `#93`, the only ignored operating submission should remain one
+  standalone idea under `factory/inputs/idea/default/`
 
 ## customer-ask truth
 
-- the import/export P0 lane is not fully closed on `main`:
-  - merged PRs `#67`, `#68`, `#69`, `#70`, `#71`, and `#72` closed the prompt
-    template, split-layout, non-success-route, dialog, and related surface
-    asks
-  - the portable bundled-file portion of that ask still remains live:
-    `pkg/config/layout.go` `FlattenFactoryConfig` still calls
-    `applySupportedPortableBundledFiles`, which collects supported
-    `factory/scripts/**` and `factory/docs/**` files back into
-    `resourceManifest.bundledFiles[*].content.inline` for canonical
-    `factory.json` export
-  - `pkg/config/runtime_config.go` still rehydrates supported bundled files
-    from disk back into inline content during runtime config loading, and
-    `pkg/config/config_validator_test.go` still protects the requirement that a
-    declared bundled file carries `content.inline`
+- the import/export P0 lane is now materially closed on `main`:
+  - merged PRs `#67`, `#68`, `#69`, `#70`, `#71`, `#72`, and `#93` now cover
+    the prompt template, split-layout, non-success-route, dialog, and
+    supported portable bundled-file portions of that ask
+  - canonical export now omits inline bundled-file content for supported
+    portable `factory/scripts/**` and `factory/docs/**` entries while keeping
+    the transport records needed for portability
+  - runtime loading and validation now accept the supported disk-backed
+    portable bundled-file path without rehydrating supported inline ownership
+  - package, integration, service, and functional coverage now protect the
+    supported bundled-file round-trip behavior through export, import, and
+    runtime loading
 - the selected-work current-selection ask is materially satisfied on `main`
   through merged PRs `#74` and `#77`
 - the submit-work copy ask is satisfied on `main` through merged PR `#75`
@@ -144,12 +142,24 @@
     `tests/functional/runtime_api/api_runtime_config_alignment_smoke_test.go`
     now cover canonical cron loading through the generated boundary and runtime
     config path
-- the next remaining narrow customer-visible ask gap on `main` is the bundled
-  file portability contract:
-  - canonical `factory.json` export still inlines supported bundled file
-    content instead of keeping those files expanded onto disk
-  - runtime and validation paths still preserve inline bundled-file ownership
-    even though authored expanded layouts already strip that content back out
+- merged PR `#93` closed the supported portable bundled-file portability seam
+  on `main`:
+  - `pkg/config/factory_config_mapping.go` now strips supported portable inline
+    bundled-file content from canonical export while preserving the portable
+    transport entries
+  - `pkg/config/runtime_config.go`, `pkg/config/layout.go`, and
+    `pkg/config/config_validator.go` now treat supported portable bundled files
+    as disk-backed during runtime loading, expansion, and validation
+  - `pkg/config/portable_bundled_files*.go`, `pkg/service/factory_test.go`,
+    and functional portability smoke coverage now protect the supported
+    export/import/runtime round-trip behavior
+- there is no remaining narrow customer-visible ask gap on `main`; the next
+  narrow cleanup candidate comes from the broader website/backend quality lane:
+  - `ui/src/features/timeline/state/timeline/replayCompletion.ts` still keeps
+    `legacyDispatchRequestPayload` and `legacyDispatchResponsePayload` as
+    one-line replay compatibility cast helpers even though the live legacy
+    snake_case fallback behavior is already consumed inline from
+    `replayCompletion.ts` and `replayWorldState.ts`
 - the remaining ask surface beyond that is broader program work:
   - the general standards-migration checklist ask is still open in
     `factory/logs/meta/asks.md`
@@ -173,6 +183,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#93` `canonicalize-portable-bundled-files-without-inline-content`,
+    merged on `2026-05-04T15:53:47Z`
   - `#92` `retire-openapi-cron-compatibility-patch`, merged on
     `2026-05-04T14:33:28Z`
   - `#91` `retire-singular-workstation-route-compatibility`, merged on
@@ -222,6 +234,10 @@
 - once a customer-visible ask lands, the right follow-up is usually not another
   broad lane but the smallest remaining seam that preserves the ask's public
   intent without reopening merged work
+- once a portability lane looks closed, re-check export mapping, runtime load,
+  validation, and service/functional tests together before retiring the idea;
+  PR `#93` only became safe to close after all four layers moved to the same
+  supported disk-backed ownership model
 - once a narrow cleanup merges, the next best seam can still hide in boundary
   normalizers and fixtures rather than in the obvious runtime path; after
   PR `#90`, the stale throttle note was gone on `main` but the array-route ask
@@ -237,6 +253,10 @@
   expanded authored layout writes before declaring the lane closed; stripping a
   field during `WriteExpandedFactoryLayout` does not mean `FlattenFactoryConfig`
   and runtime loading have stopped rehydrating it back into the exported JSON
+- after broad replay legacy-compat cleanups merge, scan for any remaining
+  one-line cast wrappers or alias-only helpers on the live replay path before
+  inventing a larger follow-up; those seams are often the next lowest-risk
+  simplifications
 - the cleaner prompt currently has a tracked local edit allowing multiple
   non-overlapping items in flight, but that does not remove the need to default
   to one standalone idea when a single seam is sufficient
