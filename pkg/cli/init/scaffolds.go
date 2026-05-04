@@ -17,7 +17,7 @@ const (
 	RalphScaffoldType ScaffoldType = "ralph"
 
 	// DefaultFactoryInputType is the work type created by the default scaffold.
-	DefaultFactoryInputType = "tasks"
+	DefaultFactoryInputType = "task"
 	// RalphFactoryInputType is the request intake work type for the Ralph scaffold.
 	RalphFactoryInputType = "request"
 )
@@ -68,7 +68,7 @@ func defaultScaffoldDefinition() scaffoldDefinition {
   "name": "factory",
   "workTypes": [
     {
-      "name": "tasks",
+      "name": "task",
       "states": [
         { "name": "init", "type": "INITIAL" },
         { "name": "complete", "type": "TERMINAL" },
@@ -83,9 +83,9 @@ func defaultScaffoldDefinition() scaffoldDefinition {
     {
       "name": "process",
       "worker": "processor",
-      "inputs": [{ "workType": "tasks", "state": "init" }],
-      "outputs": [{ "workType": "tasks", "state": "complete" }],
-      "onFailure": { "workType": "tasks", "state": "failed" }
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": { "workType": "task", "state": "failed" }
     }
   ]
 }
@@ -105,7 +105,7 @@ Each subdirectory contains an AGENTS.md defining the workstation prompt template
 Multi-channel input directory for work submissions.
 
 Default local task path:
-  inputs/tasks/default/                - Markdown or JSON task submissions
+  inputs/task/default/                 - Markdown or JSON task submissions
 
 General layout:
   inputs/<work-type>/default/          - manual submissions
@@ -385,4 +385,3 @@ Story payload:
 		},
 	}
 }
-

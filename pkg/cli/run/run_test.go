@@ -211,7 +211,7 @@ func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 
 	payload, err := json.Marshal(map[string]any{
 		"name": "alpha-factory",
-		"id": "alpha",
+		"id":   "alpha",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -225,12 +225,12 @@ func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 			"body": "You are the executor.",
 		}},
 		"workstations": []map[string]any{{
-			"name":           "execute-alpha",
-			"worker":         "executor",
-			"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":        []map[string]string{{"workType": "task", "state": "complete"}},
-			"type":           "MODEL_WORKSTATION",
-			"body": "Implement {{ .WorkID }}.",
+			"name":    "execute-alpha",
+			"worker":  "executor",
+			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+			"type":    "MODEL_WORKSTATION",
+			"body":    "Implement {{ .WorkID }}.",
 		}},
 	})
 	if err != nil {
@@ -1077,7 +1077,7 @@ func TestRun_OOTBIntegrationSmokeBootstrapsProcessesDefaultTaskAndReportsDashboa
 	preserveRunGlobals(t)
 
 	dir := filepath.Join(t.TempDir(), "factory")
-	taskPath := filepath.Join(dir, "inputs", "tasks", "default", "ootb-smoke.md")
+	taskPath := filepath.Join(dir, "inputs", initcmd.DefaultFactoryInputType, "default", "ootb-smoke.md")
 	installOOTBSmokeBootstrap(taskPath)
 	disableInteractiveDashboardForSmoke(t)
 
@@ -1182,7 +1182,7 @@ func assertOOTBSmokeStartupConfig(t *testing.T, cfg *service.FactoryServiceConfi
 		t.Fatalf("expected bootstrap to create factory.json: %v", err)
 	}
 	if _, err := os.Stat(filepath.Dir(taskPath)); err != nil {
-		t.Fatalf("expected bootstrap to create inputs/tasks/default: %v", err)
+		t.Fatalf("expected bootstrap to create inputs/%s/default: %v", initcmd.DefaultFactoryInputType, err)
 	}
 }
 
@@ -1199,7 +1199,7 @@ func waitForOOTBSmokeTaskCompletion(
 		if err != nil {
 			t.Fatalf("GetEngineStateSnapshot: %v", err)
 		}
-		if len(snapshot.Marking.TokensInPlace("tasks:complete")) == 1 {
+		if len(snapshot.Marking.TokensInPlace(initcmd.DefaultFactoryInputType+":complete")) == 1 {
 			return snapshot
 		}
 		select {
@@ -1220,11 +1220,11 @@ func assertOOTBSmokeTaskResult(
 ) {
 	t.Helper()
 
-	if got := len(snapshot.Marking.TokensInPlace("tasks:complete")); got != 1 {
-		t.Fatalf("tasks:complete token count = %d, want 1; places: %#v", got, snapshot.Marking.PlaceTokens)
+	if got := len(snapshot.Marking.TokensInPlace(initcmd.DefaultFactoryInputType + ":complete")); got != 1 {
+		t.Fatalf("%s:complete token count = %d, want 1; places: %#v", initcmd.DefaultFactoryInputType, got, snapshot.Marking.PlaceTokens)
 	}
-	if got := len(snapshot.Marking.TokensInPlace("tasks:failed")); got != 0 {
-		t.Fatalf("tasks:failed token count = %d, want 0; places: %#v", got, snapshot.Marking.PlaceTokens)
+	if got := len(snapshot.Marking.TokensInPlace(initcmd.DefaultFactoryInputType + ":failed")); got != 0 {
+		t.Fatalf("%s:failed token count = %d, want 0; places: %#v", initcmd.DefaultFactoryInputType, got, snapshot.Marking.PlaceTokens)
 	}
 }
 

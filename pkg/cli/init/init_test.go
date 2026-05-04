@@ -107,13 +107,13 @@ func TestInit_CreatesDirectoryStructure(t *testing.T) {
 		t.Error("factory.json missing 'workers' field")
 	}
 
-	defaultInputDir := filepath.Join(base, "inputs", "tasks", "default")
+	defaultInputDir := filepath.Join(base, "inputs", DefaultFactoryInputType, "default")
 	info, err := os.Stat(defaultInputDir)
 	if err != nil {
-		t.Fatalf("expected inputs/tasks/default/ to be created: %v", err)
+		t.Fatalf("expected inputs/%s/default/ to be created: %v", DefaultFactoryInputType, err)
 	}
 	if !info.IsDir() {
-		t.Error("expected inputs/tasks/default/ to be a directory")
+		t.Errorf("expected inputs/%s/default/ to be a directory", DefaultFactoryInputType)
 	}
 
 	workerAgentsPath := filepath.Join(base, "workers", "processor", "AGENTS.md")
