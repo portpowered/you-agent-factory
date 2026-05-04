@@ -596,10 +596,11 @@ async function assertReplayScenarioRenders({
       historicalHiddenButtonName,
       inFlightSelectionTick,
     });
-    await page
-      .locator('[aria-label="dashboard summary"]')
-      .getByText("RUNNING", { exact: true })
+    const dashboardSummary = page.locator('[aria-label="dashboard summary"]');
+    await dashboardSummary
+      .getByRole("status", { name: /Factory event stream (live|connecting|offline)/ })
       .waitFor();
+    expect(await dashboardSummary.getByText("RUNNING", { exact: true }).count()).toBe(0);
     await exerciseSelectedWorkTrace(page, workstationName, {
       requiresWorkItemSelection,
       selectedWorkText,
