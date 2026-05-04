@@ -78,10 +78,13 @@
   exist, compare chaining-trace propagation and batch metadata field-by-field
   before assuming the duplicate helper is harmless; this repo already allowed a
   test-only copy to drift away from the live submit path.
+- After a dedupe change merges, re-check the old owner package for alias-only
+  wrappers; this repo can leave a one-function forwarding package behind even
+  after the real behavioral duplication is gone.
 
 ## Current Summary
 
-- As of `2026-05-04T09:04:04.2336456-07:00`, `HEAD` on `main` points to `8029392`
+- As of `2026-05-04T11:03:58.9091119-07:00`, `HEAD` on `main` points to `0cbe483`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -110,6 +113,9 @@
   duplication lane on `main`.
 - Merged PR `#93` closed the supported portable bundled-file portability lane
   on `main`.
+- Merged PR `#94` closed the replay dispatch payload cast-wrapper cleanup on
+  `main`.
+- Merged PR `#95` closed the submit-request shaping dedupe lane on `main`.
 - Merged PR `#92` closed the stale OpenAPI cron post-processing compatibility
   seam on `main`.
 - Merged PR `#91` closed the hidden singular non-success route compatibility
@@ -117,16 +123,13 @@
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
-- `gh pr list --state open` now reports PR `#94`
-  (`retire-replay-dispatch-payload-cast-wrappers`), so the prior replay-wrapper
-  cleanup idea is already in flight and should not be re-queued.
+- `gh pr list --state open` now reports no open PRs.
 - The tracked local ask diff now explicitly writes the array-valued
   non-success output-interface request, but that lane is already materially
   closed on `main` through merged PR `#69`.
 - The next non-overlapping cleanup queued from this refresh is the duplicated
-  submit-request shaping drift between
-  `pkg/internal/submission/work_request.go` and
-  `tests/functional/runtime_api/runtime_support_test.go`.
+  alias-only forwarding package at `pkg/internal/submission/work_request.go`,
+  which can now be deleted in favor of direct `pkg/factory` imports.
 
 ## 2026-05-04T10:06:50.5579295-07:00 - meta state refresh
 
@@ -189,6 +192,42 @@
 - Website/backend: the next narrow simplification candidate is removing the
   remaining replay dispatch payload cast wrappers after the broader replay
   compat lanes closed through PR `#88` and PR `#89`.
+
+## 2026-05-04T11:03:58.9091119-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `8029392` to
+  `0cbe483`, which pulled in merged PR `#94`
+  (`retire-replay-dispatch-payload-cast-wrappers`) and merged PR `#95`
+  (`dedupe-submit-request-shaping-between-production-and-functional-runtime-tests`)
+  while preserving the pre-existing tracked local edits in
+  `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the ignored
+  `factory/inputs/**` residue, recent PR state, the backend standard, and the
+  live work-request shaping code.
+- Re-indexed the current checkout into the code graph and re-validated with
+  `gh pr list --state open`, `gh pr view 94`, `gh pr view 95`, `git log
+  --oneline -12`, graph reads, direct code reads, and delegated explorer
+  passes that both previously tracked cleanup lanes are now merged on `main`.
+- Confirmed the tracked local ask diff still adds the array-valued
+  non-success-output request, but that ask remains materially satisfied on
+  `main` through merged PR `#69` because `api/openapi.yaml` now models
+  `onContinue`, `onRejection`, and `onFailure` as arrays.
+- Pruned the stale ignored ideas
+  `factory/inputs/idea/default/retire-replay-dispatch-payload-cast-wrappers.md`
+  and
+  `factory/inputs/idea/default/dedupe-submit-request-shaping-between-production-and-functional-runtime-tests.md`
+  because PR `#94` and PR `#95` already landed those exact follow-ups on
+  `main`.
+- Used direct reads plus delegated inspection to identify the next narrow
+  backend cleanup seam on `main`: `pkg/internal/submission/work_request.go`
+  has collapsed to a one-function forwarder onto
+  `factory.WorkRequestFromSubmitRequests`, and all remaining callers can now
+  import `pkg/factory` directly instead of preserving the alias package.
+- Queued one new standalone ignored idea under `factory/inputs/idea/default/`
+  for removing that dead forwarding package without reopening the already
+  merged request-shaping behavior lane.
 
 ## 2026-05-04T09:04:04.2336456-07:00 - meta state refresh
 
