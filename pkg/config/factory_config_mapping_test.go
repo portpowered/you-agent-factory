@@ -1076,8 +1076,8 @@ func assertFlattenedPortableResourceManifestPayload(t *testing.T, payload map[st
 		t.Fatalf("expected three bundled files, got %#v", resourceManifest["bundledFiles"])
 	}
 	assertBundledFilePayload(t, bundledFiles[0].(map[string]any), "ROOT_HELPER", "Makefile", "test:\n\tgo test ./...\n")
-	assertBundledFilePayload(t, bundledFiles[1].(map[string]any), "DOC", "factory/docs/usage.md", "# Usage\n")
-	assertBundledFilePayload(t, bundledFiles[2].(map[string]any), "SCRIPT", "factory/scripts/setup-workspace.py", "print('portable')\n")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[1].(map[string]any), "DOC", "factory/docs/usage.md")
+	assertBundledFilePayloadWithoutInline(t, bundledFiles[2].(map[string]any), "SCRIPT", "factory/scripts/setup-workspace.py")
 }
 
 func assertBundledFilePayload(t *testing.T, payload map[string]any, wantType, wantTargetPath string, wantInline string) {
@@ -1119,11 +1119,32 @@ func assertExpandedPortableResourceManifest(t *testing.T, expanded *interfaces.F
 	if expanded.ResourceManifest.BundledFiles[0].TargetPath != "Makefile" || expanded.ResourceManifest.BundledFiles[0].Content.Inline != "test:\n\tgo test ./...\n" {
 		t.Fatalf("bundled root helper after expand = %#v", expanded.ResourceManifest.BundledFiles[0])
 	}
-	if expanded.ResourceManifest.BundledFiles[1].Content.Inline != "# Usage\n" {
+	if expanded.ResourceManifest.BundledFiles[1].Content.Inline != "" {
 		t.Fatalf("bundled doc inline after expand = %#v", expanded.ResourceManifest.BundledFiles[1])
 	}
-	if expanded.ResourceManifest.BundledFiles[2].Content.Inline != "print('portable')\n" {
+	if expanded.ResourceManifest.BundledFiles[2].Content.Inline != "" {
 		t.Fatalf("bundled script inline after expand = %#v", expanded.ResourceManifest.BundledFiles[2])
+	}
+}
+
+func assertBundledFilePayloadWithoutInline(t *testing.T, payload map[string]any, wantType, wantTargetPath string) {
+	t.Helper()
+
+	if got := payload["type"]; got != wantType {
+		t.Fatalf("bundled file type = %#v, want %q", got, wantType)
+	}
+	if got := payload["targetPath"]; got != wantTargetPath {
+		t.Fatalf("bundled file targetPath = %#v, want %q", got, wantTargetPath)
+	}
+	content, ok := payload["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected bundled file content object, got %#v", payload["content"])
+	}
+	if got := content["encoding"]; got != "utf-8" {
+		t.Fatalf("bundled file encoding = %#v", got)
+	}
+	if _, ok := content["inline"]; ok {
+		t.Fatalf("expected bundled file inline content to be omitted, got %#v", content["inline"])
 	}
 }
 

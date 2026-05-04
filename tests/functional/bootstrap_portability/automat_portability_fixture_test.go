@@ -63,16 +63,16 @@ func TestAutomatPortabilityFixture_ModelsBoundedPortableRuntimeLayout(t *testing
 }
 
 func TestAutomatPortabilityFixture_FlattenPreservesPortableBundleContract(t *testing.T) {
-	authoredFactoryDir, flattenedCfg, _ := flattenAutomatFixture(t)
+	_, flattenedCfg, _ := flattenAutomatFixture(t)
 	if flattenedCfg.ResourceManifest == nil {
 		t.Fatal("expected flattened automat fixture to include resourceManifest")
 	}
 	assertAutomatRequiredToolsManifest(t, flattenedCfg.ResourceManifest.RequiredTools)
 
 	bundledFiles := bundledFilesByTarget(flattenedCfg.ResourceManifest.BundledFiles)
-	assertAutomatBundledFileContent(t, bundledFiles, "factory/docs/portable-workflow.md", filepath.Join(authoredFactoryDir, automatWorkflowGuide))
-	assertAutomatBundledFileContent(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1", filepath.Join(authoredFactoryDir, automatPrepareScript))
-	assertAutomatBundledFileContent(t, bundledFiles, "factory/scripts/verify-external-tools.ps1", filepath.Join(authoredFactoryDir, automatVerifyToolsScript))
+	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/docs/portable-workflow.md")
+	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1")
+	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/verify-external-tools.ps1")
 
 	dependencyFile, ok := bundledFiles["factory/"+automatDependencyContract]
 	if !ok {
@@ -209,6 +209,10 @@ func TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBounde
 		"factory/scripts/prepare-automat-slice.ps1": filepath.Join(authoredFactoryDir, automatPrepareScript),
 		"factory/scripts/verify-external-tools.ps1": filepath.Join(authoredFactoryDir, automatVerifyToolsScript),
 	} {
+		if strings.HasPrefix(targetLocation, "factory/docs/") || strings.HasPrefix(targetLocation, "factory/scripts/") {
+			assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, targetLocation)
+			continue
+		}
 		assertAutomatBundledFileContent(t, bundledFiles, targetLocation, sourcePath)
 	}
 
@@ -288,6 +292,7 @@ func flattenAndExpandAutomatFixture(t *testing.T) (string, *interfaces.FactoryCo
 	if err := os.WriteFile(expandedFactoryPath, flattenedBytes, 0o644); err != nil {
 		t.Fatalf("write flattened automat factory.json: %v", err)
 	}
+	copyAutomatPortableExportSidecars(t, authoredFactoryDir, expandedDir)
 
 	expandCmd := cli.NewRootCommand()
 	expandCmd.SetOut(&bytes.Buffer{})
@@ -524,6 +529,42 @@ func assertAutomatBundledFileContent(t *testing.T, bundledFiles map[string]inter
 	}
 	if bundledFile.Content.Inline != string(wantContent) {
 		t.Fatalf("bundled file %s content mismatch", targetLocation)
+	}
+}
+
+func assertAutomatBundledFileEntryWithoutInline(t *testing.T, bundledFiles map[string]interfaces.BundledFileConfig, targetLocation string) {
+	t.Helper()
+
+	bundledFile, ok := bundledFiles[targetLocation]
+	if !ok {
+		t.Fatalf("expected bundled file %s", targetLocation)
+	}
+	if bundledFile.Content.Inline != "" {
+		t.Fatalf("expected bundled file %s to omit inline content, got %q", targetLocation, bundledFile.Content.Inline)
+	}
+}
+
+func copyAutomatPortableExportSidecars(t *testing.T, sourceDir, targetDir string) {
+	t.Helper()
+
+	for _, relativePath := range []string{
+		automatDependencyContract,
+		automatWorkflowGuide,
+		automatPrepareScript,
+		automatVerifyToolsScript,
+	} {
+		sourcePath := filepath.Join(sourceDir, relativePath)
+		targetPath := filepath.Join(targetDir, relativePath)
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			t.Fatalf("read sidecar %s: %v", sourcePath, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(targetPath), err)
+		}
+		if err := os.WriteFile(targetPath, data, 0o644); err != nil {
+			t.Fatalf("write sidecar %s: %v", targetPath, err)
+		}
 	}
 }
 

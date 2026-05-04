@@ -332,7 +332,7 @@ func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryC
 
 	resolvedWrites := make([]portableBundledFileWrite, 0, len(bundledFiles))
 	for _, bundledFile := range bundledFiles {
-		if strings.TrimSpace(bundledFile.Content.Encoding) == "" && strings.TrimSpace(bundledFile.Content.Inline) == "" {
+		if strings.TrimSpace(bundledFile.Content.Inline) == "" {
 			continue
 		}
 		target, err := portableBundledTargetPath(validationRoot.targetDir, bundledFile.TargetPath)

@@ -195,7 +195,16 @@ func validatePortableResourceManifestOnPath(factoryDir string, cfg *interfaces.F
 }
 
 func validatePortableResourceManifestForExpand(cfg *interfaces.FactoryConfig) error {
-	result := ValidatePortableResourceManifest(cfg, nil)
+	return validatePortableBundledFilesForExpandOnPath("", cfg)
+}
+
+func validatePortableBundledFilesForExpandOnPath(factoryDir string, cfg *interfaces.FactoryConfig) error {
+	result := validatePortableResourceManifest(cfg, nil, func(cfg *interfaces.FactoryConfig) []Finding {
+		if strings.TrimSpace(factoryDir) == "" {
+			return ruleBundledFiles(cfg)
+		}
+		return ruleBundledFilesOnPath(factoryDir, cfg)
+	})
 	if !result.HasErrors() {
 		return nil
 	}
@@ -853,6 +862,19 @@ func validateBundledFileTarget(basePath string, file interfaces.BundledFileConfi
 }
 
 func validateBundledFileContent(basePath string, file interfaces.BundledFileConfig) []Finding {
+	findings := validateBundledFileEncoding(basePath, file)
+	if strings.TrimSpace(file.Content.Inline) == "" && !shouldOmitSupportedPortableBundledInline(file) {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".content.inline",
+			Message:  "missing required 'inline' field",
+			Rule:     "bundled-file-content-inline",
+		})
+	}
+	return findings
+}
+
+func validateBundledFileEncoding(basePath string, file interfaces.BundledFileConfig) []Finding {
 	var findings []Finding
 	if strings.TrimSpace(file.Content.Encoding) == "" {
 		findings = append(findings, Finding{
@@ -869,25 +891,20 @@ func validateBundledFileContent(basePath string, file interfaces.BundledFileConf
 			Rule:     "bundled-file-content-encoding",
 		})
 	}
-	if strings.TrimSpace(file.Content.Inline) == "" {
-		findings = append(findings, Finding{
-			Severity: SeverityError,
-			Path:     basePath + ".content.inline",
-			Message:  "missing required 'inline' field",
-			Rule:     "bundled-file-content-inline",
-		})
-	}
 	return findings
 }
 
 func validateBundledFileContentOnPath(factoryDir, basePath string, file interfaces.BundledFileConfig) []Finding {
-	if strings.TrimSpace(file.Content.Encoding) != "" || strings.TrimSpace(file.Content.Inline) != "" {
+	if strings.TrimSpace(file.Content.Inline) != "" {
 		return validateBundledFileContent(basePath, file)
 	}
 	if sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, file); ok {
 		info, err := os.Stat(sourcePath)
 		if err == nil && !info.IsDir() {
-			return nil
+			if strings.TrimSpace(file.Content.Encoding) == "" {
+				return nil
+			}
+			return validateBundledFileEncoding(basePath, file)
 		}
 	}
 	return validateBundledFileContent(basePath, file)
