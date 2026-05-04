@@ -58,6 +58,7 @@ describe("TickSliderControl", () => {
 
     expect(currentButton.disabled).toBe(true);
     expect(currentButton.className).toContain("bg-af-accent/10");
+    expect(screen.queryByText("Current")).toBeNull();
   });
 
   it("switches between fixed and current mode through the rendered controls", async () => {
@@ -73,6 +74,7 @@ describe("TickSliderControl", () => {
     expect(currentButton.disabled).toBe(true);
     expect(currentButton.className).toContain("bg-af-accent/10");
     expect(currentButton.className).toContain("opacity-75");
+    expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");
 
     fireEvent.change(slider, { target: { value: "2" } });

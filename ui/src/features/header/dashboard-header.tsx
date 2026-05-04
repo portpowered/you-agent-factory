@@ -17,7 +17,7 @@ const DASHBOARD_TOOLBAR_CLASS = cx(
   "mb-4 flex flex-wrap items-center gap-4 p-4 px-5",
 );
 const DASHBOARD_TOOLBAR_ACTION_CLASS =
-  "inline-flex items-center gap-2 rounded-lg border border-af-accent/35 bg-af-accent/10 px-3 py-2 text-sm font-bold text-af-accent outline-af-accent transition hover:bg-af-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2";
+  "inline-flex h-11 w-11 items-center justify-center rounded-lg border border-af-accent/35 bg-af-accent/10 text-af-accent outline-af-accent transition hover:bg-af-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2";
 const DASHBOARD_TITLE_CLASS = cx("m-0", DASHBOARD_PAGE_HEADING_CLASS);
 const STREAM_STATUS_SHELL_CLASS = cx(
   "flex min-w-0 flex-1 items-center justify-end",
@@ -55,6 +55,7 @@ export function DashboardHeader() {
         </div>
       </div>
       <button
+        aria-label="Export PNG"
         aria-expanded={isExportDialogOpen}
         aria-haspopup="dialog"
         className={DASHBOARD_TOOLBAR_ACTION_CLASS}
@@ -76,7 +77,6 @@ export function DashboardHeader() {
           <path d="M8.5 11.5L12 15l3.5-3.5" />
           <path d="M5 19h14" />
         </svg>
-        <span>Export PNG</span>
       </button>
     </section>
   );

@@ -1862,6 +1862,7 @@ describe("App", () => {
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
     expect(within(toolbar).queryByText(baselineSnapshot.factory_state)).toBeNull();
     expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
+    expect(within(toolbar).queryByText("Export PNG")).toBeNull();
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
   });
 
@@ -1880,6 +1881,7 @@ describe("App", () => {
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
     expect(within(toolbar).queryByText("Stream")).toBeNull();
     expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
+    expect(within(toolbar).queryByText("Export PNG")).toBeNull();
 
     act(() => {
       useDashboardStreamStore.setState({
@@ -2402,6 +2404,7 @@ describe("App", () => {
       (screen.getByRole("button", { name: "Current" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    expect(screen.queryByText("Current")).toBeNull();
   });
 
   it("renders a fixed historical tick from the timeline slider", async () => {
@@ -2444,6 +2447,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Done Story" })).toBeNull();
     });
+    expect(screen.queryByText("Current")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Current" }));
 

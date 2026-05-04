@@ -347,6 +347,7 @@ async function expectTypographyRegressionSurface(
   expect(within(toolbar).queryByText(String(semanticWorkflowDashboardSnapshot.factory_state))).toBeNull();
   expect(within(toolbar).queryByText("Stream")).toBeNull();
   expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
+  expect(within(toolbar).queryByText("Export PNG")).toBeNull();
 
   await userEvent.click(
     await canvas.findByRole("button", { name: "Select Review workstation" }),
@@ -1364,6 +1365,7 @@ export const WorkChartTimelineVerification = {
     fireEvent.change(slider, { target: { value: "2" } });
 
     await expect(await canvas.findByText("Tick 2 of 5")).toBeVisible();
+    expect(canvas.queryByText("Current")).toBeNull();
     expectWorkOutcomeSeries(outcomeChart);
 
     await userEvent.click(
