@@ -37,11 +37,15 @@
   confirm whether it protects a real public contract or only a tolerant legacy
   parse path; if it only shields invalid legacy inputs, prefer deleting the
   shim and updating tests to assert the canonical route behavior.
+- When the checked-in workflow docs require
+  `factory/inputs/<work-type>/default/<file>`, treat acceptance of direct
+  two-segment `factory/inputs/<work-type>/<file>` submissions as hidden legacy
+  compatibility and a valid cleanup target.
 
 ## Current Summary
 
-- As of `2026-05-03T17:03:02.5759459-07:00`, `HEAD` on `main` points to
-  `1bef2b5` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T18:03:34.6151718-07:00`, `HEAD` on `main` points to
+  `dc80123` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and the live inbox still contains ignored operating
   residue.
@@ -54,12 +58,13 @@
 - The tracked input surface remains sentinel-only; visible files under
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
-- The current ignored/local residue is now trimmed down to two live standalone
-  idea files: the still-live route-array contract follow-up and the new
-  list-work legacy pagination cleanup idea.
+- The current ignored/local residue is now the still-live route-array idea, a
+  new watcher default-channel fallback cleanup idea, and an empty local
+  `factory/inputs/tasks/default/` directory.
 - PR `#76` merged the remaining import preview dialog extraction seam on
-  `2026-05-03`, and PR `#77` merged the remaining selected-work relationship
-  graph plus per-dispatch attempt-detail seam on `2026-05-03`.
+  `2026-05-03`, PR `#77` merged the remaining selected-work relationship graph
+  plus per-dispatch attempt-detail seam on `2026-05-03`, and PR `#78` merged
+  the list-work legacy pagination cleanup on `2026-05-04T00:28:40Z`.
 - The remaining import/export seam is now the route-array contract cleanup
   owned by open PR `#69`.
 - The selected-work current-selection ask is now materially satisfied on
@@ -71,6 +76,9 @@
 - That route-array gap is already actively owned by open PR `#69`
   (`ralph/workstation-non-success-route-arrays`), so a fresh dispatch would be
   duplicate queue work.
+- PR `#69` is not review-ready yet because its checks are still red and its
+  branch still leaves stale maintained docs and fixture examples publishing the
+  retired singular route shape.
 - The older duplicate-detail current-selection ask is no longer an open
   dispatch lane either, because PR `#77` closed the remaining literal graph and
   nested-attempt interpretation gap on top of PR `#74`.
@@ -82,10 +90,12 @@
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
   now fully stale because every lane it names is already merged or actively
   owned elsewhere.
-- The next safe cleanup dispatch is a narrow backend simplification outside the
-  active ask PRs: retire the handwritten `/work`
-  `handleListWorkWithLegacyPagination` shim in `pkg/api/server.go` and stop
-  protecting its silent invalid-`maxResults` fallback behavior in tests.
+- The merged PR `#78` consumed the older pagination-shim cleanup idea, so that
+  ignored idea file is now stale local residue and should be pruned.
+- The next safe cleanup dispatch is a narrow watcher simplification outside the
+  active ask PRs: retire the undocumented two-segment
+  `factory/inputs/<work-type>/<file>` default-channel fallback and keep only
+  the documented canonical three-segment inbox layout.
 
 ## 2026-05-03T13:01:50.9382865-07:00 - meta state refresh
 
@@ -489,3 +499,35 @@
   merged.
 - Queued one new standalone ignored cleanup idea at
   `factory/inputs/idea/default/remove-list-work-legacy-pagination-shim.md`.
+
+## 2026-05-03T18:03:34.6151718-07:00 - meta state refresh
+
+- Ran `git pull`; Git fast-forwarded `main` from `22cd987` to `dc80123`, which
+  pulled in merged PR `#78` (`remove-list-work-legacy-pagination-shim`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while the visible idea files are ignored operating state.
+- Re-checked recent PR movement with `gh pr list`, `gh pr view 69`, `gh pr view
+  78`, and `git log`, confirming that PR `#78` is merged and PR `#69` remains
+  the only open PR directly tied to the active ask lanes.
+- Used delegated and direct inspection to confirm the older pagination-shim
+  cleanup seam is closed on `main`: `pkg/api/server.go` no longer registers the
+  handwritten `/work` shim and `pkg/api/server_test.go` now asserts generated
+  `BAD_REQUEST` handling for invalid `maxResults`.
+- Used delegated PR inspection to confirm PR `#69` still owns the route-array
+  ask functionally, but is not yet review-ready because its checks are red and
+  its branch still carries stale maintained docs and fixture examples for the
+  retired singular route shape.
+- Inspected `pkg/listeners/filewatcher.go` and its dedicated tests, and
+  confirmed one new non-overlapping cleanup seam outside PR `#69`: the watcher
+  still accepts undocumented two-segment `factory/inputs/<work-type>/<file>`
+  submissions as a default-channel fallback even though the checked-in workflow
+  contract documents canonical three-segment inboxes.
+- Pruned the stale ignored idea
+  `factory/inputs/idea/default/remove-list-work-legacy-pagination-shim.md`
+  after its owning PR `#78` merged.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/retire-filewatcher-default-channel-fallback.md`.
