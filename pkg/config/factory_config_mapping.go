@@ -226,7 +226,6 @@ func (m *FactoryConfigMapper) Expand(data []byte) (*interfaces.FactoryConfig, er
 	if err != nil {
 		return nil, err
 	}
-	applyOpenAPICronCompatibility(&cfg, boundary.normalizedJSON)
 	return &cfg, nil
 }
 

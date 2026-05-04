@@ -13,16 +13,6 @@ import (
 
 var defaultFactoryConfigMapper = NewFactoryConfigMapper()
 
-type rawOpenAPIFactory struct {
-	Workstations []rawOpenAPIWorkstation `json:"workstations"`
-}
-
-type rawOpenAPIWorkstation struct {
-	ID   string                 `json:"id"`
-	Name string                 `json:"name"`
-	Cron *interfaces.CronConfig `json:"cron"`
-}
-
 // GeneratedFactoryFromOpenAPIJSON converts an OpenAPI-compatible factory JSON
 // payload into the generated Factory boundary model.
 func GeneratedFactoryFromOpenAPIJSON(data []byte) (factoryapi.Factory, error) {
@@ -393,42 +383,6 @@ func mergeInlineDefinitionFields(container map[string]any) {
 		container[key] = value
 	}
 	delete(container, "definition")
-}
-
-func applyOpenAPICronCompatibility(cfg *interfaces.FactoryConfig, raw []byte) {
-	if cfg == nil {
-		return
-	}
-	rawCronByWorkstation := buildRawOpenAPIWorkstationCronIndex(raw)
-	for wi := range cfg.Workstations {
-		ws := &cfg.Workstations[wi]
-		cron := rawCronByWorkstation[ws.Name]
-		if cron == nil && ws.ID != "" {
-			cron = rawCronByWorkstation[ws.ID]
-		}
-		if cron == nil {
-			continue
-		}
-		copied := *cron
-		ws.Cron = &copied
-	}
-}
-
-func buildRawOpenAPIWorkstationCronIndex(raw []byte) map[string]*interfaces.CronConfig {
-	var cfg rawOpenAPIFactory
-	_ = json.Unmarshal(raw, &cfg)
-
-	index := make(map[string]*interfaces.CronConfig)
-	for _, ws := range cfg.Workstations {
-		if ws.Cron == nil {
-			continue
-		}
-		index[ws.Name] = ws.Cron
-		if ws.ID != "" {
-			index[ws.ID] = ws.Cron
-		}
-	}
-	return index
 }
 
 func canonicalFactoryConfigKey(key string) string {
