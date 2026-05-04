@@ -300,7 +300,7 @@ func writePortableBundledRoundTripFile(t *testing.T, path, content string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), portableBundledRoundTripFileMode(path)); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
@@ -432,9 +432,16 @@ func copyPortableBundledExportFile(t *testing.T, sourcePath, targetPath string) 
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", filepath.Dir(targetPath), err)
 	}
-	if err := os.WriteFile(targetPath, data, 0o644); err != nil {
+	if err := os.WriteFile(targetPath, data, portableBundledRoundTripFileMode(targetPath)); err != nil {
 		t.Fatalf("write %s: %v", targetPath, err)
 	}
+}
+
+func portableBundledRoundTripFileMode(path string) os.FileMode {
+	if runtime.GOOS != "windows" && strings.Contains(filepath.ToSlash(path), "/scripts/") {
+		return 0o755
+	}
+	return 0o644
 }
 
 func mustCreatePortableBundledDirLinkExternal(t *testing.T, targetPath, linkPath string) {
