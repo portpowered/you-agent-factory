@@ -3276,8 +3276,28 @@ describe("factory timeline reconstruction", () => {
     expect(
       completedProjected.tracesByWorkID["work-legacy"]?.dispatches[0],
     ).toMatchObject({
+      diagnostics: {
+        provider: {
+          model: "gpt-5.4-mini",
+          provider: "openai",
+          request_metadata: {
+            prompt_source: "legacy-review",
+          },
+          response_metadata: {
+            provider_session_id: "legacy-session-1",
+          },
+        },
+      },
       current_chaining_trace_id: "chain-legacy-current",
+      dispatch_id: "dispatch-legacy",
       previous_chaining_trace_ids: ["chain-legacy-a", "chain-legacy-b"],
+      provider_session: {
+        id: "legacy-session-1",
+        provider: "openai",
+      },
+      token_names: ["Legacy Timeline Story"],
+      work_ids: ["work-legacy"],
+      work_types: ["story"],
       workstation_name: "Legacy Review",
     });
     expect(
@@ -3286,6 +3306,170 @@ describe("factory timeline reconstruction", () => {
       dispatch_id: "dispatch-legacy",
       provider_session: {
         id: "legacy-session-1",
+        provider: "openai",
+      },
+      workstation_name: "Legacy Review",
+    });
+  });
+
+  it("backfills completed trace dispatch snapshots when inference responses arrive after dispatch completion", () => {
+    const legacyWorkRequest = event(
+      "event-legacy-backfill-work-request",
+      2,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        source: "api",
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "Legacy Timeline Story",
+            trace_id: "trace-legacy-backfill",
+            work_id: "work-legacy-backfill",
+            work_type_id: "story",
+          },
+        ],
+      },
+    );
+    legacyWorkRequest.context.requestId = "request-legacy-backfill";
+    legacyWorkRequest.context.traceIds = ["trace-legacy-backfill"];
+    legacyWorkRequest.context.workIds = ["work-legacy-backfill"];
+
+    const legacyDispatchRequest = event(
+      "event-legacy-backfill-dispatch-request",
+      3,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        current_chaining_trace_id: "chain-legacy-backfill-current",
+        dispatchId: "dispatch-legacy-backfill",
+        inputs: [
+          {
+            name: "Legacy Timeline Story",
+            trace_id: "trace-legacy-backfill",
+            work_id: "work-legacy-backfill",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+        transitionId: "review",
+        workstation: {
+          name: "Legacy Review",
+        },
+      },
+    );
+    legacyDispatchRequest.context.traceIds = ["trace-legacy-backfill"];
+    legacyDispatchRequest.context.workIds = ["work-legacy-backfill"];
+
+    const legacyDispatchResponse = event(
+      "event-legacy-backfill-dispatch-response",
+      4,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        current_chaining_trace_id: "chain-legacy-backfill-current",
+        dispatchId: "dispatch-legacy-backfill",
+        durationMillis: 640,
+        outcome: "ACCEPTED",
+        output: "Legacy replay output",
+        outputWork: [
+          {
+            name: "Legacy Timeline Story",
+            previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+            state: "done",
+            trace_id: "trace-legacy-backfill",
+            work_id: "work-legacy-backfill",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+        transitionId: "review",
+        workstation: {
+          name: "Legacy Review",
+        },
+      },
+    );
+    legacyDispatchResponse.context.traceIds = ["trace-legacy-backfill"];
+    legacyDispatchResponse.context.workIds = ["work-legacy-backfill"];
+    legacyDispatchResponse.context.eventTime = "2026-04-16T12:00:04Z";
+
+    const legacyInferenceResponse = event(
+      "event-legacy-backfill-inference-response",
+      5,
+      FACTORY_EVENT_TYPES.inferenceResponse,
+      {
+        attempt: 1,
+        diagnostics: {
+          provider: {
+            model: "gpt-5.4-mini",
+            provider: "openai",
+            requestMetadata: {
+              prompt_source: "legacy-review-backfill",
+            },
+            responseMetadata: {
+              provider_session_id: "legacy-session-2",
+            },
+          },
+        },
+        dispatchId: "dispatch-legacy-backfill",
+        durationMillis: 700,
+        inferenceRequestId: "dispatch-legacy-backfill/inference-request/1",
+        outcome: "SUCCEEDED",
+        providerSession: {
+          id: "legacy-session-2",
+          kind: "session_id",
+          provider: "openai",
+        },
+        response: "Legacy backfilled replay output",
+        transitionId: "review",
+      },
+    );
+    legacyInferenceResponse.context.traceIds = ["trace-legacy-backfill"];
+    legacyInferenceResponse.context.workIds = ["work-legacy-backfill"];
+    legacyInferenceResponse.context.eventTime = "2026-04-16T12:00:05Z";
+
+    const projected = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        legacyWorkRequest,
+        legacyDispatchRequest,
+        legacyDispatchResponse,
+        legacyInferenceResponse,
+      ],
+      5,
+    );
+
+    expect(projected.tracesByWorkID["work-legacy-backfill"]?.dispatches[0]).toMatchObject({
+      current_chaining_trace_id: "chain-legacy-backfill-current",
+      diagnostics: {
+        provider: {
+          model: "gpt-5.4-mini",
+          provider: "openai",
+          request_metadata: {
+            prompt_source: "legacy-review-backfill",
+          },
+          response_metadata: {
+            provider_session_id: "legacy-session-2",
+          },
+        },
+      },
+      dispatch_id: "dispatch-legacy-backfill",
+      previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+      provider_session: {
+        id: "legacy-session-2",
+        provider: "openai",
+      },
+      token_names: ["Legacy Timeline Story"],
+      work_types: ["story"],
+      workstation_name: "Legacy Review",
+    });
+    expect(projected.runtime.session.provider_sessions?.[0]).toMatchObject({
+      diagnostics: {
+        provider: {
+          model: "gpt-5.4-mini",
+          provider: "openai",
+        },
+      },
+      dispatch_id: "dispatch-legacy-backfill",
+      provider_session: {
+        id: "legacy-session-2",
         provider: "openai",
       },
       workstation_name: "Legacy Review",

@@ -324,10 +324,7 @@ function applyInferenceResponse(
     response_time: event.context.eventTime,
     transition_id: dashboardTransitionID(transitionID),
   };
-  syncCompletedDispatchAttempt(state, dispatchID, attempts[payload.inferenceRequestId], {
-    completionToProviderSession,
-    uniqueSorted,
-  });
+  syncCompletedDispatchAttempt(state, dispatchID, attempts[payload.inferenceRequestId]);
 }
 
 function applyResponse(
@@ -388,5 +385,4 @@ function applyResponse(
     addTraceDispatch(state, traceID, completion);
   }
 }
-
 

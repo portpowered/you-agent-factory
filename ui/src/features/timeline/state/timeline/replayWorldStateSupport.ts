@@ -1,20 +1,16 @@
 import type {
   DashboardInferenceAttempt,
-  DashboardProviderSessionAttempt,
-  DashboardTraceDispatch,
 } from "../../../../api/dashboard";
 import type { InferenceRequestPayload, InferenceResponsePayload } from "../../../../api/events";
+import {
+  completionToProviderSession,
+  completionToTraceDispatch,
+} from "./replayCompletion";
 import type {
   ReplayWorldState,
-  WorldCompletion,
   WorldScriptRequest,
   WorldScriptResponse,
 } from "./types";
-
-interface CompletedAttemptSyncHelpers {
-  completionToProviderSession: (completion: WorldCompletion) => DashboardProviderSessionAttempt;
-  uniqueSorted: (values: string[]) => string[];
-}
 
 export function inferenceAttemptsForDispatch(
   state: ReplayWorldState,
@@ -50,7 +46,6 @@ export function syncCompletedDispatchAttempt(
   state: ReplayWorldState,
   dispatchID: string,
   attempt: DashboardInferenceAttempt,
-  helpers: CompletedAttemptSyncHelpers,
 ): void {
   for (let index = state.completedDispatches.length - 1; index >= 0; index -= 1) {
     const completion = state.completedDispatches[index];
@@ -71,7 +66,7 @@ export function syncCompletedDispatchAttempt(
     ) {
       state.providerSessions = [
         ...state.providerSessions,
-        helpers.completionToProviderSession(completion),
+        completionToProviderSession(completion),
       ];
     }
 
@@ -80,49 +75,15 @@ export function syncCompletedDispatchAttempt(
       if (!trace) {
         continue;
       }
-      trace.dispatches = trace.dispatches.map((dispatch: DashboardTraceDispatch) =>
+      trace.dispatches = trace.dispatches.map((dispatch) =>
         dispatch.dispatch_id === completion.dispatchID
-          ? completionToTraceDispatch(helpers, completion)
+          ? completionToTraceDispatch(completion)
           : dispatch,
       );
     }
 
     break;
   }
-}
-
-export function completionToTraceDispatch(
-  helpers: CompletedAttemptSyncHelpers,
-  completion: WorldCompletion,
-): DashboardTraceDispatch {
-  return {
-    consumed_tokens: completion.consumedTokens,
-    current_chaining_trace_id: completion.currentChainingTraceID,
-    diagnostics: completion.diagnostics,
-    dispatch_id: completion.dispatchID,
-    duration_millis: completion.durationMillis,
-    end_time: completion.endTime,
-    failure_message: completion.failureMessage,
-    failure_reason: completion.failureReason,
-    input_items: completion.inputItems,
-    outcome: completion.outcome,
-    output_items: completion.outputItems,
-    output_mutations: completion.outputMutations,
-    previous_chaining_trace_ids: completion.previousChainingTraceIDs,
-    provider_session: completion.providerSession,
-    start_time: completion.startedAt,
-    trace_id: completion.traceIDs[0],
-    trace_ids: completion.traceIDs,
-    transition_id: completion.transitionID,
-    work_ids: completion.workItems.map((item) => item.work_id),
-    token_names: helpers.uniqueSorted(
-      completion.workItems.map((item) => item.display_name?.trim() || item.work_id),
-    ),
-    work_types: helpers.uniqueSorted(
-      completion.workItems.map((item) => item.work_type_id ?? ""),
-    ),
-    workstation_name: completion.workstationName,
-  };
 }
 
 export function legacyInferencePayloadDispatchID(
