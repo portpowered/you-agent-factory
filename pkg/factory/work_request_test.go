@@ -750,6 +750,51 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	}
 }
 
+func TestWorkRequestFromSubmitRequests_LegacyTraceFallbackAndRequestIDInheritance(t *testing.T) {
+	requests := []interfaces.SubmitRequest{
+		{
+			RequestID:  "request-shared",
+			WorkID:     "work-1",
+			Name:       "first",
+			WorkTypeID: "task",
+			TraceID:    "trace-request-legacy",
+		},
+		{
+			WorkID:     "work-2",
+			Name:       "second",
+			WorkTypeID: "task",
+			TraceID:    "trace-work-legacy",
+		},
+	}
+
+	workRequest := WorkRequestFromSubmitRequests(requests)
+	if workRequest.RequestID != "request-shared" {
+		t.Fatalf("work request ID = %q, want request-shared", workRequest.RequestID)
+	}
+	if workRequest.CurrentChainingTraceID != "trace-request-legacy" {
+		t.Fatalf("work request current chaining trace ID = %q, want trace-request-legacy", workRequest.CurrentChainingTraceID)
+	}
+	if len(workRequest.Works) != 2 {
+		t.Fatalf("work count = %d, want 2", len(workRequest.Works))
+	}
+
+	first := workRequest.Works[0]
+	if first.RequestID != "request-shared" {
+		t.Fatalf("first request ID = %q, want request-shared", first.RequestID)
+	}
+	if first.CurrentChainingTraceID != "trace-request-legacy" {
+		t.Fatalf("first current chaining trace ID = %q, want trace-request-legacy", first.CurrentChainingTraceID)
+	}
+
+	second := workRequest.Works[1]
+	if second.RequestID != "request-shared" {
+		t.Fatalf("second request ID = %q, want inherited request-shared", second.RequestID)
+	}
+	if second.CurrentChainingTraceID != "trace-work-legacy" {
+		t.Fatalf("second current chaining trace ID = %q, want trace-work-legacy", second.CurrentChainingTraceID)
+	}
+}
+
 func TestWorkRequestFromSubmitRequests_EmptyBatchReturnsCanonicalEnvelope(t *testing.T) {
 	workRequest := WorkRequestFromSubmitRequests(nil)
 	if workRequest.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
