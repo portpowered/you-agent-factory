@@ -15,6 +15,11 @@ import (
 
 var retiredInitFactoryContractFields = []string{`"work_types"`, `"work_type"`, `"on_failure"`}
 var retiredInitWorkerContractFields = []string{"model_provider:", "provider:", "stop_token:", "skip_permissions:", "concurrency:", "sessionId:"}
+var retiredStarterReadmeFragments = []string{
+	"inputs/<work-type>/default/",
+	"inputs/<work-type>/<execution-id>/",
+	"Multi-channel input directory for work submissions.",
+}
 
 // TestInitFactory_StructureIsValid verifies that the init command creates the
 // correct directory structure with all required files:
@@ -290,6 +295,25 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantModel, wantProv
 	for _, retired := range retiredInitFactoryContractFields {
 		if strings.Contains(factoryJSON, retired) {
 			t.Fatalf("generated factory.json should not contain retired %q:\n%s", retired, factoryJSON)
+		}
+	}
+
+	inputsReadmeBytes, err := os.ReadFile(filepath.Join(dir, "inputs", "README.md"))
+	if err != nil {
+		t.Fatalf("read generated inputs README.md: %v", err)
+	}
+	inputsReadme := string(inputsReadmeBytes)
+	for _, expected := range []string{
+		"inputs/task/default/",
+		"Seed your starter work by adding files to this inbox",
+	} {
+		if !strings.Contains(inputsReadme, expected) {
+			t.Fatalf("generated inputs README.md should contain %q:\n%s", expected, inputsReadme)
+		}
+	}
+	for _, retired := range retiredStarterReadmeFragments {
+		if strings.Contains(inputsReadme, retired) {
+			t.Fatalf("generated inputs README.md should not contain retired starter prose %q:\n%s", retired, inputsReadme)
 		}
 	}
 
