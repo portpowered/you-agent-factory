@@ -45,11 +45,15 @@
   on inbox naming, pick one canonical path and prove the cleanup through
   init/bootstrap/run behavior instead of preserving both spellings in docs and
   smoke tests.
+- When the default starter inbox contract changes, audit the generated
+  `factory/inputs/README.md` template too; `pkg/cli/init` can keep stale
+  starter-facing prose even after the runtime path, CLI help, and bootstrap
+  tests are aligned.
 
 ## Current Summary
 
-- As of `2026-05-03T19:02:46.3958525-07:00`, `HEAD` on `main` points to
-  `4b945a7` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T20:04:00.9345431-07:00`, `HEAD` on `main` points to
+  `4728c0b` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and the live inbox still contains ignored operating
   residue.
@@ -62,15 +66,15 @@
 - The tracked input surface remains sentinel-only; visible files under
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
-- The current ignored/local residue is now the still-live route-array idea, a
-  new default-starter task-input contract cleanup idea, and an empty local
-  `factory/inputs/tasks/default/` directory.
+- The current ignored/local residue is now the still-live route-array idea plus
+  one new starter README follow-up idea.
 - PR `#76` merged the remaining import preview dialog extraction seam on
   `2026-05-03`, PR `#77` merged the remaining selected-work relationship graph
-  plus per-dispatch attempt-detail seam on `2026-05-03`, and PR `#78` merged
-  the list-work legacy pagination cleanup on `2026-05-04T00:28:40Z`, and PR
-  `#79` merged the filewatcher default-channel fallback cleanup on
-  `2026-05-04T01:27:11Z`.
+  plus per-dispatch attempt-detail seam on `2026-05-03`, PR `#78` merged the
+  list-work legacy pagination cleanup on `2026-05-04T00:28:40Z`, PR `#79`
+  merged the filewatcher default-channel fallback cleanup on
+  `2026-05-04T01:27:11Z`, and PR `#80` merged the starter task-input contract
+  alignment on `2026-05-04T02:36:26Z`.
 - The remaining import/export seam is now the route-array contract cleanup
   owned by open PR `#69`.
 - The selected-work current-selection ask is now materially satisfied on
@@ -96,12 +100,13 @@
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
   now fully stale because every lane it names is already merged or actively
   owned elsewhere.
-- The merged PR `#79` consumed the older filewatcher fallback cleanup idea, so
-  that ignored idea file is now stale local residue and should be pruned.
-- The next safe cleanup dispatch is the default-starter input-contract drift:
-  the checked-in maintainer workflow and canonical inboxes use singular `task`,
-  while starter docs, CLI help, scaffolds, and behavioral tests still teach or
-  generate plural `tasks`.
+- The merged PR `#80` consumed the older starter task-input-contract cleanup
+  idea, so that ignored idea file and its empty plural-path residue were stale
+  and were pruned locally.
+- The next safe cleanup dispatch is a narrower follow-up to `#80`: the
+  generated starter `factory/inputs/README.md` still teaches generic
+  multi-channel inbox prose even though the default starter flow now centers on
+  `inputs/task/default/`.
 
 ## 2026-05-03T19:02:46.3958525-07:00 - meta state refresh
 
@@ -136,6 +141,37 @@
   so the next non-overlapping follow-up collapses the starter `task`/`tasks`
   contract drift through behavioral init/bootstrap/run coverage instead of
   keeping both spellings alive.
+
+## 2026-05-03T20:04:00.9345431-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `4b945a7` to
+  `4728c0b`, which pulled in merged PR `#80`
+  (`align-default-starter-task-input-contract`) on `2026-05-04T02:36:26Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while the only active ignored idea residue is now the
+  route-array ask plus one newly queued starter README follow-up.
+- Re-checked live PR state with `gh pr list`, `gh pr view 69`, `gh pr view 80`,
+  `gh pr diff 69 --name-only`, `gh pr checks 69`, and `git log`, confirming
+  that PR `#80` is merged and PR `#69` remains the only open PR directly tied
+  to an active ask lane.
+- Pruned the stale ignored idea
+  `factory/inputs/idea/default/align-default-starter-task-input-contract.md`
+  and the empty local `factory/inputs/tasks/default/` residue after PR `#80`
+  landed their contract cleanup on `main`.
+- Used delegated and direct inspection to confirm one narrower non-overlapping
+  follow-up seam remains after `#80`: the generated starter
+  `factory/inputs/README.md` template in `pkg/cli/init/scaffolds.go` still
+  teaches generic `inputs/<work-type>/default` and
+  `inputs/<work-type>/<execution-id>` prose even though the canonical default
+  starter flow now centers on `inputs/task/default/`.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/trim-starter-input-readme-contract.md` so the
+  next starter follow-up trims that generated teaching surface and keeps the
+  runtime/bootstrap behavior aligned with the simplified canonical inbox path.
 
 ## 2026-05-03T13:01:50.9382865-07:00 - meta state refresh
 

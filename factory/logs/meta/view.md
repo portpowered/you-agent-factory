@@ -2,10 +2,10 @@
 
 ## world state
 
-- as of `2026-05-03T19:02:46.3958525-07:00`, local `HEAD` on `main` points to
-  `4b945a7`
-  (`retire-filewatcher-default-channel-fallback (#79)`) and matches
-  `origin/main`
+- as of `2026-05-03T20:04:00.9345431-07:00`, local `HEAD` on `main` points to
+  `4728c0b`
+  (`Merge pull request #80 from portpowered/ralph/align-default-starter-task-input-contract`)
+  and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
     `factory/workstations/cleaner/AGENTS.md`
@@ -42,9 +42,8 @@
 - `.gitignore` still ignores live workflow submissions under `factory/inputs/**`
   except those sentinel paths
 - the current checkout contains ignored operating residue:
-  - `factory/inputs/idea/default/align-default-starter-task-input-contract.md`
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - an empty local `factory/inputs/tasks/default/` directory
+  - `factory/inputs/idea/default/trim-starter-input-readme-contract.md`
 - the file watcher now enforces the documented three-segment watched-input
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
@@ -53,7 +52,7 @@
 ## customer-ask truth
 
 - the import/export P0 has materially advanced on `main` through merged PRs
-  `#67`, `#68`, `#70`, `#71`, `#72`, `#75`, `#76`, `#77`, and now `#78`
+  `#67`, `#68`, `#70`, `#71`, `#72`, `#75`, `#76`, `#77`, `#78`, and `#80`
 - the remaining active ask-owned lane is still PR `#69`
   `workstation-non-success-route-arrays`
 - on `main`, the route-array ask is still real across schema, config mapping,
@@ -86,6 +85,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#80` `align-default-starter-task-input-contract`, merged on
+    `2026-05-04T02:36:26Z`
   - `#79` `retire-filewatcher-default-channel-fallback`, merged on
     `2026-05-04T01:27:11Z`
   - `#78` `remove-list-work-legacy-pagination-shim`, merged on
@@ -111,14 +112,15 @@
 - helper planning residue can go stale within one merge cycle, so the meta loop
   has to reconcile ignored backlog files against `main` and open PR state
   before dispatching anything new
-- merged PR `#79` consumed the older filewatcher fallback cleanup idea, so
-  that ignored idea file became stale residue and should be pruned
+- merged PR `#80` consumed the older starter task-input-contract cleanup idea,
+  so that ignored idea file and its empty plural-path residue had to be pruned
 - PR ownership and ask completeness are different checks: PR `#69` owns the
   route-array lane, but failing checks plus stale maintained examples still mean
   the ask is not closed
-- once the remaining P0 route-array lane is already owned, the best safe
-  dispatch is a narrow cleanup outside `#69`
-- the next safe non-overlapping cleanup seam is the singular/plural default
-  starter contract drift: the checked-in maintainer workflow uses `task`, while
-  the public starter/default scaffold, CLI help, and related tests still teach
-  `tasks`
+- once the remaining P0 route-array lane is already owned, the meta loop should
+  only queue follow-up cleanup when it can prove the seam is genuinely
+  non-overlapping with `#69`
+- the current safe follow-up seam is narrower than the merged `#80` starter
+  contract work: the generated starter `factory/inputs/README.md` still teaches
+  generic multi-channel inbox prose instead of the simplified
+  `inputs/task/default/` starter contract
