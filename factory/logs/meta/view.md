@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T00:03:00-07:00`, local `HEAD` on `main` points to
-  `f4da7ae`
-  (`Merge pull request #83 from portpowered/ralph/simplify-dashboard-header-toolbar-verbosity`)
+- as of `2026-05-04T00:01:47.3762163-07:00`, local `HEAD` on `main` points to
+  `2781170`
+  (`Merge pull request #69 from portpowered/ralph/workstation-non-success-route-arrays`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -41,49 +41,52 @@
   - `factory/inputs/thoughts/default/.gitkeep`
 - `.gitignore` still ignores live workflow submissions under `factory/inputs/**`
   except those sentinel paths
-- the current checkout contains ignored operating residue:
-  - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - `factory/inputs/idea/default/align-work-outcome-chart-axis-labels-and-margins.md`
-- the file watcher now enforces the documented three-segment watched-input
+- the file watcher still enforces the documented three-segment watched-input
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
+- after pruning stale local residue for merged PR `#69` and merged PR `#84`,
+  the next ignored operating submission should be a single standalone branding
+  follow-up under `factory/inputs/idea/default/`
 
 ## customer-ask truth
 
-- the import/export P0 has materially advanced on `main` through merged PRs
-  `#67`, `#68`, `#70`, `#71`, `#72`, `#75`, `#76`, `#77`, `#78`, and `#80`
-- the remaining active ask-owned lane is still PR `#69`
-  `workstation-non-success-route-arrays`
-- on `main`, the route-array ask is still real across schema, config mapping,
-  replay/public projection, and UI factory-definition import surfaces
-- PR `#69` continues to own that lane functionally, but it is not yet
-  operationally closed:
-  - `gh pr checks 69` is still red
-  - the branch leaves an unused helper in `pkg/config/layout.go`
-  - maintained reference surfaces and fixtures on that branch still teach or
-    serialize the retired singular route shape in `docs/workstations.md`,
-    `ui/integration/fixtures/event-stream-replay.jsonl`, and
-    `factory/logs/agent-fails.replay.json`
-- that means the route-array ask is owned, but not yet review-ready, so a
-  second overlapping dispatch for the same lane would still be duplicate work
+- the import/export P0 lane is now materially satisfied on `main` through
+  merged PRs `#67`, `#68`, `#69`, `#70`, `#71`, and `#72`
 - the selected-work current-selection ask is materially satisfied on `main`
   through merged PRs `#74` and `#77`
-- merged PR `#83` materially advanced the header-verbosity ask on `main`:
-  - visible `Factory state`, `Stream`, `Export PNG`, and `Current` toolbar
-    labels are gone from the dashboard header
-- the broader header/branding ask is not fully closed yet:
-  - the header and status surfaces still brand the app as `Agent Factory`
-  - the favicon and page metadata still teach the retired triangle branding
-  - the stream/export/current controls still have residual iconography drift
-    from the ask's pulsating-dot, share-icon, and play-icon wording
-- the next selected unowned customer-visible follow-up is now the work outcome
-  chart contract:
-  - axis labels still render as text above the chart instead of being attached
-    to the chart axes
-  - the chart margins remain tight against the bento edges
-  - current chart coverage still asserts the external-label treatment instead
-    of the requested integrated axis/legend outcome
+- the submit-work copy ask is satisfied on `main` through merged PR `#75`
+- merged PR `#83` satisfied the header-verbosity copy reduction ask on `main`:
+  visible `Factory state`, `Stream`, `Export PNG`, and `Current` toolbar text
+  labels are gone
+- merged PR `#84` satisfied the work-outcome chart ask on `main`:
+  the chart no longer teaches detached axis labels and now carries increased
+  axis spacing through rendered chart behavior
+- the remaining customer-visible dashboard branding lane is still open:
+  - `ui/index.html` still brands the page as `Agent Factory Dashboard`,
+    describes it as an Agent Factory shell, and serves the old triangle favicon
+  - `ui/src/features/header/dashboard-header.tsx` still renders the main `Agent Factory`
+    heading
+  - `ui/src/features/header/dashboard-status-panel.tsx` still uses `Agent Factory`
+    as eyebrow copy
+  - `ui/src/features/bento/agent-bento.tsx` still labels the main board as
+    `Agent Factory bento board`
+  - `ui/src/features/workflow-activity/react-flow-current-activity-card-import.tsx`
+    still teaches `Port OS Agent Factory` PNG import wording
+  - `ui/src/features/header/dashboard-export-dialog.tsx` and
+    `ui/src/features/export/build-factory-export-filename.ts` still fall back
+    to `agent-factory` export names
+  - the header controls still have residual iconography drift from the ask:
+    the stream status uses check/offline glyphs instead of a pulsating-dot
+    contract, the export button still uses a download arrow instead of a share
+    icon, and the `Current` button still uses a refresh-style icon instead of
+    a play icon
+- if the checked-in fallback shell is still served anywhere, its bundled
+  branding remains stale too:
+  - `ui/fallback_dist/index.html`
+  - `ui/fallback_dist/assets/index.js`
+- the next selected unowned customer-visible follow-up is therefore a single
+  branding-and-header-iconography sweep
 
 ## replay truth
 
@@ -100,6 +103,10 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#69` `workstation-non-success-route-arrays`, merged into `main` before the
+    current refresh and now represented by `HEAD`
+  - `#84` `align-work-outcome-chart-axis-labels-and-margins`, merged on
+    `2026-05-04T06:31:54Z`
   - `#83` `simplify-dashboard-header-toolbar-verbosity`, merged on
     `2026-05-04T05:53:10Z`
   - `#82` `trim-ralph-starter-input-readme-contract`, merged on
@@ -112,17 +119,7 @@
     `2026-05-04T01:27:11Z`
   - `#78` `remove-list-work-legacy-pagination-shim`, merged on
     `2026-05-04T00:28:40Z`
-  - `#77`
-    `align-current-selection-relationship-graph-and-dispatch-attempt-details`,
-    merged on `2026-05-03T23:43:30Z`
-  - `#76`
-    `finish-import-preview-dialog-extraction-from-workflow-activity`, merged on
-    `2026-05-03T22:25:03Z`
-  - `#75` `trim-submit-work-card-intro-copy`, merged on `2026-05-03T22:12:16Z`
-  - `#74` `simplify-current-selection-dispatch-detail-surface`, merged on
-    `2026-05-03T19:37:13Z`
-- the only open PR directly tied to an active ask lane is still:
-  - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
+- `gh pr list --state open` currently reports no open PRs
 
 ## theory of mind
 
@@ -130,23 +127,15 @@
   checked-in workflow contract, not from replay fixtures alone
 - `factory/inputs/**` must always be reasoned about in two layers:
   checked-in contract versus ignored operating residue
-- helper planning residue can go stale within one merge cycle, so the meta loop
-  has to reconcile ignored backlog files against `main` and open PR state
+- ignored queue residue can become stale within a single merge cycle, so the
+  meta loop has to reconcile local inbox files against the newest merged PRs
   before dispatching anything new
-- merged PR `#80` consumed the older starter task-input-contract cleanup idea,
-  merged PR `#81` consumed the follow-up default starter README cleanup, and
-  merged PR `#82` consumed the Ralph starter README follow-up, and merged
-  PR `#83` consumed the broad header-verbosity follow-up, so stale ignored idea
-  residue in those lanes must be pruned quickly
-- PR ownership and ask completeness are different checks: PR `#69` owns the
-  route-array lane, but failing checks plus stale maintained examples still mean
-  the ask is not closed
-- once the remaining P0 route-array lane is already owned, the meta loop should
-  only queue follow-up cleanup when it can prove the seam is genuinely
-  non-overlapping with `#69`
-- partial closure matters: a merged PR can satisfy the visible copy part of an
-  ask while leaving narrower residual iconography, branding, or chart-contract
-  seams that still need fresh inspection before the lane is considered done
-- after PR `#83`, the cleanest new non-overlapping dispatch seam is the work
-  outcome chart because it is customer-visible, isolated to `ui/src/features/work-outcome/`,
-  and does not overlap the route-array PR
+- merged PR state can flip between the start of a refresh and the end of it;
+  open-PR assumptions need to be revalidated after `git pull` and before queue
+  writes
+- once a customer-visible ask lands, the right follow-up is usually not another
+  broad lane but the smallest remaining seam that preserves the ask's public
+  intent without reopening merged work
+- after PR `#69`, PR `#83`, and PR `#84`, the cleanest next non-overlapping
+  dispatch seam is the dashboard branding/iconography sweep because it stays
+  isolated to the UI shell, metadata, and import/export naming copy
