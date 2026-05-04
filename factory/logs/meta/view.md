@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T00:01:47.3762163-07:00`, local `HEAD` on `main` points to
-  `2781170`
-  (`Merge pull request #69 from portpowered/ralph/workstation-non-success-route-arrays`)
+- as of `2026-05-04T01:21:00-07:00`, local `HEAD` on `main` points to
+  `257367d`
+  (`align-dashboard-branding-and-header-iconography (#85)`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -45,9 +45,9 @@
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
-- after pruning stale local residue for merged PR `#69` and merged PR `#84`,
-  the next ignored operating submission should be a single standalone branding
-  follow-up under `factory/inputs/idea/default/`
+- after pruning stale local residue for merged PR `#69`, merged PR `#84`, and
+  merged PR `#85`, the next ignored operating submission should be a single
+  standalone header-button follow-up under `factory/inputs/idea/default/`
 
 ## customer-ask truth
 
@@ -62,31 +62,29 @@
 - merged PR `#84` satisfied the work-outcome chart ask on `main`:
   the chart no longer teaches detached axis labels and now carries increased
   axis spacing through rendered chart behavior
-- the remaining customer-visible dashboard branding lane is still open:
-  - `ui/index.html` still brands the page as `Agent Factory Dashboard`,
-    describes it as an Agent Factory shell, and serves the old triangle favicon
-  - `ui/src/features/header/dashboard-header.tsx` still renders the main `Agent Factory`
-    heading
-  - `ui/src/features/header/dashboard-status-panel.tsx` still uses `Agent Factory`
-    as eyebrow copy
-  - `ui/src/features/bento/agent-bento.tsx` still labels the main board as
-    `Agent Factory bento board`
-  - `ui/src/features/workflow-activity/react-flow-current-activity-card-import.tsx`
-    still teaches `Port OS Agent Factory` PNG import wording
-  - `ui/src/features/header/dashboard-export-dialog.tsx` and
-    `ui/src/features/export/build-factory-export-filename.ts` still fall back
-    to `agent-factory` export names
-  - the header controls still have residual iconography drift from the ask:
-    the stream status uses check/offline glyphs instead of a pulsating-dot
-    contract, the export button still uses a download arrow instead of a share
-    icon, and the `Current` button still uses a refresh-style icon instead of
-    a play icon
-- if the checked-in fallback shell is still served anywhere, its bundled
-  branding remains stale too:
-  - `ui/fallback_dist/index.html`
-  - `ui/fallback_dist/assets/index.js`
+- merged PR `#85` satisfied the remaining dashboard branding and header
+  iconography lane on `main`:
+  - `ui/index.html`, `ui/fallback_dist/index.html`, and
+    `ui/fallback_dist/assets/index.js` no longer ship the old
+    `Agent Factory` / triangle shell contract
+  - `ui/src/features/header/dashboard-header.tsx`,
+    `ui/src/features/header/dashboard-status-panel.tsx`,
+    `ui/src/features/bento/agent-bento.tsx`,
+    `ui/src/features/workflow-activity/react-flow-current-activity-card-import.tsx`,
+    `ui/src/features/header/dashboard-export-dialog.tsx`, and
+    `ui/src/features/export/build-factory-export-filename.ts` now align with
+    the Infinite You rename
+  - the header stream/export/current controls now use the requested
+    pulsating-dot, share-style, and play-style semantics
 - the next selected unowned customer-visible follow-up is therefore a single
-  branding-and-header-iconography sweep
+  header button-style convergence sweep:
+  - `ui/src/features/header/dashboard-header.tsx` still renders a bespoke raw
+    export button with accent-only styling
+  - `ui/src/features/header/tick-slider-control.tsx` renders the adjacent
+    current-tick action through the shared `Button` primitive with a different
+    tone
+  - that leaves the dashboard shell visibly short of the remaining ask to
+    converge buttons onto one neutral shared treatment
 
 ## replay truth
 
@@ -103,6 +101,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#85` `align-dashboard-branding-and-header-iconography`, merged on
+    `2026-05-04T08:00:00Z`
   - `#69` `workstation-non-success-route-arrays`, merged into `main` before the
     current refresh and now represented by `HEAD`
   - `#84` `align-work-outcome-chart-axis-labels-and-margins`, merged on
@@ -136,6 +136,7 @@
 - once a customer-visible ask lands, the right follow-up is usually not another
   broad lane but the smallest remaining seam that preserves the ask's public
   intent without reopening merged work
-- after PR `#69`, PR `#83`, and PR `#84`, the cleanest next non-overlapping
-  dispatch seam is the dashboard branding/iconography sweep because it stays
-  isolated to the UI shell, metadata, and import/export naming copy
+- after PR `#69`, PR `#83`, PR `#84`, and PR `#85`, the cleanest next
+  non-overlapping dispatch seam is the dashboard header button-style sweep
+  because it stays isolated to the UI shell action controls and advances the
+  remaining shared-button ask without reopening the merged branding work

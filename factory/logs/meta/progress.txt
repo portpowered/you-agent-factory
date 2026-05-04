@@ -55,8 +55,8 @@
 
 ## Current Summary
 
-- As of `2026-05-04T00:01:47.3762163-07:00`, `HEAD` on `main` points to
-  `2781170` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-04T01:21:00-07:00`, `HEAD` on `main` points to `257367d`
+  and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
   operating state.
@@ -74,20 +74,24 @@
   `main`.
 - Merged PR `#84` closed the work-outcome chart axis-label and margin ask on
   `main`.
+- Merged PR `#85` closed the remaining dashboard branding and header
+  iconography ask on `main`.
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
 - `gh pr list --state open` is now empty, so there is no longer an ask-owned
   PR lane in flight.
-- The remaining customer-visible dashboard ask is now a narrower branding lane:
-  the shell still teaches `Agent Factory`/triangle branding and still uses
-  outdated header iconography and export/import fallback naming.
+- The next customer-visible dashboard ask is now a narrower shared-button lane:
+  the header still mixes a bespoke export button in
+  `ui/src/features/header/dashboard-header.tsx` with a shared `Button`-based
+  current-tick control in `ui/src/features/header/tick-slider-control.tsx`,
+  which falls short of the remaining button-convergence ask.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- The next safe cleanup dispatch is a single standalone UI branding follow-up
-  covering the dashboard heading, favicon/metadata, bento aria label,
-  PNG import/export wording, export filename fallback, and any checked-in
-  fallback shell artifacts that still ship the old branding.
+- The next safe cleanup dispatch is a single standalone header button-style
+  follow-up covering the export and current-tick controls plus the minimum
+  shared button primitive changes needed to make those actions visually
+  consistent.
 
 ## 2026-05-04T00:01:47.3762163-07:00 - meta state refresh
 
@@ -712,3 +716,35 @@
   after its owning PR `#78` merged.
 - Queued one new standalone ignored cleanup idea at
   `factory/inputs/idea/default/retire-filewatcher-default-channel-fallback.md`.
+
+## 2026-05-04T01:21:00-07:00 - meta state refresh
+
+- Ran `git pull`; Git fast-forwarded `main` from `2781170` to `257367d`, which
+  pulled in merged PR `#85`
+  (`align-dashboard-branding-and-header-iconography`) on
+  `2026-05-04T08:00:00Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, the tracked-versus-ignored `factory/inputs/**` surface,
+  recent PR state, and the live header/import-export UI code.
+- Re-validated with `git ls-files factory/inputs`,
+  `Get-ChildItem -Recurse factory/inputs`, `gh pr list --state all --limit 12`,
+  `gh pr view 85`, `git log --oneline -12`, direct code reads, graph reads, and
+  a delegated explorer pass that PR `#85` fully closes the stale branding lane
+  recorded in the prior meta view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/align-dashboard-branding-and-header-iconography.md`
+  is now stale because PR `#85` already landed that exact work on `main`, then
+  pruned that ignored queue residue locally.
+- Inspected the live dashboard shell and found one narrower remaining
+  customer-visible seam that does not overlap the merged branding work:
+  `ui/src/features/header/dashboard-header.tsx` still uses a bespoke raw export
+  button with accent-only styling while
+  `ui/src/features/header/tick-slider-control.tsx` uses the shared `Button`
+  primitive with a different tone, so the header still falls short of the ask
+  to converge buttons onto one neutral shared treatment.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/normalize-dashboard-header-button-treatment.md`
+  so the next follow-up stays isolated to header action controls and the
+  minimum shared button primitive needed for that convergence.
