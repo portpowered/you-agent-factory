@@ -153,6 +153,47 @@ func NormalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch
 	return normalized, nil
 }
 
+// WorkRequestFromSubmitRequests wraps normalized submit requests in the
+// canonical FACTORY_REQUEST_BATCH contract.
+func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfaces.WorkRequest {
+	if len(requests) == 0 {
+		return interfaces.WorkRequest{Type: interfaces.WorkRequestTypeFactoryRequestBatch}
+	}
+
+	requestID := sharedSubmitRequestID(requests)
+	usedNames := make(map[string]int, len(requests))
+	works := make([]interfaces.Work, 0, len(requests))
+	for i, req := range requests {
+		itemRequestID := req.RequestID
+		if itemRequestID == "" {
+			itemRequestID = requestID
+		}
+		currentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID)
+		name := uniqueSubmitWorkName(req, i, usedNames)
+		works = append(works, interfaces.Work{
+			Name:                     name,
+			WorkID:                   req.WorkID,
+			RequestID:                itemRequestID,
+			WorkTypeID:               req.WorkTypeID,
+			State:                    req.TargetState,
+			CurrentChainingTraceID:   currentChainingTraceID,
+			PreviousChainingTraceIDs: append([]string(nil), req.PreviousChainingTraceIDs...),
+			TraceID:                  req.TraceID,
+			Payload:                  append([]byte(nil), req.Payload...),
+			Tags:                     maps.Clone(req.Tags),
+			ExecutionID:              req.ExecutionID,
+			RuntimeRelations:         clonePetriRelations(req.Relations),
+		})
+	}
+
+	return interfaces.WorkRequest{
+		RequestID:              requestID,
+		CurrentChainingTraceID: ResolveWorkRequestCurrentChainingTraceID(requests[0].CurrentChainingTraceID, requests[0].TraceID),
+		Type:                   interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works:                  works,
+	}
+}
+
 // WorkRequestRecordFromSubmitRequests builds the canonical request-history
 // record for a normalized batch submission.
 func WorkRequestRecordFromSubmitRequests(requestID string, source string, requests []interfaces.SubmitRequest) interfaces.WorkRequestRecord {
@@ -212,6 +253,36 @@ func SubmitWorkName(req interfaces.SubmitRequest) string {
 		return req.Tags["_work_name"]
 	}
 	return req.WorkID
+}
+
+func sharedSubmitRequestID(requests []interfaces.SubmitRequest) string {
+	var shared string
+	for _, req := range requests {
+		if req.RequestID == "" {
+			continue
+		}
+		if shared == "" {
+			shared = req.RequestID
+			continue
+		}
+		if shared != req.RequestID {
+			return ""
+		}
+	}
+	return shared
+}
+
+func uniqueSubmitWorkName(req interfaces.SubmitRequest, index int, used map[string]int) string {
+	base := SubmitWorkName(req)
+	if base == "" {
+		base = fmt.Sprintf("work-%d", index+1)
+	}
+	count := used[base]
+	used[base] = count + 1
+	if count == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s-%d", base, count+1)
 }
 
 type normalizedBatchWork struct {
