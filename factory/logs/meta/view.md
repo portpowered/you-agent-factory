@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-03T20:04:00.9345431-07:00`, local `HEAD` on `main` points to
-  `4728c0b`
-  (`Merge pull request #80 from portpowered/ralph/align-default-starter-task-input-contract`)
+- as of `2026-05-03T21:03:09.3263488-07:00`, local `HEAD` on `main` points to
+  `c4d66fd`
+  (`Merge pull request #81 from portpowered/ralph/trim-starter-input-readme-contract`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -43,7 +43,7 @@
   except those sentinel paths
 - the current checkout contains ignored operating residue:
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - `factory/inputs/idea/default/trim-starter-input-readme-contract.md`
+  - `factory/inputs/idea/default/trim-ralph-starter-input-readme-contract.md`
 - the file watcher now enforces the documented three-segment watched-input
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
@@ -85,6 +85,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#81` `trim-starter-input-readme-contract`, merged on
+    `2026-05-04T03:18:53Z`
   - `#80` `align-default-starter-task-input-contract`, merged on
     `2026-05-04T02:36:26Z`
   - `#79` `retire-filewatcher-default-channel-fallback`, merged on
@@ -113,14 +115,15 @@
   has to reconcile ignored backlog files against `main` and open PR state
   before dispatching anything new
 - merged PR `#80` consumed the older starter task-input-contract cleanup idea,
-  so that ignored idea file and its empty plural-path residue had to be pruned
+  and merged PR `#81` consumed the follow-up default starter README cleanup,
+  so stale ignored idea residue in that lane must be pruned quickly
 - PR ownership and ask completeness are different checks: PR `#69` owns the
   route-array lane, but failing checks plus stale maintained examples still mean
   the ask is not closed
 - once the remaining P0 route-array lane is already owned, the meta loop should
   only queue follow-up cleanup when it can prove the seam is genuinely
   non-overlapping with `#69`
-- the current safe follow-up seam is narrower than the merged `#80` starter
-  contract work: the generated starter `factory/inputs/README.md` still teaches
-  generic multi-channel inbox prose instead of the simplified
-  `inputs/task/default/` starter contract
+- the current safe follow-up seam after merged PR `#81` is in the Ralph
+  scaffold, not the default starter: the generated Ralph
+  `factory/inputs/README.md` still teaches generic multi-channel inbox prose
+  even though the scaffold's actual intake path is `inputs/request/default/`

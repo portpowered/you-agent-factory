@@ -52,8 +52,8 @@
 
 ## Current Summary
 
-- As of `2026-05-03T20:04:00.9345431-07:00`, `HEAD` on `main` points to
-  `4728c0b` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T21:03:09.3263488-07:00`, `HEAD` on `main` points to
+  `c4d66fd` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and the live inbox still contains ignored operating
   residue.
@@ -67,14 +67,15 @@
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
 - The current ignored/local residue is now the still-live route-array idea plus
-  one new starter README follow-up idea.
+  one new Ralph starter README follow-up idea.
 - PR `#76` merged the remaining import preview dialog extraction seam on
   `2026-05-03`, PR `#77` merged the remaining selected-work relationship graph
   plus per-dispatch attempt-detail seam on `2026-05-03`, PR `#78` merged the
   list-work legacy pagination cleanup on `2026-05-04T00:28:40Z`, PR `#79`
   merged the filewatcher default-channel fallback cleanup on
-  `2026-05-04T01:27:11Z`, and PR `#80` merged the starter task-input contract
-  alignment on `2026-05-04T02:36:26Z`.
+  `2026-05-04T01:27:11Z`, PR `#80` merged the starter task-input contract
+  alignment on `2026-05-04T02:36:26Z`, and PR `#81` merged the default starter
+  README cleanup on `2026-05-04T03:18:53Z`.
 - The remaining import/export seam is now the route-array contract cleanup
   owned by open PR `#69`.
 - The selected-work current-selection ask is now materially satisfied on
@@ -100,13 +101,43 @@
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
   now fully stale because every lane it names is already merged or actively
   owned elsewhere.
-- The merged PR `#80` consumed the older starter task-input-contract cleanup
-  idea, so that ignored idea file and its empty plural-path residue were stale
-  and were pruned locally.
-- The next safe cleanup dispatch is a narrower follow-up to `#80`: the
-  generated starter `factory/inputs/README.md` still teaches generic
-  multi-channel inbox prose even though the default starter flow now centers on
-  `inputs/task/default/`.
+- The merged PRs `#80` and `#81` consumed the default starter task-input and
+  starter README cleanup lane, so the older ignored idea residue in that lane
+  is stale and should be pruned locally.
+- The next safe cleanup dispatch now sits in the Ralph scaffold, not the
+  default starter: the generated Ralph `factory/inputs/README.md` still teaches
+  generic multi-channel inbox prose even though the actual request intake path
+  is `inputs/request/default/`.
+
+## 2026-05-03T21:03:09.3263488-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git fast-forwarded `main`
+  from `4728c0b` to `c4d66fd`, which pulled in merged PR `#81`
+  (`trim-starter-input-readme-contract`) on `2026-05-04T03:18:53Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while the visible idea files are ignored operating state.
+- Re-checked live PR state with `gh pr list`, `gh pr view 69`, `gh pr view 81`,
+  `gh pr checks 69`, and `git log`, confirming that PR `#81` is merged and PR
+  `#69` remains the only open PR directly tied to an active ask lane.
+- Confirmed that the local ignored idea
+  `factory/inputs/idea/default/trim-starter-input-readme-contract.md` is now
+  stale because PR `#81` already landed that exact default-starter README seam
+  on `main`, then pruned that ignored idea residue locally.
+- Used delegated plus direct scaffold inspection to confirm one new narrow
+  non-overlapping cleanup seam remains after `#81`: the Ralph scaffold block in
+  `pkg/cli/init/scaffolds.go` still teaches generic
+  `inputs/<work-type>/default/` and `inputs/<work-type>/<execution-id>/` prose
+  in `factory/inputs/README.md` even though the scaffold's actual intake path
+  is `inputs/request/default/`.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/trim-ralph-starter-input-readme-contract.md` so
+  the next follow-up stays isolated to Ralph scaffold teaching surfaces and
+  their coverage instead of overlapping API/config/replay/UI route-array work
+  already owned by PR `#69`.
 
 ## 2026-05-03T19:02:46.3958525-07:00 - meta state refresh
 
