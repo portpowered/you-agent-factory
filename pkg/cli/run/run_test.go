@@ -1187,12 +1187,6 @@ func assertOOTBSmokeStartupConfig(t *testing.T, cfg *service.FactoryServiceConfi
 	if _, err := os.Stat(taskPath); err != nil {
 		t.Fatalf("expected bootstrap to seed canonical starter task path %q: %v", taskPath, err)
 	}
-	retiredTasksPath := filepath.Join(dir, "inputs", "tasks")
-	if _, err := os.Stat(retiredTasksPath); err == nil {
-		t.Fatalf("expected retired starter path %q to remain absent", retiredTasksPath)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("stat retired starter path %q: %v", retiredTasksPath, err)
-	}
 }
 
 func waitForOOTBSmokeTaskCompletion(

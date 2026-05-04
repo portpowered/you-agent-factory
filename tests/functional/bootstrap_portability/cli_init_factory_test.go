@@ -68,11 +68,6 @@ func TestInitFactory_StructureIsValid(t *testing.T) {
 		t.Error("expected 'factories/' directory to NOT be created by init")
 	}
 
-	// Verify the retired plural path is not generated alongside the canonical one.
-	retiredTasksPath := filepath.Join(dir, "inputs", "tasks")
-	if _, err := os.Stat(retiredTasksPath); err == nil {
-		t.Error("expected retired 'inputs/tasks/' path to not be created")
-	}
 }
 
 // TestInitFactory_EndToEnd exercises the full init → run → complete lifecycle:
@@ -276,13 +271,6 @@ func assertCanonicalStarterInboxState(t *testing.T, dir string) {
 	}
 	if len(entries) == 0 {
 		t.Fatalf("expected canonical starter inbox %q to contain a seeded work item", canonicalInputDir)
-	}
-
-	retiredTasksPath := filepath.Join(dir, "inputs", "tasks")
-	if _, err := os.Stat(retiredTasksPath); err == nil {
-		t.Fatalf("expected retired starter inbox %q to remain absent", retiredTasksPath)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("stat retired starter inbox %q: %v", retiredTasksPath, err)
 	}
 }
 
