@@ -77,7 +77,7 @@ func (s *recordingScheduler) Select(enabled []interfaces.EnabledTransition, _ *i
 
 	return decisions
 }
-func TestDispatcher_ActiveThrottlePauses_UsesLoweredInferenceThrottleGuards(t *testing.T) {
+func TestDispatcher_ExecuteExposesActiveThrottlePausesFromLoweredInferenceThrottleGuards(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
 	n := &state.Net{
 		Transitions: map[string]*petri.Transition{
@@ -119,22 +119,31 @@ func TestDispatcher_ActiveThrottlePauses_UsesLoweredInferenceThrottleGuards(t *t
 		)),
 	)
 
-	active := dispatcher.activeThrottlePauses(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
 			throttledCompletedDispatch("dispatch-b", "t-b", now.Add(3*time.Minute)),
 			throttledCompletedDispatch("dispatch-a", "t-a", now),
 		},
 	})
-
-	if len(active) != 2 {
-		t.Fatalf("active pause count = %d, want 2", len(active))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if active[0].LaneID != "claude/claude-sonnet" || active[1].LaneID != "openai/gpt-5.4" {
-		t.Fatalf("active pauses = %#v, want stable provider/model ordering", active)
+	if result == nil {
+		t.Fatal("expected throttle pause snapshot result")
+	}
+
+	if len(result.ActiveThrottlePauses) != 2 {
+		t.Fatalf("active pause count = %d, want 2", len(result.ActiveThrottlePauses))
+	}
+	if !result.ThrottlePausesObserved {
+		t.Fatal("expected dispatcher to report authored throttle pause observability")
+	}
+	if result.ActiveThrottlePauses[0].LaneID != "claude/claude-sonnet" || result.ActiveThrottlePauses[1].LaneID != "openai/gpt-5.4" {
+		t.Fatalf("active pauses = %#v, want stable provider/model ordering", result.ActiveThrottlePauses)
 	}
 }
 
-func TestDispatcher_ActiveThrottlePauses_ReturnsEmptyWithoutAuthoredInferenceThrottleGuard(t *testing.T) {
+func TestDispatcher_ExecuteOmitsThrottlePauseObservabilityWithoutAuthoredInferenceThrottleGuard(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
 	n := &state.Net{
 		Transitions: map[string]*petri.Transition{
@@ -152,14 +161,77 @@ func TestDispatcher_ActiveThrottlePauses_ReturnsEmptyWithoutAuthoredInferenceThr
 	}
 	dispatcher := NewDispatcher(n, &mockScheduler{}, nil, nil, WithDispatcherClock(func() time.Time { return now }))
 
-	active := dispatcher.activeThrottlePauses(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
 			throttledCompletedDispatch("dispatch-a", "t-a", now),
 		},
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("result = %#v, want no dispatcher output without authored pause observability", result)
+	}
+}
 
-	if len(active) != 0 {
-		t.Fatalf("active pauses = %#v, want empty without authored inference throttle guards", active)
+func TestDispatcher_ExecuteLeavesLaneRunnableWhenAuthoredThrottleRuntimeLookupIsUnresolved(t *testing.T) {
+	now := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init": {ID: "p-init"},
+			"p-done": {ID: "p-done"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t-a": {
+				ID:         "t-a",
+				Name:       "step-a",
+				WorkerType: "worker-a",
+				InputArcs: []petri.Arc{
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 30*time.Minute)},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "a-out", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
+				},
+			},
+		},
+	}
+	sched := &recordingScheduler{}
+	dispatcher := NewDispatcher(
+		n,
+		sched,
+		nil,
+		nil,
+		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig()),
+	)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("dispatch-a", "t-a", now),
+		},
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected dispatch result")
+	}
+	if len(sched.received) != 1 || sched.received[0].TransitionID != "t-a" {
+		t.Fatalf("scheduler received transitions = %#v, want enabled transition t-a", sched.received)
+	}
+	if len(result.Dispatches) != 1 || result.Dispatches[0].Dispatch.TransitionID != "t-a" {
+		t.Fatalf("dispatches = %#v, want runnable transition t-a", result.Dispatches)
+	}
+	if result.ThrottlePausesObserved {
+		t.Fatal("expected unresolved runtime lookup to avoid authored throttle pause observability")
+	}
+	if len(result.ActiveThrottlePauses) != 0 {
+		t.Fatalf("active pauses = %#v, want none when runtime lookup is unresolved", result.ActiveThrottlePauses)
 	}
 }
 
