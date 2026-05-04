@@ -182,7 +182,7 @@ func TestRulePlaceReferences_InvalidOnRejection(t *testing.T) {
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:        "ws",
 		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "bogus"},
+		OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 	findings := rulePlaceReferences(cfg)
 	assertFindingExists(t, findings, "workstation-on-rejection-ref")
@@ -193,7 +193,7 @@ func TestRulePlaceReferences_InvalidOnFailure(t *testing.T) {
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:      "ws",
 		Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		OnFailure: &interfaces.IOConfig{WorkTypeName: "task", StateName: "bogus"},
+		OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 	findings := rulePlaceReferences(cfg)
 	assertFindingExists(t, findings, "workstation-on-failure-ref")
@@ -205,8 +205,8 @@ func TestRulePlaceReferences_AllValid(t *testing.T) {
 		Name:        "ws",
 		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 		Outputs:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-		OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
-		OnFailure:   &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+		OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 	}}
 	findings := rulePlaceReferences(cfg)
 	if len(findings) != 0 {

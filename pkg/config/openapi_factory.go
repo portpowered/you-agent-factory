@@ -271,9 +271,27 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryWorkstationInputGuardEntries(workstation, i); err != nil {
 			return err
 		}
+		normalizeWorkstationIORouteField(workstation, "onContinue")
+		normalizeWorkstationIORouteField(workstation, "onRejection")
+		normalizeWorkstationIORouteField(workstation, "onFailure")
 		normalizeRuntimeResourceRequirements(workstation, "resources")
 	}
 	return nil
+}
+
+func normalizeWorkstationIORouteField(workstation map[string]any, key string) {
+	value, ok := workstation[key]
+	if !ok {
+		return
+	}
+	switch typed := value.(type) {
+	case nil, []any:
+		return
+	case map[string]any:
+		workstation[key] = []any{typed}
+	default:
+		workstation[key] = value
+	}
 }
 
 func normalizeFactoryWorkstationGuardEntries(workstation map[string]any, workstationIndex int) error {

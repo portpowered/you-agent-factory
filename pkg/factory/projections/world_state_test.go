@@ -2,6 +2,7 @@ package projections
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,28 @@ func TestReconstructFactoryWorldState_SeedsTopologyFromRunRequestBeforeInitialSt
 	}
 	if got := state.PlaceOccupancyByID["agent-slot:available"].TokenCount; got != 2 {
 		t.Fatalf("agent-slot:available token count = %d, want 2 seeded from RUN_REQUEST", got)
+	}
+}
+
+func TestReconstructFactoryWorldState_InitialStructurePreservesNonSuccessRouteArrays(t *testing.T) {
+	t0 := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	state, err := ReconstructFactoryWorldState([]factoryapi.FactoryEvent{initialStructureEventWithNonSuccessRouteArrays(t0)}, 0)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if len(state.Topology.Workstations) != 1 {
+		t.Fatalf("topology workstations = %#v, want one projected workstation", state.Topology.Workstations)
+	}
+
+	workstation := state.Topology.Workstations[0]
+	if !reflect.DeepEqual(workstation.ContinuePlaceIDs, []string{"task:retry", "task:init"}) {
+		t.Fatalf("continue routes = %#v, want authored order", workstation.ContinuePlaceIDs)
+	}
+	if !reflect.DeepEqual(workstation.RejectionPlaceIDs, []string{"task:triage", "task:init"}) {
+		t.Fatalf("rejection routes = %#v, want authored order", workstation.RejectionPlaceIDs)
+	}
+	if !reflect.DeepEqual(workstation.FailurePlaceIDs, []string{"task:failed", "task:abandoned"}) {
+		t.Fatalf("failure routes = %#v, want authored order", workstation.FailurePlaceIDs)
 	}
 }
 
@@ -923,11 +946,40 @@ func initialStructureEvent(eventTime time.Time) factoryapi.FactoryEvent {
 				Worker:    "reviewer",
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
-				OnFailure: &factoryapi.WorkstationIO{WorkType: "task", State: "failed"},
+				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 			}},
 		},
 	}
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeInitialStructureRequest, "initial", 0, eventTime, factoryapi.FactoryEventContext{}, payload)
+}
+
+func initialStructureEventWithNonSuccessRouteArrays(eventTime time.Time) factoryapi.FactoryEvent {
+	payload := factoryapi.InitialStructureRequestEventPayload{
+		Factory: factoryapi.Factory{
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "task",
+				States: []factoryapi.WorkState{
+					{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "retry", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "triage", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+					{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+					{Name: "abandoned", Type: factoryapi.WorkStateTypeFAILED},
+				},
+			}},
+			Workstations: &[]factoryapi.Workstation{{
+				Id:          stringPtrForProjectionTest("t-review"),
+				Name:        "Review",
+				Worker:      "reviewer",
+				Inputs:      []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
+				Outputs:     []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+				OnContinue:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "retry"}, {WorkType: "task", State: "init"}},
+				OnRejection: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "triage"}, {WorkType: "task", State: "init"}},
+				OnFailure:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}, {WorkType: "task", State: "abandoned"}},
+			}},
+		},
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeInitialStructureRequest, "initial-non-success-routes", 0, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
 func runRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
@@ -953,7 +1005,7 @@ func runRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
 				Worker:    "reviewer",
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
-				OnFailure: &factoryapi.WorkstationIO{WorkType: "task", State: "failed"},
+				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 			}},
 		},
 	}

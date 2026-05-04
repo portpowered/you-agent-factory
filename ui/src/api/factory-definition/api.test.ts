@@ -54,7 +54,18 @@ describe("normalizeFactoryDefinition", () => {
             ],
             behavior: "STANDARD",
             name: "Draft",
-            onFailure: { state: "failed", workType: "story" },
+            onContinue: [
+              { state: "new", workType: "story" },
+              { state: "queued", workType: "story" },
+            ],
+            onFailure: [
+              { state: "failed", workType: "story" },
+              { state: "blocked", workType: "story" },
+            ],
+            onRejection: [
+              { state: "needs-review", workType: "story" },
+              { state: "rejected", workType: "story" },
+            ],
             outputs: [{ state: "done", workType: "story" }],
             worker: "writer",
           },
@@ -107,7 +118,18 @@ describe("normalizeFactoryDefinition", () => {
           ],
           behavior: "STANDARD",
           name: "Draft",
-          onFailure: { state: "failed", workType: "story" },
+          onContinue: [
+            { state: "new", workType: "story" },
+            { state: "queued", workType: "story" },
+          ],
+          onFailure: [
+            { state: "failed", workType: "story" },
+            { state: "blocked", workType: "story" },
+          ],
+          onRejection: [
+            { state: "needs-review", workType: "story" },
+            { state: "rejected", workType: "story" },
+          ],
           outputs: [{ state: "done", workType: "story" }],
           worker: "writer",
         },
@@ -306,4 +328,3 @@ describe("isCanonicalFactoryDefinition", () => {
     ).toBe(false);
   });
 });
-

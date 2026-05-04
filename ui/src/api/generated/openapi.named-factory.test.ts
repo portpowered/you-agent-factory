@@ -28,6 +28,18 @@ describe("generated factory OpenAPI types", () => {
         {
           inputs: [{ state: "init", workType: "task" }],
           name: "plan-task",
+          onContinue: [
+            { state: "init", workType: "task" },
+            { state: "queued", workType: "task" },
+          ],
+          onRejection: [
+            { state: "rejected", workType: "task" },
+            { state: "backlog", workType: "task" },
+          ],
+          onFailure: [
+            { state: "failed", workType: "task" },
+            { state: "blocked", workType: "task" },
+          ],
           outputs: [{ state: "done", workType: "task" }],
           worker: "planner",
         },
@@ -75,4 +87,3 @@ describe("generated factory OpenAPI types", () => {
     ]);
   });
 });
-

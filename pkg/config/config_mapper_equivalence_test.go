@@ -156,8 +156,8 @@ func configRejectionFailure() *interfaces.FactoryConfig {
 				WorkerTypeName: "process-worker",
 				Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-				OnRejection:    &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
-				OnFailure:      &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+				OnRejection:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				OnFailure:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 			},
 		},
 	}
@@ -217,7 +217,7 @@ func configRejectionGuardedLoopBreaker() *interfaces.FactoryConfig {
 				WorkerTypeName: "review-worker",
 				Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-				OnRejection:    &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
+				OnRejection:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			},
 			{
 				Name:    "reviewer-loop-breaker",

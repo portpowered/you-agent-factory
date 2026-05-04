@@ -585,7 +585,7 @@ func rewriteSmokeFixtureFile(t *testing.T, path string, replacer *strings.Replac
 }
 
 func factoryConfigSmokeCanonicalJSON() string {
-  return `{
+	return `{
   "name": "analytics-platform",
   "id": "analytics-platform",
   "inputTypes": [{"name":"batch","type":"DEFAULT"}],
@@ -615,8 +615,8 @@ func factoryConfigSmokeCanonicalJSON() string {
     "body":"Implement {{ .WorkID }}.",
     "outputSchema":"schema.json",
     "limits":{"maxExecutionTime":"30m"},
-    "onRejection":{"workType":"story","state":"init"},
-    "onFailure":{"workType":"story","state":"failed"},
+    "onRejection":[{"workType":"story","state":"init"}],
+    "onFailure":[{"workType":"story","state":"failed"}],
     "resources":[{"name":"agent-slot","capacity":2}],
     "stopWords":["DONE"],
     "workingDirectory":"/repo/{{ .WorkID }}",
@@ -646,7 +646,7 @@ func factoryConfigSmokeCanonicalJSON() string {
 }
 
 func factoryConfigSmokeLegacyJSON() string {
-  return `{
+	return `{
   "name": "analytics-platform",
   "id": "analytics-platform",
   "input_types": [{"name":"batch","type":"default"}],

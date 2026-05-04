@@ -4959,10 +4959,10 @@ func dashboardInitialStructureEventForTest(t *testing.T) factoryapi.FactoryEvent
 				Worker:  "worker-a",
 				Inputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
-				OnFailure: &factoryapi.WorkstationIO{
+				OnFailure: &[]factoryapi.WorkstationIO{{
 					WorkType: "task",
 					State:    "failed",
-				},
+				}},
 			}},
 		},
 	}

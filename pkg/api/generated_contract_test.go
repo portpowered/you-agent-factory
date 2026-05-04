@@ -86,6 +86,16 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 		Worker:   "agent",
 		Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 		Outputs:  []factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
+		OnContinue: &[]factoryapi.WorkstationIO{
+			{WorkType: "task", State: "init"},
+			{WorkType: "task", State: "retry"},
+		},
+		OnRejection: &[]factoryapi.WorkstationIO{
+			{WorkType: "task", State: "rejected"},
+		},
+		OnFailure: &[]factoryapi.WorkstationIO{
+			{WorkType: "task", State: "failed"},
+		},
 	}
 	workRequest := factoryapi.WorkRequest{
 		RequestId:              requestID,
@@ -166,6 +176,16 @@ func generatedNamedFactoryFixture() factoryapi.Factory {
 				WorkType: "task",
 				State:    "done",
 			}},
+			OnContinue: &[]factoryapi.WorkstationIO{
+				{WorkType: "task", State: "init"},
+				{WorkType: "task", State: "queued"},
+			},
+			OnRejection: &[]factoryapi.WorkstationIO{
+				{WorkType: "task", State: "review"},
+			},
+			OnFailure: &[]factoryapi.WorkstationIO{
+				{WorkType: "task", State: "failed"},
+			},
 		}},
 	}
 }
@@ -223,6 +243,16 @@ func assertGeneratedNamedFactoryJSONRoundTrip(t *testing.T, namedFactory factory
 	}
 	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)
+	}
+	workstation := (*roundTripped.Workstations)[0]
+	if workstation.OnContinue == nil || len(*workstation.OnContinue) != 2 {
+		t.Fatalf("round-tripped workstation onContinue = %#v, want two array routes", workstation.OnContinue)
+	}
+	if workstation.OnRejection == nil || len(*workstation.OnRejection) != 1 || (*workstation.OnRejection)[0].State != "review" {
+		t.Fatalf("round-tripped workstation onRejection = %#v, want review route", workstation.OnRejection)
+	}
+	if workstation.OnFailure == nil || len(*workstation.OnFailure) != 1 || (*workstation.OnFailure)[0].State != "failed" {
+		t.Fatalf("round-tripped workstation onFailure = %#v, want failed route", workstation.OnFailure)
 	}
 }
 

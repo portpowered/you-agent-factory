@@ -68,7 +68,7 @@ const initialStructureRequest = event(
           id: "review",
           inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          onFailure: { state: "failed", workType: "story" },
+          onFailure: [{ state: "failed", workType: "story" }],
           outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
@@ -120,7 +120,7 @@ const runRequest = event(
           id: "review",
           inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          onFailure: { state: "failed", workType: "story" },
+          onFailure: [{ state: "failed", workType: "story" }],
           outputs: [{ state: "review", workType: "story" }],
           worker: "reviewer",
         },
@@ -415,7 +415,7 @@ const failedRequest = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
@@ -466,7 +466,7 @@ const failedResponse = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
@@ -515,7 +515,7 @@ const rejectedRequest = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onRejection: { state: "new", workType: "story" },
+      onRejection: [{ state: "new", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
@@ -604,7 +604,7 @@ const rejectedResponse = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onRejection: { state: "new", workType: "story" },
+      onRejection: [{ state: "new", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "reviewer",
     },
@@ -613,6 +613,132 @@ const rejectedResponse = event(
 rejectedResponse.context.dispatchId = "dispatch-rejected";
 rejectedResponse.context.traceIds = ["trace-rejected"];
 rejectedResponse.context.workIds = ["work-rejected"];
+
+const continuedInitialStructure = event(
+  "event-continued-1",
+  1,
+  FACTORY_EVENT_TYPES.initialStructureRequest,
+  {
+    factory: {
+      workers: [
+        {
+          model: "gpt-5.4",
+          modelProvider: "openai",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "retry", type: "PROCESSING" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Review",
+          onContinue: [{ state: "retry", workType: "story" }],
+          outputs: [{ state: "done", workType: "story" }],
+          worker: "reviewer",
+        },
+        {
+          id: "retry-review",
+          inputs: [{ state: "retry", workType: "story" }],
+          name: "Retry Review",
+          outputs: [{ state: "done", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+    },
+  },
+);
+
+const continuedWorkInput = event(
+  "event-continued-2",
+  2,
+  FACTORY_EVENT_TYPES.workRequest,
+  {
+    type: "FACTORY_REQUEST_BATCH",
+    works: [
+      {
+        name: "Continued Timeline Story",
+        trace_id: "trace-continued",
+        work_id: "work-continued",
+        work_type_id: "story",
+      },
+    ],
+  },
+);
+continuedWorkInput.context.requestId = "request-work-continued";
+continuedWorkInput.context.traceIds = ["trace-continued"];
+continuedWorkInput.context.workIds = ["work-continued"];
+
+const continuedRequest = event(
+  "event-continued-3",
+  3,
+  FACTORY_EVENT_TYPES.dispatchRequest,
+  {
+    dispatchId: "dispatch-continued",
+    inputs: [
+      {
+        name: "Continued Timeline Story",
+        trace_id: "trace-continued",
+        work_id: "work-continued",
+        work_type_id: "story",
+      },
+    ],
+    transitionId: "review",
+    workstation: {
+      id: "review",
+      inputs: [{ state: "new", workType: "story" }],
+      name: "Review",
+      onContinue: [{ state: "retry", workType: "story" }],
+      outputs: [{ state: "done", workType: "story" }],
+      worker: "reviewer",
+    },
+  },
+);
+continuedRequest.context.dispatchId = "dispatch-continued";
+continuedRequest.context.traceIds = ["trace-continued"];
+continuedRequest.context.workIds = ["work-continued"];
+
+const continuedResponse = event(
+  "event-continued-4",
+  4,
+  FACTORY_EVENT_TYPES.dispatchResponse,
+  {
+    dispatchId: "dispatch-continued",
+    durationMillis: 450,
+    outcome: "CONTINUE",
+    output: "Needs another pass",
+    outputWork: [
+      {
+        name: "Continued Timeline Story",
+        trace_id: "trace-continued",
+        work_id: "work-continued",
+        work_type_id: "story",
+      },
+    ],
+    transitionId: "review",
+    workstation: {
+      id: "review",
+      inputs: [{ state: "new", workType: "story" }],
+      name: "Review",
+      onContinue: [{ state: "retry", workType: "story" }],
+      outputs: [{ state: "done", workType: "story" }],
+      worker: "reviewer",
+    },
+  },
+);
+continuedResponse.context.dispatchId = "dispatch-continued";
+continuedResponse.context.traceIds = ["trace-continued"];
+continuedResponse.context.workIds = ["work-continued"];
 
 const scriptPendingWorkInput = event(
   "event-script-pending-1",
@@ -658,7 +784,7 @@ const scriptPendingDispatchRequest = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
@@ -730,7 +856,7 @@ const scriptSuccessDispatchRequest = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
@@ -853,7 +979,7 @@ const scriptFailedDispatchRequest = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
@@ -926,7 +1052,7 @@ const scriptFailedDispatchResponse = event(
       id: "review",
       inputs: [{ state: "new", workType: "story" }],
       name: "Review",
-      onFailure: { state: "failed", workType: "story" },
+      onFailure: [{ state: "failed", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       worker: "script-reviewer",
     },
@@ -1098,6 +1224,48 @@ describe("factory timeline reconstruction", () => {
     expect(tickThree.runtime.in_flight_dispatch_count).toBe(1);
   });
 
+  it("routes CONTINUE outcomes through continue topology and replayed work placement", () => {
+    const continued = buildFactoryTimelineSnapshot(
+      [
+        continuedInitialStructure,
+        continuedWorkInput,
+        continuedRequest,
+        continuedResponse,
+      ],
+      4,
+    );
+
+    expect(continued.topology.edges).toEqual([
+      {
+        edge_id: "review:retry-review:story:retry:continue",
+        from_node_id: "review",
+        outcome_kind: "continue",
+        state_category: "PROCESSING",
+        state_value: "retry",
+        to_node_id: "retry-review",
+        via_place_id: "story:retry",
+        work_type_id: "story",
+      },
+    ]);
+    expect(continued.topology.workstation_nodes_by_id.review).toMatchObject({
+      output_place_ids: ["story:done", "story:retry"],
+      output_work_type_ids: ["story"],
+    });
+    expect(continued.runtime.current_work_items_by_place_id?.["story:retry"]).toEqual([
+      {
+        display_name: "Continued Timeline Story",
+        trace_id: "trace-continued",
+        work_id: "work-continued",
+        work_type_id: "story",
+      },
+    ]);
+    expect(continued.runtime.current_work_items_by_place_id?.["story:done"]).toBeUndefined();
+    expect(
+      continued.runtime.workstation_requests_by_dispatch_id?.["dispatch-continued"]?.response
+        ?.outcome,
+    ).toBe("CONTINUE");
+  });
+
   it("replays resource availability from initial capacity through dispatch consume and release", () => {
     const events = [
       resourceInitialStructure,
@@ -1162,8 +1330,8 @@ describe("factory timeline reconstruction", () => {
               ],
               behavior: "STANDARD",
               name: "ideafy",
-              onFailure: { state: "failed", workType: "thoughts" },
-              onRejection: { state: "failed", workType: "thoughts" },
+              onFailure: [{ state: "failed", workType: "thoughts" }],
+              onRejection: [{ state: "failed", workType: "thoughts" }],
               outputs: [
                 { state: "available", workType: "executor-slot" },
                 { state: "complete", workType: "thoughts" },
@@ -1226,8 +1394,8 @@ describe("factory timeline reconstruction", () => {
           ],
           behavior: "STANDARD",
           name: "ideafy",
-          onFailure: { state: "failed", workType: "thoughts" },
-          onRejection: { state: "failed", workType: "thoughts" },
+          onFailure: [{ state: "failed", workType: "thoughts" }],
+          onRejection: [{ state: "failed", workType: "thoughts" }],
           outputs: [
             { state: "available", workType: "executor-slot" },
             { state: "complete", workType: "thoughts" },
@@ -1283,8 +1451,8 @@ describe("factory timeline reconstruction", () => {
           ],
           behavior: "STANDARD",
           name: "ideafy",
-          onFailure: { state: "failed", workType: "thoughts" },
-          onRejection: { state: "failed", workType: "thoughts" },
+          onFailure: [{ state: "failed", workType: "thoughts" }],
+          onRejection: [{ state: "failed", workType: "thoughts" }],
           outputs: [
             { state: "available", workType: "executor-slot" },
             { state: "complete", workType: "thoughts" },
@@ -2036,7 +2204,7 @@ describe("factory timeline reconstruction", () => {
           id: "review",
           inputs: [{ state: "new", workType: "story" }],
           name: "Review",
-          onFailure: { state: "failed", workType: "story" },
+          onFailure: [{ state: "failed", workType: "story" }],
           outputs: [{ state: "done", workType: "story" }],
           worker: "reviewer",
         },
@@ -2107,7 +2275,7 @@ describe("factory timeline reconstruction", () => {
               id: "review",
               inputs: [{ state: "new", workType: "story" }],
               name: "Review",
-              onFailure: { state: "failed", workType: "story" },
+              onFailure: [{ state: "failed", workType: "story" }],
               outputs: [{ state: "done", workType: "story" }],
               worker: "reviewer",
             },
@@ -3514,6 +3682,3 @@ describe("factory timeline reconstruction", () => {
     });
   });
 });
-
-
-

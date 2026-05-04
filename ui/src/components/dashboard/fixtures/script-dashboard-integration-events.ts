@@ -44,7 +44,7 @@ const reviewWorkstation = {
   id: "review",
   inputs: [{ state: "new", workType: "story" }],
   name: "Review",
-  onFailure: { state: "failed", workType: "story" },
+  onFailure: [{ state: "failed", workType: "story" }],
   outputs: [{ state: "done", workType: "story" }],
   worker: "script-reviewer",
 };
@@ -486,4 +486,3 @@ scriptDashboardIntegrationTimelineEvents[15].context.traceIds = [
 scriptDashboardIntegrationTimelineEvents[15].context.workIds = [
   scriptDashboardIntegrationFixtureIDs.inferenceWorkID,
 ];
-

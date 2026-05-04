@@ -86,8 +86,8 @@ func TestConfigMapping_RejectionAndFailure(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
-				OnFailure:   &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 			},
 		},
 	}
@@ -154,7 +154,7 @@ func rejectionLoopWithGuardedLoopBreakerFactoryConfig() *interfaces.FactoryConfi
 				Name:        "reviewer",
 				Inputs:      []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
 				Outputs:     []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
-				OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
+				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			},
 			{
 				Name:    "reviewer-loop-breaker",
@@ -202,7 +202,7 @@ func TestConfigMapping_ValidationRejectsInvalidOnRejection(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "nonexistent"},
+				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "nonexistent"}},
 			},
 		},
 	}
@@ -234,7 +234,7 @@ func TestConfigMapping_ValidationRejectsInvalidOnFailure(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				OnFailure: &interfaces.IOConfig{WorkTypeName: "nonexistent-type", StateName: "failed"},
+				OnFailure: []interfaces.IOConfig{{WorkTypeName: "nonexistent-type", StateName: "failed"}},
 			},
 		},
 	}
@@ -268,7 +268,7 @@ func TestConfigMapping_VisitCountGuardOnWorkstation(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "review", WorkTypeName: "task"},
 				},
-				OnRejection: &interfaces.IOConfig{WorkTypeName: "task", StateName: "init"},
+				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			},
 			{
 				Name: "reviewer",

@@ -338,8 +338,9 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const limits = readOptionalObject(record, "limits", path, decodeWorkstationLimits);
   const body = readOptionalString(record, "body", path);
   const cron = readOptionalObject(record, "cron", path, decodeWorkstationCron);
-  const onRejection = readOptionalObject(record, "onRejection", path, decodeWorkstationIO);
-  const onFailure = readOptionalObject(record, "onFailure", path, decodeWorkstationIO);
+  const onContinue = readOptionalArray(record, "onContinue", path, decodeWorkstationIO);
+  const onRejection = readOptionalArray(record, "onRejection", path, decodeWorkstationIO);
+  const onFailure = readOptionalArray(record, "onFailure", path, decodeWorkstationIO);
   const resources = readOptionalArray(record, "resources", path, decodeResourceRequirement);
   const copyReferencedScripts = readOptionalBoolean(record, "copyReferencedScripts", path);
   const guards = readOptionalArray(record, "guards", path, decodeWorkstationGuard);
@@ -371,6 +372,9 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
   if (cron !== undefined) {
     workstation.cron = cron;
+  }
+  if (onContinue !== undefined) {
+    workstation.onContinue = onContinue;
   }
   if (onRejection !== undefined) {
     workstation.onRejection = onRejection;

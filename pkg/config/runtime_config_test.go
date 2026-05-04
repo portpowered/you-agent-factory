@@ -1875,7 +1875,7 @@ func canonicalMergeWorkstation() interfaces.FactoryWorkstationConfig {
 		Cron:             &interfaces.CronConfig{Schedule: "*/5 * * * *"},
 		Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
 		Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-		OnFailure:        &interfaces.IOConfig{WorkTypeName: "story", StateName: "failed"},
+		OnFailure:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
 		Resources:        []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 1}},
 		StopWords:        []string{"CANONICAL"},
 		PromptTemplate:   "Canonical prompt.",

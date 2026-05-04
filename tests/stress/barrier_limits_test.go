@@ -239,7 +239,7 @@ func barrierConfig() *interfaces.FactoryConfig {
 			{Name: "process-child", WorkerTypeName: "processor",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "child", StateName: "init"}},
 				Outputs:   []interfaces.IOConfig{{WorkTypeName: "child", StateName: "complete"}},
-				OnFailure: &interfaces.IOConfig{WorkTypeName: "child", StateName: "failed"}},
+				OnFailure: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "failed"}}},
 			{Name: "complete-parent", WorkerTypeName: "completer",
 				Inputs: []interfaces.IOConfig{
 					{WorkTypeName: "parent", StateName: "waiting"},
@@ -267,7 +267,7 @@ func barrierConfigWithFailureDetection() *interfaces.FactoryConfig {
 			{Name: "process-child", WorkerTypeName: "processor",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "child", StateName: "init"}},
 				Outputs:   []interfaces.IOConfig{{WorkTypeName: "child", StateName: "complete"}},
-				OnFailure: &interfaces.IOConfig{WorkTypeName: "child", StateName: "failed"}},
+				OnFailure: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "failed"}}},
 			{Name: "complete-parent", WorkerTypeName: "completer",
 				Inputs: []interfaces.IOConfig{
 					{WorkTypeName: "parent", StateName: "waiting"},
@@ -306,7 +306,7 @@ func barrierConfigObserveAll() *interfaces.FactoryConfig {
 			{Name: "process-child", WorkerTypeName: "processor",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "child", StateName: "init"}},
 				Outputs:   []interfaces.IOConfig{{WorkTypeName: "child", StateName: "complete"}},
-				OnFailure: &interfaces.IOConfig{WorkTypeName: "child", StateName: "failed"}},
+				OnFailure: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "failed"}}},
 			{Name: "complete-parent", WorkerTypeName: "completer",
 				Inputs: []interfaces.IOConfig{
 					{WorkTypeName: "parent", StateName: "waiting"},

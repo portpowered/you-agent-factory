@@ -194,10 +194,10 @@ func providerErrorSmokeLaneWorkstation(lane ProviderErrorSmokeLane) interfaces.F
 			WorkTypeName: lane.WorkTypeID,
 			StateName:    "complete",
 		}},
-		OnFailure: &interfaces.IOConfig{
+		OnFailure: []interfaces.IOConfig{{
 			WorkTypeName: lane.WorkTypeID,
 			StateName:    "failed",
-		},
+		}},
 		Worktree: defaultProviderErrorSmokeWorktreeTemplate,
 	}
 }

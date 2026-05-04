@@ -78,11 +78,11 @@ example:
         - workType: story
           state: inReview
       onRejection:
-        workType: story
-        state: init
+        - workType: story
+          state: init
       onFailure:
-        workType: story
-        state: failed
+        - workType: story
+          state: failed
     - name: review-loop-breaker
       worker: review-loop-breaker
       type: LOGICAL_MOVE

@@ -1122,14 +1122,14 @@ type Workstation struct {
 	// Name Customer-authored workstation name used by guards, diagnostics, and authored references.
 	Name string `json:"name"`
 
-	// OnContinue One authored work-state reference consumed or emitted by a workstation.
-	OnContinue *WorkstationIO `json:"onContinue,omitempty"`
+	// OnContinue Optional destination emitted when the workstation makes partial progress and should continue iterating.
+	OnContinue *[]WorkstationIO `json:"onContinue,omitempty"`
 
-	// OnFailure One authored work-state reference consumed or emitted by a workstation.
-	OnFailure *WorkstationIO `json:"onFailure,omitempty"`
+	// OnFailure Optional destination emitted when the workstation fails permanently.
+	OnFailure *[]WorkstationIO `json:"onFailure,omitempty"`
 
-	// OnRejection One authored work-state reference consumed or emitted by a workstation.
-	OnRejection *WorkstationIO `json:"onRejection,omitempty"`
+	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure.
+	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
 
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`

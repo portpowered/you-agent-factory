@@ -775,14 +775,18 @@ export interface components {
          *               "state": "inReview"
          *             }
          *           ],
-         *           "onRejection": {
-         *             "workType": "story",
-         *             "state": "init"
-         *           },
-         *           "onFailure": {
-         *             "workType": "story",
-         *             "state": "failed"
-         *           }
+         *           "onRejection": [
+         *             {
+         *               "workType": "story",
+         *               "state": "init"
+         *             }
+         *           ],
+         *           "onFailure": [
+         *             {
+         *               "workType": "story",
+         *               "state": "failed"
+         *             }
+         *           ]
          *         },
          *         {
          *           "name": "review-loop-breaker",
@@ -992,11 +996,11 @@ export interface components {
             /** @description Work states emitted after this workstation succeeds. */
             outputs: components["schemas"]["WorkstationIO"][];
             /** @description Optional destination emitted when the workstation makes partial progress and should continue iterating. */
-            onContinue?: components["schemas"]["WorkstationIO"];
+            onContinue?: components["schemas"]["WorkstationIO"][];
             /** @description Optional destination emitted when the worker rejects the current work without a hard failure. */
-            onRejection?: components["schemas"]["WorkstationIO"];
+            onRejection?: components["schemas"]["WorkstationIO"][];
             /** @description Optional destination emitted when the workstation fails permanently. */
-            onFailure?: components["schemas"]["WorkstationIO"];
+            onFailure?: components["schemas"]["WorkstationIO"][];
             /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
             resources?: components["schemas"]["ResourceRequirement"][];
             /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */

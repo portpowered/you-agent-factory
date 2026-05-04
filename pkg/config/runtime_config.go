@@ -401,14 +401,14 @@ func applyWorkstationRuntimeTopology(workstation *interfaces.FactoryWorkstationC
 	if len(runtimeDef.Outputs) > 0 {
 		workstation.Outputs = cloneIOConfigs(runtimeDef.Outputs)
 	}
-	if runtimeDef.OnContinue != nil {
-		workstation.OnContinue = cloneIOConfigPtr(runtimeDef.OnContinue)
+	if len(runtimeDef.OnContinue) > 0 {
+		workstation.OnContinue = cloneIOConfigs(runtimeDef.OnContinue)
 	}
-	if runtimeDef.OnRejection != nil {
-		workstation.OnRejection = cloneIOConfigPtr(runtimeDef.OnRejection)
+	if len(runtimeDef.OnRejection) > 0 {
+		workstation.OnRejection = cloneIOConfigs(runtimeDef.OnRejection)
 	}
-	if runtimeDef.OnFailure != nil {
-		workstation.OnFailure = cloneIOConfigPtr(runtimeDef.OnFailure)
+	if len(runtimeDef.OnFailure) > 0 {
+		workstation.OnFailure = cloneIOConfigs(runtimeDef.OnFailure)
 	}
 	if len(runtimeDef.Resources) > 0 {
 		workstation.Resources = append([]interfaces.ResourceConfig(nil), runtimeDef.Resources...)

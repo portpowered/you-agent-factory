@@ -583,15 +583,15 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	onContinue, err := workstationIOPtrInternalFromAPI(workstation.OnContinue, fieldPath+".on_continue")
+	onContinue, err := optionalWorkstationIOsInternalFromAPI(workstation.OnContinue, fieldPath+".onContinue")
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	onRejection, err := workstationIOPtrInternalFromAPI(workstation.OnRejection, fieldPath+".on_rejection")
+	onRejection, err := optionalWorkstationIOsInternalFromAPI(workstation.OnRejection, fieldPath+".onRejection")
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	onFailure, err := workstationIOPtrInternalFromAPI(workstation.OnFailure, fieldPath+".on_failure")
+	onFailure, err := optionalWorkstationIOsInternalFromAPI(workstation.OnFailure, fieldPath+".onFailure")
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
@@ -668,15 +668,11 @@ func workstationIOsInternalFromAPI(configs []factoryapi.WorkstationIO, fieldPath
 	return values, nil
 }
 
-func workstationIOPtrInternalFromAPI(cfg *factoryapi.WorkstationIO, fieldPath string) (*interfaces.IOConfig, error) {
-	if cfg == nil {
+func optionalWorkstationIOsInternalFromAPI(configs *[]factoryapi.WorkstationIO, fieldPath string) ([]interfaces.IOConfig, error) {
+	if configs == nil {
 		return nil, nil
 	}
-	value, err := workstationIOInternalFromAPI(*cfg, fieldPath)
-	if err != nil {
-		return nil, err
-	}
-	return &value, nil
+	return workstationIOsInternalFromAPI(*configs, fieldPath)
 }
 
 func factoryGuardsInternalFromAPI(guards *[]factoryapi.FactoryGuard) []interfaces.FactoryGuardConfig {
@@ -776,9 +772,9 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Inputs:                workstationIOsAPIFromInternal(normalized.Inputs),
 		Outputs:               workstationIOsAPIFromInternal(normalized.Outputs),
 		Cron:                  workstationCronAPIFromInternal(normalized.Cron),
-		OnContinue:            workstationIOPtrAPIFromInternal(normalized.OnContinue),
-		OnRejection:           workstationIOPtrAPIFromInternal(normalized.OnRejection),
-		OnFailure:             workstationIOPtrAPIFromInternal(normalized.OnFailure),
+		OnContinue:            optionalWorkstationIOsAPIFromInternal(normalized.OnContinue),
+		OnRejection:           optionalWorkstationIOsAPIFromInternal(normalized.OnRejection),
+		OnFailure:             optionalWorkstationIOsAPIFromInternal(normalized.OnFailure),
 		Resources:             resourceRequirementsAPIFromInternal(normalized.Resources),
 		CopyReferencedScripts: boolPtrIfTrue(normalized.CopyReferencedScripts),
 		Guards:                workstationGuardsAPIFromInternal(normalized.Guards),
@@ -938,12 +934,12 @@ func workstationIOsAPIFromInternal(configs []interfaces.IOConfig) []factoryapi.W
 	return values
 }
 
-func workstationIOPtrAPIFromInternal(cfg *interfaces.IOConfig) *factoryapi.WorkstationIO {
-	if cfg == nil {
+func optionalWorkstationIOsAPIFromInternal(configs []interfaces.IOConfig) *[]factoryapi.WorkstationIO {
+	if len(configs) == 0 {
 		return nil
 	}
-	apiIO := workstationIOAPIFromInternal(*cfg)
-	return &apiIO
+	values := workstationIOsAPIFromInternal(configs)
+	return &values
 }
 
 func workstationIOAPIFromInternal(cfg interfaces.IOConfig) factoryapi.WorkstationIO {

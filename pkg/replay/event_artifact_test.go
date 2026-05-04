@@ -182,7 +182,7 @@ func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnly
 			Cron:             &interfaces.CronConfig{Schedule: "*/5 * * * *", TriggerAtStart: true, ExpiryWindow: "30s"},
 			Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
 			Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
-			OnFailure:        &interfaces.IOConfig{WorkTypeName: "story", StateName: "failed"},
+			OnFailure:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
 			Resources:        []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
 			WorkingDirectory: "/repo/runtime",
 		},
@@ -223,7 +223,7 @@ func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnly
 	if !reflect.DeepEqual(got[0].Outputs, []factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}}) {
 		t.Fatalf("merged alpha outputs = %#v, want runtime outputs", got[0].Outputs)
 	}
-	if got[0].OnFailure == nil || !reflect.DeepEqual(*got[0].OnFailure, factoryapi.WorkstationIO{WorkType: "story", State: "failed"}) {
+	if got[0].OnFailure == nil || !reflect.DeepEqual(*got[0].OnFailure, []factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}}) {
 		t.Fatalf("merged alpha onFailure = %#v, want runtime onFailure", got[0].OnFailure)
 	}
 	if stringValue(got[0].WorkingDirectory) != "/repo/runtime" {

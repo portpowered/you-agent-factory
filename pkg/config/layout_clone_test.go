@@ -29,7 +29,7 @@ func TestCloneFactoryConfig_PreservesGuardedLogicalMoveLoopBreakerWorkstations(t
 				WorkerTypeName: "reviewer",
 				Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
 				Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
-				OnRejection:    &interfaces.IOConfig{WorkTypeName: "story", StateName: "review"},
+				OnRejection:    []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
 			},
 			{
 				Name:    "review-loop-breaker",

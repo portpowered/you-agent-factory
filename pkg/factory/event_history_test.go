@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -124,6 +125,38 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 	}
 	if !strings.Contains(string(data), `"behavior":"REPEATER"`) {
 		t.Fatalf("initial structure event JSON = %s, want canonical uppercase workstation behavior", data)
+	}
+}
+
+func TestFactoryEventHistory_RecordInitialStructure_PreservesNonSuccessRouteArrays(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNetWithOrderedNonSuccessRoutes(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+	)
+
+	history.RecordInitialStructure()
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsInitialStructureRequestEventPayload()
+	if err != nil {
+		t.Fatalf("initial structure payload: %v", err)
+	}
+	if payload.Factory.Workstations == nil || len(*payload.Factory.Workstations) != 1 {
+		t.Fatalf("workstations = %#v, want one generated workstation", payload.Factory.Workstations)
+	}
+
+	workstation := (*payload.Factory.Workstations)[0]
+	if workstation.OnContinue == nil || !reflect.DeepEqual(*workstation.OnContinue, []factoryapi.WorkstationIO{{WorkType: "story", State: "retry"}, {WorkType: "story", State: "init"}}) {
+		t.Fatalf("workstation onContinue = %#v, want authored route array", workstation.OnContinue)
+	}
+	if workstation.OnRejection == nil || !reflect.DeepEqual(*workstation.OnRejection, []factoryapi.WorkstationIO{{WorkType: "story", State: "triage"}, {WorkType: "story", State: "init"}}) {
+		t.Fatalf("workstation onRejection = %#v, want authored route array", workstation.OnRejection)
+	}
+	if workstation.OnFailure == nil || !reflect.DeepEqual(*workstation.OnFailure, []factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}, {WorkType: "story", State: "abandoned"}}) {
+		t.Fatalf("workstation onFailure = %#v, want authored route array", workstation.OnFailure)
 	}
 }
 
@@ -904,6 +937,55 @@ func eventHistoryProjectionNet() *state.Net {
 					{Value: "review", Category: state.StateCategoryProcessing},
 					{Value: "done", Category: state.StateCategoryTerminal},
 					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+		},
+	}
+}
+
+func eventHistoryProjectionNetWithOrderedNonSuccessRoutes() *state.Net {
+	return &state.Net{
+		ID: "event-history-projection-net-non-success-routes",
+		Places: map[string]*petri.Place{
+			"story:init":      {ID: "story:init", TypeID: "story", State: "init"},
+			"story:review":    {ID: "story:review", TypeID: "story", State: "review"},
+			"story:retry":     {ID: "story:retry", TypeID: "story", State: "retry"},
+			"story:triage":    {ID: "story:triage", TypeID: "story", State: "triage"},
+			"story:failed":    {ID: "story:failed", TypeID: "story", State: "failed"},
+			"story:abandoned": {ID: "story:abandoned", TypeID: "story", State: "abandoned"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"build": {
+				ID:         "build",
+				Name:       "Build",
+				WorkerType: "builder",
+				InputArcs:  []petri.Arc{{Name: "work", PlaceID: "story:init"}},
+				OutputArcs: []petri.Arc{{PlaceID: "story:review"}},
+				ContinueArcs: []petri.Arc{
+					{PlaceID: "story:retry"},
+					{PlaceID: "story:init"},
+				},
+				RejectionArcs: []petri.Arc{
+					{PlaceID: "story:triage"},
+					{PlaceID: "story:init"},
+				},
+				FailureArcs: []petri.Arc{
+					{PlaceID: "story:failed"},
+					{PlaceID: "story:abandoned"},
+				},
+			},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"story": {
+				ID:   "story",
+				Name: "Story",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "review", Category: state.StateCategoryProcessing},
+					{Value: "retry", Category: state.StateCategoryProcessing},
+					{Value: "triage", Category: state.StateCategoryProcessing},
+					{Value: "failed", Category: state.StateCategoryFailed},
+					{Value: "abandoned", Category: state.StateCategoryFailed},
 				},
 			},
 		},

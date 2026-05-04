@@ -45,6 +45,9 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "ExecutorProvider", reflect.TypeOf((*generated.WorkerProvider)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Behavior", reflect.TypeOf((*generated.WorkstationKind)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Type", reflect.TypeOf((*generated.WorkstationType)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnContinue", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnRejection", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnFailure", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Guard{}), "Type", reflect.TypeOf(generated.GuardType("")))
 }
 

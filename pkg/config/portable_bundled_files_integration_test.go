@@ -270,7 +270,7 @@ func TestLoadPortableBundledFiles_RejectsFilesystemLinkEscapeWithoutEscapedWrite
 			WorkerTypeName: "executor",
 			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			OnFailure:      &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+			OnFailure:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 		ResourceManifest: &interfaces.PortableResourceManifestConfig{
 			BundledFiles: []interfaces.BundledFileConfig{
@@ -390,7 +390,7 @@ func writePortableBundledRuntimeFixture(t *testing.T, portableDir string, bundle
 			WorkerTypeName: "executor",
 			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			OnFailure:      &interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"},
+			OnFailure:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 		ResourceManifest: &interfaces.PortableResourceManifestConfig{
 			BundledFiles: bundledFiles,

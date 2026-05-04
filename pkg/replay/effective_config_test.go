@@ -314,24 +314,42 @@ func TestRuntimeConfigFromGeneratedFactory_ProjectsReplayInitialTopologyFromFact
 	factoryDir := t.TempDir()
 	writeFactoryJSON(t, factoryDir, map[string]any{
 		"name": "factory",
-		"workTypes": []map[string]any{{
-			"name": "story",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
 			},
-		}},
+			{"name": "story-retry", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "story-followup", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "story-triage", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "story-backlog", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "story-failed", "states": []map[string]string{{"name": "failed", "type": "FAILED"}}},
+			{"name": "story-abandoned", "states": []map[string]string{{"name": "failed", "type": "FAILED"}}},
+		},
 		"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 		"workers":   []map[string]any{{"name": "executor"}},
 		"workstations": []map[string]any{{
-			"id":        "execute-story-id",
-			"name":      "execute-story",
-			"behavior":  "STANDARD",
-			"worker":    "executor",
-			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
-			"onFailure": map[string]string{"workType": "story", "state": "failed"},
+			"id":       "execute-story-id",
+			"name":     "execute-story",
+			"behavior": "STANDARD",
+			"worker":   "executor",
+			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "story", "state": "complete"}},
+			"onContinue": []map[string]string{
+				{"workType": "story-retry", "state": "init"},
+				{"workType": "story-followup", "state": "init"},
+			},
+			"onRejection": []map[string]string{
+				{"workType": "story-triage", "state": "init"},
+				{"workType": "story-backlog", "state": "init"},
+			},
+			"onFailure": []map[string]string{
+				{"workType": "story-failed", "state": "failed"},
+				{"workType": "story-abandoned", "state": "failed"},
+			},
 			"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 			"guards": []map[string]any{{
 				"type":        "VISIT_COUNT",
@@ -409,6 +427,7 @@ Fallback body.
 	if !reflect.DeepEqual(replayProjection, liveProjection) {
 		t.Fatalf("replay projection mismatch\n got: %#v\nwant: %#v", replayProjection, liveProjection)
 	}
+	assertProjectedWorkstationRoutes(t, replayProjection, "execute-story", []string{"story-retry:init", "story-followup:init"}, []string{"story-triage:init", "story-backlog:init"}, []string{"story-failed:failed", "story-abandoned:failed"})
 	assertProjectedWorker(t, replayProjection, interfaces.FactoryWorker{
 		ID:            "executor",
 		Name:          "executor",
@@ -807,6 +826,26 @@ func generatedWorkstationByName(t *testing.T, generated factoryapi.Factory, name
 	}
 	t.Fatalf("generated factory has no workstation %q", name)
 	return factoryapi.Workstation{}
+}
+
+func assertProjectedWorkstationRoutes(t *testing.T, payload interfaces.InitialStructurePayload, workstationID string, wantContinue []string, wantRejection []string, wantFailure []string) {
+	t.Helper()
+	for _, workstation := range payload.Workstations {
+		if workstation.ID != workstationID {
+			continue
+		}
+		if !reflect.DeepEqual(workstation.ContinuePlaceIDs, wantContinue) {
+			t.Fatalf("workstation %q continue routes = %#v, want %#v", workstationID, workstation.ContinuePlaceIDs, wantContinue)
+		}
+		if !reflect.DeepEqual(workstation.RejectionPlaceIDs, wantRejection) {
+			t.Fatalf("workstation %q rejection routes = %#v, want %#v", workstationID, workstation.RejectionPlaceIDs, wantRejection)
+		}
+		if !reflect.DeepEqual(workstation.FailurePlaceIDs, wantFailure) {
+			t.Fatalf("workstation %q failure routes = %#v, want %#v", workstationID, workstation.FailurePlaceIDs, wantFailure)
+		}
+		return
+	}
+	t.Fatalf("projected workstations = %#v, want %q", payload.Workstations, workstationID)
 }
 
 func runtimeWorkstationByName(t *testing.T, cfg *interfaces.FactoryConfig, name string) interfaces.FactoryWorkstationConfig {

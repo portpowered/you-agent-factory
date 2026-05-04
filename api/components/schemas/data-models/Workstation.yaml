@@ -51,14 +51,20 @@ properties:
     items:
       $ref: './WorkstationIO.yaml'
   onContinue:
-    $ref: './WorkstationIO.yaml'
+    type: array
     description: Optional destination emitted when the workstation makes partial progress and should continue iterating.
+    items:
+      $ref: './WorkstationIO.yaml'
   onRejection:
-    $ref: './WorkstationIO.yaml'
+    type: array
     description: Optional destination emitted when the worker rejects the current work without a hard failure.
+    items:
+      $ref: './WorkstationIO.yaml'
   onFailure:
-    $ref: './WorkstationIO.yaml'
+    type: array
     description: Optional destination emitted when the workstation fails permanently.
+    items:
+      $ref: './WorkstationIO.yaml'
   resources:
     type: array
     description: Resource capacity this workstation consumes while one dispatch is in flight.

@@ -52,7 +52,7 @@ const reviewWorkstation = {
   id: "review",
   inputs: [{ state: "new", workType: "story" }],
   name: "Review",
-  onFailure: { state: "failed", workType: "story" },
+  onFailure: [{ state: "failed", workType: "story" }],
   outputs: [{ state: "done", workType: "story" }],
   worker: "runtime-reviewer",
 };
@@ -312,4 +312,3 @@ runtimeDetailsTimelineEvents[11].context.workIds = [runtimeDetailsFixtureIDs.fai
 runtimeDetailsTimelineEvents[12].context.dispatchId = runtimeDetailsFixtureIDs.failedDispatchID;
 runtimeDetailsTimelineEvents[12].context.traceIds = [runtimeDetailsFixtureIDs.failedTraceID];
 runtimeDetailsTimelineEvents[12].context.workIds = [runtimeDetailsFixtureIDs.failedWorkID];
-

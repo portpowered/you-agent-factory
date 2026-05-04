@@ -1228,9 +1228,9 @@ func initialStructureFromGenerated(payload factoryapi.InitialStructureRequestEve
 			Config:            nilIfEmptyStringMap(config),
 			InputPlaceIDs:     placeIDsFromGeneratedIOs(workstation.Inputs),
 			OutputPlaceIDs:    placeIDsFromGeneratedIOs(workstation.Outputs),
-			ContinuePlaceIDs:  placeIDsFromGeneratedIOPtr(workstation.OnContinue),
-			RejectionPlaceIDs: placeIDsFromGeneratedIOPtr(workstation.OnRejection),
-			FailurePlaceIDs:   placeIDsFromGeneratedIOPtr(workstation.OnFailure),
+			ContinuePlaceIDs:  placeIDsFromGeneratedIOsPtr(workstation.OnContinue),
+			RejectionPlaceIDs: placeIDsFromGeneratedIOsPtr(workstation.OnRejection),
+			FailurePlaceIDs:   placeIDsFromGeneratedIOsPtr(workstation.OnFailure),
 		})
 	}
 
@@ -1485,14 +1485,14 @@ func placeIDsFromGeneratedIOs(values []factoryapi.WorkstationIO) []string {
 	for _, value := range values {
 		ids = append(ids, placeIDFromGeneratedIO(value))
 	}
-	return sortedStrings(ids)
+	return ids
 }
 
-func placeIDsFromGeneratedIOPtr(value *factoryapi.WorkstationIO) []string {
-	if value == nil {
+func placeIDsFromGeneratedIOsPtr(values *[]factoryapi.WorkstationIO) []string {
+	if values == nil {
 		return nil
 	}
-	return []string{placeIDFromGeneratedIO(*value)}
+	return placeIDsFromGeneratedIOs(*values)
 }
 
 func placeIDFromGeneratedIO(value factoryapi.WorkstationIO) string {

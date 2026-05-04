@@ -21,17 +21,27 @@ func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testi
 	support.SkipLongFunctional(t, "slow topology projection live-vs-replay sweep")
 
 	dir := support.ScaffoldFactory(t, map[string]any{
-		"workTypes": []map[string]any{{"name": "task", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}, {"name": "failed", "type": "FAILED"}}}},
+		"workTypes": []map[string]any{
+			{"name": "task", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}}},
+			{"name": "task-retry", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "task-followup", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "task-triage", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "task-backlog", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}},
+			{"name": "task-failed", "states": []map[string]string{{"name": "failed", "type": "FAILED"}}},
+			{"name": "task-abandoned", "states": []map[string]string{{"name": "failed", "type": "FAILED"}}},
+		},
 		"resources": []map[string]any{{"name": "executor-slot", "capacity": 2}},
 		"workers":   []map[string]string{{"name": "executor"}},
 		"workstations": []map[string]any{{
 			"id": "process-task-id", "name": "process-task", "worker": "executor",
-			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": map[string]string{"workType": "task", "state": "failed"},
-			"resources": []map[string]any{{"name": "executor-slot", "capacity": 1}},
-			"guards":    []map[string]any{{"type": "VISIT_COUNT", "workstation": "process-task", "maxVisits": 3}},
-			"stopWords": []string{"BLOCKED"},
+			"inputs":      []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":     []map[string]string{{"workType": "task", "state": "complete"}},
+			"onContinue":  []map[string]string{{"workType": "task-retry", "state": "init"}, {"workType": "task-followup", "state": "init"}},
+			"onRejection": []map[string]string{{"workType": "task-triage", "state": "init"}, {"workType": "task-backlog", "state": "init"}},
+			"onFailure":   []map[string]string{{"workType": "task-failed", "state": "failed"}, {"workType": "task-abandoned", "state": "failed"}},
+			"resources":   []map[string]any{{"name": "executor-slot", "capacity": 1}},
+			"guards":      []map[string]any{{"type": "VISIT_COUNT", "workstation": "process-task", "maxVisits": 3}},
+			"stopWords":   []string{"BLOCKED"},
 		}},
 	})
 	writeAgentConfig(t, dir, "executor", `---
@@ -74,10 +84,10 @@ Process {{ (index .Inputs 0).WorkID }}.
 	replayProjection := projectReplayInitialStructureFromEmbeddedConfig(t, dir)
 
 	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "SCRIPT_WRAP", ModelProvider: "CODEX", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
-	assertTopologyWorkstation(t, liveProjection, "process-task", "executor")
+	assertTopologyWorkstation(t, liveProjection, "process-task", "executor", []string{"task-retry:init", "task-followup:init"}, []string{"task-triage:init", "task-backlog:init"}, []string{"task-failed:failed", "task-abandoned:failed"})
 	assertTopologyResource(t, liveProjection, "executor-slot", 2)
 	assertTopologyWorker(t, replayProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "script_wrap", ModelProvider: "codex", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
-	assertTopologyWorkstation(t, replayProjection, "process-task", "executor")
+	assertTopologyWorkstation(t, replayProjection, "process-task", "executor", []string{"task-retry:init", "task-followup:init"}, []string{"task-triage:init", "task-backlog:init"}, []string{"task-failed:failed", "task-abandoned:failed"})
 	assertTopologyResource(t, replayProjection, "executor-slot", 2)
 }
 
@@ -124,12 +134,21 @@ func assertTopologyWorker(t *testing.T, payload interfaces.InitialStructurePaylo
 	t.Fatalf("topology workers = %#v, want %#v", payload.Workers, want)
 }
 
-func assertTopologyWorkstation(t *testing.T, payload interfaces.InitialStructurePayload, id, workerID string) {
+func assertTopologyWorkstation(t *testing.T, payload interfaces.InitialStructurePayload, id, workerID string, wantContinue []string, wantRejection []string, wantFailure []string) {
 	t.Helper()
 	for _, workstation := range payload.Workstations {
 		if workstation.ID == id && workstation.WorkerID == workerID {
 			if workstation.Config["type"] != interfaces.WorkstationTypeModel {
 				t.Fatalf("workstation %q config = %#v, want model workstation type", id, workstation.Config)
+			}
+			if !reflect.DeepEqual(workstation.ContinuePlaceIDs, wantContinue) {
+				t.Fatalf("workstation %q continue routes = %#v, want %#v", id, workstation.ContinuePlaceIDs, wantContinue)
+			}
+			if !reflect.DeepEqual(workstation.RejectionPlaceIDs, wantRejection) {
+				t.Fatalf("workstation %q rejection routes = %#v, want %#v", id, workstation.RejectionPlaceIDs, wantRejection)
+			}
+			if !reflect.DeepEqual(workstation.FailurePlaceIDs, wantFailure) {
+				t.Fatalf("workstation %q failure routes = %#v, want %#v", id, workstation.FailurePlaceIDs, wantFailure)
 			}
 			return
 		}

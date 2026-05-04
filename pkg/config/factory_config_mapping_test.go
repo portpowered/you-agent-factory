@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -176,6 +177,76 @@ func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *t
 	}
 }
 
+func TestFactoryConfigMapper_FlattenAndExpandPreservesNonSuccessRouteArrays(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	original := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "retry", Type: interfaces.StateTypeProcessing},
+				{Name: "rejected", Type: interfaces.StateTypeProcessing},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+			OnContinue: []interfaces.IOConfig{
+				{WorkTypeName: "story", StateName: "retry"},
+				{WorkTypeName: "story", StateName: "complete"},
+			},
+			OnRejection: []interfaces.IOConfig{
+				{WorkTypeName: "story", StateName: "init"},
+				{WorkTypeName: "story", StateName: "rejected"},
+			},
+			OnFailure: []interfaces.IOConfig{
+				{WorkTypeName: "story", StateName: "failed"},
+				{WorkTypeName: "story", StateName: "rejected"},
+			},
+		}},
+	}
+
+	flattened, err := mapper.Flatten(original)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstationPayload := payload["workstations"].([]any)[0].(map[string]any)
+	for _, key := range []string{"onContinue", "onRejection", "onFailure"} {
+		routes, ok := workstationPayload[key].([]any)
+		if !ok {
+			t.Fatalf("%s should flatten as an array, got %#v", key, workstationPayload[key])
+		}
+		if len(routes) != 2 {
+			t.Fatalf("%s flattened route count = %d, want 2", key, len(routes))
+		}
+	}
+
+	expanded, err := mapper.Expand(flattened)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+
+	got := expanded.Workstations[0]
+	want := original.Workstations[0]
+	if !reflect.DeepEqual(got.OnContinue, want.OnContinue) {
+		t.Fatalf("onContinue roundtrip mismatch\n got: %#v\nwant: %#v", got.OnContinue, want.OnContinue)
+	}
+	if !reflect.DeepEqual(got.OnRejection, want.OnRejection) {
+		t.Fatalf("onRejection roundtrip mismatch\n got: %#v\nwant: %#v", got.OnRejection, want.OnRejection)
+	}
+	if !reflect.DeepEqual(got.OnFailure, want.OnFailure) {
+		t.Fatalf("onFailure roundtrip mismatch\n got: %#v\nwant: %#v", got.OnFailure, want.OnFailure)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandRejectsRetiredExhaustionRulesWithMigrationGuidance(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 
@@ -279,8 +350,8 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 			"promptFile":"prompt.md",
 			"body":"Implement {{ .WorkID }}.",
 			"outputSchema":"schema.json",
-			"onRejection":{"workType":"story","state":"init"},
-			"onFailure":{"workType":"story","state":"failed"},
+			"onRejection":[{"workType":"story","state":"init"}],
+			"onFailure":[{"workType":"story","state":"failed"}],
 			"resources":[{"name":"agent-slot","capacity":2}],
 			"stopWords":["DONE"],
 			"workingDirectory":"/repo/{{ .WorkID }}",
@@ -303,6 +374,39 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredLegacyPayloadAliases(t *testing
 	}
 	if !strings.Contains(err.Error(), "workers[0].provider is not supported; use executorProvider") {
 		t.Fatalf("expected provider retirement guidance, got %v", err)
+	}
+}
+
+func TestFactoryConfigMapper_ExpandReportsCanonicalRouteArrayFieldPath(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"name":"story-factory",
+		"id":"story-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"onContinue":[{
+				"workType":"story",
+				"state":"complete",
+				"guards":[
+					{"type":"ALL_CHILDREN_COMPLETE"},
+					{"type":"ANY_CHILD_FAILED"}
+				]
+			}]
+		}]
+	}`)
+
+	_, err := mapper.Expand(raw)
+	if err == nil {
+		t.Fatal("expected invalid onContinue route to fail")
+	}
+	if !strings.Contains(err.Error(), "factory.workstations[0].onContinue[0].guards") {
+		t.Fatalf("expected canonical route array path in error, got %v", err)
 	}
 }
 
