@@ -215,6 +215,10 @@ func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthored
 	if !json.Valid(fixture.CanonicalFactoryJSON) {
 		t.Fatalf("fixture canonical factory json is invalid: %s", fixture.CanonicalFactoryJSON)
 	}
+	assertExportImportFixtureCanonicalRouteArraysJSON(t, fixture.CanonicalFactoryJSON, map[string]map[string]int{
+		"step-one": {"onFailure": 1},
+		"step-two": {"onFailure": 1},
+	})
 	if fixture.Expected.WorkTypeName != "task" {
 		t.Fatalf("fixture work type = %q, want task", fixture.Expected.WorkTypeName)
 	}
@@ -235,6 +239,14 @@ func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthored
 			comparableExportImportFactory(fixture.FlattenedFactory),
 		)
 	}
+	assertExportImportFixtureGeneratedRouteArrays(t, fixture.FlattenedFactory, map[string]map[string]int{
+		"step-one": {"onFailure": 1},
+		"step-two": {"onFailure": 1},
+	})
+	assertExportImportFixtureGeneratedRouteArrays(t, fixture.GeneratedExportFactor, map[string]map[string]int{
+		"step-one": {"onFailure": 1},
+		"step-two": {"onFailure": 1},
+	})
 
 	importContract := fixture.namedFactory("imported-service-simple")
 	if importContract.Name != factoryapi.FactoryName("imported-service-simple") {
@@ -250,6 +262,10 @@ func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthored
 			comparableExportImportFactory(fixture.GeneratedExportFactor),
 		)
 	}
+	assertExportImportFixtureGeneratedRouteArrays(t, importContract, map[string]map[string]int{
+		"step-one": {"onFailure": 1},
+		"step-two": {"onFailure": 1},
+	})
 }
 
 func TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignals(t *testing.T) {
@@ -264,4 +280,91 @@ func TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignal
 
 	svc := buildExportImportFixtureService(t, rootDir)
 	fixture.assertCurrentFactorySignals(t, rootDir, svc, "beta")
+}
+
+func assertExportImportFixtureCanonicalRouteArraysJSON(
+	t *testing.T,
+	data []byte,
+	want map[string]map[string]int,
+) {
+	t.Helper()
+
+	var payload struct {
+		Workstations []map[string]any `json:"workstations"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal canonical export/import fixture json: %v", err)
+	}
+	if len(payload.Workstations) == 0 {
+		t.Fatal("expected canonical export/import fixture to include workstations")
+	}
+
+	found := map[string]bool{}
+	for _, workstation := range payload.Workstations {
+		name, _ := workstation["name"].(string)
+		expectedRoutes, ok := want[name]
+		if !ok {
+			continue
+		}
+		found[name] = true
+		for field, expectedCount := range expectedRoutes {
+			routes, ok := workstation[field].([]any)
+			if !ok {
+				t.Fatalf("workstation %q field %q = %#v, want JSON array", name, field, workstation[field])
+			}
+			if len(routes) != expectedCount {
+				t.Fatalf("workstation %q field %q len = %d, want %d", name, field, len(routes), expectedCount)
+			}
+		}
+	}
+	for name := range want {
+		if !found[name] {
+			t.Fatalf("expected workstation %q in canonical export/import json", name)
+		}
+	}
+}
+
+func assertExportImportFixtureGeneratedRouteArrays(
+	t *testing.T,
+	factory factoryapi.Factory,
+	want map[string]map[string]int,
+) {
+	t.Helper()
+
+	workstations := valueOrEmpty(factory.Workstations)
+	if len(workstations) == 0 {
+		t.Fatal("expected generated export/import fixture to include workstations")
+	}
+
+	found := map[string]bool{}
+	for _, workstation := range workstations {
+		expectedRoutes, ok := want[workstation.Name]
+		if !ok {
+			continue
+		}
+		found[workstation.Name] = true
+		for field, expectedCount := range expectedRoutes {
+			switch field {
+			case "onContinue":
+				if workstation.OnContinue == nil || len(*workstation.OnContinue) != expectedCount {
+					t.Fatalf("workstation %q onContinue = %#v, want %d route(s)", workstation.Name, workstation.OnContinue, expectedCount)
+				}
+			case "onRejection":
+				if workstation.OnRejection == nil || len(*workstation.OnRejection) != expectedCount {
+					t.Fatalf("workstation %q onRejection = %#v, want %d route(s)", workstation.Name, workstation.OnRejection, expectedCount)
+				}
+			case "onFailure":
+				if workstation.OnFailure == nil || len(*workstation.OnFailure) != expectedCount {
+					t.Fatalf("workstation %q onFailure = %#v, want %d route(s)", workstation.Name, workstation.OnFailure, expectedCount)
+				}
+			default:
+				t.Fatalf("unsupported route field assertion %q", field)
+			}
+		}
+	}
+	for name := range want {
+		if !found[name] {
+			t.Fatalf("expected workstation %q in generated export/import factory", name)
+		}
+	}
 }

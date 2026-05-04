@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -73,7 +74,7 @@ func writeAgentFactoryExportImportAuthoredLayout(
 
 	payload, err := json.MarshalIndent(map[string]any{
 		"name": project,
-		"id": project,
+		"id":   project,
 		"workTypes": []map[string]any{{
 			"name": workType,
 			"states": []map[string]string{
@@ -159,5 +160,52 @@ func TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecif
 	}
 	if !strings.Contains(string(workstationPrompt), "acme-export") {
 		t.Fatalf("workstation prompt = %q, want project-specific content", string(workstationPrompt))
+	}
+}
+
+func TestAgentFactoryExportImportFixture_FlattenedPayloadKeepsCanonicalArrayRoutes(t *testing.T) {
+	fixture := newAgentFactoryExportImportFixture(t, "array-routes-export")
+
+	assertAgentFactoryExportImportCanonicalRouteArraysJSON(t, fixture.CanonicalPayload)
+
+	generated, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON(fixture.CanonicalPayload)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(%s): %v", fixture.Name, err)
+	}
+	assertAgentFactoryExportImportGeneratedRouteArrays(t, generated)
+}
+
+func assertAgentFactoryExportImportCanonicalRouteArraysJSON(t *testing.T, data []byte) {
+	t.Helper()
+
+	var payload struct {
+		Workstations []map[string]any `json:"workstations"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal canonical agent export/import payload: %v", err)
+	}
+	if len(payload.Workstations) != 1 {
+		t.Fatalf("workstations = %#v, want one process workstation", payload.Workstations)
+	}
+
+	routes, ok := payload.Workstations[0]["onFailure"].([]any)
+	if !ok {
+		t.Fatalf("workstation onFailure = %#v, want JSON array", payload.Workstations[0]["onFailure"])
+	}
+	if len(routes) != 1 {
+		t.Fatalf("workstation onFailure len = %d, want 1", len(routes))
+	}
+}
+
+func assertAgentFactoryExportImportGeneratedRouteArrays(t *testing.T, factory factoryapi.Factory) {
+	t.Helper()
+
+	if factory.Workstations == nil || len(*factory.Workstations) != 1 {
+		t.Fatalf("generated workstations = %#v, want one process workstation", factory.Workstations)
+	}
+
+	workstation := (*factory.Workstations)[0]
+	if workstation.OnFailure == nil || len(*workstation.OnFailure) != 1 {
+		t.Fatalf("generated process workstation onFailure = %#v, want one array route", workstation.OnFailure)
 	}
 }
