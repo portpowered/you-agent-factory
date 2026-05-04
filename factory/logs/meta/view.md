@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T01:21:00-07:00`, local `HEAD` on `main` points to
-  `257367d`
-  (`align-dashboard-branding-and-header-iconography (#85)`)
+- as of `2026-05-04T02:04:54-07:00`, local `HEAD` on `main` points to
+  `797afee`
+  (`normalize-dashboard-header-button-treatment (#86)`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -45,9 +45,10 @@
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
-- after pruning stale local residue for merged PR `#69`, merged PR `#84`, and
-  merged PR `#85`, the next ignored operating submission should be a single
-  standalone header-button follow-up under `factory/inputs/idea/default/`
+- after pruning stale local residue for merged PR `#69`, merged PR `#84`,
+  merged PR `#85`, and merged PR `#86`, the next ignored operating submission
+  should be a single standalone submit-work button follow-up under
+  `factory/inputs/idea/default/`
 
 ## customer-ask truth
 
@@ -76,15 +77,27 @@
     the Infinite You rename
   - the header stream/export/current controls now use the requested
     pulsating-dot, share-style, and play-style semantics
-- the next selected unowned customer-visible follow-up is therefore a single
-  header button-style convergence sweep:
-  - `ui/src/features/header/dashboard-header.tsx` still renders a bespoke raw
-    export button with accent-only styling
-  - `ui/src/features/header/tick-slider-control.tsx` renders the adjacent
-    current-tick action through the shared `Button` primitive with a different
-    tone
-  - that leaves the dashboard shell visibly short of the remaining ask to
-    converge buttons onto one neutral shared treatment
+- merged PR `#86` satisfied the remaining header button-convergence seam on
+  `main`:
+  - `ui/src/features/header/dashboard-header.tsx` and
+    `ui/src/features/header/tick-slider-control.tsx` now route the export and
+    return-to-current actions through
+    `ui/src/features/header/dashboard-header-action-button.tsx`
+  - `ui/src/features/header/dashboard-header.test.tsx` and
+    `ui/src/App.stories.tsx` now protect the converged neutral header-action
+    treatment through rendered behavior
+- the tracked local ask diff now explicitly includes the array-valued
+  non-success output-interface request, but that ask is already materially
+  satisfied on `main` through merged PR `#69`
+- the next selected unowned customer-visible follow-up is therefore the
+  submit-work button-tone seam:
+  - `ui/src/features/submit-work/submit-work-card.tsx` still renders the
+    `Submit work` CTA through the shared `Button` primitive without an explicit
+    tone, so it inherits the accent-filled `default` treatment from
+    `ui/src/components/ui/button.tsx`
+  - that remains visibly outside the open website button ask to converge
+    dashboard buttons onto the neutral white-ish treatment instead of the
+    primary accent color
 
 ## replay truth
 
@@ -101,6 +114,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#86` `normalize-dashboard-header-button-treatment`, merged on
+    `2026-05-04T08:36:11Z`
   - `#85` `align-dashboard-branding-and-header-iconography`, merged on
     `2026-05-04T08:00:00Z`
   - `#69` `workstation-non-success-route-arrays`, merged into `main` before the
@@ -136,7 +151,10 @@
 - once a customer-visible ask lands, the right follow-up is usually not another
   broad lane but the smallest remaining seam that preserves the ask's public
   intent without reopening merged work
-- after PR `#69`, PR `#83`, PR `#84`, and PR `#85`, the cleanest next
-  non-overlapping dispatch seam is the dashboard header button-style sweep
-  because it stays isolated to the UI shell action controls and advances the
-  remaining shared-button ask without reopening the merged branding work
+- once a narrow ask-owned sweep merges, the next best seam is often the next
+  visible outlier within the same customer lane rather than a new abstraction
+  push; after PR `#86`, that means the submit-work CTA tone is a better next
+  dispatch than reopening header or branding code
+- the cleaner prompt currently has a tracked local edit allowing multiple
+  non-overlapping items in flight, but that does not remove the need to default
+  to one standalone idea when a single seam is sufficient

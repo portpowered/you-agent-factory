@@ -55,7 +55,7 @@
 
 ## Current Summary
 
-- As of `2026-05-04T01:21:00-07:00`, `HEAD` on `main` points to `257367d`
+- As of `2026-05-04T02:04:54-07:00`, `HEAD` on `main` points to `797afee`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -76,22 +76,38 @@
   `main`.
 - Merged PR `#85` closed the remaining dashboard branding and header
   iconography ask on `main`.
+- Merged PR `#86` closed the header button-convergence seam on `main`.
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
 - `gh pr list --state open` is now empty, so there is no longer an ask-owned
   PR lane in flight.
-- The next customer-visible dashboard ask is now a narrower shared-button lane:
-  the header still mixes a bespoke export button in
-  `ui/src/features/header/dashboard-header.tsx` with a shared `Button`-based
-  current-tick control in `ui/src/features/header/tick-slider-control.tsx`,
-  which falls short of the remaining button-convergence ask.
+- The tracked local ask diff now explicitly writes the array-valued
+  non-success output-interface request, but that lane is already materially
+  closed on `main` through merged PR `#69`.
+- The next customer-visible dashboard ask is now the submit-work CTA tone lane:
+  `ui/src/features/submit-work/submit-work-card.tsx` still lets the
+  `Submit work` action inherit the accent-filled `default` button tone instead
+  of the requested neutral white-ish treatment.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- The next safe cleanup dispatch is a single standalone header button-style
-  follow-up covering the export and current-tick controls plus the minimum
-  shared button primitive changes needed to make those actions visually
-  consistent.
+- The next safe cleanup dispatch is a single standalone submit-work button-tone
+  follow-up covering the submit CTA plus its rendered behavioral coverage.
+
+## Standards Alignment Checklist
+
+- Website: header action buttons are now converged onto one neutral treatment
+  on `main` through PR `#86`.
+- Website: the next still-open button-style gap is the accent-filled
+  `Submit work` CTA in `ui/src/features/submit-work/submit-work-card.tsx`;
+  queued follow-up should keep scope to that card, its shared button tone, and
+  rendered coverage.
+- Backend: the array-valued non-success workstation output contract is now
+  aligned on `main` through PR `#69`.
+- Backend: the next narrow quality-cleanup candidate is retiring the
+  `WatchedTransitionIDs` fallback path in
+  `pkg/petri/inference_throttle_guard.go` so throttle matching relies on the
+  canonical runtime worker lookup path only.
 
 ## 2026-05-04T00:01:47.3762163-07:00 - meta state refresh
 
@@ -748,3 +764,31 @@
   `factory/inputs/idea/default/normalize-dashboard-header-button-treatment.md`
   so the next follow-up stays isolated to header action controls and the
   minimum shared button primitive needed for that convergence.
+
+## 2026-05-04T02:04:54-07:00 - meta state refresh
+
+- Ran `git pull`; Git fast-forwarded `main` from `257367d` to `797afee`, which
+  pulled in merged PR `#86`
+  (`normalize-dashboard-header-button-treatment`) on
+  `2026-05-04T08:36:11Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, the tracked-versus-ignored `factory/inputs/**` surface,
+  recent PR state, and the live submit-work plus dashboard-header UI code.
+- Re-validated with `git ls-files factory/inputs`,
+  `Get-ChildItem -Recurse factory/inputs`, `gh pr list --state all --limit 12`,
+  `gh pr view 86`, `git log --oneline -12`, direct code reads, graph reads,
+  and two delegated explorer passes that PR `#86` fully closes the stale
+  header-button lane recorded in the prior meta view.
+- Confirmed the tracked local diff in `factory/logs/meta/asks.md` now spells
+  out the array-valued non-success output-interface ask directly, but that ask
+  is already materially satisfied on `main` through merged PR `#69`.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/normalize-dashboard-header-button-treatment.md`
+  is now stale because PR `#86` already landed that exact work on `main`, then
+  replaced that ignored queue residue with a newer standalone submit-work
+  button-treatment follow-up.
+- Added a standards-alignment checklist here so the meta loop now carries a
+  checked-in running summary of the highest-signal open website and backend
+  standards gaps instead of only recording them in prose refresh notes.
