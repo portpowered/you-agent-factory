@@ -745,9 +745,9 @@ func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
 	help := out.String()
 	for _, want := range []string{
 		"Running infinite-you with no arguments starts the out-of-the-box flow",
-		"factory/inputs/tasks/default",
+		"factory/inputs/task/default",
 		"http://localhost:7437/dashboard/ui",
-		"printf \"Fix the lint issues\\n\" > factory/inputs/tasks/default/fix-lint.md",
+		"printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md",
 		"docs",
 		"Print packaged markdown reference topics",
 		"infinite-you docs workstation",
@@ -805,10 +805,10 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "run infinite-you with no arguments") {
 		t.Fatal("expected run command long help text to point users to no-arg default flow")
 	}
-	if !strings.Contains(runCmd.Long, "factory/inputs/tasks/default") {
+	if !strings.Contains(runCmd.Long, "factory/inputs/task/default") {
 		t.Fatal("expected run command long help text to mention default task input path")
 	}
-	if !strings.Contains(runCmd.Example, "factory/inputs/tasks/default") {
+	if !strings.Contains(runCmd.Example, "factory/inputs/task/default") {
 		t.Fatal("expected run command examples to mention default task input path")
 	}
 }

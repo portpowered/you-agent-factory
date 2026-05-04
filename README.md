@@ -117,10 +117,10 @@ Supported starter scaffold options are `codex` and `claude`.
 
 3. Add a Markdown task from another terminal:
 ```bash
-printf "Fix the lint issues\n" > factory/inputs/tasks/default/my-request.md
+printf "Fix the lint issues\n" > factory/inputs/task/default/my-request.md
 ```
 
-The factory watches `factory/inputs/tasks/default`, picks up new Markdown or
+The factory watches `factory/inputs/task/default`, picks up new Markdown or
 JSON files, and dispatches them through the default Codex-backed workflow.
 
 ## Custom inits
