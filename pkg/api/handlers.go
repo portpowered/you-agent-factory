@@ -198,7 +198,8 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	}
 	sort.Slice(tokens, func(i, j int) bool { return tokens[i].ID < tokens[j].ID })
 
-	// Consume canonical parsed params; the handwritten /work route owns tolerant query parsing.
+	// Consume the generated route params directly. Non-positive values still fall back
+	// to the default page size after successful integer binding.
 	maxResults := defaultMaxResults
 	if params.MaxResults != nil && *params.MaxResults > 0 {
 		maxResults = *params.MaxResults

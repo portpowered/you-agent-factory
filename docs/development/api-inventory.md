@@ -153,7 +153,7 @@ Lists current work tokens from the engine state snapshot marking.
 
 Query parameters:
 
-- `maxResults`: optional positive integer page size. Defaults to `50`; invalid or non-positive values are ignored.
+- `maxResults`: optional positive integer page size. Defaults to `50`; malformed or empty values return `400 BAD_REQUEST`, and non-positive values fall back to the default page size.
 - `nextToken`: optional base64-encoded token ID cursor.
 
 Success:

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -80,27 +79,11 @@ func (s *Server) buildRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/dashboard/ui", s.handleDashboardUI).Methods("GET")
 	r.PathPrefix("/dashboard/ui/").HandlerFunc(s.handleDashboardUI).Methods("GET")
-	// Preserve the current tolerant maxResults parsing before generated integer binding.
-	r.HandleFunc("/work", s.handleListWorkWithLegacyPagination).Methods("GET")
 	factoryapi.HandlerWithOptions(s, factoryapi.GorillaServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: s.handleGeneratedParameterError,
 	})
 	return r
-}
-
-func (s *Server) handleListWorkWithLegacyPagination(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	params := factoryapi.ListWorkParams{}
-	if raw := query.Get("maxResults"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			params.MaxResults = &parsed
-		}
-	}
-	if raw := query.Get("nextToken"); raw != "" {
-		params.NextToken = &raw
-	}
-	s.ListWork(w, r, params)
 }
 
 func (s *Server) handleGeneratedParameterError(w http.ResponseWriter, _ *http.Request, err error) {

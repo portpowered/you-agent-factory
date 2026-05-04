@@ -1468,6 +1468,104 @@ func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 	}
 }
 
+func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
+	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+			"tok-filter-1": {
+				ID:      "tok-filter-1",
+				PlaceID: "story:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-filter-1",
+					WorkTypeID: "story",
+					TraceID:    "trace-filter-1",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"tok-filter-2": {
+				ID:      "tok-filter-2",
+				PlaceID: interfaces.SystemTimePendingPlaceID,
+				Color: interfaces.TokenColor{
+					WorkID:     "time-daily-refresh",
+					WorkTypeID: interfaces.SystemTimeWorkTypeID,
+					TraceID:    "trace-filter-2",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"tok-filter-3": {
+				ID:      "tok-filter-3",
+				PlaceID: "story:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-filter-3",
+					WorkTypeID: "story",
+					TraceID:    "trace-filter-3",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+			"tok-filter-4": {
+				ID:      "tok-filter-4",
+				PlaceID: "story:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-filter-4",
+					WorkTypeID: "story",
+					TraceID:    "trace-filter-4",
+				},
+				CreatedAt: now,
+				EnteredAt: now,
+			},
+		}},
+	})
+
+	firstReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2", nil)
+	firstRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(firstRec, firstReq)
+
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("first page status = %d, want 200: %s", firstRec.Code, firstRec.Body.String())
+	}
+
+	var firstResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(firstRec.Body).Decode(&firstResp); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(firstResp.Results) != 2 {
+		t.Fatalf("first page results = %d, want 2", len(firstResp.Results))
+	}
+	if firstResp.Results[0].Id != "tok-filter-1" || firstResp.Results[1].Id != "tok-filter-3" {
+		t.Fatalf("first page listed tokens = %#v, want public tokens before pagination", firstResp.Results)
+	}
+	if firstResp.PaginationContext == nil {
+		t.Fatal("expected first page pagination context")
+	}
+
+	nextToken := stringValue(firstResp.PaginationContext.NextToken)
+	if nextToken == "" {
+		t.Fatal("expected first page nextToken")
+	}
+
+	secondReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2&nextToken="+nextToken, nil)
+	secondRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(secondRec, secondReq)
+
+	if secondRec.Code != http.StatusOK {
+		t.Fatalf("second page status = %d, want 200: %s", secondRec.Code, secondRec.Body.String())
+	}
+
+	var secondResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(secondRec.Body).Decode(&secondResp); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(secondResp.Results) != 1 || secondResp.Results[0].Id != "tok-filter-4" {
+		t.Fatalf("second page listed tokens = %#v, want remaining public token", secondResp.Results)
+	}
+	if secondResp.PaginationContext != nil {
+		t.Fatalf("second page pagination context = %#v, want none on final page", secondResp.PaginationContext)
+	}
+}
+
 func TestGetWork_HidesInternalTimeWorkToken(t *testing.T) {
 	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
 	srv := newTestServer(&testutil.MockFactory{
@@ -1786,7 +1884,27 @@ func TestListWork(t *testing.T) {
 	}
 }
 
-func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
+func TestListWork_InvalidMaxResultsUsesGeneratedBadRequest(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{name: "empty", path: "/work?maxResults="},
+		{name: "invalid", path: "/work?maxResults=abc"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request parameter")
+		})
+	}
+}
+
+func TestListWork_NonPositiveMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 	now := time.Now()
 	tokens := makeListWorkTokens("legacy", 3, now)
 
@@ -1799,12 +1917,10 @@ func TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 		path string
 	}{
 		{name: "absent", path: "/work"},
-		{name: "empty", path: "/work?maxResults="},
-		{name: "invalid", path: "/work?maxResults=abc"},
 		{name: "non_positive", path: "/work?maxResults=0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", tc.path, nil)
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 

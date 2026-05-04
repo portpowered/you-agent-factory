@@ -1194,7 +1194,7 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Optional positive page size. Invalid or non-positive values are ignored by current handlers. */
+        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
         MaxResults: number;
         /** @description Optional base64-encoded token ID cursor. */
         NextToken: string;
@@ -1210,7 +1210,7 @@ export interface operations {
     listWork: {
         parameters: {
             query?: {
-                /** @description Optional positive page size. Invalid or non-positive values are ignored by current handlers. */
+                /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
                 maxResults?: components["parameters"]["MaxResults"];
                 /** @description Optional base64-encoded token ID cursor. */
                 nextToken?: components["parameters"]["NextToken"];

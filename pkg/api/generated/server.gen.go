@@ -1230,7 +1230,7 @@ type NotFound = ErrorResponse
 
 // ListWorkParams defines parameters for ListWork.
 type ListWorkParams struct {
-	// MaxResults Optional positive page size. Invalid or non-positive values are ignored by current handlers.
+	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
 	MaxResults *MaxResults `form:"maxResults,omitempty" json:"maxResults,omitempty"`
 
 	// NextToken Optional base64-encoded token ID cursor.
