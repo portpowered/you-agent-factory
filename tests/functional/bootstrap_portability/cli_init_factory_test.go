@@ -95,6 +95,7 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 
 	// Step 2: Write a seed file into the generated preseed directory.
 	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "init factory e2e test"}`))
+	assertCanonicalStarterInboxState(t, dir)
 
 	// Step 3: Start the factory with a mock provider that returns a successful response.
 	// The init-generated worker has no stop_token, so any non-error response is accepted.
@@ -146,6 +147,7 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 	assertGeneratedInitScaffoldCanonical(t, dir, "claude-sonnet-4-20250514", "claude")
 
 	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "claude init factory e2e test"}`))
+	assertCanonicalStarterInboxState(t, dir)
 
 	work := map[string][]testutil.WorkResponse{
 		"processor": {
@@ -261,6 +263,26 @@ func assertInitProviderRequest(t *testing.T, req interfaces.ProviderInferenceReq
 	}
 	if req.UserMessage == "" {
 		t.Fatal("expected provider request user message to be populated from workstation AGENTS.md")
+	}
+}
+
+func assertCanonicalStarterInboxState(t *testing.T, dir string) {
+	t.Helper()
+
+	canonicalInputDir := filepath.Join(dir, "inputs", initcmd.DefaultFactoryInputType, "default")
+	entries, err := os.ReadDir(canonicalInputDir)
+	if err != nil {
+		t.Fatalf("read canonical starter inbox: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatalf("expected canonical starter inbox %q to contain a seeded work item", canonicalInputDir)
+	}
+
+	retiredTasksPath := filepath.Join(dir, "inputs", "tasks")
+	if _, err := os.Stat(retiredTasksPath); err == nil {
+		t.Fatalf("expected retired starter inbox %q to remain absent", retiredTasksPath)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat retired starter inbox %q: %v", retiredTasksPath, err)
 	}
 }
 
