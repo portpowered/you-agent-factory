@@ -240,6 +240,9 @@ func (cm *ConfigMapper) applyFactoryGuards(cfg *interfaces.FactoryConfig, transi
 			if transition.WorkerType == "" {
 				continue
 			}
+			if !factoryConfigWorkerMatchesLane(cfg, transition.WorkerType, authoredGuard.ModelProvider, authoredGuard.Model) {
+				continue
+			}
 			transition.InputArcs[0].Guard = combineArcGuards(transition.InputArcs[0].Guard, &petri.InferenceThrottleGuard{
 				Provider:      authoredGuard.ModelProvider,
 				Model:         authoredGuard.Model,
@@ -260,6 +263,14 @@ func factoryConfigWorker(cfg *interfaces.FactoryConfig, name string) (*interface
 		}
 	}
 	return nil, false
+}
+
+func factoryConfigWorkerMatchesLane(cfg *interfaces.FactoryConfig, workerName, provider, model string) bool {
+	worker, ok := factoryConfigWorker(cfg, workerName)
+	if !ok || worker == nil {
+		return false
+	}
+	return worker.ModelProvider == provider && worker.Model == model
 }
 
 // applyInputGuards processes per-input guard declarations on workstation inputs.
