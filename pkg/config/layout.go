@@ -1307,10 +1307,10 @@ func authoredFactoryConfigForExpandedLayout(cfg *interfaces.FactoryConfig) (*int
 	}
 	if authored.ResourceManifest != nil {
 		for i := range authored.ResourceManifest.BundledFiles {
-			if !isSupportedPortableBundledFile(authored.ResourceManifest.BundledFiles[i]) {
+			if !shouldOmitSupportedPortableBundledInline(authored.ResourceManifest.BundledFiles[i]) {
 				continue
 			}
-			authored.ResourceManifest.BundledFiles[i].Content = interfaces.BundledFileContentConfig{}
+			authored.ResourceManifest.BundledFiles[i].Content.Inline = ""
 		}
 	}
 	return authored, nil

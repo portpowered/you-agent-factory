@@ -171,13 +171,6 @@ func ValidateRequiredTools(cfg *interfaces.FactoryConfig, checker RequiredToolCh
 	return result
 }
 
-// ValidatePortableResourceManifest runs only portability-manifest validation
-// rules. Load boundaries can use this narrower pass without re-running the full
-// topology validator.
-func ValidatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker RequiredToolChecker) *ValidationResult {
-	return validatePortableResourceManifest(cfg, checker, ruleBundledFiles)
-}
-
 func validatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker RequiredToolChecker, bundledFileRule func(*interfaces.FactoryConfig) []Finding) *ValidationResult {
 	result := ValidateRequiredTools(cfg, checker)
 	result.Findings = append(result.Findings, bundledFileRule(cfg)...)
@@ -192,10 +185,6 @@ func validatePortableResourceManifestOnPath(factoryDir string, cfg *interfaces.F
 		return nil
 	}
 	return fmt.Errorf("%s", result.Error())
-}
-
-func validatePortableResourceManifestForExpand(cfg *interfaces.FactoryConfig) error {
-	return validatePortableBundledFilesForExpandOnPath("", cfg)
 }
 
 func validatePortableBundledFilesForExpandOnPath(factoryDir string, cfg *interfaces.FactoryConfig) error {

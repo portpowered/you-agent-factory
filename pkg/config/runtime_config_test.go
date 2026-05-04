@@ -446,18 +446,18 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 		targetPath, _ := bundledFile["targetPath"].(string)
 		switch targetPath {
 		case "Makefile":
-			if got := content["inline"]; got != "" {
-				t.Fatalf("expected persisted root helper inline content to be empty, got %#v", content)
+			if got := content["inline"]; got != "test:\n\tgo test ./...\n" {
+				t.Fatalf("expected persisted root helper inline content to stay inlined, got %#v", content)
 			}
-			if got := content["encoding"]; got != "" {
-				t.Fatalf("expected persisted root helper encoding to be empty, got %#v", content)
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("expected persisted root helper encoding to stay canonical, got %#v", content)
 			}
 		case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
 			if _, ok := content["inline"]; ok {
 				t.Fatalf("expected persisted bundled file inline content to be omitted, got %#v", content)
 			}
-			if got := content["encoding"]; got != "" {
-				t.Fatalf("expected persisted bundled file encoding to be empty, got %#v", content)
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("expected persisted bundled file encoding to stay canonical, got %#v", content)
 			}
 		default:
 			t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)

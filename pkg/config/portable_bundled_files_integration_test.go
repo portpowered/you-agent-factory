@@ -88,7 +88,7 @@ func TestPortableBundledFiles_LoadRuntimeConfigMaterializesStandalonePortableCon
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableBundledRoundTripScriptExecutable(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"))
 	assertPortableBundledLoadedWorker(t, loaded)
-	assertPortableBundledLoadedManifest(t, loaded.FactoryConfig())
+	assertPortableBundledLoadedThinManifest(t, loaded.FactoryConfig())
 }
 
 func TestPortableBundledFiles_LoadRuntimeConfigAcceptsThinDiskBackedManifest(t *testing.T) {
@@ -121,7 +121,7 @@ func TestPortableBundledFiles_LoadRuntimeConfigAcceptsThinDiskBackedManifest(t *
 	}
 
 	assertPortableBundledLoadedWorker(t, loaded)
-	assertPortableBundledLoadedManifest(t, loaded.FactoryConfig())
+	assertPortableBundledLoadedThinManifest(t, loaded.FactoryConfig())
 }
 
 func seedPortableBundledRoundTripFactory(t *testing.T) (string, string) {
@@ -179,7 +179,7 @@ func assertPortableBundledLoadedWorker(t *testing.T, loaded *factoryconfig.Loade
 	}
 }
 
-func assertPortableBundledLoadedManifest(t *testing.T, cfg *interfaces.FactoryConfig) {
+func assertPortableBundledLoadedThinManifest(t *testing.T, cfg *interfaces.FactoryConfig) {
 	t.Helper()
 
 	if cfg == nil || cfg.ResourceManifest == nil {
@@ -189,8 +189,8 @@ func assertPortableBundledLoadedManifest(t *testing.T, cfg *interfaces.FactoryCo
 		t.Fatalf("expected 3 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
 	}
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
-	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
-	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
+	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md")
+	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1")
 }
 
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {

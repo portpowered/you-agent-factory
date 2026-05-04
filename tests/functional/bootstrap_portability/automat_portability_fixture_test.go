@@ -117,9 +117,9 @@ func TestAutomatPortabilityFixture_ExpandRestoresPortableRuntimeLayout(t *testin
 	}
 	assertAutomatRequiredToolsManifest(t, loaded.FactoryConfig().ResourceManifest.RequiredTools)
 	bundledFiles := bundledFilesByTarget(loaded.FactoryConfig().ResourceManifest.BundledFiles)
-	assertAutomatBundledFileContent(t, bundledFiles, "factory/docs/portable-workflow.md", filepath.Join(authoredFactoryDir, automatWorkflowGuide))
-	assertAutomatBundledFileContent(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1", filepath.Join(authoredFactoryDir, automatPrepareScript))
-	assertAutomatBundledFileContent(t, bundledFiles, "factory/scripts/verify-external-tools.ps1", filepath.Join(authoredFactoryDir, automatVerifyToolsScript))
+	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/docs/portable-workflow.md")
+	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1")
+	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/verify-external-tools.ps1")
 
 	assertAutomatDependencyContract(t, expandedDir)
 }

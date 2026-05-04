@@ -40,38 +40,6 @@ func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.Facto
 	return nil
 }
 
-func rehydrateSupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig) error {
-	if cfg == nil || cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) == 0 {
-		return nil
-	}
-
-	for i := range cfg.ResourceManifest.BundledFiles {
-		sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, cfg.ResourceManifest.BundledFiles[i])
-		if !ok {
-			continue
-		}
-		info, err := os.Stat(sourcePath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return fmt.Errorf("stat portable bundled file %s: %w", sourcePath, err)
-		}
-		if !info.Mode().IsRegular() {
-			continue
-		}
-		content, err := os.ReadFile(sourcePath)
-		if err != nil {
-			return fmt.Errorf("read portable bundled file %s: %w", sourcePath, err)
-		}
-		cfg.ResourceManifest.BundledFiles[i].Content = interfaces.BundledFileContentConfig{
-			Encoding: interfaces.BundledFileEncodingUTF8,
-			Inline:   string(content),
-		}
-	}
-	return nil
-}
-
 func collectSupportedPortableBundledFiles(factoryDir string) ([]interfaces.BundledFileConfig, error) {
 	layout, ok := portableBundledLayoutForFactoryDir(factoryDir)
 	if !ok {
@@ -218,16 +186,11 @@ func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string) 
 		if err != nil {
 			return fmt.Errorf("resolve bundled file path %s: %w", path, err)
 		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read bundled file %s: %w", path, err)
-		}
 		bundledFiles = append(bundledFiles, interfaces.BundledFileConfig{
 			Type:       fileType,
 			TargetPath: filepath.ToSlash(filepath.Join(targetRoot, relativePath)),
 			Content: interfaces.BundledFileContentConfig{
 				Encoding: interfaces.BundledFileEncodingUTF8,
-				Inline:   string(content),
 			},
 		})
 		return nil
