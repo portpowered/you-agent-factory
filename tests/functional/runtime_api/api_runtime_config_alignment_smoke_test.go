@@ -350,6 +350,8 @@ type: MODEL_WORKSTATION
 worker: cron-worker
 cron:
   schedule: "0 * * * *"
+  triggerAtStart: true
+  jitter: 5s
   expiryWindow: 1h
 ---
 Complete the scheduled task and return COMPLETE.
@@ -746,6 +748,15 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	}
 	if cron.Cron == nil || cron.Cron.Schedule != "0 * * * *" {
 		t.Fatalf("%s cron = %#v, want schedule 0 * * * *", runtimeConfigAlignmentCronWorkstation, cron.Cron)
+	}
+	if cron.Cron.TriggerAtStart == nil || !*cron.Cron.TriggerAtStart {
+		t.Fatalf("%s cron = %#v, want triggerAtStart true", runtimeConfigAlignmentCronWorkstation, cron.Cron)
+	}
+	if stringValueFromFunctionalPtr(cron.Cron.Jitter) != "5s" {
+		t.Fatalf("%s cron = %#v, want jitter 5s", runtimeConfigAlignmentCronWorkstation, cron.Cron)
+	}
+	if stringValueFromFunctionalPtr(cron.Cron.ExpiryWindow) != "1h" {
+		t.Fatalf("%s cron = %#v, want expiryWindow 1h", runtimeConfigAlignmentCronWorkstation, cron.Cron)
 	}
 	review := runtimeConfigAlignmentRequireGeneratedWorkstation(t, *generated.Workstations, runtimeConfigAlignmentReviewWorkstation)
 	if review.Worker != "reviewer" {
@@ -1200,8 +1211,10 @@ func assertRuntimeConfigAlignmentTopologyPayload(t *testing.T, payload interface
 		"words": "DONE",
 	})
 	assertRuntimeConfigAlignmentConstraint(t, payload.Constraints, "workstation/"+runtimeConfigAlignmentCronWorkstation+"/cron", "cron_trigger", map[string]string{
-		"schedule":      "0 * * * *",
-		"expiry_window": "1h",
+		"schedule":         "0 * * * *",
+		"trigger_at_start": "true",
+		"jitter":           "5s",
+		"expiry_window":    "1h",
 	})
 }
 

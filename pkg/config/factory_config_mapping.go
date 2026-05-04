@@ -23,8 +23,7 @@ func NewFactoryConfigMapper() *FactoryConfigMapper {
 }
 
 type generatedFactoryBoundary struct {
-	generated      factoryapi.Factory
-	normalizedJSON []byte
+	generated factoryapi.Factory
 }
 
 const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
@@ -226,7 +225,6 @@ func (m *FactoryConfigMapper) Expand(data []byte) (*interfaces.FactoryConfig, er
 	if err != nil {
 		return nil, err
 	}
-	applyOpenAPICronCompatibility(&cfg, boundary.normalizedJSON)
 	return &cfg, nil
 }
 
@@ -253,8 +251,7 @@ func decodeGeneratedFactoryBoundaryJSON(data []byte) (generatedFactoryBoundary, 
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
 	return generatedFactoryBoundary{
-		generated:      apiCfg,
-		normalizedJSON: normalizedData,
+		generated: apiCfg,
 	}, nil
 }
 
