@@ -1831,7 +1831,7 @@ describe("App", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("Imported factory active")).toBeTruthy();
+        expect(screen.queryByText("Imported factory active")).toBeNull();
       });
       expect(
         await screen.findByRole("button", {
@@ -1851,19 +1851,77 @@ describe("App", () => {
       name: "Agent Factory",
     });
     const toolbar = screen.getByRole("region", { name: "dashboard summary" });
-    const factoryStateLabel = screen.getByText("Factory state");
+    const streamStatus = screen.getByRole("status", {
+      name: "Factory event stream connecting",
+    });
     const exportButton = screen.getByRole("button", { name: "Export PNG" });
-    const summaryList = factoryStateLabel.closest("dl");
-
-    if (!(summaryList instanceof HTMLDListElement)) {
-      throw new Error("expected dashboard summary metadata list");
-    }
 
     expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
-    expect(summaryList.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-    expect(summaryList.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
-    expect(toolbar.textContent).toContain(baselineSnapshot.factory_state);
+    expect(streamStatus.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
+    expect(streamStatus.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
+    expect(within(toolbar).queryByText("Factory state")).toBeNull();
+    expect(within(toolbar).queryByText(baselineSnapshot.factory_state)).toBeNull();
+    expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
+  });
+
+  it("renders compact accessible stream status states without the retired toolbar labels", async () => {
+    renderApp({ snapshot: baselineSnapshot });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "dashboard summary",
+    });
+
+    expect(
+      within(toolbar).getByRole("status", {
+        name: "Factory event stream connecting",
+      }),
+    ).toBeTruthy();
+    expect(within(toolbar).queryByText("Factory state")).toBeNull();
+    expect(within(toolbar).queryByText("Stream")).toBeNull();
+    expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
+
+    act(() => {
+      useDashboardStreamStore.setState({
+        streamState: {
+          message: "Factory event stream connected.",
+          status: "live",
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        within(toolbar).getByRole("status", {
+          name: "Factory event stream live",
+        }),
+      ).toBeTruthy();
+    });
+    expect(
+      within(toolbar).queryByText("Factory event stream connected."),
+    ).toBeNull();
+
+    act(() => {
+      useDashboardStreamStore.setState({
+        streamState: {
+          message: "Factory event stream disconnected. Showing last event state.",
+          status: "offline",
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        within(toolbar).getByRole("status", {
+          name: "Factory event stream offline",
+        }),
+      ).toBeTruthy();
+    });
+    expect(
+      within(toolbar).queryByText(
+        "Factory event stream disconnected. Showing last event state.",
+      ),
+    ).toBeNull();
   });
 
   it("opens the export dialog from the toolbar and dismisses it without dashboard side effects", async () => {
@@ -3980,7 +4038,9 @@ describe("App dashboard follow-up flows", () => {
             .closest("article") as HTMLElement,
         ).getByText("1"),
       ).toBeTruthy();
-      expect(screen.getByText("Factory event stream connected.")).toBeTruthy();
+      expect(
+        screen.getByRole("status", { name: "Factory event stream live" }),
+      ).toBeTruthy();
     });
   });
 });
