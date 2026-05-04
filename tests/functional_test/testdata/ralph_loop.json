@@ -40,14 +40,18 @@
       ],
       "behavior": "REPEATER",
       "name": "executor",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "story"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "story"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",
@@ -66,14 +70,18 @@
         }
       ],
       "name": "reviewer",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "story"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "story"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

@@ -40,10 +40,12 @@
         }
       ],
       "name": "draft",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "doc"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "processing",
@@ -60,14 +62,18 @@
         }
       ],
       "name": "approve",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "doc"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "doc"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

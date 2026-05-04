@@ -38,14 +38,18 @@
       ],
       "behavior": "REPEATER",
       "name": "executor",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "processing",
@@ -68,10 +72,12 @@
         }
       ],
       "name": "finisher",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

@@ -59,7 +59,7 @@ func minimalFactoryConfig() map[string]any {
 				"worker":    "worker-a",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 		},
 	}
@@ -94,7 +94,7 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 			"worker":    "worker-a",
 			"inputs":    []map[string]string{{"workType": workType, "state": "init"}},
 			"outputs":   []map[string]string{{"workType": workType, "state": "complete"}},
-			"onFailure": map[string]string{"workType": workType, "state": "failed"},
+			"onFailure": []map[string]string{{"workType": workType, "state": "failed"}},
 			"type":      "MODEL_WORKSTATION",
 			"body":      "Do the " + project + " work.",
 		}},
@@ -134,7 +134,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 			"worker":    "worker-a",
 			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": map[string]string{"workType": "task", "state": "failed"},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			"type":      "MODEL_WORKSTATION",
 			"body":      "Do the " + name + " work.",
 		}},
@@ -192,7 +192,7 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 			{"name":"failed","type":"FAILED"}
 		]}],
 		"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"You are worker ` + name + `."}],
-		"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"Do the ` + name + ` work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"complete"}],"onFailure":{"workType":"` + workType + `","state":"failed"}}]
+		"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"Do the ` + name + ` work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"complete"}],"onFailure": [{"workType":"` + workType + `","state":"failed"}]}]
 		}`))
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(%s): %v", name, err)
@@ -1326,7 +1326,7 @@ func TestBuildFactoryService_LoadsWorkersFromConfig(t *testing.T) {
 				"worker":    "worker-a",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 		},
 	}
@@ -1373,7 +1373,7 @@ func TestBuildFactoryService_WorkerWithoutAgentsMD_SkippedSilently(t *testing.T)
 				"worker":    "worker-a",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 		},
 	}

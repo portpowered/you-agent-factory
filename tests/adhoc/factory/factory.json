@@ -121,10 +121,12 @@
           "state": "complete"
         }
       ],
-      "onFailure": {
+      "onFailure": [
+        {
         "workType": "thoughts",
         "state": "failed"
-      },
+        }
+      ],
       "resources": [
         {
           "name": "executor-slot",
@@ -157,14 +159,18 @@
           "capacity": 1
         }
       ],
-      "onRejection": {
+      "onRejection": [
+        {
         "workType": "idea",
         "state": "failed"
-      },
-      "onFailure": {
+        }
+      ],
+      "onFailure": [
+        {
         "workType": "idea",
         "state": "failed"
-      }
+        }
+      ]
     },
     {
       "name": "setup-workspace",
@@ -186,10 +192,12 @@
           "state": "init"
         }
       ],
-      "onFailure": {
+      "onFailure": [
+        {
         "workType": "plan",
         "state": "failed"
-      }
+        }
+      ]
     },
     {
       "name": "process",
@@ -207,18 +215,24 @@
           "state": "in-review"
         }
       ],
-      "onContinue": {
+      "onContinue": [
+        {
         "workType": "task",
         "state": "init"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "workType": "task",
         "state": "init"
-      },
-      "onFailure": {
+        }
+      ],
+      "onFailure": [
+        {
         "workType": "task",
         "state": "failed"
-      },
+        }
+      ],
       "resources": [
         {
           "name": "executor-slot",
@@ -243,14 +257,18 @@
           "state": "complete"
         }
       ],
-      "onRejection": {
+      "onRejection": [
+        {
         "workType": "task",
         "state": "init"
-      },
-      "onFailure": {
+        }
+      ],
+      "onFailure": [
+        {
         "workType": "task",
         "state": "failed"
-      },
+        }
+      ],
       "resources": [
         {
           "name": "executor-slot",

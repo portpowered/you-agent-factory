@@ -82,10 +82,12 @@
         }
       ],
       "name": "page-processor",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "page"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

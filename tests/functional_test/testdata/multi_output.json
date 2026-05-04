@@ -53,10 +53,12 @@
         }
       ],
       "name": "planner",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "request"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "init",

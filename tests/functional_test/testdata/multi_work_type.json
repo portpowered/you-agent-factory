@@ -44,10 +44,12 @@
         }
       ],
       "name": "handle-request",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "request"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",
@@ -64,10 +66,12 @@
         }
       ],
       "name": "handle-review",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "review"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

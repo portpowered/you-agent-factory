@@ -277,7 +277,7 @@ func runtimeConfigAlignmentExecuteWorkstationConfig() map[string]any {
 		"worker":    "executor",
 		"inputs":    []map[string]string{{"workType": "task", "state": "reviewed"}},
 		"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-		"onFailure": map[string]string{"workType": "task", "state": "failed"},
+		"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		"resources": []map[string]any{{
 			"name":     "agent-slot",
 			"capacity": 1,
@@ -291,7 +291,7 @@ func runtimeConfigAlignmentCronWorkstationConfig() map[string]any {
 		"worker":    "cron-worker",
 		"inputs":    []map[string]string{{"workType": "scheduled", "state": "init"}},
 		"outputs":   []map[string]string{{"workType": "scheduled", "state": "complete"}},
-		"onFailure": map[string]string{"workType": "scheduled", "state": "failed"},
+		"onFailure": []map[string]string{{"workType": "scheduled", "state": "failed"}},
 	}
 }
 

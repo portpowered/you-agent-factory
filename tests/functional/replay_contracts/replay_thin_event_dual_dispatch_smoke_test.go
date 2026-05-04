@@ -154,7 +154,7 @@ func configureThinEventDualDispatchFixture(t *testing.T, dir string) {
 			"outputs": []any{
 				map[string]any{"workType": dualDispatchSmokeScriptWorkType, "state": "done"},
 			},
-			"onFailure": map[string]any{"workType": dualDispatchSmokeScriptWorkType, "state": "failed"},
+			"onFailure": []map[string]any{{"workType": dualDispatchSmokeScriptWorkType, "state": "failed"}},
 		})
 	})
 

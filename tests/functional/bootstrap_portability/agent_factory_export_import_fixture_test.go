@@ -90,7 +90,7 @@ func writeAgentFactoryExportImportAuthoredLayout(
 			"worker":    "worker-a",
 			"inputs":    []map[string]string{{"workType": workType, "state": "init"}},
 			"outputs":   []map[string]string{{"workType": workType, "state": terminalState}},
-			"onFailure": map[string]string{"workType": workType, "state": "failed"},
+			"onFailure": []map[string]string{{"workType": workType, "state": "failed"}},
 		}},
 	}, "", "  ")
 	if err != nil {

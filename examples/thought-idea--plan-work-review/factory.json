@@ -97,10 +97,12 @@
         }
       ],
       "name": "ideafy",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "thoughts"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",
@@ -123,14 +125,18 @@
         }
       ],
       "name": "plan",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",
@@ -157,10 +163,12 @@
         }
       ],
       "name": "setup-workspace",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "plan"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",
@@ -182,14 +190,18 @@
       ],
       "behavior": "REPEATER",
       "name": "process",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",
@@ -214,14 +226,18 @@
         }
       ],
       "name": "review",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

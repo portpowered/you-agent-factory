@@ -40,10 +40,12 @@
         }
       ],
       "name": "coding",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "code-change"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",
@@ -60,14 +62,18 @@
         }
       ],
       "name": "review",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "code-change"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "code-change"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

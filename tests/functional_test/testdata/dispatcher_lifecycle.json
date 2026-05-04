@@ -57,10 +57,12 @@
         }
       ],
       "name": "plan",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "init",
@@ -77,10 +79,12 @@
         }
       ],
       "name": "execute",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "prd"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "init",
@@ -97,10 +101,12 @@
         }
       ],
       "name": "review",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "code-change"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "approved",
@@ -117,10 +123,12 @@
         }
       ],
       "name": "archive-gate",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "code-change"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "archived",

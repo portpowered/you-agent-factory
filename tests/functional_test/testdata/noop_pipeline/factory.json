@@ -37,10 +37,12 @@
         }
       ],
       "name": "step-one",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

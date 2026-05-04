@@ -35,10 +35,12 @@
         }
       ],
       "name": "coding",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "code-change"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",
@@ -55,10 +57,12 @@
         }
       ],
       "name": "review",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "resolving-conflicts",
         "workType": "code-change"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",
@@ -75,10 +79,12 @@
         }
       ],
       "name": "resolve-conflicts",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "code-change"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",

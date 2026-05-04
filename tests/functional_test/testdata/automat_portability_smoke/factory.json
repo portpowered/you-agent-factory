@@ -64,10 +64,12 @@
           "state": "staged"
         }
       ],
-      "onFailure": {
+      "onFailure": [
+        {
         "workType": "chapter",
         "state": "failed"
-      },
+        }
+      ],
       "workingDirectory": "runtime/{{ (index .Inputs 0).WorkID }}",
       "env": {
         "AUTOMAT_DEPENDENCY_CONTRACT": "portable-dependencies.json",
@@ -91,10 +93,12 @@
           "state": "ready"
         }
       ],
-      "onFailure": {
+      "onFailure": [
+        {
         "workType": "chapter",
         "state": "failed"
-      },
+        }
+      ],
       "env": {
         "AUTOMAT_DEPENDENCY_CONTRACT": "portable-dependencies.json"
       }

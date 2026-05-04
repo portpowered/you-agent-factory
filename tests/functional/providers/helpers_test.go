@@ -328,7 +328,7 @@ func configureTwoInputResourceGatedTemplateWorkstation(t *testing.T, dir, workst
 				map[string]any{"workType": "zeta-resource", "state": "done"},
 				map[string]any{"workType": "alpha-resource", "state": "done"},
 			},
-			"onFailure": map[string]any{"workType": "zeta-resource", "state": "failed"},
+			"onFailure": []map[string]any{{"workType": "zeta-resource", "state": "failed"}},
 			"resources": []any{map[string]any{"name": "repo-slot", "capacity": 1}, map[string]any{"name": "gpu-slot", "capacity": 1}},
 		}}
 	})

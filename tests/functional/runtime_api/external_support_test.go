@@ -27,7 +27,7 @@ func twoStagePipelineConfig() map[string]any {
 				"behavior":  "STANDARD",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "stage1"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 			{
 				"name":      "worker-b",
@@ -35,7 +35,7 @@ func twoStagePipelineConfig() map[string]any {
 				"behavior":  "STANDARD",
 				"inputs":    []map[string]string{{"workType": "task", "state": "stage1"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 		},
 	}

@@ -36,10 +36,12 @@
         }
       ],
       "name": "plan",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "init",
