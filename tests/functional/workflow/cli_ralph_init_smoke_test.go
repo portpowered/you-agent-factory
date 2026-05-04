@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,6 +65,7 @@ type ralphInitSmokeUserStory struct {
 
 func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing.T) {
 	dir := initRalphSmokeScaffold(t)
+	assertRalphInputsReadmeContract(t, dir)
 	support.SetWorkingDirectory(t, dir)
 	writeRalphSmokeRequest(t, dir, "release-planning-loop.md")
 
@@ -143,6 +145,7 @@ func TestIntegrationSmoke_RalphInitScaffoldCompletesFromGeneratedLoop(t *testing
 
 func TestIntegrationSmoke_RalphInitScaffoldExhaustsNonConvergingLoop(t *testing.T) {
 	dir := initRalphSmokeScaffold(t)
+	assertRalphInputsReadmeContract(t, dir)
 	support.SetWorkingDirectory(t, dir)
 	writeRalphSmokeRequest(t, dir, "never-converges.md")
 
@@ -200,6 +203,40 @@ func writeRalphSmokeRequest(t *testing.T, dir string, name string) {
 	path := filepath.Join(dir, "inputs", initcmd.RalphFactoryInputType, "default", name)
 	if err := os.WriteFile(path, []byte(ralphInitSmokeRequest), 0o644); err != nil {
 		t.Fatalf("write request %s: %v", path, err)
+	}
+}
+
+func assertRalphInputsReadmeContract(t *testing.T, dir string) {
+	t.Helper()
+
+	path := filepath.Join(dir, "inputs", "README.md")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	content := string(body)
+
+	for _, expected := range []string{
+		"one canonical request inbox",
+		"inputs/request/default/",
+		"drop each starter request here as a Markdown file",
+		"Seed your first Ralph run by writing a request into that directory",
+		"document processing service",
+		"product-neutral",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("%s missing %q:\n%s", path, expected, content)
+		}
+	}
+	for _, retired := range []string{
+		"General layout:",
+		"inputs/<work-type>/default/",
+		"inputs/<work-type>/<execution-id>/",
+		"The file watcher monitors this directory tree and automatically watches new subdirectories.",
+	} {
+		if strings.Contains(content, retired) {
+			t.Fatalf("%s should not contain %q:\n%s", path, retired, content)
+		}
 	}
 }
 
