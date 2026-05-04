@@ -2,18 +2,17 @@
 
 ## world state
 
-- as of `2026-05-03T16:02:24.9115382-07:00`, local `HEAD` on `main` points to
-  `f803e8d` (`trim-submit-work-card-intro-copy (#75)`)
+- as of `2026-05-03T17:03:02.5759459-07:00`, local `HEAD` on `main` points to
+  `1bef2b5`
+  (`align-current-selection-relationship-graph-and-dispatch-attempt-details (#77)`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
     `factory/workstations/cleaner/AGENTS.md`
-  - untracked local planning residue exists in
-    `factory/scripts/import-export-p0-followups.json`
+  - ignored local workflow residue exists under `factory/inputs/**`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`, and
-  the remaining active ask lanes now open on GitHub are:
+  the remaining active ask lane now open on GitHub is:
   - `#69` for multi-output workstation routes
-  - `#76` for the remaining import preview dialog ownership extraction
 
 ## workflow truth
 
@@ -44,15 +43,9 @@
   - `factory/inputs/thoughts/default/.gitkeep`
 - `.gitignore` still ignores live workflow submissions under `factory/inputs/**`
   except those sentinel paths
-- the current checkout also contains ignored operating residue related to the
-  active ask:
-  - `factory/inputs/thoughts/default/import-export-issues.md`
-  - `factory/inputs/idea/default/align-current-selection-relationship-graph-and-dispatch-attempt-details.md`
+- the current checkout also contains ignored operating residue:
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - `factory/inputs/idea/default/finish-import-preview-dialog-extraction-from-workflow-activity.md`
-- the local repository root also contains untracked planning residue outside the
-  canonical inboxes:
-  - `factory/scripts/import-export-p0-followups.json`
+  - `factory/inputs/idea/default/remove-list-work-legacy-pagination-shim.md`
 - the watcher still accepts direct `factory/inputs/<work-type>/...` paths as
   the default channel even though the public docs emphasize the
   `factory/inputs/<work_type-or-BATCH>/<channel>/<filename>` layout
@@ -118,31 +111,33 @@
   - `pkg/cli/init/init_test.go`
   - `ui/src/api/factory-definition/api.test.ts`
   - `ui/src/features/timeline/state/factoryTimelineStore.test.ts`
-- the broad current-selection simplification ask has now merged on `main` as
-  PR `#74` `simplify-current-selection-dispatch-detail-surface`
-- the selected-work view on `main` is now materially dispatch-centric:
-  - `ui/src/features/current-selection/work-item-card.tsx` limits the primary
-    work-item surface to summary fields, relationship listings, and dispatch
-    history
-  - `ui/src/features/current-selection/selected-work-dispatch-history.tsx` and
-    `ui/src/features/current-selection/selected-work-dispatch-history-card.tsx`
-    now carry the surviving request/response inspection surface
-- one narrower interpretation gap remains after the broad simplification merge:
-  - the ask literally describes a relationship graph and a nested per-dispatch
-    inference-attempt list, while `main` currently renders a textual
-    relationship list and a consolidated per-dispatch request/response view
-- the import dialog ownership seam is no longer unowned:
-  - open PR `#76`
-    `finish-import-preview-dialog-extraction-from-workflow-activity` now owns
-    the remaining wrapper-removal and dialog-home cleanup
-- the next narrow unowned UI cleanup is the literal current-selection
-  interpretation gap:
-  - `ui/src/features/current-selection/work-item-card.tsx` still shows
-    relationships as a textual list instead of a graph-shaped surface
-  - `ui/src/features/current-selection/selected-work-dispatch-history.tsx` and
-    `ui/src/features/current-selection/selected-work-dispatch-history-card.tsx`
-    still show consolidated dispatch request/response details instead of a
-    nested per-dispatch attempt list
+- the import preview dialog ownership seam is no longer open:
+  - PR `#76`
+    `finish-import-preview-dialog-extraction-from-workflow-activity` merged on
+    `2026-05-03`
+- the selected-work current-selection ask is now materially satisfied on
+  `main`:
+  - PR `#74` merged the broad dispatch-centric simplification
+  - PR `#77`
+    `align-current-selection-relationship-graph-and-dispatch-attempt-details`
+    merged on `2026-05-03`
+  - `ui/src/features/current-selection/work-item-card.tsx` now renders a
+    graph-shaped relationship surface instead of only a flat relationship list
+  - `ui/src/features/current-selection/selected-work-dispatch-history-card.tsx`
+    and
+    `ui/src/features/current-selection/selected-work-dispatch-attempt-sections.tsx`
+    now render nested inference and script attempt details per dispatch
+  - `ui/src/features/current-selection/work-item-card.test.tsx` now locks those
+    behaviors with rendered UI assertions
+- with `#76` and `#77` merged, the older ignored import-preview and
+  current-selection idea files were stale operating residue rather than live
+  queue truth and have now been pruned locally
+- the next safe non-overlapping cleanup seam is a narrow backend simplification:
+  - `pkg/api/server.go` still registers a handwritten `/work` route through
+    `handleListWorkWithLegacyPagination` solely to preserve tolerant legacy
+    `maxResults` parsing ahead of the generated handler
+  - `pkg/api/server_test.go` currently protects that tolerance with
+    `TestListWork_InvalidMaxResultsDefaultsToCurrentBehavior`
 
 ## replay truth
 
@@ -159,6 +154,12 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#77`
+    `align-current-selection-relationship-graph-and-dispatch-attempt-details`,
+    merged on `2026-05-03`
+  - `#76`
+    `finish-import-preview-dialog-extraction-from-workflow-activity`, merged on
+    `2026-05-03`
   - `#75` `trim-submit-work-card-intro-copy`, merged on `2026-05-03`
   - `#74` `simplify-current-selection-dispatch-detail-surface`, merged on
     `2026-05-03`
@@ -178,10 +179,8 @@
   - `#64` `retire-dashboard-bento-layout-ownership`
   - `#63` `retire-current-selection-inference-duplication`
   - `#62` `align-dashboard-work-summary-count-semantics`
-- the open PRs directly tied to active ask lanes are:
+- the only open PR directly tied to an active ask lane is:
   - `#69` `workstation-non-success-route-arrays`, opened on `2026-05-03`
-  - `#76` `finish-import-preview-dialog-extraction-from-workflow-activity`,
-    opened on `2026-05-03`
 
 ## theory of mind
 
@@ -192,9 +191,9 @@
 - helper planning residue can go stale quickly once related PRs merge, so the
   meta loop has to reconcile ignored backlog files against `main` and open PR
   state before dispatching anything new
-- import/export prompt-template, split-layout, bundled-file, dialog, and
-  standards-alignment asks are now landed on `main`, while the final import
-  preview ownership move is already owned by open PR `#76`
+- import/export prompt-template, split-layout, bundled-file, dialog,
+  standards-alignment, and the remaining import-preview ownership move are now
+  landed on `main`
 - the route-array contract cleanup is already actively owned by ignored local
   residue plus open PR `#69`, so queuing another idea for it would be
   duplicative
@@ -204,18 +203,14 @@
 - the earlier local button-wrapper idea has already been consumed by merged
   PR `#73`, so keeping that ignored idea file around would only create stale
   local queue residue
-- broad ask ownership and narrow ask completeness are different checks:
-  a merged change can satisfy the operational problem even if one literal ask
-  detail still looks under-served
-- the narrow remaining seam visible after reconciling merged PR `#74` is no
-  longer duplicate top-level panels; it is the gap between the ask's literal
-  request for a relationship graph plus per-attempt inference lists and the
-  simpler merged textual relationship list plus consolidated dispatch card
+- broad ask ownership and narrow ask completeness are different checks, but
+  merged PR `#77` closes the literal selected-work interpretation gap that
+  earlier notes still treated as open
 - once the remaining P0 route-array lane is already owned, the best safe
-  dispatch is a narrow, isolated follow-up from the canonical ask surface rather
-  than a second overlapping import/export contract request
+  dispatch is a narrow simplification outside `#69` rather than a second
+  overlapping import/export contract request
 - the right meta action in this iteration is to refresh the checked-in world
-  view, record that PR `#75` has merged, record that PR `#76` now owns the
-  remaining import preview extraction seam, and queue the literal
-  current-selection graph-plus-attempt-detail follow-up as a standalone ignored
-  idea
+  view, record that PR `#76` and PR `#77` have merged, prune the now-stale
+  local current-selection/import-export helper residue, and queue one narrow
+  backend cleanup idea that retires the handwritten list-work legacy pagination
+  shim
