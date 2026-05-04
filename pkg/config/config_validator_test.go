@@ -997,6 +997,33 @@ func TestRuleBundledFiles_RejectsMissingInlineContent(t *testing.T) {
 	}
 }
 
+func TestRuleBundledFiles_AcceptsSupportedDiskBackedScriptAndDocWithoutInline(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
+		BundledFiles: []interfaces.BundledFileConfig{
+			{
+				Type:       interfaces.BundledFileTypeScript,
+				TargetPath: "factory/scripts/setup-workspace.py",
+				Content: interfaces.BundledFileContentConfig{
+					Encoding: interfaces.BundledFileEncodingUTF8,
+				},
+			},
+			{
+				Type:       interfaces.BundledFileTypeDoc,
+				TargetPath: "factory/docs/usage.md",
+				Content: interfaces.BundledFileContentConfig{
+					Encoding: interfaces.BundledFileEncodingUTF8,
+				},
+			},
+		},
+	}
+
+	findings := ruleBundledFiles(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no bundled-file findings, got %#v", findings)
+	}
+}
+
 func TestValidatePortableResourceManifestOnPath_AcceptsSupportedDiskBackedBundledFilesWithoutInline(t *testing.T) {
 	factoryDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(factoryDir, "scripts"), 0o755); err != nil {
@@ -1034,6 +1061,33 @@ func TestValidatePortableResourceManifestOnPath_AcceptsSupportedDiskBackedBundle
 
 	if err := validatePortableResourceManifestOnPath(factoryDir, cfg); err != nil {
 		t.Fatalf("validatePortableResourceManifestOnPath: %v", err)
+	}
+}
+
+func TestConfigValidator_ValidateAcceptsSupportedDiskBackedBundledFilesWithoutInline(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
+		BundledFiles: []interfaces.BundledFileConfig{
+			{
+				Type:       interfaces.BundledFileTypeScript,
+				TargetPath: "factory/scripts/setup-workspace.py",
+				Content: interfaces.BundledFileContentConfig{
+					Encoding: interfaces.BundledFileEncodingUTF8,
+				},
+			},
+			{
+				Type:       interfaces.BundledFileTypeDoc,
+				TargetPath: "factory/docs/usage.md",
+				Content: interfaces.BundledFileContentConfig{
+					Encoding: interfaces.BundledFileEncodingUTF8,
+				},
+			},
+		},
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if result.HasErrors() {
+		t.Fatalf("expected config validator to accept supported disk-backed bundled files without inline content, got %#v", result.Errors())
 	}
 }
 
