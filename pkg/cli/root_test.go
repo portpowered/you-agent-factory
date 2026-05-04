@@ -447,9 +447,17 @@ func TestReadmeQuickstartDocumentsInitStarterOptions(t *testing.T) {
 		"agent-factory init\n",
 		"agent-factory init --executor claude --dir my-factory",
 		"Supported starter scaffold options are `codex` and `claude`.",
+		"task:init",
+		"task:complete",
+		"task:failed",
 	} {
 		if !strings.Contains(contents, want) {
 			t.Fatalf("README missing %q:\n%s", want, contents)
+		}
+	}
+	for _, retired := range []string{"tasks:init", "tasks:complete", "tasks:failed"} {
+		if strings.Contains(contents, retired) {
+			t.Fatalf("README should not document retired starter flow state %q:\n%s", retired, contents)
 		}
 	}
 }

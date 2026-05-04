@@ -162,9 +162,9 @@ flowchart LR
    classDef place fill:#000,stroke:#333,color:#fff,stroke-width:2px
    classDef transition fill:#333,stroke:#333,color:#fff,rx:0,ry:0
 
-   P0((tasks:init)):::place
-   P1((tasks:complete)):::place
-   P2((tasks:failed)):::place
+   P0((task:init)):::place
+   P1((task:complete)):::place
+   P2((task:failed)):::place
 
    T0[process]:::transition
 
