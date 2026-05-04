@@ -52,8 +52,8 @@
 
 ## Current Summary
 
-- As of `2026-05-03T21:03:09.3263488-07:00`, `HEAD` on `main` points to
-  `c4d66fd` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T22:02:10.9873186-07:00`, `HEAD` on `main` points to
+  `5f9576f` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and the live inbox still contains ignored operating
   residue.
@@ -67,7 +67,7 @@
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
 - The current ignored/local residue is now the still-live route-array idea plus
-  one new Ralph starter README follow-up idea.
+  one new dashboard-header follow-up idea.
 - PR `#76` merged the remaining import preview dialog extraction seam on
   `2026-05-03`, PR `#77` merged the remaining selected-work relationship graph
   plus per-dispatch attempt-detail seam on `2026-05-03`, PR `#78` merged the
@@ -75,7 +75,8 @@
   merged the filewatcher default-channel fallback cleanup on
   `2026-05-04T01:27:11Z`, PR `#80` merged the starter task-input contract
   alignment on `2026-05-04T02:36:26Z`, and PR `#81` merged the default starter
-  README cleanup on `2026-05-04T03:18:53Z`.
+  README cleanup on `2026-05-04T03:18:53Z`, and PR `#82` merged the Ralph
+  starter README cleanup on `2026-05-04T04:20:52Z`.
 - The remaining import/export seam is now the route-array contract cleanup
   owned by open PR `#69`.
 - The selected-work current-selection ask is now materially satisfied on
@@ -101,13 +102,42 @@
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
   now fully stale because every lane it names is already merged or actively
   owned elsewhere.
-- The merged PRs `#80` and `#81` consumed the default starter task-input and
-  starter README cleanup lane, so the older ignored idea residue in that lane
-  is stale and should be pruned locally.
-- The next safe cleanup dispatch now sits in the Ralph scaffold, not the
-  default starter: the generated Ralph `factory/inputs/README.md` still teaches
-  generic multi-channel inbox prose even though the actual request intake path
-  is `inputs/request/default/`.
+- The merged PRs `#80`, `#81`, and `#82` consumed the starter-input and both
+  starter README cleanup lanes, so the older ignored idea residue in those
+  lanes is stale and should be pruned locally.
+- The next safe cleanup dispatch now sits in the dashboard header, not the
+  starter scaffolds: the live UI still renders verbose `Factory state`,
+  `Stream`, `Export PNG`, and `Current` controls even though the ask wants a
+  thinner icon-first summary strip.
+
+## 2026-05-03T22:02:10.9873186-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `c4d66fd` to
+  `5f9576f`, which pulled in merged PR `#82`
+  (`trim-ralph-starter-input-readme-contract`) on `2026-05-04T04:20:52Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while visible idea files remain ignored operating state.
+- Re-checked live PR state with `gh pr list`, `gh pr view 69`, `gh pr view 82`,
+  `git log`, and the current checkout status, confirming that PR `#82` is now
+  merged and PR `#69` remains the only open PR directly tied to an active ask
+  lane.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/trim-ralph-starter-input-readme-contract.md` is
+  stale because PR `#82` already landed that exact scaffold-teaching cleanup on
+  `main`, then pruned that ignored idea residue locally.
+- Inspected the current dashboard header and its test/story surfaces and found
+  one new narrow non-overlapping ask seam: `ui/src/features/header/` still
+  renders visible `Factory state`, `Stream`, `Export PNG`, and `Current`
+  toolbar labels even though the ask wants a thinner icon-first summary strip.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/simplify-dashboard-header-toolbar-verbosity.md`
+  so the next follow-up stays isolated to the header/timeline/export chrome and
+  its behavioral coverage instead of overlapping route-array work already owned
+  by PR `#69`.
 
 ## 2026-05-03T21:03:09.3263488-07:00 - meta state refresh
 
