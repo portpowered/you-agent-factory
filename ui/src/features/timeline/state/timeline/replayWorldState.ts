@@ -1,39 +1,12 @@
-import type {
-  FactoryEvent,
-  FactoryRelation,
-} from "../../../../api/events";
+import type { FactoryEvent, FactoryRelation } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import {
-  applyScriptRequest,
-  applyScriptResponse,
-  inferenceAttemptsForDispatch,
-  legacyInferencePayloadDispatchID,
-  legacyInferencePayloadTransitionID,
-  resolveDispatchTransitionID,
-  syncCompletedDispatchAttempt,
-} from "./replayWorldStateSupport";
-import type {
-  DispatchRequestEvent,
-  DispatchResponseEvent,
-  FactoryStateResponseEvent,
-  InferenceRequestEvent,
-  InferenceResponseEvent,
-  InitialStructureRequestEvent,
-  RelationshipChangeRequestEvent,
-  RunRequestEvent,
-  ScriptRequestEvent,
-  ScriptResponseEvent,
-  WorkRequestEvent,
-} from "./replayWorldStateTypes";
-import {
-  dashboardDiagnosticsFromEvent,
-  firstRequestID,
-  legacyDispatchRequestPayload,
-  legacyDispatchResponsePayload,
-  responseCompletion,
-  recordFailedCompletion,
   completionToProviderSession,
   completionToTraceDispatch,
+  dashboardDiagnosticsFromEvent,
+  firstRequestID,
+  recordFailedCompletion,
+  responseCompletion,
 } from "./replayCompletion";
 import {
   eventWorkTypeID,
@@ -58,6 +31,28 @@ import {
   resourceTokenID,
   traceToken,
 } from "./replayGraphState";
+import {
+  applyScriptRequest,
+  applyScriptResponse,
+  inferenceAttemptsForDispatch,
+  legacyInferencePayloadDispatchID,
+  legacyInferencePayloadTransitionID,
+  resolveDispatchTransitionID,
+  syncCompletedDispatchAttempt,
+} from "./replayWorldStateSupport";
+import type {
+  DispatchRequestEvent,
+  DispatchResponseEvent,
+  FactoryStateResponseEvent,
+  InferenceRequestEvent,
+  InferenceResponseEvent,
+  InitialStructureRequestEvent,
+  RelationshipChangeRequestEvent,
+  RunRequestEvent,
+  ScriptRequestEvent,
+  ScriptResponseEvent,
+  WorkRequestEvent,
+} from "./replayWorldStateTypes";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
 import { emptyWorldRuntime, type ReplayWorldState } from "./types";
@@ -117,13 +112,17 @@ export function reconstructWorldState(
 function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
   switch (event.type) {
     case FACTORY_EVENT_TYPES.runRequest:
-      state.topology = normalizeFactoryPayload((event as RunRequestEvent).payload);
+      state.topology = normalizeFactoryPayload(
+        (event as RunRequestEvent).payload,
+      );
       seedResourceOccupancy(state);
       return;
     case FACTORY_EVENT_TYPES.runResponse:
       return;
     case FACTORY_EVENT_TYPES.initialStructureRequest:
-      state.topology = normalizeFactoryPayload((event as InitialStructureRequestEvent).payload);
+      state.topology = normalizeFactoryPayload(
+        (event as InitialStructureRequestEvent).payload,
+      );
       seedResourceOccupancy(state);
       return;
     case FACTORY_EVENT_TYPES.workRequest:
@@ -156,11 +155,19 @@ function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
   }
 }
 
-function applyWorkRequest(state: ReplayWorldState, event: WorkRequestEvent): void {
-  const requestID = event.context.requestId ?? firstRequestID(event.payload.works) ?? "";
+function applyWorkRequest(
+  state: ReplayWorldState,
+  event: WorkRequestEvent,
+): void {
+  const requestID =
+    event.context.requestId ?? firstRequestID(event.payload.works) ?? "";
   const traceID = event.context.traceIds?.[0];
   const workItems = (event.payload.works ?? []).map((work) =>
-    factoryWorkToItem(state, work, initialPlaceForWork(state, eventWorkTypeID(work) ?? "")),
+    factoryWorkToItem(
+      state,
+      work,
+      initialPlaceForWork(state, eventWorkTypeID(work) ?? ""),
+    ),
   );
   state.workRequestsByID[requestID] = {
     request_id: requestID,
@@ -198,12 +205,26 @@ function applyRelationshipChange(
   });
 }
 
-function applyRequest(state: ReplayWorldState, event: DispatchRequestEvent): void {
-  const legacyPayload = legacyDispatchRequestPayload(event.payload);
+function applyRequest(
+  state: ReplayWorldState,
+  event: DispatchRequestEvent,
+): void {
+  const legacyPayload = event.payload as DispatchRequestEvent["payload"] & {
+    current_chaining_trace_id?: string;
+    dispatchId?: string;
+    inputs?: Array<
+      Parameters<typeof factoryWorkToItem>[1] | { workId: string }
+    >;
+    previous_chaining_trace_ids?: string[];
+    worker?: Parameters<typeof workerModelProvider>[0];
+    workstation?: { name?: string };
+  };
   const worker = topologyWorker(state.topology, event.payload.transitionId);
   const dispatchID =
     event.context.dispatchId ??
-    (typeof legacyPayload.dispatchId === "string" ? legacyPayload.dispatchId : undefined);
+    (typeof legacyPayload.dispatchId === "string"
+      ? legacyPayload.dispatchId
+      : undefined);
   if (!dispatchID) {
     return;
   }
@@ -219,9 +240,13 @@ function applyRequest(state: ReplayWorldState, event: DispatchRequestEvent): voi
     }
     addTraceWork(state, item);
   }
-  const publicWorkItems = workItems.filter((item) => !isSystemTimeWorkItem(item));
+  const publicWorkItems = workItems.filter(
+    (item) => !isSystemTimeWorkItem(item),
+  );
   state.activeDispatches[dispatchID] = {
-    consumedTokens: workItems.map((item) => traceToken(item, event.context.eventTime)),
+    consumedTokens: workItems.map((item) =>
+      traceToken(item, event.context.eventTime),
+    ),
     currentChainingTraceID:
       event.context.currentChainingTraceId ??
       event.payload.currentChainingTraceId ??
@@ -244,7 +269,8 @@ function applyRequest(state: ReplayWorldState, event: DispatchRequestEvent): voi
     resources: consumeResourceUnits(state, event.payload.resources),
     startedAt: event.context.eventTime,
     systemOnly:
-      event.payload.transitionId === "__system_time:expire" && publicWorkItems.length === 0,
+      event.payload.transitionId === "__system_time:expire" &&
+      publicWorkItems.length === 0,
     traceIDs: uniqueSorted(publicWorkItems.map((item) => item.trace_id ?? "")),
     transitionID: dashboardTransitionID(event.payload.transitionId),
     workItems: publicWorkItems.map(workRef),
@@ -324,24 +350,36 @@ function applyInferenceResponse(
     response_time: event.context.eventTime,
     transition_id: dashboardTransitionID(transitionID),
   };
-  syncCompletedDispatchAttempt(state, dispatchID, attempts[payload.inferenceRequestId]);
+  syncCompletedDispatchAttempt(
+    state,
+    dispatchID,
+    attempts[payload.inferenceRequestId],
+  );
 }
 
 function applyResponse(
   state: ReplayWorldState,
   event: DispatchResponseEvent,
 ): void {
-  const legacyPayload = legacyDispatchResponsePayload(event.payload);
+  const legacyPayload = event.payload as DispatchResponseEvent["payload"] & {
+    dispatchId?: string;
+  };
   const dispatchID =
     event.context.dispatchId ??
-    (typeof legacyPayload.dispatchId === "string" ? legacyPayload.dispatchId : undefined);
+    (typeof legacyPayload.dispatchId === "string"
+      ? legacyPayload.dispatchId
+      : undefined);
   if (!dispatchID) {
     return;
   }
 
   const active = state.activeDispatches[dispatchID];
   delete state.activeDispatches[dispatchID];
-  releaseResourceUnits(state, active?.resources ?? [], event.payload.outputResources);
+  releaseResourceUnits(
+    state,
+    active?.resources ?? [],
+    event.payload.outputResources,
+  );
   const outputItems = (event.payload.outputWork ?? []).map((work) =>
     factoryWorkToItem(
       state,
@@ -370,7 +408,8 @@ function applyResponse(
     completion.outcome !== "FAILED" &&
     completion.terminalWork.status !== "FAILED"
   ) {
-    state.terminalWorkByID[completion.terminalWork.work_item.id] = completion.terminalWork;
+    state.terminalWorkByID[completion.terminalWork.work_item.id] =
+      completion.terminalWork;
   }
   if (event.payload.outcome === "FAILED") {
     recordFailedCompletion(state, completion);
@@ -385,4 +424,3 @@ function applyResponse(
     addTraceDispatch(state, traceID, completion);
   }
 }
-
