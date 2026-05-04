@@ -70,10 +70,14 @@
   field directly, look for post-processing compatibility patches that reparse
   the raw authored JSON again; those helpers are often dead seams that can be
   deleted with focused boundary/runtime regression coverage.
+- For import/export portability asks, verify both `FlattenFactoryConfig` and
+  expanded authored-layout writes before closing the lane; stripped fields in
+  `WriteExpandedFactoryLayout` can still be rehydrated back into canonical
+  `factory.json` export or runtime load paths elsewhere.
 
 ## Current Summary
 
-- As of `2026-05-04T07:04:39.6783592-07:00`, `HEAD` on `main` points to `f2a5ab8`
+- As of `2026-05-04T08:02:51.5432975-07:00`, `HEAD` on `main` points to `e35682b`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -100,6 +104,8 @@
   `main`.
 - Merged PR `#89` closed the remaining replay trace-dispatch projection
   duplication lane on `main`.
+- Merged PR `#92` closed the stale OpenAPI cron post-processing compatibility
+  seam on `main`.
 - Merged PR `#91` closed the hidden singular non-success route compatibility
   seam on `main`.
 - The selected-work current-selection ask is now materially satisfied on
@@ -112,13 +118,16 @@
   closed on `main` through merged PR `#69`.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- There is no remaining narrow customer-visible ask gap on `main`; the
-  remaining checked-in asks are broader quality-program items such as the
-  general standards checklist, website coverage target, manual QA runs, and
-  systems-quality docs.
-- The next safe cleanup dispatch is a single standalone backend cleanup to
-  retire the stale OpenAPI cron post-processing compatibility patch from the
-  factory load path.
+- The portable bundled-file portion of the import/export ask is still live on
+  `main`: `pkg/config/layout.go` still collects supported bundled files into
+  inline `resourceManifest.bundledFiles[*].content.inline` during canonical
+  export, `pkg/config/runtime_config.go` still rehydrates those files back into
+  inline content during runtime load, and
+  `pkg/config/config_validator_test.go` still protects the inline-content
+  requirement for declared bundled files.
+- The next safe dispatch is a single standalone customer-visible idea to
+  canonicalize portable bundled files without inline content in exported
+  `factory.json`.
 
 ## Standards Alignment Checklist
 
@@ -134,9 +143,42 @@
   `main` through PR `#90`.
 - Backend: the array-only non-success route boundary is now fully closed on
   `main` through PR `#91`.
-- Backend: the next cleanup seam is removing the stale OpenAPI cron
-  post-processing helper path in `pkg/config/openapi_factory.go` and
-  `pkg/config/factory_config_mapping.go`.
+- Backend: the stale OpenAPI cron post-processing helper path is now closed on
+  `main` through PR `#92`.
+- Backend: the next customer-visible portability seam is retiring inline
+  bundled-file ownership from canonical export, runtime load, and validator
+  expectations.
+
+## 2026-05-04T08:02:51.5432975-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git fast-forwarded `main`
+  from `8b8ffc9` to `e35682b`, which pulled in merged PR `#92`
+  (`retire-openapi-cron-compatibility-patch`) on
+  `2026-05-04T14:33:28Z` while preserving the pre-existing local tracked edits
+  in `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, recent PR state, the tracked-versus-ignored
+  `factory/inputs/**` surface, and the live portability/config code.
+- Re-validated with `gh pr list --state all --limit 12`, `gh pr view 92`,
+  `git log --oneline -12`, graph reads, and direct code reads that PR `#92`
+  fully closed the stale cron seam previously recorded in the meta view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/retire-openapi-cron-compatibility-patch.md` is
+  now stale because PR `#92` already landed that exact work on `main`.
+- Corrected the earlier worldview that treated the import/export P0 as fully
+  closed: `pkg/config/layout.go` still calls
+  `applySupportedPortableBundledFiles` during `FlattenFactoryConfig`,
+  `pkg/config/runtime_config.go` still calls both
+  `rehydrateSupportedPortableBundledFiles` and
+  `applySupportedPortableBundledFiles` during runtime load, and
+  `pkg/config/config_validator_test.go` still asserts the
+  `bundled-file-content-inline` rule for declared bundled files.
+- Queued one new standalone ignored idea under `factory/inputs/idea/default/`
+  for the portable bundled-file contract so the next follow-up stays scoped to
+  removing inline bundled-file ownership from canonical export/runtime loading
+  without reopening unrelated import/export or dashboard lanes.
 
 ## 2026-05-04T07:04:39.6783592-07:00 - meta state refresh
 

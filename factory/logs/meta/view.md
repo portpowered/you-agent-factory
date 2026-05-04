@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T07:04:39.6783592-07:00`, local `HEAD` on `main` points to
-  `f2a5ab8`
-  (`Merge pull request #91 from portpowered/ralph/retire-singular-workstation-route-compatibility`)
+- as of `2026-05-04T08:02:51.5432975-07:00`, local `HEAD` on `main` points to
+  `e35682b`
+  (`Merge pull request #92 from portpowered/ralph/retire-openapi-cron-compatibility-patch`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -47,14 +47,26 @@
   channel fallback
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
   merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`,
-  merged PR `#89`, merged PR `#90`, and merged PR `#91`, the next ignored
-  operating submission should remain a single standalone cleanup idea under
+  merged PR `#89`, merged PR `#90`, merged PR `#91`, and merged PR `#92`, the
+  only ignored operating submission should remain one standalone idea under
   `factory/inputs/idea/default/`
 
 ## customer-ask truth
 
-- the import/export P0 lane is now materially satisfied on `main` through
-  merged PRs `#67`, `#68`, `#69`, `#70`, `#71`, and `#72`
+- the import/export P0 lane is not fully closed on `main`:
+  - merged PRs `#67`, `#68`, `#69`, `#70`, `#71`, and `#72` closed the prompt
+    template, split-layout, non-success-route, dialog, and related surface
+    asks
+  - the portable bundled-file portion of that ask still remains live:
+    `pkg/config/layout.go` `FlattenFactoryConfig` still calls
+    `applySupportedPortableBundledFiles`, which collects supported
+    `factory/scripts/**` and `factory/docs/**` files back into
+    `resourceManifest.bundledFiles[*].content.inline` for canonical
+    `factory.json` export
+  - `pkg/config/runtime_config.go` still rehydrates supported bundled files
+    from disk back into inline content during runtime config loading, and
+    `pkg/config/config_validator_test.go` still protects the requirement that a
+    declared bundled file carries `content.inline`
 - the selected-work current-selection ask is materially satisfied on `main`
   through merged PRs `#74` and `#77`
 - the submit-work copy ask is satisfied on `main` through merged PR `#75`
@@ -122,23 +134,29 @@
   - checked-in factory fixtures across `factory/`, `examples/`, and
     `tests/functional_test/testdata/` now author canonical array-valued
     non-success routes
-- there is no remaining narrow customer-visible ask gap on `main`; the
-  remaining ask surface is broad program work:
+- merged PR `#92` closed the stale OpenAPI cron post-processing compatibility
+  seam on `main`:
+  - `pkg/config/factory_config_mapping.go` no longer calls
+    `applyOpenAPICronCompatibility`
+  - `pkg/config/openapi_factory.go` no longer reparses normalized authored JSON
+    through `buildRawOpenAPIWorkstationCronIndex`
+  - `pkg/config/openapi_factory_test.go` and
+    `tests/functional/runtime_api/api_runtime_config_alignment_smoke_test.go`
+    now cover canonical cron loading through the generated boundary and runtime
+    config path
+- the next remaining narrow customer-visible ask gap on `main` is the bundled
+  file portability contract:
+  - canonical `factory.json` export still inlines supported bundled file
+    content instead of keeping those files expanded onto disk
+  - runtime and validation paths still preserve inline bundled-file ownership
+    even though authored expanded layouts already strip that content back out
+- the remaining ask surface beyond that is broader program work:
   - the general standards-migration checklist ask is still open in
     `factory/logs/meta/asks.md`
   - the website `90%` coverage target is still open in
     `factory/logs/meta/asks.md`
   - the manual QA and systems-quality documentation asks are still open in
     `factory/logs/meta/asks.md`
-- the next adjacent narrow cleanup seam on `main` is the stale cron
-  post-processing compatibility patch still carried by the OpenAPI factory load
-  path:
-  - `pkg/config/factory_config_mapping.go` `Expand` still calls
-    `applyOpenAPICronCompatibility`
-  - `pkg/config/openapi_factory.go` still reparses the normalized JSON through
-    `buildRawOpenAPIWorkstationCronIndex`
-  - the generated boundary and mapper already expose workstation `cron`
-    directly, so this extra patch layer appears redundant
 
 ## replay truth
 
@@ -155,6 +173,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#92` `retire-openapi-cron-compatibility-patch`, merged on
+    `2026-05-04T14:33:28Z`
   - `#91` `retire-singular-workstation-route-compatibility`, merged on
     `2026-05-04T13:28:02Z`
   - `#90` `retire-authored-throttle-transition-id-fallback`, merged on
@@ -213,6 +233,10 @@
   patches that still reparse the authored JSON out-of-band; once the generated
   model and mapper both carry the canonical field directly, those patches are
   often the next dead compatibility seam
+- for import/export asks, verify both canonical `factory.json` flattening and
+  expanded authored layout writes before declaring the lane closed; stripping a
+  field during `WriteExpandedFactoryLayout` does not mean `FlattenFactoryConfig`
+  and runtime loading have stopped rehydrating it back into the exported JSON
 - the cleaner prompt currently has a tracked local edit allowing multiple
   non-overlapping items in flight, but that does not remove the need to default
   to one standalone idea when a single seam is sufficient
