@@ -338,15 +338,16 @@ async function expectTypographyRegressionSurface(
   const canvas = within(canvasElement);
   const heading = await canvas.findByRole("heading", { name: "Agent Factory" });
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
-  const summaryList = canvas.getByText("Factory state").closest("dl");
-
-  if (!(summaryList instanceof HTMLDListElement)) {
-    throw new Error("expected dashboard summary metadata list");
-  }
+  const streamStatus = canvas.getByRole("status", { name: /Factory event stream (connecting|live)/ });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
-  expect(summaryList.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-  expect(summaryList.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
+  expect(streamStatus.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
+  expect(streamStatus.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
+  expect(within(toolbar).queryByText("Factory state")).toBeNull();
+  expect(within(toolbar).queryByText(String(semanticWorkflowDashboardSnapshot.factory_state))).toBeNull();
+  expect(within(toolbar).queryByText("Stream")).toBeNull();
+  expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
+  expect(within(toolbar).queryByText("Export PNG")).toBeNull();
 
   await userEvent.click(
     await canvas.findByRole("button", { name: "Select Review workstation" }),
@@ -374,9 +375,6 @@ async function expectTypographyRegressionSurface(
   expect(activeWorkCard?.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
   expect(within(runHistorySection).getByText("2 runs").className).toContain(
     DASHBOARD_SUPPORTING_TEXT_CLASS,
-  );
-  expect(toolbar.textContent).toContain(
-    String(semanticWorkflowDashboardSnapshot.factory_state),
   );
 }
 
@@ -1367,6 +1365,7 @@ export const WorkChartTimelineVerification = {
     fireEvent.change(slider, { target: { value: "2" } });
 
     await expect(await canvas.findByText("Tick 2 of 5")).toBeVisible();
+    expect(canvas.queryByText("Current")).toBeNull();
     expectWorkOutcomeSeries(outcomeChart);
 
     await userEvent.click(

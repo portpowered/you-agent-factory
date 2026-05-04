@@ -10,7 +10,7 @@ const TICK_SLIDER_LABEL_CLASS =
   "flex min-w-36 flex-1 flex-col gap-1 text-xs font-bold uppercase tracking-[0.16em] text-af-ink/62";
 const TICK_SLIDER_INPUT_CLASS =
   "h-2 min-w-44 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:opacity-45";
-const TICK_SLIDER_BUTTON_CLASS = "px-3 py-2 text-sm font-bold";
+const TICK_SLIDER_BUTTON_CLASS = "shrink-0";
 const TICK_SLIDER_STATUS_CLASS = "text-sm text-af-ink/76";
 const MINIMUM_TIMELINE_TICKS = 2;
 
@@ -92,11 +92,26 @@ export function TickSliderControl() {
 
       <Button
         className={cx(TICK_SLIDER_BUTTON_CLASS, mode === "current" && "opacity-75")}
+        aria-label="Current"
         disabled={isDisabled || mode === "current"}
         onClick={setCurrentMode}
+        size="icon"
         tone="secondary"
       >
-        Current
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+          <path d="M20 4v6h-6" />
+        </svg>
       </Button>
     </div>
   );
