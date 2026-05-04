@@ -3106,6 +3106,192 @@ describe("factory timeline reconstruction", () => {
     });
   });
 
+  it("replays legacy dispatch payload fallbacks through active and completed workstation projections", () => {
+    const legacyWorkRequest = event(
+      "event-legacy-dispatch-work-request",
+      2,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        source: "api",
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "Legacy Timeline Story",
+            trace_id: "trace-legacy",
+            work_id: "work-legacy",
+            work_type_id: "story",
+          },
+        ],
+      },
+    );
+    legacyWorkRequest.context.requestId = "request-legacy";
+    legacyWorkRequest.context.traceIds = ["trace-legacy"];
+    legacyWorkRequest.context.workIds = ["work-legacy"];
+
+    const legacyDispatchRequest = event(
+      "event-legacy-dispatch-request",
+      3,
+      FACTORY_EVENT_TYPES.dispatchRequest,
+      {
+        current_chaining_trace_id: "chain-legacy-current",
+        dispatchId: "dispatch-legacy",
+        inputs: [
+          {
+            name: "Legacy Timeline Story",
+            trace_id: "trace-legacy",
+            work_id: "work-legacy",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["chain-legacy-a", "chain-legacy-b"],
+        transitionId: "review",
+        workstation: {
+          name: "Legacy Review",
+        },
+      },
+    );
+    legacyDispatchRequest.context.traceIds = ["trace-legacy"];
+    legacyDispatchRequest.context.workIds = ["work-legacy"];
+
+    const legacyDispatchResponse = event(
+      "event-legacy-dispatch-response",
+      4,
+      FACTORY_EVENT_TYPES.dispatchResponse,
+      {
+        current_chaining_trace_id: "chain-legacy-current",
+        diagnostics: {
+          provider: {
+            model: "gpt-5.4-mini",
+            provider: "openai",
+            requestMetadata: {
+              prompt_source: "legacy-review",
+            },
+            responseMetadata: {
+              provider_session_id: "legacy-session-1",
+            },
+          },
+        },
+        dispatchId: "dispatch-legacy",
+        durationMillis: 640,
+        outcome: "ACCEPTED",
+        output: "Legacy replay output",
+        outputWork: [
+          {
+            name: "Legacy Timeline Story",
+            previous_chaining_trace_ids: ["chain-legacy-a", "chain-legacy-b"],
+            state: "done",
+            trace_id: "trace-legacy",
+            work_id: "work-legacy",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["chain-legacy-a", "chain-legacy-b"],
+        providerSession: {
+          id: "legacy-session-1",
+          kind: "session_id",
+          provider: "openai",
+        },
+        transitionId: "review",
+        workstation: {
+          name: "Legacy Review",
+        },
+      },
+    );
+    legacyDispatchResponse.context.traceIds = ["trace-legacy"];
+    legacyDispatchResponse.context.workIds = ["work-legacy"];
+    legacyDispatchResponse.context.eventTime = "2026-04-16T12:00:04Z";
+
+    const activeProjected = buildFactoryTimelineSnapshot(
+      [initialStructureRequest, legacyWorkRequest, legacyDispatchRequest],
+      3,
+    );
+    expect(
+      activeProjected.runtime.active_executions_by_dispatch_id?.["dispatch-legacy"],
+    ).toMatchObject({
+      workstation_name: "Legacy Review",
+    });
+    expect(
+      activeProjected.workstationRequestsByDispatchID["dispatch-legacy"],
+    ).toMatchObject({
+      dispatch_id: "dispatch-legacy",
+      request_view: {
+        current_chaining_trace_id: "chain-legacy-current",
+        input_work_items: [
+          {
+            display_name: "Legacy Timeline Story",
+            trace_id: "trace-legacy",
+            work_id: "work-legacy",
+            work_type_id: "story",
+          },
+        ],
+        previous_chaining_trace_ids: ["chain-legacy-a", "chain-legacy-b"],
+      },
+      workstation_name: "Legacy Review",
+    });
+
+    const completedProjected = buildFactoryTimelineSnapshot(
+      [
+        initialStructureRequest,
+        legacyWorkRequest,
+        legacyDispatchRequest,
+        legacyDispatchResponse,
+      ],
+      4,
+    );
+    expect(
+      completedProjected.workstationRequestsByDispatchID["dispatch-legacy"],
+    ).toMatchObject({
+      dispatch_id: "dispatch-legacy",
+      outcome: "ACCEPTED",
+      response: "Legacy replay output",
+      response_view: {
+        diagnostics: {
+          provider: {
+            model: "gpt-5.4-mini",
+            provider: "openai",
+            request_metadata: {
+              prompt_source: "legacy-review",
+            },
+            response_metadata: {
+              provider_session_id: "legacy-session-1",
+            },
+          },
+        },
+        output_work_items: [
+          {
+            display_name: "Legacy Timeline Story",
+            previous_chaining_trace_ids: ["chain-legacy-a", "chain-legacy-b"],
+            trace_id: "trace-legacy",
+            work_id: "work-legacy",
+            work_type_id: "story",
+          },
+        ],
+        provider_session: {
+          id: "legacy-session-1",
+          provider: "openai",
+        },
+      },
+      workstation_name: "Legacy Review",
+    });
+    expect(
+      completedProjected.tracesByWorkID["work-legacy"]?.dispatches[0],
+    ).toMatchObject({
+      current_chaining_trace_id: "chain-legacy-current",
+      previous_chaining_trace_ids: ["chain-legacy-a", "chain-legacy-b"],
+      workstation_name: "Legacy Review",
+    });
+    expect(
+      completedProjected.runtime.session.provider_sessions?.[0],
+    ).toMatchObject({
+      dispatch_id: "dispatch-legacy",
+      provider_session: {
+        id: "legacy-session-1",
+        provider: "openai",
+      },
+      workstation_name: "Legacy Review",
+    });
+  });
+
   it("projects script-aware workstation requests by dispatch id without inference-shaped fallbacks", () => {
     const projected = buildFactoryTimelineSnapshot(
       [
