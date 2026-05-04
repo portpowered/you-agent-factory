@@ -5,7 +5,6 @@ import {
   completionToTraceDispatch,
   dashboardDiagnosticsFromEvent,
   firstRequestID,
-  legacyDispatchResponsePayload,
   recordFailedCompletion,
   responseCompletion,
 } from "./replayCompletion";
@@ -362,7 +361,9 @@ function applyResponse(
   state: ReplayWorldState,
   event: DispatchResponseEvent,
 ): void {
-  const legacyPayload = legacyDispatchResponsePayload(event.payload);
+  const legacyPayload = event.payload as DispatchResponseEvent["payload"] & {
+    dispatchId?: string;
+  };
   const dispatchID =
     event.context.dispatchId ??
     (typeof legacyPayload.dispatchId === "string"

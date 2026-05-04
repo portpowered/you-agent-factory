@@ -33,15 +33,6 @@ import {
 import type { ReplayWorldState, WorldCompletion, WorldDispatch } from "./types";
 import { workRef } from "./workItemRef";
 
-export interface LegacyDispatchResponsePayloadCompat {
-  current_chaining_trace_id?: string;
-  diagnostics?: FactoryWorkDiagnostics;
-  dispatchId?: string;
-  previous_chaining_trace_ids?: string[];
-  providerSession?: FactoryProviderSession;
-  workstation?: { name?: string };
-}
-
 export function latestWorkstationAttempt(
   attempts: Record<string, DashboardInferenceAttempt> | undefined,
 ): DashboardInferenceAttempt | undefined {
@@ -54,13 +45,6 @@ export function latestWorkstationAttempt(
     }
     return right.inference_request_id.localeCompare(left.inference_request_id);
   })[0];
-}
-
-export function legacyDispatchResponsePayload(
-  payload: DispatchResponsePayload,
-): LegacyDispatchResponsePayloadCompat {
-  return payload as DispatchResponsePayload &
-    LegacyDispatchResponsePayloadCompat;
 }
 
 export function dashboardDiagnosticsFromEvent(
@@ -130,7 +114,13 @@ export function responseCompletion(
   active: WorldDispatch | undefined,
   dispatchID: string,
 ): WorldCompletion {
-  const legacyPayload = legacyDispatchResponsePayload(event.payload);
+  const legacyPayload = event.payload as DispatchResponsePayload & {
+    current_chaining_trace_id?: string;
+    diagnostics?: FactoryWorkDiagnostics;
+    previous_chaining_trace_ids?: string[];
+    providerSession?: FactoryProviderSession;
+    workstation?: { name?: string };
+  };
   const outputItems = (event.payload.outputWork ?? []).map((work) =>
     factoryWorkToItem(
       state,
