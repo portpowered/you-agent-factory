@@ -62,6 +62,10 @@
   transition-ID fallback field or test fixture as a cleanup seam; prefer
   deleting the fallback and rewriting tests toward runtime-visible lane
   behavior instead of preserving dual ownership models.
+- When a public JSON route contract moves from singular objects to arrays,
+  inspect import/load boundary normalizers and checked-in fixture JSON next;
+  hidden coercion can keep the retired authored shape alive after schemas,
+  generated types, and UI consumers are already canonical.
 
 ## Current Summary
 
@@ -103,8 +107,8 @@
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
 - The next safe cleanup dispatch is a single standalone backend cleanup to
-  retire the remaining authored-throttle `WatchedTransitionIDs` fallback and
-  its fallback-shaped tests.
+  retire the hidden singular non-success route compatibility still carried by
+  the OpenAPI factory boundary and its fixture-shaped residue.
 
 ## Standards Alignment Checklist
 
@@ -116,10 +120,39 @@
   on `main` through PR `#89`.
 - Backend: the array-valued non-success workstation output contract is now
   aligned on `main` through PR `#69`.
-- Backend: the next cleanup seam is removing the remaining
-  `WatchedTransitionIDs` fallback from `pkg/petri/inference_throttle_guard.go`,
-  `pkg/config/config_mapper.go`, and the fallback-shaped dispatcher/guard test
-  helpers so authored runtime lookup remains the only ownership model.
+- Backend: the authored-throttle transition-ID fallback lane is now closed on
+  `main` through PR `#90`.
+- Backend: the next cleanup seam is removing the hidden single-object
+  `onContinue` / `onRejection` / `onFailure` coercion from
+  `pkg/config/openapi_factory.go` and updating the remaining checked-in JSON
+  fixtures that still rely on that retired authored shape.
+
+## 2026-05-04T06:06:00-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `4e218a5` to
+  `797f670`, which pulled in merged PR `#90`
+  (`retire-authored-throttle-transition-id-fallback`) on
+  `2026-05-04T12:32:50Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend
+  standards, recent PR state, the tracked-versus-ignored `factory/inputs/**`
+  surface, and the live throttle-guard plus OpenAPI-factory boundary code.
+- Re-validated with `gh pr list --state all --limit 12`, `git log --oneline -12`,
+  direct code reads, graph reads, and delegated explorer passes that PR `#90`
+  fully closed the stale throttle-fallback seam previously recorded in the meta
+  view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/retire-authored-throttle-transition-id-fallback.md`
+  was stale because PR `#90` already landed that exact work on `main`, then
+  replaced that ignored queue residue with one new standalone cleanup request
+  for the next live seam.
+- Used direct reads plus delegated inspection to confirm the next narrow
+  backend cleanup on `main`: `pkg/config/openapi_factory.go` still silently
+  wraps single-object `onContinue`, `onRejection`, and `onFailure` values into
+  arrays through `normalizeWorkstationIORouteField`, and checked-in JSON
+  fixtures still rely on that tolerance even though the public contract already
+  uses array-valued routes.
 
 ## 2026-05-04T05:02:59.2509080-07:00 - meta state refresh
 

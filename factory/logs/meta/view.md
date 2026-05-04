@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T05:02:59.2509080-07:00`, local `HEAD` on `main` points to
-  `4e218a5`
-  (`centralize-replay-trace-dispatch-projection (#89)`)
+- as of `2026-05-04T06:06:00-07:00`, local `HEAD` on `main` points to
+  `797f670`
+  (`Merge pull request #90 from portpowered/ralph/retire-authored-throttle-transition-id-fallback`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -46,9 +46,9 @@
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
-  merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`, and
-  merged PR `#89`, the next ignored operating submission should be a single
-  standalone backend throttle-fallback cleanup follow-up under
+  merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`,
+  merged PR `#89`, and merged PR `#90`, the next ignored operating submission
+  should remain a single standalone cleanup idea under
   `factory/inputs/idea/default/`
 
 ## customer-ask truth
@@ -100,21 +100,28 @@
 - there is no remaining unowned customer-visible dashboard ask on `main`; the
   next narrow cleanup candidate now comes from the broader backend quality
   lane:
-  - merged PR `#88` retired the duplicated legacy dispatch compat payload
-    aliases from `ui/src/features/timeline/state/timeline/replayWorldStateTypes.ts`
-    and merged PR `#89` centralized the remaining replay
-    `completionToTraceDispatch` projection duplication without reopening the
-    broader legacy compat lane
-  - the next adjacent narrow seam on `main` is the authored-throttle fallback
-    still carried by `pkg/petri/inference_throttle_guard.go`:
-    `InferenceThrottleGuard` still stores `WatchedTransitionIDs`, its runtime
-    methods still fall back to transition-ID matching when runtime lookup
-    misses, and `pkg/config/config_mapper.go` plus dispatcher/guard tests still
-    populate and assert that legacy shape
-  - because the runtime worker/provider lookup path is already the live primary
-    behavior, the best next cleanup is to retire the
-    `WatchedTransitionIDs` fallback and rewrite tests toward authored runtime
-    outcomes instead of preserving both ownership models
+- merged PR `#88` retired the duplicated legacy dispatch compat payload
+  aliases from `ui/src/features/timeline/state/timeline/replayWorldStateTypes.ts`
+  and merged PR `#89` centralized the remaining replay
+  `completionToTraceDispatch` projection duplication without reopening the
+  broader legacy compat lane
+- merged PR `#90` closed the authored-throttle transition-ID fallback lane on
+  `main`:
+  - `pkg/petri/inference_throttle_guard.go` no longer carries
+    `WatchedTransitionIDs`
+  - `pkg/config/config_mapper.go` no longer lowers authored throttle guards
+    through transition-ID watch sets
+  - throttle tests now assert runtime-observable lane behavior instead of the
+    retired fallback shape
+- the next adjacent narrow seam on `main` is the hidden singular non-success
+  route compatibility still carried by `pkg/config/openapi_factory.go`:
+  - `normalizeFactoryWorkstationEntries` still calls
+    `normalizeWorkstationIORouteField` for `onContinue`, `onRejection`, and
+    `onFailure`
+  - `normalizeWorkstationIORouteField` still silently wraps a single route
+    object into a one-element array
+  - checked-in JSON fixtures still rely on that tolerance even though the
+    public API contract and UI types already use array-valued routes
 
 ## replay truth
 
@@ -131,6 +138,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#90` `retire-authored-throttle-transition-id-fallback`, merged on
+    `2026-05-04T12:32:50Z`
   - `#89` `centralize-replay-trace-dispatch-projection`, merged on
     `2026-05-04T11:25:59Z`
   - `#88` `retire-replay-timeline-legacy-compat-duplication`, merged on
@@ -174,14 +183,13 @@
 - once a customer-visible ask lands, the right follow-up is usually not another
   broad lane but the smallest remaining seam that preserves the ask's public
   intent without reopening merged work
-- once a narrow ask-owned sweep fully merges, the next best seam can move from
-  customer-visible polish back to standards-driven duplication cleanup; after
-  PR `#89`, that means the replay lane is closed enough that the next best seam
-  is no longer UI-owned but the remaining backend authored-versus-legacy
-  throttle ownership split
-- a cleanup target is only truly narrow when its tests already align with the
-  authored runtime contract; if dispatcher or guard tests still construct the
-  old shape directly, the safer next step is to migrate those tests first
+- once a narrow cleanup merges, the next best seam can still hide in boundary
+  normalizers and fixtures rather than in the obvious runtime path; after
+  PR `#90`, the stale throttle note was gone on `main` but the array-route ask
+  still had a hidden compatibility layer in the OpenAPI factory boundary
+- when a public JSON shape moves from singular objects to arrays, re-check
+  import/load normalization helpers and checked-in factory fixtures; type and
+  schema updates alone do not prove the old authored shape is actually rejected
 - the cleaner prompt currently has a tracked local edit allowing multiple
   non-overlapping items in flight, but that does not remove the need to default
   to one standalone idea when a single seam is sufficient
