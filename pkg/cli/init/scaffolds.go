@@ -257,14 +257,11 @@ The scaffold intentionally excludes reviewer, ideation, and cron stages.
 `,
 			factoryInputsDirName + "/README.md": `# Inputs
 
-The Ralph scaffold watches request intake here:
-  inputs/request/default/              - customer requests to turn into a plan and execution loop
+The Ralph scaffold starts with one canonical request inbox:
+  inputs/request/default/              - drop each starter request here as a Markdown file
 
-General layout:
-  inputs/<work-type>/default/          - manual submissions
-  inputs/<work-type>/<execution-id>/   - executor-generated work
-
-The file watcher monitors this directory tree and automatically watches new subdirectories.
+Seed your first Ralph run by writing a request into that directory, then run the scaffold.
+The generated planner and executor already route the rest of the loop from that canonical inbox contract.
 
 Example request payload to drop into inputs/request/default/ as Markdown:
 
