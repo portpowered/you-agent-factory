@@ -83,9 +83,9 @@ func defaultScaffoldDefinition() scaffoldDefinition {
     {
       "name": "process",
       "worker": "processor",
-      "inputs": [{ "workType": "tasks", "state": "init" }],
-      "outputs": [{ "workType": "tasks", "state": "complete" }],
-      "onFailure": [{ "workType": "tasks", "state": "failed" }]
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": [{ "workType": "task", "state": "failed" }]
     }
   ]
 }
