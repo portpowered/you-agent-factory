@@ -11,7 +11,7 @@ pkg/testutil/artifact_contract.go:41:6: unreachable func: MustClassifiedArtifact
 pkg/testutil/replay_harness.go:36:6: unreachable func: WithReplayHarnessDir
 pkg/testutil/replay_harness.go:44:6: unreachable func: WithReplayHarnessServiceOptions
 pkg/testutil/replay_harness.go:147:6: unreachable func: AssertReplayDiverges
-pkg/testutil/service_harness.go:122:6: unreachable func: WithExecutionBaseDir
+pkg/testutil/service_harness.go:121:6: unreachable func: WithExecutionBaseDir
 pkg/testutil/testutil.go:81:6: unreachable func: WriteSeedMarkdownFile
 pkg/testutil/testutil.go:109:6: unreachable func: WriteSeedBatchFile
 tests/functional/bootstrap_portability/cli_relative_working_directory_test.go:9:6: unreachable func: writeRelativeWorkingDirectoryFactoryConfig

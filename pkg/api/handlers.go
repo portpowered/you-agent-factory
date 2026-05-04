@@ -17,7 +17,6 @@ import (
 	factorypkg "github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/internal/submission"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"go.uber.org/zap"
 )
@@ -68,7 +67,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	workRequest := submission.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
+	workRequest := factorypkg.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq})
 
 	result, err := s.runtime.SubmitWorkRequest(r.Context(), workRequest)
 	if err != nil {

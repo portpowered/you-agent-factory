@@ -23,7 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/internal/submission"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -203,14 +202,14 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 }
 
 func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []interfaces.SubmitRequest) error {
-	workRequest := submission.WorkRequestFromSubmitRequests(reqs)
+	workRequest := factory.WorkRequestFromSubmitRequests(reqs)
 	_, err := svc.SubmitWorkRequest(ctx, workRequest)
 	return err
 }
 
 func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitRequest) {
 	t.Helper()
-	data, err := json.Marshal(submission.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
+	data, err := json.Marshal(factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
 	if err != nil {
 		t.Fatalf("marshal work request file: %v", err)
 	}
@@ -4772,7 +4771,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 		Logger:            zap.NewNop(),
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, port int, l *zap.Logger) error {
 			observation := starterObservation{}
-			workRequest := submission.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+			workRequest := factory.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
 				Name:       "starter-task",
 				WorkTypeID: "task",
 				TraceID:    "trace-api-surface-starter",

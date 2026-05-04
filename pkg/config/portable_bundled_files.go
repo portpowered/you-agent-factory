@@ -271,9 +271,12 @@ func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryCo
 		if err := os.MkdirAll(filepath.Dir(write.targetPath), 0o755); err != nil {
 			return fmt.Errorf("create bundled file directory for %s: %w", write.targetPath, err)
 		}
-		if err := os.WriteFile(write.targetPath, []byte(write.content), write.mode); err != nil {
+		if err := writePortableBundledFile(write.targetPath, []byte(write.content), write.mode); err != nil {
 			return fmt.Errorf("write bundled file %s: %w", write.targetPath, err)
 		}
+	}
+	if err := normalizeSupportedPortableBundledFileModes(targetDir, cfg); err != nil {
+		return err
 	}
 	return nil
 }
@@ -330,6 +333,48 @@ func portableBundledFileMode(bundledFile interfaces.BundledFileConfig) fs.FileMo
 		return 0o755
 	}
 	return 0o644
+}
+
+func writePortableBundledFile(path string, data []byte, mode fs.FileMode) error {
+	if err := os.WriteFile(path, data, mode); err != nil {
+		return err
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizeSupportedPortableBundledFileModes(factoryDir string, cfg *interfaces.FactoryConfig) error {
+	if cfg == nil || cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) == 0 {
+		return nil
+	}
+
+	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
+		if !shouldOmitSupportedPortableBundledInline(bundledFile) || strings.TrimSpace(bundledFile.Content.Inline) != "" {
+			continue
+		}
+
+		sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, bundledFile)
+		if !ok {
+			continue
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("stat bundled file %s: %w", sourcePath, err)
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		if err := os.Chmod(sourcePath, portableBundledFileMode(bundledFile)); err != nil {
+			return fmt.Errorf("normalize bundled file mode %s: %w", sourcePath, err)
+		}
+	}
+
+	return nil
 }
 
 type portableBundledValidationRoot struct {
