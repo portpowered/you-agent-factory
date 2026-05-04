@@ -51,7 +51,6 @@ export const Configured = {
     const submitButton = scope.getByRole("button", { name: "Submit work" });
 
     await expect(submitButton).toBeDisabled();
-    await expect(submitButton).toHaveAttribute("data-tone", "outline");
     await userEvent.selectOptions(workType, "story");
     await userEvent.type(requestName, "Driver review");
     await userEvent.type(requestText, "Review the queue and summarize the next driver issue.");

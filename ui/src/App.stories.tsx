@@ -274,6 +274,24 @@ function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
   ).toBe(true);
 }
 
+function buttonVisibleStyle(button: HTMLElement): {
+  backgroundColor: string;
+  borderColor: string;
+  color: string;
+} {
+  const view = button.ownerDocument.defaultView;
+  if (!view) {
+    throw new Error("expected a defaultView when reading button styles");
+  }
+
+  const styles = view.getComputedStyle(button);
+  return {
+    backgroundColor: styles.backgroundColor,
+    borderColor: styles.borderTopColor,
+    color: styles.color,
+  };
+}
+
 async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
   requestNameField: HTMLElement;
   requestField: HTMLElement;
@@ -898,6 +916,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
   render: () => <App />,
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
     const {
       requestField,
       requestNameField,
@@ -905,6 +924,9 @@ export const DashboardSubmitWorkIntegrationSmoke = {
       submitButton,
       workTypeField,
     } = await submitWorkCardControls(canvasElement);
+    const exportButton = await canvas.findByRole("button", {
+      name: "Export PNG",
+    });
 
     expect(
       Array.from(
@@ -922,6 +944,11 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     await expect(submitButton).toBeDisabled();
     await userEvent.selectOptions(workTypeField, "story");
     await expect(submitButton).toBeEnabled();
+    await waitFor(() => {
+      expect(buttonVisibleStyle(submitButton)).toEqual(
+        buttonVisibleStyle(exportButton),
+      );
+    });
     await userEvent.click(submitButton);
     await expect(
       await scope.findByText(

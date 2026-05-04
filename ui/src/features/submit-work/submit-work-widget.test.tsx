@@ -27,9 +27,7 @@ describe("SubmitWorkWidget", () => {
     expect(
       within(card).getByText("Choose a work type and describe what you need to get started."),
     ).toBeTruthy();
-    expect(within(card).getByRole("button", { name: "Submit work" }).getAttribute("data-tone")).toBe(
-      "outline",
-    );
+    expect(within(card).getByRole("button", { name: "Submit work" })).toBeTruthy();
   });
 
   it("disables submission until a configured work type and request text are present", () => {
@@ -118,7 +116,6 @@ describe("SubmitWorkWidget", () => {
     });
     const submittingButton = screen.getByRole("button", { name: "Submitting..." });
     expect(submittingButton.getAttribute("aria-busy")).toBe("true");
-    expect(submittingButton.getAttribute("data-tone")).toBe("outline");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
