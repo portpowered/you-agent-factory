@@ -509,7 +509,7 @@ func copySupportedPortableBundledFilesFromSource(sourceDir, targetDir string, cf
 		if err := os.MkdirAll(filepath.Dir(target.path), 0o755); err != nil {
 			return fmt.Errorf("create bundled file directory for %s: %w", target.path, err)
 		}
-		if err := os.WriteFile(target.path, data, portableBundledFileMode(bundledFile)); err != nil {
+		if err := writePortableBundledFile(target.path, data, portableBundledFileMode(bundledFile)); err != nil {
 			return fmt.Errorf("write bundled file %s: %w", target.path, err)
 		}
 	}
