@@ -62,7 +62,6 @@ describe("TickSliderControl", () => {
     });
 
     expect(currentButton.disabled).toBe(true);
-    expect(currentButton.className).toContain("bg-af-accent/10");
     expect(screen.queryByText("Current")).toBeNull();
   });
 
@@ -83,7 +82,6 @@ describe("TickSliderControl", () => {
     expect(slider.value).toBe("9");
     expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
     expect(currentButton.disabled).toBe(true);
-    expect(currentButton.className).toContain("bg-af-accent/10");
     expect(currentButton.className).toContain("opacity-75");
     expect(screen.queryByText("Current")).toBeNull();
     expect(useFactoryTimelineStore.getState().mode).toBe("current");

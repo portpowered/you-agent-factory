@@ -10,6 +10,7 @@ import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore"
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
+import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 
 const PANEL_CLASS =
   "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
@@ -17,8 +18,6 @@ const DASHBOARD_TOOLBAR_CLASS = cx(
   PANEL_CLASS,
   "mb-4 flex flex-wrap items-center gap-4 p-4 px-5",
 );
-const DASHBOARD_TOOLBAR_ACTION_CLASS =
-  "inline-flex h-11 w-11 items-center justify-center rounded-lg border border-af-accent/35 bg-af-accent/10 text-af-accent outline-af-accent transition hover:bg-af-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2";
 const DASHBOARD_TITLE_CLASS = cx("m-0", DASHBOARD_PAGE_HEADING_CLASS);
 const STREAM_STATUS_SHELL_CLASS = cx(
   "flex min-w-0 flex-1 items-center justify-end",
@@ -61,13 +60,11 @@ export function DashboardHeader() {
           <StreamStatusIcon status={streamState.status} />
         </div>
       </div>
-      <button
+      <DashboardHeaderActionButton
         aria-label="Export PNG"
         aria-expanded={isExportDialogOpen}
         aria-haspopup="dialog"
-        className={DASHBOARD_TOOLBAR_ACTION_CLASS}
         onClick={openExportDialog}
-        type="button"
       >
         <svg
           aria-hidden="true"
@@ -84,7 +81,7 @@ export function DashboardHeader() {
           <path d="M10 14 19 5" />
           <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
         </svg>
-      </button>
+      </DashboardHeaderActionButton>
     </section>
   );
 }

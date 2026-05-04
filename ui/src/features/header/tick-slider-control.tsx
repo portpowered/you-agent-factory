@@ -1,8 +1,8 @@
 import { useMemo, type ChangeEvent } from "react";
 
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
-import { Button } from "../../components/ui/button";
 import { cx } from "../../lib/cx";
+import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 
 const TICK_SLIDER_SHELL_CLASS =
   "flex min-w-64 flex-1 flex-wrap items-center gap-3 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-3 py-2";
@@ -10,7 +10,6 @@ const TICK_SLIDER_LABEL_CLASS =
   "flex min-w-36 flex-1 flex-col gap-1 text-xs font-bold uppercase tracking-[0.16em] text-af-ink/62";
 const TICK_SLIDER_INPUT_CLASS =
   "h-2 min-w-44 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:opacity-45";
-const TICK_SLIDER_BUTTON_CLASS = "shrink-0";
 const TICK_SLIDER_STATUS_CLASS = "text-sm text-af-ink/76";
 const MINIMUM_TIMELINE_TICKS = 2;
 
@@ -102,16 +101,11 @@ export function TickSliderControl() {
           : `Tick ${displayedTick} of ${bounds.maxTick}`}
       </span>
 
-      <Button
-        className={cx(
-          TICK_SLIDER_BUTTON_CLASS,
-          mode === "current" && "opacity-75",
-        )}
+      <DashboardHeaderActionButton
+        className={cx(mode === "current" && "opacity-75")}
         aria-label="Return to current tick"
         disabled={isDisabled || mode === "current"}
         onClick={setCurrentMode}
-        size="icon"
-        tone="secondary"
       >
         <svg
           aria-hidden="true"
@@ -127,7 +121,7 @@ export function TickSliderControl() {
           <path d="M6 5.75v12.5" />
           <path d="m10 8.25 8 3.75-8 3.75v-7.5" />
         </svg>
-      </Button>
+      </DashboardHeaderActionButton>
     </div>
   );
 }
