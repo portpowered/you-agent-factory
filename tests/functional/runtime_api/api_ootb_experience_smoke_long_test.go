@@ -131,14 +131,14 @@ func ootbTwoStagePipelineConfig() map[string]any {
 				"worker":    "worker-a",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "processing"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 			{
 				"name":      "step-two",
 				"worker":    "worker-b",
 				"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 		},
 	}

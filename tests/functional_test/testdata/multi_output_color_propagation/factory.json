@@ -50,10 +50,12 @@
         }
       ],
       "name": "split",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",
@@ -74,10 +76,12 @@
         }
       ],
       "name": "finish-task",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

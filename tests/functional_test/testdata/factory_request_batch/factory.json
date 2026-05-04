@@ -40,10 +40,12 @@
         }
       ],
       "name": "process",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "processing",
@@ -60,10 +62,12 @@
         }
       ],
       "name": "finish",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

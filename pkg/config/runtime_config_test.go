@@ -513,7 +513,7 @@ func TestPersistNamedFactory_RejectsInvalidPayloadWithoutChangingCurrentFactory(
 				"worker":    "executor",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "failed"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 		},
 		"exhaustionRules": []map[string]any{
@@ -1586,7 +1586,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 					},
 				},
 				"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "story", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
 				"resources": []map[string]any{{"name": "agent-slot", "capacity": 1}},
 				"guards": []map[string]any{
 					{"type": "VISIT_COUNT", "workstation": "execute-story", "maxVisits": 3},

@@ -25,7 +25,7 @@ func TestFlattenFactoryConfig_CollectsSupportedPortableBundledFiles(t *testing.T
     "worker":"executor",
     "inputs":[{"workType":"task","state":"init"}],
     "outputs":[{"workType":"task","state":"complete"}],
-    "onFailure":{"workType":"task","state":"failed"}
+    "onFailure":[{"workType":"task","state":"failed"}]
   }]
 }`)
 	writePortableBundledTestFile(t, filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName), `---

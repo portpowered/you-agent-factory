@@ -63,10 +63,12 @@
         }
       ],
       "name": "process-story",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "story"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

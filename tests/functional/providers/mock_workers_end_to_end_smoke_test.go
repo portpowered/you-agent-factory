@@ -132,7 +132,7 @@ func mockWorkersSmokeWorkstation(name, workerName, workType string) map[string]a
 		"worker":    workerName,
 		"inputs":    []map[string]string{{"workType": workType, "state": "init"}},
 		"outputs":   []map[string]string{{"workType": workType, "state": "done"}},
-		"onFailure": map[string]string{"workType": workType, "state": "failed"},
+		"onFailure": []map[string]string{{"workType": workType, "state": "failed"}},
 	}
 }
 

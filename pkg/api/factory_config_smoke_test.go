@@ -125,6 +125,63 @@ func TestFactoryConfigSmoke_OpenAPIDescriptionsAndEnumContractsReachRuntimeBound
 	}
 }
 
+func TestFactoryConfigSmoke_OpenAPIFactoryBoundaryRejectsSingularNonSuccessRoutes(t *testing.T) {
+	testCases := []struct {
+		name      string
+		payload   string
+		fieldPath string
+	}{
+		{
+			name: "rejects singular onContinue object",
+			payload: strings.Replace(
+				factoryConfigSmokeCanonicalJSON(),
+				`"outputs":[{"workType":"story","state":"complete"}],`,
+				`"outputs":[{"workType":"story","state":"complete"}],
+    "onContinue":{"workType":"story","state":"init"},`,
+				1,
+			),
+			fieldPath: "onContinue",
+		},
+		{
+			name: "rejects singular onRejection object",
+			payload: strings.Replace(
+				factoryConfigSmokeCanonicalJSON(),
+				`"onRejection":[{"workType":"story","state":"init"}],`,
+				`"onRejection":{"workType":"story","state":"init"},`,
+				1,
+			),
+			fieldPath: "onRejection",
+		},
+		{
+			name: "rejects singular onFailure object",
+			payload: strings.Replace(
+				factoryConfigSmokeCanonicalJSON(),
+				`"onFailure":[{"workType":"story","state":"failed"}],`,
+				`"onFailure":{"workType":"story","state":"failed"},`,
+				1,
+			),
+			fieldPath: "onFailure",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			invalidDir := writeFactoryConfigSmokeDir(t, tc.payload)
+
+			_, err := config.LoadRuntimeConfig(invalidDir, nil)
+			if err == nil {
+				t.Fatal("expected singular non-success route object to fail at the generated boundary")
+			}
+			if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
+				t.Fatalf("expected generated boundary context, got %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.fieldPath) {
+				t.Fatalf("expected rejection to mention %q, got %v", tc.fieldPath, err)
+			}
+		})
+	}
+}
+
 func TestFactoryConfigSmoke_RepresentativeFactoryDirectoryPreservesPublicContract(t *testing.T) {
 	factorySchema := loadFactorySchemaForSmoke(t)
 

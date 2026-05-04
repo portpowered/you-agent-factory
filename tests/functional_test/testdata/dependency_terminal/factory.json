@@ -40,10 +40,12 @@
         }
       ],
       "name": "execute",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "prd"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",
@@ -60,10 +62,12 @@
         }
       ],
       "name": "review",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "prd"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "archived",

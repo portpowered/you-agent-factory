@@ -37,10 +37,12 @@
         }
       ],
       "name": "step1",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "stage1",
@@ -57,10 +59,12 @@
         }
       ],
       "name": "step2",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "done",

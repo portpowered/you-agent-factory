@@ -51,10 +51,12 @@
       ],
       "behavior": "REPEATER",
       "name": "execute-story",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "story"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",
@@ -84,14 +86,18 @@
       ],
       "behavior": "STANDARD",
       "name": "review-story",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "story"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "story"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

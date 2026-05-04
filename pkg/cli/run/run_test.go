@@ -1297,7 +1297,7 @@ func writeDashboardRunFixture(t *testing.T) (string, string) {
       "worker": "script-worker",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "done" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{"workType": "task", "state": "failed"}]
     }
   ]
 }

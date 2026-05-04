@@ -37,14 +37,18 @@
         }
       ],
       "name": "process",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "task"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "rejected",
         "workType": "task"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

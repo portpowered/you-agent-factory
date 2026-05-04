@@ -49,10 +49,12 @@
         }
       ],
       "name": "plan",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "init",
@@ -69,10 +71,12 @@
         }
       ],
       "name": "process-prd",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "prd"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

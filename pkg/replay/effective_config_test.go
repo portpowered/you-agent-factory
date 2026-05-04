@@ -611,7 +611,7 @@ func writeGuardedLoopBreakerFactoryJSON(t *testing.T, factoryDir string) {
 				"worker":      "reviewer-worker",
 				"inputs":      []map[string]string{{"workType": "story", "state": "init"}},
 				"outputs":     []map[string]string{{"workType": "story", "state": "complete"}},
-				"onRejection": map[string]string{"workType": "story", "state": "init"},
+				"onRejection": []map[string]string{{"workType": "story", "state": "init"}},
 			},
 			{
 				"name":    "review-story-loop-breaker",

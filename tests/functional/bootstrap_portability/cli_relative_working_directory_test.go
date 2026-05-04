@@ -31,7 +31,7 @@ func writeRelativeWorkingDirectoryFactoryConfig(t *testing.T, factoryDir string)
       "worker": "worker-a",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{"workType": "task", "state": "failed"}],
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}",
       "worktree": "{{ (index .Inputs 0).Name }}"
     }

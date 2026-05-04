@@ -163,7 +163,7 @@ func workInProgressPriorityFixture(t *testing.T) string {
       "worker": "processor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "processing" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{"workType": "task", "state": "failed"}]
     },
     {
       "name": "zzz-finish",
@@ -171,7 +171,7 @@ func workInProgressPriorityFixture(t *testing.T) string {
       "worker": "finisher",
       "inputs": [{ "workType": "task", "state": "processing" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{"workType": "task", "state": "failed"}]
     }
   ]
 }`
@@ -220,7 +220,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 				"worker":    "starter",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 			{
 				"name":      "bbb-finish-processing",
@@ -228,7 +228,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 				"worker":    "finisher",
 				"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "task", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 			{
 				"name":      "zzz-cron-initial",
@@ -237,7 +237,7 @@ func schedulerPrioritySmokeConfig() map[string]any {
 				"cron":      map[string]string{"schedule": "0 * * * *", "expiryWindow": "2h"},
 				"inputs":    []map[string]string{{"workType": "scheduled", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "scheduled", "state": "complete"}},
-				"onFailure": map[string]string{"workType": "scheduled", "state": "failed"},
+				"onFailure": []map[string]string{{"workType": "scheduled", "state": "failed"}},
 			},
 		},
 	}

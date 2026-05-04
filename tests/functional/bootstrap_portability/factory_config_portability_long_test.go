@@ -55,7 +55,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{"workType": "task", "state": "failed"}],
       "resources": [{ "name": "agent-slot", "capacity": 1 }],
       "definition": {
         "type": "MODEL_WORKSTATION",
@@ -164,7 +164,7 @@ func TestFactoryConfigPortability_FlattenSplitLayoutExecutesStandalone(t *testin
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{"workType": "task", "state": "failed"}],
       "resources": [{ "name": "agent-slot", "capacity": 1 }]
     }
   ]
@@ -261,7 +261,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{"workType": "task", "state": "failed"}],
       "definition": {
         "type": "MODEL_WORKSTATION",
         "worker": "executor",
@@ -327,7 +327,7 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
       "worker": "executor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{"workType": "task", "state": "failed"}],
       "resources": [],
       "definition": {
         "type": "MODEL_WORKSTATION",
@@ -407,7 +407,7 @@ func writeInlineScriptBackedFactoryFixture(t *testing.T) string {
       "copyReferencedScripts": true,
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{"workType": "task", "state": "failed"}],
       "type": "MODEL_WORKSTATION",
       "body": "Execute {{ (index .Inputs 0).Payload }}.",
       "workingDirectory": "/repo/{{ (index .Inputs 0).WorkID }}",

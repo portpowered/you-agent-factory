@@ -54,10 +54,12 @@
         }
       ],
       "name": "merge-review",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

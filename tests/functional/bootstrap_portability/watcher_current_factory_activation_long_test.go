@@ -475,7 +475,7 @@ func functionalNamedFactoryPayloadWithTerminalState(t *testing.T, project, termi
 			"worker":         "worker-a",
 			"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":        []map[string]string{{"workType": "task", "state": terminalState}},
-			"onFailure":      map[string]string{"workType": "task", "state": "failed"},
+			"onFailure":      []map[string]string{{"workType": "task", "state": "failed"}},
 			"type":           "MODEL_WORKSTATION",
 			"promptTemplate": "Do the " + project + " work.",
 		}},

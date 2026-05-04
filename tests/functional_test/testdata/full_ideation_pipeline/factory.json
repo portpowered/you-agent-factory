@@ -80,10 +80,12 @@
         }
       ],
       "name": "plan-idea",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "idea"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "init",
@@ -100,10 +102,12 @@
         }
       ],
       "name": "convert-prd",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "prd"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "init",
@@ -121,10 +125,12 @@
       ],
       "behavior": "REPEATER",
       "name": "execute-story",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "story"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "in-review",
@@ -141,14 +147,18 @@
         }
       ],
       "name": "review-story",
-      "onFailure": {
+      "onFailure": [
+        {
         "state": "failed",
         "workType": "story"
-      },
-      "onRejection": {
+        }
+      ],
+      "onRejection": [
+        {
         "state": "init",
         "workType": "story"
-      },
+        }
+      ],
       "outputs": [
         {
           "state": "complete",

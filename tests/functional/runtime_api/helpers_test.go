@@ -43,7 +43,7 @@ func simplePipelineConfig() map[string]any {
 			"worker":    "worker-a",
 			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": map[string]string{"workType": "task", "state": "failed"},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		}},
 	}
 }
