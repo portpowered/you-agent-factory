@@ -41,14 +41,14 @@ func NewRootCommand() *cobra.Command {
 		Long: "Run and manage CPN-based workflow factories.\n\n" +
 			"Running " + cliBinaryName + " with no arguments starts the out-of-the-box flow: " +
 			"it prepares ./factory when needed, keeps the runtime alive in continuous mode, " +
-			"watches factory/inputs/tasks/default for Markdown or JSON task files, and reports " +
+			"watches factory/inputs/task/default for Markdown or JSON task files, and reports " +
 			"the local dashboard at the first available port, preferring http://localhost:7437/dashboard/ui.\n\n" +
 			"Packaged reference topics are also available through " + cliBinaryName + " docs <topic>. " +
 			"Supported docs topics: " + supportedDocsTopicsHelpText() + ".",
 		Example: "  # Start the default Codex-backed factory in the current project.\n" +
 			"  " + cliBinaryName + "\n\n" +
 			"  # In another terminal, submit a Markdown task to the default scaffold.\n" +
-			"  printf \"Fix the lint issues\\n\" > factory/inputs/tasks/default/fix-lint.md\n\n" +
+			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
 			"  # Print the packaged workstation reference page from the installed binary.\n" +
 			"  " + cliBinaryName + " docs workstation\n\n" +
 			"  # Explicit batch-style runs are still available when you need them.\n" +
@@ -220,7 +220,7 @@ func newRunCommand() *cobra.Command {
 		Short: "Load workflow and run the factory engine",
 		Long: "Load workflow and run the factory engine.\n\n" +
 			"For the quickest local setup, run " + cliBinaryName + " with no arguments. " +
-			"That default flow bootstraps ./factory, watches factory/inputs/tasks/default, " +
+			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
 			"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
 			"Default execution uses batch mode and exits after idle completion. " +
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
@@ -230,7 +230,7 @@ func newRunCommand() *cobra.Command {
 		Example: "  # Start the out-of-the-box continuous factory.\n" +
 			"  " + cliBinaryName + "\n\n" +
 			"  # Submit a Markdown task to the default scaffold.\n" +
-			"  printf \"Fix the lint issues\\n\" > factory/inputs/tasks/default/fix-lint.md\n\n" +
+			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
 			"  # Run an existing factory once in explicit batch mode.\n" +
 			"  " + cliBinaryName + " run --dir factory",
 		RunE: func(cmd *cobra.Command, args []string) error {
