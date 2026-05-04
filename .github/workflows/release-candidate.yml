@@ -97,28 +97,28 @@ jobs:
         include:
           - asset_id: linux-amd64
             runner: ubuntu-latest
-            archive_glob: agent-factory_*_linux_amd64.tar.gz
-            binary_name: agent-factory
+            archive_glob: infinite-you_*_linux_amd64.tar.gz
+            binary_name: infinite-you
           - asset_id: linux-arm64
             runner: ubuntu-24.04-arm
-            archive_glob: agent-factory_*_linux_arm64.tar.gz
-            binary_name: agent-factory
+            archive_glob: infinite-you_*_linux_arm64.tar.gz
+            binary_name: infinite-you
           - asset_id: darwin-amd64
             runner: macos-15-intel
-            archive_glob: agent-factory_*_darwin_amd64.tar.gz
-            binary_name: agent-factory
+            archive_glob: infinite-you_*_darwin_amd64.tar.gz
+            binary_name: infinite-you
           - asset_id: darwin-arm64
             runner: macos-latest
-            archive_glob: agent-factory_*_darwin_arm64.tar.gz
-            binary_name: agent-factory
+            archive_glob: infinite-you_*_darwin_arm64.tar.gz
+            binary_name: infinite-you
           - asset_id: windows-amd64
             runner: windows-latest
-            archive_glob: agent-factory_*_windows_amd64.zip
-            binary_name: agent-factory.exe
+            archive_glob: infinite-you_*_windows_amd64.zip
+            binary_name: infinite-you.exe
           - asset_id: windows-arm64
             runner: windows-11-arm
-            archive_glob: agent-factory_*_windows_arm64.zip
-            binary_name: agent-factory.exe
+            archive_glob: infinite-you_*_windows_arm64.zip
+            binary_name: infinite-you.exe
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

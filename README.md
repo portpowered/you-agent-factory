@@ -1,7 +1,7 @@
 # Infinite You
 
-Infinite you is an agent-factory, it orchestrates AI agents for you, so you
-can do more work without doing anything. 
+Infinite You is an AI agent factory. It orchestrates AI agents for you so you
+can do more work without doing everything manually.
 
 ## Why?
 
@@ -19,16 +19,16 @@ first, then choose the install path that matches your machine.
 Use Homebrew when you are on macOS and want the standard package-manager flow:
 
 ```bash
-brew install --cask portpowered/cask/agent-factory
+brew install --cask portpowered/cask/infinite-you
 ```
 
-The cask installs the packaged `agent-factory` release binary into Homebrew's
+The cask installs the packaged `infinite-you` release binary into Homebrew's
 normal binary location. The binary is not code signed or notarized yet. The
 cask tries to clear the macOS quarantine attribute automatically, but if macOS
 still blocks launch run:
 
 ```bash
-xattr -dr com.apple.quarantine "$(brew --prefix)/bin/agent-factory"
+xattr -dr com.apple.quarantine "$(brew --prefix)/bin/infinite-you"
 ```
 
 ### `install.sh` for macOS and Linux
@@ -57,13 +57,13 @@ go install github.com/portpowered/infinite-you/cmd/factory@latest
 
 This path installs the current `cmd/factory` entrypoint from source. Because
 `go install` names the binary from the leaf package directory, this command
-installs `factory` into your `GOBIN` rather than `agent-factory`.
+installs `factory` into your `GOBIN` rather than `infinite-you`.
 
 ### Manual release archive fallback
 
 If you cannot use Homebrew, `install.sh`, or `go install`, you can still
 download a release archive manually from GitHub Releases, unpack it, and place
-`agent-factory` on your `PATH`.
+`infinite-you` on your `PATH`.
 
 If you are working from a local checkout instead, build and install the binary:
 
@@ -73,18 +73,18 @@ cd infinite-you
 make install     # installs to $GOBIN
 ```
 
-The packaged release archives and docs examples use the `agent-factory` command
+The packaged release archives and docs examples use the `infinite-you` command
 surface:
 
 ```bash
-agent-factory
+infinite-you
 ```
 
 ```bash
-agent-factory init
-agent-factory init --executor claude --dir my-factory
-agent-factory docs
-agent-factory docs workstation
+infinite-you init
+infinite-you init --executor claude --dir my-factory
+infinite-you docs
+infinite-you docs workstation
 ```
 
 Supported docs topics are `config`, `workstation`, `workers`, `resources`,
@@ -102,15 +102,15 @@ cd ~/src/sample-project
 
 2) Start the default starter factory:
 ```bash
-agent-factory
+infinite-you
 ```
 
-With no arguments, `agent-factory` creates or reuses a `./factory` directory and opens up the dashboard.
+With no arguments, `infinite-you` creates or reuses a `./factory` directory and opens up the dashboard.
 
 If you want to scaffold the starter layout without launching the runtime, use:
 ```bash
-agent-factory init
-agent-factory init --executor claude --dir my-factory
+infinite-you init
+infinite-you init --executor claude --dir my-factory
 ```
 
 Supported starter scaffold options are `codex` and `claude`.
@@ -124,27 +124,27 @@ The factory watches `factory/inputs/task/default`, picks up new Markdown or
 JSON files, and dispatches them through the default Codex-backed workflow.
 
 ## Custom inits
-If you want to create the starter files explicitly before you run the factory, use `agent-factory init`:
+If you want to create the starter files explicitly before you run the factory, use `infinite-you init`:
 
 ```bash
 # Default starter scaffold (Codex-backed)
-agent-factory init
+infinite-you init
 
 # Claude-backed default scaffold
-agent-factory init --executor claude --dir my-factory
+infinite-you init --executor claude --dir my-factory
 
 # Dedicated Ralph Loop
-agent-factory init --type ralph --dir ralph-factory
-agent-factory run --dir ralph-factory
+infinite-you init --type ralph --dir ralph-factory
+infinite-you run --dir ralph-factory
 printf "Create a minimal release-planning loop for a document processing service.\nGenerate a human-readable PRD, a matching Ralph JSON plan, and an execution loop that completes one story per iteration until the work is done.\nKeep the plan product-neutral unless the customer request names a specific product.\n" > ralph-factory/inputs/request/default/release-planning-loop.md
 ```
 
 ## Docs
 
 ```bash
-agent-factory docs
-agent-factory docs workstation
-agent-factory docs batch-work
+infinite-you docs
+infinite-you docs workstation
+infinite-you docs batch-work
 etc
 ```
 
@@ -184,15 +184,15 @@ feedback, fan-out/fan-in, and guarded loop breakers.
 ##  CLI Commands
 
 ```bash
-agent-factory          # Bootstrap ./factory and keep the default factory running
-agent-factory docs     # List packaged markdown reference topics
-agent-factory docs config  # Print the packaged config reference page
-agent-factory init     # Create the default single-step scaffold (--executor codex|claude, default: codex)
-agent-factory init --type ralph --dir ralph-factory  # Create the minimal Ralph PRD-to-execution scaffold
-agent-factory run      # Load workflow and run the factory engine in explicit batch mode
-agent-factory config flatten ./factory  # Write canonical camelCase single-file factory JSON to stdout
-agent-factory config expand ./factory.json  # Write split factory files beside factory.json
-agent-factory submit --work-type-name <work-type-name> --payload <path>  # Submit work to a running factory
+infinite-you          # Bootstrap ./factory and keep the default factory running
+infinite-you docs     # List packaged markdown reference topics
+infinite-you docs config  # Print the packaged config reference page
+infinite-you init     # Create the default single-step scaffold (--executor codex|claude, default: codex)
+infinite-you init --type ralph --dir ralph-factory  # Create the minimal Ralph PRD-to-execution scaffold
+infinite-you run      # Load workflow and run the factory engine in explicit batch mode
+infinite-you config flatten ./factory  # Write canonical camelCase single-file factory JSON to stdout
+infinite-you config expand ./factory.json  # Write split factory files beside factory.json
+infinite-you submit --work-type-name <work-type-name> --payload <path>  # Submit work to a running factory
 ```
 
 Common flags:
@@ -243,4 +243,4 @@ sample-factory/
 
 ## Development
 
-Start with the [Agent Factory Development Guide](./docs/development/development.md) before changing runtime code, workflow behavior, dashboard assets, replay, or tests. It owns the local command list, package-specific verification gates, and Agent Factory gotchas.
+Start with the [Infinite You Development Guide](./docs/development/development.md) before changing runtime code, workflow behavior, dashboard assets, replay, or tests. It owns the local command list, package-specific verification gates, and Infinite You gotchas.

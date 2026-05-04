@@ -53,10 +53,10 @@ Use this sequence for every CLI release:
 The release workflow publishes one set of GitHub release archives and reuses
 that output for every supported installation path:
 
-- GoReleaser builds the tagged `agent-factory` archives and checksum file from
+- GoReleaser builds the tagged `infinite-you` archives and checksum file from
   `.goreleaser.yml`.
 - The same GoReleaser run updates the `portpowered/cask` tap on `main` by
-  writing the generated cask file to `Casks/agent-factory.rb`.
+  writing the generated cask file to `Casks/infinite-you.rb`.
 - The publish workflow then uploads the repo-owned `install.sh` from the tagged
   commit as a GitHub release asset, so the hosted installer URL becomes:
 
@@ -67,7 +67,7 @@ https://github.com/portpowered/infinite-you/releases/download/vX.Y.Z/install.sh
 For consumers, the expected Homebrew install command remains:
 
 ```bash
-brew install --cask portpowered/cask/agent-factory
+brew install --cask portpowered/cask/infinite-you
 ```
 
 The latest-release fallback installer path remains:
@@ -88,7 +88,7 @@ prepare the tap and credentials expected by `.goreleaser.yml` and
 
 - The Homebrew tap repository is `portpowered/cask`.
 - The generated cask is committed on the tap's `main` branch under
-  `Casks/agent-factory.rb`.
+  `Casks/infinite-you.rb`.
 - GitHub Actions needs a `HOMEBREW_TAP_GITHUB_TOKEN` secret with permission to
   push to `portpowered/cask`.
 - The token must be available to the release publish workflow because
@@ -144,7 +144,7 @@ After the push:
 - Maintainers should monitor the workflow until the release assets and checksums
   are available on the GitHub release page.
 - Homebrew consumers should be able to install the published cask through
-  `brew install --cask portpowered/cask/agent-factory`.
+  `brew install --cask portpowered/cask/infinite-you`.
 - The hosted installer should be reachable from the tag-specific release asset
   URL and the latest-download URL after the asset upload step completes.
 - Release verification should keep both a repo-owned `go install ./cmd/factory`
@@ -163,7 +163,7 @@ Interpret post-publish failures by the job that reported them:
   that `HOMEBREW_TAP_GITHUB_TOKEN` is present with push access to
   `portpowered/cask`.
 - `Verify Homebrew Cask Publication` failures mean the tap checkout or the
-  generated `tap/Casks/agent-factory.rb` content is wrong for the tagged
+  generated `tap/Casks/infinite-you.rb` content is wrong for the tagged
   release. Confirm the cask version, asset URL, checksum, and install behavior
   match the published release artifacts.
 - `Smoke Hosted install.sh` failures mean the uploaded `install.sh` asset or

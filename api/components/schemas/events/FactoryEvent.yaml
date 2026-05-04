@@ -1,7 +1,7 @@
 type: object
 additionalProperties: false
 description: >-
-  Versioned Agent Factory event message. This is the intended canonical
+  Versioned Infinite You event message. This is the intended canonical
   schema for customer event streams, history projection, record/replay
   artifacts, and runtime diagnostics. New fields use camelCase even when
   older REST resource schemas still contain legacy snake_case fields.
@@ -16,9 +16,9 @@ properties:
     type: string
     description: Version of the factory event envelope schema.
     enum:
-      - agent-factory.event.v1
+      - infinite-you.event.v1
     x-enum-descriptions:
-      - Initial unified Agent Factory event schema.
+      - Initial unified Infinite You event schema.
   id:
     type: string
     description: Stable event identifier. Record/replay artifacts must preserve this value.

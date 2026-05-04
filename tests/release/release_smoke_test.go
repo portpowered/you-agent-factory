@@ -109,8 +109,8 @@ func TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN(t *testing.T) {
 func TestGoInstallSmoke_InstallsPublishedModulePathIntoCleanGOBIN(t *testing.T) {
 	t.Parallel()
 
-	if os.Getenv("AGENT_FACTORY_RELEASE_PUBLIC_GO_INSTALL_SMOKE") != "1" {
-		t.Skip("set AGENT_FACTORY_RELEASE_PUBLIC_GO_INSTALL_SMOKE=1 to run the published-module go install smoke")
+	if os.Getenv("INFINITE_YOU_RELEASE_PUBLIC_GO_INSTALL_SMOKE") != "1" {
+		t.Skip("set INFINITE_YOU_RELEASE_PUBLIC_GO_INSTALL_SMOKE=1 to run the published-module go install smoke")
 	}
 
 	binaryPath := runGoInstallSmoke(t, "github.com/portpowered/infinite-you/cmd/factory@latest", "")
@@ -130,7 +130,7 @@ func buildReleaseSmokeBinary(t *testing.T) string {
 }
 
 func releaseSmokeBinaryName() string {
-	binaryName := "agent-factory"
+	binaryName := "infinite-you"
 	if runtime.GOOS == "windows" {
 		binaryName += ".exe"
 	}

@@ -1,16 +1,16 @@
 openapi: 3.0.3
 info:
-  title: Agent Factory API
+  title: Infinite You API
   version: 0.1.0
   license:
     name: MIT
   description: |
-    Current Agent Factory runtime API contract. This file captures existing
+    Current Infinite You runtime API contract. This file captures existing
     handler behavior for schema standardization and intentionally does not
     redesign route names, pagination, or response fields.
 servers:
   - url: http://localhost:8080
-    description: Local Agent Factory API server
+    description: Local Infinite You API server
 security: []
 tags:
   - name: Work
@@ -270,7 +270,7 @@ components:
             invalidFactory:
               summary: Factory payload failed validation.
               value:
-                message: Factory payload is not a valid Agent Factory definition.
+                message: Factory payload is not a valid Infinite You definition.
                 family: BAD_REQUEST
                 code: INVALID_FACTORY
     CreateFactoryConflict:
@@ -839,7 +839,7 @@ components:
     FactoryEvent:
       type: object
       additionalProperties: false
-      description: Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.
+      description: Versioned Infinite You event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.
       required:
         - schemaVersion
         - id
@@ -851,9 +851,9 @@ components:
           type: string
           description: Version of the factory event envelope schema.
           enum:
-            - agent-factory.event.v1
+            - infinite-you.event.v1
           x-enum-descriptions:
-            - Initial unified Agent Factory event schema.
+            - Initial unified Infinite You event schema.
         id:
           type: string
           description: Stable event identifier. Record/replay artifacts must preserve this value.
@@ -1665,7 +1665,7 @@ components:
     ResourceManifest:
       type: object
       additionalProperties: false
-      description: Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
+      description: Canonical portability manifest for Infinite You bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
       properties:
         requiredTools:
           type: array

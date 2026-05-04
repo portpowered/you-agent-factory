@@ -1,19 +1,19 @@
 #!/usr/bin/env sh
 set -eu
 
-BINARY_NAME="agent-factory"
-RELEASE_BASE_URL="${AGENT_FACTORY_INSTALL_BASE_URL:-https://github.com/portpowered/infinite-you/releases}"
-INSTALL_DIR="${AGENT_FACTORY_INSTALL_DIR:-$HOME/.local/bin}"
-VERSION_OVERRIDE="${AGENT_FACTORY_VERSION:-}"
-OS_OVERRIDE="${AGENT_FACTORY_INSTALL_OS:-}"
-ARCH_OVERRIDE="${AGENT_FACTORY_INSTALL_ARCH:-}"
+BINARY_NAME="infinite-you"
+RELEASE_BASE_URL="${INFINITE_YOU_INSTALL_BASE_URL:-https://github.com/portpowered/infinite-you/releases}"
+INSTALL_DIR="${INFINITE_YOU_INSTALL_DIR:-$HOME/.local/bin}"
+VERSION_OVERRIDE="${INFINITE_YOU_VERSION:-}"
+OS_OVERRIDE="${INFINITE_YOU_INSTALL_OS:-}"
+ARCH_OVERRIDE="${INFINITE_YOU_INSTALL_ARCH:-}"
 
 say() {
   printf '%s\n' "$*"
 }
 
 fail() {
-  printf 'agent-factory install: %s\n' "$*" >&2
+  printf 'infinite-you install: %s\n' "$*" >&2
   exit 1
 }
 
@@ -97,7 +97,7 @@ resolve_tag() {
 
   require_command curl
   effective_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$RELEASE_BASE_URL/latest")" ||
-    fail "failed to resolve the latest agent-factory release from $RELEASE_BASE_URL/latest"
+    fail "failed to resolve the latest infinite-you release from $RELEASE_BASE_URL/latest"
 
   tag="${effective_url##*/}"
   case "$tag" in
@@ -154,18 +154,18 @@ install_binary() {
 
   target_dir="$(dirname "$target_path")"
   if ! mkdir -p "$target_dir"; then
-    fail "could not create install directory $target_dir; set AGENT_FACTORY_INSTALL_DIR to a writable path"
+    fail "could not create install directory $target_dir; set INFINITE_YOU_INSTALL_DIR to a writable path"
   fi
 
   if command_exists install; then
     if ! install -m 0755 "$source_path" "$target_path"; then
-      fail "could not install $BINARY_NAME to $target_path; set AGENT_FACTORY_INSTALL_DIR to a writable path"
+      fail "could not install $BINARY_NAME to $target_path; set INFINITE_YOU_INSTALL_DIR to a writable path"
     fi
     return
   fi
 
   if ! cp "$source_path" "$target_path"; then
-    fail "could not copy $BINARY_NAME to $target_path; set AGENT_FACTORY_INSTALL_DIR to a writable path"
+    fail "could not copy $BINARY_NAME to $target_path; set INFINITE_YOU_INSTALL_DIR to a writable path"
   fi
   if ! chmod 0755 "$target_path"; then
     fail "installed $BINARY_NAME but could not mark it executable at $target_path"
@@ -215,7 +215,7 @@ main() {
   require_command tar
   require_command mktemp
 
-  tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t agent-factory-install)"
+  tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t infinite-you-install)"
   trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
   archive_path="$tmp_dir/$archive_name"
