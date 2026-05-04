@@ -110,4 +110,23 @@ describe("DashboardExportDialog", () => {
     ).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
+
+  it("falls back to the Infinite You filename slug when the current factory is unavailable", async () => {
+    isExportDialogOpen = true;
+    currentFactoryExportState = {
+      currentFactoryExport: {
+        code: "FACTORY_DEFINITION_UNAVAILABLE",
+        message: "The current factory definition could not be loaded from the current-factory API.",
+        ok: false,
+      },
+      isPreparing: false,
+    };
+
+    render(<DashboardExportDialog />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Export factory" });
+    expect(
+      (within(dialog).getByRole("textbox", { name: "Factory name" }) as HTMLInputElement).value,
+    ).toBe("infinite-you");
+  });
 });

@@ -10,7 +10,7 @@ export function DashboardExportDialog() {
     <ExportFactoryDialog
       factory={currentFactoryExport.ok ? currentFactoryExport.factoryDefinition : null}
       initialFactoryName={
-        currentFactoryExport.ok ? currentFactoryExport.factoryDefinition.name : "agent-factory"
+        currentFactoryExport.ok ? currentFactoryExport.factoryDefinition.name : "infinite-you"
       }
       isOpen={isExportDialogOpen}
       isPreparing={isPreparing}
@@ -19,4 +19,3 @@ export function DashboardExportDialog() {
     />
   );
 }
-

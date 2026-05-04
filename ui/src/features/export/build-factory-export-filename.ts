@@ -1,4 +1,4 @@
-const EXPORT_NAME_FALLBACK = "agent-factory";
+const EXPORT_NAME_FALLBACK = "infinite-you";
 
 export function buildFactoryExportFilename(factoryName: string): string {
   const slug = factoryName
@@ -9,4 +9,3 @@ export function buildFactoryExportFilename(factoryName: string): string {
 
   return `${slug || EXPORT_NAME_FALLBACK}.png`;
 }
-

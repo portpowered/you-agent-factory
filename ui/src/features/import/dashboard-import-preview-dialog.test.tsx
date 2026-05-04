@@ -52,6 +52,9 @@ describe("DashboardImportPreviewDialog", () => {
 
     expect(previewDialog.textContent).toContain("Dropped Factory");
     expect(previewDialog.textContent).toContain("factory-import.png");
+    expect(previewDialog.textContent).toContain(
+      "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
+    );
     expect(
       within(previewDialog).getByRole("img", { name: "Dropped Factory preview" }).getAttribute("src"),
     ).toBe("blob:factory-preview");

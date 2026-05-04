@@ -93,6 +93,28 @@ describe("ExportFactoryDialog", () => {
     expect(screen.getByText("Loading the current authored factory definition.")).toBeTruthy();
   });
 
+  it("renders Infinite You export copy for metadata and filename guidance", () => {
+    render(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Factory Aurora"
+        isOpen
+        onClose={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded Infinite You factory metadata.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "This name is embedded in the exported Infinite You PNG metadata and used for the downloaded filename.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {
     let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null = null;
     vi.mocked(writeFactoryExportPng).mockImplementation(

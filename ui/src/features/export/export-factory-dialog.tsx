@@ -118,7 +118,7 @@ export function ExportFactoryDialog({
 
         <p className={DIALOG_HINT_CLASS}>
           Confirming export keeps the current dashboard state unchanged and downloads
-          a PNG artifact with embedded Port OS factory metadata.
+          a PNG artifact with embedded Infinite You factory metadata.
         </p>
 
         <ExportFactoryDialogForm formState={formState} />
@@ -183,7 +183,7 @@ function ExportFactoryDialogForm({
           value={formState.exportName}
         />
         <p className={DIALOG_FIELD_DESCRIPTION_CLASS}>
-          This name is embedded in the exported PNG metadata and used for the
+          This name is embedded in the exported Infinite You PNG metadata and used for the
           downloaded filename.
         </p>
         {formState.nameValidationMessage ? (

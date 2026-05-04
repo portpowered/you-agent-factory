@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: dashboard story smoke states are intentionally consolidated in one runtime-backed file.
 import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { App } from "./App";
@@ -336,15 +337,21 @@ async function expectTypographyRegressionSurface(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
-  const heading = await canvas.findByRole("heading", { name: "Agent Factory" });
+  const heading = await canvas.findByRole("heading", { name: "Infinite You" });
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
-  const streamStatus = canvas.getByRole("status", { name: /Factory event stream (connecting|live)/ });
+  const streamStatus = canvas.getByRole("status", {
+    name: /Infinite You event stream (connecting|live)/,
+  });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
   expect(streamStatus.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
   expect(streamStatus.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
   expect(within(toolbar).queryByText("Factory state")).toBeNull();
-  expect(within(toolbar).queryByText(String(semanticWorkflowDashboardSnapshot.factory_state))).toBeNull();
+  expect(
+    within(toolbar).queryByText(
+      String(semanticWorkflowDashboardSnapshot.factory_state),
+    ),
+  ).toBeNull();
   expect(within(toolbar).queryByText("Stream")).toBeNull();
   expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
   expect(within(toolbar).queryByText("Export PNG")).toBeNull();
@@ -577,7 +584,7 @@ function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
 }
 
 export default {
-  title: "Agent Factory/Workflow Dashboard",
+  title: "Infinite You/Workflow Dashboard",
   component: App,
 };
 
@@ -851,7 +858,7 @@ export const DashboardImprovementsSmokeNarrow = {
     );
 
     const dashboardGrid = await canvas.findByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
     const dashboardScope = within(dashboardGrid);
 
@@ -1369,7 +1376,7 @@ export const WorkChartTimelineVerification = {
     expectWorkOutcomeSeries(outcomeChart);
 
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Current" }),
+      await canvas.findByRole("button", { name: "Return to current tick" }),
     );
 
     await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();

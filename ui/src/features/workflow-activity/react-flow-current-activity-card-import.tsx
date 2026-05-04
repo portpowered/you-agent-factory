@@ -9,7 +9,7 @@ import type {
   ReadFactoryImportPngError,
 } from "../import";
 
-const GRAPH_DROP_HINT = "Drop a Port OS factory PNG onto this graph to start import.";
+const GRAPH_DROP_HINT = "Drop an Infinite You PNG onto this graph to start import.";
 const GRAPH_IMPORT_ERROR_TITLE = "Factory import failed";
 const GRAPH_IMPORT_LOADING_TITLE = "Validating factory PNG";
 
@@ -37,16 +37,16 @@ function graphDropOverlayCopy(dropState: FactoryPngDropState): { message: string
 function graphImportErrorCopy(error: ReadFactoryImportPngError): string {
   switch (error.code) {
     case "NOT_PNG_FILE":
-      return "Drop a PNG image exported by Port OS Agent Factory.";
+      return "Drop a PNG image exported by Infinite You.";
     case "PNG_METADATA_MISSING":
-      return "This PNG does not include the Port OS factory metadata needed for import.";
+      return "This PNG does not include the Infinite You factory metadata needed for import.";
     case "UNSUPPORTED_SCHEMA_VERSION":
       return error.details?.schemaVersion
-        ? `This PNG uses unsupported Port OS factory metadata version ${error.details.schemaVersion}.`
-        : "This PNG uses an unsupported Port OS factory metadata version.";
+        ? `This PNG uses unsupported Infinite You factory metadata version ${error.details.schemaVersion}.`
+        : "This PNG uses an unsupported Infinite You factory metadata version.";
     case "PNG_METADATA_INVALID":
     case "FACTORY_PAYLOAD_INVALID":
-      return "The embedded Port OS factory metadata is invalid, so the current factory was left unchanged.";
+      return "The embedded Infinite You factory metadata is invalid, so the current factory was left unchanged.";
     case "IMAGE_DECODE_FAILED":
     case "PREVIEW_UNAVAILABLE":
       return "The browser could not validate this PNG for import preview, so the current factory was left unchanged.";

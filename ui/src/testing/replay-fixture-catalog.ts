@@ -1,6 +1,7 @@
 export const replayCoverageSurfaceCatalog = [
   {
-    description: "Dashboard-shell rendering from a live `/events` replay stream.",
+    description:
+      "Dashboard-shell rendering from a live `/events` replay stream.",
     id: "dashboard-shell",
   },
   {
@@ -16,7 +17,8 @@ export const replayCoverageSurfaceCatalog = [
     id: "current-selection",
   },
   {
-    description: "Failure-path rendering for replayed failed work and provider failures.",
+    description:
+      "Failure-path rendering for replayed failed work and provider failures.",
     id: "failure-rendering",
   },
   {
@@ -24,7 +26,8 @@ export const replayCoverageSurfaceCatalog = [
     id: "timeline-history",
   },
   {
-    description: "Graph-state markers and node rendering driven by replayed topology events.",
+    description:
+      "Graph-state markers and node rendering driven by replayed topology events.",
     id: "graph-state",
   },
   {
@@ -32,40 +35,49 @@ export const replayCoverageSurfaceCatalog = [
     id: "selection-history",
   },
   {
-    description: "Workspace setup and runtime-config derived projections from replay data.",
+    description:
+      "Workspace setup and runtime-config derived projections from replay data.",
     id: "workspace-setup",
   },
   {
-    description: "Runtime workstation-request details for active, completed, and failed work.",
+    description:
+      "Runtime workstation-request details for active, completed, and failed work.",
     id: "runtime-request-details",
   },
   {
-    description: "Replay-driven terminal work summaries rather than direct seeded snapshots.",
+    description:
+      "Replay-driven terminal work summaries rather than direct seeded snapshots.",
     id: "terminal-summary",
   },
   {
-    description: "Replay-driven mixed script and inference request-history rendering.",
+    description:
+      "Replay-driven mixed script and inference request-history rendering.",
     id: "script-request-history",
   },
   {
-    description: "Replay-driven resource-count assertions against backend world-view counts.",
+    description:
+      "Replay-driven resource-count assertions against backend world-view counts.",
     id: "resource-counts",
   },
   {
-    description: "Browser-visible factory PNG export flow with a real downloadable artifact.",
+    description:
+      "Browser-visible factory PNG export flow with a real downloadable artifact.",
     id: "png-export",
   },
   {
-    description: "Browser-visible factory PNG import preview and validation through the drop surface.",
+    description:
+      "Browser-visible factory PNG import preview and validation through the drop surface.",
     id: "png-import-preview",
   },
   {
-    description: "Browser-visible factory PNG activation after previewing an imported PNG.",
+    description:
+      "Browser-visible factory PNG activation after previewing an imported PNG.",
     id: "png-import-activation",
   },
 ] as const;
 
-export type ReplayCoverageSurfaceID = (typeof replayCoverageSurfaceCatalog)[number]["id"];
+export type ReplayCoverageSurfaceID =
+  (typeof replayCoverageSurfaceCatalog)[number]["id"];
 
 export interface BrowserIntegrationReplayMetadata {
   finalTick: number;
@@ -99,7 +111,7 @@ export const replayFixtureCatalog = {
   baseline: {
     browserIntegration: {
       finalTick: 2,
-      headingName: "Agent Factory",
+      headingName: "Infinite You",
       historicalHiddenButtonName: /^work-1/i,
       name: "baseline replay",
       requiresWorkItemSelection: true,
@@ -112,14 +124,16 @@ export const replayFixtureCatalog = {
     verificationLayers: ["app-smoke", "browser-integration"],
   },
   failureAnalysis: {
-    description: "Failure-focused replay fixture with queued, active, and failed work rendering.",
+    description:
+      "Failure-focused replay fixture with queued, active, and failed work rendering.",
     fileName: "failure-analysis-replay.jsonl",
     id: "failureAnalysis",
     surfaces: ["current-selection", "failure-rendering", "timeline-history"],
     verificationLayers: ["app-smoke"],
   },
   graphStateSmoke: {
-    description: "Graph-state replay fixture covering state markers, selection, and tick changes.",
+    description:
+      "Graph-state replay fixture covering state markers, selection, and tick changes.",
     fileName: "graph-state-smoke-replay.jsonl",
     id: "graphStateSmoke",
     surfaces: ["dashboard-shell", "graph-state", "selection-history"],
@@ -128,47 +142,55 @@ export const replayFixtureCatalog = {
   runtimeConfigInterfaceConsolidation: {
     browserIntegration: {
       finalTick: 8,
-      headingName: "Agent Factory",
+      headingName: "Infinite You",
       historicalHiddenButtonName: /^work-1/i,
       inFlightSelectionTick: 7,
       name: "captured replay 2",
       requiresWorkItemSelection: false,
       workstationName: /^Select process workstation$/i,
     },
-    description: "Captured runtime-config replay fixture with setup-workspace projections.",
+    description:
+      "Captured runtime-config replay fixture with setup-workspace projections.",
     fileName: "event-stream-replay-2.jsonl",
     id: "runtimeConfigInterfaceConsolidation",
     surfaces: ["current-selection", "trace-drilldown", "workspace-setup"],
     verificationLayers: ["browser-integration", "projection-helper"],
   },
   runtimeDetails: {
-    description: "Runtime-request replay fixture with pending, completed, and failed detail rendering.",
+    description:
+      "Runtime-request replay fixture with pending, completed, and failed detail rendering.",
     fileName: "runtime-details-replay.jsonl",
     id: "runtimeDetails",
-    surfaces: ["current-selection", "failure-rendering", "runtime-request-details"],
+    surfaces: [
+      "current-selection",
+      "failure-rendering",
+      "runtime-request-details",
+    ],
     verificationLayers: ["app-smoke"],
   },
   weirdNumberSummary: {
-    description: "Focused replay fixture for one failed dispatch that produces three failed work-item summaries.",
+    description:
+      "Focused replay fixture for one failed dispatch that produces three failed work-item summaries.",
     fileName: "weird-number-summary-replay.jsonl",
     id: "weirdNumberSummary",
     surfaces: ["failure-rendering", "resource-counts", "terminal-summary"],
     verificationLayers: ["app-smoke", "projection-helper"],
   },
-} as const satisfies Record<
-  string,
-  ReplayFixtureScenarioDefinition
->;
+} as const satisfies Record<string, ReplayFixtureScenarioDefinition>;
 
 export const supplementalReplayCoverageCatalog = {
   pngRoundTrip: {
-    description: "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
+    description:
+      "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
     fileName: "graph-state-smoke-replay.jsonl",
     id: "pngRoundTrip",
     surfaces: ["png-export", "png-import-preview", "png-import-activation"],
     verificationLayers: ["browser-integration", "jsdom", "unit"],
   },
-} as const satisfies Record<string, SupplementalReplayCoverageScenarioDefinition>;
+} as const satisfies Record<
+  string,
+  SupplementalReplayCoverageScenarioDefinition
+>;
 
 export type ReplayFixtureCatalog = typeof replayFixtureCatalog;
 export type ReplayFixtureID = keyof ReplayFixtureCatalog;
@@ -226,15 +248,14 @@ function listReplayCoverageScenarios(): ReplayCoverageScenarioDefinition[] {
 }
 
 export function buildReplayCoverageReport(): ReplayCoverageReport {
-  const scenarios: ReplayCoverageScenarioReport[] = listReplayCoverageScenarios().map(
-    (scenario) => ({
+  const scenarios: ReplayCoverageScenarioReport[] =
+    listReplayCoverageScenarios().map((scenario) => ({
       description: scenario.description,
       fileName: scenario.fileName,
       id: scenario.id,
       surfaces: [...scenario.surfaces],
       verificationLayers: [...scenario.verificationLayers],
-    }),
-  );
+    }));
 
   const surfaces = replayCoverageSurfaceCatalog.map((surface) => {
     const coveringScenarios = scenarios
@@ -249,7 +270,9 @@ export function buildReplayCoverageReport(): ReplayCoverageReport {
     } satisfies ReplayCoverageSurfaceReport;
   });
 
-  const coveredSurfaceCount = surfaces.filter((surface) => surface.status === "covered").length;
+  const coveredSurfaceCount = surfaces.filter(
+    (surface) => surface.status === "covered",
+  ).length;
 
   return {
     coveredSurfaceCount,
@@ -261,7 +284,9 @@ export function buildReplayCoverageReport(): ReplayCoverageReport {
   };
 }
 
-export function formatReplayCoverageReportMarkdown(report: ReplayCoverageReport): string {
+export function formatReplayCoverageReportMarkdown(
+  report: ReplayCoverageReport,
+): string {
   const lines = [
     "# Agent Factory UI Replay Coverage",
     "",
@@ -284,7 +309,10 @@ export function formatReplayCoverageReportMarkdown(report: ReplayCoverageReport)
     "| Surface | Status | Covered by | Notes |",
     "| --- | --- | --- | --- |",
     ...report.surfaces.map((surface) => {
-      const coveredBy = surface.scenarios.length > 0 ? surface.scenarios.map((scenario) => `\`${scenario}\``).join(", ") : "none yet";
+      const coveredBy =
+        surface.scenarios.length > 0
+          ? surface.scenarios.map((scenario) => `\`${scenario}\``).join(", ")
+          : "none yet";
       return `| \`${surface.id}\` | ${surface.status} | ${coveredBy} | ${surface.description} |`;
     }),
     "",
@@ -293,10 +321,14 @@ export function formatReplayCoverageReportMarkdown(report: ReplayCoverageReport)
   return `${lines.join("\n")}\n`;
 }
 
-export function validateReplayCoverageReport(report: ReplayCoverageReport): string[] {
+export function validateReplayCoverageReport(
+  report: ReplayCoverageReport,
+): string[] {
   const issues: string[] = [];
   const scenarioIDs = new Set(report.scenarios.map((scenario) => scenario.id));
-  const surfaceIDs = new Set(replayCoverageSurfaceCatalog.map((surface) => surface.id));
+  const surfaceIDs = new Set(
+    replayCoverageSurfaceCatalog.map((surface) => surface.id),
+  );
 
   for (const scenario of report.scenarios) {
     if (scenario.verificationLayers.length === 0) {
@@ -307,7 +339,9 @@ export function validateReplayCoverageReport(report: ReplayCoverageReport): stri
     }
     for (const surfaceID of scenario.surfaces) {
       if (!surfaceIDs.has(surfaceID)) {
-        issues.push(`Scenario '${scenario.id}' references unknown surface '${surfaceID}'.`);
+        issues.push(
+          `Scenario '${scenario.id}' references unknown surface '${surfaceID}'.`,
+        );
       }
     }
   }
@@ -315,15 +349,18 @@ export function validateReplayCoverageReport(report: ReplayCoverageReport): stri
   for (const surface of report.surfaces) {
     const expectedStatus = surface.scenarios.length > 0 ? "covered" : "gap";
     if (surface.status !== expectedStatus) {
-      issues.push(`Surface '${surface.id}' has status '${surface.status}' but should be '${expectedStatus}'.`);
+      issues.push(
+        `Surface '${surface.id}' has status '${surface.status}' but should be '${expectedStatus}'.`,
+      );
     }
     for (const scenarioID of surface.scenarios) {
       if (!scenarioIDs.has(scenarioID)) {
-        issues.push(`Surface '${surface.id}' references unknown scenario '${scenarioID}'.`);
+        issues.push(
+          `Surface '${surface.id}' references unknown scenario '${scenarioID}'.`,
+        );
       }
     }
   }
 
   return issues;
 }
-

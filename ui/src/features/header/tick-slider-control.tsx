@@ -20,7 +20,11 @@ interface TimelineBounds {
   tickCount: number;
 }
 
-function timelineBounds(eventTicks: number[], cachedTicks: string[], latestTick: number): TimelineBounds {
+function timelineBounds(
+  eventTicks: number[],
+  cachedTicks: string[],
+  latestTick: number,
+): TimelineBounds {
   const ticks = new Set<number>();
   for (const tick of eventTicks) {
     ticks.add(tick);
@@ -50,19 +54,27 @@ export function TickSliderControl() {
   const eventTicks = useFactoryTimelineStore((state) =>
     state.events.map((event) => event.context.tick),
   );
-  const cachedTicks = useFactoryTimelineStore((state) => Object.keys(state.worldViewCache));
+  const cachedTicks = useFactoryTimelineStore((state) =>
+    Object.keys(state.worldViewCache),
+  );
   const latestTick = useFactoryTimelineStore((state) => state.latestTick);
   const mode = useFactoryTimelineStore((state) => state.mode);
   const selectTick = useFactoryTimelineStore((state) => state.selectTick);
   const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
-  const setCurrentMode = useFactoryTimelineStore((state) => state.setCurrentMode);
+  const setCurrentMode = useFactoryTimelineStore(
+    (state) => state.setCurrentMode,
+  );
   const bounds = useMemo(
     () => timelineBounds(eventTicks, cachedTicks, latestTick),
     [eventTicks, cachedTicks, latestTick],
   );
   const isDisabled =
-    bounds.tickCount < MINIMUM_TIMELINE_TICKS || bounds.maxTick <= bounds.minTick;
-  const displayedTick = Math.min(Math.max(selectedTick, bounds.minTick), bounds.maxTick);
+    bounds.tickCount < MINIMUM_TIMELINE_TICKS ||
+    bounds.maxTick <= bounds.minTick;
+  const displayedTick = Math.min(
+    Math.max(selectedTick, bounds.minTick),
+    bounds.maxTick,
+  );
 
   const handleTickChange = (event: ChangeEvent<HTMLInputElement>) => {
     selectTick(Number(event.target.value));
@@ -91,8 +103,11 @@ export function TickSliderControl() {
       </span>
 
       <Button
-        className={cx(TICK_SLIDER_BUTTON_CLASS, mode === "current" && "opacity-75")}
-        aria-label="Current"
+        className={cx(
+          TICK_SLIDER_BUTTON_CLASS,
+          mode === "current" && "opacity-75",
+        )}
+        aria-label="Return to current tick"
         disabled={isDisabled || mode === "current"}
         onClick={setCurrentMode}
         size="icon"
@@ -109,8 +124,8 @@ export function TickSliderControl() {
           viewBox="0 0 24 24"
           width="18"
         >
-          <path d="M20 12a8 8 0 1 1-2.34-5.66" />
-          <path d="M20 4v6h-6" />
+          <path d="M6 5.75v12.5" />
+          <path d="m10 8.25 8 3.75-8 3.75v-7.5" />
         </svg>
       </Button>
     </div>

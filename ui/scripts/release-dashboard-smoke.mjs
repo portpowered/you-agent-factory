@@ -13,15 +13,23 @@ function assetPath(pathname) {
 }
 
 function livePath(pathname) {
-  return pathname === "/events" || pathname === "/status" || pathname === "/work";
+  return (
+    pathname === "/events" || pathname === "/status" || pathname === "/work"
+  );
 }
 
 async function waitForRenderedDashboard(page) {
-  await page.getByRole("heading", { level: 1, name: "Agent Factory" }).waitFor();
+  await page.getByRole("heading", { level: 1, name: "Infinite You" }).waitFor();
   await page.getByText("Work totals").waitFor();
-  await page.getByRole("button", { name: "Select step-one workstation" }).waitFor();
-  await page.getByRole("button", { name: "Select step-two workstation" }).waitFor();
-  await page.getByText("Factory event stream connected.").waitFor();
+  await page
+    .getByRole("button", { name: "Select step-one workstation" })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Select step-two workstation" })
+    .waitFor();
+  await page
+    .getByRole("status", { name: "Infinite You event stream live" })
+    .waitFor();
   await page.waitForFunction(() => {
     const workTotals = document.querySelector('[aria-label="work totals"]');
     if (!(workTotals instanceof HTMLElement)) {
@@ -72,9 +80,13 @@ async function main() {
       }
     });
 
-    const response = await page.goto(dashboardURL, { waitUntil: "domcontentloaded" });
+    const response = await page.goto(dashboardURL, {
+      waitUntil: "domcontentloaded",
+    });
     if (!response?.ok()) {
-      throw new Error(`dashboard navigation failed with status ${response?.status() ?? "unknown"}`);
+      throw new Error(
+        `dashboard navigation failed with status ${response?.status() ?? "unknown"}`,
+      );
     }
 
     await waitForRenderedDashboard(page);
@@ -89,25 +101,35 @@ async function main() {
     const observedAssetPaths = unique(assetRequests);
     const observedLivePaths = unique(liveRequests);
     if (observedAssetPaths.length === 0) {
-      throw new Error("dashboard did not request any embedded /dashboard/ui/assets resources");
+      throw new Error(
+        "dashboard did not request any embedded /dashboard/ui/assets resources",
+      );
     }
     if (!observedLivePaths.includes("/events")) {
       throw new Error("dashboard did not establish a live /events request");
     }
 
+    const streamStatusName = await page
+      .getByRole("status", { name: "Infinite You event stream live" })
+      .getAttribute("aria-label");
+    if (streamStatusName !== "Infinite You event stream live") {
+      throw new Error(
+        `dashboard stream status name = ${JSON.stringify(streamStatusName)}, want "Infinite You event stream live"`,
+      );
+    }
+
     const visibleTexts = unique([
-      "Agent Factory",
+      "Infinite You",
       "Work totals",
       "step-one",
       "step-two",
-      "Factory event stream connected.",
     ]);
     process.stdout.write(
       `${JSON.stringify(
         {
           assetRequestPaths: observedAssetPaths,
           liveRequestPaths: observedLivePaths,
-          streamMessage: "Factory event stream connected.",
+          streamStatusName,
           visibleTexts,
         },
         null,

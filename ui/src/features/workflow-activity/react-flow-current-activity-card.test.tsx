@@ -513,7 +513,7 @@ describe("ReactFlowCurrentActivityCard", () => {
 
     expect(viewport.getAttribute("data-current-activity-drop-state")).toBe("drag-active");
     expect(screen.getByText("Import factory PNG")).toBeTruthy();
-    expect(screen.getByText("Drop a Port OS factory PNG onto this graph to start import.")).toBeTruthy();
+    expect(screen.getByText("Drop an Infinite You PNG onto this graph to start import.")).toBeTruthy();
 
     fireEvent.drop(viewport, createFileDropTransfer([file]));
 
@@ -601,7 +601,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     const readFactoryImportFile = vi.fn<ReadFactoryImportFile>().mockResolvedValue({
       error: {
         code: "PNG_METADATA_MISSING",
-        message: "The selected PNG does not contain Port OS factory metadata.",
+        message: "The selected PNG does not contain Infinite You factory metadata.",
       },
       ok: false,
     });
@@ -621,7 +621,7 @@ describe("ReactFlowCurrentActivityCard", () => {
     expect(alert.textContent).toContain("Factory import failed");
     expect(alert.textContent).toContain("invalid-factory.png");
     expect(alert.textContent).toContain(
-      "This PNG does not include the Port OS factory metadata needed for import.",
+      "This PNG does not include the Infinite You factory metadata needed for import.",
     );
     expect(onFactoryImportReady).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog", { name: "Review factory import" })).toBeNull();

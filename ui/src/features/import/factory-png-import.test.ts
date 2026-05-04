@@ -103,7 +103,7 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The Port OS factory metadata does not contain a valid factory payload.",
+        message: "The Infinite You factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -128,7 +128,7 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The Port OS factory metadata does not contain a valid factory payload.",
+        message: "The Infinite You factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -154,7 +154,7 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The Port OS factory metadata does not contain a valid factory payload.",
+        message: "The Infinite You factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -235,7 +235,7 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "PNG_METADATA_MISSING",
-        message: "The selected PNG does not contain Port OS factory metadata.",
+        message: "The selected PNG does not contain Infinite You factory metadata.",
       },
       ok: false,
     });
@@ -262,7 +262,7 @@ describe("readFactoryImportPng", () => {
         details: {
           schemaVersion: "portos.agent-factory.png.v2",
         },
-        message: "The selected PNG uses an unsupported Port OS factory metadata version.",
+        message: "The selected PNG uses an unsupported Infinite You factory metadata version.",
       },
       ok: false,
     });
@@ -333,7 +333,7 @@ describe("readFactoryImportPng", () => {
       error: {
         cause: expect.any(SyntaxError),
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata is not valid JSON.",
+        message: "The Infinite You factory metadata is not valid JSON.",
       },
       ok: false,
     });
@@ -351,7 +351,7 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata must be an object.",
+        message: "The Infinite You factory metadata must be an object.",
       },
       ok: false,
     });
@@ -376,7 +376,7 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata is missing the schema version.",
+        message: "The Infinite You factory metadata is missing the schema version.",
       },
       ok: false,
     });
@@ -401,7 +401,7 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The Port OS factory metadata does not contain a valid factory payload.",
+        message: "The Infinite You factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });

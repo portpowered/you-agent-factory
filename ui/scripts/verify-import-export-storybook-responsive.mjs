@@ -16,13 +16,13 @@ const storyChecks = [
   {
     assertions: verifyExportDialog,
     dialogName: "Export factory",
-    id: "agent-factory-dashboard-export-factory-dialog--ready",
+    id: "infinite-you-dashboard-export-factory-dialog--ready",
     label: "export dialog",
   },
   {
     assertions: verifyImportDialog,
     dialogName: "Review factory import",
-    id: "agent-factory-dashboard-import-preview-dialog--ready",
+    id: "infinite-you-dashboard-import-preview-dialog--ready",
     label: "import preview dialog",
   },
 ];

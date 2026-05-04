@@ -8,7 +8,7 @@ const factory = {
 } as const;
 
 export default {
-  title: "Agent Factory/Dashboard/Export Factory Dialog",
+  title: "Infinite You/Dashboard/Export Factory Dialog",
   component: ExportFactoryDialog,
   tags: ["test"],
 };
@@ -30,6 +30,11 @@ export const Ready = {
     const exportButton = scope.getByRole("button", { name: "Export PNG" });
 
     await expect(nameInput).toHaveValue("Factory Aurora");
+    await expect(
+      scope.getByText(
+        "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded Infinite You factory metadata.",
+      ),
+    ).toBeVisible();
     await expect(exportButton).toBeEnabled();
 
     nameInput.focus();

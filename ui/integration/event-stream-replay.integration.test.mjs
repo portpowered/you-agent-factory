@@ -39,7 +39,13 @@ let replayCompleted = Promise.resolve();
 let replayPaused = Promise.resolve();
 let releaseReplayStream = () => {};
 const replayFixtures = listBrowserIntegrationReplayScenarios();
-const exportCoverImagePath = path.resolve(packageRoot, "..", "docs", "resources", "dashboard.png");
+const exportCoverImagePath = path.resolve(
+  packageRoot,
+  "..",
+  "docs",
+  "resources",
+  "dashboard.png",
+);
 const exportFactoryDefinition = {
   inputTypes: [
     {
@@ -156,7 +162,12 @@ async function reserveAvailablePort() {
   });
 }
 
-async function runBun(args, extraEnv = {}, timeoutMs = buildTimeoutMs, options = {}) {
+async function runBun(
+  args,
+  extraEnv = {},
+  timeoutMs = buildTimeoutMs,
+  options = {},
+) {
   const child = spawnBun(args, extraEnv, options);
   let stdout = "";
   let stderr = "";
@@ -239,11 +250,12 @@ async function startReplayServer(lines, options = {}) {
     resolveReplayCompleted = resolve;
   });
   let resolveReplayPaused = () => {};
-  replayPaused = pauseBeforeTick === null
-    ? Promise.resolve()
-    : new Promise((resolve) => {
-      resolveReplayPaused = resolve;
-    });
+  replayPaused =
+    pauseBeforeTick === null
+      ? Promise.resolve()
+      : new Promise((resolve) => {
+          resolveReplayPaused = resolve;
+        });
   let pauseReleased = false;
   let resumeReplayStream = () => {};
   releaseReplayStream = () => {
@@ -253,11 +265,12 @@ async function startReplayServer(lines, options = {}) {
     pauseReleased = true;
     resumeReplayStream();
   };
-  const replayPauseReleased = pauseBeforeTick === null
-    ? Promise.resolve()
-    : new Promise((resolve) => {
-      resumeReplayStream = resolve;
-    });
+  const replayPauseReleased =
+    pauseBeforeTick === null
+      ? Promise.resolve()
+      : new Promise((resolve) => {
+          resumeReplayStream = resolve;
+        });
 
   apiServer = http.createServer((request, response) => {
     if (request.method === "OPTIONS") {
@@ -276,10 +289,12 @@ async function startReplayServer(lines, options = {}) {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
         });
-        response.end(JSON.stringify({
-          code: "NOT_FOUND",
-          message: "The current factory definition is not available.",
-        }));
+        response.end(
+          JSON.stringify({
+            code: "NOT_FOUND",
+            message: "The current factory definition is not available.",
+          }),
+        );
         return;
       }
 
@@ -395,14 +410,14 @@ async function loadReplayLines(fileName) {
 }
 
 async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
-  const {
-    requiresWorkItemSelection = true,
-    selectedWorkText = null,
-  } = options;
+  const { requiresWorkItemSelection = true, selectedWorkText = null } = options;
   const workstationButton = page.getByRole("button", {
     name: workstationName,
   });
-  await workstationButton.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+  await workstationButton.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
   await workstationButton.click({ force: true });
 
   await page.getByRole("article", { name: "Current selection" }).waitFor({
@@ -420,7 +435,9 @@ async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
     return;
   }
 
-  const workItemButton = page.getByRole("button", { name: /^Select work item / }).first();
+  const workItemButton = page
+    .getByRole("button", { name: /^Select work item / })
+    .first();
   try {
     await workItemButton.waitFor({ state: "visible", timeout: 2_000 });
     await workItemButton.click({ force: true });
@@ -451,10 +468,16 @@ async function waitForTickLabel(page, label) {
       timeout: uiInteractionTimeoutMs,
     });
   } catch (error) {
-    const sliderValue = await page.getByRole("slider", { name: "Timeline tick" }).inputValue();
-    const statusTexts = await page.locator("span").evaluateAll((elements) =>
-      elements.map((element) => element.textContent?.trim() ?? "").filter((text) => /^Tick \d+ of \d+$/.test(text))
-    );
+    const sliderValue = await page
+      .getByRole("slider", { name: "Timeline tick" })
+      .inputValue();
+    const statusTexts = await page
+      .locator("span")
+      .evaluateAll((elements) =>
+        elements
+          .map((element) => element.textContent?.trim() ?? "")
+          .filter((text) => /^Tick \d+ of \d+$/.test(text)),
+      );
     throw new Error(
       `Timed out waiting for ${label}; slider=${sliderValue}; visibleTicks=${statusTexts.join(", ") || "<none>"}`,
       { cause: error },
@@ -463,13 +486,13 @@ async function waitForTickLabel(page, label) {
 }
 
 async function exerciseHistoricalTimelineView(page, options) {
-  const {
-    finalTick,
-    historicalHiddenButtonName,
-    inFlightSelectionTick,
-  } = options;
+  const { finalTick, historicalHiddenButtonName, inFlightSelectionTick } =
+    options;
   const slider = page.getByRole("slider", { name: "Timeline tick" });
-  const currentButton = page.getByRole("button", { exact: true, name: "Current" });
+  const currentButton = page.getByRole("button", {
+    exact: true,
+    name: "Return to current tick",
+  });
   const liveTick = inFlightSelectionTick ?? finalTick;
   const previousTick = liveTick - 1;
   const liveTickLabel = `Tick ${liveTick} of ${liveTick}`;
@@ -503,7 +526,10 @@ async function exerciseHistoricalTimelineView(page, options) {
   expect(await currentButton.isDisabled()).toBe(false);
   let historicalButtonCount = null;
   if (historicalHiddenButtonName) {
-    historicalButtonCount = await countButtons(page, historicalHiddenButtonName);
+    historicalButtonCount = await countButtons(
+      page,
+      historicalHiddenButtonName,
+    );
     if (!inFlightSelectionTick) {
       expect(historicalButtonCount).toBeLessThan(liveButtonCount);
     }
@@ -522,7 +548,9 @@ async function exerciseHistoricalTimelineView(page, options) {
   expect(await slider.inputValue()).toBe(String(previousTick));
   expect(await currentButton.isDisabled()).toBe(false);
   if (historicalHiddenButtonName) {
-    expect(await countButtons(page, historicalHiddenButtonName)).toBe(historicalButtonCount);
+    expect(await countButtons(page, historicalHiddenButtonName)).toBe(
+      historicalButtonCount,
+    );
   }
 
   await currentButton.click();
@@ -530,7 +558,10 @@ async function exerciseHistoricalTimelineView(page, options) {
   expect(await slider.inputValue()).toBe(String(finalTick));
   expect(await currentButton.isDisabled()).toBe(true);
   if (historicalHiddenButtonName) {
-    const currentButtonCount = await countButtons(page, historicalHiddenButtonName);
+    const currentButtonCount = await countButtons(
+      page,
+      historicalHiddenButtonName,
+    );
     if (inFlightSelectionTick) {
       expect(currentButtonCount).toBeGreaterThan(historicalButtonCount);
     } else {
@@ -557,8 +588,11 @@ async function assertReplayScenarioRenders({
     pauseBeforeTick: inFlightSelectionTick ?? null,
   });
   const replayCoverageReport = buildReplayCoverageReport();
-  const coverageScenario = replayCoverageReport.scenarios.find((scenario) => scenario.id === id);
-  const replayCoverageMarkdown = formatReplayCoverageReportMarkdown(replayCoverageReport);
+  const coverageScenario = replayCoverageReport.scenarios.find(
+    (scenario) => scenario.id === id,
+  );
+  const replayCoverageMarkdown =
+    formatReplayCoverageReportMarkdown(replayCoverageReport);
 
   expect(coverageScenario).toBeDefined();
   expect(coverageScenario?.verificationLayers).toContain("browser-integration");
@@ -584,6 +618,9 @@ async function assertReplayScenarioRenders({
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
     await page.getByRole("heading", { name: headingName }).waitFor();
+    await page
+      .getByRole("region", { name: "Infinite You bento board" })
+      .waitFor();
     await page.getByRole("button", { name: workstationName }).waitFor();
     if (!inFlightSelectionTick) {
       await replayCompleted;
@@ -598,9 +635,13 @@ async function assertReplayScenarioRenders({
     });
     const dashboardSummary = page.locator('[aria-label="dashboard summary"]');
     await dashboardSummary
-      .getByRole("status", { name: /Factory event stream (live|connecting|offline)/ })
+      .getByRole("status", {
+        name: /Infinite You event stream (live|connecting|offline)/,
+      })
       .waitFor();
-    expect(await dashboardSummary.getByText("RUNNING", { exact: true }).count()).toBe(0);
+    expect(
+      await dashboardSummary.getByText("RUNNING", { exact: true }).count(),
+    ).toBe(0);
     await exerciseSelectedWorkTrace(page, workstationName, {
       requiresWorkItemSelection,
       selectedWorkText,
@@ -621,13 +662,18 @@ async function assertFactoryExportRoundTrip() {
   const page = await context.newPage();
   const pageErrors = [];
   const consoleErrors = [];
-  const downloadDirectory = await mkdtemp(path.join(os.tmpdir(), "agent-factory-export-"));
+  const downloadDirectory = await mkdtemp(
+    path.join(os.tmpdir(), "agent-factory-export-"),
+  );
   const activationRequests = [];
   const replayCoverageReport = buildReplayCoverageReport();
-  const pngCoverageScenario = replayCoverageReport.scenarios.find((scenario) => scenario.id === "pngRoundTrip");
+  const pngCoverageScenario = replayCoverageReport.scenarios.find(
+    (scenario) => scenario.id === "pngRoundTrip",
+  );
 
   expect(pngCoverageScenario).toEqual({
-    description: "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
+    description:
+      "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
     fileName: "graph-state-smoke-replay.jsonl",
     id: "pngRoundTrip",
     surfaces: ["png-export", "png-import-preview", "png-import-activation"],
@@ -679,7 +725,7 @@ async function assertFactoryExportRoundTrip() {
       },
     );
     await page.goto(previewURL, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "Agent Factory" }).waitFor({
+    await page.getByRole("heading", { name: "Infinite You" }).waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
@@ -699,33 +745,52 @@ async function assertFactoryExportRoundTrip() {
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
+    await exportDialog
+      .getByText(
+        "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded Infinite You factory metadata.",
+      )
+      .waitFor({
+        state: "visible",
+        timeout: uiInteractionTimeoutMs,
+      });
 
     const exportName = "Roundtrip Browser Export";
     await exportDialog.getByLabel("Factory name").fill(exportName);
-    await exportDialog.getByLabel("Cover image").setInputFiles(exportCoverImagePath);
+    await exportDialog
+      .getByLabel("Cover image")
+      .setInputFiles(exportCoverImagePath);
     await exportDialog.getByText("Selected image: dashboard.png").waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
-    const exportDialogButton = exportDialog.getByRole("button", { name: "Export PNG" });
+    const exportDialogButton = exportDialog.getByRole("button", {
+      name: "Export PNG",
+    });
     expect(await exportDialogButton.isEnabled()).toBe(true);
 
     await exportDialogButton.click();
     const exportOutcome = await Promise.race([
-      page.waitForFunction(
-        () => window.__agentFactoryCapturedDownloads.length > 0,
-        null,
-        { timeout: uiInteractionTimeoutMs },
-      ).then(() => "download"),
-      exportDialog.getByRole("alert").waitFor({
-        state: "visible",
-        timeout: uiInteractionTimeoutMs,
-      }).then(() => "error"),
+      page
+        .waitForFunction(
+          () => window.__agentFactoryCapturedDownloads.length > 0,
+          null,
+          { timeout: uiInteractionTimeoutMs },
+        )
+        .then(() => "download"),
+      exportDialog
+        .getByRole("alert")
+        .waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        })
+        .then(() => "error"),
     ]);
     if (exportOutcome === "error") {
       throw new Error(await exportDialog.getByRole("alert").innerText());
     }
-    const download = await page.evaluate(() => window.__agentFactoryCapturedDownloads[0] ?? null);
+    const download = await page.evaluate(
+      () => window.__agentFactoryCapturedDownloads[0] ?? null,
+    );
     expect(download).not.toBeNull();
     const downloadPath = path.join(downloadDirectory, download.filename);
     await writeFile(downloadPath, new Uint8Array(download.bytes));
@@ -739,7 +804,9 @@ async function assertFactoryExportRoundTrip() {
         state: "visible",
         timeout: uiInteractionTimeoutMs,
       });
-    await exportDialog.getByRole("button", { exact: true, name: "Close" }).click();
+    await exportDialog
+      .getByRole("button", { exact: true, name: "Close" })
+      .click();
     await page.getByRole("heading", { name: "Export factory" }).waitFor({
       state: "hidden",
       timeout: uiInteractionTimeoutMs,
@@ -752,37 +819,51 @@ async function assertFactoryExportRoundTrip() {
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     );
     const viewport = page.getByRole("region", { name: "Work graph viewport" });
-    const importDataTransfer = await page.evaluateHandle(({ bytes, fileName }) => {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(
-        new File([new Uint8Array(bytes)], fileName, { type: "image/png" }),
-      );
-      return dataTransfer;
-    }, {
-      bytes: Array.from(exportedBytes),
-      fileName: download.filename,
-    });
+    const importDataTransfer = await page.evaluateHandle(
+      ({ bytes, fileName }) => {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(
+          new File([new Uint8Array(bytes)], fileName, { type: "image/png" }),
+        );
+        return dataTransfer;
+      },
+      {
+        bytes: Array.from(exportedBytes),
+        fileName: download.filename,
+      },
+    );
 
-    await viewport.dispatchEvent("dragover", { dataTransfer: importDataTransfer });
+    await viewport.dispatchEvent("dragover", {
+      dataTransfer: importDataTransfer,
+    });
     await page.getByText("Import factory PNG").waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
     await viewport.dispatchEvent("drop", { dataTransfer: importDataTransfer });
 
-    const importDialog = page.getByRole("dialog", { name: "Review factory import" });
+    const importDialog = page.getByRole("dialog", {
+      name: "Review factory import",
+    });
     await importDialog.waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
-    await importDialog.getByRole("img", { name: `${exportName} preview` }).waitFor({
-      state: "visible",
-      timeout: uiInteractionTimeoutMs,
-    });
+    await importDialog
+      .getByRole("img", { name: `${exportName} preview` })
+      .waitFor({
+        state: "visible",
+        timeout: uiInteractionTimeoutMs,
+      });
     expect(await importDialog.textContent()).toContain(exportName);
     expect(await importDialog.textContent()).toContain(download.filename);
+    expect(await importDialog.textContent()).toContain(
+      "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
+    );
 
-    await importDialog.getByRole("button", { name: "Activate factory" }).click();
+    await importDialog
+      .getByRole("button", { name: "Activate factory" })
+      .click();
     await importDialog.waitFor({
       state: "hidden",
       timeout: uiInteractionTimeoutMs,
@@ -810,19 +891,37 @@ describe.sequential("captured event stream replay", () => {
     previewPort = await reserveAvailablePort();
     apiOrigin = `http://${previewHost}:${apiPort}`;
     previewURL = `http://${previewHost}:${previewPort}/dashboard/ui/`;
-    await runBun(["run", "build"], {
-      VITE_AGENT_FACTORY_API_ORIGIN: apiOrigin,
-    }, buildTimeoutMs, {
-      nodeEnv: "production",
-      stripVitestEnv: true,
-    });
+    await runBun(
+      ["run", "build"],
+      {
+        VITE_AGENT_FACTORY_API_ORIGIN: apiOrigin,
+      },
+      buildTimeoutMs,
+      {
+        nodeEnv: "production",
+        stripVitestEnv: true,
+      },
+    );
 
-    previewProcess = spawnBun(["x", "vite", "preview", "--host", previewHost, "--port", String(previewPort), "--strictPort"], {
-      AGENT_FACTORY_API_ORIGIN: apiOrigin,
-    }, {
-      nodeEnv: "production",
-      stripVitestEnv: true,
-    });
+    previewProcess = spawnBun(
+      [
+        "x",
+        "vite",
+        "preview",
+        "--host",
+        previewHost,
+        "--port",
+        String(previewPort),
+        "--strictPort",
+      ],
+      {
+        AGENT_FACTORY_API_ORIGIN: apiOrigin,
+      },
+      {
+        nodeEnv: "production",
+        stripVitestEnv: true,
+      },
+    );
 
     await waitForURL(previewURL);
   }, buildTimeoutMs);

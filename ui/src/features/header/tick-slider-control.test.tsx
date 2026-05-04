@@ -7,7 +7,9 @@ import { FACTORY_EVENT_TYPES } from "../../api/events";
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { describe, afterEach, it, expect } from "vitest";
 
-type TimelineWorldState = ReturnType<typeof useFactoryTimelineStore.getState>["worldViewCache"][number];
+type TimelineWorldState = ReturnType<
+  typeof useFactoryTimelineStore.getState
+>["worldViewCache"][number];
 
 function timelineEvent(
   id: string,
@@ -50,11 +52,14 @@ describe("TickSliderControl", () => {
 
     render(<TickSliderControl />);
 
-    expect(screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" }).disabled).toBe(
-      true,
-    );
+    expect(
+      screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" })
+        .disabled,
+    ).toBe(true);
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", { name: "Current" });
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Return to current tick",
+    });
 
     expect(currentButton.disabled).toBe(true);
     expect(currentButton.className).toContain("bg-af-accent/10");
@@ -62,12 +67,18 @@ describe("TickSliderControl", () => {
   });
 
   it("switches between fixed and current mode through the rendered controls", async () => {
-    useFactoryTimelineStore.getState().replaceEvents(graphStateSmokeTimelineEvents);
+    useFactoryTimelineStore
+      .getState()
+      .replaceEvents(graphStateSmokeTimelineEvents);
 
     render(<TickSliderControl />);
 
-    const slider = screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", { name: "Current" });
+    const slider = screen.getByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Return to current tick",
+    });
 
     expect(slider.value).toBe("9");
     expect(screen.getByText("Tick 9 of 9")).toBeTruthy();
@@ -108,8 +119,12 @@ describe("TickSliderControl", () => {
 
     render(<TickSliderControl />);
 
-    const slider = screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", { name: "Current" });
+    const slider = screen.getByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Return to current tick",
+    });
 
     expect(slider.disabled).toBe(true);
     expect(slider.min).toBe("0");
@@ -134,8 +149,12 @@ describe("TickSliderControl", () => {
 
     render(<TickSliderControl />);
 
-    const slider = screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" });
-    const currentButton = screen.getByRole<HTMLButtonElement>("button", { name: "Current" });
+    const slider = screen.getByRole<HTMLInputElement>("slider", {
+      name: "Timeline tick",
+    });
+    const currentButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Return to current tick",
+    });
 
     expect(slider.disabled).toBe(false);
     expect(slider.min).toBe("2");

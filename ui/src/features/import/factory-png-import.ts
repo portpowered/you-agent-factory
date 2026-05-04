@@ -192,7 +192,7 @@ function readFactoryMetadataText(pngBytes: Uint8Array): ImportStepResult<string>
   return {
     error: {
       code: "PNG_METADATA_MISSING",
-      message: "The selected PNG does not contain Port OS factory metadata.",
+      message: "The selected PNG does not contain Infinite You factory metadata.",
     },
     ok: false,
   };
@@ -207,7 +207,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
       error: {
         cause: error,
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata is not valid JSON.",
+        message: "The Infinite You factory metadata is not valid JSON.",
       },
       ok: false,
     };
@@ -217,7 +217,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
     return {
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata must be an object.",
+        message: "The Infinite You factory metadata must be an object.",
       },
       ok: false,
     };
@@ -227,7 +227,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
     return {
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata is missing the schema version.",
+        message: "The Infinite You factory metadata is missing the schema version.",
       },
       ok: false,
     };
@@ -240,7 +240,7 @@ function parseFactoryMetadata(metadataText: string): ImportStepResult<FactoryPng
         details: {
           schemaVersion: parsedMetadata.schemaVersion,
         },
-        message: "The selected PNG uses an unsupported Port OS factory metadata version.",
+        message: "The selected PNG uses an unsupported Infinite You factory metadata version.",
       },
       ok: false,
     };
@@ -267,7 +267,7 @@ function normalizeFactoryMetadata(
     return {
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The Port OS factory metadata does not contain a valid factory payload.",
+        message: "The Infinite You factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     };
@@ -306,7 +306,7 @@ function readFactoryMetadataName(parsedMetadata: Record<string, unknown>): Impor
   return {
     error: {
       code: "PNG_METADATA_INVALID",
-      message: "The Port OS factory metadata is missing the factory name.",
+      message: "The Infinite You factory metadata is missing the factory name.",
     },
     ok: false,
   };
@@ -514,4 +514,3 @@ interface ParsedChunk {
   nextOffset: number;
   type: string;
 }
-

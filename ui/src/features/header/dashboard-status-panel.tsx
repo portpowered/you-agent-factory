@@ -3,6 +3,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
 } from "../../components/ui/dashboard-typography";
+import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
 const PANEL_CLASS =
   "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
@@ -24,14 +25,17 @@ export function DashboardStatusPanel({
   tone = "default",
 }: DashboardStatusPanelProps) {
   const panelClassName =
-    tone === "error" ? cx(STATUS_PANEL_CLASS, "border-af-danger/45") : STATUS_PANEL_CLASS;
+    tone === "error"
+      ? cx(STATUS_PANEL_CLASS, "border-af-danger/45")
+      : STATUS_PANEL_CLASS;
 
   return (
     <section className={panelClassName}>
-      <p className={EYEBROW_CLASS}>Agent Factory</p>
+      <p className={EYEBROW_CLASS}>
+        <DashboardBrandLockup className="gap-2" wordmarkClassName="truncate" />
+      </p>
       <h1 className={DASHBOARD_TITLE_CLASS}>{title}</h1>
       {detail ? <p className={DETAIL_COPY_CLASS}>{detail}</p> : null}
     </section>
   );
 }
-

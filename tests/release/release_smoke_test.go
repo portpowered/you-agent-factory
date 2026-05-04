@@ -30,8 +30,8 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 			return releasesmoke.DashboardRenderEvidence{
 				AssetRequestPaths: []string{"/dashboard/ui/assets/index.js"},
 				LiveRequestPaths:  []string{"/events"},
-				StreamMessage:     "Factory event stream connected.",
-				VisibleTexts:      []string{"Agent Factory", "Work totals", "step-one", "step-two"},
+				StreamStatusName:  "Infinite You event stream live",
+				VisibleTexts:      []string{"Infinite You", "Work totals", "step-one", "step-two"},
 			}, nil
 		},
 	})
@@ -51,8 +51,8 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	if renderedDashboardURL != result.DashboardURL {
 		t.Fatalf("rendered dashboard URL = %q, want %q", renderedDashboardURL, result.DashboardURL)
 	}
-	if result.DashboardRenderEvidence.StreamMessage != "Factory event stream connected." {
-		t.Fatalf("stream message = %q, want connected evidence", result.DashboardRenderEvidence.StreamMessage)
+	if result.DashboardRenderEvidence.StreamStatusName != "Infinite You event stream live" {
+		t.Fatalf("stream status name = %q, want live status evidence", result.DashboardRenderEvidence.StreamStatusName)
 	}
 	if len(result.DashboardRenderEvidence.AssetRequestPaths) == 0 || len(result.DashboardRenderEvidence.LiveRequestPaths) == 0 {
 		t.Fatalf("dashboard render evidence = %#v, want asset and live request paths", result.DashboardRenderEvidence)

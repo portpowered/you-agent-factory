@@ -52,7 +52,7 @@ function ImportPreviewStory() {
 }
 
 export default {
-  title: "Agent Factory/Dashboard/Import Preview Dialog",
+  title: "Infinite You/Dashboard/Import Preview Dialog",
   component: DashboardImportPreviewDialog,
   tags: ["test"],
 };

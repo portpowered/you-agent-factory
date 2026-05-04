@@ -152,7 +152,7 @@ export function AgentBentoLayout({
 
   return (
     <section
-      aria-label="Agent Factory bento board"
+      aria-label="Infinite You bento board"
       className={layoutClassName}
       ref={containerRef}
     >
@@ -236,4 +236,3 @@ export function AgentBentoCard({
     </article>
   );
 }
-

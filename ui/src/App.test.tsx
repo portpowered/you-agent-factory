@@ -1301,7 +1301,7 @@ function renderApp({
 
 function submitWorkCardControls() {
   const dashboardGrid = screen.getByRole("region", {
-    name: "Agent Factory bento board",
+    name: "Infinite You bento board",
   });
   const submitWorkCard = within(dashboardGrid).getByRole("article", {
     name: "Submit work",
@@ -1582,7 +1582,7 @@ describe("App", () => {
     renderApp({ snapshot: baselineSnapshot });
 
     expect(
-      await screen.findByRole("heading", { name: "Agent Factory" }),
+      await screen.findByRole("heading", { name: "Infinite You" }),
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
@@ -1848,11 +1848,11 @@ describe("App", () => {
     renderApp({ snapshot: baselineSnapshot });
 
     const heading = await screen.findByRole("heading", {
-      name: "Agent Factory",
+      name: "Infinite You",
     });
     const toolbar = screen.getByRole("region", { name: "dashboard summary" });
     const streamStatus = screen.getByRole("status", {
-      name: "Factory event stream connecting",
+      name: "Infinite You event stream connecting",
     });
     const exportButton = screen.getByRole("button", { name: "Export PNG" });
 
@@ -1860,7 +1860,9 @@ describe("App", () => {
     expect(streamStatus.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
     expect(streamStatus.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
-    expect(within(toolbar).queryByText(baselineSnapshot.factory_state)).toBeNull();
+    expect(
+      within(toolbar).queryByText(baselineSnapshot.factory_state),
+    ).toBeNull();
     expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
     expect(within(toolbar).queryByText("Export PNG")).toBeNull();
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
@@ -1875,7 +1877,7 @@ describe("App", () => {
 
     expect(
       within(toolbar).getByRole("status", {
-        name: "Factory event stream connecting",
+        name: "Infinite You event stream connecting",
       }),
     ).toBeTruthy();
     expect(within(toolbar).queryByText("Factory state")).toBeNull();
@@ -1895,7 +1897,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "Factory event stream live",
+          name: "Infinite You event stream live",
         }),
       ).toBeTruthy();
     });
@@ -1906,7 +1908,8 @@ describe("App", () => {
     act(() => {
       useDashboardStreamStore.setState({
         streamState: {
-          message: "Factory event stream disconnected. Showing last event state.",
+          message:
+            "Factory event stream disconnected. Showing last event state.",
           status: "offline",
         },
       });
@@ -1915,7 +1918,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(
         within(toolbar).getByRole("status", {
-          name: "Factory event stream offline",
+          name: "Infinite You event stream offline",
         }),
       ).toBeTruthy();
     });
@@ -2401,8 +2404,11 @@ describe("App", () => {
     expect(slider.disabled).toBe(true);
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Current" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: "Return to current tick",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(screen.queryByText("Current")).toBeNull();
   });
@@ -2449,7 +2455,9 @@ describe("App", () => {
     });
     expect(screen.queryByText("Current")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Current" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return to current tick" }),
+    );
 
     await waitFor(() => {
       expect(slider.value).toBe("4");
@@ -3103,7 +3111,7 @@ describe("App", () => {
       name: "Timeline tick",
     });
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
 
     await waitFor(() => {
@@ -3205,7 +3213,7 @@ describe("App", () => {
     });
 
     expect(
-      await screen.findByRole("heading", { name: "Agent Factory" }),
+      await screen.findByRole("heading", { name: "Infinite You" }),
     ).toBeTruthy();
     expect(screen.queryByText("Loading dashboard")).toBeNull();
     expect(
@@ -3224,10 +3232,10 @@ describe("App", () => {
   it("starts with full-width totals above a full-width Factory graph card", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
     const workTotals = dashboardGrid.querySelector<HTMLElement>(
       '[data-bento-card-id="work-totals"]',
@@ -3273,10 +3281,10 @@ describe("App", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
     const currentSelection = dashboardGrid.querySelector<HTMLElement>(
       '[data-bento-card-id="current-selection"]',
@@ -3303,10 +3311,10 @@ describe("App", () => {
 
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
     const workOutcome = dashboardGrid.querySelector<HTMLElement>(
       '[data-bento-card-id="work-outcome-chart"]',
@@ -3344,7 +3352,7 @@ describe("App", () => {
     );
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
     const trace = await within(dashboardGrid).findByRole("article", {
       name: "Trace drill-down",
@@ -3412,7 +3420,7 @@ describe("App", () => {
     renderApp({ snapshot: singleNodeSnapshotWithoutEdges });
 
     expect(
-      await screen.findByRole("heading", { name: "Agent Factory" }),
+      await screen.findByRole("heading", { name: "Infinite You" }),
     ).toBeTruthy();
     expect(
       await screen.findByRole("button", { name: "Select Intake workstation" }),
@@ -3434,7 +3442,7 @@ describe("App", () => {
   it("uses React Flow controls for work graph zoom interaction", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const workGraphViewport = screen.getByRole("region", {
       name: "Work graph viewport",
@@ -3457,7 +3465,7 @@ describe("App", () => {
   it("renders and interacts with a 20-node workflow through React Flow", async () => {
     renderApp({ snapshot: twentyNodeSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     await waitFor(() => {
       expect(
@@ -3517,10 +3525,10 @@ describe("App dashboard follow-up flows", () => {
   it("renders the submit-work card alongside the existing dashboard widgets", async () => {
     renderApp({ snapshot: terminalSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
 
     expect(
@@ -3554,7 +3562,7 @@ describe("App dashboard follow-up flows", () => {
       ),
     );
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     expect(screen.getByRole("button", { name: "Export PNG" })).toBeTruthy();
 
@@ -3600,7 +3608,7 @@ describe("App dashboard follow-up flows", () => {
         ),
       );
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const {
       requestName,
@@ -3687,10 +3695,10 @@ describe("App dashboard follow-up flows", () => {
         }),
     );
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
     const submitWorkCard = within(dashboardGrid).getByRole("article", {
       name: "Submit work",
@@ -3760,10 +3768,10 @@ describe("App dashboard follow-up flows", () => {
         ),
     );
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const dashboardGrid = screen.getByRole("region", {
-      name: "Agent Factory bento board",
+      name: "Infinite You bento board",
     });
     const submitWorkCard = within(dashboardGrid).getByRole("article", {
       name: "Submit work",
@@ -3810,7 +3818,7 @@ describe("App dashboard follow-up flows", () => {
   it("shows workstation-scoped workstation runs on the free-floating cards", async () => {
     renderApp({ snapshot: activeSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Select Review workstation" }),
@@ -4002,7 +4010,7 @@ describe("App dashboard follow-up flows", () => {
   it("updates completed and failed totals from the live stream", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    await screen.findByRole("heading", { name: "Agent Factory" });
+    await screen.findByRole("heading", { name: "Infinite You" });
 
     const stream = MockEventSource.instances[0];
     if (!stream) {
@@ -4043,7 +4051,7 @@ describe("App dashboard follow-up flows", () => {
         ).getByText("1"),
       ).toBeTruthy();
       expect(
-        screen.getByRole("status", { name: "Factory event stream live" }),
+        screen.getByRole("status", { name: "Infinite You event stream live" }),
       ).toBeTruthy();
     });
   });

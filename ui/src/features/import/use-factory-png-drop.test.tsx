@@ -100,7 +100,7 @@ describe("useFactoryPngDrop", () => {
     const readFactoryImportFile = vi.fn<ReadFactoryImportFile>().mockResolvedValue({
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata is not valid JSON.",
+        message: "The Infinite You factory metadata is not valid JSON.",
       },
       ok: false,
     });
@@ -115,7 +115,7 @@ describe("useFactoryPngDrop", () => {
     expect(result.current.dropState).toEqual({
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The Port OS factory metadata is not valid JSON.",
+        message: "The Infinite You factory metadata is not valid JSON.",
       },
       fileName: "factory-import.png",
       status: "error",
@@ -202,7 +202,7 @@ describe("useFactoryPngDrop", () => {
       firstPending.resolve({
         error: {
           code: "PNG_METADATA_INVALID",
-          message: "The Port OS factory metadata is not valid JSON.",
+          message: "The Infinite You factory metadata is not valid JSON.",
         },
         ok: false,
       });

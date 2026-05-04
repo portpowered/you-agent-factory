@@ -71,7 +71,7 @@ describe("AgentBentoLayout", () => {
     const activityTitle = within(activityCard).getByRole("heading", { name: "Current activity" });
     const activityBody = screen.getByText("Active workstation graph goes here.").parentElement;
 
-    expect(screen.getByRole("region", { name: "Agent Factory bento board" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Infinite You bento board" })).toBeTruthy();
     expect(activityCard).toBeTruthy();
     expect(screen.getByRole("article", { name: "Trace grid" })).toBeTruthy();
     expect(screen.getByText("Active workstation graph goes here.")).toBeTruthy();
@@ -199,7 +199,7 @@ describe("AgentBentoLayout", () => {
       />,
     );
 
-    const board = screen.getByRole("region", { name: "Agent Factory bento board" });
+    const board = screen.getByRole("region", { name: "Infinite You bento board" });
     const workTotals = screen.getByRole("article", { name: "Work totals" });
     const currentSelection = screen.getByRole("article", { name: "Current selection" });
 
@@ -225,4 +225,3 @@ describe("AgentBentoLayout", () => {
     expect(getGridItem("Current selection").dataset.bentoCardId).toBe("current-selection");
   });
 });
-

@@ -9,6 +9,7 @@ import {
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
+import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
 const PANEL_CLASS =
   "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
@@ -34,8 +35,12 @@ export function DashboardHeader() {
     (state) => state.worldViewCache[state.selectedTick],
   );
   const streamState = useDashboardStreamStore((state) => state.streamState);
-  const isExportDialogOpen = useExportDialogStore((state) => state.isExportDialogOpen);
-  const openExportDialog = useExportDialogStore((state) => state.openExportDialog);
+  const isExportDialogOpen = useExportDialogStore(
+    (state) => state.isExportDialogOpen,
+  );
+  const openExportDialog = useExportDialogStore(
+    (state) => state.openExportDialog,
+  );
 
   if (!snapshot) {
     return null;
@@ -43,7 +48,9 @@ export function DashboardHeader() {
 
   return (
     <section className={DASHBOARD_TOOLBAR_CLASS} aria-label="dashboard summary">
-      <h1 className={DASHBOARD_TITLE_CLASS}>Agent Factory</h1>
+      <h1 className={DASHBOARD_TITLE_CLASS}>
+        <DashboardBrandLockup wordmarkClassName="truncate" />
+      </h1>
       <TickSliderControl />
       <div className={STREAM_STATUS_SHELL_CLASS}>
         <div
@@ -73,9 +80,9 @@ export function DashboardHeader() {
           viewBox="0 0 24 24"
           width="18"
         >
-          <path d="M12 4v11" />
-          <path d="M8.5 11.5L12 15l3.5-3.5" />
-          <path d="M5 19h14" />
+          <path d="M14 5h5v5" />
+          <path d="M10 14 19 5" />
+          <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
         </svg>
       </button>
     </section>
@@ -85,21 +92,24 @@ export function DashboardHeader() {
 function streamStatusClassName(status: DashboardStreamState["status"]): string {
   return cx(
     STREAM_STATUS_CLASS,
-    status === "live" && "border-af-success/30 bg-af-success/16 text-af-success-ink",
-    status === "connecting" && "border-af-accent/30 bg-af-accent/12 text-af-accent",
-    status === "offline" && "border-af-danger/30 bg-af-danger/12 text-af-danger-ink",
+    status === "live" &&
+      "border-af-success/30 bg-af-success/16 text-af-success-ink",
+    status === "connecting" &&
+      "border-af-accent/30 bg-af-accent/12 text-af-accent",
+    status === "offline" &&
+      "border-af-danger/30 bg-af-danger/12 text-af-danger-ink",
   );
 }
 
 function streamStatusLabel(status: DashboardStreamState["status"]): string {
   if (status === "live") {
-    return "Factory event stream live";
+    return "Infinite You event stream live";
   }
   if (status === "offline") {
-    return "Factory event stream offline";
+    return "Infinite You event stream offline";
   }
 
-  return "Factory event stream connecting";
+  return "Infinite You event stream connecting";
 }
 
 function StreamStatusIcon({
@@ -109,19 +119,13 @@ function StreamStatusIcon({
 }) {
   if (status === "live") {
     return (
-      <svg
+      <span
         aria-hidden="true"
-        fill="none"
-        height="16"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-        viewBox="0 0 16 16"
-        width="16"
+        className="relative inline-flex size-3.5 items-center justify-center"
       >
-        <path d="M3.5 8.5 6.5 11.5 12.5 5.5" />
-      </svg>
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-35" />
+        <span className="relative inline-flex size-2.5 rounded-full bg-current" />
+      </span>
     );
   }
 
