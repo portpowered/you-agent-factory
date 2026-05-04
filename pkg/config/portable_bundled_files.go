@@ -275,6 +275,9 @@ func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryCo
 			return fmt.Errorf("write bundled file %s: %w", write.targetPath, err)
 		}
 	}
+	if err := normalizeSupportedPortableBundledFileModes(targetDir, cfg); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -339,6 +342,38 @@ func writePortableBundledFile(path string, data []byte, mode fs.FileMode) error 
 	if err := os.Chmod(path, mode); err != nil {
 		return err
 	}
+	return nil
+}
+
+func normalizeSupportedPortableBundledFileModes(factoryDir string, cfg *interfaces.FactoryConfig) error {
+	if cfg == nil || cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) == 0 {
+		return nil
+	}
+
+	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
+		if !shouldOmitSupportedPortableBundledInline(bundledFile) || strings.TrimSpace(bundledFile.Content.Inline) != "" {
+			continue
+		}
+
+		sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, bundledFile)
+		if !ok {
+			continue
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("stat bundled file %s: %w", sourcePath, err)
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		if err := os.Chmod(sourcePath, portableBundledFileMode(bundledFile)); err != nil {
+			return fmt.Errorf("normalize bundled file mode %s: %w", sourcePath, err)
+		}
+	}
+
 	return nil
 }
 
