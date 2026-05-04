@@ -3,12 +3,7 @@ import type {
   DashboardProviderSessionAttempt,
   DashboardTraceDispatch,
 } from "../../../../api/dashboard";
-import type {
-  DispatchResponsePayload,
-  InferenceRequestPayload,
-  InferenceResponsePayload,
-} from "../../../../api/events";
-import type { LegacyDispatchResponsePayloadCompat } from "./replayWorldStateTypes";
+import type { InferenceRequestPayload, InferenceResponsePayload } from "../../../../api/events";
 import type {
   ReplayWorldState,
   WorldCompletion,
@@ -172,12 +167,6 @@ export function scriptResponsesForDispatch(
   return responses;
 }
 
-export function legacyDispatchResponsePayload(
-  payload: DispatchResponsePayload,
-): LegacyDispatchResponsePayloadCompat {
-  return payload as DispatchResponsePayload & LegacyDispatchResponsePayloadCompat;
-}
-
 export function applyScriptRequest(
   state: ReplayWorldState,
   event: {
@@ -245,5 +234,3 @@ export function applyScriptResponse(
     transition_id: payload.transitionId,
   };
 }
-
-
