@@ -71,6 +71,62 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"cron-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"scheduled-story",
+			"behavior":"CRON",
+			"worker":"executor",
+			"outputs":[{"workType":"story","state":"complete"}],
+			"cron":{"schedule":"*/5 * * * *","triggerAtStart":true,"jitter":"1s","expiryWindow":"20s"}
+		}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
+		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
+	}
+
+	workstation := (*generated.Workstations)[0]
+	if workstation.Cron == nil {
+		t.Fatal("expected generated cron to decode")
+	}
+	if workstation.Cron.Schedule != "*/5 * * * *" {
+		t.Fatalf("expected generated cron schedule to decode, got %#v", workstation.Cron)
+	}
+	if workstation.Cron.TriggerAtStart == nil || !*workstation.Cron.TriggerAtStart {
+		t.Fatalf("expected generated cron triggerAtStart=true, got %#v", workstation.Cron.TriggerAtStart)
+	}
+	if workstation.Cron.Jitter == nil || *workstation.Cron.Jitter != "1s" {
+		t.Fatalf("expected generated cron jitter to decode, got %#v", workstation.Cron.Jitter)
+	}
+	if workstation.Cron.ExpiryWindow == nil || *workstation.Cron.ExpiryWindow != "20s" {
+		t.Fatalf("expected generated cron expiryWindow to decode, got %#v", workstation.Cron.ExpiryWindow)
+	}
+
+	generatedJSON, err := json.Marshal(generated)
+	if err != nil {
+		t.Fatalf("marshal generated factory boundary: %v", err)
+	}
+	serialized := string(generatedJSON)
+	for _, field := range []string{`"schedule"`, `"triggerAtStart"`, `"jitter"`, `"expiryWindow"`} {
+		if !strings.Contains(serialized, field) {
+			t.Fatalf("expected generated boundary JSON to retain canonical cron field %s: %s", field, serialized)
+		}
+	}
+	for _, retiredField := range []string{`"trigger_at_start"`, `"expiry_window"`, `"interval"`} {
+		if strings.Contains(serialized, retiredField) {
+			t.Fatalf("generated boundary JSON must not include retired cron field %s: %s", retiredField, serialized)
+		}
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalCamelCaseNestedFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"customer-facing-name",
