@@ -102,15 +102,10 @@ Each subdirectory contains an AGENTS.md defining the workstation prompt template
 `,
 			factoryInputsDirName + "/README.md": `# Inputs
 
-Multi-channel input directory for work submissions.
-
-Default local task path:
+Use the default starter inbox for local task submissions:
   inputs/task/default/                 - Markdown or JSON task submissions
 
-General layout:
-  inputs/<work-type>/default/          - manual submissions
-  inputs/<work-type>/<execution-id>/   - executor-generated work
-
+Seed your starter work by adding files to this inbox, then run the starter to process them.
 The file watcher monitors this directory tree and automatically watches new subdirectories.
 `,
 			factoryWorkersDirName + "/processor/" + factoryAgentsFileName: `---
