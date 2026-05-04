@@ -2,7 +2,7 @@
 
 ## world state
 
-- as of `2026-05-04T09:04:04.2336456-07:00`, local `HEAD` on `main` points to
+- as of `2026-05-04T10:06:50.5579295-07:00`, local `HEAD` on `main` points to
   `8029392`
   (`Merge pull request #93 from portpowered/ralph/canonicalize-portable-bundled-files-without-inline-content`)
   and matches `origin/main`
@@ -48,8 +48,11 @@
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
   merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`,
   merged PR `#89`, merged PR `#90`, merged PR `#91`, merged PR `#92`, and
-  merged PR `#93`, the only ignored operating submission should remain one
-  standalone idea under `factory/inputs/idea/default/`
+  merged PR `#93`, the ignored operating submissions should now be two
+  standalone ideas under `factory/inputs/idea/default/`:
+  - the replay-wrapper cleanup already advanced into open PR `#94`
+  - one new non-overlapping backend cleanup idea for duplicated submit-request
+    shaping drift
 
 ## customer-ask truth
 
@@ -153,13 +156,19 @@
   - `pkg/config/portable_bundled_files*.go`, `pkg/service/factory_test.go`,
     and functional portability smoke coverage now protect the supported
     export/import/runtime round-trip behavior
-- there is no remaining narrow customer-visible ask gap on `main`; the next
-  narrow cleanup candidate comes from the broader website/backend quality lane:
-  - `ui/src/features/timeline/state/timeline/replayCompletion.ts` still keeps
-    `legacyDispatchRequestPayload` and `legacyDispatchResponsePayload` as
-    one-line replay compatibility cast helpers even though the live legacy
-    snake_case fallback behavior is already consumed inline from
-    `replayCompletion.ts` and `replayWorldState.ts`
+- there is no remaining narrow customer-visible ask gap on `main`; open
+  PR `#94` now owns the replay-wrapper cleanup seam previously recorded here:
+  - `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
+    `ui/src/features/timeline/state/timeline/replayWorldState.ts` are the only
+    code files in scope, and the PR keeps the proof path behavioral through the
+    existing replay timeline tests
+- the next narrow cleanup candidate now comes from the broader backend quality
+  lane:
+  - `pkg/internal/submission/work_request.go` and
+    `tests/functional/runtime_api/runtime_support_test.go` both shape
+    `interfaces.WorkRequest` batches from `[]interfaces.SubmitRequest`, but the
+    functional-test copy already drifted and no longer propagates
+    `CurrentChainingTraceID` the same way production does
 - the remaining ask surface beyond that is broader program work:
   - the general standards-migration checklist ask is still open in
     `factory/logs/meta/asks.md`
@@ -182,6 +191,10 @@
 
 ## recent repo movement
 
+- recent repo movement now includes one active cleanup PR:
+  - `#94` `retire-replay-dispatch-payload-cast-wrappers`, open on
+    `ralph/retire-replay-dispatch-payload-cast-wrappers` as of
+    `2026-05-04T16:22:37Z`
 - recent merged PRs on `main` now include:
   - `#93` `canonicalize-portable-bundled-files-without-inline-content`,
     merged on `2026-05-04T15:53:47Z`
@@ -217,7 +230,7 @@
     `2026-05-04T01:27:11Z`
   - `#78` `remove-list-work-legacy-pagination-shim`, merged on
     `2026-05-04T00:28:40Z`
-- `gh pr list --state open` currently reports no open PRs
+- `gh pr list --state open` currently reports one open PR: `#94`
 
 ## theory of mind
 
@@ -257,6 +270,10 @@
   one-line cast wrappers or alias-only helpers on the live replay path before
   inventing a larger follow-up; those seams are often the next lowest-risk
   simplifications
+- when production request-shaping and functional-test request-shaping both
+  exist, compare chaining-trace propagation and batch metadata field-by-field
+  before assuming the duplicate helper is harmless; this repo already allowed a
+  test-only copy to drift away from the live submit path
 - the cleaner prompt currently has a tracked local edit allowing multiple
   non-overlapping items in flight, but that does not remove the need to default
   to one standalone idea when a single seam is sufficient

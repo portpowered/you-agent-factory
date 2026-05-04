@@ -74,6 +74,10 @@
   expanded authored-layout writes before closing the lane; stripped fields in
   `WriteExpandedFactoryLayout` can still be rehydrated back into canonical
   `factory.json` export or runtime load paths elsewhere.
+- When production request-shaping and functional-test request-shaping both
+  exist, compare chaining-trace propagation and batch metadata field-by-field
+  before assuming the duplicate helper is harmless; this repo already allowed a
+  test-only copy to drift away from the live submit path.
 
 ## Current Summary
 
@@ -113,11 +117,46 @@
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
-- `gh pr list --state open` is now empty, so there is no longer an ask-owned
-  PR lane in flight.
+- `gh pr list --state open` now reports PR `#94`
+  (`retire-replay-dispatch-payload-cast-wrappers`), so the prior replay-wrapper
+  cleanup idea is already in flight and should not be re-queued.
 - The tracked local ask diff now explicitly writes the array-valued
   non-success output-interface request, but that lane is already materially
   closed on `main` through merged PR `#69`.
+- The next non-overlapping cleanup queued from this refresh is the duplicated
+  submit-request shaping drift between
+  `pkg/internal/submission/work_request.go` and
+  `tests/functional/runtime_api/runtime_support_test.go`.
+
+## 2026-05-04T10:06:50.5579295-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git reported the checkout was already current with
+  `origin/main` at `8029392`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the tracked
+  versus ignored `factory/inputs/**` surface, recent PR state, and the live
+  replay plus submission-shaping code.
+- Re-validated with `gh pr list --state all --limit 12`, `gh pr view 94`,
+  `gh pr diff 94 --name-only`, graph reads, direct code reads, and a delegated
+  explorer pass that open PR `#94`
+  (`retire-replay-dispatch-payload-cast-wrappers`) fully owns the narrow
+  replay-wrapper cleanup lane previously recorded in the worldview.
+- Confirmed the ignored idea
+  `factory/inputs/idea/default/retire-replay-dispatch-payload-cast-wrappers.md`
+  should remain in local operating state until PR `#94` merges rather than
+  being replaced or duplicated.
+- Used direct reads plus delegated inspection to identify the next
+  non-overlapping backend cleanup seam on `main`:
+  `pkg/internal/submission/work_request.go` and
+  `tests/functional/runtime_api/runtime_support_test.go` both shape canonical
+  batch requests from `[]interfaces.SubmitRequest`, but the functional-test
+  copy already drifted and omits production
+  `CurrentChainingTraceID` propagation.
+- Queued one new standalone ignored idea under `factory/inputs/idea/default/`
+  for that submit-request shaping dedupe so the next follow-up stays scoped to
+  removing duplicated logic and restoring behavioral parity between production
+  and the functional test path.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
 - The import/export P0 lane is now materially closed on `main` for the
