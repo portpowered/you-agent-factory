@@ -158,6 +158,7 @@ export function SubmitWorkCard({
             aria-busy={isSubmitting ? "true" : undefined}
             className="shrink-0"
             disabled={!canSubmit}
+            tone="outline"
             type="submit"
           >
             {isSubmitting ? "Submitting..." : "Submit work"}

@@ -114,9 +114,8 @@ describe("SubmitWorkWidget", () => {
     await waitFor(() => {
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Submitting..." })).toBeTruthy();
     });
-    expect(screen.getByRole("button", { name: "Submitting..." }).getAttribute("aria-busy")).toBe(
-      "true",
-    );
+    const submittingButton = screen.getByRole("button", { name: "Submitting..." });
+    expect(submittingButton.getAttribute("aria-busy")).toBe("true");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
