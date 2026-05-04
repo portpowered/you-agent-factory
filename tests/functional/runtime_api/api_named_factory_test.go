@@ -288,18 +288,18 @@ func assertFunctionalPersistedFactoryJSONStripsInlineBundledContent(t *testing.T
 		targetPath, _ := bundledFile["targetPath"].(string)
 		switch targetPath {
 		case "Makefile":
-			if got := content["inline"]; got != "" {
-				t.Fatalf("persisted root helper inline = %#v, want empty string", got)
+			if got := content["inline"]; got != "test:\n\tgo test ./...\n" {
+				t.Fatalf("persisted root helper inline = %#v, want root helper body", got)
 			}
-			if got := content["encoding"]; got != "" {
-				t.Fatalf("persisted root helper encoding = %#v, want empty string", got)
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("persisted root helper encoding = %#v, want utf-8", got)
 			}
 		case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
 			if _, ok := content["inline"]; ok {
 				t.Fatalf("persisted bundled inline = %#v, want omitted field", content["inline"])
 			}
-			if got := content["encoding"]; got != "" {
-				t.Fatalf("persisted bundled encoding = %#v, want empty string", got)
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("persisted bundled encoding = %#v, want utf-8", got)
 			}
 		default:
 			t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)
