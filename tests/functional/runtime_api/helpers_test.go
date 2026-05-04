@@ -167,7 +167,7 @@ func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, requests ...inter
 	t.Helper()
 
 	normalized := normalizeSubmitRequestsForFunctionalTest(requests)
-	workRequest := workRequestFromSubmitRequests(normalized)
+	workRequest := factory.WorkRequestFromSubmitRequests(normalized)
 	if _, err := fs.factory.SubmitWorkRequest(context.Background(), workRequest); err != nil {
 		t.Fatalf("factory.SubmitWorkRequest: %v", err)
 	}
