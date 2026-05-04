@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T02:04:54-07:00`, local `HEAD` on `main` points to
-  `797afee`
-  (`normalize-dashboard-header-button-treatment (#86)`)
+- as of `2026-05-04T03:03:24.3956041-07:00`, local `HEAD` on `main` points to
+  `519cbdd`
+  (`Merge pull request #87 from portpowered/ralph/normalize-submit-work-button-treatment`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -46,9 +46,9 @@
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
-  merged PR `#85`, and merged PR `#86`, the next ignored operating submission
-  should be a single standalone submit-work button follow-up under
-  `factory/inputs/idea/default/`
+  merged PR `#85`, merged PR `#86`, and merged PR `#87`, the next ignored
+  operating submission should be a single standalone replay-timeline legacy
+  compat cleanup follow-up under `factory/inputs/idea/default/`
 
 ## customer-ask truth
 
@@ -86,18 +86,28 @@
   - `ui/src/features/header/dashboard-header.test.tsx` and
     `ui/src/App.stories.tsx` now protect the converged neutral header-action
     treatment through rendered behavior
+- merged PR `#87` satisfied the remaining submit-work button-tone seam on
+  `main`:
+  - `ui/src/features/submit-work/submit-work-card.tsx` now renders the
+    `Submit work` CTA through the shared neutral `outline` tone instead of the
+    accent-filled default treatment
+  - `ui/src/features/submit-work/submit-work-widget.test.tsx` and
+    `ui/src/App.stories.tsx` now protect that neutral rendered treatment
 - the tracked local ask diff now explicitly includes the array-valued
   non-success output-interface request, but that ask is already materially
   satisfied on `main` through merged PR `#69`
-- the next selected unowned customer-visible follow-up is therefore the
-  submit-work button-tone seam:
-  - `ui/src/features/submit-work/submit-work-card.tsx` still renders the
-    `Submit work` CTA through the shared `Button` primitive without an explicit
-    tone, so it inherits the accent-filled `default` treatment from
-    `ui/src/components/ui/button.tsx`
-  - that remains visibly outside the open website button ask to converge
-    dashboard buttons onto the neutral white-ish treatment instead of the
-    primary accent color
+- there is no remaining unowned customer-visible dashboard button ask on
+  `main`; the next narrow cleanup candidate now comes from the broader quality
+  lane:
+  - `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
+    `ui/src/features/timeline/state/timeline/replayWorldStateTypes.ts` each
+    redeclare the same legacy dispatch compat payload types
+  - `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
+    `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts` each
+    redeclare the same legacy dispatch-response cast helper
+  - `ui/src/features/timeline/state/timeline/replayWorldState.ts` still consumes
+    those duplicated shims on the live replay path, so the best next cleanup is
+    to consolidate that legacy compat handling instead of adding more wrappers
 
 ## replay truth
 
@@ -114,6 +124,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#87` `normalize-submit-work-button-treatment`, merged on
+    `2026-05-04T09:17:47Z`
   - `#86` `normalize-dashboard-header-button-treatment`, merged on
     `2026-05-04T08:36:11Z`
   - `#85` `align-dashboard-branding-and-header-iconography`, merged on
@@ -151,10 +163,10 @@
 - once a customer-visible ask lands, the right follow-up is usually not another
   broad lane but the smallest remaining seam that preserves the ask's public
   intent without reopening merged work
-- once a narrow ask-owned sweep merges, the next best seam is often the next
-  visible outlier within the same customer lane rather than a new abstraction
-  push; after PR `#86`, that means the submit-work CTA tone is a better next
-  dispatch than reopening header or branding code
+- once a narrow ask-owned sweep fully merges, the next best seam can move from
+  customer-visible polish back to standards-driven duplication cleanup; after
+  PR `#87`, that means the replay-timeline legacy compat shim duplication is a
+  better next dispatch than reopening dashboard button work
 - the cleaner prompt currently has a tracked local edit allowing multiple
   non-overlapping items in flight, but that does not remove the need to default
   to one standalone idea when a single seam is sufficient

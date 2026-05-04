@@ -52,10 +52,13 @@
 - After a UI cleanup PR merges, re-read the exact live controls and chart
   contracts before closing the ask; copy reduction can land while residual
   iconography, branding, or axis-layout drift still remains.
+- When replay timeline helpers carry the same legacy compat payload aliases or
+  cast helpers in more than one file, consolidate them before adding new
+  replay-path behavior so compatibility shims do not become a second API layer.
 
 ## Current Summary
 
-- As of `2026-05-04T02:04:54-07:00`, `HEAD` on `main` points to `797afee`
+- As of `2026-05-04T03:03:24.3956041-07:00`, `HEAD` on `main` points to `519cbdd`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -77,6 +80,7 @@
 - Merged PR `#85` closed the remaining dashboard branding and header
   iconography ask on `main`.
 - Merged PR `#86` closed the header button-convergence seam on `main`.
+- Merged PR `#87` closed the submit-work button-tone seam on `main`.
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
@@ -85,29 +89,60 @@
 - The tracked local ask diff now explicitly writes the array-valued
   non-success output-interface request, but that lane is already materially
   closed on `main` through merged PR `#69`.
-- The next customer-visible dashboard ask is now the submit-work CTA tone lane:
-  `ui/src/features/submit-work/submit-work-card.tsx` still lets the
-  `Submit work` action inherit the accent-filled `default` button tone instead
-  of the requested neutral white-ish treatment.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- The next safe cleanup dispatch is a single standalone submit-work button-tone
-  follow-up covering the submit CTA plus its rendered behavioral coverage.
+- The next safe cleanup dispatch is a single standalone replay-timeline legacy
+  compat cleanup covering the duplicated payload aliases and cast helper spread
+  across `replayCompletion.ts`, `replayWorldStateTypes.ts`, and
+  `replayWorldStateSupport.ts`.
 
 ## Standards Alignment Checklist
 
 - Website: header action buttons are now converged onto one neutral treatment
   on `main` through PR `#86`.
-- Website: the next still-open button-style gap is the accent-filled
-  `Submit work` CTA in `ui/src/features/submit-work/submit-work-card.tsx`;
-  queued follow-up should keep scope to that card, its shared button tone, and
-  rendered coverage.
+- Website: the dashboard button-color convergence ask is now materially closed
+  on `main` through PR `#87`.
+- Website: the next narrow quality-cleanup candidate is consolidating the
+  duplicated replay-timeline legacy compat shims in
+  `ui/src/features/timeline/state/timeline/` so replay parsing keeps one source
+  of truth for legacy dispatch payload fallbacks.
 - Backend: the array-valued non-success workstation output contract is now
   aligned on `main` through PR `#69`.
 - Backend: the next narrow quality-cleanup candidate is retiring the
   `WatchedTransitionIDs` fallback path in
   `pkg/petri/inference_throttle_guard.go` so throttle matching relies on the
   canonical runtime worker lookup path only.
+
+## 2026-05-04T03:03:24.3956041-07:00 - meta state refresh
+
+- Ran `git pull`; Git fast-forwarded `main` from `797afee` to `519cbdd`, which
+  pulled in merged PR `#87`
+  (`normalize-submit-work-button-treatment`) on `2026-05-04T09:17:47Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, the tracked-versus-ignored `factory/inputs/**` surface,
+  recent PR state, and the live submit-work plus replay-timeline UI code.
+- Re-validated with `git ls-files factory/inputs`,
+  `Get-ChildItem -Recurse factory/inputs`, `gh pr list --state all --limit 12`,
+  `git log --oneline -12`, direct code reads, graph reads, and a delegated
+  explorer pass that PR `#87` fully closes the stale submit-work button lane
+  recorded in the prior meta view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/normalize-submit-work-button-treatment.md` is
+  now stale because PR `#87` already landed that exact work on `main`, then
+  replaced that ignored queue residue with a newer standalone replay-timeline
+  legacy-compat cleanup follow-up.
+- Used direct replay-state reads plus a delegated explorer pass to confirm the
+  next non-overlapping quality seam on `main`: the replay timeline still
+  duplicates the legacy dispatch compat payload aliases between
+  `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
+  `ui/src/features/timeline/state/timeline/replayWorldStateTypes.ts`, and it
+  duplicates the legacy dispatch-response cast helper between
+  `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
+  `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts` while
+  `ui/src/features/timeline/state/timeline/replayWorldState.ts` still consumes
+  those shims on the live replay path.
 
 ## 2026-05-04T00:01:47.3762163-07:00 - meta state refresh
 
