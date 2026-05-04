@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T04:03:23.4586706-07:00`, local `HEAD` on `main` points to
-  `beb0660`
-  (`Merge pull request #88 from portpowered/ralph/retire-replay-timeline-legacy-compat-duplication`)
+- as of `2026-05-04T05:02:59.2509080-07:00`, local `HEAD` on `main` points to
+  `4e218a5`
+  (`centralize-replay-trace-dispatch-projection (#89)`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -46,9 +46,9 @@
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
-  merged PR `#85`, merged PR `#86`, merged PR `#87`, and merged PR `#88`, the
-  next ignored operating submission should be a single standalone replay-trace
-  dispatch projection cleanup follow-up under
+  merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`, and
+  merged PR `#89`, the next ignored operating submission should be a single
+  standalone backend throttle-fallback cleanup follow-up under
   `factory/inputs/idea/default/`
 
 ## customer-ask truth
@@ -97,22 +97,24 @@
 - the tracked local ask diff now explicitly includes the array-valued
   non-success output-interface request, but that ask is already materially
   satisfied on `main` through merged PR `#69`
-- there is no remaining unowned customer-visible dashboard button ask on
-  `main`; the next narrow cleanup candidate now comes from the broader quality
+- there is no remaining unowned customer-visible dashboard ask on `main`; the
+  next narrow cleanup candidate now comes from the broader backend quality
   lane:
   - merged PR `#88` retired the duplicated legacy dispatch compat payload
     aliases from `ui/src/features/timeline/state/timeline/replayWorldStateTypes.ts`
-    and kept the replay fixture behavior green through
-    `ui/src/features/timeline/state/factoryTimelineStore.test.ts`
-  - one adjacent replay-state duplication seam still remains on `main`:
-    `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
-    `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts` each
-    define a `completionToTraceDispatch` mapper for the same
-    `DashboardTraceDispatch` projection
-  - `ui/src/features/timeline/state/timeline/replayWorldState.ts` still uses
-    both helpers on the live replay path, so the best next cleanup is to
-    centralize that trace-dispatch projection instead of reopening the
+    and merged PR `#89` centralized the remaining replay
+    `completionToTraceDispatch` projection duplication without reopening the
     broader legacy compat lane
+  - the next adjacent narrow seam on `main` is the authored-throttle fallback
+    still carried by `pkg/petri/inference_throttle_guard.go`:
+    `InferenceThrottleGuard` still stores `WatchedTransitionIDs`, its runtime
+    methods still fall back to transition-ID matching when runtime lookup
+    misses, and `pkg/config/config_mapper.go` plus dispatcher/guard tests still
+    populate and assert that legacy shape
+  - because the runtime worker/provider lookup path is already the live primary
+    behavior, the best next cleanup is to retire the
+    `WatchedTransitionIDs` fallback and rewrite tests toward authored runtime
+    outcomes instead of preserving both ownership models
 
 ## replay truth
 
@@ -129,6 +131,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#89` `centralize-replay-trace-dispatch-projection`, merged on
+    `2026-05-04T11:25:59Z`
   - `#88` `retire-replay-timeline-legacy-compat-duplication`, merged on
     `2026-05-04T10:20:32Z`
   - `#87` `normalize-submit-work-button-treatment`, merged on
@@ -172,9 +176,9 @@
   intent without reopening merged work
 - once a narrow ask-owned sweep fully merges, the next best seam can move from
   customer-visible polish back to standards-driven duplication cleanup; after
-  PR `#88`, that means re-reading the exact replay helper owners matters
-  because a broad compat cleanup can still leave one smaller projection seam
-  behind
+  PR `#89`, that means the replay lane is closed enough that the next best seam
+  is no longer UI-owned but the remaining backend authored-versus-legacy
+  throttle ownership split
 - a cleanup target is only truly narrow when its tests already align with the
   authored runtime contract; if dispatcher or guard tests still construct the
   old shape directly, the safer next step is to migrate those tests first

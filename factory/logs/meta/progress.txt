@@ -58,10 +58,14 @@
 - After a broad replay-state dedupe PR merges, re-check whether one smaller
   projection helper still remains duplicated on the live path before declaring
   the whole timeline seam closed.
+- When an authored runtime lookup path is already live, treat any remaining
+  transition-ID fallback field or test fixture as a cleanup seam; prefer
+  deleting the fallback and rewriting tests toward runtime-visible lane
+  behavior instead of preserving dual ownership models.
 
 ## Current Summary
 
-- As of `2026-05-04T04:03:23.4586706-07:00`, `HEAD` on `main` points to `beb0660`
+- As of `2026-05-04T05:02:59.2509080-07:00`, `HEAD` on `main` points to `4e218a5`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -86,6 +90,8 @@
 - Merged PR `#87` closed the submit-work button-tone seam on `main`.
 - Merged PR `#88` closed the broader replay legacy-compat duplication lane on
   `main`.
+- Merged PR `#89` closed the remaining replay trace-dispatch projection
+  duplication lane on `main`.
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
@@ -96,10 +102,9 @@
   closed on `main` through merged PR `#69`.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- The next safe cleanup dispatch is a single standalone replay trace-dispatch
-  projection cleanup covering the remaining duplicated
-  `completionToTraceDispatch` mapper in `replayCompletion.ts` and
-  `replayWorldStateSupport.ts`.
+- The next safe cleanup dispatch is a single standalone backend cleanup to
+  retire the remaining authored-throttle `WatchedTransitionIDs` fallback and
+  its fallback-shaped tests.
 
 ## Standards Alignment Checklist
 
@@ -107,15 +112,49 @@
   on `main` through PR `#86`.
 - Website: the dashboard button-color convergence ask is now materially closed
   on `main` through PR `#87`.
-- Website: the next narrow quality-cleanup candidate is consolidating the
-  duplicated replay trace-dispatch projection helper in
-  `ui/src/features/timeline/state/timeline/` so replay parsing keeps one source
-  of truth for `DashboardTraceDispatch` mapping.
+- Website: the replay trace-dispatch projection duplication lane is now closed
+  on `main` through PR `#89`.
 - Backend: the array-valued non-success workstation output contract is now
   aligned on `main` through PR `#69`.
-- Backend: the next cleanup prep seam is migrating remaining throttle-guard
-  tests and helpers off `WatchedTransitionIDs` so the later fallback removal in
-  `pkg/petri/inference_throttle_guard.go` becomes genuinely narrow.
+- Backend: the next cleanup seam is removing the remaining
+  `WatchedTransitionIDs` fallback from `pkg/petri/inference_throttle_guard.go`,
+  `pkg/config/config_mapper.go`, and the fallback-shaped dispatcher/guard test
+  helpers so authored runtime lookup remains the only ownership model.
+
+## 2026-05-04T05:02:59.2509080-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `beb0660` to
+  `4e218a5`, which pulled in merged PR `#89`
+  (`centralize-replay-trace-dispatch-projection`) on
+  `2026-05-04T11:25:59Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, the tracked-versus-ignored `factory/inputs/**` surface,
+  recent PR state, and the live throttle-guard plus runtime-lookup code.
+- Re-validated with `git ls-files factory/inputs`,
+  `Get-ChildItem -Recurse factory/inputs`, `gh pr list --state all --limit 12`,
+  `gh pr view 89`, `git log --oneline -12`, direct code reads, graph reads,
+  and delegated explorer passes that PR `#89` fully closed the replay
+  trace-dispatch projection seam previously recorded in the meta view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/centralize-replay-trace-dispatch-projection.md`
+  is now stale because PR `#89` already landed that exact work on `main`, then
+  replaced that ignored queue residue with a newer standalone backend cleanup
+  for the remaining authored-throttle fallback seam.
+- Used direct reads plus delegated inspection to confirm there is no better
+  narrow `pkg/interfaces` consolidation dispatch on `main`: the runtime lookup
+  interface layering in `pkg/interfaces/runtime_lookup.go` is still intentional
+  and protected by `pkg/interfaces/runtime_lookup_contract_guard_test.go`.
+- Used direct reads plus delegated inspection to confirm the next narrow
+  backend seam on `main`: `pkg/petri/inference_throttle_guard.go` still keeps
+  `WatchedTransitionIDs`, both `appliesToCurrentTransition` and
+  `historyDispatchMatchesLane` still fall back to transition-ID matching,
+  `pkg/config/config_mapper.go` still populates that field, and
+  `pkg/petri/inference_throttle_guard_test.go` plus
+  `pkg/factory/subsystems/dispatcher_test.go` still assert the legacy shape
+  directly even though the runtime lookup path is already the live primary
+  behavior.
 
 ## 2026-05-04T04:03:23.4586706-07:00 - meta state refresh
 
