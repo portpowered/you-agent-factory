@@ -5,7 +5,6 @@ import type {
   DashboardWorkDiagnostics,
 } from "../../../../api/dashboard";
 import type {
-  DispatchRequestPayload,
   DispatchResponsePayload,
   FactoryEvent,
   FactoryProviderSession,
@@ -13,16 +12,18 @@ import type {
   FactoryWork,
   FactoryWorkDiagnostics,
   FactoryWorkItem,
-  FactoryWorker,
 } from "../../../../api/events";
-import { cloneWorkItemRef, uniqueSortedWorkRefs } from "./cloneTimelineSnapshot";
-import { addTraceWork } from "./replayGraphState";
+import {
+  cloneWorkItemRef,
+  uniqueSortedWorkRefs,
+} from "./cloneTimelineSnapshot";
 import {
   eventWorkTypeID,
   factoryWorkToItem,
   outputPlaceForWorkstation,
   resolveWorkstationName,
 } from "./replayFactoryTopology";
+import { addTraceWork } from "./replayGraphState";
 import { uniqueSorted } from "./shared";
 import {
   dashboardTransitionID,
@@ -31,15 +32,6 @@ import {
 } from "./systemTime";
 import type { ReplayWorldState, WorldCompletion, WorldDispatch } from "./types";
 import { workRef } from "./workItemRef";
-
-export interface LegacyDispatchRequestPayloadCompat {
-  current_chaining_trace_id?: string;
-  dispatchId?: string;
-  inputs?: Array<FactoryWork | { workId: string }>;
-  previous_chaining_trace_ids?: string[];
-  worker?: FactoryWorker;
-  workstation?: { name?: string };
-}
 
 export interface LegacyDispatchResponsePayloadCompat {
   current_chaining_trace_id?: string;
@@ -64,16 +56,11 @@ export function latestWorkstationAttempt(
   })[0];
 }
 
-export function legacyDispatchRequestPayload(
-  payload: DispatchRequestPayload,
-): LegacyDispatchRequestPayloadCompat {
-  return payload as DispatchRequestPayload & LegacyDispatchRequestPayloadCompat;
-}
-
 export function legacyDispatchResponsePayload(
   payload: DispatchResponsePayload,
 ): LegacyDispatchResponsePayloadCompat {
-  return payload as DispatchResponsePayload & LegacyDispatchResponsePayloadCompat;
+  return payload as DispatchResponsePayload &
+    LegacyDispatchResponsePayloadCompat;
 }
 
 export function dashboardDiagnosticsFromEvent(
@@ -102,12 +89,18 @@ export function dashboardDiagnosticsFromEvent(
   };
 }
 
-export function firstRequestID(works: FactoryWork[] | undefined): string | undefined {
+export function firstRequestID(
+  works: FactoryWork[] | undefined,
+): string | undefined {
   return works?.find((work) => work.requestId)?.requestId;
 }
 
-function placeCategory(state: ReplayWorldState, placeIDValue: string | undefined): string | undefined {
-  return state.topology.places?.find((place) => place.id === placeIDValue)?.category;
+function placeCategory(
+  state: ReplayWorldState,
+  placeIDValue: string | undefined,
+): string | undefined {
+  return state.topology.places?.find((place) => place.id === placeIDValue)
+    ?.category;
 }
 
 function terminalWorkFromItems(
@@ -116,8 +109,12 @@ function terminalWorkFromItems(
   outcome: string,
 ): FactoryTerminalWork | undefined {
   const publicItems = items.filter((item) => !isSystemTimeWorkItem(item));
-  const terminal = publicItems.find((item) => placeCategory(state, item.place_id) === "TERMINAL");
-  const failed = publicItems.find((item) => placeCategory(state, item.place_id) === "FAILED");
+  const terminal = publicItems.find(
+    (item) => placeCategory(state, item.place_id) === "TERMINAL",
+  );
+  const failed = publicItems.find(
+    (item) => placeCategory(state, item.place_id) === "FAILED",
+  );
   if (outcome === "FAILED" && failed) {
     return { status: "FAILED", work_item: failed };
   }
@@ -154,19 +151,26 @@ export function responseCompletion(
       addTraceWork(state, item);
       return workRef(item);
     });
-  const terminalWork = terminalWorkFromItems(state, outputItems, event.payload.outcome);
-  const latestAttempt = latestWorkstationAttempt(state.inferenceAttemptsByDispatchID[dispatchID]);
+  const terminalWork = terminalWorkFromItems(
+    state,
+    outputItems,
+    event.payload.outcome,
+  );
+  const latestAttempt = latestWorkstationAttempt(
+    state.inferenceAttemptsByDispatchID[dispatchID],
+  );
   const terminalRefs = terminalWork ? [workRef(terminalWork.work_item)] : [];
   const workItemsByID = new Map(
-    [...(active?.workItems ?? []), ...outputRefs, ...terminalRefs].map((item) => [
-      item.work_id,
-      item,
-    ]),
+    [...(active?.workItems ?? []), ...outputRefs, ...terminalRefs].map(
+      (item) => [item.work_id, item],
+    ),
   );
   const traceIDs = uniqueSorted([
     ...(active?.traceIDs ?? []),
     ...(event.context.traceIds ?? []),
-    ...(event.context.workIds ?? []).map((workID) => state.workItemsByID[workID]?.trace_id ?? ""),
+    ...(event.context.workIds ?? []).map(
+      (workID) => state.workItemsByID[workID]?.trace_id ?? "",
+    ),
   ]);
 
   return {
@@ -178,7 +182,8 @@ export function responseCompletion(
       active?.currentChainingTraceID ??
       traceIDs[0],
     diagnostics:
-      latestAttempt?.diagnostics ?? dashboardDiagnosticsFromEvent(legacyPayload.diagnostics),
+      latestAttempt?.diagnostics ??
+      dashboardDiagnosticsFromEvent(legacyPayload.diagnostics),
     dispatchID,
     durationMillis: event.payload.durationMillis ?? 0,
     endTime: event.context.eventTime,
@@ -195,16 +200,20 @@ export function responseCompletion(
       event.payload.previousChainingTraceIds ??
       legacyPayload.previous_chaining_trace_ids ??
       active?.previousChainingTraceIDs,
-    providerSession: latestAttempt?.provider_session ?? legacyPayload.providerSession,
+    providerSession:
+      latestAttempt?.provider_session ?? legacyPayload.providerSession,
     resources: active?.resources ?? [],
     startedAt: active?.startedAt ?? "",
     systemOnly:
       active?.systemOnly ??
-      (event.payload.transitionId === SYSTEM_TIME_EXPIRY_TRANSITION_ID && workItemsByID.size === 0),
+      (event.payload.transitionId === SYSTEM_TIME_EXPIRY_TRANSITION_ID &&
+        workItemsByID.size === 0),
     terminalWork,
     traceIDs,
     transitionID: dashboardTransitionID(event.payload.transitionId),
-    workItems: [...workItemsByID.values()].sort((left, right) => left.work_id.localeCompare(right.work_id)),
+    workItems: [...workItemsByID.values()].sort((left, right) =>
+      left.work_id.localeCompare(right.work_id),
+    ),
     workstationName: resolveWorkstationName(
       state.topology,
       event.payload.transitionId,
@@ -225,7 +234,8 @@ export function recordFailedCompletion(
         : completion.workItems;
 
   for (const item of workItems) {
-    const existing = state.workItemsByID[item.work_id] ?? completion.terminalWork?.work_item;
+    const existing =
+      state.workItemsByID[item.work_id] ?? completion.terminalWork?.work_item;
     if (!existing) {
       continue;
     }
@@ -258,7 +268,9 @@ export function completionToProviderSession(
   };
 }
 
-export function completionToTraceDispatch(completion: WorldCompletion): DashboardTraceDispatch {
+export function completionToTraceDispatch(
+  completion: WorldCompletion,
+): DashboardTraceDispatch {
   return {
     consumed_tokens: completion.consumedTokens,
     current_chaining_trace_id: completion.currentChainingTraceID,
@@ -280,11 +292,13 @@ export function completionToTraceDispatch(completion: WorldCompletion): Dashboar
     transition_id: completion.transitionID,
     work_ids: completion.workItems.map((item) => item.work_id),
     token_names: uniqueSorted(
-      completion.workItems.map((item) => item.display_name?.trim() || item.work_id),
+      completion.workItems.map(
+        (item) => item.display_name?.trim() || item.work_id,
+      ),
     ),
-    work_types: uniqueSorted(completion.workItems.map((item) => item.work_type_id ?? "")),
+    work_types: uniqueSorted(
+      completion.workItems.map((item) => item.work_type_id ?? ""),
+    ),
     workstation_name: completion.workstationName,
   };
 }
-
-
