@@ -530,7 +530,7 @@ func TestConfigMapping_ValidationRejectsFactoryInferenceThrottleGuardInvalidRefr
 	}
 }
 
-func TestConfigMapping_LowersFactoryInferenceThrottleGuardAcrossWorkerTransitions(t *testing.T) {
+func TestConfigMapping_LowersFactoryInferenceThrottleGuardOnlyAcrossMatchingWorkerTransitions(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		Guards: []interfaces.FactoryGuardConfig{{
 			Type:          interfaces.GuardTypeInferenceThrottle,
@@ -562,6 +562,12 @@ func TestConfigMapping_LowersFactoryInferenceThrottleGuardAcrossWorkerTransition
 				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
 				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
 			},
+			{
+				Name: "logical-step",
+				Type: interfaces.WorkstationTypeLogical,
+				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			},
 		},
 	}
 
@@ -573,11 +579,15 @@ func TestConfigMapping_LowersFactoryInferenceThrottleGuardAcrossWorkerTransition
 
 	claudeGuard := net.Transitions["claude-step"].InputArcs[0].Guard
 	codexGuard := net.Transitions["codex-step"].InputArcs[0].Guard
+	logicalGuard := net.Transitions["logical-step"].InputArcs[0].Guard
 	if !containsInferenceThrottleGuard(claudeGuard) {
 		t.Fatalf("claude-step guard = %#v, want inference throttle guard in chain", claudeGuard)
 	}
-	if !containsInferenceThrottleGuard(codexGuard) {
-		t.Fatalf("codex-step guard = %#v, want inference throttle guard in chain", codexGuard)
+	if containsInferenceThrottleGuard(codexGuard) {
+		t.Fatalf("codex-step guard = %#v, want no inference throttle guard outside authored lane", codexGuard)
+	}
+	if containsInferenceThrottleGuard(logicalGuard) {
+		t.Fatalf("logical-step guard = %#v, want no inference throttle guard on non-worker transition", logicalGuard)
 	}
 }
 

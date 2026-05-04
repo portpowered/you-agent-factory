@@ -28,11 +28,10 @@ type ActivePauseProvider interface {
 // InferenceThrottleGuard blocks a transition while throttle failures remain
 // active for the authored provider/model lane derived from dispatch history.
 type InferenceThrottleGuard struct {
-	Provider             string
-	Model                string
-	WorkerName           string
-	RefreshWindow        time.Duration
-	WatchedTransitionIDs map[string]struct{}
+	Provider      string
+	Model         string
+	WorkerName    string
+	RefreshWindow time.Duration
 }
 
 var _ RuntimeGuard = (*InferenceThrottleGuard)(nil)
@@ -79,12 +78,11 @@ func (g *InferenceThrottleGuard) appliesToCurrentTransition(ctx RuntimeGuardCont
 	if g == nil {
 		return false
 	}
-	if ctx.CurrentTransitionID != "" && len(g.WatchedTransitionIDs) > 0 {
-		_, ok := g.WatchedTransitionIDs[ctx.CurrentTransitionID]
-		return ok
-	}
-	if g.WorkerName == "" || ctx.RuntimeConfig == nil {
+	if g.WorkerName == "" {
 		return true
+	}
+	if ctx.RuntimeConfig == nil {
+		return false
 	}
 	worker, ok := ctx.RuntimeConfig.Worker(g.WorkerName)
 	if !ok || worker == nil {
@@ -97,18 +95,16 @@ func (g *InferenceThrottleGuard) historyDispatchMatchesLane(ctx RuntimeGuardCont
 	if g == nil {
 		return false
 	}
-	if ctx.RuntimeConfig != nil && len(ctx.TransitionWorkers) > 0 {
-		workerName, ok := ctx.TransitionWorkers[transitionID]
-		if ok && workerName != "" {
-			worker, ok := ctx.RuntimeConfig.Worker(workerName)
-			if ok && worker != nil {
-				return strings.EqualFold(worker.ModelProvider, g.Provider) && (g.Model == "" || worker.Model == g.Model)
-			}
-		}
-	}
-	if len(g.WatchedTransitionIDs) == 0 {
+	if ctx.RuntimeConfig == nil || len(ctx.TransitionWorkers) == 0 {
 		return false
 	}
-	_, ok := g.WatchedTransitionIDs[transitionID]
-	return ok
+	workerName, ok := ctx.TransitionWorkers[transitionID]
+	if !ok || workerName == "" {
+		return false
+	}
+	worker, ok := ctx.RuntimeConfig.Worker(workerName)
+	if !ok || worker == nil {
+		return false
+	}
+	return strings.EqualFold(worker.ModelProvider, g.Provider) && (g.Model == "" || worker.Model == g.Model)
 }

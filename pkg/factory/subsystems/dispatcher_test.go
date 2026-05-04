@@ -77,52 +77,73 @@ func (s *recordingScheduler) Select(enabled []interfaces.EnabledTransition, _ *i
 
 	return decisions
 }
-func TestDispatcher_ActiveThrottlePauses_UsesLoweredInferenceThrottleGuards(t *testing.T) {
+func TestDispatcher_ExecuteExposesActiveThrottlePausesFromLoweredInferenceThrottleGuards(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
 	n := &state.Net{
 		Transitions: map[string]*petri.Transition{
 			"t-a": {
-				ID: "t-a",
+				ID:         "t-a",
+				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{{
 					ID:          "a-in",
 					Name:        "work",
 					PlaceID:     "p-init-a",
 					Direction:   petri.ArcInput,
 					Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
-					Guard:       inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a"),
+					Guard:       inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 30*time.Minute),
 				}},
 			},
 			"t-b": {
-				ID: "t-b",
+				ID:         "t-b",
+				WorkerType: "worker-b",
 				InputArcs: []petri.Arc{{
 					ID:          "b-in",
 					Name:        "work",
 					PlaceID:     "p-init-b",
 					Direction:   petri.ArcInput,
 					Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
-					Guard:       inferenceThrottleGuard("openai", "gpt-5.4", 30*time.Minute, "t-b"),
+					Guard:       inferenceThrottleGuard("openai", "gpt-5.4", "worker-b", 30*time.Minute),
 				}},
 			},
 		},
 	}
-	dispatcher := NewDispatcher(n, &mockScheduler{}, nil, nil, WithDispatcherClock(func() time.Time { return now }))
+	dispatcher := NewDispatcher(
+		n,
+		&mockScheduler{},
+		nil,
+		nil,
+		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+		)),
+	)
 
-	active := dispatcher.activeThrottlePauses(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
 			throttledCompletedDispatch("dispatch-b", "t-b", now.Add(3*time.Minute)),
 			throttledCompletedDispatch("dispatch-a", "t-a", now),
 		},
 	})
-
-	if len(active) != 2 {
-		t.Fatalf("active pause count = %d, want 2", len(active))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if active[0].LaneID != "claude/claude-sonnet" || active[1].LaneID != "openai/gpt-5.4" {
-		t.Fatalf("active pauses = %#v, want stable provider/model ordering", active)
+	if result == nil {
+		t.Fatal("expected throttle pause snapshot result")
+	}
+
+	if len(result.ActiveThrottlePauses) != 2 {
+		t.Fatalf("active pause count = %d, want 2", len(result.ActiveThrottlePauses))
+	}
+	if !result.ThrottlePausesObserved {
+		t.Fatal("expected dispatcher to report authored throttle pause observability")
+	}
+	if result.ActiveThrottlePauses[0].LaneID != "claude/claude-sonnet" || result.ActiveThrottlePauses[1].LaneID != "openai/gpt-5.4" {
+		t.Fatalf("active pauses = %#v, want stable provider/model ordering", result.ActiveThrottlePauses)
 	}
 }
 
-func TestDispatcher_ActiveThrottlePauses_ReturnsEmptyWithoutAuthoredInferenceThrottleGuard(t *testing.T) {
+func TestDispatcher_ExecuteOmitsThrottlePauseObservabilityWithoutAuthoredInferenceThrottleGuard(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
 	n := &state.Net{
 		Transitions: map[string]*petri.Transition{
@@ -140,14 +161,77 @@ func TestDispatcher_ActiveThrottlePauses_ReturnsEmptyWithoutAuthoredInferenceThr
 	}
 	dispatcher := NewDispatcher(n, &mockScheduler{}, nil, nil, WithDispatcherClock(func() time.Time { return now }))
 
-	active := dispatcher.activeThrottlePauses(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
 			throttledCompletedDispatch("dispatch-a", "t-a", now),
 		},
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("result = %#v, want no dispatcher output without authored pause observability", result)
+	}
+}
 
-	if len(active) != 0 {
-		t.Fatalf("active pauses = %#v, want empty without authored inference throttle guards", active)
+func TestDispatcher_ExecuteLeavesLaneRunnableWhenAuthoredThrottleRuntimeLookupIsUnresolved(t *testing.T) {
+	now := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init": {ID: "p-init"},
+			"p-done": {ID: "p-done"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t-a": {
+				ID:         "t-a",
+				Name:       "step-a",
+				WorkerType: "worker-a",
+				InputArcs: []petri.Arc{
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 30*time.Minute)},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "a-out", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
+				},
+			},
+		},
+	}
+	sched := &recordingScheduler{}
+	dispatcher := NewDispatcher(
+		n,
+		sched,
+		nil,
+		nil,
+		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig()),
+	)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{
+			throttledCompletedDispatch("dispatch-a", "t-a", now),
+		},
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected dispatch result")
+	}
+	if len(sched.received) != 1 || sched.received[0].TransitionID != "t-a" {
+		t.Fatalf("scheduler received transitions = %#v, want enabled transition t-a", sched.received)
+	}
+	if len(result.Dispatches) != 1 || result.Dispatches[0].Dispatch.TransitionID != "t-a" {
+		t.Fatalf("dispatches = %#v, want runnable transition t-a", result.Dispatches)
+	}
+	if result.ThrottlePausesObserved {
+		t.Fatal("expected unresolved runtime lookup to avoid authored throttle pause observability")
+	}
+	if len(result.ActiveThrottlePauses) != 0 {
+		t.Fatalf("active pauses = %#v, want none when runtime lookup is unresolved", result.ActiveThrottlePauses)
 	}
 }
 
@@ -552,7 +636,7 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in-a", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a")},
+					{ID: "a-in-a", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 30*time.Minute)},
 				},
 				OutputArcs: []petri.Arc{
 					{ID: "a-out-a", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
@@ -579,6 +663,10 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -713,7 +801,7 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 10*time.Minute, "t-a")},
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 10*time.Minute)},
 				},
 				OutputArcs: []petri.Arc{
 					{ID: "a-out", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
@@ -733,6 +821,9 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return currentTime }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		)),
 	)
 
 	pausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -793,7 +884,7 @@ func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testin
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 10*time.Minute, "t-a")},
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 10*time.Minute)},
 				},
 			},
 		},
@@ -805,6 +896,9 @@ func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testin
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return currentTime }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		)),
 	)
 
 	firstSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -858,7 +952,7 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 10*time.Minute, "t-a")},
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 10*time.Minute)},
 				},
 				OutputArcs: []petri.Arc{
 					{ID: "a-out", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
@@ -874,6 +968,9 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return currentTime }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		)),
 	)
 
 	firstFailure := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -922,7 +1019,7 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 				Name:       "scheduled-work",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 10*time.Minute, "t-cron")},
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 10*time.Minute)},
 				},
 			},
 		},
@@ -934,6 +1031,9 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -969,7 +1069,7 @@ func TestDispatcher_ThrottlePauseSkipsSchedulerWhenAllEnabledLanesPaused(t *test
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 10*time.Minute, "t-a")},
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 10*time.Minute)},
 				},
 			},
 		},
@@ -982,6 +1082,9 @@ func TestDispatcher_ThrottlePauseSkipsSchedulerWhenAllEnabledLanesPaused(t *test
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -1117,7 +1220,7 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 10*time.Minute, "t-a")},
+					{ID: "a-in", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 10*time.Minute)},
 				},
 			},
 		},
@@ -1129,6 +1232,9 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return currentTime }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		)),
 	)
 
 	pausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -1185,7 +1291,7 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-work", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a")},
+					{ID: "a-work", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 30*time.Minute)},
 					{ID: "a-slot", Name: "slot", PlaceID: "slot:available", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
 				},
 				OutputArcs: []petri.Arc{
@@ -1214,6 +1320,10 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return now }),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -1261,7 +1371,7 @@ func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnap
 				Name:       "step-a",
 				WorkerType: "worker-a",
 				InputArcs: []petri.Arc{
-					{ID: "a-in", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a", "t-b")},
+					{ID: "a-in", Name: "work", PlaceID: "p-init-a", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-a", 30*time.Minute)},
 				},
 			},
 			"t-b": {
@@ -1269,7 +1379,7 @@ func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnap
 				Name:       "step-b",
 				WorkerType: "worker-b",
 				InputArcs: []petri.Arc{
-					{ID: "b-in", Name: "work", PlaceID: "p-init-b", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", 30*time.Minute, "t-a", "t-b")},
+					{ID: "b-in", Name: "work", PlaceID: "p-init-b", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: inferenceThrottleGuard("claude", "claude-sonnet", "worker-b", 30*time.Minute)},
 				},
 			},
 		},
@@ -1282,12 +1392,10 @@ func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnap
 		nil,
 		nil,
 		WithDispatcherClock(func() time.Time { return now }),
-		WithDispatcherRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-				"worker-b": {Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
-			},
-		}),
+		WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
+			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
+		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -1540,16 +1648,23 @@ func dispatchSequences(dispatches []interfaces.DispatchRecord) ([]string, []stri
 	return transitionIDs, workTokenIDs, resourceTokenIDs
 }
 
-func inferenceThrottleGuard(provider string, model string, refreshWindow time.Duration, transitionIDs ...string) *petri.InferenceThrottleGuard {
-	watched := make(map[string]struct{}, len(transitionIDs))
-	for _, transitionID := range transitionIDs {
-		watched[transitionID] = struct{}{}
+func dispatcherRuntimeConfig(workers ...interfaces.WorkerConfig) runtimefixtures.RuntimeDefinitionLookupFixture {
+	lookup := runtimefixtures.RuntimeDefinitionLookupFixture{
+		Workers: make(map[string]*interfaces.WorkerConfig, len(workers)),
 	}
+	for i := range workers {
+		worker := workers[i]
+		lookup.Workers[worker.Name] = &worker
+	}
+	return lookup
+}
+
+func inferenceThrottleGuard(provider string, model string, workerName string, refreshWindow time.Duration) *petri.InferenceThrottleGuard {
 	return &petri.InferenceThrottleGuard{
-		Provider:             provider,
-		Model:                model,
-		RefreshWindow:        refreshWindow,
-		WatchedTransitionIDs: watched,
+		Provider:      provider,
+		Model:         model,
+		WorkerName:    workerName,
+		RefreshWindow: refreshWindow,
 	}
 }
 
