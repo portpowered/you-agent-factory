@@ -601,6 +601,30 @@ func assertInitScaffoldFilesCanonical(t *testing.T, base, wantModel, wantProvide
 		}
 	}
 
+	inputsReadmePath := filepath.Join(base, "inputs", "README.md")
+	inputsReadmeBytes, err := os.ReadFile(inputsReadmePath)
+	if err != nil {
+		t.Fatalf("read generated inputs README.md: %v", err)
+	}
+	inputsReadme := string(inputsReadmeBytes)
+	for _, expected := range []string{
+		"inputs/task/default/",
+		"Seed your starter work by adding files to this inbox",
+	} {
+		if !strings.Contains(inputsReadme, expected) {
+			t.Fatalf("generated inputs README.md should contain %q:\n%s", expected, inputsReadme)
+		}
+	}
+	for _, retired := range []string{
+		"inputs/<work-type>/default/",
+		"inputs/<work-type>/<execution-id>/",
+		"Multi-channel input directory for work submissions.",
+	} {
+		if strings.Contains(inputsReadme, retired) {
+			t.Fatalf("generated inputs README.md should not contain retired starter prose %q:\n%s", retired, inputsReadme)
+		}
+	}
+
 	workerAgentsPath := filepath.Join(base, "workers", "processor", "AGENTS.md")
 	workerAgentsBytes, err := os.ReadFile(workerAgentsPath)
 	if err != nil {
