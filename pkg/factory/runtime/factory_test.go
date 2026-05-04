@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/internal/submission"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -111,7 +110,7 @@ func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch interf
 }
 
 func submitWorkRequests(ctx context.Context, f factory.Factory, reqs []interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return f.SubmitWorkRequest(ctx, submission.WorkRequestFromSubmitRequests(reqs))
+	return f.SubmitWorkRequest(ctx, factory.WorkRequestFromSubmitRequests(reqs))
 }
 
 type runtimeProjectionConfig = runtimefixtures.RuntimeDefinitionLookupFixture
