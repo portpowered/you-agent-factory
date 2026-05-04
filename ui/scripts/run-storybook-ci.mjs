@@ -8,6 +8,7 @@ export const PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 
 const READY_TIMEOUT_MS = 30000;
 const POST_READY_SETTLE_MS = 1000;
+const POST_TEST_RUNNER_SETTLE_MS = 1000;
 const STORYBOOK_URL = `http://${HOST}:${PORT}`;
 const STORYBOOK_INDEX_URL = `${STORYBOOK_URL}/index.json`;
 
@@ -149,6 +150,14 @@ async function stopServer(child) {
       killer.once("error", reject);
       killer.once("exit", () => resolve());
     });
+
+    if (child.exitCode !== null) {
+      return;
+    }
+
+    await new Promise((resolve) => {
+      child.once("exit", () => resolve());
+    });
     return;
   }
 
@@ -217,6 +226,8 @@ export async function main() {
   try {
     await waitForStorybookReady({ serverExit });
     await Promise.race([runBun(["run", "storybook:test-runner:ci"]), serverExit]);
+    await delay(POST_TEST_RUNNER_SETTLE_MS);
+    await waitForStableStorybookIndex();
     await Promise.race([runBun(["run", "storybook:responsive-check"]), serverExit]);
   } finally {
     shuttingDown = true;
