@@ -443,9 +443,9 @@ func TestReadmeQuickstartDocumentsInitStarterOptions(t *testing.T) {
 
 	contents := string(readme)
 	for _, want := range []string{
-		"agent-factory\n```",
-		"agent-factory init\n",
-		"agent-factory init --executor claude --dir my-factory",
+		"infinite-you\n```",
+		"infinite-you init\n",
+		"infinite-you init --executor claude --dir my-factory",
 		"Supported starter scaffold options are `codex` and `claude`.",
 		"task:init",
 		"task:complete",
@@ -469,12 +469,12 @@ func TestReadmeDocumentsDocsCommandSurface(t *testing.T) {
 
 	contents := string(readme)
 	for _, want := range []string{
-		"agent-factory docs",
-		"agent-factory docs workstation",
+		"infinite-you docs",
+		"infinite-you docs workstation",
 		"Supported docs topics are `config`, `workstation`, `workers`, `resources`,",
 		"`batch-work`, and `templates`.",
-		"agent-factory docs batch-work",
-		"agent-factory docs config",
+		"infinite-you docs batch-work",
+		"infinite-you docs config",
 	} {
 		if !strings.Contains(contents, want) {
 			t.Fatalf("README missing %q:\n%s", want, contents)
