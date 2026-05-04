@@ -447,9 +447,19 @@ func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.
 	inputsReadmePath := filepath.Join(base, "inputs", "README.md")
 	inputsReadme := readFileString(t, inputsReadmePath)
 	requireContainsAll(t, inputsReadmePath, inputsReadme, []string{
+		"one canonical request inbox",
+		"inputs/request/default/",
+		"drop each starter request here as a Markdown file",
+		"Seed your first Ralph run by writing a request into that directory",
 		"Example request payload",
 		"document processing service",
 		"product-neutral",
+	})
+	requireOmitsAll(t, inputsReadmePath, inputsReadme, []string{
+		"General layout:",
+		"inputs/<work-type>/default/",
+		"inputs/<work-type>/<execution-id>/",
+		"The file watcher monitors this directory tree and automatically watches new subdirectories.",
 	})
 
 	scaffoldReadmePath := filepath.Join(base, "README.md")
