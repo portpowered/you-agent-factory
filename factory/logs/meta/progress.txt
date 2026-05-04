@@ -55,10 +55,13 @@
 - When replay timeline helpers carry the same legacy compat payload aliases or
   cast helpers in more than one file, consolidate them before adding new
   replay-path behavior so compatibility shims do not become a second API layer.
+- After a broad replay-state dedupe PR merges, re-check whether one smaller
+  projection helper still remains duplicated on the live path before declaring
+  the whole timeline seam closed.
 
 ## Current Summary
 
-- As of `2026-05-04T03:03:24.3956041-07:00`, `HEAD` on `main` points to `519cbdd`
+- As of `2026-05-04T04:03:23.4586706-07:00`, `HEAD` on `main` points to `beb0660`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -81,6 +84,8 @@
   iconography ask on `main`.
 - Merged PR `#86` closed the header button-convergence seam on `main`.
 - Merged PR `#87` closed the submit-work button-tone seam on `main`.
+- Merged PR `#88` closed the broader replay legacy-compat duplication lane on
+  `main`.
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
@@ -91,9 +96,9 @@
   closed on `main` through merged PR `#69`.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
-- The next safe cleanup dispatch is a single standalone replay-timeline legacy
-  compat cleanup covering the duplicated payload aliases and cast helper spread
-  across `replayCompletion.ts`, `replayWorldStateTypes.ts`, and
+- The next safe cleanup dispatch is a single standalone replay trace-dispatch
+  projection cleanup covering the remaining duplicated
+  `completionToTraceDispatch` mapper in `replayCompletion.ts` and
   `replayWorldStateSupport.ts`.
 
 ## Standards Alignment Checklist
@@ -103,15 +108,48 @@
 - Website: the dashboard button-color convergence ask is now materially closed
   on `main` through PR `#87`.
 - Website: the next narrow quality-cleanup candidate is consolidating the
-  duplicated replay-timeline legacy compat shims in
+  duplicated replay trace-dispatch projection helper in
   `ui/src/features/timeline/state/timeline/` so replay parsing keeps one source
-  of truth for legacy dispatch payload fallbacks.
+  of truth for `DashboardTraceDispatch` mapping.
 - Backend: the array-valued non-success workstation output contract is now
   aligned on `main` through PR `#69`.
-- Backend: the next narrow quality-cleanup candidate is retiring the
-  `WatchedTransitionIDs` fallback path in
-  `pkg/petri/inference_throttle_guard.go` so throttle matching relies on the
-  canonical runtime worker lookup path only.
+- Backend: the next cleanup prep seam is migrating remaining throttle-guard
+  tests and helpers off `WatchedTransitionIDs` so the later fallback removal in
+  `pkg/petri/inference_throttle_guard.go` becomes genuinely narrow.
+
+## 2026-05-04T04:03:23.4586706-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `70118ed` to
+  `beb0660`, which pulled in merged PR `#88`
+  (`retire-replay-timeline-legacy-compat-duplication`) on
+  `2026-05-04T10:20:32Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, the tracked-versus-ignored `factory/inputs/**` surface,
+  recent PR state, and the live replay-timeline plus throttle-guard code.
+- Re-validated with `git ls-files factory/inputs`,
+  `Get-ChildItem -Recurse factory/inputs`, `gh pr list --state all --limit 12`,
+  `gh pr view 88`, `git log --oneline -12`, direct code reads, graph reads,
+  and delegated explorer passes that PR `#88` fully closed the larger replay
+  legacy-compat duplication previously recorded in the meta view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/retire-replay-timeline-legacy-compat-duplication.md`
+  is now stale because PR `#88` already landed that exact work on `main`, then
+  replaced that ignored queue residue with a newer standalone follow-up for the
+  remaining replay trace-dispatch projection duplication.
+- Used direct reads plus delegated inspection to confirm the next narrow
+  quality seam on `main`: `ui/src/features/timeline/state/timeline/replayCompletion.ts`
+  and `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts`
+  still each define a `completionToTraceDispatch` mapper while
+  `ui/src/features/timeline/state/timeline/replayWorldState.ts` still uses both
+  on the live replay path.
+- Used direct reads plus delegated inspection to confirm the older backend
+  throttle fallback lane is not yet a clean one-step deletion: live dispatcher
+  and guard tests still construct `InferenceThrottleGuard` through
+  `WatchedTransitionIDs`, so the safer next backend cleanup is a prep pass that
+  migrates those tests and helpers onto the authored runtime worker lookup
+  shape first.
 
 ## 2026-05-04T03:03:24.3956041-07:00 - meta state refresh
 

@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T03:03:24.3956041-07:00`, local `HEAD` on `main` points to
-  `519cbdd`
-  (`Merge pull request #87 from portpowered/ralph/normalize-submit-work-button-treatment`)
+- as of `2026-05-04T04:03:23.4586706-07:00`, local `HEAD` on `main` points to
+  `beb0660`
+  (`Merge pull request #88 from portpowered/ralph/retire-replay-timeline-legacy-compat-duplication`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -46,9 +46,10 @@
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
-  merged PR `#85`, merged PR `#86`, and merged PR `#87`, the next ignored
-  operating submission should be a single standalone replay-timeline legacy
-  compat cleanup follow-up under `factory/inputs/idea/default/`
+  merged PR `#85`, merged PR `#86`, merged PR `#87`, and merged PR `#88`, the
+  next ignored operating submission should be a single standalone replay-trace
+  dispatch projection cleanup follow-up under
+  `factory/inputs/idea/default/`
 
 ## customer-ask truth
 
@@ -99,15 +100,19 @@
 - there is no remaining unowned customer-visible dashboard button ask on
   `main`; the next narrow cleanup candidate now comes from the broader quality
   lane:
-  - `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
-    `ui/src/features/timeline/state/timeline/replayWorldStateTypes.ts` each
-    redeclare the same legacy dispatch compat payload types
-  - `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
+  - merged PR `#88` retired the duplicated legacy dispatch compat payload
+    aliases from `ui/src/features/timeline/state/timeline/replayWorldStateTypes.ts`
+    and kept the replay fixture behavior green through
+    `ui/src/features/timeline/state/factoryTimelineStore.test.ts`
+  - one adjacent replay-state duplication seam still remains on `main`:
+    `ui/src/features/timeline/state/timeline/replayCompletion.ts` and
     `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts` each
-    redeclare the same legacy dispatch-response cast helper
-  - `ui/src/features/timeline/state/timeline/replayWorldState.ts` still consumes
-    those duplicated shims on the live replay path, so the best next cleanup is
-    to consolidate that legacy compat handling instead of adding more wrappers
+    define a `completionToTraceDispatch` mapper for the same
+    `DashboardTraceDispatch` projection
+  - `ui/src/features/timeline/state/timeline/replayWorldState.ts` still uses
+    both helpers on the live replay path, so the best next cleanup is to
+    centralize that trace-dispatch projection instead of reopening the
+    broader legacy compat lane
 
 ## replay truth
 
@@ -124,6 +129,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#88` `retire-replay-timeline-legacy-compat-duplication`, merged on
+    `2026-05-04T10:20:32Z`
   - `#87` `normalize-submit-work-button-treatment`, merged on
     `2026-05-04T09:17:47Z`
   - `#86` `normalize-dashboard-header-button-treatment`, merged on
@@ -165,8 +172,12 @@
   intent without reopening merged work
 - once a narrow ask-owned sweep fully merges, the next best seam can move from
   customer-visible polish back to standards-driven duplication cleanup; after
-  PR `#87`, that means the replay-timeline legacy compat shim duplication is a
-  better next dispatch than reopening dashboard button work
+  PR `#88`, that means re-reading the exact replay helper owners matters
+  because a broad compat cleanup can still leave one smaller projection seam
+  behind
+- a cleanup target is only truly narrow when its tests already align with the
+  authored runtime contract; if dispatcher or guard tests still construct the
+  old shape directly, the safer next step is to migrate those tests first
 - the cleaner prompt currently has a tracked local edit allowing multiple
   non-overlapping items in flight, but that does not remove the need to default
   to one standalone idea when a single seam is sufficient
