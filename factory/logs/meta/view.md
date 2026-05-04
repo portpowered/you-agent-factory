@@ -2,9 +2,10 @@
 
 ## world state
 
-- as of `2026-05-03T18:03:34.6151718-07:00`, local `HEAD` on `main` points to
-  `dc80123`
-  (`remove-list-work-legacy-pagination-shim (#78)`) and matches `origin/main`
+- as of `2026-05-03T19:02:46.3958525-07:00`, local `HEAD` on `main` points to
+  `4b945a7`
+  (`retire-filewatcher-default-channel-fallback (#79)`) and matches
+  `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
     `factory/workstations/cleaner/AGENTS.md`
@@ -41,14 +42,13 @@
 - `.gitignore` still ignores live workflow submissions under `factory/inputs/**`
   except those sentinel paths
 - the current checkout contains ignored operating residue:
+  - `factory/inputs/idea/default/align-default-starter-task-input-contract.md`
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - `factory/inputs/idea/default/retire-filewatcher-default-channel-fallback.md`
   - an empty local `factory/inputs/tasks/default/` directory
-- the file watcher still accepts direct two-segment
-  `factory/inputs/<work-type>/<file>` submissions as a hidden default-channel
-  fallback even though the checked-in workflow docs emphasize canonical
-  three-segment inboxes like
-  `factory/inputs/<work_type-or-BATCH>/<channel>/<filename>`
+- the file watcher now enforces the documented three-segment watched-input
+  contract and no longer accepts direct
+  `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
+  channel fallback
 
 ## customer-ask truth
 
@@ -86,6 +86,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#79` `retire-filewatcher-default-channel-fallback`, merged on
+    `2026-05-04T01:27:11Z`
   - `#78` `remove-list-work-legacy-pagination-shim`, merged on
     `2026-05-04T00:28:40Z`
   - `#77`
@@ -109,14 +111,14 @@
 - helper planning residue can go stale within one merge cycle, so the meta loop
   has to reconcile ignored backlog files against `main` and open PR state
   before dispatching anything new
-- merged PR `#78` consumed the older local pagination-shim cleanup idea, so
+- merged PR `#79` consumed the older filewatcher fallback cleanup idea, so
   that ignored idea file became stale residue and should be pruned
 - PR ownership and ask completeness are different checks: PR `#69` owns the
   route-array lane, but failing checks plus stale maintained examples still mean
   the ask is not closed
 - once the remaining P0 route-array lane is already owned, the best safe
   dispatch is a narrow cleanup outside `#69`
-- the next safe non-overlapping cleanup seam is to retire the hidden
-  file-watcher default-channel fallback in `pkg/listeners/filewatcher.go` and
-  its dedicated tests so the runtime matches the documented canonical inbox
-  layout
+- the next safe non-overlapping cleanup seam is the singular/plural default
+  starter contract drift: the checked-in maintainer workflow uses `task`, while
+  the public starter/default scaffold, CLI help, and related tests still teach
+  `tasks`

@@ -41,11 +41,15 @@
   `factory/inputs/<work-type>/default/<file>`, treat acceptance of direct
   two-segment `factory/inputs/<work-type>/<file>` submissions as hidden legacy
   compatibility and a valid cleanup target.
+- When the checked-in maintainer workflow and the public starter scaffold drift
+  on inbox naming, pick one canonical path and prove the cleanup through
+  init/bootstrap/run behavior instead of preserving both spellings in docs and
+  smoke tests.
 
 ## Current Summary
 
-- As of `2026-05-03T18:03:34.6151718-07:00`, `HEAD` on `main` points to
-  `dc80123` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-03T19:02:46.3958525-07:00`, `HEAD` on `main` points to
+  `4b945a7` and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and the live inbox still contains ignored operating
   residue.
@@ -59,12 +63,14 @@
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
 - The current ignored/local residue is now the still-live route-array idea, a
-  new watcher default-channel fallback cleanup idea, and an empty local
+  new default-starter task-input contract cleanup idea, and an empty local
   `factory/inputs/tasks/default/` directory.
 - PR `#76` merged the remaining import preview dialog extraction seam on
   `2026-05-03`, PR `#77` merged the remaining selected-work relationship graph
   plus per-dispatch attempt-detail seam on `2026-05-03`, and PR `#78` merged
-  the list-work legacy pagination cleanup on `2026-05-04T00:28:40Z`.
+  the list-work legacy pagination cleanup on `2026-05-04T00:28:40Z`, and PR
+  `#79` merged the filewatcher default-channel fallback cleanup on
+  `2026-05-04T01:27:11Z`.
 - The remaining import/export seam is now the route-array contract cleanup
   owned by open PR `#69`.
 - The selected-work current-selection ask is now materially satisfied on
@@ -90,12 +96,46 @@
 - The helper batch under `factory/scripts/import-export-p0-followups.json` is
   now fully stale because every lane it names is already merged or actively
   owned elsewhere.
-- The merged PR `#78` consumed the older pagination-shim cleanup idea, so that
-  ignored idea file is now stale local residue and should be pruned.
-- The next safe cleanup dispatch is a narrow watcher simplification outside the
-  active ask PRs: retire the undocumented two-segment
-  `factory/inputs/<work-type>/<file>` default-channel fallback and keep only
-  the documented canonical three-segment inbox layout.
+- The merged PR `#79` consumed the older filewatcher fallback cleanup idea, so
+  that ignored idea file is now stale local residue and should be pruned.
+- The next safe cleanup dispatch is the default-starter input-contract drift:
+  the checked-in maintainer workflow and canonical inboxes use singular `task`,
+  while starter docs, CLI help, scaffolds, and behavioral tests still teach or
+  generate plural `tasks`.
+
+## 2026-05-03T19:02:46.3958525-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `99b010f` to
+  `4b945a7`, which pulled in merged PR `#79`
+  (`retire-filewatcher-default-channel-fallback`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while the visible idea files and `factory/inputs/tasks/default`
+  path remain ignored operating state.
+- Re-checked recent PR state with `gh pr list`, `gh pr view 69`, `gh pr view
+  79`, `gh pr checks 69`, and `git log`, confirming that PR `#79` is merged
+  and PR `#69` remains the only open PR directly tied to an active ask lane.
+- Used delegated PR inspection to confirm PR `#69` still fully owns the
+  array-valued non-success route ask across API, config, replay/projection, and
+  UI import surfaces, and that dispatching another follow-up in that same lane
+  would be duplicate work while its deadcode/fixture cleanup remains in flight.
+- Inspected the public starter/default workflow surfaces and found a separate
+  non-overlapping contract drift: the checked-in maintainer workflow and
+  canonical inboxes use singular `task`, while `README.md`, `pkg/cli/root.go`,
+  `pkg/cli/init/scaffolds.go`, `pkg/cli/run/run_test.go`, and
+  `tests/functional/bootstrap_portability/cli_init_factory_test.go` still teach
+  or generate plural `tasks`.
+- Pruned the stale ignored idea
+  `factory/inputs/idea/default/retire-filewatcher-default-channel-fallback.md`
+  after its owning PR `#79` merged.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/align-default-starter-task-input-contract.md`
+  so the next non-overlapping follow-up collapses the starter `task`/`tasks`
+  contract drift through behavioral init/bootstrap/run coverage instead of
+  keeping both spellings alive.
 
 ## 2026-05-03T13:01:50.9382865-07:00 - meta state refresh
 
