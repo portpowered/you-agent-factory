@@ -84,7 +84,7 @@ func ExpandFactoryConfigLayout(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse factory config %s: %w", sourcePath, err)
 	}
-	if err := validatePortableResourceManifestForExpand(factoryCfg); err != nil {
+	if err := validatePortableBundledFilesForExpandOnPath(filepath.Dir(sourcePath), factoryCfg); err != nil {
 		return "", err
 	}
 
@@ -458,8 +458,60 @@ func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.Fac
 	if err := materializePortableBundledFiles(targetDir, cfg); err != nil {
 		return err
 	}
+	if err := copySupportedPortableBundledFilesFromSource(sourceDir, targetDir, cfg); err != nil {
+		return err
+	}
 	if err := writeExpandedReferencedScripts(sourceDir, targetDir, cfg); err != nil {
 		return err
+	}
+	return nil
+}
+
+func copySupportedPortableBundledFilesFromSource(sourceDir, targetDir string, cfg *interfaces.FactoryConfig) error {
+	if cfg == nil || cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) == 0 {
+		return nil
+	}
+
+	validationRoot, err := preparePortableBundledValidationRoot(targetDir)
+	if err != nil {
+		return err
+	}
+
+	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
+		if !shouldOmitSupportedPortableBundledInline(bundledFile) || strings.TrimSpace(bundledFile.Content.Inline) != "" {
+			continue
+		}
+		sourcePath, ok := supportedPortableBundledSourcePath(sourceDir, bundledFile)
+		if !ok {
+			continue
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("stat portable bundled file %s: %w", sourcePath, err)
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		target, err := portableBundledTargetPath(validationRoot.targetDir, bundledFile.TargetPath)
+		if err != nil {
+			return fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
+		}
+		if err := validatePortableBundledFilesystemPath(validationRoot, bundledFile.TargetPath, target); err != nil {
+			return fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
+		}
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			return fmt.Errorf("read portable bundled file %s: %w", sourcePath, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(target.path), 0o755); err != nil {
+			return fmt.Errorf("create bundled file directory for %s: %w", target.path, err)
+		}
+		if err := os.WriteFile(target.path, data, portableBundledFileMode(bundledFile)); err != nil {
+			return fmt.Errorf("write bundled file %s: %w", target.path, err)
+		}
 	}
 	return nil
 }
@@ -1255,10 +1307,10 @@ func authoredFactoryConfigForExpandedLayout(cfg *interfaces.FactoryConfig) (*int
 	}
 	if authored.ResourceManifest != nil {
 		for i := range authored.ResourceManifest.BundledFiles {
-			if !isSupportedPortableBundledFile(authored.ResourceManifest.BundledFiles[i]) {
+			if !shouldOmitSupportedPortableBundledInline(authored.ResourceManifest.BundledFiles[i]) {
 				continue
 			}
-			authored.ResourceManifest.BundledFiles[i].Content = interfaces.BundledFileContentConfig{}
+			authored.ResourceManifest.BundledFiles[i].Content.Inline = ""
 		}
 	}
 	return authored, nil

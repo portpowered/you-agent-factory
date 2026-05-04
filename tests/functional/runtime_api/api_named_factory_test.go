@@ -195,8 +195,8 @@ func assertFunctionalNamedFactoryBundledFiles(t *testing.T, namedFactory factory
 		t.Fatalf("%s bundled files = %#v, want 3 entries", contextLabel, bundledFiles)
 	}
 	assertFunctionalBundledFileEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n", contextLabel)
-	assertFunctionalBundledFileEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n", contextLabel)
-	assertFunctionalBundledFileEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n", contextLabel)
+	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", contextLabel)
+	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", contextLabel)
 }
 
 func assertFunctionalBundledFileEntry(
@@ -218,6 +218,28 @@ func assertFunctionalBundledFileEntry(
 	}
 	if bundledFile.Content.Inline != wantInline {
 		t.Fatalf("%s bundled file inline = %q, want %q", contextLabel, bundledFile.Content.Inline, wantInline)
+	}
+}
+
+func assertFunctionalBundledFileEntryWithoutInline(
+	t *testing.T,
+	bundledFile factoryapi.BundledFile,
+	wantType factoryapi.BundledFileType,
+	wantPath, contextLabel string,
+) {
+	t.Helper()
+
+	if bundledFile.Type != wantType {
+		t.Fatalf("%s bundled file type = %q, want %q", contextLabel, bundledFile.Type, wantType)
+	}
+	if bundledFile.TargetPath != wantPath {
+		t.Fatalf("%s bundled file targetPath = %q, want %q", contextLabel, bundledFile.TargetPath, wantPath)
+	}
+	if bundledFile.Content.Encoding != factoryapi.Utf8 {
+		t.Fatalf("%s bundled file encoding = %q, want %q", contextLabel, bundledFile.Content.Encoding, factoryapi.Utf8)
+	}
+	if bundledFile.Content.Inline != "" {
+		t.Fatalf("%s bundled file inline = %q, want omitted content", contextLabel, bundledFile.Content.Inline)
 	}
 }
 
@@ -263,11 +285,24 @@ func assertFunctionalPersistedFactoryJSONStripsInlineBundledContent(t *testing.T
 		if !ok {
 			t.Fatalf("persisted bundled content = %#v, want object", bundledFile["content"])
 		}
-		if got := content["inline"]; got != "" {
-			t.Fatalf("persisted bundled inline = %#v, want empty string", got)
-		}
-		if got := content["encoding"]; got != "" {
-			t.Fatalf("persisted bundled encoding = %#v, want empty string", got)
+		targetPath, _ := bundledFile["targetPath"].(string)
+		switch targetPath {
+		case "Makefile":
+			if got := content["inline"]; got != "test:\n\tgo test ./...\n" {
+				t.Fatalf("persisted root helper inline = %#v, want root helper body", got)
+			}
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("persisted root helper encoding = %#v, want utf-8", got)
+			}
+		case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
+			if _, ok := content["inline"]; ok {
+				t.Fatalf("persisted bundled inline = %#v, want omitted field", content["inline"])
+			}
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("persisted bundled encoding = %#v, want utf-8", got)
+			}
+		default:
+			t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)
 		}
 	}
 }

@@ -144,7 +144,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "ROOT_HELPER",
 					"targetPath": "Makefile",
 					"content": map[string]any{
-						"encoding": "UTF8",
+						"encoding": string(factoryapi.Utf8),
 						"inline":   "test:\n\tgo test ./...\n",
 					},
 				},
@@ -152,7 +152,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "DOC",
 					"targetPath": "factory/docs/README.md",
 					"content": map[string]any{
-						"encoding": "UTF8",
+						"encoding": string(factoryapi.Utf8),
 						"inline":   "# Portable factory\n",
 					},
 				},
@@ -160,7 +160,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "SCRIPT",
 					"targetPath": "factory/scripts/execute-story.ps1",
 					"content": map[string]any{
-						"encoding": "UTF8",
+						"encoding": string(factoryapi.Utf8),
 						"inline":   servicePortableBundledScriptBody,
 					},
 				},
@@ -540,8 +540,8 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
@@ -573,11 +573,24 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 		if !ok {
 			t.Fatalf("expected bundled file content object, got %#v", bundledFile["content"])
 		}
-		if got := content["inline"]; got != "" {
-			t.Fatalf("expected persisted bundled file inline content to be empty, got %#v", content)
-		}
-		if got := content["encoding"]; got != "" {
-			t.Fatalf("expected persisted bundled file encoding to be empty, got %#v", content)
+		targetPath, _ := bundledFile["targetPath"].(string)
+		switch targetPath {
+		case "Makefile":
+			if got := content["inline"]; got != "test:\n\tgo test ./...\n" {
+				t.Fatalf("expected persisted root helper inline content to stay inlined, got %#v", content)
+			}
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("expected persisted root helper encoding to stay canonical, got %#v", content)
+			}
+		case "factory/docs/README.md", "factory/scripts/execute-story.ps1":
+			if _, ok := content["inline"]; ok {
+				t.Fatalf("expected persisted bundled file inline content to be omitted, got %#v", content)
+			}
+			if got := content["encoding"]; got != "utf-8" {
+				t.Fatalf("expected persisted bundled file encoding to stay canonical, got %#v", content)
+			}
+		default:
+			t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)
 		}
 	}
 }
@@ -748,8 +761,8 @@ func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledF
 	}
 	bundledFiles := *current.SupportingFiles.BundledFiles
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1")
 }
 
 func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
@@ -951,6 +964,22 @@ func assertServiceBundledFactoryEntry(t *testing.T, bundledFile factoryapi.Bundl
 	}
 	if bundledFile.Content.Inline != wantContent {
 		t.Fatalf("bundled file %q content = %q, want %q", wantPath, bundledFile.Content.Inline, wantContent)
+	}
+}
+
+func assertServiceBundledFactoryEntryWithoutInline(t *testing.T, bundledFile factoryapi.BundledFile, wantType factoryapi.BundledFileType, wantPath string) {
+	t.Helper()
+	if bundledFile.Type != wantType {
+		t.Fatalf("bundled file type = %q, want %q", bundledFile.Type, wantType)
+	}
+	if bundledFile.TargetPath != wantPath {
+		t.Fatalf("bundled file targetPath = %q, want %q", bundledFile.TargetPath, wantPath)
+	}
+	if bundledFile.Content.Encoding != factoryapi.Utf8 {
+		t.Fatalf("bundled file %q encoding = %q, want %q", wantPath, bundledFile.Content.Encoding, factoryapi.Utf8)
+	}
+	if bundledFile.Content.Inline != "" {
+		t.Fatalf("bundled file %q content = %q, want omitted inline content", wantPath, bundledFile.Content.Inline)
 	}
 }
 

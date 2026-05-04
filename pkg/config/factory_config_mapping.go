@@ -305,6 +305,7 @@ func (m *FactoryConfigMapper) Flatten(cfg *interfaces.FactoryConfig) ([]byte, er
 		return nil, fmt.Errorf("decode factory api payload: %w", err)
 	}
 	canonical := normalizeFactoryOutputJSONKeys(decoded)
+	dropSupportedPortableBundledInlineContent(canonical)
 	encoded, err := json.Marshal(canonical)
 	if err != nil {
 		return nil, fmt.Errorf("normalize factory config keys: %w", err)
@@ -838,13 +839,67 @@ func bundledFilesAPIFromInternal(bundledFiles []interfaces.BundledFileConfig) *[
 		values[i] = factoryapi.BundledFile{
 			Type:       factoryapi.BundledFileType(file.Type),
 			TargetPath: file.TargetPath,
-			Content: factoryapi.BundledFileContent{
-				Encoding: factoryapi.BundledFileContentEncoding(file.Content.Encoding),
-				Inline:   file.Content.Inline,
-			},
+			Content:    bundledFileContentAPIFromInternal(file),
 		}
 	}
 	return &values
+}
+
+func bundledFileContentAPIFromInternal(file interfaces.BundledFileConfig) factoryapi.BundledFileContent {
+	content := factoryapi.BundledFileContent{
+		Encoding: factoryapi.BundledFileContentEncoding(file.Content.Encoding),
+		Inline:   file.Content.Inline,
+	}
+	if shouldOmitSupportedPortableBundledInline(file) {
+		content.Inline = ""
+	}
+	return content
+}
+
+func shouldOmitSupportedPortableBundledInline(file interfaces.BundledFileConfig) bool {
+	if !isSupportedPortableBundledFile(file) {
+		return false
+	}
+	switch file.Type {
+	case interfaces.BundledFileTypeScript, interfaces.BundledFileTypeDoc:
+		return true
+	default:
+		return false
+	}
+}
+
+func dropSupportedPortableBundledInlineContent(payload any) {
+	root, ok := payload.(map[string]any)
+	if !ok {
+		return
+	}
+	supportingFiles, ok := root["supportingFiles"].(map[string]any)
+	if !ok {
+		return
+	}
+	bundledFiles, ok := supportingFiles["bundledFiles"].([]any)
+	if !ok {
+		return
+	}
+	for _, entry := range bundledFiles {
+		bundledFile, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		fileType, _ := bundledFile["type"].(string)
+		targetPath, _ := bundledFile["targetPath"].(string)
+		if !shouldOmitSupportedPortableBundledInline(interfaces.BundledFileConfig{
+			Type:       fileType,
+			TargetPath: targetPath,
+		}) {
+			continue
+		}
+		content, ok := bundledFile["content"].(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(content, "inline")
+	}
 }
 
 // WorkstationConfigToOpenAPI converts an internal workstation config into the

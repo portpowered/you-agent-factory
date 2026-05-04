@@ -171,13 +171,6 @@ func ValidateRequiredTools(cfg *interfaces.FactoryConfig, checker RequiredToolCh
 	return result
 }
 
-// ValidatePortableResourceManifest runs only portability-manifest validation
-// rules. Load boundaries can use this narrower pass without re-running the full
-// topology validator.
-func ValidatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker RequiredToolChecker) *ValidationResult {
-	return validatePortableResourceManifest(cfg, checker, ruleBundledFiles)
-}
-
 func validatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker RequiredToolChecker, bundledFileRule func(*interfaces.FactoryConfig) []Finding) *ValidationResult {
 	result := ValidateRequiredTools(cfg, checker)
 	result.Findings = append(result.Findings, bundledFileRule(cfg)...)
@@ -194,8 +187,13 @@ func validatePortableResourceManifestOnPath(factoryDir string, cfg *interfaces.F
 	return fmt.Errorf("%s", result.Error())
 }
 
-func validatePortableResourceManifestForExpand(cfg *interfaces.FactoryConfig) error {
-	result := ValidatePortableResourceManifest(cfg, nil)
+func validatePortableBundledFilesForExpandOnPath(factoryDir string, cfg *interfaces.FactoryConfig) error {
+	result := validatePortableResourceManifest(cfg, nil, func(cfg *interfaces.FactoryConfig) []Finding {
+		if strings.TrimSpace(factoryDir) == "" {
+			return ruleBundledFiles(cfg)
+		}
+		return ruleBundledFilesOnPath(factoryDir, cfg)
+	})
 	if !result.HasErrors() {
 		return nil
 	}
@@ -853,6 +851,19 @@ func validateBundledFileTarget(basePath string, file interfaces.BundledFileConfi
 }
 
 func validateBundledFileContent(basePath string, file interfaces.BundledFileConfig) []Finding {
+	findings := validateBundledFileEncoding(basePath, file)
+	if strings.TrimSpace(file.Content.Inline) == "" && !shouldOmitSupportedPortableBundledInline(file) {
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".content.inline",
+			Message:  "missing required 'inline' field",
+			Rule:     "bundled-file-content-inline",
+		})
+	}
+	return findings
+}
+
+func validateBundledFileEncoding(basePath string, file interfaces.BundledFileConfig) []Finding {
 	var findings []Finding
 	if strings.TrimSpace(file.Content.Encoding) == "" {
 		findings = append(findings, Finding{
@@ -869,25 +880,20 @@ func validateBundledFileContent(basePath string, file interfaces.BundledFileConf
 			Rule:     "bundled-file-content-encoding",
 		})
 	}
-	if strings.TrimSpace(file.Content.Inline) == "" {
-		findings = append(findings, Finding{
-			Severity: SeverityError,
-			Path:     basePath + ".content.inline",
-			Message:  "missing required 'inline' field",
-			Rule:     "bundled-file-content-inline",
-		})
-	}
 	return findings
 }
 
 func validateBundledFileContentOnPath(factoryDir, basePath string, file interfaces.BundledFileConfig) []Finding {
-	if strings.TrimSpace(file.Content.Encoding) != "" || strings.TrimSpace(file.Content.Inline) != "" {
+	if strings.TrimSpace(file.Content.Inline) != "" {
 		return validateBundledFileContent(basePath, file)
 	}
 	if sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, file); ok {
 		info, err := os.Stat(sourcePath)
 		if err == nil && !info.IsDir() {
-			return nil
+			if strings.TrimSpace(file.Content.Encoding) == "" {
+				return nil
+			}
+			return validateBundledFileEncoding(basePath, file)
 		}
 	}
 	return validateBundledFileContent(basePath, file)
