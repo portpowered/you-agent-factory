@@ -96,15 +96,13 @@ func TestInferenceThrottleGuard_EvaluateRuntimeBlocksOnlyWhilePauseWindowIsActiv
 	}
 }
 
-func TestInferenceThrottleGuard_FallsBackToWatchedTransitionIDsWhenRuntimeLookupMisses(t *testing.T) {
+func TestInferenceThrottleGuard_DoesNotBlockWhenCurrentTransitionRuntimeLookupMisses(t *testing.T) {
 	pausedAt := time.Date(2026, time.May, 2, 15, 0, 0, 0, time.UTC)
 	guard := &InferenceThrottleGuard{
 		Provider:      "claude",
 		Model:         "claude-sonnet",
+		WorkerName:    "writer",
 		RefreshWindow: 5 * time.Minute,
-		WatchedTransitionIDs: map[string]struct{}{
-			"t-claude": {},
-		},
 	}
 	candidates := []interfaces.Token{{ID: "tok-1"}}
 
@@ -121,8 +119,37 @@ func TestInferenceThrottleGuard_FallsBackToWatchedTransitionIDsWhenRuntimeLookup
 			"t-claude": "missing-worker",
 		},
 	}, candidates, nil, nil)
-	if ok || matched != nil {
-		t.Fatalf("fallback pause evaluation = (%v, %t), want (nil, false)", matched, ok)
+	if !ok {
+		t.Fatal("expected unresolved runtime lookup to leave authored lane runnable")
+	}
+	if len(matched) != 1 || matched[0].ID != "tok-1" {
+		t.Fatalf("matched tokens with unresolved runtime lookup = %#v, want original candidate", matched)
+	}
+}
+
+func TestInferenceThrottleGuard_ActivePausesIgnoreUnresolvedHistoryTransitions(t *testing.T) {
+	now := time.Date(2026, time.May, 2, 15, 0, 0, 0, time.UTC)
+	guard := &InferenceThrottleGuard{
+		Provider:      "claude",
+		Model:         "claude-sonnet",
+		WorkerName:    "writer",
+		RefreshWindow: 5 * time.Minute,
+	}
+
+	active := guard.ActivePauses(RuntimeGuardContext{
+		Now: now,
+		DispatchHistory: []interfaces.CompletedDispatch{
+			completedThrottleFailure("dispatch-match", "t-claude", now.Add(-2*time.Minute)),
+		},
+		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workers: map[string]*interfaces.WorkerConfig{},
+		},
+		TransitionWorkers: map[string]string{
+			"t-claude": "missing-worker",
+		},
+	})
+	if len(active) != 0 {
+		t.Fatalf("active pauses with unresolved history lookup = %#v, want none", active)
 	}
 }
 
