@@ -358,9 +358,8 @@ func (fw *FileWatcher) handleFile(ctx context.Context, path string) error {
 }
 
 // deriveWorkTypeAndChannel extracts the work type and optional execution ID
-// from the file path. It supports two layouts:
+// from a canonical watched input path:
 //
-//	<root>/<work-type>/file                → workType, default channel
 //	<root>/<work-type>/<channel>/file      → workType, channel (or "" if "default")
 func (fw *FileWatcher) deriveWorkTypeAndChannel(path string) (workType string, executionID string, err error) {
 	targetPath, err := filepath.Rel(fw.dir, path)
@@ -370,9 +369,6 @@ func (fw *FileWatcher) deriveWorkTypeAndChannel(path string) (workType string, e
 
 	parts := strings.Split(filepath.ToSlash(targetPath), "/")
 	switch len(parts) {
-	case 2:
-		// <work-type>/file — no channel subdirectory, default channel.
-		return parts[0], "", nil
 	case 3:
 		// <work-type>/<channel>/file — standard 3-level layout.
 		workType = parts[0]
@@ -381,7 +377,7 @@ func (fw *FileWatcher) deriveWorkTypeAndChannel(path string) (workType string, e
 		}
 		return workType, executionID, nil
 	default:
-		return "", "", fmt.Errorf("unexpected path depth (%d segments) for %s: expected <work-type>/file or <work-type>/<channel>/file", len(parts), targetPath)
+		return "", "", fmt.Errorf("unexpected path depth (%d segments) for %s: expected <work-type>/<channel>/file", len(parts), targetPath)
 	}
 }
 
