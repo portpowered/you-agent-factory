@@ -101,7 +101,7 @@ func writePortableSourceFactory(t *testing.T, sourceDir string, copyScript bool)
 				"copyReferencedScripts": copyScript,
 				"inputs":                []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":               []map[string]string{{"workType": "task", "state": "complete"}},
-				"onFailure":             map[string]string{"workType": "task", "state": "failed"},
+				"onFailure":             []map[string]string{{"workType": "task", "state": "failed"}},
 				"type":                  "MODEL_WORKSTATION",
 				"body":                  "Execute {{ (index .Inputs 0).Payload }}.",
 				"workingDirectory":      "repo/{{ (index .Inputs 0).WorkID }}",

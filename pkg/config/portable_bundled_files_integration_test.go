@@ -108,7 +108,7 @@ func TestPortableBundledFiles_LoadRuntimeConfigAcceptsThinDiskBackedManifest(t *
     "worker":"executor",
     "inputs":[{"workType":"task","state":"init"}],
     "outputs":[{"workType":"task","state":"complete"}],
-    "onFailure":{"workType":"task","state":"failed"}
+    "onFailure":[{"workType":"task","state":"failed"}]
   }]
 }`)
 	writePortableBundledRoundTripFile(t, filepath.Join(projectDir, "Makefile"), "test:\n\tgo test ./...\n")
@@ -137,7 +137,7 @@ func seedPortableBundledRoundTripFactory(t *testing.T) (string, string) {
     "worker":"executor",
     "inputs":[{"workType":"task","state":"init"}],
     "outputs":[{"workType":"task","state":"complete"}],
-    "onFailure":{"workType":"task","state":"failed"}
+    "onFailure":[{"workType":"task","state":"failed"}]
   }]
 }`)
 	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName), `---
