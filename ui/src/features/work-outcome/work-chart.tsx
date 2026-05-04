@@ -34,6 +34,11 @@ export const WORK_CHART_LOADING_MESSAGE = "Waiting for dashboard timeline data."
 export const WORK_CHART_ERROR_TITLE = "Work outcome chart unavailable";
 export const WORK_CHART_ERROR_MESSAGE =
   "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.";
+const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
+const WORK_CHART_OVERLAY_CLASS =
+  "flex items-start justify-between gap-3 px-4 pb-3 pt-3 sm:px-5 sm:pb-4 sm:pt-4";
+const WORK_CHART_X_AXIS_OVERLAY_CLASS = "self-end";
+const WORK_CHART_Y_AXIS_WIDTH = 52;
 
 export interface WorkChartSeriesDefinition {
   key: WorkChartSeriesKey;
@@ -132,74 +137,100 @@ export function WorkChart({
     );
   }
 
+  return renderReadyWorkChart({
+    ariaLabel,
+    chartData: chartData.data,
+    className,
+    xAxisLabel,
+    yAxisLabel,
+  });
+}
+
+interface ReadyWorkChartProps {
+  ariaLabel: string;
+  chartData: WorkChartData;
+  className: string;
+  xAxisLabel: string;
+  yAxisLabel: string;
+}
+
+function renderReadyWorkChart({
+  ariaLabel,
+  chartData,
+  className,
+  xAxisLabel,
+  yAxisLabel,
+}: ReadyWorkChartProps) {
   return (
-    <div className={cn("grid h-full min-h-0 gap-2", className)}>
-      <div className="flex items-center justify-between gap-3">
-        <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>{yAxisLabel}</p>
-        <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>{xAxisLabel}</p>
-      </div>
-      <ChartContainer
-        className="h-[16rem] min-h-[14rem] p-3 sm:h-[18rem] sm:p-4"
-        config={chartData.data.config}
-        title={ariaLabel}
+    <ChartContainer
+      className={cn("h-[16rem] min-h-[14rem] px-4 pb-4 pt-3 sm:h-[18rem] sm:px-5 sm:pb-5 sm:pt-4", className)}
+      config={chartData.config}
+      overlay={
+        <div className={WORK_CHART_OVERLAY_CLASS}>
+          <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>{yAxisLabel}</p>
+          <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS, WORK_CHART_X_AXIS_OVERLAY_CLASS)}>
+            {xAxisLabel}
+          </p>
+        </div>
+      }
+      title={ariaLabel}
+    >
+      <LineChart
+        accessibilityLayer
+        data={chartData.rows}
+        margin={WORK_CHART_MARGIN}
       >
-        <LineChart
-          accessibilityLayer
-          data={chartData.data.rows}
-          margin={{ bottom: 8, left: 8, right: 8, top: 8 }}
-        >
-          <CartesianGrid vertical={false} />
-          <XAxis
-            axisLine={false}
-            dataKey="tick"
-            minTickGap={24}
-            tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
-            tickFormatter={formatAxisNumber}
-            tickLine={false}
-          />
-          <YAxis
-            allowDecimals={false}
-            axisLine={false}
-            tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
-            tickCount={5}
-            tickFormatter={formatAxisNumber}
-            tickLine={false}
-            width={30}
-          />
-          <ChartTooltip
-            content={(props) => {
-              const label = props.payload?.[0]?.payload?.label ?? props.label;
-              return <ChartTooltipContent {...props} label={label} />;
+        <CartesianGrid vertical={false} />
+        <XAxis
+          axisLine={false}
+          dataKey="tick"
+          minTickGap={24}
+          tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
+          tickFormatter={formatAxisNumber}
+          tickLine={false}
+        />
+        <YAxis
+          allowDecimals={false}
+          axisLine={false}
+          tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
+          tickCount={5}
+          tickFormatter={formatAxisNumber}
+          tickLine={false}
+          width={WORK_CHART_Y_AXIS_WIDTH}
+        />
+        <ChartTooltip
+          content={(props) => {
+            const label = props.payload?.[0]?.payload?.label ?? props.label;
+            return <ChartTooltipContent {...props} label={label} />;
+          }}
+          cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}
+        />
+        <ChartLegend content={<ChartLegendContent />} />
+        {chartData.series.map((seriesData) => (
+          <Line
+            key={seriesData.key}
+            activeDot={{
+              className: seriesData.pointClassName,
+              fill: seriesData.lineColor,
+              r: seriesData.pointRadius,
+              stroke: "rgb(from var(--color-af-canvas) r g b / 0.88)",
+              strokeWidth: 1.5,
             }}
-            cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}
+            className={seriesData.lineClassName}
+            data-chart-series={seriesData.key}
+            data-chart-series-color={seriesData.lineColor}
+            dataKey={seriesData.key}
+            dot={false}
+            isAnimationActive={false}
+            name={seriesData.label}
+            stroke={seriesData.lineColor}
+            strokeDasharray={seriesData.strokeDasharray}
+            strokeWidth={2.25}
+            type="linear"
           />
-          <ChartLegend content={<ChartLegendContent />} />
-          {chartData.data.series.map((seriesData) => (
-            <Line
-              key={seriesData.key}
-              activeDot={{
-                className: seriesData.pointClassName,
-                fill: seriesData.lineColor,
-                r: seriesData.pointRadius,
-                stroke: "rgb(from var(--color-af-canvas) r g b / 0.88)",
-                strokeWidth: 1.5,
-              }}
-              className={seriesData.lineClassName}
-              data-chart-series={seriesData.key}
-              data-chart-series-color={seriesData.lineColor}
-              dataKey={seriesData.key}
-              dot={false}
-              isAnimationActive={false}
-              name={seriesData.label}
-              stroke={seriesData.lineColor}
-              strokeDasharray={seriesData.strokeDasharray}
-              strokeWidth={2.25}
-              type="linear"
-            />
-          ))}
-        </LineChart>
-      </ChartContainer>
-    </div>
+        ))}
+      </LineChart>
+    </ChartContainer>
   );
 }
 
@@ -407,4 +438,3 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
-

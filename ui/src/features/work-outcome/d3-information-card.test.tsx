@@ -130,16 +130,15 @@ describe("D3CompletionInformationCard", () => {
     expect(within(card).queryByRole("combobox", { name: "Time range" })).toBeNull();
     expect(within(card).queryByRole("list", { name: "Work outcome totals" })).toBeNull();
     expect(within(card).queryByText("Completed in range")).toBeNull();
-    expect(
-      within(card).getByRole("img", { name: "Work outcome chart for 15m" }),
-    ).toBeTruthy();
+    const chart = within(card).getByRole("img", { name: "Work outcome chart for 15m" });
+    expect(chart).toBeTruthy();
     expect(card.querySelector(".recharts-wrapper")).toBeTruthy();
-    expect(within(card).getByText("Queued")).toBeTruthy();
-    expect(within(card).getByText("In-flight")).toBeTruthy();
-    expect(within(card).getByText("Completed")).toBeTruthy();
-    expect(within(card).getByText("Failed/retried")).toBeTruthy();
-    expect(within(card).getByText("Ticks")).toBeTruthy();
-    expect(within(card).getByText("Work count")).toBeTruthy();
+    expect(within(chart).getByText("Queued")).toBeTruthy();
+    expect(within(chart).getByText("In-flight")).toBeTruthy();
+    expect(within(chart).getByText("Completed")).toBeTruthy();
+    expect(within(chart).getByText("Failed/retried")).toBeTruthy();
+    expect(within(chart).getByText("Ticks")).toBeTruthy();
+    expect(within(chart).getByText("Work count")).toBeTruthy();
   });
 
   it("renders an explicit empty state without a chart when samples are unavailable", () => {
@@ -173,4 +172,3 @@ describe("D3CompletionInformationCard", () => {
     ).toBeNull();
   });
 });
-

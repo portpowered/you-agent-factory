@@ -1269,15 +1269,18 @@ describe("App current selection layout", () => {
         name: "Work outcome chart for Session",
       }),
     ).toBeTruthy();
+    const chart = within(trendWidget).getByRole("img", {
+      name: "Work outcome chart for Session",
+    });
     expect(
       within(trendWidget).queryByRole("list", { name: "Work outcome totals" }),
     ).toBeNull();
-    expect(within(trendWidget).getByText("Queued")).toBeTruthy();
-    expect(within(trendWidget).getByText("In-flight")).toBeTruthy();
-    expect(within(trendWidget).getByText("Completed")).toBeTruthy();
-    expect(within(trendWidget).getByText("Failed/retried")).toBeTruthy();
-    expect(within(trendWidget).getByText("Ticks")).toBeTruthy();
-    expect(within(trendWidget).getByText("Work count")).toBeTruthy();
+    expect(within(chart).getByText("Queued")).toBeTruthy();
+    expect(within(chart).getByText("In-flight")).toBeTruthy();
+    expect(within(chart).getByText("Completed")).toBeTruthy();
+    expect(within(chart).getByText("Failed/retried")).toBeTruthy();
+    expect(within(chart).getByText("Ticks")).toBeTruthy();
+    expect(within(chart).getByText("Work count")).toBeTruthy();
 
     const stream = MockEventSource.instances[0];
     if (!stream) {

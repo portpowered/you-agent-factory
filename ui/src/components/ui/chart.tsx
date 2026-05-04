@@ -34,11 +34,13 @@ export function ChartContainer({
   children,
   className,
   config,
+  overlay,
   title,
 }: {
   children: ReactNode;
   className?: string;
   config: ChartConfig;
+  overlay?: ReactNode;
   title: string;
 }) {
   return (
@@ -46,7 +48,7 @@ export function ChartContainer({
       <div
         aria-label={title}
         className={cn(
-          "h-[18rem] rounded-2xl border border-af-overlay/10 bg-af-surface/56 p-4 text-af-ink",
+          "relative h-[18rem] rounded-2xl border border-af-overlay/10 bg-af-surface/56 p-4 text-af-ink",
           className,
         )}
         data-chart-container=""
@@ -57,6 +59,7 @@ export function ChartContainer({
           ) as CSSProperties
         }
       >
+        {overlay ? <div className="pointer-events-none absolute inset-0">{overlay}</div> : null}
         <ResponsiveContainer height="100%" minHeight={0} minWidth={0} width="100%">
           {children}
         </ResponsiveContainer>
@@ -140,4 +143,3 @@ export function ChartLegendContent({
     </div>
   );
 }
-

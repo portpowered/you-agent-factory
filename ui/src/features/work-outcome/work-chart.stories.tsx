@@ -1,3 +1,6 @@
+import type { ComponentProps } from "react";
+import { expect, within } from "storybook/test";
+
 import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 import type { WorkChartModel } from "./trends";
@@ -129,6 +132,32 @@ const WORK_CHART_SERIES: readonly WorkChartSeriesDefinition[] = [
   },
 ];
 
+function expectWorkChartOverlayContract(chart: HTMLElement): void {
+  expect(within(chart).getByText("Ticks")).toBeVisible();
+  expect(within(chart).getByText("Work count")).toBeVisible();
+}
+
+function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
+  const shell = canvasElement.querySelector<HTMLElement>("[data-story-shell]");
+
+  expect(shell).not.toBeNull();
+  expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
+  const card = shell?.querySelector<HTMLElement>("[data-chart-container]");
+  expect(card).not.toBeNull();
+  expect((card?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
+}
+
+function renderWorkChartStoryShell(
+  args: ComponentProps<typeof WorkChart>,
+  maxWidth: string,
+) {
+  return (
+    <div data-story-shell="work-chart" style={{ maxWidth, padding: "1rem", width: "100%" }}>
+      <WorkChart {...args} />
+    </div>
+  );
+}
+
 export default {
   title: "Agent Factory/Dashboard/Work Chart",
   component: WorkChart,
@@ -139,9 +168,17 @@ export default {
 };
 
 export const Populated = {
+  render: (args: ComponentProps<typeof WorkChart>) =>
+    renderWorkChartStoryShell(args, "640px"),
   args: {
     model: populatedModel,
     series: WORK_CHART_SERIES,
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const chart = await canvas.findByRole("img", { name: "Work outcome chart" });
+
+    expectWorkChartOverlayContract(chart);
   },
 };
 
@@ -169,3 +206,18 @@ export const IncompleteData = {
   },
 };
 
+export const ConstrainedWidth = {
+  render: (args: ComponentProps<typeof WorkChart>) =>
+    renderWorkChartStoryShell(args, "360px"),
+  args: {
+    model: populatedModel,
+    series: WORK_CHART_SERIES,
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const chart = await canvas.findByRole("img", { name: "Work outcome chart" });
+
+    expectWorkChartOverlayContract(chart);
+    expectNoOverflowInStoryShell(canvasElement);
+  },
+};

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
@@ -156,12 +156,12 @@ describe("WorkChart", () => {
     const chart = screen.getByRole("img", { name: "Work chart" });
     expect(chart).toBeTruthy();
     expect(chart.querySelector(".recharts-wrapper")).toBeTruthy();
-    expect(screen.getByText("Queued")).toBeTruthy();
-    expect(screen.getByText("In-flight")).toBeTruthy();
-    expect(screen.getByText("Completed")).toBeTruthy();
-    expect(screen.queryByText("Failed")).toBeNull();
-    expect(screen.getByText("Ticks")).toBeTruthy();
-    expect(screen.getByText("Work count")).toBeTruthy();
+    expect(within(chart).getByText("Queued")).toBeTruthy();
+    expect(within(chart).getByText("In-flight")).toBeTruthy();
+    expect(within(chart).getByText("Completed")).toBeTruthy();
+    expect(within(chart).queryByText("Failed")).toBeNull();
+    expect(within(chart).getByText("Ticks")).toBeTruthy();
+    expect(within(chart).getByText("Work count")).toBeTruthy();
   });
 
   it("keeps missing series points absent instead of fabricating zero-valued rows", () => {
@@ -185,7 +185,7 @@ describe("WorkChart", () => {
       />,
     );
 
-    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Zero work chart" }).textContent).toContain("Failed");
   });
 
   it("renders explicit no-data state when timeline points are unavailable", () => {
@@ -261,4 +261,3 @@ describe("WorkChart", () => {
     expect(screen.queryByRole("img", { name: "Work chart malformed" })).toBeNull();
   });
 });
-
