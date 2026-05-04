@@ -66,10 +66,14 @@
   inspect import/load boundary normalizers and checked-in fixture JSON next;
   hidden coercion can keep the retired authored shape alive after schemas,
   generated types, and UI consumers are already canonical.
+- After a generated boundary and the main mapper both expose the same canonical
+  field directly, look for post-processing compatibility patches that reparse
+  the raw authored JSON again; those helpers are often dead seams that can be
+  deleted with focused boundary/runtime regression coverage.
 
 ## Current Summary
 
-- As of `2026-05-04T05:02:59.2509080-07:00`, `HEAD` on `main` points to `4e218a5`
+- As of `2026-05-04T07:04:39.6783592-07:00`, `HEAD` on `main` points to `f2a5ab8`
   and matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
   have tracked local edits and `factory/inputs/**` still holds ignored
@@ -96,6 +100,8 @@
   `main`.
 - Merged PR `#89` closed the remaining replay trace-dispatch projection
   duplication lane on `main`.
+- Merged PR `#91` closed the hidden singular non-success route compatibility
+  seam on `main`.
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
@@ -106,9 +112,13 @@
   closed on `main` through merged PR `#69`.
 - The replay fixtures remain useful smoke artifacts, but they reflect an older
   workflow shape than the current checked-in contract.
+- There is no remaining narrow customer-visible ask gap on `main`; the
+  remaining checked-in asks are broader quality-program items such as the
+  general standards checklist, website coverage target, manual QA runs, and
+  systems-quality docs.
 - The next safe cleanup dispatch is a single standalone backend cleanup to
-  retire the hidden singular non-success route compatibility still carried by
-  the OpenAPI factory boundary and its fixture-shaped residue.
+  retire the stale OpenAPI cron post-processing compatibility patch from the
+  factory load path.
 
 ## Standards Alignment Checklist
 
@@ -122,10 +132,42 @@
   aligned on `main` through PR `#69`.
 - Backend: the authored-throttle transition-ID fallback lane is now closed on
   `main` through PR `#90`.
-- Backend: the next cleanup seam is removing the hidden single-object
-  `onContinue` / `onRejection` / `onFailure` coercion from
-  `pkg/config/openapi_factory.go` and updating the remaining checked-in JSON
-  fixtures that still rely on that retired authored shape.
+- Backend: the array-only non-success route boundary is now fully closed on
+  `main` through PR `#91`.
+- Backend: the next cleanup seam is removing the stale OpenAPI cron
+  post-processing helper path in `pkg/config/openapi_factory.go` and
+  `pkg/config/factory_config_mapping.go`.
+
+## 2026-05-04T07:04:39.6783592-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git fast-forwarded `main`
+  from `13a26af` to `f2a5ab8`, which pulled in merged PR `#91`
+  (`retire-singular-workstation-route-compatibility`) on
+  `2026-05-04T13:28:02Z` while preserving the pre-existing local tracked edits
+  in `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the recent PR
+  state, the tracked-versus-ignored `factory/inputs/**` surface, and the live
+  OpenAPI-factory boundary and mapper code.
+- Re-validated with `gh pr list --state all --limit 12`, `gh pr view 91`,
+  `git log --oneline -12`, direct code reads, graph reads, and delegated
+  explorer passes that PR `#91` fully closed the stale singular non-success
+  route compatibility seam previously recorded in the meta view.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/retire-singular-workstation-route-compatibility.md`
+  is now stale because PR `#91` already landed that exact work on `main`, then
+  replaced that ignored queue residue with a newer standalone backend cleanup
+  for the next live seam.
+- Used direct reads plus delegated inspection to confirm there is no remaining
+  narrow customer-visible ask gap on `main`; the unresolved items in
+  `factory/logs/meta/asks.md` are broad program asks rather than one more
+  concrete feature lane from PRs `#83` through `#91`.
+- Identified the next narrow backend cleanup on `main`: `pkg/config/factory_config_mapping.go`
+  `Expand` still calls `applyOpenAPICronCompatibility`, and
+  `pkg/config/openapi_factory.go` still reparses the normalized JSON through
+  `buildRawOpenAPIWorkstationCronIndex` even though the generated boundary and
+  the mapper already carry workstation `cron` directly.
 
 ## 2026-05-04T06:06:00-07:00 - meta state refresh
 

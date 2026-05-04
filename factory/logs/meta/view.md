@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-04T06:06:00-07:00`, local `HEAD` on `main` points to
-  `797f670`
-  (`Merge pull request #90 from portpowered/ralph/retire-authored-throttle-transition-id-fallback`)
+- as of `2026-05-04T07:04:39.6783592-07:00`, local `HEAD` on `main` points to
+  `f2a5ab8`
+  (`Merge pull request #91 from portpowered/ralph/retire-singular-workstation-route-compatibility`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -47,8 +47,8 @@
   channel fallback
 - after pruning stale local residue for merged PR `#69`, merged PR `#84`,
   merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`,
-  merged PR `#89`, and merged PR `#90`, the next ignored operating submission
-  should remain a single standalone cleanup idea under
+  merged PR `#89`, merged PR `#90`, and merged PR `#91`, the next ignored
+  operating submission should remain a single standalone cleanup idea under
   `factory/inputs/idea/default/`
 
 ## customer-ask truth
@@ -113,15 +113,32 @@
     through transition-ID watch sets
   - throttle tests now assert runtime-observable lane behavior instead of the
     retired fallback shape
-- the next adjacent narrow seam on `main` is the hidden singular non-success
-  route compatibility still carried by `pkg/config/openapi_factory.go`:
-  - `normalizeFactoryWorkstationEntries` still calls
-    `normalizeWorkstationIORouteField` for `onContinue`, `onRejection`, and
-    `onFailure`
-  - `normalizeWorkstationIORouteField` still silently wraps a single route
-    object into a one-element array
-  - checked-in JSON fixtures still rely on that tolerance even though the
-    public API contract and UI types already use array-valued routes
+- merged PR `#91` closed the last hidden non-success route compatibility seam
+  on `main`:
+  - `pkg/config/openapi_factory.go` no longer carries the singular
+    `onContinue` / `onRejection` / `onFailure` coercion helper
+  - `pkg/api/factory_config_smoke_test.go` now rejects singular non-success
+    route objects at the generated boundary
+  - checked-in factory fixtures across `factory/`, `examples/`, and
+    `tests/functional_test/testdata/` now author canonical array-valued
+    non-success routes
+- there is no remaining narrow customer-visible ask gap on `main`; the
+  remaining ask surface is broad program work:
+  - the general standards-migration checklist ask is still open in
+    `factory/logs/meta/asks.md`
+  - the website `90%` coverage target is still open in
+    `factory/logs/meta/asks.md`
+  - the manual QA and systems-quality documentation asks are still open in
+    `factory/logs/meta/asks.md`
+- the next adjacent narrow cleanup seam on `main` is the stale cron
+  post-processing compatibility patch still carried by the OpenAPI factory load
+  path:
+  - `pkg/config/factory_config_mapping.go` `Expand` still calls
+    `applyOpenAPICronCompatibility`
+  - `pkg/config/openapi_factory.go` still reparses the normalized JSON through
+    `buildRawOpenAPIWorkstationCronIndex`
+  - the generated boundary and mapper already expose workstation `cron`
+    directly, so this extra patch layer appears redundant
 
 ## replay truth
 
@@ -138,6 +155,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#91` `retire-singular-workstation-route-compatibility`, merged on
+    `2026-05-04T13:28:02Z`
   - `#90` `retire-authored-throttle-transition-id-fallback`, merged on
     `2026-05-04T12:32:50Z`
   - `#89` `centralize-replay-trace-dispatch-projection`, merged on
@@ -190,6 +209,10 @@
 - when a public JSON shape moves from singular objects to arrays, re-check
   import/load normalization helpers and checked-in factory fixtures; type and
   schema updates alone do not prove the old authored shape is actually rejected
+- after a boundary migration lands, re-check for follow-on post-processing
+  patches that still reparse the authored JSON out-of-band; once the generated
+  model and mapper both carry the canonical field directly, those patches are
+  often the next dead compatibility seam
 - the cleaner prompt currently has a tracked local edit allowing multiple
   non-overlapping items in flight, but that does not remove the need to default
   to one standalone idea when a single seam is sufficient
