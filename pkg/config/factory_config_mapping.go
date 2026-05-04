@@ -23,8 +23,7 @@ func NewFactoryConfigMapper() *FactoryConfigMapper {
 }
 
 type generatedFactoryBoundary struct {
-	generated      factoryapi.Factory
-	normalizedJSON []byte
+	generated factoryapi.Factory
 }
 
 const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
@@ -252,8 +251,7 @@ func decodeGeneratedFactoryBoundaryJSON(data []byte) (generatedFactoryBoundary, 
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
 	return generatedFactoryBoundary{
-		generated:      apiCfg,
-		normalizedJSON: normalizedData,
+		generated: apiCfg,
 	}, nil
 }
 
