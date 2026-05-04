@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-03T22:02:10.9873186-07:00`, local `HEAD` on `main` points to
-  `5f9576f`
-  (`Merge pull request #82 from portpowered/ralph/trim-ralph-starter-input-readme-contract`)
+- as of `2026-05-04T00:03:00-07:00`, local `HEAD` on `main` points to
+  `f4da7ae`
+  (`Merge pull request #83 from portpowered/ralph/simplify-dashboard-header-toolbar-verbosity`)
   and matches `origin/main`
 - the local worktree is not clean:
   - tracked local edits exist in `factory/logs/meta/asks.md` and
@@ -43,7 +43,7 @@
   except those sentinel paths
 - the current checkout contains ignored operating residue:
   - `factory/inputs/idea/default/workstation-non-success-route-arrays.md`
-  - `factory/inputs/idea/default/simplify-dashboard-header-toolbar-verbosity.md`
+  - `factory/inputs/idea/default/align-work-outcome-chart-axis-labels-and-margins.md`
 - the file watcher now enforces the documented three-segment watched-input
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
@@ -69,13 +69,21 @@
   second overlapping dispatch for the same lane would still be duplicate work
 - the selected-work current-selection ask is materially satisfied on `main`
   through merged PRs `#74` and `#77`
-- the ask surface now also still contains an unowned dashboard-header verbosity
-  lane:
-  - `Factory state` should be dropped from the header summary
-  - stream state should collapse to a compact pulsating status indicator
-  - `Export PNG` should collapse to an icon-only trigger
-  - the current/live timeline action should collapse to a play-style icon-only
-    control
+- merged PR `#83` materially advanced the header-verbosity ask on `main`:
+  - visible `Factory state`, `Stream`, `Export PNG`, and `Current` toolbar
+    labels are gone from the dashboard header
+- the broader header/branding ask is not fully closed yet:
+  - the header and status surfaces still brand the app as `Agent Factory`
+  - the favicon and page metadata still teach the retired triangle branding
+  - the stream/export/current controls still have residual iconography drift
+    from the ask's pulsating-dot, share-icon, and play-icon wording
+- the next selected unowned customer-visible follow-up is now the work outcome
+  chart contract:
+  - axis labels still render as text above the chart instead of being attached
+    to the chart axes
+  - the chart margins remain tight against the bento edges
+  - current chart coverage still asserts the external-label treatment instead
+    of the requested integrated axis/legend outcome
 
 ## replay truth
 
@@ -92,6 +100,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#83` `simplify-dashboard-header-toolbar-verbosity`, merged on
+    `2026-05-04T05:53:10Z`
   - `#82` `trim-ralph-starter-input-readme-contract`, merged on
     `2026-05-04T04:20:52Z`
   - `#81` `trim-starter-input-readme-contract`, merged on
@@ -125,15 +135,18 @@
   before dispatching anything new
 - merged PR `#80` consumed the older starter task-input-contract cleanup idea,
   merged PR `#81` consumed the follow-up default starter README cleanup, and
-  merged PR `#82` consumed the Ralph starter README follow-up, so stale ignored
-  idea residue in those lanes must be pruned quickly
+  merged PR `#82` consumed the Ralph starter README follow-up, and merged
+  PR `#83` consumed the broad header-verbosity follow-up, so stale ignored idea
+  residue in those lanes must be pruned quickly
 - PR ownership and ask completeness are different checks: PR `#69` owns the
   route-array lane, but failing checks plus stale maintained examples still mean
   the ask is not closed
 - once the remaining P0 route-array lane is already owned, the meta loop should
   only queue follow-up cleanup when it can prove the seam is genuinely
   non-overlapping with `#69`
-- the current safe follow-up seam after merged PR `#82` has shifted out of the
-  starter scaffolds and into the dashboard header: the toolbar still publishes
-  verbose `Factory state`, `Stream`, `Export PNG`, and `Current` labels even
-  though the ask now calls for a thinner icon-first summary strip
+- partial closure matters: a merged PR can satisfy the visible copy part of an
+  ask while leaving narrower residual iconography, branding, or chart-contract
+  seams that still need fresh inspection before the lane is considered done
+- after PR `#83`, the cleanest new non-overlapping dispatch seam is the work
+  outcome chart because it is customer-visible, isolated to `ui/src/features/work-outcome/`,
+  and does not overlap the route-array PR

@@ -49,11 +49,14 @@
   `factory/inputs/README.md` template too; `pkg/cli/init` can keep stale
   starter-facing prose even after the runtime path, CLI help, and bootstrap
   tests are aligned.
+- After a UI cleanup PR merges, re-read the exact live controls and chart
+  contracts before closing the ask; copy reduction can land while residual
+  iconography, branding, or axis-layout drift still remains.
 
 ## Current Summary
 
-- As of `2026-05-03T22:02:10.9873186-07:00`, `HEAD` on `main` points to
-  `5f9576f` and matches `origin/main`; the worktree is not clean because
+- As of `2026-05-04T00:03:00-07:00`, `HEAD` on `main` points to `f4da7ae` and
+  matches `origin/main`; the worktree is not clean because
   `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md` have
   tracked local edits and the live inbox still contains ignored operating
   residue.
@@ -67,7 +70,10 @@
   `factory/inputs/**` are ignored local residue rather than checked-in repo
   truth.
 - The current ignored/local residue is now the still-live route-array idea plus
-  one new dashboard-header follow-up idea.
+  one new work-outcome chart follow-up idea.
+- PR `#83` merged the broad dashboard-header verbosity cleanup on
+  `2026-05-04T05:53:10Z`, so the older local header-verbosity idea is stale and
+  should be pruned.
 - PR `#76` merged the remaining import preview dialog extraction seam on
   `2026-05-03`, PR `#77` merged the remaining selected-work relationship graph
   plus per-dispatch attempt-detail seam on `2026-05-03`, PR `#78` merged the
@@ -105,10 +111,42 @@
 - The merged PRs `#80`, `#81`, and `#82` consumed the starter-input and both
   starter README cleanup lanes, so the older ignored idea residue in those
   lanes is stale and should be pruned locally.
-- The next safe cleanup dispatch now sits in the dashboard header, not the
-  starter scaffolds: the live UI still renders verbose `Factory state`,
-  `Stream`, `Export PNG`, and `Current` controls even though the ask wants a
-  thinner icon-first summary strip.
+- The next safe cleanup dispatch now sits in the work outcome chart: the live
+  chart still keeps axis labels outside the chart and hugs the bento edges even
+  though the ask wants the legend/labels integrated with the chart and the axes
+  given more breathing room.
+
+## 2026-05-04T00:03:00-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `cad726f` to
+  `f4da7ae`, which pulled in merged PR `#83`
+  (`simplify-dashboard-header-toolbar-verbosity`) on `2026-05-04T05:53:10Z`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, the tracked-versus-ignored `factory/inputs/**` surface,
+  current PR metadata, and the live `ui/src/features/header/` plus
+  `ui/src/features/work-outcome/` code.
+- Re-validated with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs` that the tracked inbox remains
+  sentinel-only while visible idea files remain ignored operating state.
+- Confirmed with `gh pr list`, `gh pr view 69`, `gh pr view 83`, and `git log`
+  that PR `#83` is merged and PR `#69` remains the only open PR directly tied
+  to an active ask lane.
+- Confirmed the local ignored idea
+  `factory/inputs/idea/default/simplify-dashboard-header-toolbar-verbosity.md`
+  is stale because PR `#83` already landed the broad copy-reduction cleanup on
+  `main`, then pruned that ignored idea residue locally.
+- Used delegated and direct inspection to confirm the remaining unowned
+  customer-visible chart seam on `main`: `ui/src/features/work-outcome/work-chart.tsx`
+  still renders `Ticks` and `Work count` as detached text above the chart and
+  keeps tight chart margins, while existing work-chart tests still assert that
+  external-label layout.
+- Queued one new standalone ignored cleanup idea at
+  `factory/inputs/idea/default/align-work-outcome-chart-axis-labels-and-margins.md`
+  so the next follow-up stays isolated to the work outcome chart and its
+  rendered behavior instead of overlapping route-array work already owned by
+  PR `#69`.
 
 ## 2026-05-03T22:02:10.9873186-07:00 - meta state refresh
 
