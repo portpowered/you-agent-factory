@@ -90,6 +90,9 @@
 - Deadcode-baseline entries that only feed one long functional smoke are good
   candidates for the next narrow cleanup idea when live runtime, API, and CLI
   callers are absent.
+- When deadcode-baseline entries still have live callers, compare the shared
+  helper against suite-local copies before deleting it; duplicated test-helper
+  ownership is often the real seam.
 - Treat graph or delegated explorer suggestions as provisional after a
   fast-forward; confirm the seam still exists on live `main` with `git log`,
   `rg`, and direct file reads before dispatching new cleanup work.
@@ -184,6 +187,38 @@
   `factory/inputs/idea/default/trim-replay-only-testutil-helper-surface.md`
   so the next worker can localize replay-only helper ownership without
   reopening current-selection, chaining-trace, or frontend coverage work.
+
+## 2026-05-05T16:03:16.6459180-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `53c8c0d` to
+  `187a072`, which pulled in merged PR `#102` and merged PR `#104`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, the tracked-versus-ignored `factory/inputs/**` surface,
+  recent PR state, and the live functional helper code.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs`, confirming the checked-in inboxes
+  remain sentinel-only while the visible idea file is ignored local operating
+  state.
+- Re-checked repo movement with `gh pr list --state open --limit 20`,
+  `gh pr list --state merged --limit 12`, and `git log --oneline -12`,
+  confirming PR `#99`, `#102`, and `#104` are now merged on `main` and that
+  `#103` is the only open PR.
+- Used direct reads, graph traces, `rg`, and delegated explorer passes to
+  invalidate the previously queued replay-helper idea:
+  merged PR `#104` already closed that exact seam on `main`, so the ignored
+  `factory/inputs/idea/default/trim-replay-only-testutil-helper-surface.md`
+  file was stale and had to be pruned.
+- Verified the next narrow non-overlapping cleanup seam in live code:
+  `tests/functional/runtime_api/api_cron_workstations_smoke_test.go` still
+  duplicates dispatch-history helpers already owned by
+  `tests/functional/internal/support/events.go`, while the shared helper file
+  still serves live guards-batch callers.
+- Queued one replacement ignored idea under
+  `factory/inputs/idea/default/dedupe-functional-dispatch-history-test-helpers.md`
+  so the next worker can consolidate that helper ownership without reopening
+  frontend coverage, replay artifact compatibility, or broader runtime logic.
 
 ## 2026-05-05T14:04:03.9441625-07:00 - meta state refresh
 

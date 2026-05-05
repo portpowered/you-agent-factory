@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-05T15:03:51.1883314-07:00`, local `HEAD` on `main` points to
-  `53c8c0d`
-  (`Merge pull request #101 from portpowered/ralph/code-coverage-backend`)
+- as of `2026-05-05T16:03:16.6459180-07:00`, local `HEAD` on `main` points to
+  `187a072`
+  (`Merge pull request #104 from portpowered/ralph/trim-replay-only-testutil-helper-surface`)
   and matches `origin/main`
 - the local worktree is clean apart from ignored workflow inputs
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
@@ -44,7 +44,7 @@
   channel fallback
 - the visible canonical inboxes now contain the tracked `.gitkeep` sentinels
   plus one ignored local idea residue:
-  `factory/inputs/idea/default/trim-replay-only-testutil-helper-surface.md`
+  `factory/inputs/idea/default/dedupe-functional-dispatch-history-test-helpers.md`
 
 ## customer-ask truth
 
@@ -177,20 +177,25 @@
   - `Makefile` and `cmd/gocoveragecheck/main.go` now enforce the backend gate
   - backend runtime, replay, worker, and projection tests now cover the raised
     floor through observable behavior
+- merged PR `#104` closed the replay-only shared-helper lane on `main`:
+  - replay-only helper ownership no longer inflates the shared exported surface
+    of `pkg/testutil` and `internal/testpath`
+  - replay artifact smoke and replay regression coverage still protect copied
+    factory replay success plus expected divergence behavior through observable
+    runtime outcomes
 - there is still no remaining narrow unowned customer-visible ask gap on
   `main`; the next non-overlapping cleanup candidate now comes from the
   broader backend quality lane:
-  - `docs/development/deadcode-baseline.txt` now points at several replay-only
-    or test-only exported helpers in `pkg/testutil` and `internal/testpath`
-    rather than a production replay wrapper
-  - direct repo reads and graph traces show the replay-specific exported helper
-    surface is now only consumed by
-    `tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go`,
-    `tests/functional/replay_contracts/replay_regression_harness_long_test.go`,
-    and the replay adhoc scheduler smoke
-  - that makes the next narrow non-overlapping seam: trim replay-only helper
-    ownership out of shared `pkg/testutil` / `internal/testpath` surface while
-    preserving behavioral replay success and divergence coverage
+  - `docs/development/deadcode-baseline.txt` still flags helper clusters under
+    `pkg/testutil` and `tests/functional/internal/support`, but direct reads
+    and graph traces now show several of those helpers still have live test
+    callers
+  - the narrowest remaining seam is duplicate dispatch-history helper
+    ownership between `tests/functional/internal/support/events.go` and
+    `tests/functional/runtime_api/api_cron_workstations_smoke_test.go`
+  - both files currently carry the same work-request history and input-work ID
+    reconstruction helpers, so the next cleanup should consolidate those
+    helpers without changing the observable cron or guards-batch behavior
 - the remaining ask surface beyond that is broader program work:
   - the general standards-migration checklist ask is still open in
     `factory/logs/meta/asks.md`
@@ -214,6 +219,11 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#104` `trim-replay-only-testutil-helper-surface`, merged on
+    `2026-05-05T22:23:43Z`
+  - `#102` `work-chaininig-trace-ids`, merged on `2026-05-05T21:39:26Z`
+  - `#99` `workstation-current-selection-cleanup`, merged on
+    `2026-05-05T21:20:11Z`
   - `#101` `code-coverage-backend`, merged on `2026-05-05T21:29:09Z`
   - `#100` `retire-replay-event-stream-file-wrapper-cluster`, merged on
     `2026-05-05T21:22:34Z`
@@ -259,11 +269,8 @@
     `2026-05-04T01:27:11Z`
   - `#78` `remove-list-work-legacy-pagination-shim`, merged on
     `2026-05-04T00:28:40Z`
-- `gh pr list --state open` currently reports three open PRs:
+- `gh pr list --state open` currently reports one open PR:
   - `#103` `code-coverage-frontend`, opened on `2026-05-05T21:45:42Z`
-  - `#102` `work-chaininig-trace-ids`, opened on `2026-05-05T21:39:26Z`
-  - `#99` `workstation-current-selection-cleanup`, opened on
-    `2026-05-05T21:20:11Z`
 
 ## theory of mind
 
@@ -321,6 +328,9 @@
 - deadcode-baseline entries that are only reachable from one long functional
   smoke are strong candidates for the next narrow cleanup idea, especially when
   the live runtime, API, and CLI paths have no direct callers
+- when a deadcode-baseline entry still has live callers, compare it against
+  suite-local helper copies before queueing deletion; duplicated functional
+  helper ownership can be the real simplification seam
 - graph and explorer results can lag behind a fast-forwarded `main`; verify any
   suggested cleanup seam against live `git log`, `rg`, and direct file reads
   before writing a new queue item
