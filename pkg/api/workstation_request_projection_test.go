@@ -146,11 +146,8 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	}
 
 	active := requests["dispatch-active"]
-	if active.Request.Provider == nil || *active.Request.Provider != "codex" {
-		t.Fatalf("active request provider = %#v, want codex", active.Request.Provider)
-	}
-	if active.Request.Model == nil || *active.Request.Model != "gpt-5.4" {
-		t.Fatalf("active request model = %#v, want gpt-5.4", active.Request.Model)
+	if active.Request.Provider != nil || active.Request.Model != nil {
+		t.Fatalf("active inference summary provider/model = (%#v, %#v), want omitted dispatch-level inference detail", active.Request.Provider, active.Request.Model)
 	}
 	if active.Request.ConsumedTokens == nil || len(*active.Request.ConsumedTokens) != 1 || (*active.Request.ConsumedTokens)[0].TokenId != "token-active" {
 		t.Fatalf("active consumed tokens = %#v, want token-active", active.Request.ConsumedTokens)
@@ -163,8 +160,14 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	}
 
 	completed := requests["dispatch-completed"]
-	if completed.Request.RequestTime == nil || *completed.Request.RequestTime != "2026-04-21T12:00:03Z" {
-		t.Fatalf("completed request_time = %#v, want 2026-04-21T12:00:03Z", completed.Request.RequestTime)
+	if completed.Request.RequestTime != nil ||
+		completed.Request.Prompt != nil ||
+		completed.Request.WorkingDirectory != nil ||
+		completed.Request.Worktree != nil ||
+		completed.Request.Provider != nil ||
+		completed.Request.Model != nil ||
+		completed.Request.RequestMetadata != nil {
+		t.Fatalf("completed request inference summary = %#v, want omitted dispatch-level inference detail", completed.Request)
 	}
 	if completed.Response == nil || completed.Response.Outcome == nil || *completed.Response.Outcome != "ACCEPTED" {
 		t.Fatalf("completed response = %#v, want accepted outcome", completed.Response)
@@ -175,8 +178,12 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 		(*completed.Response.OutputMutations)[0].Type != string(interfaces.MutationCreate) {
 		t.Fatalf("completed output mutations = %#v, want create mutation for work-completed-output", completed.Response.OutputMutations)
 	}
-	if completed.Response.ResponseText == nil || *completed.Response.ResponseText != "Approved" {
-		t.Fatalf("completed response_text = %#v, want Approved", completed.Response.ResponseText)
+	if completed.Response.ResponseText != nil ||
+		completed.Response.ErrorClass != nil ||
+		completed.Response.ProviderSession != nil ||
+		completed.Response.Diagnostics != nil ||
+		completed.Response.ResponseMetadata != nil {
+		t.Fatalf("completed response inference summary = %#v, want omitted dispatch-level inference detail", completed.Response)
 	}
 	if completed.Response.OutputWorkItems == nil || len(*completed.Response.OutputWorkItems) != 1 {
 		t.Fatalf("completed output work items = %#v, want one output", completed.Response.OutputWorkItems)
@@ -200,8 +207,8 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	if roundTripped.WorkstationRequestsByDispatchId == nil {
 		t.Fatal("round-tripped projection slice missing request map")
 	}
-	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response; got == nil || got.ProviderSession == nil || got.ProviderSession.Id == nil || *got.ProviderSession.Id != "session-1" {
-		t.Fatalf("round-tripped provider session = %#v, want session-1", got)
+	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response; got == nil || got.ProviderSession != nil || got.ResponseText != nil || got.Diagnostics != nil {
+		t.Fatalf("round-tripped completed response = %#v, want omitted dispatch-level inference detail", got)
 	}
 
 	state.ActiveDispatches["dispatch-active"].Inputs[0].WorkItem.DisplayName = "mutated active"
@@ -274,7 +281,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesTerminalWorkFall
 	}
 }
 
-func TestWorkstationDispatchViewFromCompletion_PreservesProviderSessionAndDiagnosticsFallbacks(t *testing.T) {
+func TestWorkstationDispatchViewFromCompletion_OmitsInferenceOwnedSummaryFields(t *testing.T) {
 	completion := interfaces.FactoryWorldDispatchCompletion{
 		DispatchID:   "dispatch-completed",
 		TransitionID: "review",
@@ -297,66 +304,25 @@ func TestWorkstationDispatchViewFromCompletion_PreservesProviderSessionAndDiagno
 		},
 	}
 
-	nilAttemptView := workstationDispatchViewFromCompletion(completion, interfaces.FactoryWorldState{}, nil, nil, nil)
-	if nilAttemptView.Request.Provider == nil || *nilAttemptView.Request.Provider != "openai" {
-		t.Fatalf("nil-attempt request provider = %#v, want openai fallback", nilAttemptView.Request.Provider)
+	view := workstationDispatchViewFromCompletion(completion, interfaces.FactoryWorldState{}, nil, nil)
+	if view.Request.Provider != nil ||
+		view.Request.Model != nil ||
+		view.Request.RequestTime != nil ||
+		view.Request.WorkingDirectory != nil ||
+		view.Request.Worktree != nil ||
+		view.Request.RequestMetadata != nil ||
+		view.Request.Prompt != nil {
+		t.Fatalf("completion request inference summary = %#v, want omitted dispatch-level inference detail", view.Request)
 	}
-	if nilAttemptView.Request.WorkingDirectory == nil || *nilAttemptView.Request.WorkingDirectory != "/fallback/workdir" {
-		t.Fatalf("nil-attempt working directory = %#v, want /fallback/workdir fallback", nilAttemptView.Request.WorkingDirectory)
+	if view.Response == nil {
+		t.Fatal("completion response = nil, want dispatch status summary")
 	}
-	if nilAttemptView.Response == nil || nilAttemptView.Response.ProviderSession == nil || nilAttemptView.Response.ProviderSession.Id == nil || *nilAttemptView.Response.ProviderSession.Id != "session-fallback" {
-		t.Fatalf("nil-attempt provider session = %#v, want session-fallback", nilAttemptView.Response)
-	}
-	if nilAttemptView.Response.ResponseMetadata == nil || (*nilAttemptView.Response.ResponseMetadata)["provider_session_id"] != "session-fallback" {
-		t.Fatalf("nil-attempt response metadata = %#v, want fallback response metadata", nilAttemptView.Response.ResponseMetadata)
-	}
-
-	attemptDiagnostics := &interfaces.SafeWorkDiagnostics{
-		Provider: &interfaces.SafeProviderDiagnostic{
-			Provider:         "anthropic",
-			Model:            "claude-sonnet",
-			RequestMetadata:  map[string]string{"working_directory": "/attempt/workdir"},
-			ResponseMetadata: map[string]string{"provider_session_id": "session-attempt"},
-		},
-	}
-	partialAttempt := &interfaces.FactoryWorldInferenceAttempt{
-		Diagnostics: attemptDiagnostics,
-	}
-
-	partialAttemptView := workstationDispatchViewFromCompletion(completion, interfaces.FactoryWorldState{}, partialAttempt, nil, nil)
-	if partialAttemptView.Request.Provider == nil || *partialAttemptView.Request.Provider != "anthropic" {
-		t.Fatalf("partial-attempt request provider = %#v, want anthropic diagnostics override", partialAttemptView.Request.Provider)
-	}
-	if partialAttemptView.Request.WorkingDirectory == nil || *partialAttemptView.Request.WorkingDirectory != "/attempt/workdir" {
-		t.Fatalf("partial-attempt working directory = %#v, want /attempt/workdir diagnostics override", partialAttemptView.Request.WorkingDirectory)
-	}
-	if partialAttemptView.Response == nil || partialAttemptView.Response.ProviderSession == nil || partialAttemptView.Response.ProviderSession.Id == nil || *partialAttemptView.Response.ProviderSession.Id != "session-fallback" {
-		t.Fatalf("partial-attempt provider session = %#v, want completion fallback session", partialAttemptView.Response)
-	}
-	if partialAttemptView.Response.ResponseMetadata == nil || (*partialAttemptView.Response.ResponseMetadata)["provider_session_id"] != "session-attempt" {
-		t.Fatalf("partial-attempt response metadata = %#v, want attempt diagnostics metadata", partialAttemptView.Response.ResponseMetadata)
-	}
-
-	providerSessionOnlyAttempt := &interfaces.FactoryWorldInferenceAttempt{
-		ProviderSession: &interfaces.ProviderSessionMetadata{
-			Provider: "anthropic",
-			Kind:     "session_id",
-			ID:       "session-attempt-only",
-		},
-	}
-
-	providerSessionOnlyView := workstationDispatchViewFromCompletion(completion, interfaces.FactoryWorldState{}, providerSessionOnlyAttempt, nil, nil)
-	if providerSessionOnlyView.Request.Provider == nil || *providerSessionOnlyView.Request.Provider != "openai" {
-		t.Fatalf("provider-session-only request provider = %#v, want completion diagnostics fallback", providerSessionOnlyView.Request.Provider)
-	}
-	if providerSessionOnlyView.Request.WorkingDirectory == nil || *providerSessionOnlyView.Request.WorkingDirectory != "/fallback/workdir" {
-		t.Fatalf("provider-session-only working directory = %#v, want completion diagnostics fallback", providerSessionOnlyView.Request.WorkingDirectory)
-	}
-	if providerSessionOnlyView.Response == nil || providerSessionOnlyView.Response.ProviderSession == nil || providerSessionOnlyView.Response.ProviderSession.Id == nil || *providerSessionOnlyView.Response.ProviderSession.Id != "session-attempt-only" {
-		t.Fatalf("provider-session-only provider session = %#v, want attempt provider session override", providerSessionOnlyView.Response)
-	}
-	if providerSessionOnlyView.Response.ResponseMetadata == nil || (*providerSessionOnlyView.Response.ResponseMetadata)["provider_session_id"] != "session-fallback" {
-		t.Fatalf("provider-session-only response metadata = %#v, want completion diagnostics fallback metadata", providerSessionOnlyView.Response.ResponseMetadata)
+	if view.Response.ProviderSession != nil ||
+		view.Response.Diagnostics != nil ||
+		view.Response.ResponseMetadata != nil ||
+		view.Response.ResponseText != nil ||
+		view.Response.ErrorClass != nil {
+		t.Fatalf("completion response inference summary = %#v, want omitted dispatch-level inference detail", view.Response)
 	}
 }
 

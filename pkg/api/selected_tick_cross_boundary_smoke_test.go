@@ -129,16 +129,34 @@ func assertSelectedTickWorkstationRequests(
 	if active.Response != nil || active.Request.RequestTime != nil {
 		t.Fatalf("active request = %#v, want no response or inference timestamp yet", active)
 	}
+	if active.Request.Provider != nil ||
+		active.Request.Model != nil ||
+		active.Request.Prompt != nil ||
+		active.Request.WorkingDirectory != nil ||
+		active.Request.Worktree != nil ||
+		active.Request.RequestMetadata != nil {
+		t.Fatalf("active request inference summary = %#v, want omitted dispatch-level inference detail", active.Request)
+	}
 
 	completed := requests["dispatch-runtime-completed"]
-	if completed.Request.RequestMetadata == nil || (*completed.Request.RequestMetadata)["prompt_source"] != "factory-renderer" {
-		t.Fatalf("completed request metadata = %#v, want prompt_source=factory-renderer", completed.Request.RequestMetadata)
+	if completed.Request.RequestMetadata != nil ||
+		completed.Request.RequestTime != nil ||
+		completed.Request.Prompt != nil ||
+		completed.Request.Provider != nil ||
+		completed.Request.Model != nil ||
+		completed.Request.WorkingDirectory != nil ||
+		completed.Request.Worktree != nil {
+		t.Fatalf("completed request inference summary = %#v, want omitted dispatch-level inference detail", completed.Request)
 	}
-	if completed.Response == nil || completed.Response.ResponseText == nil || *completed.Response.ResponseText != "The completed runtime story is ready for review." {
-		t.Fatalf("completed response = %#v, want projected response text", completed.Response)
+	if completed.Response == nil {
+		t.Fatal("completed response = nil, want dispatch status summary")
 	}
-	if completed.Response.ProviderSession == nil || completed.Response.ProviderSession.Id == nil || *completed.Response.ProviderSession.Id != "sess-runtime-completed" {
-		t.Fatalf("completed provider session = %#v, want sess-runtime-completed", completed.Response.ProviderSession)
+	if completed.Response.ResponseText != nil ||
+		completed.Response.ProviderSession != nil ||
+		completed.Response.Diagnostics != nil ||
+		completed.Response.ResponseMetadata != nil ||
+		completed.Response.ErrorClass != nil {
+		t.Fatalf("completed response inference summary = %#v, want omitted dispatch-level inference detail", completed.Response)
 	}
 
 	failed := requests["dispatch-runtime-failed"]
@@ -148,8 +166,12 @@ func assertSelectedTickWorkstationRequests(
 	if failed.Response == nil || failed.Response.FailureReason == nil || *failed.Response.FailureReason != "provider_rate_limit" {
 		t.Fatalf("failed response = %#v, want provider_rate_limit", failed.Response)
 	}
-	if failed.Response.Diagnostics == nil || failed.Response.Diagnostics.Provider == nil {
-		t.Fatalf("failed response diagnostics = %#v, want provider diagnostics", failed.Response.Diagnostics)
+	if failed.Response.Diagnostics != nil ||
+		failed.Response.ProviderSession != nil ||
+		failed.Response.ResponseMetadata != nil ||
+		failed.Response.ResponseText != nil ||
+		failed.Response.ErrorClass != nil {
+		t.Fatalf("failed response inference summary = %#v, want omitted dispatch-level inference detail", failed.Response)
 	}
 }
 
