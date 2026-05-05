@@ -88,6 +88,32 @@ describe("named factory API error handling", () => {
     );
   });
 
+  it("preserves BAD_REQUEST activation failures as typed API errors", async () => {
+    await expect(
+      createFactory(canonicalFactory, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ code: "BAD_REQUEST", message: "Factory name is required." }), {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 400,
+            statusText: "Bad Request",
+          }),
+        ),
+      }),
+    ).rejects.toEqual(
+      new NamedFactoryAPIError("Factory name is required.", {
+        code: "BAD_REQUEST",
+        responseBody: {
+          code: "BAD_REQUEST",
+          message: "Factory name is required.",
+        },
+        status: 400,
+        statusText: "Bad Request",
+      }),
+    );
+  });
+
   it("falls back to the default activation error message when the error body has no string fields", async () => {
     await expect(
       createFactory(canonicalFactory, {
@@ -153,6 +179,38 @@ describe("named factory API error handling", () => {
         responseBody: null,
         status: 503,
         statusText: "Service Unavailable",
+      }),
+    );
+  });
+
+  it("preserves FACTORY_ALREADY_EXISTS errors from current-factory lookups when the API reports them", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "FACTORY_ALREADY_EXISTS",
+              message: "A named factory with this name already exists.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toEqual(
+      new NamedFactoryAPIError("A named factory with this name already exists.", {
+        code: "FACTORY_ALREADY_EXISTS",
+        responseBody: {
+          code: "FACTORY_ALREADY_EXISTS",
+          message: "A named factory with this name already exists.",
+        },
+        status: 409,
+        statusText: "Conflict",
       }),
     );
   });

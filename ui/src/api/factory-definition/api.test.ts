@@ -382,6 +382,88 @@ describe("normalizeFactoryDefinition", () => {
     });
   });
 
+  it("preserves workstation routing variants that the typed API boundary supports", () => {
+    expect(
+      normalizeFactoryDefinition({
+        name: "agent-factory",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workers: [{ name: "writer" }],
+        workstations: [
+          {
+            guards: [{ type: "VISIT_COUNT", workstation: "Review" }],
+            inputs: [
+              {
+                guards: [
+                  { parentInput: "storyId", type: "ALL_CHILDREN_COMPLETE" },
+                  { spawnedBy: "draft", type: "ANY_CHILD_FAILED" },
+                ],
+                state: "new",
+                workType: "story",
+              },
+            ],
+            limits: {
+              maxExecutionTime: "10m",
+            },
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toEqual({
+      name: "agent-factory",
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workers: [{ name: "writer" }],
+      workstations: [
+        {
+          guards: [{ type: "VISIT_COUNT", workstation: "Review" }],
+          inputs: [
+            {
+              guards: [
+                { parentInput: "storyId", type: "ALL_CHILDREN_COMPLETE" },
+                { spawnedBy: "draft", type: "ANY_CHILD_FAILED" },
+              ],
+              state: "new",
+              workType: "story",
+            },
+          ],
+          limits: {
+            maxExecutionTime: "10m",
+          },
+          name: "Draft",
+          outputs: [{ state: "done", workType: "story" }],
+          worker: "writer",
+        },
+      ],
+    });
+  });
+
+  it("allows a minimal factory payload without optional collections", () => {
+    expect(
+      normalizeFactoryDefinition({
+        name: "agent-factory",
+      }),
+    ).toEqual({
+      name: "agent-factory",
+    });
+  });
+
   it("rejects retired lowercase public enum aliases", () => {
     expect(() =>
       normalizeFactoryDefinition({
@@ -544,6 +626,123 @@ describe("normalizeFactoryDefinition", () => {
         "factory.project is not allowed by the generated factory contract.",
       ),
     );
+  });
+
+  it("rejects malformed optional collection and metadata fields instead of coercing them", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workstations: "Draft",
+      }),
+    ).toThrowError(new FactoryDefinitionAPIError("factory.workstations must be an array."));
+
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workers: [
+          {
+            args: ["--json", 7],
+            name: "writer",
+          },
+        ],
+      }),
+    ).toThrowError(new FactoryDefinitionAPIError("factory.workers[0].args[1] must be a string."));
+
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        metadata: {
+          owner: true,
+        },
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError("factory.metadata.owner must be a string."),
+    );
+  });
+
+  it("rejects malformed optional boolean, integer, and object workstation fields", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workers: [{ name: "writer" }],
+        workstations: [
+          {
+            copyReferencedScripts: "yes",
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "new", workType: "story" }],
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workstations[0].copyReferencedScripts must be a boolean.",
+      ),
+    );
+
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workers: [{ name: "writer" }],
+        workstations: [
+          {
+            guards: [{ maxVisits: 1.5, type: "VISIT_COUNT" }],
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "new", workType: "story" }],
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workstations[0].guards[0].maxVisits must be an integer.",
+      ),
+    );
+
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workers: [{ name: "writer" }],
+        workstations: [
+          {
+            guards: [{ matchConfig: "storyId", type: "MATCHES_FIELDS" }],
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "new", workType: "story" }],
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workstations[0].guards[0].matchConfig must be an object.",
+      ),
+    );
+  });
+
+  it("rejects missing required nested values inside typed payloads", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        workTypes: [
+          {
+            states: [{ name: "new", type: "INITIAL" }],
+          },
+        ],
+      }),
+    ).toThrowError(new FactoryDefinitionAPIError("factory.workTypes[0].name is required."));
+
+    expect(() =>
+      normalizeFactoryDefinition({
+        name: "legacy-factory",
+        resources: [{ name: "gpu" }],
+      }),
+    ).toThrowError(new FactoryDefinitionAPIError("factory.resources[0].capacity is required."));
   });
 });
 
