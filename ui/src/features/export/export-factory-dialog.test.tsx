@@ -206,4 +206,83 @@ describe("ExportFactoryDialog", () => {
     expect(downloadBlobAsFile).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("surfaces the preparation failure and blocks export when the factory is unavailable", async () => {
+    render(
+      <ExportFactoryDialog
+        factory={null}
+        initialFactoryName="infinite-you"
+        isOpen
+        onClose={() => {}}
+        preparationFailure={{
+          code: "FACTORY_DEFINITION_UNAVAILABLE",
+          message: "The current factory definition could not be loaded from the current-factory API.",
+          ok: false,
+        }}
+      />,
+    );
+
+    const errorPanel = await screen.findByRole("status");
+    expect(errorPanel.textContent).toContain(
+      "The current factory definition could not be loaded from the current-factory API.",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Export PNG" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(writeFactoryExportPng).not.toHaveBeenCalled();
+    expect(downloadBlobAsFile).not.toHaveBeenCalled();
+  });
+
+  it("ignores a completed export after the dialog was closed mid-flight", async () => {
+    let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null = null;
+    vi.mocked(writeFactoryExportPng).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveExport = resolve;
+        }),
+    );
+    const onClose = vi.fn();
+    render(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Factory Aurora"
+        isOpen
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Cover image"), {
+      target: {
+        files: [new File(["binary"], "cover.png", { type: "image/png" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Exporting..." })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    if (!resolveExport) {
+      throw new Error("expected export request promise to be pending");
+    }
+
+    resolveExport({
+      blob: new Blob(["png"], { type: "image/png" }),
+      envelope: {
+        schemaVersion: "portos.agent-factory.png.v1",
+        ...factory,
+      },
+      ok: true,
+    });
+
+    await waitFor(() => {
+      expect(writeFactoryExportPng).toHaveBeenCalledTimes(1);
+    });
+    expect(downloadBlobAsFile).not.toHaveBeenCalled();
+    expect(screen.queryByText("Downloaded factory-aurora.png.")).toBeNull();
+  });
 });
