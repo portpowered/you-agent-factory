@@ -1,22 +1,11 @@
 package testutil
 
 import (
-	"github.com/portpowered/infinite-you/internal/testpath"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
-
-type ArtifactClassification = testpath.ArtifactClassification
-
-const (
-	ArtifactCheckedIn = testpath.ArtifactCheckedIn
-	ArtifactGenerated = testpath.ArtifactGenerated
-	ArtifactObsolete  = testpath.ArtifactObsolete
-)
-
-type ArtifactContractEntry = testpath.ArtifactContractEntry
 
 func MustRepoRoot(t testing.TB) string {
 	t.Helper()
@@ -36,11 +25,6 @@ func MustRepoRoot(t testing.TB) string {
 func MustRepoPath(t testing.TB, rel string) string {
 	t.Helper()
 	return filepath.Join(MustRepoRoot(t), filepath.FromSlash(rel))
-}
-
-func MustClassifiedArtifactPath(t testing.TB, rel string, allowed ...ArtifactClassification) string {
-	t.Helper()
-	return testpath.MustClassifiedArtifactPathFromCaller(t, 0, rel, allowed...)
 }
 
 func findRepoRoot(startDir string) (string, error) {

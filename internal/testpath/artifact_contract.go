@@ -1,268 +1,228 @@
 package testpath
 
-import (
-	"path/filepath"
-	"slices"
-)
-
-type ArtifactClassification string
+type artifactClassification string
 
 const (
-	ArtifactCheckedIn ArtifactClassification = "checked_in"
-	ArtifactGenerated ArtifactClassification = "generated"
-	ArtifactObsolete  ArtifactClassification = "obsolete"
+	artifactCheckedIn artifactClassification = "checked_in"
+	artifactGenerated artifactClassification = "generated"
+	artifactObsolete  artifactClassification = "obsolete"
 )
 
-type ArtifactContractEntry struct {
+type artifactContractEntry struct {
 	Path           string
-	Classification ArtifactClassification
+	Classification artifactClassification
 	Reason         string
 }
 
-var artifactContractEntries = []ArtifactContractEntry{
+var artifactContractEntries = []artifactContractEntry{
 	{
 		Path:           "factory",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Canonical checked-in repository starter root.",
 	},
 	{
 		Path:           "factory/README.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Canonical checked-in repository starter documentation.",
 	},
 	{
 		Path:           "factory/factory.json",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Canonical checked-in repository starter config.",
 	},
 	{
 		Path:           "factory/scripts/setup-workspace.py",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in workspace setup helper used by the canonical repository workflow.",
 	},
 	{
 		Path:           "factory/inputs",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in starter input directories used by the repository-local workflow and backed by tracked sentinels.",
 	},
 	{
 		Path:           "factory/inputs/BATCH/default",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical inbox for ordered or mixed-work-type FACTORY_REQUEST_BATCH submissions.",
 	},
 	{
 		Path:           "factory/inputs/BATCH/default/.gitkeep",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Tracked sentinel that keeps the canonical batch inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/inputs/idea/default",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in repository workflow idea inbox backed by a tracked sentinel.",
 	},
 	{
 		Path:           "factory/inputs/idea/default/.gitkeep",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Tracked sentinel that keeps the canonical idea inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/inputs/plan/default",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in repository workflow plan inbox backed by a tracked sentinel.",
 	},
 	{
 		Path:           "factory/inputs/plan/default/.gitkeep",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Tracked sentinel that keeps the canonical plan inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/inputs/task/default",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in repository workflow task inbox backed by a tracked sentinel.",
 	},
 	{
 		Path:           "factory/inputs/task/default/.gitkeep",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Tracked sentinel that keeps the canonical task inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/inputs/thoughts/default",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in repository workflow thought inbox backed by a tracked sentinel.",
 	},
 	{
 		Path:           "factory/inputs/thoughts/default/.gitkeep",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Tracked sentinel that keeps the canonical thought inbox present in clean checkouts.",
 	},
 	{
 		Path:           "factory/logs/meta/asks.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Canonical checked-in customer-ask backlog for the meta and cleaner workflow.",
 	},
 	{
 		Path:           "factory/logs/meta/view.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in meta world-state view consumed by the cleaner workflow.",
 	},
 	{
 		Path:           "factory/logs/meta/progress.txt",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in meta progress surface consumed by the cleaner workflow.",
 	},
 	{
 		Path:           "factory/logs/agent-fails.json",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in event-stream sample used for replay conversion coverage.",
 	},
 	{
 		Path:           "factory/logs/agent-fails.replay.json",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in replay artifact sample paired with the event-stream conversion smoke.",
 	},
 	{
 		Path:           "factory/meta/asks.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Redirect-only legacy stub that points maintainers back to the canonical checked-in meta ask surface.",
 	},
 	{
 		Path:           "tests/adhoc/factory-recording-04-11-02.json",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Canonical replay fixture used by targeted adhoc and replay tests.",
 	},
 	{
 		Path:           "tests/adhoc/factory/README.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in adhoc fixture documentation.",
 	},
 	{
 		Path:           "tests/adhoc/factory/factory.json",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in adhoc fixture config.",
 	},
 	{
 		Path:           "ui/src/api/generated/openapi.ts",
-		Classification: ArtifactGenerated,
+		Classification: artifactGenerated,
 		Reason:         "Generated TypeScript client types checked in from the authored OpenAPI contract.",
 	},
 	{
 		Path:           "ui/src/components/dashboard/fixtures/failure-analysis-events.ts",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in dashboard replay fixture.",
 	},
 	{
 		Path:           "ui/src/components/dashboard/fixtures/graph-state-smoke-events.ts",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in dashboard replay fixture.",
 	},
 	{
 		Path:           "ui/src/components/dashboard/fixtures/resource-count-events.ts",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in dashboard replay fixture.",
 	},
 	{
 		Path:           "ui/src/components/dashboard/fixtures/runtime-details-events.ts",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in dashboard replay fixture.",
 	},
 	{
 		Path:           "factory/workers/processor/AGENTS.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical processor worker prompt.",
 	},
 	{
 		Path:           "factory/workers/workspace-setup/AGENTS.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical workspace setup worker prompt.",
 	},
 	{
 		Path:           "factory/workstations/cleaner/AGENTS.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical repository cleanup workstation prompt.",
 	},
 	{
 		Path:           "factory/workstations/ideafy/AGENTS.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical ideation workstation prompt.",
 	},
 	{
 		Path:           "factory/workstations/plan/AGENTS.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical planning workstation prompt.",
 	},
 	{
 		Path:           "factory/workstations/process/AGENTS.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical execution workstation prompt.",
 	},
 	{
 		Path:           "factory/workstations/review/AGENTS.md",
-		Classification: ArtifactCheckedIn,
+		Classification: artifactCheckedIn,
 		Reason:         "Checked-in canonical review workstation prompt.",
 	},
 	{
 		Path:           "factory/workers/executor/AGENTS.md",
-		Classification: ArtifactObsolete,
+		Classification: artifactObsolete,
 		Reason:         "Legacy story-starter worker path no longer belongs to the canonical root factory.",
 	},
 	{
 		Path:           "factory/workers/reviewer/AGENTS.md",
-		Classification: ArtifactObsolete,
+		Classification: artifactObsolete,
 		Reason:         "Legacy story-starter worker path no longer belongs to the canonical root factory.",
 	},
 	{
 		Path:           "factory/workstations/execute-story/AGENTS.md",
-		Classification: ArtifactObsolete,
+		Classification: artifactObsolete,
 		Reason:         "Legacy story-starter workstation path no longer belongs to the canonical root factory.",
 	},
 	{
 		Path:           "factory/workstations/review-story/AGENTS.md",
-		Classification: ArtifactObsolete,
+		Classification: artifactObsolete,
 		Reason:         "Legacy story-starter workstation path no longer belongs to the canonical root factory.",
 	},
 	{
 		Path:           "factory/inputs/story/default/example-story.md",
-		Classification: ArtifactObsolete,
+		Classification: artifactObsolete,
 		Reason:         "Legacy story-starter seed file is not part of the canonical root factory surface.",
 	},
 	{
 		Path:           "factory/old/README.md",
-		Classification: ArtifactObsolete,
+		Classification: artifactObsolete,
 		Reason:         "Legacy historical starter tree is not part of the canonical root factory surface.",
 	},
-}
-
-func ArtifactContractEntryByPath(path string) (ArtifactContractEntry, bool) {
-	normalized := filepath.ToSlash(filepath.Clean(path))
-	for _, entry := range artifactContractEntries {
-		if entry.Path == normalized {
-			return entry, true
-		}
-	}
-	return ArtifactContractEntry{}, false
-}
-
-func MustArtifactContractEntry(t fatalHelper, path string) ArtifactContractEntry {
-	t.Helper()
-
-	entry, ok := ArtifactContractEntryByPath(path)
-	if !ok {
-		t.Fatalf("artifact path %q is not classified in the checked-in artifact contract inventory", filepath.ToSlash(filepath.Clean(path)))
-	}
-	return entry
-}
-
-func MustClassifiedArtifactPathFromCaller(t fatalHelper, skip int, rel string, allowed ...ArtifactClassification) string {
-	t.Helper()
-
-	entry := MustArtifactContractEntry(t, rel)
-	if len(allowed) > 0 && !slices.Contains(allowed, entry.Classification) {
-		t.Fatalf(
-			"artifact path %q classified as %s, want one of %v",
-			entry.Path,
-			entry.Classification,
-			allowed,
-		)
-	}
-	return MustRepoPathFromCaller(t, skip+1, filepath.FromSlash(entry.Path))
 }

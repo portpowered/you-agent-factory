@@ -153,16 +153,22 @@ Use `pkg/testutil` so regression tests exercise service replay mode, embedded co
    h.Service.Assert().HasTokenInPlace("task:complete")
    ```
 
-4. For intentional mismatch coverage, mutate a copied artifact and assert structured divergence.
+4. For intentional mismatch or replay-only harness customization coverage, mutate a copied artifact and keep copied-factory or scheduler-specific harness composition inside the replay contract lane rather than expanding shared `pkg/testutil` with replay-only wrappers.
 
    ```go
-   report := testutil.AssertReplayDiverges(t, divergentPath, 10*time.Second)
+   h := testutil.NewReplayHarness(t, divergentPath)
+   err := h.RunUntilComplete(10 * time.Second)
+   var divergence *replay.DivergenceError
+   if !errors.As(err, &divergence) {
+   	t.Fatalf("error = %v, want replay divergence", err)
+   }
+   report := divergence.Report
    if report.Category != replay.DivergenceCategoryDispatchMismatch {
    	t.Fatalf("category = %q", report.Category)
    }
    ```
 
-See `tests/functional_test/replay_regression_harness_test.go` for the current production-style harness pattern.
+See `tests/functional/replay_contracts/replay_regression_harness_long_test.go` and `tests/functional/replay_contracts/replay_harness_customization_test.go` for the current production-style harness and replay-lane-local customization pattern.
 
 ## Manual Smoke Flow
 
@@ -179,7 +185,8 @@ Set `AGENT_FACTORY_ADHOC_ARTIFACT=<path>` to keep the generated artifact at a kn
 
 - `pkg/replay` owns the artifact schema, validation, recorder, replay side effects, logical delivery planning, and divergence reports.
 - `pkg/service` wires record and replay modes into runtime construction.
-- `pkg/testutil/replay_harness.go` owns the reusable regression harness helpers.
+- `pkg/testutil/replay_harness.go` owns the reusable default replay harness helpers for replay paths that do not need replay-lane-specific customization.
+- `tests/functional/replay_contracts/replay_harness_customization_test.go` owns copied-factory and scheduler-specific replay harness customization used only by replay contract tests.
 - `tests/adhoc/main_adhoc_test.go` owns the opt-in manual record/replay smoke flow.
 
 ## References

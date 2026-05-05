@@ -26,7 +26,7 @@ import (
 func TestReplayEventStreamArtifactSmoke_ConvertsAgentFailsLogAndReplays(t *testing.T) {
 	support.SkipLongFunctional(t, "slow replay artifact conversion smoke")
 
-	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
+	eventStreamPath := testutil.MustRepoPath(t, "factory/logs/agent-fails.json")
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
 
 	result, err := saveReplayArtifactFromEventStreamFile(eventStreamPath, artifactPath)
@@ -50,7 +50,7 @@ func TestReplayEventStreamArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t
 	support.SkipLongFunctional(t, "slow replay artifact root-factory mirroring sweep")
 
 	adhocFactoryDir := testutil.MustRepoPath(t, "tests/adhoc/factory")
-	eventStreamPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.json", testutil.ArtifactCheckedIn)
+	eventStreamPath := testutil.MustRepoPath(t, "factory/logs/agent-fails.json")
 	artifactPath := filepath.Join(t.TempDir(), "agent-fails.replay.json")
 	copiedFactoryDir := testutil.CopyFixtureDir(t, adhocFactoryDir)
 
@@ -65,14 +65,12 @@ func TestReplayEventStreamArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, copiedFactoryDir, copiedFactoryDir, artifact)
 
-	h := testutil.AssertReplaySucceeds(
+	h := assertReplaySucceedsWithCustomizedHarness(
 		t,
 		artifactPath,
 		30*time.Second,
-		testutil.WithReplayHarnessDir(copiedFactoryDir),
-		testutil.WithReplayHarnessServiceOptions(
-			testutil.WithExecutionBaseDir(copiedFactoryDir),
-		),
+		copiedFactoryDir,
+		testutil.WithExecutionBaseDir(copiedFactoryDir),
 	)
 	if h.Artifact == nil {
 		t.Fatal("replay harness artifact = nil, want loaded replay artifact")
@@ -323,19 +321,17 @@ func TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopied
 	support.SkipLongFunctional(t, "slow replay checked-in sample artifact sweep")
 
 	copiedFactoryDir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/adhoc/factory"))
-	artifactPath := testutil.MustClassifiedArtifactPath(t, "factory/logs/agent-fails.replay.json", testutil.ArtifactCheckedIn)
+	artifactPath := testutil.MustRepoPath(t, "factory/logs/agent-fails.replay.json")
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, copiedFactoryDir, copiedFactoryDir, artifact)
 
-	h := testutil.AssertReplaySucceeds(
+	h := assertReplaySucceedsWithCustomizedHarness(
 		t,
 		artifactPath,
 		30*time.Second,
-		testutil.WithReplayHarnessDir(copiedFactoryDir),
-		testutil.WithReplayHarnessServiceOptions(
-			testutil.WithExecutionBaseDir(copiedFactoryDir),
-		),
+		copiedFactoryDir,
+		testutil.WithExecutionBaseDir(copiedFactoryDir),
 	)
 	if h.Artifact == nil {
 		t.Fatal("replay harness artifact = nil, want loaded replay artifact")
