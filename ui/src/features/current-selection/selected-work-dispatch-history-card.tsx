@@ -6,16 +6,12 @@ import {
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import {
   formatDurationMillis,
-  formatProviderSession,
-  getProviderSessionLogTarget,
 } from "../../components/ui/formatters";
 import {
   EXECUTION_PILL_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
-  RequestAuthoredText,
-  REQUEST_HISTORY_TEXT_CLASS,
   normalizeDetailText,
 } from "./detail-card-shared";
 import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
@@ -33,7 +29,6 @@ import {
 } from "./selected-work-dispatch-history-card-shared";
 import {
   dedupeWorkItems,
-  hasResponseDetails,
   requestCounts,
   requestDurationMillis,
   requestErrorClass,
@@ -41,19 +36,14 @@ import {
   requestFailureReason,
   requestInferenceAttempts,
   requestInputWorkItems,
-  requestModel,
   requestOutcome,
   requestOutputWorkItems,
   requestPrompt,
-  requestProvider,
-  requestProviderSession,
   requestResponseText,
   requestScriptRequest,
   requestScriptResponse,
   requestStartedAt,
   requestTraceIDs,
-  requestWorkingDirectory,
-  requestWorktree,
   scriptAttemptNumber,
   scriptRequestID,
   scriptResponseDurationMillis,
@@ -99,7 +89,6 @@ export function DispatchHistoryCard({
       <DispatchSummaryDetails request={request} view={view} />
       <DispatchRequestSection
         onSelectWorkID={onSelectWorkID}
-        request={request}
         selectedWorkID={selectedWorkID}
         view={view}
       />
@@ -142,10 +131,7 @@ interface DispatchHistoryView {
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
   outputWorkItems: ReturnType<typeof dedupeWorkItems>;
-  prompt: string | undefined;
-  providerSession: ReturnType<typeof requestProviderSession>;
-  providerSessionLogTarget: ReturnType<typeof getProviderSessionLogTarget>;
-  responseText: string | undefined;
+  requestUnavailableCopy: string;
   responseUnavailableCopy: string;
   scriptRequest: ReturnType<typeof requestScriptRequest>;
   scriptResponse: ReturnType<typeof requestScriptResponse>;
@@ -159,10 +145,12 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
   const errorClass = normalizeDetailText(requestErrorClass(request));
   const scriptRequest = requestScriptRequest(request);
   const scriptResponse = requestScriptResponse(request);
-  const responseText = normalizeDetailText(requestResponseText(request));
   const hasFailureDetails = Boolean(failureReason || failureMessage || errorClass);
   const isScriptBackedRequest = scriptRequest !== undefined || scriptResponse !== undefined;
-  const providerSession = requestProviderSession(request);
+  const sortedInferenceAttempts = requestInferenceAttempts(request);
+  const hasInferenceAttempts = sortedInferenceAttempts.length > 0;
+  const hasDispatchPrompt = Boolean(normalizeDetailText(requestPrompt(request)));
+  const hasDispatchResponse = Boolean(normalizeDetailText(requestResponseText(request)));
 
   return {
     counts: requestCounts(request),
@@ -178,23 +166,25 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
     normalizedScriptStdout: normalizeDetailText(scriptResponse?.stdout),
     outcome: requestOutcome(request),
     outputWorkItems: dedupeWorkItems(requestOutputWorkItems(request)),
-    prompt: normalizeDetailText(requestPrompt(request)),
-    providerSession,
-    providerSessionLogTarget: getProviderSessionLogTarget(
-      providerSession,
-      requestStartedAt(request),
-    ),
-    responseText,
-    responseUnavailableCopy: responseText
+    requestUnavailableCopy: isScriptBackedRequest
+      ? "Prompt details are not applicable to this script-backed dispatch."
+      : hasInferenceAttempts
+        ? "Inference request details are shown under Inference attempts."
+        : hasDispatchPrompt
+          ? "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded."
+          : "Inference request details are not available for this dispatch yet.",
+    responseUnavailableCopy: isScriptBackedRequest
       ? ""
-      : hasFailureDetails
-        ? "Response text is unavailable because this dispatch ended with an error."
-        : hasResponseDetails(request)
-          ? "Response text is unavailable for this dispatch."
-          : "No response yet for this dispatch.",
+      : hasInferenceAttempts
+        ? "Inference response details are shown under Inference attempts."
+        : hasFailureDetails
+          ? "Inference response details are unavailable because this dispatch ended before any attempt details were recorded."
+          : hasDispatchResponse
+            ? "Inference response details are unavailable at the dispatch level. Check back once attempts are recorded."
+            : "Inference response details are not available for this dispatch yet.",
     scriptRequest,
     scriptResponse,
-    sortedInferenceAttempts: requestInferenceAttempts(request),
+    sortedInferenceAttempts,
     traceIDs: requestTraceIDs(request),
   };
 }
@@ -248,8 +238,6 @@ function DispatchSummaryDetails({
     <dl className={cx("mt-[0.65rem]", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
       <InferenceAttemptDetail label="Workstation" value={request.workstation_name} />
       <InferenceAttemptDetail label="Transition ID" code value={request.transition_id} />
-      <InferenceAttemptDetail label="Provider" code value={requestProvider(request)} />
-      <InferenceAttemptDetail label="Model" code value={requestModel(request)} />
       <InferenceAttemptDetail label="dispatchedCount" value={view.counts.dispatchedCount} />
       <InferenceAttemptDetail label="respondedCount" value={view.counts.respondedCount} />
       <InferenceAttemptDetail label="erroredCount" value={view.counts.erroredCount} />
@@ -264,30 +252,18 @@ function DispatchSummaryDetails({
 
 function DispatchRequestSection({
   onSelectWorkID,
-  request,
   selectedWorkID,
   view,
 }: {
   onSelectWorkID?: (workID: string) => void;
-  request: SelectedWorkRequestHistoryItem;
   selectedWorkID: string;
   view: DispatchHistoryView;
 }) {
   return (
     <DispatchDetailSection title="Request details">
-      {view.prompt ? (
-        <RequestAuthoredText value={view.prompt} />
-      ) : view.isScriptBackedRequest ? (
-        <p className={DETAIL_COPY_CLASS}>
-          Prompt details are not applicable to this script-backed dispatch.
-        </p>
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>Prompt details are not available for this dispatch yet.</p>
-      )}
+      <p className={DETAIL_COPY_CLASS}>{view.requestUnavailableCopy}</p>
       <DispatchDetailList
         entries={[
-          { label: "Working directory", value: requestWorkingDirectory(request), code: true },
-          { label: "Worktree", value: requestWorktree(request), code: true },
           {
             label: "Script request ID",
             value: view.scriptRequest?.script_request_id,
@@ -331,23 +307,8 @@ function DispatchResponseSection({
     <DispatchDetailSection title="Response details">
       {view.isScriptBackedRequest ? (
         <ScriptResponseContent view={view} />
-      ) : view.responseText ? (
-        <pre className={REQUEST_HISTORY_TEXT_CLASS}>{view.responseText}</pre>
       ) : (
         <p className={DETAIL_COPY_CLASS}>{view.responseUnavailableCopy}</p>
-      )}
-      {view.isScriptBackedRequest ? null : (
-        <DispatchDetailList
-          entries={[
-            {
-              label: "Provider session",
-              value: view.providerSession ? formatProviderSession(view.providerSession) : undefined,
-              code: !view.providerSessionLogTarget,
-              href: view.providerSessionLogTarget?.href,
-              title: view.providerSessionLogTarget?.display,
-            },
-          ]}
-        />
       )}
       <WorkItemActionGroup
         items={view.outputWorkItems}
@@ -434,7 +395,6 @@ function DispatchFailureSection({
           { label: "Failure reason", value: view.failureReason },
           { label: "Failure message", value: view.failureMessage },
           { label: "Failure type", code: true, value: view.failureType },
-          { label: "Error class", code: true, value: view.errorClass },
         ]}
       />
     </DispatchDetailSection>
