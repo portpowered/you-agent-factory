@@ -1,5 +1,12 @@
 # Infinite You
 
+[![CI](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml)
+[![Release Candidate Verification](https://github.com/portpowered/infinite-you/actions/workflows/release-candidate.yml/badge.svg)](https://github.com/portpowered/infinite-you/actions/workflows/release-candidate.yml)
+[![Release Publish and Verification](https://github.com/portpowered/infinite-you/actions/workflows/release.yml/badge.svg)](https://github.com/portpowered/infinite-you/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/portpowered/infinite-you?display_name=tag)](https://github.com/portpowered/infinite-you/releases)
+[![Go Version](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE.md)
+
 Infinite You is an AI agent factory. It orchestrates AI agents for you so you can do more work without doing everything manually.
 
 ## Why?
