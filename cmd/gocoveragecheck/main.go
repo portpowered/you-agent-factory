@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -15,8 +17,16 @@ import (
 
 var totalCoveragePattern = regexp.MustCompile(`total:\s+\(statements\)\s+([0-9.]+)%`)
 
+const modulePath = "github.com/portpowered/infinite-you"
+
+var (
+	defaultCoveragePatterns = []string{"./cmd/factory", "./pkg/..."}
+	defaultTestPatterns     = []string{"./cmd/factory", "./pkg/...", "./tests/functional/..."}
+)
+
 type config struct {
 	covermode string
+	coverpkg  string
 	min       float64
 	packages  string
 	profile   string
@@ -39,8 +49,9 @@ func main() {
 func parseConfig() config {
 	var cfg config
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
+	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
-	flag.StringVar(&cfg.packages, "packages", "./...", "go test package pattern")
+	flag.StringVar(&cfg.packages, "packages", "", "space-separated go test package patterns; defaults to backend package tests plus backend-facing functional tests")
 	flag.StringVar(&cfg.profile, "profile", "", "coverage profile output path; defaults to a temp file")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
@@ -68,7 +79,15 @@ func run(cfg config) (float64, error) {
 		_ = cleanup()
 	}()
 
-	testArgs := []string{"test"}
+	coverPackages, testPackages, err := resolveCoverageLane(cfg)
+	if err != nil {
+		return 0, err
+	}
+
+	testArgs := []string{
+		"test",
+		fmt.Sprintf("-coverpkg=%s", strings.Join(coverPackages, ",")),
+	}
 	if cfg.short {
 		testArgs = append(testArgs, "-short")
 	}
@@ -76,8 +95,8 @@ func run(cfg config) (float64, error) {
 		fmt.Sprintf("-coverprofile=%s", profilePath),
 		fmt.Sprintf("-covermode=%s", cfg.covermode),
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
-		cfg.packages,
 	)
+	testArgs = append(testArgs, testPackages...)
 
 	testCmd := exec.Command("go", testArgs...)
 	testCmd.Env = os.Environ()
@@ -111,6 +130,132 @@ func run(cfg config) (float64, error) {
 	}
 	fmt.Println(totalLine)
 	return actual, nil
+}
+
+func resolveCoverageLane(cfg config) ([]string, []string, error) {
+	coverPackages, err := resolveCoverPackages(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	testPackages, err := resolveTestPackages(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return coverPackages, testPackages, nil
+}
+
+func resolveCoverPackages(cfg config) ([]string, error) {
+	if strings.TrimSpace(cfg.coverpkg) != "" {
+		return splitList(cfg.coverpkg, ",", false), nil
+	}
+	return listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+}
+
+func resolveTestPackages(cfg config) ([]string, error) {
+	if strings.TrimSpace(cfg.packages) != "" {
+		return splitList(cfg.packages, " ", true), nil
+	}
+	return listGoPackages(defaultTestPatterns, isBackendTestPackage)
+}
+
+func listGoPackages(patterns []string, include func(string) bool) ([]string, error) {
+	args := append([]string{"list"}, patterns...)
+	cmd := exec.Command("go", args...)
+	cmd.Env = os.Environ()
+	rootDir, err := repoRootDir()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Dir = rootDir
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" {
+			detail = strings.TrimSpace(stdout.String())
+		}
+		if detail != "" {
+			return nil, fmt.Errorf("list go packages: %w\n%s", err, detail)
+		}
+		return nil, fmt.Errorf("list go packages: %w", err)
+	}
+
+	seen := make(map[string]struct{})
+	var packages []string
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		importPath := strings.TrimSpace(line)
+		if importPath == "" || !include(importPath) {
+			continue
+		}
+		if _, ok := seen[importPath]; ok {
+			continue
+		}
+		seen[importPath] = struct{}{}
+		packages = append(packages, importPath)
+	}
+	slices.Sort(packages)
+	if len(packages) == 0 {
+		return nil, errors.New("resolve go coverage lane: no packages matched")
+	}
+	return packages, nil
+}
+
+func repoRootDir() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve working directory: %w", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.New("resolve repository root: go.mod not found")
+		}
+		dir = parent
+	}
+}
+
+func isBackendCoveragePackage(importPath string) bool {
+	switch {
+	case importPath == modulePath+"/cmd/factory":
+		return true
+	case !strings.HasPrefix(importPath, modulePath+"/pkg/"):
+		return false
+	case importPath == modulePath+"/pkg/api/generated":
+		return false
+	case importPath == modulePath+"/pkg/generatedclient":
+		return false
+	case strings.HasPrefix(importPath, modulePath+"/pkg/testutil"):
+		return false
+	default:
+		return true
+	}
+}
+
+func isBackendTestPackage(importPath string) bool {
+	if isBackendCoveragePackage(importPath) {
+		return true
+	}
+	return strings.HasPrefix(importPath, modulePath+"/tests/functional/") &&
+		!strings.HasPrefix(importPath, modulePath+"/tests/functional/internal/")
+}
+
+func splitList(value string, separator string, filterEmpty bool) []string {
+	parts := strings.Split(value, separator)
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" && filterEmpty {
+			continue
+		}
+		items = append(items, trimmed)
+	}
+	return items
 }
 
 func parseTotalCoverage(report string) (float64, string, error) {
