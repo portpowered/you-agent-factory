@@ -495,45 +495,6 @@ func mutationTokenID(input interfaces.WorkstationInput, item interfaces.FactoryW
 	return item.ID
 }
 
-func generatedFactoryWorldWorkDiagnostics(
-	diagnostics *interfaces.SafeWorkDiagnostics,
-) *factoryapi.FactoryWorldWorkDiagnostics {
-	if diagnostics == nil {
-		return nil
-	}
-	return &factoryapi.FactoryWorldWorkDiagnostics{
-		RenderedPrompt: generatedFactoryWorldRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
-		Provider:       generatedFactoryWorldProviderDiagnostic(diagnostics.Provider),
-	}
-}
-
-func generatedFactoryWorldRenderedPromptDiagnostic(
-	diagnostic *interfaces.SafeRenderedPromptDiagnostic,
-) *factoryapi.FactoryWorldRenderedPromptDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &factoryapi.FactoryWorldRenderedPromptDiagnostic{
-		SystemPromptHash: workstationRequestStringPtr(diagnostic.SystemPromptHash),
-		UserMessageHash:  workstationRequestStringPtr(diagnostic.UserMessageHash),
-		Variables:        workstationRequestStringMapPtr(diagnostic.Variables),
-	}
-}
-
-func generatedFactoryWorldProviderDiagnostic(
-	diagnostic *interfaces.SafeProviderDiagnostic,
-) *factoryapi.FactoryWorldProviderDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &factoryapi.FactoryWorldProviderDiagnostic{
-		Provider:         workstationRequestStringPtr(diagnostic.Provider),
-		Model:            workstationRequestStringPtr(diagnostic.Model),
-		RequestMetadata:  workstationRequestStringMapPtr(diagnostic.RequestMetadata),
-		ResponseMetadata: workstationRequestStringMapPtr(diagnostic.ResponseMetadata),
-	}
-}
-
 func generatedFactoryWorldScriptRequest(
 	request *interfaces.FactoryWorldScriptRequest,
 ) *factoryapi.FactoryWorldScriptRequestView {
