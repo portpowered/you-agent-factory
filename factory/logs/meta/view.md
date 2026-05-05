@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-05T14:04:03.9441625-07:00`, local `HEAD` on `main` points to
-  `d868ab7`
-  (`update teh words on the readme to be a bit clearer`)
+- as of `2026-05-05T15:03:51.1883314-07:00`, local `HEAD` on `main` points to
+  `53c8c0d`
+  (`Merge pull request #101 from portpowered/ralph/code-coverage-backend`)
   and matches `origin/main`
 - the local worktree is clean apart from ignored workflow inputs
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
@@ -42,8 +42,9 @@
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
-- the visible canonical inboxes currently contain only the tracked `.gitkeep`
-  sentinels; there is no ignored local idea or batch residue staged right now
+- the visible canonical inboxes now contain the tracked `.gitkeep` sentinels
+  plus one ignored local idea residue:
+  `factory/inputs/idea/default/trim-replay-only-testutil-helper-surface.md`
 
 ## customer-ask truth
 
@@ -165,24 +166,31 @@
     directly
   - the old meta note naming that package as the next cleanup candidate is now
     stale
-- open PR `#97` (`website-icon-removal`) edits the dashboard header branding
-  and timeline slider layout surface that the meta view already treated as
-  materially closed through merged PRs `#83`, `#85`, and `#86`; it therefore
-  overlaps an already-closed customer-ask lane instead of opening a new clean
-  maintainer seam
+- merged PR `#97` closed the last stale iconography branch residue without
+  reopening the broader dashboard ask on `main`
+- merged PR `#98` closed the remaining work-outcome chart padding follow-up on
+  `main`
+- merged PR `#100` closed the replay event-stream file-wrapper seam on `main`:
+  - `pkg/replay/event_stream_artifact.go` is gone from production ownership
+  - replay conversion behavior now lives in the replay contract smoke lane
+- merged PR `#101` closed the backend `80%` coverage lane on `main`:
+  - `Makefile` and `cmd/gocoveragecheck/main.go` now enforce the backend gate
+  - backend runtime, replay, worker, and projection tests now cover the raised
+    floor through observable behavior
 - there is still no remaining narrow unowned customer-visible ask gap on
   `main`; the next non-overlapping cleanup candidate now comes from the
   broader backend quality lane:
-  - `docs/development/deadcode-baseline.txt` still lists the replay
-    event-stream file wrapper cluster in `pkg/replay/event_stream_artifact.go`
-    (`ArtifactFromEventStreamFile`, `SaveArtifactFromEventStreamFile`, and the
-    adjacent-factory hydration helpers) as unreachable dead surface
-  - direct repo reads show that cluster is only exercised by
-    `tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go`
-    and is otherwise absent from live runtime, API, and CLI callers
-  - that makes it the next narrow non-overlapping cleanup seam: collapse or
-    relocate the test-only wrapper layer while preserving replay artifact
-    conversion behavior through behavioral replay smoke coverage
+  - `docs/development/deadcode-baseline.txt` now points at several replay-only
+    or test-only exported helpers in `pkg/testutil` and `internal/testpath`
+    rather than a production replay wrapper
+  - direct repo reads and graph traces show the replay-specific exported helper
+    surface is now only consumed by
+    `tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go`,
+    `tests/functional/replay_contracts/replay_regression_harness_long_test.go`,
+    and the replay adhoc scheduler smoke
+  - that makes the next narrow non-overlapping seam: trim replay-only helper
+    ownership out of shared `pkg/testutil` / `internal/testpath` surface while
+    preserving behavioral replay success and divergence coverage
 - the remaining ask surface beyond that is broader program work:
   - the general standards-migration checklist ask is still open in
     `factory/logs/meta/asks.md`
@@ -206,6 +214,11 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#101` `code-coverage-backend`, merged on `2026-05-05T21:29:09Z`
+  - `#100` `retire-replay-event-stream-file-wrapper-cluster`, merged on
+    `2026-05-05T21:22:34Z`
+  - `#98` `work-outcome-chart-padding`, merged on `2026-05-05T21:02:23Z`
+  - `#97` `website-icon-removal`, merged on `2026-05-05T20:59:43Z`
   - `#96` `remove-dead-submission-work-request-forwarder-package`, merged on
     `2026-05-04T18:22:54Z`
   - `#95` `dedupe-submit-request-shaping-between-production-and-functional-runtime-tests`,
@@ -246,8 +259,11 @@
     `2026-05-04T01:27:11Z`
   - `#78` `remove-list-work-legacy-pagination-shim`, merged on
     `2026-05-04T00:28:40Z`
-- `gh pr list --state open` currently reports one open PR:
-  - `#97` `website-icon-removal`, opened on `2026-05-05T20:59:43Z`
+- `gh pr list --state open` currently reports three open PRs:
+  - `#103` `code-coverage-frontend`, opened on `2026-05-05T21:45:42Z`
+  - `#102` `work-chaininig-trace-ids`, opened on `2026-05-05T21:39:26Z`
+  - `#99` `workstation-current-selection-cleanup`, opened on
+    `2026-05-05T21:20:11Z`
 
 ## theory of mind
 
@@ -305,3 +321,6 @@
 - deadcode-baseline entries that are only reachable from one long functional
   smoke are strong candidates for the next narrow cleanup idea, especially when
   the live runtime, API, and CLI paths have no direct callers
+- graph and explorer results can lag behind a fast-forwarded `main`; verify any
+  suggested cleanup seam against live `git log`, `rg`, and direct file reads
+  before writing a new queue item
