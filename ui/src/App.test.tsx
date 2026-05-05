@@ -2956,7 +2956,7 @@ describe("App", () => {
     ).toBeNull();
     expect(
       within(pendingSelection).getByText(
-        "Prompt details are not available for this dispatch yet.",
+        "Inference request details are not available for this dispatch yet.",
       ),
     ).toBeTruthy();
     expect(
