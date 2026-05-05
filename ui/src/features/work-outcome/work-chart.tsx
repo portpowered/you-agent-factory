@@ -35,8 +35,10 @@ export const WORK_CHART_ERROR_TITLE = "Work outcome chart unavailable";
 export const WORK_CHART_ERROR_MESSAGE =
   "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.";
 const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
+const WORK_CHART_READY_CLASS =
+  "h-[16rem] min-h-[14rem] px-5 pb-5 pt-4 sm:h-[18rem] sm:px-6 sm:pb-6 sm:pt-5";
 const WORK_CHART_OVERLAY_CLASS =
-  "flex items-start justify-between gap-3 px-4 pb-3 pt-3 sm:px-5 sm:pb-4 sm:pt-4";
+  "flex items-start justify-between gap-3 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
 const WORK_CHART_X_AXIS_OVERLAY_CLASS = "self-end";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
@@ -163,16 +165,17 @@ function renderReadyWorkChart({
 }: ReadyWorkChartProps) {
   return (
     <ChartContainer
-      className={cn("h-[16rem] min-h-[14rem] px-4 pb-4 pt-3 sm:h-[18rem] sm:px-5 sm:pb-5 sm:pt-4", className)}
+      className={cn(WORK_CHART_READY_CLASS, className)}
       config={chartData.config}
       overlay={
-        <div className={WORK_CHART_OVERLAY_CLASS}>
+        <div className={WORK_CHART_OVERLAY_CLASS} data-work-chart-overlay="true">
           <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>{yAxisLabel}</p>
           <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS, WORK_CHART_X_AXIS_OVERLAY_CLASS)}>
             {xAxisLabel}
           </p>
         </div>
       }
+      rootAttributes={{ "data-work-chart-ready": "true" }}
       title={ariaLabel}
     >
       <LineChart
