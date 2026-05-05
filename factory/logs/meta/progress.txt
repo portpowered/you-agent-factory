@@ -81,14 +81,21 @@
 - After a dedupe change merges, re-check the old owner package for alias-only
   wrappers; this repo can leave a one-function forwarding package behind even
   after the real behavioral duplication is gone.
+- Re-check checked-in worldview notes against live `main` before dispatching a
+  follow-up; merged cleanup PRs can invalidate the recorded “next seam” within
+  a single refresh cycle.
+- When an open PR touches a surface already treated as closed, compare the PR
+  diff against the canonical ask before queueing sibling work; a new branch
+  name can still hide overlap with an already-closed lane.
+- Deadcode-baseline entries that only feed one long functional smoke are good
+  candidates for the next narrow cleanup idea when live runtime, API, and CLI
+  callers are absent.
 
 ## Current Summary
 
-- As of `2026-05-04T11:03:58.9091119-07:00`, `HEAD` on `main` points to `0cbe483`
-  and matches `origin/main`; the worktree is not clean because
-  `factory/logs/meta/asks.md` and `factory/workstations/cleaner/AGENTS.md`
-  have tracked local edits and `factory/inputs/**` still holds ignored
-  operating state.
+- As of `2026-05-05T14:04:03.9441625-07:00`, `HEAD` on `main` points to
+  `d868ab7` and matches `origin/main`; the worktree is clean apart from ignored
+  workflow inputs.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -123,13 +130,55 @@
 - The selected-work current-selection ask is now materially satisfied on
   `main` through PR `#74` plus PR `#77`.
 - The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
-- `gh pr list --state open` now reports no open PRs.
+- `gh pr list --state open` now reports one open PR: `#97`
+  (`website-icon-removal`).
 - The tracked local ask diff now explicitly writes the array-valued
   non-success output-interface request, but that lane is already materially
   closed on `main` through merged PR `#69`.
-- The next non-overlapping cleanup queued from this refresh is the duplicated
-  alias-only forwarding package at `pkg/internal/submission/work_request.go`,
-  which can now be deleted in favor of direct `pkg/factory` imports.
+- Merged PR `#96` has already removed the dead submission forwarder package on
+  `main`, so the old “next seam” recorded here is stale.
+- PR `#97` overlaps a dashboard header branding and toolbar lane that the
+  checked-in worldview already treated as materially closed, so it should not
+  cause another sibling dispatch from the meta loop.
+- The next non-overlapping cleanup seam is the replay event-stream file wrapper
+  cluster in `pkg/replay/event_stream_artifact.go`, which the deadcode
+  baseline still marks unreachable and which is only exercised by
+  `tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go`.
+
+## 2026-05-05T14:04:03.9441625-07:00 - meta state refresh
+
+- Ran `git pull`; Git reported the checkout was already up to date with
+  `origin/main`, then verified `HEAD` at `d868ab7`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, and the tracked-versus-ignored `factory/inputs/**`
+  surface.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs`, confirming the canonical inboxes are
+  sentinel-only and there is no ignored local idea residue staged right now.
+- Re-checked repo movement with `git log --oneline -12`, `gh pr list --state open`,
+  `gh pr list --state merged --limit 12`, and `gh pr view 97`, confirming that
+  merged PR `#96` already removed the dead submission forwarder package while
+  open PR `#97` is the only active PR.
+- Used direct code reads, code-graph inspection, and a delegated explorer pass
+  to correct the stale worldview:
+  `pkg/internal/submission` no longer exists on `main`, so the previously
+  recorded next cleanup seam is closed.
+- Confirmed PR `#97` overlaps the dashboard header/iconography and toolbar
+  surface already treated as materially closed through merged PRs `#83`, `#85`,
+  and `#86`, so the meta loop should not dispatch another sibling task in that
+  lane.
+- Inspected `docs/development/deadcode-baseline.txt`,
+  `pkg/replay/event_stream_artifact.go`, and
+  `tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go`,
+  and identified the next narrow non-overlapping backend cleanup seam:
+  the replay event-stream file wrapper cluster is still dead production surface
+  that only feeds one long functional replay smoke.
+- Queued one new standalone ignored idea under
+  `factory/inputs/idea/default/retire-replay-event-stream-file-wrapper-cluster.md`
+  so the next worker can remove or relocate that wrapper layer without
+  reopening header work or changing replay behavior.
 
 ## 2026-05-04T10:06:50.5579295-07:00 - meta state refresh
 
