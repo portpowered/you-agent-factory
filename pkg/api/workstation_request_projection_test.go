@@ -28,6 +28,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 		ID:                     "work-active",
 		WorkTypeID:             "task",
 		DisplayName:            "Active story",
+		ChainingTraceDepth:     2,
 		CurrentChainingTraceID: "chain-active",
 		TraceID:                "chain-active",
 		PlaceID:                "task:init",
@@ -36,6 +37,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 		ID:                     "work-completed-input",
 		WorkTypeID:             "task",
 		DisplayName:            "Completed story",
+		ChainingTraceDepth:     3,
 		CurrentChainingTraceID: "chain-parent-a",
 		TraceID:                "chain-parent-a",
 		PlaceID:                "task:init",
@@ -44,6 +46,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 		ID:                       "work-completed-output",
 		WorkTypeID:               "task",
 		DisplayName:              "Completed story",
+		ChainingTraceDepth:       4,
 		CurrentChainingTraceID:   "chain-completed",
 		PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"},
 		TraceID:                  "chain-completed",
@@ -155,6 +158,9 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	if active.Request.ConsumedTokens == nil || len(*active.Request.ConsumedTokens) != 1 || (*active.Request.ConsumedTokens)[0].TokenId != "token-active" {
 		t.Fatalf("active consumed tokens = %#v, want token-active", active.Request.ConsumedTokens)
 	}
+	if (*active.Request.ConsumedTokens)[0].ChainingTraceDepth == nil || *(*active.Request.ConsumedTokens)[0].ChainingTraceDepth != 2 {
+		t.Fatalf("active consumed token depth = %#v, want 2", active.Request.ConsumedTokens)
+	}
 	if active.Request.CurrentChainingTraceId == nil || *active.Request.CurrentChainingTraceId != "chain-active" {
 		t.Fatalf("active current chaining trace ID = %#v, want chain-active", active.Request.CurrentChainingTraceId)
 	}
@@ -184,8 +190,14 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	if completed.Request.PreviousChainingTraceIds == nil || len(*completed.Request.PreviousChainingTraceIds) != 2 {
 		t.Fatalf("completed previous chaining trace IDs = %#v, want two predecessor chains", completed.Request.PreviousChainingTraceIds)
 	}
+	if completed.Request.InputWorkItems == nil || (*completed.Request.InputWorkItems)[0].ChainingTraceDepth == nil || *(*completed.Request.InputWorkItems)[0].ChainingTraceDepth != 3 {
+		t.Fatalf("completed input work item depth = %#v, want 3", completed.Request.InputWorkItems)
+	}
 	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].PreviousChainingTraceIds == nil || len(*outputItems[0].PreviousChainingTraceIds) != 2 {
 		t.Fatalf("completed output work item chaining lineage = %#v, want explicit previous chaining trace IDs", outputItems)
+	}
+	if outputItems := *completed.Response.OutputWorkItems; outputItems[0].ChainingTraceDepth == nil || *outputItems[0].ChainingTraceDepth != 4 {
+		t.Fatalf("completed output work item depth = %#v, want 4", outputItems)
 	}
 
 	encoded, err := json.Marshal(slice)

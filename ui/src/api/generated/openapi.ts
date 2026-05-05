@@ -194,6 +194,9 @@ export interface components {
             name?: string;
             workId: string;
             workType: string;
+            chainingTraceDepth?: number;
+            currentChainingTraceId?: string;
+            previousChainingTraceIds?: string[];
             traceId: string;
             tags?: components["schemas"]["StringMap"];
             /** Format: date-time */
@@ -280,6 +283,7 @@ export interface components {
             workId: string;
             workTypeId?: string;
             displayName?: string;
+            chainingTraceDepth?: number;
             currentChainingTraceId?: string;
             previousChainingTraceIds?: string[];
             traceId?: string;
@@ -290,6 +294,7 @@ export interface components {
             name?: string;
             workId?: string;
             workTypeId?: string;
+            chainingTraceDepth?: number;
             currentChainingTraceId?: string;
             previousChainingTraceIds?: string[];
             traceId?: string;
@@ -1117,6 +1122,8 @@ export interface components {
             workTypeName?: string;
             /** @description Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type. */
             state?: string;
+            /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
+            chainingTraceDepth?: number;
             /** @description Explicit chaining-trace identifier for this submitted work item. */
             currentChainingTraceId?: string;
             /** @description Explicit predecessor chaining traces that directly caused this work item. */

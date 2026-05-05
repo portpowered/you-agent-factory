@@ -107,3 +107,72 @@ func CurrentChainingTraceIDFromTokens(tokens []Token) string {
 	}
 	return ""
 }
+
+// ChainingTraceDepthForTokenColor returns the stored chain depth for one token
+// color, falling back to depth 1 when only a trace identifier is available.
+func ChainingTraceDepthForTokenColor(color TokenColor) int {
+	if color.ChainingTraceDepth > 0 {
+		return color.ChainingTraceDepth
+	}
+	if firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID) != "" {
+		return 1
+	}
+	return 0
+}
+
+// ChainingTraceDepthForWorkItem returns the stored chain depth for one work
+// item, falling back to depth 1 when only a trace identifier is available.
+func ChainingTraceDepthForWorkItem(item FactoryWorkItem) int {
+	if item.ChainingTraceDepth > 0 {
+		return item.ChainingTraceDepth
+	}
+	if firstNonEmptyString(item.CurrentChainingTraceID, item.TraceID) != "" {
+		return 1
+	}
+	return 0
+}
+
+// ChainingTraceDepthFromTokenColors resolves the next chain depth from the
+// deepest non-resource token color, defaulting initial traced work to depth 1.
+func ChainingTraceDepthFromTokenColors(colors []TokenColor) int {
+	depth := 0
+	for _, color := range colors {
+		if color.DataType == DataTypeResource {
+			continue
+		}
+		if candidate := ChainingTraceDepthForTokenColor(color); candidate > depth {
+			depth = candidate
+		}
+	}
+	if depth > 0 {
+		return depth + 1
+	}
+	if CurrentChainingTraceIDFromTokenColors(colors) != "" {
+		return 1
+	}
+	return 0
+}
+
+func CurrentChainingTraceIDFromTokenColors(colors []TokenColor) string {
+	for _, color := range colors {
+		if color.DataType == DataTypeResource || color.WorkTypeID == SystemTimeWorkTypeID {
+			continue
+		}
+		return firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID)
+	}
+	for _, color := range colors {
+		if color.DataType != DataTypeResource {
+			return firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID)
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}

@@ -108,6 +108,7 @@ type FactoryWorldWorkItemRef struct {
 	WorkID                   string   `json:"work_id"`
 	WorkTypeID               string   `json:"work_type_id,omitempty"`
 	DisplayName              string   `json:"display_name,omitempty"`
+	ChainingTraceDepth       int      `json:"chaining_trace_depth,omitempty"`
 	CurrentChainingTraceID   string   `json:"current_chaining_trace_id,omitempty"`
 	PreviousChainingTraceIDs []string `json:"previous_chaining_trace_ids,omitempty"`
 	TraceID                  string   `json:"trace_id,omitempty"`

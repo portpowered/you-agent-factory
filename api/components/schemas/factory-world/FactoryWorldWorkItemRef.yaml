@@ -9,6 +9,9 @@ properties:
     type: string
   displayName:
     type: string
+  chainingTraceDepth:
+    type: integer
+    minimum: 1
   currentChainingTraceId:
     type: string
   previousChainingTraceIds:

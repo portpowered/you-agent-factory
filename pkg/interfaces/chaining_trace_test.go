@@ -70,6 +70,29 @@ func TestCurrentChainingTraceIDFromWorkItems_PrefersCustomerWorkOverSystemTime(t
 	}
 }
 
+func TestChainingTraceDepthFromTokenColors_UsesDeepestNonResourceAncestor(t *testing.T) {
+	got := ChainingTraceDepthFromTokenColors([]TokenColor{
+		{DataType: DataTypeResource, WorkTypeID: "slot", ChainingTraceDepth: 99},
+		{DataType: DataTypeWork, WorkTypeID: "task", ChainingTraceDepth: 2, TraceID: "trace-a"},
+		{DataType: DataTypeWork, WorkTypeID: "task", ChainingTraceDepth: 4, TraceID: "trace-b"},
+	})
+	if got != 5 {
+		t.Fatalf("chaining trace depth = %d, want 5", got)
+	}
+}
+
+func TestChainingTraceDepthForTokenColor_AndWorkItem_FallbackToInitialDepth(t *testing.T) {
+	tokenDepth := ChainingTraceDepthForTokenColor(TokenColor{CurrentChainingTraceID: "chain-1"})
+	if tokenDepth != 1 {
+		t.Fatalf("token chaining trace depth = %d, want 1", tokenDepth)
+	}
+
+	workDepth := ChainingTraceDepthForWorkItem(FactoryWorkItem{TraceID: "trace-1"})
+	if workDepth != 1 {
+		t.Fatalf("work item chaining trace depth = %d, want 1", workDepth)
+	}
+}
+
 func assertCanonicalTraceIDs(t *testing.T, got []string, want []string) {
 	t.Helper()
 	if len(got) != len(want) {

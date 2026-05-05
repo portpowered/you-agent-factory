@@ -422,6 +422,15 @@ components:
           type: string
         workType:
           type: string
+        chainingTraceDepth:
+          type: integer
+          minimum: 1
+        currentChainingTraceId:
+          type: string
+        previousChainingTraceIds:
+          type: array
+          items:
+            type: string
         traceId:
           type: string
         tags:
@@ -624,6 +633,9 @@ components:
           type: string
         displayName:
           type: string
+        chainingTraceDepth:
+          type: integer
+          minimum: 1
         currentChainingTraceId:
           type: string
         previousChainingTraceIds:
@@ -649,6 +661,9 @@ components:
           type: string
         workTypeId:
           type: string
+        chainingTraceDepth:
+          type: integer
+          minimum: 1
         currentChainingTraceId:
           type: string
         previousChainingTraceIds:
@@ -2205,6 +2220,10 @@ components:
         state:
           type: string
           description: Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
+        chainingTraceDepth:
+          type: integer
+          minimum: 1
+          description: Current chaining depth for this work item when the runtime already knows its upstream lineage.
         currentChainingTraceId:
           type: string
           description: Explicit chaining-trace identifier for this submitted work item.

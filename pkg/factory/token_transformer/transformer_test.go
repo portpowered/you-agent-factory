@@ -82,6 +82,9 @@ func TestInitialTokenFromSubmit_PreservesExplicitChainingLineage(t *testing.T) {
 	if token.Color.CurrentChainingTraceID != "chain-current" {
 		t.Fatalf("CurrentChainingTraceID = %q, want chain-current", token.Color.CurrentChainingTraceID)
 	}
+	if token.Color.ChainingTraceDepth != 1 {
+		t.Fatalf("ChainingTraceDepth = %d, want 1 for initial submitted work", token.Color.ChainingTraceDepth)
+	}
 	if got := token.Color.PreviousChainingTraceIDs; len(got) != 2 || got[0] != "chain-a" || got[1] != "chain-z" {
 		t.Fatalf("PreviousChainingTraceIDs = %#v, want [chain-a chain-z]", got)
 	}
@@ -176,7 +179,7 @@ func TestOutputToken_CrossType_UsesWorkIDGenerator(t *testing.T) {
 			{PlaceID: "place-target", Direction: petri.ArcOutput},
 		},
 		InputColors: []interfaces.TokenColor{
-			{WorkTypeID: "source-type", WorkID: "work-source-type-1", TraceID: "trace-1", Name: "item-a"},
+			{WorkTypeID: "source-type", WorkID: "work-source-type-1", TraceID: "trace-1", Name: "item-a", ChainingTraceDepth: 3},
 		},
 		Outcome: interfaces.OutcomeAccepted,
 		Now:     time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC),
@@ -204,6 +207,9 @@ func TestOutputToken_CrossType_UsesWorkIDGenerator(t *testing.T) {
 	}
 	if token.Color.CurrentChainingTraceID != "trace-1" {
 		t.Errorf("CurrentChainingTraceID = %q, want %q", token.Color.CurrentChainingTraceID, "trace-1")
+	}
+	if token.Color.ChainingTraceDepth != 4 {
+		t.Errorf("ChainingTraceDepth = %d, want 4", token.Color.ChainingTraceDepth)
 	}
 	if got := token.Color.PreviousChainingTraceIDs; len(got) != 1 || got[0] != "trace-1" {
 		t.Errorf("PreviousChainingTraceIDs = %#v, want [trace-1]", got)
@@ -289,6 +295,7 @@ func TestOutputToken_SameType_PreservesWorkID(t *testing.T) {
 			{
 				WorkTypeID:               "my-type",
 				WorkID:                   "work-my-type-42",
+				ChainingTraceDepth:       7,
 				CurrentChainingTraceID:   "chain-current",
 				PreviousChainingTraceIDs: []string{"chain-a", "chain-z"},
 				TraceID:                  "trace-1",
@@ -315,6 +322,9 @@ func TestOutputToken_SameType_PreservesWorkID(t *testing.T) {
 	}
 	if token.Color.CurrentChainingTraceID != "chain-current" {
 		t.Errorf("same-type CurrentChainingTraceID = %q, want %q", token.Color.CurrentChainingTraceID, "chain-current")
+	}
+	if token.Color.ChainingTraceDepth != 7 {
+		t.Errorf("same-type ChainingTraceDepth = %d, want 7", token.Color.ChainingTraceDepth)
 	}
 	if got := token.Color.PreviousChainingTraceIDs; len(got) != 2 || got[0] != "chain-a" || got[1] != "chain-z" {
 		t.Errorf("same-type PreviousChainingTraceIDs = %#v, want [chain-a chain-z]", got)

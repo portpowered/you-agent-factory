@@ -20,6 +20,10 @@ properties:
   state:
     type: string
     description: Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
+  chainingTraceDepth:
+    type: integer
+    minimum: 1
+    description: Current chaining depth for this work item when the runtime already knows its upstream lineage.
   currentChainingTraceId:
     type: string
     description: Explicit chaining-trace identifier for this submitted work item.

@@ -318,14 +318,17 @@ func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request) {
 
 func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenResponse {
 	resp := factoryapi.TokenResponse{
-		Id:        t.ID,
-		PlaceId:   t.PlaceID,
-		WorkId:    t.Color.WorkID,
-		WorkType:  t.Color.WorkTypeID,
-		TraceId:   t.Color.TraceID,
-		Tags:      stringMapPtr(t.Color.Tags),
-		CreatedAt: t.CreatedAt,
-		EnteredAt: t.EnteredAt,
+		Id:                       t.ID,
+		PlaceId:                  t.PlaceID,
+		WorkId:                   t.Color.WorkID,
+		WorkType:                 t.Color.WorkTypeID,
+		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
+		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
+		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
+		TraceId:                  t.Color.TraceID,
+		Tags:                     stringMapPtr(t.Color.Tags),
+		CreatedAt:                t.CreatedAt,
+		EnteredAt:                t.EnteredAt,
 	}
 	if t.Color.Name != "" {
 		resp.Name = &t.Color.Name
@@ -507,6 +510,13 @@ func stringValue(value *string) string {
 	return *value
 }
 
+func intValue(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
 func stringSliceValue(values *[]string) []string {
 	if values == nil {
 		return nil
@@ -514,6 +524,14 @@ func stringSliceValue(values *[]string) []string {
 	out := make([]string, len(*values))
 	copy(out, *values)
 	return out
+}
+
+func stringSlicePtrCopy(values []string) *[]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := append([]string(nil), values...)
+	return &out
 }
 
 func stringPtrIfNotEmpty(value string) *string {
@@ -537,6 +555,22 @@ func stringMapPtr(values map[string]string) *factoryapi.StringMap {
 	}
 	converted := factoryapi.StringMap(values)
 	return &converted
+}
+
+func intPtrIfPositive(value int) *int {
+	if value <= 0 {
+		return nil
+	}
+	return &value
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func generatedStringMap(values *factoryapi.StringMap) map[string]string {
@@ -576,6 +610,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkReq
 				RequestID:                stringValue(work.RequestId),
 				WorkTypeID:               stringValue(work.WorkTypeName),
 				State:                    stringValue(work.State),
+				ChainingTraceDepth:       intValue(work.ChainingTraceDepth),
 				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
 				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
 				TraceID:                  stringValue(work.TraceId),
