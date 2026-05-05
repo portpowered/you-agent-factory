@@ -461,6 +461,7 @@ type FactoryWorldScriptResponseView struct {
 
 // FactoryWorldTokenView defines model for FactoryWorldTokenView.
 type FactoryWorldTokenView struct {
+	ChainingTraceDepth       *int       `json:"chainingTraceDepth,omitempty"`
 	CurrentChainingTraceId   *string    `json:"currentChainingTraceId,omitempty"`
 	Name                     *string    `json:"name,omitempty"`
 	PlaceId                  string     `json:"placeId"`
@@ -480,6 +481,7 @@ type FactoryWorldWorkDiagnostics struct {
 
 // FactoryWorldWorkItemRef defines model for FactoryWorldWorkItemRef.
 type FactoryWorldWorkItemRef struct {
+	ChainingTraceDepth       *int      `json:"chainingTraceDepth,omitempty"`
 	CurrentChainingTraceId   *string   `json:"currentChainingTraceId,omitempty"`
 	DisplayName              *string   `json:"displayName,omitempty"`
 	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
@@ -908,16 +910,19 @@ type TokenHistory struct {
 
 // TokenResponse defines model for TokenResponse.
 type TokenResponse struct {
-	CreatedAt time.Time     `json:"createdAt"`
-	EnteredAt time.Time     `json:"enteredAt"`
-	History   *TokenHistory `json:"history,omitempty"`
-	Id        string        `json:"id"`
-	Name      *string       `json:"name,omitempty"`
-	PlaceId   string        `json:"placeId"`
-	Tags      *StringMap    `json:"tags,omitempty"`
-	TraceId   string        `json:"traceId"`
-	WorkId    string        `json:"workId"`
-	WorkType  string        `json:"workType"`
+	ChainingTraceDepth       *int          `json:"chainingTraceDepth,omitempty"`
+	CreatedAt                time.Time     `json:"createdAt"`
+	CurrentChainingTraceId   *string       `json:"currentChainingTraceId,omitempty"`
+	EnteredAt                time.Time     `json:"enteredAt"`
+	History                  *TokenHistory `json:"history,omitempty"`
+	Id                       string        `json:"id"`
+	Name                     *string       `json:"name,omitempty"`
+	PlaceId                  string        `json:"placeId"`
+	PreviousChainingTraceIds *[]string     `json:"previousChainingTraceIds,omitempty"`
+	Tags                     *StringMap    `json:"tags,omitempty"`
+	TraceId                  string        `json:"traceId"`
+	WorkId                   string        `json:"workId"`
+	WorkType                 string        `json:"workType"`
 }
 
 // Transition defines model for Transition.
@@ -943,6 +948,9 @@ type WallClock struct {
 
 // Work A piece of work.
 type Work struct {
+	// ChainingTraceDepth Current chaining depth for this work item when the runtime already knows its upstream lineage.
+	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
+
 	// CurrentChainingTraceId Explicit chaining-trace identifier for this submitted work item.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 

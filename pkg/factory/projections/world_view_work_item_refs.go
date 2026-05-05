@@ -58,6 +58,7 @@ func workItemRef(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkIte
 		WorkID:                   item.ID,
 		WorkTypeID:               item.WorkTypeID,
 		DisplayName:              item.DisplayName,
+		ChainingTraceDepth:       item.ChainingTraceDepth,
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: cloneStringSlice(item.PreviousChainingTraceIDs),
 		TraceID:                  item.TraceID,

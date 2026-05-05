@@ -16,11 +16,12 @@ func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
-			ID:          "work-1",
-			WorkTypeID:  "task",
-			DisplayName: "Write docs",
-			TraceID:     "trace-1",
-			PlaceID:     "task:init",
+			ID:                 "work-1",
+			WorkTypeID:         "task",
+			DisplayName:        "Write docs",
+			ChainingTraceDepth: 3,
+			TraceID:            "trace-1",
+			PlaceID:            "task:init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
@@ -29,7 +30,7 @@ func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T)
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", ChainingTraceDepth: 3, TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 	}
@@ -247,11 +248,12 @@ func TestBuildFactoryWorldView_ProjectsCurrentWorkItemsByPlaceID(t *testing.T) {
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
-			ID:          "work-1",
-			WorkTypeID:  "task",
-			DisplayName: "Write docs",
-			TraceID:     "trace-1",
-			PlaceID:     "task:init",
+			ID:                 "work-1",
+			WorkTypeID:         "task",
+			DisplayName:        "Write docs",
+			ChainingTraceDepth: 3,
+			TraceID:            "trace-1",
+			PlaceID:            "task:init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
@@ -260,7 +262,7 @@ func TestBuildFactoryWorldView_ProjectsCurrentWorkItemsByPlaceID(t *testing.T) {
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", ChainingTraceDepth: 3, TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 	}
@@ -274,6 +276,9 @@ func TestBuildFactoryWorldView_ProjectsCurrentWorkItemsByPlaceID(t *testing.T) {
 	if len(queuedItems) != 1 || queuedItems[0].WorkID != "work-1" {
 		t.Fatalf("queued task:init work items = %#v, want work-1", queuedItems)
 	}
+	if queuedItems[0].ChainingTraceDepth != 3 {
+		t.Fatalf("queued chaining trace depth = %d, want 3", queuedItems[0].ChainingTraceDepth)
+	}
 
 	inFlightState, err := ReconstructFactoryWorldState(events, 2)
 	if err != nil {
@@ -285,6 +290,10 @@ func TestBuildFactoryWorldView_ProjectsCurrentWorkItemsByPlaceID(t *testing.T) {
 	}
 	if got, ok := inFlightView.Runtime.CurrentWorkItemsByPlaceID["task:review"]; !ok || len(got) != 0 {
 		t.Fatalf("empty task:review work items = %#v, present=%t, want empty slice", got, ok)
+	}
+	activeInput := inFlightView.Runtime.ActiveExecutionsByDispatchID["dispatch-1"].ConsumedInputs[0]
+	if activeInput.WorkItem == nil || activeInput.WorkItem.ChainingTraceDepth != 3 {
+		t.Fatalf("active consumed input depth = %#v, want depth 3", activeInput.WorkItem)
 	}
 	if _, ok := inFlightView.Runtime.CurrentWorkItemsByPlaceID["task:complete"]; ok {
 		t.Fatalf("terminal task:complete should not be exposed as current non-terminal work")
@@ -1447,6 +1456,9 @@ func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t 
 	}
 	if refsByID[0].CurrentChainingTraceID != "chain-1" || len(refsByID[1].PreviousChainingTraceIDs) != 2 {
 		t.Fatalf("workItemRefsForIDs lineage = %#v, want explicit chaining fields", refsByID)
+	}
+	if refsByID[0].ChainingTraceDepth != 0 || refsByID[1].ChainingTraceDepth != 0 {
+		t.Fatalf("workItemRefsForIDs unexpected implicit depth = %#v, want zero when source depth absent", refsByID)
 	}
 
 	refsForItems := workItemRefsForItems([]interfaces.FactoryWorkItem{

@@ -82,6 +82,9 @@ func TestInitialTokenFromSubmit_PreservesExplicitChainingLineage(t *testing.T) {
 	if token.Color.CurrentChainingTraceID != "chain-current" {
 		t.Fatalf("CurrentChainingTraceID = %q, want chain-current", token.Color.CurrentChainingTraceID)
 	}
+	if token.Color.ChainingTraceDepth != 1 {
+		t.Fatalf("ChainingTraceDepth = %d, want 1 for initial submitted work", token.Color.ChainingTraceDepth)
+	}
 	if got := token.Color.PreviousChainingTraceIDs; len(got) != 2 || got[0] != "chain-a" || got[1] != "chain-z" {
 		t.Fatalf("PreviousChainingTraceIDs = %#v, want [chain-a chain-z]", got)
 	}
@@ -176,7 +179,7 @@ func TestOutputToken_CrossType_UsesWorkIDGenerator(t *testing.T) {
 			{PlaceID: "place-target", Direction: petri.ArcOutput},
 		},
 		InputColors: []interfaces.TokenColor{
-			{WorkTypeID: "source-type", WorkID: "work-source-type-1", TraceID: "trace-1", Name: "item-a"},
+			{WorkTypeID: "source-type", WorkID: "work-source-type-1", TraceID: "trace-1", Name: "item-a", ChainingTraceDepth: 3},
 		},
 		Outcome: interfaces.OutcomeAccepted,
 		Now:     time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC),
@@ -204,6 +207,9 @@ func TestOutputToken_CrossType_UsesWorkIDGenerator(t *testing.T) {
 	}
 	if token.Color.CurrentChainingTraceID != "trace-1" {
 		t.Errorf("CurrentChainingTraceID = %q, want %q", token.Color.CurrentChainingTraceID, "trace-1")
+	}
+	if token.Color.ChainingTraceDepth != 4 {
+		t.Errorf("ChainingTraceDepth = %d, want 4", token.Color.ChainingTraceDepth)
 	}
 	if got := token.Color.PreviousChainingTraceIDs; len(got) != 1 || got[0] != "trace-1" {
 		t.Errorf("PreviousChainingTraceIDs = %#v, want [trace-1]", got)
@@ -289,6 +295,7 @@ func TestOutputToken_SameType_PreservesWorkID(t *testing.T) {
 			{
 				WorkTypeID:               "my-type",
 				WorkID:                   "work-my-type-42",
+				ChainingTraceDepth:       7,
 				CurrentChainingTraceID:   "chain-current",
 				PreviousChainingTraceIDs: []string{"chain-a", "chain-z"},
 				TraceID:                  "trace-1",
@@ -315,6 +322,9 @@ func TestOutputToken_SameType_PreservesWorkID(t *testing.T) {
 	}
 	if token.Color.CurrentChainingTraceID != "chain-current" {
 		t.Errorf("same-type CurrentChainingTraceID = %q, want %q", token.Color.CurrentChainingTraceID, "chain-current")
+	}
+	if token.Color.ChainingTraceDepth != 7 {
+		t.Errorf("same-type ChainingTraceDepth = %d, want 7", token.Color.ChainingTraceDepth)
 	}
 	if got := token.Color.PreviousChainingTraceIDs; len(got) != 2 || got[0] != "chain-a" || got[1] != "chain-z" {
 		t.Errorf("same-type PreviousChainingTraceIDs = %#v, want [chain-a chain-z]", got)
@@ -427,6 +437,68 @@ func TestOutputToken_Resource_PreservesConsumedTokenIdentity(t *testing.T) {
 	}
 	if token.History.PlaceVisits["slot:available"] != 1 {
 		t.Fatalf("PlaceVisits = %#v, want original history", token.History.PlaceVisits)
+	}
+}
+
+func TestOutputToken_Resource_DoesNotInventWorkChainingLineage(t *testing.T) {
+	now := time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)
+	transformer := New(
+		map[string]*petri.Place{
+			"slot:available": {ID: "slot:available", TypeID: "slot", State: "available"},
+		},
+		map[string]*state.WorkType{
+			"task": {ID: "task"},
+		},
+	)
+	resource := interfaces.Token{
+		ID:      "slot:resource:0",
+		PlaceID: "slot:busy",
+		Color: interfaces.TokenColor{
+			WorkID:     "slot:0",
+			WorkTypeID: "slot",
+			DataType:   interfaces.DataTypeResource,
+		},
+	}
+	work := interfaces.Token{
+		ID:      "work-task-1",
+		PlaceID: "task:busy",
+		Color: interfaces.TokenColor{
+			WorkID:                   "work-task-1",
+			WorkTypeID:               "task",
+			DataType:                 interfaces.DataTypeWork,
+			CurrentChainingTraceID:   "chain-task",
+			PreviousChainingTraceIDs: []string{"chain-root"},
+			TraceID:                  "trace-task",
+		},
+	}
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "slot:available", Direction: petri.ArcOutput},
+		},
+		ConsumedTokens: []interfaces.Token{resource, work},
+		InputColors:    []interfaces.TokenColor{resource.Color, work.Color},
+		Outcome:        interfaces.OutcomeAccepted,
+		Now:            now,
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+
+	if token.Color.CurrentChainingTraceID != "" {
+		t.Fatalf("CurrentChainingTraceID = %q, want empty for resource output", token.Color.CurrentChainingTraceID)
+	}
+	if len(token.Color.PreviousChainingTraceIDs) != 0 {
+		t.Fatalf("PreviousChainingTraceIDs = %#v, want empty for resource output", token.Color.PreviousChainingTraceIDs)
+	}
+	if token.Color.TraceID != "" {
+		t.Fatalf("TraceID = %q, want empty for resource output", token.Color.TraceID)
 	}
 }
 

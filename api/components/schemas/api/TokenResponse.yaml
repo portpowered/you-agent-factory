@@ -19,6 +19,15 @@ properties:
     type: string
   workType:
     type: string
+  chainingTraceDepth:
+    type: integer
+    minimum: 1
+  currentChainingTraceId:
+    type: string
+  previousChainingTraceIds:
+    type: array
+    items:
+      type: string
   traceId:
     type: string
   tags:

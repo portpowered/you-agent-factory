@@ -1265,9 +1265,12 @@ func TestGetWork(t *testing.T) {
 					ID:      "tok-prd-1",
 					PlaceID: "prd:init",
 					Color: interfaces.TokenColor{
-						WorkID:     "work-prd-1",
-						WorkTypeID: "prd",
-						TraceID:    "trace-1",
+						WorkID:                   "work-prd-1",
+						WorkTypeID:               "prd",
+						ChainingTraceDepth:       4,
+						CurrentChainingTraceID:   "chain-1",
+						PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
+						TraceID:                  "trace-1",
 					},
 					CreatedAt: now,
 					EnteredAt: now,
@@ -1297,6 +1300,15 @@ func TestGetWork(t *testing.T) {
 	}
 	if resp.PlaceId != "prd:init" {
 		t.Errorf("expected prd:init, got %s", resp.PlaceId)
+	}
+	if resp.ChainingTraceDepth == nil || *resp.ChainingTraceDepth != 4 {
+		t.Errorf("expected chainingTraceDepth 4, got %#v", resp.ChainingTraceDepth)
+	}
+	if resp.CurrentChainingTraceId == nil || *resp.CurrentChainingTraceId != "chain-1" {
+		t.Errorf("expected currentChainingTraceId chain-1, got %#v", resp.CurrentChainingTraceId)
+	}
+	if resp.PreviousChainingTraceIds == nil || len(*resp.PreviousChainingTraceIds) != 2 {
+		t.Errorf("expected previousChainingTraceIds [chain-a chain-b], got %#v", resp.PreviousChainingTraceIds)
 	}
 	if resp.History == nil {
 		t.Error("expected history in single token response")

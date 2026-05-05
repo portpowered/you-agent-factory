@@ -64,6 +64,7 @@ export interface DashboardTopology {
 
 export interface DashboardWorkItemRef {
   current_chaining_trace_id?: string;
+  chaining_trace_depth?: number;
   work_id: string;
   work_type_id?: string;
   display_name?: string;
@@ -368,6 +369,7 @@ export interface DashboardTraceToken {
   name?: string;
   work_id: string;
   work_type_id: string;
+  chaining_trace_depth?: number;
   trace_id?: string;
   tags?: Record<string, string>;
   created_at: string;

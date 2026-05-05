@@ -1217,6 +1217,7 @@ func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID s
 		Name:                     item.DisplayName,
 		RequestId:                stringPtrForProjectionTest(requestID),
 		Tags:                     generatedStringMapForProjectionTest(item.Tags),
+		ChainingTraceDepth:       intPtrForProjectionTest(item.ChainingTraceDepth),
 		CurrentChainingTraceId:   stringPtrForProjectionTest(item.CurrentChainingTraceID),
 		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(item.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrForProjectionTest(item.TraceID),

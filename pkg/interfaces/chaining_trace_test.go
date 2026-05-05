@@ -28,6 +28,15 @@ func TestPreviousChainingTraceIDsFromTokens_MultiInputFanInReturnsSortedUniquePr
 	assertCanonicalTraceIDs(t, got, want)
 }
 
+func TestPreviousChainingTraceIDsFromTokens_PrefersCanonicalCurrentTraceOverLegacyTrace(t *testing.T) {
+	got := PreviousChainingTraceIDsFromTokens([]Token{
+		{Color: TokenColor{DataType: DataTypeWork, CurrentChainingTraceID: "chain-z", TraceID: "trace-a"}},
+		{Color: TokenColor{DataType: DataTypeWork, CurrentChainingTraceID: "chain-a", TraceID: "trace-z"}},
+	})
+	want := []string{"chain-a", "chain-z"}
+	assertCanonicalTraceIDs(t, got, want)
+}
+
 func TestPreviousChainingTraceIDsFromWorkItems_MultiInputFanInReturnsSortedUniquePredecessors(t *testing.T) {
 	got := PreviousChainingTraceIDsFromWorkItems([]FactoryWorkItem{
 		{ID: "work-2", TraceID: "trace-b"},
@@ -50,6 +59,15 @@ func TestPreviousChainingTraceIDsFromTokenColors_MultiInputFanInReturnsSortedUni
 	assertCanonicalTraceIDs(t, got, want)
 }
 
+func TestCurrentChainingTraceIDFromTokens_PrefersCanonicalCurrentTraceOverLegacyTrace(t *testing.T) {
+	got := CurrentChainingTraceIDFromTokens([]Token{
+		{Color: TokenColor{DataType: DataTypeWork, WorkTypeID: "task", CurrentChainingTraceID: "chain-customer", TraceID: "trace-customer"}},
+	})
+	if got != "chain-customer" {
+		t.Fatalf("current chaining trace ID = %q, want chain-customer", got)
+	}
+}
+
 func TestCurrentChainingTraceIDFromTokens_PrefersCustomerWorkOverSystemTime(t *testing.T) {
 	got := CurrentChainingTraceIDFromTokens([]Token{
 		{Color: TokenColor{DataType: DataTypeWork, WorkTypeID: SystemTimeWorkTypeID, TraceID: "trace-system"}},
@@ -67,6 +85,29 @@ func TestCurrentChainingTraceIDFromWorkItems_PrefersCustomerWorkOverSystemTime(t
 	})
 	if got != "chain-customer" {
 		t.Fatalf("current chaining trace ID from work items = %q, want chain-customer", got)
+	}
+}
+
+func TestChainingTraceDepthFromTokenColors_UsesDeepestNonResourceAncestor(t *testing.T) {
+	got := ChainingTraceDepthFromTokenColors([]TokenColor{
+		{DataType: DataTypeResource, WorkTypeID: "slot", ChainingTraceDepth: 99},
+		{DataType: DataTypeWork, WorkTypeID: "task", ChainingTraceDepth: 2, TraceID: "trace-a"},
+		{DataType: DataTypeWork, WorkTypeID: "task", ChainingTraceDepth: 4, TraceID: "trace-b"},
+	})
+	if got != 5 {
+		t.Fatalf("chaining trace depth = %d, want 5", got)
+	}
+}
+
+func TestChainingTraceDepthForTokenColor_AndWorkItem_FallbackToInitialDepth(t *testing.T) {
+	tokenDepth := ChainingTraceDepthForTokenColor(TokenColor{CurrentChainingTraceID: "chain-1"})
+	if tokenDepth != 1 {
+		t.Fatalf("token chaining trace depth = %d, want 1", tokenDepth)
+	}
+
+	workDepth := ChainingTraceDepthForWorkItem(FactoryWorkItem{TraceID: "trace-1"})
+	if workDepth != 1 {
+		t.Fatalf("work item chaining trace depth = %d, want 1", workDepth)
 	}
 }
 

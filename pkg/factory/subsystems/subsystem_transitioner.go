@@ -539,9 +539,13 @@ func deterministicWorkerBatchRequestID(result resolvedWorkResult, output string)
 func enrichWorkerEmittedBatchRequest(request *interfaces.WorkRequest, inputColors []interfaces.TokenColor, result resolvedWorkResult) {
 	source := firstNonResourceInput(inputColors)
 	previousChainingTraceIDs := interfaces.PreviousChainingTraceIDsFromTokenColors(inputColors)
+	chainingTraceDepth := interfaces.ChainingTraceDepthFromTokenColors(inputColors)
 	for i := range request.Works {
 		if request.Works[i].RequestID == "" {
 			request.Works[i].RequestID = request.RequestID
+		}
+		if request.Works[i].ChainingTraceDepth == 0 {
+			request.Works[i].ChainingTraceDepth = chainingTraceDepth
 		}
 		request.Works[i].PreviousChainingTraceIDs = previousChainingTraceIDs
 		if source == nil {
@@ -551,7 +555,10 @@ func enrichWorkerEmittedBatchRequest(request *interfaces.WorkRequest, inputColor
 			request.Works[i].TraceID = source.TraceID
 		}
 		if request.Works[i].CurrentChainingTraceID == "" {
-			request.Works[i].CurrentChainingTraceID = request.Works[i].TraceID
+			request.Works[i].CurrentChainingTraceID = source.TraceID
+			if source.CurrentChainingTraceID != "" {
+				request.Works[i].CurrentChainingTraceID = source.CurrentChainingTraceID
+			}
 		}
 		request.Works[i].Tags = mergedWorkerBatchTags(source.Tags, request.Works[i].Tags, source, result)
 	}
@@ -720,6 +727,9 @@ func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interface
 	}
 	if len(recorded.PreviousChainingTraceIDs) > 0 {
 		token.Color.PreviousChainingTraceIDs = append([]string(nil), recorded.PreviousChainingTraceIDs...)
+	}
+	if recorded.ChainingTraceDepth > 0 {
+		token.Color.ChainingTraceDepth = recorded.ChainingTraceDepth
 	}
 	if recorded.TraceID != "" {
 		token.Color.TraceID = recorded.TraceID

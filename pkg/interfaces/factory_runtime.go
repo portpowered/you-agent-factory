@@ -27,6 +27,7 @@ type SubmitRequest struct {
 	Name                     string            `json:"name,omitempty"`
 	WorkTypeID               string            `json:"workTypeName"`
 	TargetState              string            `json:"targetState,omitempty"`
+	ChainingTraceDepth       int               `json:"chainingTraceDepth,omitempty"`
 	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId"`
@@ -66,6 +67,7 @@ type Work struct {
 	RequestID                string            `json:"requestId,omitempty"`
 	WorkTypeID               string            `json:"workTypeName,omitempty"`
 	State                    string            `json:"state,omitempty"`
+	ChainingTraceDepth       int               `json:"chainingTraceDepth,omitempty"`
 	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId,omitempty"`
@@ -104,6 +106,7 @@ type FactoryWorkItem struct {
 	WorkTypeID               string            `json:"workTypeId"`
 	State                    string            `json:"state,omitempty"`
 	DisplayName              string            `json:"displayName,omitempty"`
+	ChainingTraceDepth       int               `json:"chainingTraceDepth,omitempty"`
 	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId,omitempty"`

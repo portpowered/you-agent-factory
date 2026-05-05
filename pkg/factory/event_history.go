@@ -637,6 +637,7 @@ func generatedWork(item interfaces.FactoryWorkItem) factoryapi.Work {
 		WorkId:                   stringPtrIfNotEmpty(item.ID),
 		WorkTypeName:             stringPtrIfNotEmpty(item.WorkTypeID),
 		State:                    stringPtrIfNotEmpty(item.State),
+		ChainingTraceDepth:       intPtrIfPositive(item.ChainingTraceDepth),
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
 		PreviousChainingTraceIds: stringSlicePtr(item.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(item.TraceID),
@@ -781,6 +782,13 @@ func int64Ptr(value int64) *int64 {
 	return &value
 }
 
+func intPtrIfPositive(value int) *int {
+	if value <= 0 {
+		return nil
+	}
+	return &value
+}
+
 func timePtrIfNotZero(value time.Time) *time.Time {
 	if value.IsZero() {
 		return nil
@@ -828,6 +836,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
 		DisplayName:              token.Color.Name,
+		ChainingTraceDepth:       token.Color.ChainingTraceDepth,
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...),
 		TraceID:                  token.Color.TraceID,

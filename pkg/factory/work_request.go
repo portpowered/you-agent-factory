@@ -69,6 +69,7 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			WorkID:                   workIndex[work.Name].id,
 			Name:                     work.Name,
 			WorkTypeID:               workTypeID,
+			ChainingTraceDepth:       normalizeSubmitChainingTraceDepth(work.ChainingTraceDepth, itemCurrentChainingTraceID, itemTraceID),
 			CurrentChainingTraceID:   itemCurrentChainingTraceID,
 			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
 			TraceID:                  itemTraceID,
@@ -176,6 +177,7 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 			RequestID:                itemRequestID,
 			WorkTypeID:               req.WorkTypeID,
 			State:                    req.TargetState,
+			ChainingTraceDepth:       req.ChainingTraceDepth,
 			CurrentChainingTraceID:   currentChainingTraceID,
 			PreviousChainingTraceIDs: append([]string(nil), req.PreviousChainingTraceIDs...),
 			TraceID:                  req.TraceID,
@@ -211,6 +213,7 @@ func WorkRequestRecordFromSubmitRequests(requestID string, source string, reques
 			WorkTypeID:               req.WorkTypeID,
 			State:                    req.TargetState,
 			DisplayName:              name,
+			ChainingTraceDepth:       req.ChainingTraceDepth,
 			CurrentChainingTraceID:   ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID),
 			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
@@ -525,6 +528,16 @@ func rawWorkPayload(payload any) ([]byte, error) {
 	default:
 		return json.Marshal(value)
 	}
+}
+
+func normalizeSubmitChainingTraceDepth(depth int, currentChainingTraceID string, traceID string) int {
+	if depth > 0 {
+		return depth
+	}
+	if ResolveWorkRequestCurrentChainingTraceID(currentChainingTraceID, traceID) != "" {
+		return 1
+	}
+	return 0
 }
 
 func clonePetriRelations(relations []interfaces.Relation) []interfaces.Relation {

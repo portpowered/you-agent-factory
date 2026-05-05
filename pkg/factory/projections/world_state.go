@@ -1276,6 +1276,7 @@ func factoryWorkItemFromGenerated(work factoryapi.Work) interfaces.FactoryWorkIt
 		WorkTypeID:               stringValue(work.WorkTypeName),
 		State:                    stringValue(work.State),
 		DisplayName:              work.Name,
+		ChainingTraceDepth:       intValue(work.ChainingTraceDepth),
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: cloneStringSlice(sliceValue(work.PreviousChainingTraceIds)),
 		TraceID:                  traceID,
@@ -1295,6 +1296,9 @@ func mergeFactoryWorkItem(existing interfaces.FactoryWorkItem, incoming interfac
 	}
 	if incoming.DisplayName == "" {
 		incoming.DisplayName = existing.DisplayName
+	}
+	if incoming.ChainingTraceDepth == 0 {
+		incoming.ChainingTraceDepth = existing.ChainingTraceDepth
 	}
 	if incoming.TraceID == "" {
 		incoming.TraceID = existing.TraceID
@@ -1534,6 +1538,13 @@ func stringMapFromGenerated(values *factoryapi.StringMap) map[string]string {
 func stringValue(value *string) string {
 	if value == nil {
 		return ""
+	}
+	return *value
+}
+
+func intValue(value *int) int {
+	if value == nil {
+		return 0
 	}
 	return *value
 }

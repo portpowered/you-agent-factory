@@ -80,6 +80,7 @@ func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now t
 			WorkID:                   workID,
 			WorkTypeID:               req.WorkTypeID,
 			DataType:                 interfaces.DataTypeWork,
+			ChainingTraceDepth:       chainingTraceDepthForSubmit(req),
 			CurrentChainingTraceID:   firstNonEmpty(req.CurrentChainingTraceID, req.TraceID),
 			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
@@ -285,6 +286,7 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 			WorkID:                   matched.WorkID,
 			Name:                     matched.Name,
 			RequestID:                matched.RequestID,
+			ChainingTraceDepth:       matched.ChainingTraceDepth,
 			CurrentChainingTraceID:   firstNonEmpty(matched.CurrentChainingTraceID, matched.TraceID),
 			PreviousChainingTraceIDs: cloneStringSlice(matched.PreviousChainingTraceIDs),
 			TraceID:                  matched.TraceID,
@@ -318,6 +320,7 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 		WorkID:                   t.nextWorkID(targetTypeID),
 		Name:                     name,
 		RequestID:                requestID,
+		ChainingTraceDepth:       interfaces.ChainingTraceDepthFromTokenColors(inputColors),
 		CurrentChainingTraceID:   traceID,
 		PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokenColors(inputColors),
 		TraceID:                  traceID,
@@ -408,6 +411,7 @@ func cloneColor(color interfaces.TokenColor) interfaces.TokenColor {
 		WorkID:                   color.WorkID,
 		WorkTypeID:               color.WorkTypeID,
 		DataType:                 color.DataType,
+		ChainingTraceDepth:       color.ChainingTraceDepth,
 		CurrentChainingTraceID:   color.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: cloneStringSlice(color.PreviousChainingTraceIDs),
 		TraceID:                  color.TraceID,
@@ -432,6 +436,16 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func chainingTraceDepthForSubmit(req interfaces.SubmitRequest) int {
+	if req.ChainingTraceDepth > 0 {
+		return req.ChainingTraceDepth
+	}
+	if firstNonEmpty(req.CurrentChainingTraceID, req.TraceID) != "" {
+		return 1
+	}
+	return 0
 }
 
 func submitParentID(relations []interfaces.Relation) string {

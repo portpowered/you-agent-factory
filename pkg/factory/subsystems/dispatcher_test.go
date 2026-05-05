@@ -345,6 +345,71 @@ func TestDispatcher_SingleTransitionFires(t *testing.T) {
 	}
 }
 
+func TestDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(t *testing.T) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"p-init": {ID: "p-init"},
+			"p-done": {ID: "p-done"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t1": {
+				ID:         "t1",
+				Name:       "do-work",
+				WorkerType: "script",
+				InputArcs: []petri.Arc{
+					{ID: "a1", Name: "work", PlaceID: "p-init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "a2", Name: "out", PlaceID: "p-done", Direction: petri.ArcOutput},
+				},
+			},
+		},
+	}
+
+	sched := &mockScheduler{
+		decisions: []interfaces.FiringDecision{
+			{TransitionID: "t1", ConsumeTokens: []string{"tok1"}, WorkerType: "script"},
+		},
+	}
+
+	dispatcher := NewDispatcher(n, sched, nil, nil)
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"tok1": {
+				ID:      "tok1",
+				PlaceID: "p-init",
+				Color: interfaces.TokenColor{
+					RequestID:              "request-1",
+					WorkID:                 "w1",
+					WorkTypeID:             "task",
+					DataType:               interfaces.DataTypeWork,
+					CurrentChainingTraceID: "chain-1",
+					TraceID:                "trace-1",
+				},
+			},
+		}),
+		TickCount: 3,
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil || len(result.Dispatches) != 1 {
+		t.Fatalf("dispatch result = %#v, want one dispatch", result)
+	}
+	dispatch := result.Dispatches[0].Dispatch
+	if dispatch.CurrentChainingTraceID != "chain-1" {
+		t.Fatalf("dispatch current chaining trace ID = %q, want chain-1", dispatch.CurrentChainingTraceID)
+	}
+	if strings.Join(dispatch.PreviousChainingTraceIDs, ",") != "chain-1" {
+		t.Fatalf("dispatch previous chaining trace IDs = %#v, want [chain-1]", dispatch.PreviousChainingTraceIDs)
+	}
+	if dispatch.Execution.TraceID != "trace-1" {
+		t.Fatalf("execution trace ID = %q, want legacy trace-1 compatibility", dispatch.Execution.TraceID)
+	}
+}
+
 func TestDispatcher_MultipleDecisionsProcessInOneTick(t *testing.T) {
 	n := &state.Net{
 		Places: map[string]*petri.Place{

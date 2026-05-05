@@ -36,7 +36,7 @@ func PreviousChainingTraceIDsFromTokens(tokens []Token) []string {
 		if token.Color.DataType == DataTypeResource {
 			continue
 		}
-		traceIDs = append(traceIDs, token.Color.TraceID)
+		traceIDs = append(traceIDs, firstNonEmptyString(token.Color.CurrentChainingTraceID, token.Color.TraceID))
 	}
 	return CanonicalChainingTraceIDs(traceIDs)
 }
@@ -49,7 +49,7 @@ func PreviousChainingTraceIDsFromTokenColors(colors []TokenColor) []string {
 		if color.DataType == DataTypeResource {
 			continue
 		}
-		traceIDs = append(traceIDs, color.TraceID)
+		traceIDs = append(traceIDs, firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID))
 	}
 	return CanonicalChainingTraceIDs(traceIDs)
 }
@@ -59,7 +59,7 @@ func PreviousChainingTraceIDsFromTokenColors(colors []TokenColor) []string {
 func PreviousChainingTraceIDsFromWorkItems(items []FactoryWorkItem) []string {
 	traceIDs := make([]string, 0, len(items))
 	for _, item := range items {
-		traceIDs = append(traceIDs, item.TraceID)
+		traceIDs = append(traceIDs, firstNonEmptyString(item.CurrentChainingTraceID, item.TraceID))
 	}
 	return CanonicalChainingTraceIDs(traceIDs)
 }
@@ -98,11 +98,80 @@ func CurrentChainingTraceIDFromTokens(tokens []Token) string {
 		if token.Color.DataType == DataTypeResource || token.Color.WorkTypeID == SystemTimeWorkTypeID {
 			continue
 		}
-		return token.Color.TraceID
+		return firstNonEmptyString(token.Color.CurrentChainingTraceID, token.Color.TraceID)
 	}
 	for _, token := range tokens {
 		if token.Color.DataType != DataTypeResource {
-			return token.Color.TraceID
+			return firstNonEmptyString(token.Color.CurrentChainingTraceID, token.Color.TraceID)
+		}
+	}
+	return ""
+}
+
+// ChainingTraceDepthForTokenColor returns the stored chain depth for one token
+// color, falling back to depth 1 when only a trace identifier is available.
+func ChainingTraceDepthForTokenColor(color TokenColor) int {
+	if color.ChainingTraceDepth > 0 {
+		return color.ChainingTraceDepth
+	}
+	if firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID) != "" {
+		return 1
+	}
+	return 0
+}
+
+// ChainingTraceDepthForWorkItem returns the stored chain depth for one work
+// item, falling back to depth 1 when only a trace identifier is available.
+func ChainingTraceDepthForWorkItem(item FactoryWorkItem) int {
+	if item.ChainingTraceDepth > 0 {
+		return item.ChainingTraceDepth
+	}
+	if firstNonEmptyString(item.CurrentChainingTraceID, item.TraceID) != "" {
+		return 1
+	}
+	return 0
+}
+
+// ChainingTraceDepthFromTokenColors resolves the next chain depth from the
+// deepest non-resource token color, defaulting initial traced work to depth 1.
+func ChainingTraceDepthFromTokenColors(colors []TokenColor) int {
+	depth := 0
+	for _, color := range colors {
+		if color.DataType == DataTypeResource {
+			continue
+		}
+		if candidate := ChainingTraceDepthForTokenColor(color); candidate > depth {
+			depth = candidate
+		}
+	}
+	if depth > 0 {
+		return depth + 1
+	}
+	if CurrentChainingTraceIDFromTokenColors(colors) != "" {
+		return 1
+	}
+	return 0
+}
+
+func CurrentChainingTraceIDFromTokenColors(colors []TokenColor) string {
+	for _, color := range colors {
+		if color.DataType == DataTypeResource || color.WorkTypeID == SystemTimeWorkTypeID {
+			continue
+		}
+		return firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID)
+	}
+	for _, color := range colors {
+		if color.DataType != DataTypeResource {
+			return firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID)
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
 		}
 	}
 	return ""

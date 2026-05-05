@@ -464,6 +464,7 @@ func generatedWorkItemRefs(refs []interfaces.FactoryWorldWorkItemRef) []factorya
 			WorkId:                   ref.WorkID,
 			WorkTypeId:               workstationRequestStringPtr(ref.WorkTypeID),
 			DisplayName:              workstationRequestStringPtr(ref.DisplayName),
+			ChainingTraceDepth:       intPtr(ref.ChainingTraceDepth),
 			CurrentChainingTraceId:   workstationRequestStringPtr(ref.CurrentChainingTraceID),
 			PreviousChainingTraceIds: stringSlicePtr(sortedStrings(ref.PreviousChainingTraceIDs)),
 			TraceId:                  workstationRequestStringPtr(ref.TraceID),
@@ -528,6 +529,7 @@ func workItemRef(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkIte
 		WorkID:                   item.ID,
 		WorkTypeID:               item.WorkTypeID,
 		DisplayName:              item.DisplayName,
+		ChainingTraceDepth:       item.ChainingTraceDepth,
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: cloneStringSlice(item.PreviousChainingTraceIDs),
 		TraceID:                  item.TraceID,
@@ -560,6 +562,7 @@ func generatedTokenViewsFromInputs(inputs []interfaces.WorkstationInput) []facto
 			view.Name = workstationRequestStringPtr(input.WorkItem.DisplayName)
 			view.WorkId = workstationRequestStringPtr(input.WorkItem.ID)
 			view.WorkTypeId = workstationRequestStringPtr(input.WorkItem.WorkTypeID)
+			view.ChainingTraceDepth = intPtr(input.WorkItem.ChainingTraceDepth)
 			view.CurrentChainingTraceId = workstationRequestStringPtr(currentChainingTraceID)
 			view.PreviousChainingTraceIds = stringSlicePtr(sortedStrings(input.WorkItem.PreviousChainingTraceIDs))
 			view.TraceId = workstationRequestStringPtr(input.WorkItem.TraceID)
@@ -632,6 +635,7 @@ func generatedTokenViewForWorkItem(tokenID string, item interfaces.FactoryWorkIt
 		Name:                     workstationRequestStringPtr(item.DisplayName),
 		WorkId:                   workstationRequestStringPtr(item.ID),
 		WorkTypeId:               workstationRequestStringPtr(item.WorkTypeID),
+		ChainingTraceDepth:       intPtr(item.ChainingTraceDepth),
 		CurrentChainingTraceId:   workstationRequestStringPtr(currentChainingTraceID),
 		PreviousChainingTraceIds: stringSlicePtr(sortedStrings(item.PreviousChainingTraceIDs)),
 		TraceId:                  workstationRequestStringPtr(item.TraceID),
