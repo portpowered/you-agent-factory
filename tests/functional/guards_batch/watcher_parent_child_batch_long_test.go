@@ -238,11 +238,11 @@ func assertParentFailedOnlyAfterChildFailure(t *testing.T, events []factoryapi.F
 				t.Fatalf("decode DISPATCH_CREATED event %q: %v", event.Id, err)
 			}
 			if payload.TransitionId == "process-story" &&
-				support.DispatchInputsIncludeWorkNameFromHistory(t, events, event, payload, "story-billing") {
+				dispatchHistoryIncludesWorkName(t, events, event, payload, "story-billing") {
 				childFailureDispatchID = support.StringPointerValue(event.Context.DispatchId)
 			}
 			if payload.TransitionId == "fail-story-set-from-child" &&
-				support.DispatchInputsIncludeWorkNameFromHistory(t, events, event, payload, "story-set") {
+				dispatchHistoryIncludesWorkName(t, events, event, payload, "story-set") {
 				parentFailureDispatchIndex = i
 			}
 		}
@@ -263,4 +263,21 @@ func assertParentFailedOnlyAfterChildFailure(t *testing.T, events []factoryapi.F
 	if parentFailureCompletionIndex <= childFailureIndex {
 		t.Fatalf("parent failure completion index %d should be after child failure index %d", parentFailureCompletionIndex, childFailureIndex)
 	}
+}
+
+func dispatchHistoryIncludesWorkName(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	event factoryapi.FactoryEvent,
+	payload factoryapi.DispatchRequestEventPayload,
+	workName string,
+) bool {
+	t.Helper()
+
+	for _, work := range support.DispatchInputWorksFromHistory(t, events, event, payload) {
+		if work.Name == workName {
+			return true
+		}
+	}
+	return false
 }

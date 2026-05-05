@@ -661,17 +661,3 @@ func stringPointerValue[T ~string](value *T) string {
 	}
 	return string(*value)
 }
-
-func eventString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func eventStringSlice(values *[]string) []string {
-	if values == nil {
-		return nil
-	}
-	return *values
-}

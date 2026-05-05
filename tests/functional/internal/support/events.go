@@ -77,23 +77,6 @@ func assertWorkRequestPayloadContainsWork(t *testing.T, payload factoryapi.WorkR
 	t.Fatalf("WORK_REQUEST missing work_id %q: %#v", workID, FactoryWorksValue(payload.Works))
 }
 
-func DispatchInputsIncludeWorkNameFromHistory(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-	event factoryapi.FactoryEvent,
-	payload factoryapi.DispatchRequestEventPayload,
-	workName string,
-) bool {
-	t.Helper()
-
-	for _, work := range DispatchInputWorksFromHistory(t, events, event, payload) {
-		if work.Name == workName {
-			return true
-		}
-	}
-	return false
-}
-
 func DispatchInputWorksFromHistory(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
