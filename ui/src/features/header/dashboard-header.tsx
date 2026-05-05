@@ -18,10 +18,14 @@ const DASHBOARD_TOOLBAR_CLASS = cx(
   PANEL_CLASS,
   "mb-4 flex flex-wrap items-center gap-4 p-4 px-5",
 );
-const DASHBOARD_TITLE_CLASS = cx("m-0", DASHBOARD_PAGE_HEADING_CLASS);
+const DASHBOARD_TITLE_CLASS = cx("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
+const DASHBOARD_CONTROLS_CLASS = cx(
+  "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-4",
+  "max-[720px]:ml-0 max-[720px]:w-full max-[720px]:justify-stretch",
+);
 const STREAM_STATUS_SHELL_CLASS = cx(
-  "flex min-w-0 flex-1 items-center justify-end",
-  "max-[720px]:order-4 max-[720px]:w-full max-[720px]:justify-start",
+  "flex shrink-0 items-center justify-end",
+  "max-[720px]:justify-start",
 );
 const STREAM_STATUS_CLASS = cx(
   "inline-flex h-11 w-11 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4",
@@ -50,38 +54,40 @@ export function DashboardHeader() {
       <h1 className={DASHBOARD_TITLE_CLASS}>
         <DashboardBrandLockup wordmarkClassName="truncate" />
       </h1>
-      <TickSliderControl />
-      <div className={STREAM_STATUS_SHELL_CLASS}>
-        <div
-          aria-label={streamStatusLabel(streamState.status)}
-          className={streamStatusClassName(streamState.status)}
-          role="status"
-        >
-          <StreamStatusIcon status={streamState.status} />
+      <div className={DASHBOARD_CONTROLS_CLASS}>
+        <TickSliderControl />
+        <div className={STREAM_STATUS_SHELL_CLASS}>
+          <div
+            aria-label={streamStatusLabel(streamState.status)}
+            className={streamStatusClassName(streamState.status)}
+            role="status"
+          >
+            <StreamStatusIcon status={streamState.status} />
+          </div>
         </div>
-      </div>
-      <DashboardHeaderActionButton
-        aria-label="Export PNG"
-        aria-expanded={isExportDialogOpen}
-        aria-haspopup="dialog"
-        onClick={openExportDialog}
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          height="18"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.8"
-          viewBox="0 0 24 24"
-          width="18"
+        <DashboardHeaderActionButton
+          aria-label="Export PNG"
+          aria-expanded={isExportDialogOpen}
+          aria-haspopup="dialog"
+          onClick={openExportDialog}
         >
-          <path d="M14 5h5v5" />
-          <path d="M10 14 19 5" />
-          <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-        </svg>
-      </DashboardHeaderActionButton>
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M14 5h5v5" />
+            <path d="M10 14 19 5" />
+            <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+          </svg>
+        </DashboardHeaderActionButton>
+      </div>
     </section>
   );
 }

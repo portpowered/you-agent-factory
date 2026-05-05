@@ -106,3 +106,42 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestClaudeProviderBehavior_FormatTimeoutFailure(t *testing.T) {
+	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
+
+	testCases := []struct {
+		name   string
+		result CommandResult
+		want   string
+	}{
+		{
+			name: "PrefersTrimmedStderr",
+			result: CommandResult{
+				Stderr: []byte("  provider timed out waiting for upstream  \n"),
+				Stdout: []byte("stdout fallback"),
+			},
+			want: "provider timed out waiting for upstream",
+		},
+		{
+			name: "FallsBackToStdout",
+			result: CommandResult{
+				Stdout: []byte("provider timeout echoed on stdout"),
+			},
+			want: "provider timeout echoed on stdout",
+		},
+		{
+			name:   "UsesDefaultMessageWhenNoOutputExists",
+			result: CommandResult{},
+			want:   "execution timeout",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := behavior.FormatTimeoutFailure(tc.result); got != tc.want {
+				t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

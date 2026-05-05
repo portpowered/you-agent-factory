@@ -35,12 +35,14 @@ export function ChartContainer({
   className,
   config,
   overlay,
+  rootAttributes,
   title,
 }: {
   children: ReactNode;
   className?: string;
   config: ChartConfig;
   overlay?: ReactNode;
+  rootAttributes?: Record<string, string>;
   title: string;
 }) {
   return (
@@ -53,6 +55,7 @@ export function ChartContainer({
         )}
         data-chart-container=""
         role="img"
+        {...rootAttributes}
         style={
           Object.fromEntries(
             Object.entries(config).map(([key, value]) => [`--color-${key}`, value.color]),

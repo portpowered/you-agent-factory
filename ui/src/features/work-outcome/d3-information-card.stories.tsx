@@ -156,6 +156,24 @@ function expectWorkOutcomeChartContract(card: HTMLElement): void {
     expect(path?.getAttribute("data-chart-series-color")).toBe(series.lineColor);
     expect(path ? window.getComputedStyle(path).strokeWidth : "").toBe("2.25px");
   }
+
+  expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
+  expect(chart.className).toContain("px-5");
+  expect(chart.className).toContain("pb-5");
+  expect(chart.className).toContain("pt-4");
+  expect(chart.className).toContain("sm:px-6");
+  expect(chart.className).toContain("sm:pb-6");
+  expect(chart.className).toContain("sm:pt-5");
+
+  const overlay = chart.querySelector<HTMLElement>("[data-work-chart-overlay='true']");
+
+  expect(overlay).not.toBeNull();
+  expect(overlay?.className).toContain("px-5");
+  expect(overlay?.className).toContain("pb-4");
+  expect(overlay?.className).toContain("pt-4");
+  expect(overlay?.className).toContain("sm:px-6");
+  expect(overlay?.className).toContain("sm:pb-5");
+  expect(overlay?.className).toContain("sm:pt-5");
 }
 
 function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
@@ -216,4 +234,3 @@ export const ConstrainedWidth = {
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
-

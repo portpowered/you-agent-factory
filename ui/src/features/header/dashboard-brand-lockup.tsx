@@ -18,7 +18,7 @@ export function DashboardBrandLockup({
         <span className="text-[0.96rem] leading-none">∞</span>
         <span className="leading-none">U</span>
       </span>
-      <span className={cx("min-w-0 truncate", wordmarkClassName)}>
+      <span className={cx("sr-only", wordmarkClassName)}>
         Infinite You
       </span>
     </span>

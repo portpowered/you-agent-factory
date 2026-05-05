@@ -629,6 +629,130 @@ func TestLoadRuntimeConfig_UsesCurrentFactoryPointerFromNamedLayout(t *testing.T
 	}
 }
 
+func TestLoadRuntimeConfig_CurrentFactoryPointerOverridesLegacyRootFactory(t *testing.T) {
+	rootDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, rootDir, map[string]any{
+		"name": "legacy-root",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{"name": "executor"}},
+		"workstations": []map[string]any{{
+			"name":    "execute-story",
+			"worker":  "executor",
+			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, rootDir, "executor", `---
+type: MODEL_WORKER
+model: claude-sonnet-4-20250514
+modelProvider: claude
+---
+Legacy root worker.
+`)
+	writeRuntimeWorkstationAgentsMD(t, rootDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+---
+Legacy root workstation.
+`)
+
+	if _, err := PersistNamedFactory(rootDir, "beta", namedFactoryPayload(t, "beta")); err != nil {
+		t.Fatalf("PersistNamedFactory(beta): %v", err)
+	}
+	if err := WriteCurrentFactoryPointer(rootDir, "beta"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(beta): %v", err)
+	}
+
+	loaded, err := LoadRuntimeConfig(rootDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(named root): %v", err)
+	}
+	if loaded.FactoryDir() != filepath.Join(rootDir, "beta") {
+		t.Fatalf("FactoryDir = %q, want %q", loaded.FactoryDir(), filepath.Join(rootDir, "beta"))
+	}
+	if loaded.FactoryConfig().Project != "beta" {
+		t.Fatalf("project = %q, want beta", loaded.FactoryConfig().Project)
+	}
+}
+
+func TestLoadRuntimeConfig_InvalidCurrentFactoryPointerReturnsStructuredError(t *testing.T) {
+	rootDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, rootDir, map[string]any{
+		"name": "legacy-root",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{"name": "executor"}},
+		"workstations": []map[string]any{{
+			"name":    "execute-story",
+			"worker":  "executor",
+			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+		}},
+	})
+
+	if err := os.WriteFile(filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile), []byte("../beta\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(current pointer): %v", err)
+	}
+
+	_, err := LoadRuntimeConfig(rootDir, nil)
+	if err == nil {
+		t.Fatal("expected malformed current-factory pointer to fail")
+	}
+	if got := err.Error(); !containsAll(got, "read current factory pointer", "cannot contain path separators") {
+		t.Fatalf("expected structured current-pointer error, got %v", err)
+	}
+}
+
+func TestWriteCurrentFactoryPointer_RejectsMissingPersistedFactory(t *testing.T) {
+	rootDir := t.TempDir()
+
+	err := WriteCurrentFactoryPointer(rootDir, "missing")
+	if err == nil {
+		t.Fatal("expected missing persisted factory to be rejected")
+	}
+	if got := err.Error(); !containsAll(got, `set current factory "missing"`, "find factory config") {
+		t.Fatalf("expected missing-factory error context, got %v", err)
+	}
+}
+
+func TestValidateNamedFactoryName_RejectsPathTraversal(t *testing.T) {
+	err := ValidateNamedFactoryName("../beta")
+	if err == nil {
+		t.Fatal("expected invalid named-factory segment to fail")
+	}
+	if got := err.Error(); !containsAll(got, `factory name "../beta"`, "cannot contain path separators") {
+		t.Fatalf("expected path-separator validation error, got %v", err)
+	}
+}
+
+func TestResolveNamedFactoryDir_RejectsDirectoryWithoutFactoryConfig(t *testing.T) {
+	rootDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(rootDir, "beta"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(beta): %v", err)
+	}
+
+	_, err := ResolveNamedFactoryDir(rootDir, "beta")
+	if err == nil {
+		t.Fatal("expected missing named factory config to fail")
+	}
+	if got := err.Error(); !containsAll(got, `resolve factory "beta"`, "find factory config") {
+		t.Fatalf("expected missing-config resolution error, got %v", err)
+	}
+}
+
 func TestLoadRuntimeConfig_RejectsRetiredSplitWorkerAliases(t *testing.T) {
 	factoryDir := t.TempDir()
 

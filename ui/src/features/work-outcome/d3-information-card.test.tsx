@@ -139,6 +139,21 @@ describe("D3CompletionInformationCard", () => {
     expect(within(chart).getByText("Failed/retried")).toBeTruthy();
     expect(within(chart).getByText("Ticks")).toBeTruthy();
     expect(within(chart).getByText("Work count")).toBeTruthy();
+    expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
+    expect(chart.className).toContain("px-5");
+    expect(chart.className).toContain("pb-5");
+    expect(chart.className).toContain("pt-4");
+    expect(chart.className).toContain("sm:px-6");
+    expect(chart.className).toContain("sm:pb-6");
+    expect(chart.className).toContain("sm:pt-5");
+    const overlay = chart.querySelector<HTMLElement>("[data-work-chart-overlay='true']");
+    expect(overlay).toBeTruthy();
+    expect(overlay?.className).toContain("px-5");
+    expect(overlay?.className).toContain("pb-4");
+    expect(overlay?.className).toContain("pt-4");
+    expect(overlay?.className).toContain("sm:px-6");
+    expect(overlay?.className).toContain("sm:pb-5");
+    expect(overlay?.className).toContain("sm:pt-5");
   });
 
   it("renders an explicit empty state without a chart when samples are unavailable", () => {

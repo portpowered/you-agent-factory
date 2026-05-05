@@ -40,7 +40,7 @@ ifdef IS_WORKTREE
 endif
 
 GO_TEST_TIMEOUT ?= 300s
-GO_COVERAGE_MIN ?= 68.9
+GO_COVERAGE_MIN ?= 80.0
 
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 

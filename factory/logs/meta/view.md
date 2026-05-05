@@ -2,14 +2,11 @@
 
 ## world state
 
-- as of `2026-05-04T11:03:58.9091119-07:00`, local `HEAD` on `main` points to
-  `0cbe483`
-  (`Merge pull request #95 from portpowered/ralph/dedupe-submit-request-shaping-between-production-and-functional-runtime-tests`)
+- as of `2026-05-05T14:04:03.9441625-07:00`, local `HEAD` on `main` points to
+  `d868ab7`
+  (`update teh words on the readme to be a bit clearer`)
   and matches `origin/main`
-- the local worktree is not clean:
-  - tracked local edits exist in `factory/logs/meta/asks.md` and
-    `factory/workstations/cleaner/AGENTS.md`
-  - ignored local workflow residue exists under `factory/inputs/**`
+- the local worktree is clean apart from ignored workflow inputs
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 
 ## workflow truth
@@ -45,14 +42,8 @@
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
-- after pruning stale local residue for merged PR `#69`, merged PR `#84`,
-  merged PR `#85`, merged PR `#86`, merged PR `#87`, merged PR `#88`,
-  merged PR `#89`, merged PR `#90`, merged PR `#91`, merged PR `#92`,
-  merged PR `#93`, merged PR `#94`, and merged PR `#95`, the ignored
-  operating submissions should now be one standalone idea under
-  `factory/inputs/idea/default/`:
-  - one new non-overlapping backend cleanup idea for removing the now-dead
-    `pkg/internal/submission` work-request forwarding package
+- the visible canonical inboxes currently contain only the tracked `.gitkeep`
+  sentinels; there is no ignored local idea or batch residue staged right now
 
 ## customer-ask truth
 
@@ -168,12 +159,30 @@
     onto `factory.WorkRequestFromSubmitRequests`
   - functional runtime smoke coverage now protects trace and request-shaping
     parity through the runtime-visible submission path
-- there is no remaining narrow customer-visible ask gap on `main`; the next
-  narrow cleanup candidate now comes from the broader backend quality lane:
-  - `pkg/internal/submission/work_request.go` is dead forwarding surface after
-    PR `#95`; production and test callers can now import
-    `pkg/factory.WorkRequestFromSubmitRequests` directly and delete the wrapper
-    package without changing behavior
+- merged PR `#96` closed the dead submission-forwarder lane on `main`:
+  - `pkg/internal/submission` is gone
+  - live callers now import `pkg/factory.WorkRequestFromSubmitRequests`
+    directly
+  - the old meta note naming that package as the next cleanup candidate is now
+    stale
+- open PR `#97` (`website-icon-removal`) edits the dashboard header branding
+  and timeline slider layout surface that the meta view already treated as
+  materially closed through merged PRs `#83`, `#85`, and `#86`; it therefore
+  overlaps an already-closed customer-ask lane instead of opening a new clean
+  maintainer seam
+- there is still no remaining narrow unowned customer-visible ask gap on
+  `main`; the next non-overlapping cleanup candidate now comes from the
+  broader backend quality lane:
+  - `docs/development/deadcode-baseline.txt` still lists the replay
+    event-stream file wrapper cluster in `pkg/replay/event_stream_artifact.go`
+    (`ArtifactFromEventStreamFile`, `SaveArtifactFromEventStreamFile`, and the
+    adjacent-factory hydration helpers) as unreachable dead surface
+  - direct repo reads show that cluster is only exercised by
+    `tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go`
+    and is otherwise absent from live runtime, API, and CLI callers
+  - that makes it the next narrow non-overlapping cleanup seam: collapse or
+    relocate the test-only wrapper layer while preserving replay artifact
+    conversion behavior through behavioral replay smoke coverage
 - the remaining ask surface beyond that is broader program work:
   - the general standards-migration checklist ask is still open in
     `factory/logs/meta/asks.md`
@@ -197,6 +206,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#96` `remove-dead-submission-work-request-forwarder-package`, merged on
+    `2026-05-04T18:22:54Z`
   - `#95` `dedupe-submit-request-shaping-between-production-and-functional-runtime-tests`,
     merged on `2026-05-04T17:34:28Z`
   - `#94` `retire-replay-dispatch-payload-cast-wrappers`, merged on
@@ -235,7 +246,8 @@
     `2026-05-04T01:27:11Z`
   - `#78` `remove-list-work-legacy-pagination-shim`, merged on
     `2026-05-04T00:28:40Z`
-- `gh pr list --state open` currently reports no open PRs
+- `gh pr list --state open` currently reports one open PR:
+  - `#97` `website-icon-removal`, opened on `2026-05-05T20:59:43Z`
 
 ## theory of mind
 
@@ -283,6 +295,13 @@
   wrappers; this repo now shows that a merged centralization can leave a whole
   package behind as dead forwarding surface even after the behavioral drift is
   fixed
-- the cleaner prompt currently has a tracked local edit allowing multiple
-  non-overlapping items in flight, but that does not remove the need to default
-  to one standalone idea when a single seam is sufficient
+- once a cleanup seam is recorded in the checked-in worldview, re-validate it
+  against live `main` before dispatching; merged PR `#96` proved the meta view
+  can go stale within a single refresh cycle
+- when an open PR touches a surface already marked closed in the worldview,
+  compare the PR diff against the canonical ask text before dispatching any
+  sibling work; PR `#97` is a good example of overlap hiding behind a new
+  branch name
+- deadcode-baseline entries that are only reachable from one long functional
+  smoke are strong candidates for the next narrow cleanup idea, especially when
+  the live runtime, API, and CLI paths have no direct callers

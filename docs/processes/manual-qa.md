@@ -29,13 +29,14 @@ Use this checklist for the shadcn primitive migration lane and similar dashboard
 - Trace drill-down card: selectable work-item controls still update the trace detail surface and dispatch grid.
 - Work outcome chart: loading, empty, error, and ready states render explicitly, and sparse series do not appear as fabricated zero-value lines.
 - Trace dispatch grid: shared table and skeleton states render without layout breakage on narrow and wide viewports.
+- Dashboard header: icon-only branding keeps the accessible `Infinite You` name, the timeline slider cluster stays keyboard-operable, and the header toolbar remains unclipped at mobile, tablet, and desktop widths with desktop controls ordered brand -> slider -> stream status -> export action.
 
 ## Latest Evidence
 
 Date: `2026-05-04`
 
 - `cd ui && bun run build-storybook` passed.
-- `cd ui && bun run test-storybook` passed in a browser-backed runner, including export and import preview dialog keyboard-reachability stories plus the dedicated responsive verification script.
+- `cd ui && bun run test-storybook` passed in a browser-backed runner, including tagged header stories for icon-only branding, slider alignment, and keyboard-driven return/export actions plus the dedicated responsive verification script.
 - `cd ui && bun run build` passed.
-- `cd ui && bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for `ExportFactoryDialog` and `DashboardImportPreviewDialog`, confirming mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) dialog bounds, visible controls, and no horizontal overflow in headless Chromium.
+- `cd ui && bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for `ExportFactoryDialog`, `DashboardImportPreviewDialog`, and the dashboard header verification story, confirming mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) dialog/header bounds, visible controls, keyboard timeline interactions, desktop toolbar ordering, and no horizontal overflow in headless Chromium.
 - `make test` passed from the repository root while the refreshed Storybook wrapper waited for the built index to restabilize before launching the responsive browser check.
