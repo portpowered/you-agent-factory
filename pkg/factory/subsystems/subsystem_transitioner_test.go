@@ -267,6 +267,7 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 				DisplayName:              "review-override",
 				CurrentChainingTraceID:   "trace-replay",
 				PreviousChainingTraceIDs: []string{"trace-parent"},
+				ChainingTraceDepth:       7,
 				TraceID:                  "trace-replay",
 				Tags:                     map[string]string{"source": "recording"},
 			}},
@@ -294,6 +295,9 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 	}
 	if len(token.Color.PreviousChainingTraceIDs) != 1 || token.Color.PreviousChainingTraceIDs[0] != "trace-parent" {
 		t.Fatalf("recorded output previous chaining trace IDs = %#v, want [trace-parent]", token.Color.PreviousChainingTraceIDs)
+	}
+	if token.Color.ChainingTraceDepth != 7 {
+		t.Fatalf("recorded output chaining trace depth = %d, want 7", token.Color.ChainingTraceDepth)
 	}
 	if got := token.Color.Tags["source"]; got != "recording" {
 		t.Fatalf("recorded output tags = %#v, want source=recording", token.Color.Tags)

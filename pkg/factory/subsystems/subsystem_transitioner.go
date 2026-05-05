@@ -728,6 +728,9 @@ func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interface
 	if len(recorded.PreviousChainingTraceIDs) > 0 {
 		token.Color.PreviousChainingTraceIDs = append([]string(nil), recorded.PreviousChainingTraceIDs...)
 	}
+	if recorded.ChainingTraceDepth > 0 {
+		token.Color.ChainingTraceDepth = recorded.ChainingTraceDepth
+	}
 	if recorded.TraceID != "" {
 		token.Color.TraceID = recorded.TraceID
 	}
