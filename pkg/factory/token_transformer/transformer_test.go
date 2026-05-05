@@ -430,6 +430,68 @@ func TestOutputToken_Resource_PreservesConsumedTokenIdentity(t *testing.T) {
 	}
 }
 
+func TestOutputToken_Resource_DoesNotInventWorkChainingLineage(t *testing.T) {
+	now := time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)
+	transformer := New(
+		map[string]*petri.Place{
+			"slot:available": {ID: "slot:available", TypeID: "slot", State: "available"},
+		},
+		map[string]*state.WorkType{
+			"task": {ID: "task"},
+		},
+	)
+	resource := interfaces.Token{
+		ID:      "slot:resource:0",
+		PlaceID: "slot:busy",
+		Color: interfaces.TokenColor{
+			WorkID:     "slot:0",
+			WorkTypeID: "slot",
+			DataType:   interfaces.DataTypeResource,
+		},
+	}
+	work := interfaces.Token{
+		ID:      "work-task-1",
+		PlaceID: "task:busy",
+		Color: interfaces.TokenColor{
+			WorkID:                   "work-task-1",
+			WorkTypeID:               "task",
+			DataType:                 interfaces.DataTypeWork,
+			CurrentChainingTraceID:   "chain-task",
+			PreviousChainingTraceIDs: []string{"chain-root"},
+			TraceID:                  "trace-task",
+		},
+	}
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "slot:available", Direction: petri.ArcOutput},
+		},
+		ConsumedTokens: []interfaces.Token{resource, work},
+		InputColors:    []interfaces.TokenColor{resource.Color, work.Color},
+		Outcome:        interfaces.OutcomeAccepted,
+		Now:            now,
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+
+	if token.Color.CurrentChainingTraceID != "" {
+		t.Fatalf("CurrentChainingTraceID = %q, want empty for resource output", token.Color.CurrentChainingTraceID)
+	}
+	if len(token.Color.PreviousChainingTraceIDs) != 0 {
+		t.Fatalf("PreviousChainingTraceIDs = %#v, want empty for resource output", token.Color.PreviousChainingTraceIDs)
+	}
+	if token.Color.TraceID != "" {
+		t.Fatalf("TraceID = %q, want empty for resource output", token.Color.TraceID)
+	}
+}
+
 func TestReleasedResourceToken_PreservesConsumedTokenIdentity(t *testing.T) {
 	now := time.Date(2026, time.April, 7, 13, 0, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)
