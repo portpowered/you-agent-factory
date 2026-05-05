@@ -1259,7 +1259,9 @@ export const SelectedWorkDispatchHistorySmoke = {
       within(activeCard).getByText("Current dispatch"),
     ).toBeVisible();
     await expect(
-      within(activeCard).getByText("No response yet for this dispatch."),
+      within(activeCard).getByText(
+        "Inference response details are not available for this dispatch yet.",
+      ),
     ).toBeVisible();
     await expect(
       within(activeCard).getByRole("button", {

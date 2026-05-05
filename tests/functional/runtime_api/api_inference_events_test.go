@@ -275,8 +275,14 @@ func assertThinEventSmokeActiveViews(
 	if activeRequestView.Response != nil {
 		t.Fatalf("active workstation request response = %#v, want nil before inference response", activeRequestView.Response)
 	}
-	if activeRequestView.Request.RequestTime == nil || *activeRequestView.Request.RequestTime == "" {
-		t.Fatalf("active workstation request = %#v, want request_time from inference request event", activeRequestView.Request)
+	if activeRequestView.Request.RequestTime != nil ||
+		activeRequestView.Request.Prompt != nil ||
+		activeRequestView.Request.Provider != nil ||
+		activeRequestView.Request.Model != nil ||
+		activeRequestView.Request.WorkingDirectory != nil ||
+		activeRequestView.Request.Worktree != nil ||
+		activeRequestView.Request.RequestMetadata != nil {
+		t.Fatalf("active workstation request = %#v, want omitted dispatch-level inference detail", activeRequestView.Request)
 	}
 }
 
@@ -386,13 +392,22 @@ func assertThinEventSmokeFinalViews(
 		factoryboundary.BuildFactoryWorldWorkstationRequestProjectionSlice(finalState),
 		dispatchID,
 	)
-	if completedRequestView.Request.RequestMetadata == nil || (*completedRequestView.Request.RequestMetadata)["prompt_source"] != "factory-renderer" {
-		t.Fatalf("completed workstation request metadata = %#v, want prompt_source=factory-renderer", completedRequestView.Request.RequestMetadata)
+	if completedRequestView.Request.RequestMetadata != nil ||
+		completedRequestView.Request.RequestTime != nil ||
+		completedRequestView.Request.Prompt != nil ||
+		completedRequestView.Request.Provider != nil ||
+		completedRequestView.Request.Model != nil ||
+		completedRequestView.Request.WorkingDirectory != nil ||
+		completedRequestView.Request.Worktree != nil {
+		t.Fatalf("completed workstation request inference summary = %#v, want omitted dispatch-level inference detail", completedRequestView.Request)
 	}
 	if completedRequestView.Response == nil ||
-		stringValueFromFunctionalPtr(completedRequestView.Response.ResponseText) != "Step one done. COMPLETE" ||
-		stringValueFromFunctionalPtr(completedRequestView.Response.ProviderSession.Id) != "sess-thin-dispatch-1" {
-		t.Fatalf("completed workstation request response = %#v, want provider-attempt response/session derived from inference events", completedRequestView.Response)
+		completedRequestView.Response.ResponseText != nil ||
+		completedRequestView.Response.ProviderSession != nil ||
+		completedRequestView.Response.Diagnostics != nil ||
+		completedRequestView.Response.ResponseMetadata != nil ||
+		completedRequestView.Response.ErrorClass != nil {
+		t.Fatalf("completed workstation request response = %#v, want omitted dispatch-level inference detail", completedRequestView.Response)
 	}
 }
 

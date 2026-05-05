@@ -18,9 +18,20 @@ export function buildDashboardInferenceAttemptFixture(
 ): DashboardInferenceAttempt {
   return {
     attempt: 1,
+    diagnostics: {
+      provider: {
+        model: "gpt-5.4",
+        provider: "codex",
+      },
+    },
     dispatch_id: dispatchID,
     inference_request_id: `${dispatchID}/inference-request/1`,
     prompt: "Review the active story and return a concise result.",
+    provider_session: {
+      id: `${dispatchID}/session/1`,
+      kind: "session_id",
+      provider: "codex",
+    },
     request_time: REVIEW_REQUEST_TIME,
     transition_id: "review",
     working_directory: REVIEW_WORKING_DIRECTORY,
@@ -94,15 +105,7 @@ export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFi
         response_time: REVIEW_RESPONSE_TIME,
       }),
     ],
-    model: "gpt-5.4",
     outcome: "ACCEPTED",
-    prompt: "Review the active story and decide whether it is ready.",
-    provider: "codex",
-    provider_session: {
-      id: "sess-ready-request",
-      kind: "session_id",
-      provider: "codex",
-    },
     request_view: {
       input_work_items: [
         {
@@ -113,9 +116,6 @@ export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFi
         },
       ],
       input_work_type_ids: ["story"],
-      model: "gpt-5.4",
-      prompt: "Review the active story and decide whether it is ready.",
-      provider: "codex",
       request_metadata: {
         prompt_source: "factory-renderer",
         source: "dispatch-history",
@@ -123,8 +123,6 @@ export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFi
       request_time: REVIEW_REQUEST_TIME,
       started_at: REVIEW_REQUEST_TIME,
       trace_ids: ["trace-active-story"],
-      working_directory: REVIEW_WORKING_DIRECTORY,
-      worktree: REVIEW_WORKTREE,
     },
     request_id: "request-ready-story",
     request_metadata: {
@@ -132,7 +130,6 @@ export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFi
       source: "dispatch-history",
     },
     responded_request_count: 1,
-    response: "Ready for the next workstation.",
     response_view: {
       duration_millis: 63_000,
       end_time: REVIEW_RESPONSE_TIME,
@@ -145,16 +142,10 @@ export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFi
           work_type_id: "story",
         },
       ],
-      provider_session: {
-        id: "sess-ready-request",
-        kind: "session_id",
-        provider: "codex",
-      },
       response_metadata: {
         finish_reason: "stop",
         session_source: "codex",
       },
-      response_text: "Ready for the next workstation.",
     },
     response_metadata: {
       finish_reason: "stop",
@@ -162,15 +153,12 @@ export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFi
     },
     total_duration_millis: 63_000,
     trace_ids: ["trace-active-story"],
-    working_directory: REVIEW_WORKING_DIRECTORY,
-    worktree: REVIEW_WORKTREE,
   },
 );
 
 export const noResponseWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
   PENDING_DISPATCH_ID,
   {
-    prompt: "Review the active story while the provider response is still pending.",
     request_view: {
       input_work_items: [
         {
@@ -181,22 +169,17 @@ export const noResponseWorkstationRequestFixture = buildDashboardWorkstationRequ
         },
       ],
       input_work_type_ids: ["story"],
-      prompt: "Review the active story while the provider response is still pending.",
       request_metadata: {
         prompt_source: "factory-renderer",
       },
       request_time: REVIEW_REQUEST_TIME,
       started_at: REVIEW_REQUEST_TIME,
       trace_ids: ["trace-active-story"],
-      working_directory: REVIEW_WORKING_DIRECTORY,
-      worktree: "C:\\work\\portos\\.worktrees\\pending-story",
     },
     request_id: "request-pending-story",
     request_metadata: {
       prompt_source: "factory-renderer",
     },
-    working_directory: REVIEW_WORKING_DIRECTORY,
-    worktree: "C:\\work\\portos\\.worktrees\\pending-story",
   },
 );
 
@@ -214,19 +197,12 @@ export const rejectedWorkstationRequestFixture = buildDashboardWorkstationReques
         duration_millis: 920,
         inference_request_id: `${REJECTED_DISPATCH_ID}/inference-request/1`,
         outcome: "SUCCEEDED",
+        prompt: "Review the active story and explain what needs to change before approval.",
         response: "The active story needs revision before it can continue.",
         response_time: "2026-04-08T12:00:03Z",
       }),
     ],
-    model: "gpt-5.4",
     outcome: "REJECTED",
-    prompt: "Review the active story and explain what needs to change before approval.",
-    provider: "codex",
-    provider_session: {
-      id: "sess-rejected-story",
-      kind: "session_id",
-      provider: "codex",
-    },
     request_view: {
       input_work_items: [
         {
@@ -237,9 +213,6 @@ export const rejectedWorkstationRequestFixture = buildDashboardWorkstationReques
         },
       ],
       input_work_type_ids: ["story"],
-      model: "gpt-5.4",
-      prompt: "Review the active story and explain what needs to change before approval.",
-      provider: "codex",
       request_metadata: {
         prompt_source: "factory-renderer",
         source: "dispatch-history",
@@ -247,8 +220,6 @@ export const rejectedWorkstationRequestFixture = buildDashboardWorkstationReques
       request_time: REVIEW_REQUEST_TIME,
       started_at: REVIEW_REQUEST_TIME,
       trace_ids: ["trace-active-story"],
-      working_directory: REVIEW_WORKING_DIRECTORY,
-      worktree: REVIEW_WORKTREE,
     },
     request_id: "request-rejected-story",
     request_metadata: {
@@ -273,21 +244,13 @@ export const rejectedWorkstationRequestFixture = buildDashboardWorkstationReques
           work_type_id: "story",
         },
       ],
-      provider_session: {
-        id: "sess-rejected-story",
-        kind: "session_id",
-        provider: "codex",
-      },
       response_metadata: {
         finish_reason: "rejected",
         session_source: "codex",
       },
-      response_text: "The active story needs revision before it can continue.",
     },
     total_duration_millis: 2_000,
     trace_ids: ["trace-active-story"],
-    working_directory: REVIEW_WORKING_DIRECTORY,
-    worktree: REVIEW_WORKTREE,
   },
 );
 
@@ -307,11 +270,11 @@ export const erroredWorkstationRequestFixture = buildDashboardWorkstationRequest
         error_class: "provider_rate_limit",
         inference_request_id: `${ERRORED_DISPATCH_ID}/inference-request/1`,
         outcome: "FAILED",
+        prompt: "Review the blocked story and explain the failure.",
         response_time: "2026-04-08T12:00:02Z",
       }),
     ],
     outcome: "FAILED",
-    prompt: "Review the blocked story and explain the failure.",
     request_view: {
       input_work_items: [
         {
@@ -322,7 +285,6 @@ export const erroredWorkstationRequestFixture = buildDashboardWorkstationRequest
         },
       ],
       input_work_type_ids: ["story"],
-      prompt: "Review the blocked story and explain the failure.",
       request_time: REVIEW_REQUEST_TIME,
       started_at: REVIEW_REQUEST_TIME,
       trace_ids: ["trace-active-story"],
@@ -408,4 +370,3 @@ export const dashboardWorkstationRequestFixtures = {
   scriptPending: scriptPendingWorkstationRequestFixture,
   scriptSuccess: scriptSuccessWorkstationRequestFixture,
 } satisfies Record<string, DashboardWorkstationRequest>;
-

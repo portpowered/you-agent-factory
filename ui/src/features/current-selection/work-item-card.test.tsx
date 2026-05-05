@@ -196,6 +196,12 @@ describe("WorkItemDetailCard summary", () => {
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
+    const requestDetails = within(
+      screen.getByRole("region", { name: "Request details" }),
+    );
+    const responseDetails = within(
+      screen.getByRole("region", { name: "Response details" }),
+    );
     expect(
       within(currentSelection).queryByRole("heading", {
         name: "Execution details",
@@ -210,12 +216,15 @@ describe("WorkItemDetailCard summary", () => {
     expect(screen.getAllByText("Review").length).toBeGreaterThan(0);
     expect(screen.getByText("Current dispatch")).toBeTruthy();
     expect(dispatchHistory.getByText("trace-active-story")).toBeTruthy();
-    expect(dispatchHistory.getByText("Provider")).toBeTruthy();
-    expect(dispatchHistory.getByText("codex")).toBeTruthy();
-    expect(dispatchHistory.getByText("Model")).toBeTruthy();
-    expect(dispatchHistory.getByText("gpt-5.4")).toBeTruthy();
     expect(
-      dispatchHistory.getByText("codex / session_id / sess-active-story"),
+      requestDetails.getByText(
+        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+      ),
+    ).toBeTruthy();
+    expect(
+      responseDetails.getByText(
+        "Inference response details are unavailable at the dispatch level. Check back once attempts are recorded.",
+      ),
     ).toBeTruthy();
     expect(
       within(currentSelection).queryByRole("heading", {
@@ -650,7 +659,7 @@ describe("WorkItemDetailCard summary", () => {
     ).toBeTruthy();
   });
 
-  it("renders a unified pending dispatch-history row with request details and no-response-yet copy", () => {
+  it("renders a unified pending dispatch-history row with attempt-owned request copy and no-response-yet copy", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
 
@@ -701,13 +710,22 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(currentSelection).getByText(
-        "Review the active story while the provider response is still pending.",
+      within(
+        screen.getByRole("region", { name: "Request details" }),
+      ).getByText(
+        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
       ),
     ).toBeTruthy();
     expect(
-      within(currentSelection).getByText("No response yet for this dispatch."),
+      responseDetails.getByText(
+        "Inference response details are not available for this dispatch yet.",
+      ),
     ).toBeTruthy();
+    expect(
+      within(currentSelection).queryByText(
+        "Review the active story while the provider response is still pending.",
+      ),
+    ).toBeNull();
     expect(
       dispatchHistory.getByRole("button", {
         name: "Select work item Active Story",
@@ -774,7 +792,7 @@ describe("WorkItemDetailCard summary", () => {
     expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
   });
 
-  it("renders markdown-authored dispatch-history prompts through the shared request renderer", () => {
+  it("keeps markdown-authored inference prompts out of dispatch-level request details before attempts exist", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
 
@@ -835,19 +853,21 @@ describe("WorkItemDetailCard summary", () => {
     );
 
     expect(
-      requestDetails.getByRole("heading", {
+      requestDetails.getByText(
+        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+      ),
+    ).toBeTruthy();
+    expect(
+      requestDetails.queryByRole("heading", {
         level: 2,
         name: "Review checklist",
       }),
-    ).toBeTruthy();
-    expect(requestDetails.getByRole("list")).toBeTruthy();
-    expect(requestDetails.getByText("Check the latest diff")).toBeTruthy();
+    ).toBeNull();
+    expect(requestDetails.queryByRole("list")).toBeNull();
+    expect(requestDetails.queryByText("Check the latest diff")).toBeNull();
     expect(
-      requestDetails.getAllByText("bun test", { selector: "code" }),
-    ).toHaveLength(2);
-    expect(
-      requestDetails.getAllByText("bun test", { selector: "pre code" }),
-    ).toHaveLength(1);
+      requestDetails.queryByText("bun test", { selector: "code" }),
+    ).toBeNull();
     expect(within(dispatchCard).queryByText("## Review checklist")).toBeNull();
   });
 });
@@ -1069,7 +1089,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       within(
         screen.getByRole("region", { name: "Response details" }),
       ).getByText(
-        "Response text is unavailable because this dispatch ended with an error.",
+        "Inference response details are unavailable because this dispatch ended before any attempt details were recorded.",
       ),
     ).toBeTruthy();
     expect(
@@ -1354,8 +1374,20 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(dispatchCard).getByText(
-        "codex / session_id / sess-rejected-story",
+      within(
+        within(dispatchCard).getByRole("region", { name: "Request details" }),
+      ).getByText("Inference request details are shown under Inference attempts."),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Response details" }),
+      ).getByText("Inference response details are shown under Inference attempts."),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Inference attempts" }),
+      ).getByText(
+        `codex / session_id / ${dashboardWorkstationRequestFixtures.rejected.inference_attempts?.[0]?.provider_session?.id}`,
       ),
     ).toBeTruthy();
     expect(

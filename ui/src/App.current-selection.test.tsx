@@ -633,50 +633,109 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
     );
+    const pendingRequestDetails = within(pendingCard).getByRole("region", {
+      name: "Request details",
+    });
+    const pendingResponseDetails = within(pendingCard).getByRole("region", {
+      name: "Response details",
+    });
     expect(
-      within(pendingCard).getByText(
-        "Review the active story while the provider response is still pending.",
+      within(pendingRequestDetails).getByText(
+        "Inference request details are not available for this dispatch yet.",
       ),
     ).toBeTruthy();
     expect(
-      within(pendingCard).getByText("No response yet for this dispatch."),
+      within(pendingResponseDetails).getByText(
+        "Inference response details are not available for this dispatch yet.",
+      ),
     ).toBeTruthy();
+    expect(
+      within(pendingCard).queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
+    expect(
+      within(pendingCard).queryByText("Provider", { selector: "dt" }),
+    ).toBeNull();
+    expect(
+      within(pendingCard).queryByText("Model", { selector: "dt" }),
+    ).toBeNull();
 
     const readyCard = getDispatchHistoryCard(
       dispatchHistory,
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
     );
+    const readyRequestDetails = within(readyCard).getByRole("region", {
+      name: "Request details",
+    });
+    const readyResponseDetails = within(readyCard).getByRole("region", {
+      name: "Response details",
+    });
+    const readyAttempt = within(readyCard).getByRole("article", {
+      name: "Inference attempt 2",
+    });
     expect(
-      within(readyCard).getByText(
-        "Review the active story and decide whether it is ready.",
+      within(readyRequestDetails).getByText(
+        "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
     expect(
-      within(readyCard).getAllByText("Ready for the next workstation.").length,
-    ).toBeGreaterThan(0);
+      within(readyResponseDetails).getByText(
+        "Inference response details are shown under Inference attempts.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(readyRequestDetails).queryByText(
+        "Review the active story and decide whether it is ready.",
+      ),
+    ).toBeNull();
+    expect(
+      within(readyResponseDetails).queryByText("Ready for the next workstation."),
+    ).toBeNull();
+    expect(within(readyAttempt).getByText("Retry the review with the latest context.")).toBeTruthy();
+    expect(within(readyAttempt).getByText("Ready for the next workstation.")).toBeTruthy();
+    expect(within(readyAttempt).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
+    expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
+    expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
+    expect(within(readyAttempt).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
+    expect(within(readyCard).queryByText("Provider", { selector: "dt" })).toBeNull();
+    expect(within(readyCard).queryByText("Model", { selector: "dt" })).toBeNull();
+    expect(within(readyCard).queryByText("Provider session", { selector: "dt" })).toBeNull();
+    expect(within(readyCard).queryByText("Working directory", { selector: "dt" })).toBeNull();
+    expect(within(readyCard).queryByText("Worktree", { selector: "dt" })).toBeNull();
 
     const rejectedCard = getDispatchHistoryCard(
       dispatchHistory,
       dashboardWorkstationRequestFixtures.rejected.dispatch_id,
     );
+    const rejectedAttempt = within(rejectedCard).getByRole("article", {
+      name: "Inference attempt 1",
+    });
     expect(
-      within(rejectedCard).getByText(
+      within(rejectedAttempt).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(rejectedCard).getAllByText(
+      within(rejectedAttempt).getByText(
         "The active story needs revision before it can continue.",
-      ).length,
-    ).toBeGreaterThan(0);
+      ),
+    ).toBeTruthy();
 
     const erroredCard = getDispatchHistoryCard(
       dispatchHistory,
       dashboardWorkstationRequestFixtures.errored.dispatch_id,
     );
+    const erroredRequestDetails = within(erroredCard).getByRole("region", {
+      name: "Request details",
+    });
+    const erroredResponseDetails = within(erroredCard).getByRole("region", {
+      name: "Response details",
+    });
+    const erroredAttempt = within(erroredCard).getByRole("article", {
+      name: "Inference attempt 1",
+    });
     expect(
-      within(erroredCard).getByText(
-        "Review the blocked story and explain the failure.",
+      within(erroredResponseDetails).getByText(
+        "Inference response details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
     expect(
@@ -685,10 +744,13 @@ describe("App current selection", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(erroredCard).getByText(
-        "Response text is unavailable because this dispatch ended with an error.",
-      ),
+      within(erroredAttempt).getByText("provider_rate_limit"),
     ).toBeTruthy();
+    expect(
+      within(erroredRequestDetails).queryByText(
+        "Review the blocked story and explain the failure.",
+      ),
+    ).toBeNull();
 
     const scriptSuccessCard = getDispatchHistoryCard(
       dispatchHistory,

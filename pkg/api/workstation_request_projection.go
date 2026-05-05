@@ -46,14 +46,12 @@ func buildFactoryWorldWorkstationDispatchViewsByID(
 
 	dispatchViewsByID := make(map[string]factoryapi.FactoryWorldWorkstationRequestView, len(dispatchIDs))
 	for _, dispatchID := range sortedMapKeys(dispatchIDs) {
-		latestAttempt := latestWorkstationInferenceAttempt(state.InferenceAttemptsByDispatchID[dispatchID])
 		latestScriptResponse := latestWorkstationScriptResponse(state.ScriptResponsesByDispatchID[dispatchID])
 		latestScriptRequest := workstationScriptRequestForProjection(latestScriptResponse, state.ScriptRequestsByDispatchID[dispatchID])
 		if dispatch, ok := state.ActiveDispatches[dispatchID]; ok && dispatchHasCustomerWork(dispatch.WorkItemIDs, state.WorkItemsByID) {
 			dispatchViewsByID[dispatchID] = workstationDispatchViewFromActiveDispatch(
 				dispatch,
 				state,
-				latestAttempt,
 				latestScriptRequest,
 				latestScriptResponse,
 			)
@@ -62,7 +60,6 @@ func buildFactoryWorldWorkstationDispatchViewsByID(
 			dispatchViewsByID[dispatchID] = workstationDispatchViewFromCompletion(
 				completion,
 				state,
-				latestAttempt,
 				latestScriptRequest,
 				latestScriptResponse,
 			)
@@ -87,7 +84,6 @@ func buildFactoryWorldWorkstationDispatchViewsByID(
 func workstationDispatchViewFromActiveDispatch(
 	dispatch interfaces.FactoryWorldDispatch,
 	state interfaces.FactoryWorldState,
-	latestAttempt *interfaces.FactoryWorldInferenceAttempt,
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 	latestScriptResponse *interfaces.FactoryWorldScriptResponse,
 ) factoryapi.FactoryWorldWorkstationRequestView {
@@ -106,12 +102,7 @@ func workstationDispatchViewFromActiveDispatch(
 			dispatch.PreviousChainingTraceIDs,
 			sortedStrings(dispatch.TraceIDs),
 			generatedTokenViewsFromInputs(dispatch.Inputs),
-			latestAttempt,
 			latestScriptRequest,
-			inferenceAttemptProviderSession(latestAttempt),
-			dispatch.Provider,
-			dispatch.Model,
-			inferenceAttemptDiagnostics(latestAttempt),
 		),
 		Response: workstationRequestResponseViewFromActiveDispatch(latestScriptResponse),
 	}
@@ -131,18 +122,9 @@ func workstationRequestResponseViewFromActiveDispatch(
 func workstationDispatchViewFromCompletion(
 	completion interfaces.FactoryWorldDispatchCompletion,
 	state interfaces.FactoryWorldState,
-	latestAttempt *interfaces.FactoryWorldInferenceAttempt,
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 	latestScriptResponse *interfaces.FactoryWorldScriptResponse,
 ) factoryapi.FactoryWorldWorkstationRequestView {
-	providerSession := inferenceAttemptProviderSession(latestAttempt)
-	if providerSession == nil {
-		providerSession = completion.ProviderSession
-	}
-	diagnostics := inferenceAttemptDiagnostics(latestAttempt)
-	if diagnostics == nil {
-		diagnostics = completion.Diagnostics
-	}
 	inputWorkItems := generatedWorkItemRefs(workItemRefsForItems(completion.InputWorkItems))
 	if len(inputWorkItems) == 0 {
 		inputWorkItems = generatedWorkItemRefs(workItemRefsForInputs(completion.ConsumedInputs))
@@ -167,28 +149,18 @@ func workstationDispatchViewFromCompletion(
 			completion.PreviousChainingTraceIDs,
 			sortedStrings(completion.TraceIDs),
 			generatedTokenViewsFromInputs(completion.ConsumedInputs),
-			latestAttempt,
 			latestScriptRequest,
-			providerSession,
-			"",
-			"",
-			diagnostics,
 		),
 		Response: &factoryapi.FactoryWorldWorkstationRequestResponseView{
-			Outcome:          workstationRequestStringPtr(completion.Result.Outcome),
-			Feedback:         workstationRequestStringPtr(completion.Result.Feedback),
-			FailureReason:    workstationRequestStringPtr(completion.Result.FailureReason),
-			FailureMessage:   workstationRequestStringPtr(completion.Result.FailureMessage),
-			ResponseText:     workstationRequestStringPtr(workstationResponseText(latestAttempt, latestScriptResponse, completion.Result.Output)),
-			ErrorClass:       workstationRequestStringPtr(workstationErrorClass(latestAttempt)),
-			ProviderSession:  interfaces.GeneratedProviderSessionMetadata(providerSession),
-			Diagnostics:      generatedFactoryWorldWorkDiagnostics(diagnostics),
-			ResponseMetadata: workstationRequestStringMapPtr(workstationResponseMetadata(diagnostics)),
-			ScriptResponse:   generatedFactoryWorldScriptResponse(latestScriptResponse),
-			EndTime:          timePtr(completion.CompletedAt),
-			DurationMillis:   int64Ptr(completion.DurationMillis),
-			OutputWorkItems:  workItemRefSlicePtr(outputWorkItems),
-			OutputMutations:  mutationViewsPtrForCompletion(completion),
+			Outcome:         workstationRequestStringPtr(completion.Result.Outcome),
+			Feedback:        workstationRequestStringPtr(completion.Result.Feedback),
+			FailureReason:   workstationRequestStringPtr(completion.Result.FailureReason),
+			FailureMessage:  workstationRequestStringPtr(completion.Result.FailureMessage),
+			ScriptResponse:  generatedFactoryWorldScriptResponse(latestScriptResponse),
+			EndTime:         timePtr(completion.CompletedAt),
+			DurationMillis:  int64Ptr(completion.DurationMillis),
+			OutputWorkItems: workItemRefSlicePtr(outputWorkItems),
+			OutputMutations: mutationViewsPtrForCompletion(completion),
 		},
 	}
 }
@@ -200,51 +172,18 @@ func workstationDispatchRequestView(
 	previousChainingTraceIDs []string,
 	traceIDs []string,
 	consumedTokens []factoryapi.FactoryWorldTokenView,
-	latestAttempt *interfaces.FactoryWorldInferenceAttempt,
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
-	providerSession *interfaces.ProviderSessionMetadata,
-	fallbackProvider string,
-	fallbackModel string,
-	diagnostics *interfaces.SafeWorkDiagnostics,
 ) factoryapi.FactoryWorldWorkstationRequestRequestView {
-	provider, model := workstationRequestProviderModel(diagnostics, providerSession, fallbackProvider, fallbackModel)
 	return factoryapi.FactoryWorldWorkstationRequestRequestView{
 		StartedAt:                timePtr(startedAt),
-		RequestTime:              timePtr(workstationRequestTime(latestAttempt)),
 		InputWorkItems:           workItemRefSlicePtr(inputWorkItems),
 		InputWorkTypeIds:         stringSlicePtr(workTypeIDsForWorkRefs(inputWorkItems)),
 		CurrentChainingTraceId:   workstationRequestStringPtr(currentChainingTraceID),
 		PreviousChainingTraceIds: stringSlicePtr(sortedStrings(previousChainingTraceIDs)),
 		TraceIds:                 stringSlicePtr(traceIDs),
 		ConsumedTokens:           tokenViewSlicePtr(consumedTokens),
-		Prompt:                   workstationRequestStringPtr(workstationRequestPrompt(latestAttempt)),
-		WorkingDirectory:         workstationRequestStringPtr(workstationWorkingDirectory(latestAttempt, diagnostics)),
-		Worktree:                 workstationRequestStringPtr(workstationWorktree(latestAttempt, diagnostics)),
-		Provider:                 workstationRequestStringPtr(provider),
-		Model:                    workstationRequestStringPtr(model),
 		ScriptRequest:            generatedFactoryWorldScriptRequest(latestScriptRequest),
-		RequestMetadata:          workstationRequestStringMapPtr(workstationRequestMetadata(diagnostics)),
 	}
-}
-
-func latestWorkstationInferenceAttempt(
-	attempts map[string]interfaces.FactoryWorldInferenceAttempt,
-) *interfaces.FactoryWorldInferenceAttempt {
-	if len(attempts) == 0 {
-		return nil
-	}
-	var latest *interfaces.FactoryWorldInferenceAttempt
-	for _, requestID := range sortedMapKeys(attempts) {
-		attempt := attempts[requestID]
-		if latest == nil ||
-			attempt.Attempt > latest.Attempt ||
-			(attempt.Attempt == latest.Attempt && attempt.RequestTime.After(latest.RequestTime)) ||
-			(attempt.Attempt == latest.Attempt && attempt.RequestTime.Equal(latest.RequestTime) && attempt.InferenceRequestID > latest.InferenceRequestID) {
-			attemptCopy := attempt
-			latest = &attemptCopy
-		}
-	}
-	return latest
 }
 
 func buildFactoryWorldWorkstationRequestCounts(
@@ -284,103 +223,6 @@ func buildFactoryWorldWorkstationRequestCounts(
 		counts.RespondedCount++
 	}
 	return counts
-}
-
-func workstationRequestPrompt(attempt *interfaces.FactoryWorldInferenceAttempt) string {
-	if attempt == nil {
-		return ""
-	}
-	return attempt.Prompt
-}
-
-func inferenceAttemptProviderSession(attempt *interfaces.FactoryWorldInferenceAttempt) *interfaces.ProviderSessionMetadata {
-	if attempt == nil {
-		return nil
-	}
-	return attempt.ProviderSession
-}
-
-func inferenceAttemptDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt) *interfaces.SafeWorkDiagnostics {
-	if attempt == nil {
-		return nil
-	}
-	return attempt.Diagnostics
-}
-
-func workstationRequestTime(attempt *interfaces.FactoryWorldInferenceAttempt) time.Time {
-	if attempt == nil {
-		return time.Time{}
-	}
-	return attempt.RequestTime
-}
-
-func workstationWorkingDirectory(attempt *interfaces.FactoryWorldInferenceAttempt, diagnostics *interfaces.SafeWorkDiagnostics) string {
-	if attempt != nil && attempt.WorkingDirectory != "" {
-		return attempt.WorkingDirectory
-	}
-	return workstationProviderRequestMetadataValue(diagnostics, "working_directory")
-}
-
-func workstationWorktree(attempt *interfaces.FactoryWorldInferenceAttempt, diagnostics *interfaces.SafeWorkDiagnostics) string {
-	if attempt != nil && attempt.Worktree != "" {
-		return attempt.Worktree
-	}
-	return workstationProviderRequestMetadataValue(diagnostics, "worktree")
-}
-
-func workstationRequestProviderModel(
-	diagnostics *interfaces.SafeWorkDiagnostics,
-	providerSession *interfaces.ProviderSessionMetadata,
-	fallbackProvider string,
-	fallbackModel string,
-) (string, string) {
-	if diagnostics != nil && diagnostics.Provider != nil {
-		return firstNonEmpty(diagnostics.Provider.Provider, providerSessionProvider(providerSession), fallbackProvider),
-			firstNonEmpty(diagnostics.Provider.Model, fallbackModel)
-	}
-	return firstNonEmpty(providerSessionProvider(providerSession), fallbackProvider), fallbackModel
-}
-
-func workstationProviderRequestMetadataValue(diagnostics *interfaces.SafeWorkDiagnostics, key string) string {
-	if diagnostics == nil || diagnostics.Provider == nil || diagnostics.Provider.RequestMetadata == nil {
-		return ""
-	}
-	return diagnostics.Provider.RequestMetadata[key]
-}
-
-func workstationRequestMetadata(diagnostics *interfaces.SafeWorkDiagnostics) map[string]string {
-	if diagnostics == nil || diagnostics.Provider == nil {
-		return nil
-	}
-	return cloneStringMap(diagnostics.Provider.RequestMetadata)
-}
-
-func workstationResponseMetadata(diagnostics *interfaces.SafeWorkDiagnostics) map[string]string {
-	if diagnostics == nil || diagnostics.Provider == nil {
-		return nil
-	}
-	return cloneStringMap(diagnostics.Provider.ResponseMetadata)
-}
-
-func workstationResponseText(
-	attempt *interfaces.FactoryWorldInferenceAttempt,
-	scriptResponse *interfaces.FactoryWorldScriptResponse,
-	fallback string,
-) string {
-	if attempt != nil && attempt.Response != "" {
-		return attempt.Response
-	}
-	if scriptResponse != nil {
-		return ""
-	}
-	return fallback
-}
-
-func workstationErrorClass(attempt *interfaces.FactoryWorldInferenceAttempt) string {
-	if attempt == nil {
-		return ""
-	}
-	return attempt.ErrorClass
 }
 
 func latestWorkstationScriptRequest(
@@ -657,45 +499,6 @@ func mutationTokenID(input interfaces.WorkstationInput, item interfaces.FactoryW
 	return item.ID
 }
 
-func generatedFactoryWorldWorkDiagnostics(
-	diagnostics *interfaces.SafeWorkDiagnostics,
-) *factoryapi.FactoryWorldWorkDiagnostics {
-	if diagnostics == nil {
-		return nil
-	}
-	return &factoryapi.FactoryWorldWorkDiagnostics{
-		RenderedPrompt: generatedFactoryWorldRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
-		Provider:       generatedFactoryWorldProviderDiagnostic(diagnostics.Provider),
-	}
-}
-
-func generatedFactoryWorldRenderedPromptDiagnostic(
-	diagnostic *interfaces.SafeRenderedPromptDiagnostic,
-) *factoryapi.FactoryWorldRenderedPromptDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &factoryapi.FactoryWorldRenderedPromptDiagnostic{
-		SystemPromptHash: workstationRequestStringPtr(diagnostic.SystemPromptHash),
-		UserMessageHash:  workstationRequestStringPtr(diagnostic.UserMessageHash),
-		Variables:        workstationRequestStringMapPtr(diagnostic.Variables),
-	}
-}
-
-func generatedFactoryWorldProviderDiagnostic(
-	diagnostic *interfaces.SafeProviderDiagnostic,
-) *factoryapi.FactoryWorldProviderDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &factoryapi.FactoryWorldProviderDiagnostic{
-		Provider:         workstationRequestStringPtr(diagnostic.Provider),
-		Model:            workstationRequestStringPtr(diagnostic.Model),
-		RequestMetadata:  workstationRequestStringMapPtr(diagnostic.RequestMetadata),
-		ResponseMetadata: workstationRequestStringMapPtr(diagnostic.ResponseMetadata),
-	}
-}
-
 func generatedFactoryWorldScriptRequest(
 	request *interfaces.FactoryWorldScriptRequest,
 ) *factoryapi.FactoryWorldScriptRequestView {
@@ -786,13 +589,6 @@ func workstationRequestStringPtr(value string) *string {
 	return &value
 }
 
-func providerSessionProvider(session *interfaces.ProviderSessionMetadata) string {
-	if session == nil {
-		return ""
-	}
-	return session.Provider
-}
-
 func workstationNameOrID(name string, id string) string {
 	if name != "" {
 		return name
@@ -844,15 +640,6 @@ func appendUnique(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func cloneStringMap(input map[string]string) map[string]string {
