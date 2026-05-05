@@ -137,6 +137,26 @@ function expectWorkChartOverlayContract(chart: HTMLElement): void {
   expect(within(chart).getByText("Work count")).toBeVisible();
 }
 
+function expectWorkChartPaddingContract(chart: HTMLElement): void {
+  expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
+  expect(chart.className).toContain("px-5");
+  expect(chart.className).toContain("pb-5");
+  expect(chart.className).toContain("pt-4");
+  expect(chart.className).toContain("sm:px-6");
+  expect(chart.className).toContain("sm:pb-6");
+  expect(chart.className).toContain("sm:pt-5");
+
+  const overlay = chart.querySelector<HTMLElement>("[data-work-chart-overlay='true']");
+
+  expect(overlay).not.toBeNull();
+  expect(overlay?.className).toContain("px-5");
+  expect(overlay?.className).toContain("pb-4");
+  expect(overlay?.className).toContain("pt-4");
+  expect(overlay?.className).toContain("sm:px-6");
+  expect(overlay?.className).toContain("sm:pb-5");
+  expect(overlay?.className).toContain("sm:pt-5");
+}
+
 function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
   const shell = canvasElement.querySelector<HTMLElement>("[data-story-shell]");
 
@@ -179,6 +199,7 @@ export const Populated = {
     const chart = await canvas.findByRole("img", { name: "Work outcome chart" });
 
     expectWorkChartOverlayContract(chart);
+    expectWorkChartPaddingContract(chart);
   },
 };
 
@@ -218,6 +239,7 @@ export const ConstrainedWidth = {
     const chart = await canvas.findByRole("img", { name: "Work outcome chart" });
 
     expectWorkChartOverlayContract(chart);
+    expectWorkChartPaddingContract(chart);
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
