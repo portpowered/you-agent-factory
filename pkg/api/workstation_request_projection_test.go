@@ -326,6 +326,155 @@ func TestWorkstationDispatchViewFromCompletion_OmitsInferenceOwnedSummaryFields(
 	}
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBackedDispatchDetails(t *testing.T) {
+	t0 := time.Date(2026, 4, 23, 9, 0, 0, 0, time.UTC)
+	workItem := interfaces.FactoryWorkItem{
+		ID:          "work-scripted",
+		WorkTypeID:  "task",
+		DisplayName: "Scripted story",
+		TraceID:     "trace-scripted",
+		PlaceID:     "task:init",
+	}
+	exitCode := 124
+
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			workItem.ID: workItem,
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			scriptProjectionActiveDispatchID: {
+				DispatchID:   scriptProjectionActiveDispatchID,
+				TransitionID: "script-review",
+				Workstation:  interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
+				StartedAt:    t0,
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID:  "token-script-active",
+					PlaceID:  workItem.PlaceID,
+					WorkItem: &workItem,
+				}},
+				WorkItemIDs: []string{workItem.ID},
+				TraceIDs:    []string{workItem.TraceID},
+			},
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID:   scriptProjectionCompletedDispatchID,
+			TransitionID: "script-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
+			StartedAt:    t0.Add(time.Minute),
+			CompletedAt:  t0.Add(2 * time.Minute),
+			Result: interfaces.WorkstationResult{
+				Outcome:        string(interfaces.OutcomeRejected),
+				FailureReason:  "script failed",
+				FailureMessage: "script timed out",
+			},
+			DurationMillis: 12_000,
+			WorkItemIDs:    []string{workItem.ID},
+			ConsumedInputs: []interfaces.WorkstationInput{{
+				TokenID:  "token-script-completed",
+				PlaceID:  workItem.PlaceID,
+				WorkItem: &workItem,
+			}},
+			InputWorkItems: []interfaces.FactoryWorkItem{workItem},
+			TraceIDs:       []string{workItem.TraceID},
+		}},
+		ScriptRequestsByDispatchID: map[string]map[string]interfaces.FactoryWorldScriptRequest{
+			scriptProjectionActiveDispatchID: {
+				scriptProjectionActiveRequestID: {
+					DispatchID:      scriptProjectionActiveDispatchID,
+					TransitionID:    "script-review",
+					ScriptRequestID: scriptProjectionActiveRequestID,
+					Attempt:         1,
+					Command:         scriptProjectionCommand,
+					Args:            []string{"--mode", "active"},
+					RequestTime:     t0.Add(5 * time.Second),
+				},
+			},
+			scriptProjectionCompletedDispatchID: {
+				scriptProjectionCompletedRequestID: {
+					DispatchID:      scriptProjectionCompletedDispatchID,
+					TransitionID:    "script-review",
+					ScriptRequestID: scriptProjectionCompletedRequestID,
+					Attempt:         2,
+					Command:         scriptProjectionCommand,
+					Args:            []string{"--mode", "completed"},
+					RequestTime:     t0.Add(time.Minute + 5*time.Second),
+				},
+			},
+		},
+		ScriptResponsesByDispatchID: map[string]map[string]interfaces.FactoryWorldScriptResponse{
+			scriptProjectionCompletedDispatchID: {
+				scriptProjectionCompletedRequestID: {
+					DispatchID:      scriptProjectionCompletedDispatchID,
+					TransitionID:    "script-review",
+					ScriptRequestID: scriptProjectionCompletedRequestID,
+					Attempt:         2,
+					Outcome:         scriptProjectionCompletedOutcome,
+					Stdout:          scriptProjectionCompletedStdout,
+					Stderr:          "script stderr\n",
+					DurationMillis:  12_000,
+					ExitCode:        &exitCode,
+					FailureType:     "TIMEOUT",
+					ResponseTime:    t0.Add(2*time.Minute - time.Second),
+				},
+			},
+		},
+	})
+
+	if slice.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("workstation request slice missing generated projection map")
+	}
+	requests := *slice.WorkstationRequestsByDispatchId
+
+	active := requests[scriptProjectionActiveDispatchID]
+	if active.Request.ScriptRequest == nil {
+		t.Fatalf("active script request = %#v, want projected script request", active.Request)
+	}
+	if active.Request.ScriptRequest.Command == nil || *active.Request.ScriptRequest.Command != scriptProjectionCommand {
+		t.Fatalf("active script request command = %#v, want %q", active.Request.ScriptRequest.Command, scriptProjectionCommand)
+	}
+	if active.Request.ScriptRequest.Args == nil || len(*active.Request.ScriptRequest.Args) != 2 || (*active.Request.ScriptRequest.Args)[1] != "active" {
+		t.Fatalf("active script request args = %#v, want [--mode active]", active.Request.ScriptRequest.Args)
+	}
+	if active.Request.Prompt != nil || active.Request.Provider != nil || active.Request.Model != nil {
+		t.Fatalf("active request inference summary = %#v, want only script-backed detail", active.Request)
+	}
+	if active.Response != nil {
+		t.Fatalf("active response = %#v, want nil without script response", active.Response)
+	}
+
+	completed := requests[scriptProjectionCompletedDispatchID]
+	if completed.Request.ScriptRequest == nil {
+		t.Fatalf("completed script request = %#v, want projected script request", completed.Request)
+	}
+	if completed.Request.ScriptRequest.Attempt == nil || *completed.Request.ScriptRequest.Attempt != 2 {
+		t.Fatalf("completed script request attempt = %#v, want 2", completed.Request.ScriptRequest.Attempt)
+	}
+	if completed.Request.ScriptRequest.Args == nil || len(*completed.Request.ScriptRequest.Args) != 2 || (*completed.Request.ScriptRequest.Args)[1] != "completed" {
+		t.Fatalf("completed script request args = %#v, want [--mode completed]", completed.Request.ScriptRequest.Args)
+	}
+	if completed.Request.RequestTime != nil || completed.Request.WorkingDirectory != nil || completed.Request.Worktree != nil {
+		t.Fatalf("completed request inference summary = %#v, want omitted inference-owned detail", completed.Request)
+	}
+	if completed.Response == nil || completed.Response.ScriptResponse == nil {
+		t.Fatalf("completed response = %#v, want projected script response", completed.Response)
+	}
+	if completed.Response.ScriptResponse.Outcome == nil || *completed.Response.ScriptResponse.Outcome != scriptProjectionCompletedOutcome {
+		t.Fatalf("completed script response outcome = %#v, want %q", completed.Response.ScriptResponse.Outcome, scriptProjectionCompletedOutcome)
+	}
+	if completed.Response.ScriptResponse.ExitCode == nil || *completed.Response.ScriptResponse.ExitCode != exitCode {
+		t.Fatalf("completed script response exit code = %#v, want %d", completed.Response.ScriptResponse.ExitCode, exitCode)
+	}
+	if completed.Response.ScriptResponse.Stdout == nil || *completed.Response.ScriptResponse.Stdout != scriptProjectionCompletedStdout {
+		t.Fatalf("completed script response stdout = %#v, want %q", completed.Response.ScriptResponse.Stdout, scriptProjectionCompletedStdout)
+	}
+	if completed.Response.ScriptResponse.FailureType == nil || *completed.Response.ScriptResponse.FailureType != "TIMEOUT" {
+		t.Fatalf("completed script response failure type = %#v, want TIMEOUT", completed.Response.ScriptResponse.FailureType)
+	}
+	if completed.Response.ResponseText != nil || completed.Response.ProviderSession != nil || completed.Response.Diagnostics != nil {
+		t.Fatalf("completed response inference summary = %#v, want only script-backed detail", completed.Response)
+	}
+}
+
 func completedInputSlice(item interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
 	return []interfaces.FactoryWorkItem{item}
 }
