@@ -160,7 +160,10 @@ func hydrateArtifactFromEvents(artifact *interfaces.ReplayArtifact) error {
 func runStartedPayloadFromEvent(event factoryapi.FactoryEvent) (factoryapi.RunRequestEventPayload, error) {
 	payload, err := event.Payload.AsRunRequestEventPayload()
 	if err != nil {
-		return factoryapi.RunRequestEventPayload{}, fmt.Errorf("decode run started event %q: %w", event.Id, err)
+		payload, err = decodeRunStartedPayloadEnvelope(event)
+		if err != nil {
+			return factoryapi.RunRequestEventPayload{}, fmt.Errorf("decode run started event %q: %w", event.Id, err)
+		}
 	}
 
 	factoryBoundary, err := runStartedFactoryBoundaryFromEvent(event)
@@ -169,6 +172,28 @@ func runStartedPayloadFromEvent(event factoryapi.FactoryEvent) (factoryapi.RunRe
 	}
 	payload.Factory = factoryBoundary
 	return payload, nil
+}
+
+func decodeRunStartedPayloadEnvelope(event factoryapi.FactoryEvent) (factoryapi.RunRequestEventPayload, error) {
+	payloadJSON, err := event.Payload.MarshalJSON()
+	if err != nil {
+		return factoryapi.RunRequestEventPayload{}, fmt.Errorf("marshal run started event %q payload: %w", event.Id, err)
+	}
+
+	var raw struct {
+		RecordedAt  time.Time               `json:"recordedAt"`
+		WallClock   *factoryapi.WallClock   `json:"wallClock"`
+		Diagnostics *factoryapi.Diagnostics `json:"diagnostics"`
+	}
+	if err := json.Unmarshal(payloadJSON, &raw); err != nil {
+		return factoryapi.RunRequestEventPayload{}, err
+	}
+
+	return factoryapi.RunRequestEventPayload{
+		RecordedAt:  raw.RecordedAt,
+		WallClock:   raw.WallClock,
+		Diagnostics: raw.Diagnostics,
+	}, nil
 }
 
 func runStartedFactoryBoundaryFromEvent(event factoryapi.FactoryEvent) (factoryapi.Factory, error) {
@@ -187,11 +212,62 @@ func runStartedFactoryBoundaryFromEvent(event factoryapi.FactoryEvent) (factorya
 		return factoryapi.Factory{}, fmt.Errorf("run started event %q factory is required", event.Id)
 	}
 
-	factoryBoundary, err := config.GeneratedFactoryFromOpenAPIJSON(raw.Factory)
+	normalizedFactoryJSON, err := normalizeLegacyReplayFactoryBoundary(raw.Factory)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("normalize run started event %q factory boundary: %w", event.Id, err)
+	}
+
+	factoryBoundary, err := config.GeneratedFactoryFromOpenAPIJSON(normalizedFactoryJSON)
 	if err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("decode run started event %q factory boundary: %w", event.Id, err)
 	}
 	return factoryBoundary, nil
+}
+
+func normalizeLegacyReplayFactoryBoundary(data json.RawMessage) ([]byte, error) {
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	root, ok := raw.(map[string]any)
+	if !ok {
+		return []byte(data), nil
+	}
+
+	workstations, ok := root["workstations"].([]any)
+	if !ok {
+		return json.Marshal(root)
+	}
+	for _, item := range workstations {
+		workstation, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		normalizeLegacyReplayTransitionRoutes(workstation)
+		if definition, ok := workstation["definition"].(map[string]any); ok {
+			normalizeLegacyReplayTransitionRoutes(definition)
+		}
+	}
+	return json.Marshal(root)
+}
+
+func normalizeLegacyReplayTransitionRoutes(workstation map[string]any) {
+	for _, key := range []string{"onContinue", "onFailure", "onRejection"} {
+		value, ok := workstation[key]
+		if !ok {
+			continue
+		}
+		if route, ok := value.(map[string]any); ok {
+			workstation[key] = []any{route}
+		}
+	}
+	if _, hasBody := workstation["body"]; !hasBody {
+		if promptTemplate, ok := workstation["promptTemplate"]; ok {
+			workstation["body"] = promptTemplate
+		}
+	}
+	delete(workstation, "promptTemplate")
 }
 
 func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi.Relation) []interfaces.WorkRelation {
