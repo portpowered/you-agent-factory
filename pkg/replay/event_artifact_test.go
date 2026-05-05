@@ -81,6 +81,78 @@ func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 	}
 }
 
+func TestRunStartedPayloadFromEvent_AllowsLegacyOnFailureObjectWhileNormalizingFactoryBoundary(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	rawEvent := map[string]any{
+		"id":            "factory-event/run-started",
+		"schemaVersion": factoryapi.AgentFactoryEventV1,
+		"type":          factoryapi.FactoryEventTypeRunRequest,
+		"context": map[string]any{
+			"eventTime": recordedAt.Format(time.RFC3339),
+			"tick":      0,
+		},
+		"payload": map[string]any{
+			"recordedAt": recordedAt.Format(time.RFC3339),
+			"factory": map[string]any{
+				"name": "legacy-onfailure-shape",
+				"workTypes": []map[string]any{
+					{
+						"name": "story",
+						"states": []map[string]string{
+							{"name": "ready", "type": "INITIAL"},
+							{"name": "failed", "type": "FAILED"},
+							{"name": "complete", "type": "TERMINAL"},
+						},
+					},
+				},
+				"workers": []map[string]any{
+					{
+						"name":          "executor",
+						"type":          "MODEL_WORKER",
+						"modelProvider": "CODEX",
+					},
+				},
+				"workstations": []map[string]any{
+					{
+						"name":      "scheduled-story",
+						"worker":    "executor",
+						"inputs":    []map[string]string{{"workType": "story", "state": "ready"}},
+						"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+						"onFailure": map[string]string{"workType": "story", "state": "failed"},
+					},
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(rawEvent)
+	if err != nil {
+		t.Fatalf("marshal raw event: %v", err)
+	}
+
+	var event factoryapi.FactoryEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		t.Fatalf("unmarshal factory event: %v", err)
+	}
+
+	payload, err := runStartedPayloadFromEvent(event)
+	if err != nil {
+		t.Fatalf("runStartedPayloadFromEvent() error = %v", err)
+	}
+	if !payload.RecordedAt.Equal(recordedAt) {
+		t.Fatalf("RecordedAt = %s, want %s", payload.RecordedAt, recordedAt)
+	}
+	if payload.Factory.Name != "legacy-onfailure-shape" {
+		t.Fatalf("factory name = %q, want legacy-onfailure-shape", payload.Factory.Name)
+	}
+	if payload.Factory.Workstations == nil || len(*payload.Factory.Workstations) != 1 {
+		t.Fatalf("factory workstations = %#v, want normalized workstation", payload.Factory.Workstations)
+	}
+	if got := (*payload.Factory.Workstations)[0].OnFailure; got == nil || !reflect.DeepEqual(*got, []factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}}) {
+		t.Fatalf("normalized onFailure = %#v, want [{WorkType:story State:failed}]", got)
+	}
+}
+
 func TestMergeGeneratedWorkers_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSortedOrder(t *testing.T) {
 	factory := &factoryapi.Factory{
 		Workers: &[]factoryapi.Worker{
