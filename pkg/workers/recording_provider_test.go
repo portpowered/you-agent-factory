@@ -337,6 +337,105 @@ func TestRecordingProvider_Infer_MultipleAttemptsIncrementAndKeepUniqueRequestID
 	}
 }
 
+func TestRecordingProvider_Infer_RetryableFailureKeepsAttemptCounterUntilTerminalOutcome(t *testing.T) {
+	start := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	fake := &recordingProviderFake{
+		errors: []error{
+			NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timed out", nil),
+			NewProviderError(interfaces.ProviderErrorTypePermanentBadRequest, "prompt invalid", nil),
+			nil,
+		},
+		responses: []interfaces.InferenceResponse{
+			{},
+			{},
+			{Content: "fresh dispatch"},
+		},
+	}
+	events := &recordingEvents{}
+	provider := NewRecordingProvider(fake, events.record, WithRecordingProviderClock(sequenceClock(
+		start,
+		time.Millisecond,
+		start.Add(2*time.Millisecond),
+		3*time.Millisecond,
+		start.Add(4*time.Millisecond),
+		5*time.Millisecond,
+	)))
+
+	dispatch := recordingProviderDispatch()
+	for i := 0; i < 3; i++ {
+		_, _ = provider.Infer(context.Background(), dispatch)
+	}
+	if len(events.items) != 6 {
+		t.Fatalf("recorded events = %d, want 6", len(events.items))
+	}
+
+	firstFailure := assertInferenceResponseEvent(t, events.items[1])
+	secondFailure := assertInferenceResponseEvent(t, events.items[3])
+	finalSuccess := assertInferenceResponseEvent(t, events.items[5])
+
+	if firstFailure.Attempt != 1 || secondFailure.Attempt != 2 || finalSuccess.Attempt != 1 {
+		t.Fatalf("attempt sequence = [%d %d %d], want [1 2 1]", firstFailure.Attempt, secondFailure.Attempt, finalSuccess.Attempt)
+	}
+	if firstFailure.ErrorClass == nil || *firstFailure.ErrorClass != string(interfaces.ProviderErrorTypeTimeout) {
+		t.Fatalf("first failure errorClass = %#v, want timeout", firstFailure.ErrorClass)
+	}
+	if secondFailure.ErrorClass == nil || *secondFailure.ErrorClass != string(interfaces.ProviderErrorTypePermanentBadRequest) {
+		t.Fatalf("second failure errorClass = %#v, want permanent bad request", secondFailure.ErrorClass)
+	}
+	if finalSuccess.Outcome != factoryapi.InferenceOutcomeSucceeded {
+		t.Fatalf("final success outcome = %s, want SUCCEEDED", finalSuccess.Outcome)
+	}
+}
+
+func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEvent(t *testing.T) {
+	events := &recordingEvents{}
+	provider := NewRecordingProvider(nil, events.record, WithRecordingProviderClock(sequenceClock(
+		time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC),
+		11*time.Millisecond,
+	)))
+
+	_, err := provider.Infer(context.Background(), recordingProviderDispatch())
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Type != interfaces.ProviderErrorTypeMisconfigured {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypeMisconfigured)
+	}
+	if providerErr.Message != "recording provider requires an inner provider" {
+		t.Fatalf("provider error message = %q", providerErr.Message)
+	}
+	if len(events.items) != 2 {
+		t.Fatalf("recorded events = %d, want 2", len(events.items))
+	}
+
+	response := assertInferenceResponseEvent(t, events.items[1])
+	if response.Outcome != factoryapi.InferenceOutcomeFailed {
+		t.Fatalf("response outcome = %s, want FAILED", response.Outcome)
+	}
+	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.ProviderErrorTypeMisconfigured) {
+		t.Fatalf("errorClass = %#v, want misconfigured", response.ErrorClass)
+	}
+	if response.ExitCode != nil {
+		t.Fatalf("exitCode = %#v, want nil", response.ExitCode)
+	}
+	if response.Diagnostics == nil || response.Diagnostics.Provider == nil {
+		t.Fatalf("diagnostics = %#v, want provider diagnostics", response.Diagnostics)
+	}
+	responseMetadata := recordingProviderStringMapValue(response.Diagnostics.Provider.ResponseMetadata)
+	if responseMetadata["retry_count"] != "0" {
+		t.Fatalf("retry_count = %q, want 0", responseMetadata["retry_count"])
+	}
+	requestMetadata := recordingProviderStringMapValue(response.Diagnostics.Provider.RequestMetadata)
+	if requestMetadata["worker_type"] != "worker-a" || requestMetadata["working_directory"] != "C:\\repo" || requestMetadata["worktree"] != "feature-worktree" {
+		t.Fatalf("request metadata = %#v, want worker_type/working_directory/worktree", requestMetadata)
+	}
+}
+
 func recordingProviderDispatch() interfaces.ProviderInferenceRequest {
 	dispatch := interfaces.WorkDispatch{
 		DispatchID:   "dispatch-1",
