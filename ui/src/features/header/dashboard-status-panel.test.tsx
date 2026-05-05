@@ -7,11 +7,14 @@ describe("DashboardStatusPanel", () => {
     const { container } = render(
       <DashboardStatusPanel title="Timeline unavailable" />,
     );
+    const headerEyebrow = container.querySelector("p");
 
     expect(
       screen.getByRole("heading", { name: "Timeline unavailable" }),
     ).toBeTruthy();
-    expect(screen.getByText("Infinite You")).toBeTruthy();
+    expect(screen.getByText("Infinite You").className).toContain("sr-only");
+    expect(headerEyebrow?.textContent).toContain("∞");
+    expect(headerEyebrow?.textContent).toContain("U");
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
     expect(container.querySelector("section")?.className).not.toContain(
       "border-af-danger/45",

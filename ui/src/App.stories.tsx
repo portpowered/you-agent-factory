@@ -357,12 +357,16 @@ async function expectTypographyRegressionSurface(
 ): Promise<void> {
   const canvas = within(canvasElement);
   const heading = await canvas.findByRole("heading", { name: "Infinite You" });
+  const hiddenWordmark = within(heading).getByText("Infinite You");
   const toolbar = canvas.getByRole("region", { name: "dashboard summary" });
   const streamStatus = canvas.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
 
   expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
+  expect(hiddenWordmark.className).toContain("sr-only");
+  expect(heading.textContent).toContain("∞");
+  expect(heading.textContent).toContain("U");
   expect(streamStatus.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
   expect(streamStatus.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
   expect(within(toolbar).queryByText("Factory state")).toBeNull();
@@ -401,6 +405,37 @@ async function expectTypographyRegressionSurface(
   expect(activeWorkCard?.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
   expect(within(runHistorySection).getByText("2 runs").className).toContain(
     DASHBOARD_SUPPORTING_TEXT_CLASS,
+  );
+}
+
+async function expectTimelineToolbarAlignment(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+  const toolbar = await canvas.findByRole("region", {
+    name: "dashboard summary",
+  });
+  const heading = within(toolbar).getByRole("heading", { name: "Infinite You" });
+  const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
+    name: "Timeline tick",
+  });
+  const streamStatus = within(toolbar).getByRole("status", {
+    name: /Infinite You event stream (connecting|live)/,
+  });
+  const exportButton = within(toolbar).getByRole("button", { name: "Export PNG" });
+  const sliderShell = requireValue(
+    slider.closest<HTMLElement>("div"),
+    "expected slider shell in dashboard toolbar",
+  );
+  const headingRect = heading.getBoundingClientRect();
+  const sliderRect = sliderShell.getBoundingClientRect();
+  const streamStatusRect = streamStatus.getBoundingClientRect();
+  const exportButtonRect = exportButton.getBoundingClientRect();
+
+  expect(sliderRect.left).toBeGreaterThanOrEqual(headingRect.right - 1);
+  expect(streamStatusRect.left).toBeGreaterThanOrEqual(sliderRect.right - 1);
+  expect(exportButtonRect.left).toBeGreaterThanOrEqual(
+    streamStatusRect.right - 1,
   );
 }
 
@@ -1413,6 +1448,7 @@ export const WorkChartTimelineVerification = {
 };
 
 export const HeaderActionButtonsVerification = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       timelineSnapshots: [
@@ -1452,10 +1488,12 @@ export const HeaderActionButtonsVerification = {
       await expect(await canvas.findByText("Tick 2 of 5")).toBeVisible();
       await expect(currentButton).toBeEnabled();
 
-      await userEvent.click(currentButton);
+      currentButton.focus();
+      await userEvent.keyboard("{Enter}");
       await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
 
-      await userEvent.click(exportButton);
+      exportButton.focus();
+      await userEvent.keyboard("{Enter}");
       const dialog = await within(canvasElement.ownerDocument.body).findByRole(
         "dialog",
         {
@@ -1464,7 +1502,11 @@ export const HeaderActionButtonsVerification = {
       );
       await expect(dialog).toBeVisible();
 
-      await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      const cancelButton = within(dialog).getByRole("button", {
+        name: "Cancel",
+      });
+      cancelButton.focus();
+      await userEvent.keyboard("{Enter}");
       await waitFor(() => {
         expect(
           within(canvasElement.ownerDocument.body).queryByRole("dialog", {
@@ -1475,6 +1517,26 @@ export const HeaderActionButtonsVerification = {
     } finally {
       useExportDialogStore.setState({ isExportDialogOpen: false });
     }
+  },
+};
+
+export const HeaderTimelineAlignmentVerification = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      timelineSnapshots: [
+        historicalWorkOutcomeSnapshot,
+        liveWorkOutcomeSnapshot,
+      ],
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <App />
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectTimelineToolbarAlignment(canvasElement);
   },
 };
 
@@ -1697,6 +1759,7 @@ export const ResourceCountEventReplaySmoke = {
 };
 
 export const TypographyRegression = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -1712,6 +1775,7 @@ export const TypographyRegression = {
 };
 
 export const TypographyRegressionNarrow = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       snapshot: semanticWorkflowDashboardSnapshot,

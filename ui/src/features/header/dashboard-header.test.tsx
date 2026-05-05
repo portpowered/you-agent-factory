@@ -87,6 +87,10 @@ describe("DashboardHeader", () => {
     });
 
     render(<DashboardHeader />);
+    const toolbar = screen.getByRole("region", { name: "dashboard summary" });
+    const heading = screen.getByRole("heading", { name: "Infinite You" });
+    const wordmark = screen.getByText("Infinite You");
+    const slider = screen.getByRole("slider", { name: "Timeline tick" });
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Export PNG",
@@ -99,6 +103,13 @@ describe("DashboardHeader", () => {
     expect(currentButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
+    expect(wordmark.className).toContain("sr-only");
+    expect(heading.textContent).toContain("∞");
+    expect(heading.textContent).toContain("U");
+    expect(toolbar.firstElementChild).toBe(heading);
+    expect(slider.closest("div")?.parentElement?.className).toContain(
+      "justify-end",
+    );
     expect(useExportDialogStore.getState().isExportDialogOpen).toBe(false);
 
     fireEvent.click(exportButton);
