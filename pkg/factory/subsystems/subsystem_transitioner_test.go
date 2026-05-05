@@ -465,6 +465,37 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(
 	assertGeneratedWorkerBatchOutcome(t, result, first, normalized[1])
 }
 
+func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesCanonicalChainingTrace(t *testing.T) {
+	now := time.Date(2026, time.April, 16, 22, 10, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
+	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"child"}]}}`
+	snapshot := workerBatchSnapshot(output)
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.CurrentChainingTraceID = "chain-source"
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.TraceID = "trace-source"
+
+	result := executeWorkerBatchTransition(t, transitioner, snapshot)
+	batch := result.GeneratedBatches[0]
+	normalized, err := factory.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true, "child": true},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeGeneratedSubmissionBatch: %v", err)
+	}
+	if len(normalized) != 1 {
+		t.Fatalf("normalized submissions = %d, want 1", len(normalized))
+	}
+	if normalized[0].CurrentChainingTraceID != "chain-source" {
+		t.Fatalf("generated current chaining trace ID = %q, want chain-source", normalized[0].CurrentChainingTraceID)
+	}
+	if len(normalized[0].PreviousChainingTraceIDs) != 1 || normalized[0].PreviousChainingTraceIDs[0] != "chain-source" {
+		t.Fatalf("generated previous chaining trace IDs = %#v, want [chain-source]", normalized[0].PreviousChainingTraceIDs)
+	}
+	if normalized[0].TraceID != "trace-source" {
+		t.Fatalf("generated legacy trace ID = %q, want trace-source", normalized[0].TraceID)
+	}
+}
+
 func executeWorkerBatchTransition(
 	t *testing.T,
 	transitioner *TransitionerSubsystem,

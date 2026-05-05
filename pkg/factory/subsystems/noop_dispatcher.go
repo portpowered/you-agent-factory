@@ -93,7 +93,7 @@ func (d *NoOpDispatcherSubsystem) Execute(_ context.Context, snapshot *interface
 			DispatchID:               uuid.NewString(),
 			TransitionID:             decision.TransitionID,
 			WorkerType:               decision.WorkerType,
-			CurrentChainingTraceID:   execution.TraceID,
+			CurrentChainingTraceID:   interfaces.CurrentChainingTraceIDFromTokens(inputTokens),
 			PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokens(inputTokens),
 			Execution:                execution,
 			InputTokens:              workers.InputTokens(inputTokens...),

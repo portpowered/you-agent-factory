@@ -28,6 +28,15 @@ func TestPreviousChainingTraceIDsFromTokens_MultiInputFanInReturnsSortedUniquePr
 	assertCanonicalTraceIDs(t, got, want)
 }
 
+func TestPreviousChainingTraceIDsFromTokens_PrefersCanonicalCurrentTraceOverLegacyTrace(t *testing.T) {
+	got := PreviousChainingTraceIDsFromTokens([]Token{
+		{Color: TokenColor{DataType: DataTypeWork, CurrentChainingTraceID: "chain-z", TraceID: "trace-a"}},
+		{Color: TokenColor{DataType: DataTypeWork, CurrentChainingTraceID: "chain-a", TraceID: "trace-z"}},
+	})
+	want := []string{"chain-a", "chain-z"}
+	assertCanonicalTraceIDs(t, got, want)
+}
+
 func TestPreviousChainingTraceIDsFromWorkItems_MultiInputFanInReturnsSortedUniquePredecessors(t *testing.T) {
 	got := PreviousChainingTraceIDsFromWorkItems([]FactoryWorkItem{
 		{ID: "work-2", TraceID: "trace-b"},
@@ -48,6 +57,15 @@ func TestPreviousChainingTraceIDsFromTokenColors_MultiInputFanInReturnsSortedUni
 	})
 	want := []string{"trace-a", "trace-z"}
 	assertCanonicalTraceIDs(t, got, want)
+}
+
+func TestCurrentChainingTraceIDFromTokens_PrefersCanonicalCurrentTraceOverLegacyTrace(t *testing.T) {
+	got := CurrentChainingTraceIDFromTokens([]Token{
+		{Color: TokenColor{DataType: DataTypeWork, WorkTypeID: "task", CurrentChainingTraceID: "chain-customer", TraceID: "trace-customer"}},
+	})
+	if got != "chain-customer" {
+		t.Fatalf("current chaining trace ID = %q, want chain-customer", got)
+	}
 }
 
 func TestCurrentChainingTraceIDFromTokens_PrefersCustomerWorkOverSystemTime(t *testing.T) {

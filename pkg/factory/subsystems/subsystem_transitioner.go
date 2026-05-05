@@ -551,7 +551,10 @@ func enrichWorkerEmittedBatchRequest(request *interfaces.WorkRequest, inputColor
 			request.Works[i].TraceID = source.TraceID
 		}
 		if request.Works[i].CurrentChainingTraceID == "" {
-			request.Works[i].CurrentChainingTraceID = request.Works[i].TraceID
+			request.Works[i].CurrentChainingTraceID = source.TraceID
+			if source.CurrentChainingTraceID != "" {
+				request.Works[i].CurrentChainingTraceID = source.CurrentChainingTraceID
+			}
 		}
 		request.Works[i].Tags = mergedWorkerBatchTags(source.Tags, request.Works[i].Tags, source, result)
 	}

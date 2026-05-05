@@ -36,7 +36,7 @@ func PreviousChainingTraceIDsFromTokens(tokens []Token) []string {
 		if token.Color.DataType == DataTypeResource {
 			continue
 		}
-		traceIDs = append(traceIDs, token.Color.TraceID)
+		traceIDs = append(traceIDs, firstNonEmptyString(token.Color.CurrentChainingTraceID, token.Color.TraceID))
 	}
 	return CanonicalChainingTraceIDs(traceIDs)
 }
@@ -49,7 +49,7 @@ func PreviousChainingTraceIDsFromTokenColors(colors []TokenColor) []string {
 		if color.DataType == DataTypeResource {
 			continue
 		}
-		traceIDs = append(traceIDs, color.TraceID)
+		traceIDs = append(traceIDs, firstNonEmptyString(color.CurrentChainingTraceID, color.TraceID))
 	}
 	return CanonicalChainingTraceIDs(traceIDs)
 }
@@ -59,7 +59,7 @@ func PreviousChainingTraceIDsFromTokenColors(colors []TokenColor) []string {
 func PreviousChainingTraceIDsFromWorkItems(items []FactoryWorkItem) []string {
 	traceIDs := make([]string, 0, len(items))
 	for _, item := range items {
-		traceIDs = append(traceIDs, item.TraceID)
+		traceIDs = append(traceIDs, firstNonEmptyString(item.CurrentChainingTraceID, item.TraceID))
 	}
 	return CanonicalChainingTraceIDs(traceIDs)
 }
@@ -98,11 +98,11 @@ func CurrentChainingTraceIDFromTokens(tokens []Token) string {
 		if token.Color.DataType == DataTypeResource || token.Color.WorkTypeID == SystemTimeWorkTypeID {
 			continue
 		}
-		return token.Color.TraceID
+		return firstNonEmptyString(token.Color.CurrentChainingTraceID, token.Color.TraceID)
 	}
 	for _, token := range tokens {
 		if token.Color.DataType != DataTypeResource {
-			return token.Color.TraceID
+			return firstNonEmptyString(token.Color.CurrentChainingTraceID, token.Color.TraceID)
 		}
 	}
 	return ""
