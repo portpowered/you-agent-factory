@@ -594,6 +594,162 @@ func TestFactoryEventHistory_RecordWorkstationEvents_PreserveChainingTraceLineag
 	assertEventHistoryResponseLineage(t, events[1])
 }
 
+func TestFactoryEventHistory_RecordWorkstationEvents_CanonicalizesFanInLineageAndPreservesFanOutOutputs(t *testing.T) {
+	eventTime := time.Date(2026, 4, 22, 18, 10, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	consumed := []interfaces.Token{
+		{
+			ID:      "tok-z",
+			PlaceID: "task:init",
+			Color: interfaces.TokenColor{
+				DataType:                 interfaces.DataTypeWork,
+				WorkID:                   "work-z",
+				WorkTypeID:               "task",
+				Name:                     "source-z",
+				RequestID:                "request-z",
+				CurrentChainingTraceID:   "trace-z",
+				PreviousChainingTraceIDs: []string{"trace-root-z"},
+				TraceID:                  "trace-z",
+			},
+		},
+		{
+			ID:      "tok-resource",
+			PlaceID: "resource:available",
+			Color: interfaces.TokenColor{
+				DataType:                 interfaces.DataTypeResource,
+				WorkTypeID:               "gpu",
+				Name:                     "gpu",
+				CurrentChainingTraceID:   "trace-resource-ignored",
+				PreviousChainingTraceIDs: []string{"trace-resource-parent"},
+				TraceID:                  "trace-resource-ignored",
+			},
+		},
+		{
+			ID:      "tok-a",
+			PlaceID: "task:init",
+			Color: interfaces.TokenColor{
+				DataType:                 interfaces.DataTypeWork,
+				WorkID:                   "work-a",
+				WorkTypeID:               "task",
+				Name:                     "source-a",
+				RequestID:                "request-a",
+				CurrentChainingTraceID:   "trace-a",
+				PreviousChainingTraceIDs: []string{"trace-root-a"},
+				TraceID:                  "trace-a",
+			},
+		},
+		{
+			ID:      "tok-z-duplicate",
+			PlaceID: "task:init",
+			Color: interfaces.TokenColor{
+				DataType:                 interfaces.DataTypeWork,
+				WorkID:                   "work-z-duplicate",
+				WorkTypeID:               "task",
+				Name:                     "source-z-duplicate",
+				RequestID:                "request-z",
+				CurrentChainingTraceID:   "trace-z",
+				PreviousChainingTraceIDs: []string{"trace-root-z"},
+				TraceID:                  "trace-z",
+			},
+		},
+	}
+	record := chainingTraceLineageDispatchRecord(consumed)
+	record.Dispatch.CurrentChainingTraceID = "trace-z"
+	record.Dispatch.PreviousChainingTraceIDs = []string{"trace-a", "trace-z"}
+	record.Dispatch.Execution.WorkIDs = []string{"work-z", "work-a", "work-z-duplicate"}
+	history.RecordWorkstationRequest(12, record, eventTime)
+	history.RecordWorkstationResponse(13, chainingTraceLineageResult(), interfaces.CompletedDispatch{
+		DispatchID:      "dispatch-lineage",
+		TransitionID:    "build",
+		WorkstationName: "Build",
+		Outcome:         interfaces.OutcomeAccepted,
+		EndTime:         eventTime,
+		Duration:        2 * time.Second,
+		ConsumedTokens:  consumed,
+		OutputMutations: []interfaces.TokenMutationRecord{
+			{
+				Type: interfaces.MutationCreate,
+				Token: &interfaces.Token{
+					ID:      "tok-output-a",
+					PlaceID: "task:review",
+					Color: interfaces.TokenColor{
+						DataType:                 interfaces.DataTypeWork,
+						WorkID:                   "work-output-a",
+						WorkTypeID:               "task",
+						Name:                     "fan-out-a",
+						CurrentChainingTraceID:   "trace-output-a",
+						PreviousChainingTraceIDs: []string{"not-used"},
+						TraceID:                  "trace-output-a",
+					},
+				},
+			},
+			{
+				Type: interfaces.MutationCreate,
+				Token: &interfaces.Token{
+					ID:      "tok-output-b",
+					PlaceID: "task:done",
+					Color: interfaces.TokenColor{
+						DataType:               interfaces.DataTypeWork,
+						WorkID:                 "work-output-b",
+						WorkTypeID:             "task",
+						Name:                   "fan-out-b",
+						CurrentChainingTraceID: "trace-output-b",
+						TraceID:                "trace-output-b",
+					},
+				},
+			},
+			{
+				Type: interfaces.MutationCreate,
+				Token: &interfaces.Token{
+					ID:      "tok-resource-out",
+					PlaceID: "gpu:available",
+					Color: interfaces.TokenColor{
+						DataType:   interfaces.DataTypeResource,
+						WorkTypeID: "gpu",
+						Name:       "gpu",
+					},
+				},
+			},
+		},
+	})
+
+	events := history.Events()
+	if len(events) != 2 {
+		t.Fatalf("event count = %d, want 2", len(events))
+	}
+	requestPayload, err := events[0].Payload.AsDispatchRequestEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch request payload: %v", err)
+	}
+	if got := stringSliceValueForEventHistoryTest(requestPayload.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+		t.Fatalf("dispatch request previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
+	if len(requestPayload.Inputs) != 3 {
+		t.Fatalf("dispatch request inputs = %#v, want three non-resource work refs", requestPayload.Inputs)
+	}
+	for _, ref := range requestPayload.Inputs {
+		if ref.WorkId == "" {
+			t.Fatalf("dispatch request input ref = %#v, want non-empty work ID", ref)
+		}
+	}
+
+	responsePayload, err := events[1].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if got := stringSliceValueForEventHistoryTest(responsePayload.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+		t.Fatalf("dispatch response previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
+	if responsePayload.OutputWork == nil || len(*responsePayload.OutputWork) != 2 {
+		t.Fatalf("dispatch response output work = %#v, want two work outputs", responsePayload.OutputWork)
+	}
+	for _, work := range *responsePayload.OutputWork {
+		if got := stringSliceValueForEventHistoryTest(work.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+			t.Fatalf("output work previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+		}
+	}
+}
+
 func chainingTraceLineageConsumedTokens() []interfaces.Token {
 	return []interfaces.Token{
 		{

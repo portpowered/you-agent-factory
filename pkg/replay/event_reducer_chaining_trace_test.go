@@ -192,3 +192,72 @@ func TestReplayDispatchFromEvent_FallsBackToPayloadChainingLineageForLegacyEvent
 		t.Fatalf("replayed dispatch previous chaining trace IDs = %#v, want [payload-a payload-z]", got)
 	}
 }
+
+func TestReplayDispatchFromEvent_DerivesCanonicalPreviousLineageFromMixedInputs(t *testing.T) {
+	payload := factoryapi.DispatchRequestEventPayload{
+		TransitionId: "merge",
+		Inputs: []factoryapi.DispatchConsumedWorkRef{
+			{WorkId: "work-z"},
+			{WorkId: "work-a"},
+			{WorkId: "work-z-duplicate"},
+		},
+		Resources: &[]factoryapi.Resource{{Name: "gpu"}},
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromDispatchRequestEventPayload(payload); err != nil {
+		t.Fatalf("encode dispatch payload: %v", err)
+	}
+
+	replayed, err := replayDispatchFromEvent(factoryapi.Factory{}, factoryapi.FactoryEvent{
+		Id:            "factory-event/dispatch-created/dispatch-fan-in",
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeDispatchRequest,
+		Context: factoryapi.FactoryEventContext{
+			EventTime:  time.Date(2026, 4, 22, 19, 9, 0, 0, time.UTC),
+			Tick:       8,
+			DispatchId: stringPtrIfNotEmpty("dispatch-fan-in"),
+			TraceIds:   slicePtr([]string{"trace-z", "trace-a", "trace-z"}),
+			WorkIds:    slicePtr([]string{"work-z", "work-a", "work-z-duplicate"}),
+		},
+		Payload: union,
+	}, map[string]interfaces.Work{
+		"work-z": {
+			WorkID:                   "work-z",
+			Name:                     "work-z",
+			WorkTypeID:               "task",
+			CurrentChainingTraceID:   "trace-z",
+			PreviousChainingTraceIDs: []string{"trace-root-z"},
+			TraceID:                  "trace-z",
+		},
+		"work-a": {
+			WorkID:                   "work-a",
+			Name:                     "work-a",
+			WorkTypeID:               "task",
+			CurrentChainingTraceID:   "trace-a",
+			PreviousChainingTraceIDs: []string{"trace-root-a"},
+			TraceID:                  "trace-a",
+		},
+		"work-z-duplicate": {
+			WorkID:                   "work-z-duplicate",
+			Name:                     "work-z-duplicate",
+			WorkTypeID:               "task",
+			CurrentChainingTraceID:   "trace-z",
+			PreviousChainingTraceIDs: []string{"trace-root-z"},
+			TraceID:                  "trace-z",
+		},
+	})
+	if err != nil {
+		t.Fatalf("replayDispatchFromEvent: %v", err)
+	}
+
+	if got := replayed.dispatch.PreviousChainingTraceIDs; len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
+		t.Fatalf("replayed dispatch previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
+	tokens := workers.WorkDispatchInputTokens(replayed.dispatch)
+	if len(tokens) != 4 {
+		t.Fatalf("replayed input tokens = %#v, want three work tokens plus one resource token", tokens)
+	}
+	if tokens[3].Color.DataType != interfaces.DataTypeResource {
+		t.Fatalf("replayed resource token data type = %q, want resource", tokens[3].Color.DataType)
+	}
+}
