@@ -488,6 +488,9 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesCanonicalCha
 	if normalized[0].CurrentChainingTraceID != "chain-source" {
 		t.Fatalf("generated current chaining trace ID = %q, want chain-source", normalized[0].CurrentChainingTraceID)
 	}
+	if normalized[0].ChainingTraceDepth != 2 {
+		t.Fatalf("generated chaining trace depth = %d, want 2", normalized[0].ChainingTraceDepth)
+	}
 	if len(normalized[0].PreviousChainingTraceIDs) != 1 || normalized[0].PreviousChainingTraceIDs[0] != "chain-source" {
 		t.Fatalf("generated previous chaining trace IDs = %#v, want [chain-source]", normalized[0].PreviousChainingTraceIDs)
 	}
@@ -568,6 +571,9 @@ func assertGeneratedWorkerBatchSubmissions(
 	if first.TraceID != "trace-source" || first.CurrentChainingTraceID != "trace-source" {
 		t.Fatalf("first generated trace fields = %#v, want trace-source", first)
 	}
+	if first.ChainingTraceDepth != 2 {
+		t.Fatalf("first generated chaining trace depth = %d, want 2", first.ChainingTraceDepth)
+	}
 	if len(first.PreviousChainingTraceIDs) != 1 || first.PreviousChainingTraceIDs[0] != "trace-source" {
 		t.Fatalf("generated previous chaining trace IDs = %#v, want [trace-source]", first.PreviousChainingTraceIDs)
 	}
@@ -607,6 +613,9 @@ func assertGeneratedWorkerBatchOutcome(
 
 	if second.CurrentChainingTraceID != "trace-source" {
 		t.Fatalf("second generated current chaining trace ID = %q, want trace-source", second.CurrentChainingTraceID)
+	}
+	if second.ChainingTraceDepth != 2 {
+		t.Fatalf("second generated chaining trace depth = %d, want 2", second.ChainingTraceDepth)
 	}
 	if len(second.PreviousChainingTraceIDs) != 1 || second.PreviousChainingTraceIDs[0] != "trace-source" {
 		t.Fatalf("second generated previous chaining trace IDs = %#v, want [trace-source]", second.PreviousChainingTraceIDs)

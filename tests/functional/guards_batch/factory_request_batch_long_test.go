@@ -788,6 +788,9 @@ func assertGeneratedBranchWork(
 	if eventString(work.CurrentChainingTraceId) != wantTrace {
 		t.Fatalf("generated work %q current chaining trace ID = %q, want %q", wantWorkID, eventString(work.CurrentChainingTraceId), wantTrace)
 	}
+	if eventInt(work.ChainingTraceDepth) != 3 {
+		t.Fatalf("generated work %q chaining trace depth = %d, want 3", wantWorkID, eventInt(work.ChainingTraceDepth))
+	}
 	assertStringSliceEqual(t, "generated work previous chaining trace IDs", eventStringSlice(work.PreviousChainingTraceIds), []string{"chain-root"})
 
 	tags := eventTags(work.Tags)
@@ -869,6 +872,9 @@ func assertThreeWorkstationMergeEvents(t *testing.T, events []factoryapi.Factory
 	if eventString(output.CurrentChainingTraceId) != "chain-z" {
 		t.Fatalf("merge output current chaining trace ID = %q, want chain-z", eventString(output.CurrentChainingTraceId))
 	}
+	if eventInt(output.ChainingTraceDepth) != 4 {
+		t.Fatalf("merge output chaining trace depth = %d, want 4", eventInt(output.ChainingTraceDepth))
+	}
 	assertStringSliceEqual(t, "merge output previous chaining trace IDs", eventStringSlice(output.PreviousChainingTraceIds), []string{"chain-a", "chain-z"})
 	if eventString(output.WorkTypeName) != "merged" {
 		t.Fatalf("merge output work type = %q, want merged", eventString(output.WorkTypeName))
@@ -926,13 +932,31 @@ func assertThreeWorkstationWorldStateAndResources(
 	if merged.CurrentChainingTraceID != "chain-z" {
 		t.Fatalf("world state merged output current chaining trace ID = %q, want chain-z", merged.CurrentChainingTraceID)
 	}
+	if merged.ChainingTraceDepth != 4 {
+		t.Fatalf("world state merged output chaining trace depth = %d, want 4", merged.ChainingTraceDepth)
+	}
 	assertStringSliceEqual(t, "world state merged output previous chaining trace IDs", merged.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
 
 	projectedMerged, ok := worldState.WorkItemsByID[merged.ID]
 	if !ok {
 		t.Fatalf("world state missing projected merged work item %q", merged.ID)
 	}
+	if projectedMerged.ChainingTraceDepth != 4 {
+		t.Fatalf("projected merged work chaining trace depth = %d, want 4", projectedMerged.ChainingTraceDepth)
+	}
 	assertStringSliceEqual(t, "projected merged work previous chaining trace IDs", projectedMerged.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
+
+	mergedTokens := h.Marking().TokensInPlace("merged:complete")
+	if len(mergedTokens) != 1 {
+		t.Fatalf("merged tokens in merged:complete = %d, want 1", len(mergedTokens))
+	}
+	if mergedTokens[0].Color.ChainingTraceDepth != 4 {
+		t.Fatalf("merged token chaining trace depth = %d, want 4", mergedTokens[0].Color.ChainingTraceDepth)
+	}
+	if mergedTokens[0].Color.CurrentChainingTraceID != "chain-z" {
+		t.Fatalf("merged token current chaining trace ID = %q, want chain-z", mergedTokens[0].Color.CurrentChainingTraceID)
+	}
+	assertStringSliceEqual(t, "merged token previous chaining trace IDs", mergedTokens[0].Color.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
 
 	resourceTokens := h.Marking().TokensInPlace("slot:available")
 	if len(resourceTokens) != 1 {
@@ -964,6 +988,9 @@ func assertProjectedGeneratedBranch(
 	}
 	if item.CurrentChainingTraceID != wantTrace {
 		t.Fatalf("projected generated work %q current chaining trace ID = %q, want %q", wantWorkID, item.CurrentChainingTraceID, wantTrace)
+	}
+	if item.ChainingTraceDepth != 3 {
+		t.Fatalf("projected generated work %q chaining trace depth = %d, want 3", wantWorkID, item.ChainingTraceDepth)
 	}
 	assertStringSliceEqual(t, "projected generated work previous chaining trace IDs", item.PreviousChainingTraceIDs, []string{"chain-root"})
 	if item.Tags["branch"] != wantBranch {
@@ -1344,6 +1371,13 @@ func dispatchCreatedIncludesWork(payload factoryapi.DispatchRequestEventPayload,
 func eventString(value *string) string {
 	if value == nil {
 		return ""
+	}
+	return *value
+}
+
+func eventInt(value *int) int {
+	if value == nil {
+		return 0
 	}
 	return *value
 }
