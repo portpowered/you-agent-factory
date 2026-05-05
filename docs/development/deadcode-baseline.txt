@@ -14,13 +14,7 @@ tests/functional/guards_batch/helpers_test.go:16:6: unreachable func: writeAgent
 tests/functional/guards_batch/helpers_test.go:28:6: unreachable func: assertArgsContainSequence
 tests/functional/guards_batch/helpers_test.go:47:6: unreachable func: providerErrorCorpusEntryForTest
 tests/functional/guards_batch/helpers_test.go:132:29: unreachable func: panickingExecutor.Execute
-tests/functional/internal/support/events.go:80:6: unreachable func: DispatchInputsIncludeWorkNameFromHistory
-tests/functional/internal/support/events.go:97:6: unreachable func: dispatchInputWorksFromHistory
-tests/functional/internal/support/events.go:115:6: unreachable func: workRequestWorksByID
-tests/functional/internal/support/events.go:136:6: unreachable func: dispatchInputWorkIDs
-tests/functional/internal/support/events.go:150:6: unreachable func: appendUniqueDispatchWorkID
-tests/functional/internal/support/events.go:162:6: unreachable func: LastFactoryEventTick
-tests/functional/internal/support/events.go:172:6: unreachable func: eventStringSlice
+tests/functional/internal/support/events.go:145:6: unreachable func: LastFactoryEventTick
 tests/functional/internal/support/fixtures.go:136:6: unreachable func: UpdateFactoryConfig
 tests/functional/internal/support/harness.go:53:6: unreachable func: CountFactoryEvents
 tests/functional/internal/support/provider.go:33:6: unreachable func: AcceptedCommandResults
