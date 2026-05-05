@@ -65,14 +65,12 @@ func TestReplayEventStreamArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, copiedFactoryDir, copiedFactoryDir, artifact)
 
-	h := testutil.AssertReplaySucceeds(
+	h := assertReplaySucceedsWithCustomizedHarness(
 		t,
 		artifactPath,
 		30*time.Second,
-		testutil.WithReplayHarnessDir(copiedFactoryDir),
-		testutil.WithReplayHarnessServiceOptions(
-			testutil.WithExecutionBaseDir(copiedFactoryDir),
-		),
+		copiedFactoryDir,
+		testutil.WithExecutionBaseDir(copiedFactoryDir),
 	)
 	if h.Artifact == nil {
 		t.Fatal("replay harness artifact = nil, want loaded replay artifact")
@@ -328,14 +326,12 @@ func TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopied
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, copiedFactoryDir, copiedFactoryDir, artifact)
 
-	h := testutil.AssertReplaySucceeds(
+	h := assertReplaySucceedsWithCustomizedHarness(
 		t,
 		artifactPath,
 		30*time.Second,
-		testutil.WithReplayHarnessDir(copiedFactoryDir),
-		testutil.WithReplayHarnessServiceOptions(
-			testutil.WithExecutionBaseDir(copiedFactoryDir),
-		),
+		copiedFactoryDir,
+		testutil.WithExecutionBaseDir(copiedFactoryDir),
 	)
 	if h.Artifact == nil {
 		t.Fatal("replay harness artifact = nil, want loaded replay artifact")

@@ -65,10 +65,10 @@ func TestReplayRegressionHarness_AssertsExpectedDivergence(t *testing.T) {
 	}
 }
 
-func assertReplayDiverges(t *testing.T, artifactPath string, timeout time.Duration, opts ...testutil.ReplayHarnessOption) replay.DivergenceReport {
+func assertReplayDiverges(t *testing.T, artifactPath string, timeout time.Duration) replay.DivergenceReport {
 	t.Helper()
 
-	h := testutil.NewReplayHarness(t, artifactPath, opts...)
+	h := testutil.NewReplayHarness(t, artifactPath)
 	err := h.RunUntilComplete(timeout)
 	if err == nil {
 		t.Fatal("assertReplayDiverges: replay succeeded, expected divergence")

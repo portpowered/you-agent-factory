@@ -15,18 +15,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
-func runRecordedAdhocReplay(t *testing.T, artifactPath string, replayScheduler scheduler.Scheduler) ([]interfaces.FactoryDispatchRecord, *testutil.ReplayHarness) {
+func runRecordedAdhocReplay(t *testing.T, artifactPath string, replayScheduler scheduler.Scheduler) ([]interfaces.FactoryDispatchRecord, *replayContractHarness) {
 	t.Helper()
 
 	var dispatches []interfaces.FactoryDispatchRecord
-	h := testutil.AssertReplaySucceeds(t, artifactPath, 30*time.Second,
-		testutil.WithReplayHarnessServiceOptions(
-			testutil.WithExtraOptions(
-				factory.WithScheduler(replayScheduler),
-				factory.WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
-					dispatches = append(dispatches, record)
-				}),
-			),
+	h := assertReplaySucceedsWithCustomizedHarness(
+		t,
+		artifactPath,
+		30*time.Second,
+		"",
+		testutil.WithExtraOptions(
+			factory.WithScheduler(replayScheduler),
+			factory.WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
+				dispatches = append(dispatches, record)
+			}),
 		),
 	)
 
@@ -170,7 +172,7 @@ func dispatchID(dispatch interfaces.FactoryDispatchRecord) string {
 	return dispatch.Dispatch.DispatchID
 }
 
-func assertReplayFinishedWithoutCompletedOrActiveDispatches(t *testing.T, h *testutil.ReplayHarness) {
+func assertReplayFinishedWithoutCompletedOrActiveDispatches(t *testing.T, h *replayContractHarness) {
 	t.Helper()
 
 	snapshot, err := h.Service.GetEngineStateSnapshot()
