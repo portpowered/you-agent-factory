@@ -153,10 +153,16 @@ Use `pkg/testutil` so regression tests exercise service replay mode, embedded co
    h.Service.Assert().HasTokenInPlace("task:complete")
    ```
 
-4. For intentional mismatch coverage, mutate a copied artifact and assert structured divergence.
+4. For intentional mismatch coverage, mutate a copied artifact and assert structured divergence from the owning replay contract test or replay-lane helper rather than expanding shared `pkg/testutil` with a replay-only wrapper.
 
    ```go
-   report := testutil.AssertReplayDiverges(t, divergentPath, 10*time.Second)
+   h := testutil.NewReplayHarness(t, divergentPath)
+   err := h.RunUntilComplete(10 * time.Second)
+   var divergence *replay.DivergenceError
+   if !errors.As(err, &divergence) {
+   	t.Fatalf("error = %v, want replay divergence", err)
+   }
+   report := divergence.Report
    if report.Category != replay.DivergenceCategoryDispatchMismatch {
    	t.Fatalf("category = %q", report.Category)
    }

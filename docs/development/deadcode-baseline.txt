@@ -4,7 +4,6 @@ internal/testpath/artifact_contract.go:255:6: unreachable func: MustClassifiedAr
 pkg/testutil/artifact_contract.go:41:6: unreachable func: MustClassifiedArtifactPath
 pkg/testutil/replay_harness.go:36:6: unreachable func: WithReplayHarnessDir
 pkg/testutil/replay_harness.go:44:6: unreachable func: WithReplayHarnessServiceOptions
-pkg/testutil/replay_harness.go:147:6: unreachable func: AssertReplayDiverges
 pkg/testutil/service_harness.go:121:6: unreachable func: WithExecutionBaseDir
 pkg/testutil/testutil.go:81:6: unreachable func: WriteSeedMarkdownFile
 pkg/testutil/testutil.go:109:6: unreachable func: WriteSeedBatchFile

@@ -140,21 +140,3 @@ func AssertReplaySucceeds(t *testing.T, artifactPath string, timeout time.Durati
 	}
 	return h
 }
-
-// AssertReplayDiverges runs a replay artifact and returns the structured
-// divergence report. It fails the test if replay succeeds or fails for an
-// unrelated reason.
-func AssertReplayDiverges(t *testing.T, artifactPath string, timeout time.Duration, opts ...ReplayHarnessOption) replay.DivergenceReport {
-	t.Helper()
-
-	h := NewReplayHarness(t, artifactPath, opts...)
-	err := h.RunUntilComplete(timeout)
-	if err == nil {
-		t.Fatal("AssertReplayDiverges: replay succeeded, expected divergence")
-	}
-	var divergence *replay.DivergenceError
-	if !errors.As(err, &divergence) {
-		t.Fatalf("AssertReplayDiverges: error = %v, want replay divergence", err)
-	}
-	return divergence.Report
-}

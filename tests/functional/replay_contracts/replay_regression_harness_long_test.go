@@ -3,6 +3,7 @@
 package replay_contracts
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -52,7 +53,7 @@ func TestReplayRegressionHarness_AssertsExpectedDivergence(t *testing.T) {
 		t.Fatalf("save divergent replay artifact: %v", err)
 	}
 
-	report := testutil.AssertReplayDiverges(t, divergentPath, 10*time.Second)
+	report := assertReplayDiverges(t, divergentPath, 10*time.Second)
 	if report.Category != replay.DivergenceCategoryDispatchMismatch {
 		t.Fatalf("divergence category = %q, want %q", report.Category, replay.DivergenceCategoryDispatchMismatch)
 	}
@@ -62,6 +63,21 @@ func TestReplayRegressionHarness_AssertsExpectedDivergence(t *testing.T) {
 	if report.Tick != expectedTick {
 		t.Fatalf("divergence tick = %d, want %d", report.Tick, expectedTick)
 	}
+}
+
+func assertReplayDiverges(t *testing.T, artifactPath string, timeout time.Duration, opts ...testutil.ReplayHarnessOption) replay.DivergenceReport {
+	t.Helper()
+
+	h := testutil.NewReplayHarness(t, artifactPath, opts...)
+	err := h.RunUntilComplete(timeout)
+	if err == nil {
+		t.Fatal("assertReplayDiverges: replay succeeded, expected divergence")
+	}
+	var divergence *replay.DivergenceError
+	if !errors.As(err, &divergence) {
+		t.Fatalf("assertReplayDiverges: error = %v, want replay divergence", err)
+	}
+	return divergence.Report
 }
 
 func mutateFirstDispatchCreatedEvent(t *testing.T, artifact *interfaces.ReplayArtifact, mutate func(*factoryapi.DispatchRequestEventPayload)) (string, int) {
