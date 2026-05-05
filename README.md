@@ -10,9 +10,10 @@ With __Infinite You__, you codify your entire process of how you do code reviews
 
 That way, you can run 10-100+ agents at once, and have even more leverage to do more stuff.
 
-Alternatives like shell scripts in ralph, and autoresearcher, are a bit more brittle and have a tendency to fall over as you extend them for new stuff.
+Alternatives shell scripts in ralph, and autoresearcher, are a bit more brittle and have a tendency to fall over as you extend them for new stuff.
+We formalize the loops/iterations and flows into a stabler system.
 
-## 📦 Install
+## Install
 
 
 1. install [codex](https://developers.openai.com/codex/cli) `npm i -g @openai/codex`
@@ -29,16 +30,6 @@ Alternatives like shell scripts in ralph, and autoresearcher, are a bit more bri
 infinite-you init --executor claude --dir my-factory
 infinite-you docs workstation
 ```
-## Customization 
-
-See [authoring-workflows](./docs/authoring-workflows.md) for the full configuration guide.
-Infinite you lets you customize your flow however you want. 
-
-The overall system of how __infinite you__ works is relatively simple. 
-1. You have work. 
-2. Work goes to workstations where the work gets worked on by workers (agents, or just shell scripts)
-3. When the workstations complete the, work is converted to other work.  
-4. __Infinite you__ stops when no work remains.
 
 
 ## Example
@@ -68,6 +59,16 @@ flowchart LR
 
 ```
 
+## Customization 
+
+See [authoring-workflows](./docs/authoring-workflows.md) for the full configuration guide.
+Infinite you lets you customize your flow however you want. 
+
+The overall system of how __infinite you__ works is relatively simple. 
+1. You have work. 
+2. Work goes to workstations where the work gets worked on by workers (agents, or just shell scripts)
+3. When the workstations complete the, work is converted to other work.  
+4. __Infinite you__ stops when no work remains.
 
 
 ## Shipped example factories
