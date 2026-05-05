@@ -1,8 +1,6 @@
 # Infinite You
 
 [![CI](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml)
-[![Release Candidate Verification](https://github.com/portpowered/infinite-you/actions/workflows/release-candidate.yml/badge.svg)](https://github.com/portpowered/infinite-you/actions/workflows/release-candidate.yml)
-[![Release Publish and Verification](https://github.com/portpowered/infinite-you/actions/workflows/release.yml/badge.svg)](https://github.com/portpowered/infinite-you/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/portpowered/infinite-you?display_name=tag)](https://github.com/portpowered/infinite-you/releases)
 [![Go Version](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE.md)
@@ -13,12 +11,12 @@ Infinite You is an AI agent factory. It orchestrates AI agents for you so you ca
 
 Leverage. 
 
-With __Infinite You__, you codify your entire process of how you do code reviews, write plans, into some JSON and markdown files.
+With __Infinite You__, you codify your entire process of how you do code reviews, write plans, into JSON and markdown files, rather than system specific bash, powershell, etc.
 
-That way, you can run 10-100+ agents at once, and have even more leverage to do more stuff.
+With __Infinite you__ you can run 10-100+ agents at once, duplicating the processes you would typically perform yourself, so that you don't havet o.
 
-Alternatives shell scripts in ralph, and autoresearcher, are a bit more brittle and have a tendency to fall over as you extend them for new stuff.
-We formalize the loops/iterations and flows into a stabler system.
+Alternatives shell scripts in ralph, and autoresearcher, are a bit more brittle and have a tendency to fall over as you extend them.
+We formalize the loops/iterations and flows into a testable code base that won't fall over as much.
 
 ## Install
 
