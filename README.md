@@ -1,162 +1,56 @@
 # Infinite You
 
-Infinite You is an AI agent factory. It orchestrates AI agents for you so you
-can do more work without doing everything manually.
+Infinite You is an AI agent factory. It orchestrates AI agents for you so you can do more work without doing everything manually.
 
 ## Why?
 
-As engineers push to use more AI, they are using a lot of brain power
-manually managing 1-8 agents. With __Infinite You__, you get the agents coordinate/write code/review for you. You write out how the flow should work, give the agents instructions and they run. 
+Leverage. 
+
+With __Infinite You__, you codify your entire process of how you do code reviews, write plans, into some JSON and markdown files.
+
 That way, you can run 10-100+ agents at once, and have even more leverage to do more stuff.
+
+Alternatives like shell scripts in ralph, and autoresearcher, are a bit more brittle and have a tendency to fall over as you extend them for new stuff.
 
 ## 📦 Install
 
-Install the local Codex provider used by your environment and authenticate it
-first, then choose the install path that matches your machine.
 
-### Homebrew cask for macOS
+1. install [codex](https://developers.openai.com/codex/cli) `npm i -g @openai/codex`
+2. install :`curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh`
+3. go `cd your-project-directory`
+3. run `infinite-you`
+4. submit a work task on the website interface, like "go write a report on my codebase at TEST.md", 
+5. wait till complete
+6. finished
 
-Use Homebrew when you are on macOS and want the standard package-manager flow:
 
-```bash
-brew install --cask portpowered/cask/infinite-you
+### claude variant
 ```
-
-The cask installs the packaged `infinite-you` release binary into Homebrew's
-normal binary location. The binary is not code signed or notarized yet. The
-cask tries to clear the macOS quarantine attribute automatically, but if macOS
-still blocks launch run:
-
-```bash
-xattr -dr com.apple.quarantine "$(brew --prefix)/bin/infinite-you"
-```
-
-### `install.sh` for macOS and Linux
-
-Use the hosted installer when you want the packaged release binary without
-manual archive selection or unpacking:
-
-```bash
-curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh
-```
-
-`install.sh` supports macOS and Linux on `amd64` and `arm64`, verifies the
-published checksum before extraction, installs into a user-writable directory,
-and prints the final binary path plus `PATH` guidance when needed. On macOS it
-also prints the exact `xattr` command above if quarantine removal still needs a
-manual retry.
-
-### `go install` for Go toolchain users
-
-Use `go install` only when you already have a working Go toolchain and want the
-CLI built from source instead of the packaged release artifact:
-
-```bash
-go install github.com/portpowered/infinite-you/cmd/factory@latest
-```
-
-This path installs the current `cmd/factory` entrypoint from source. Because
-`go install` names the binary from the leaf package directory, this command
-installs `factory` into your `GOBIN` rather than `infinite-you`.
-
-### Manual release archive fallback
-
-If you cannot use Homebrew, `install.sh`, or `go install`, you can still
-download a release archive manually from GitHub Releases, unpack it, and place
-`infinite-you` on your `PATH`.
-
-If you are working from a local checkout instead, build and install the binary:
-
-```bash
-git clone https://github.com/portpowered/infinite-you.git
-cd infinite-you
-make install     # installs to $GOBIN
-```
-
-The packaged release archives and docs examples use the `infinite-you` command
-surface:
-
-```bash
-infinite-you
-```
-
-```bash
-infinite-you init
 infinite-you init --executor claude --dir my-factory
-infinite-you docs
 infinite-you docs workstation
 ```
+## Customization 
 
-Supported docs topics are `config`, `workstation`, `workers`, `resources`,
-`batch-work`, and `templates`.
+See [authoring-workflows](./docs/authoring-workflows.md) for the full configuration guide.
+Infinite you lets you customize your flow however you want. 
+
+The overall system of how __infinite you__ works is relatively simple. 
+1. You have work. 
+2. Work goes to workstations where the work gets worked on by workers (agents, or just shell scripts)
+3. When the workstations complete the, work is converted to other work.  
+4. __Infinite you__ stops when no work remains.
 
 
 ## Example
+Here's an example of the factory for infinite-you dispatching roughly 5-10 agents. 
+
 ![](docs/resources/dashboard.gif)
-## 🚀 Quickstart
 
-1) Go to the repository where you want to run the workflow:
-```bash
-cd ~/src/sample-project
-```
-
-2) Start the default starter factory:
-```bash
-infinite-you
-```
-
-With no arguments, `infinite-you` creates or reuses a `./factory` directory and opens up the dashboard.
-
-If you want to scaffold the starter layout without launching the runtime, use:
-```bash
-infinite-you init
-infinite-you init --executor claude --dir my-factory
-```
-
-Supported starter scaffold options are `codex` and `claude`.
-
-3. Add a Markdown task from another terminal:
-```bash
-printf "Fix the lint issues\n" > factory/inputs/task/default/my-request.md
-```
-
-The factory watches `factory/inputs/task/default`, picks up new Markdown or
-JSON files, and dispatches them through the default Codex-backed workflow.
-
-## Custom inits
-If you want to create the starter files explicitly before you run the factory, use `infinite-you init`:
-
-```bash
-# Default starter scaffold (Codex-backed)
-infinite-you init
-
-# Claude-backed default scaffold
-infinite-you init --executor claude --dir my-factory
-
-# Dedicated Ralph Loop
-infinite-you init --type ralph --dir ralph-factory
-infinite-you run --dir ralph-factory
-printf "Create a minimal release-planning loop for a document processing service.\nGenerate a human-readable PRD, a matching Ralph JSON plan, and an execution loop that completes one story per iteration until the work is done.\nKeep the plan product-neutral unless the customer request names a specific product.\n" > ralph-factory/inputs/request/default/release-planning-loop.md
-```
-
-## Docs
-
-```bash
-infinite-you docs
-infinite-you docs workstation
-infinite-you docs batch-work
-etc
-```
-
-Supported docs topics are `config`, `workstation`, `workers`, `resources`,
-`batch-work`, and `templates`.
 
 ## How It Works
 
-The factory ingests files or API submissions as work items, then moves that
-work through workstations that run workers and change the work state.
 
-The default no-argument starter flow looks like this:
+The default no-argument starter flow looks like below: you give it a task, it spawns a basic agent CLI run and does stuff. 
 ```mermaid
 flowchart LR
    classDef place fill:#000,stroke:#333,color:#fff,stroke-width:2px
@@ -174,73 +68,81 @@ flowchart LR
 
 ```
 
-From there, you can build multi-step pipelines, review loops with rejection
-feedback, fan-out/fan-in, and guarded loop breakers.
-
-- See [authoring-workflows](./docs/authoring-workflows.md) for the full configuration guide.
-- See [examples/simple-tasks](./examples/simple-tasks/README.md) for a runnable review-loop example.
-
-
-##  CLI Commands
-
-```bash
-infinite-you          # Bootstrap ./factory and keep the default factory running
-infinite-you docs     # List packaged markdown reference topics
-infinite-you docs config  # Print the packaged config reference page
-infinite-you init     # Create the default single-step scaffold (--executor codex|claude, default: codex)
-infinite-you init --type ralph --dir ralph-factory  # Create the minimal Ralph PRD-to-execution scaffold
-infinite-you run      # Load workflow and run the factory engine in explicit batch mode
-infinite-you config flatten ./factory  # Write canonical camelCase single-file factory JSON to stdout
-infinite-you config expand ./factory.json  # Write split factory files beside factory.json
-infinite-you submit --work-type-name <work-type-name> --payload <path>  # Submit work to a running factory
-```
-
-Common flags:
-- `--dir <path>` — factory base directory (default: `factory`)
-- `--with-mock-workers [config]` — test workflows with deterministic mock workers; omit `config` for default accept behavior. See [Test Workflows With Mock Workers](./docs/authoring-workflows.md#test-workflows-with-mock-workers).
-- `--work <path>` — path to an initial `FACTORY_REQUEST_BATCH` JSON file to submit on startup
-- `--record <path>` — stream a replay artifact for the current run
-- `--replay <path>` — replay a run from an existing replay artifact
-
-## Key Concepts
-
-- 🗂️ **Work types** — categories of work (e.g., `task`, `story`, `request`). Denotes what states each piece of work can have. 
-- 👷 **Workers** — executors that do the work. Works on work. 
-- 🔧 **Workstations** — Places that transform work. Workers work at workstations to change work from one state to another. 
-- 🧰 **Resources** — concurrency constraints (e.g., limit simultaneous agent slots).
-- 🏭 **Factory** — the complete system: work, workers, workstations, resources.
-
-## Directory Structure
-
-A factory is a self-contained directory:
-
-```
-sample-factory/
-├── factory.json        # Workflow definition: work types, workers, workstations, resources
-├── inputs/             # Drop files here to submit work
-│   └── default/    # One directory per work type
-│       └── <channel>/  # Optional channel subdirectory (defaults to "default")
-├── workers/
-│   └── <worker-name>/
-│       └── AGENTS.md   # Worker configuration (model, modelProvider, executorProvider, system prompt)
-└── workstations/
-    └── <station-name>/
-        └── AGENTS.md   # Task instructions (prompt template with variable substitution)
-```
 
 
 ## Shipped example factories
 
-- [examples/basic/factory](./examples/basic/factory/README.md) — minimal
-  single-step task workflow.
-- [infinite-you's factory](./factory/factory.json) - this is the factory that we use to boostrap.
-- [examples/simple-tasks](./examples/simple-tasks/README.md) — execution and
-  review loop with guarded loop breakers.
-- [examples/write-code-review](./examples/write-code-review/README.md) —
-  structured input and code-review workflow example.
-- [examples/thought-idea--plan-work-review](./examples/thought-idea--plan-work-review/README.md) —
-  multi-stage idea, planning, and review workflow.
+### [examples/basic/factory](./examples/basic/factory/README.md)
 
-## Development
+Single-step task workflow.
 
-Start with the [Infinite You Development Guide](./docs/development/development.md) before changing runtime code, workflow behavior, dashboard assets, replay, or tests. It owns the local command list, package-specific verification gates, and Infinite You gotchas.
+### [infinite-you's factory](./factory/factory.json)
+
+This is the factory that we use to boostrap. You can see all the PRs on this project run on this. 
+
+This is a fairly complex, but at a high level, you give it an input, it turns it into a plan, dispatches it into a worktree, runs a pr. 
+
+### [write-code-review](./examples/write-code-review/README.md) 
+
+given an input, it writes the code, and does a review. 
+
+### [thought idea plan work review](./examples/thought-idea--plan-work-review/README.md)
+
+Multi-stage idea, planning, and review workflow.
+
+This does given a thought you write out, it generates a plan, writes a iterative worker that runs through all the work items and dispatches them, and reviews
+
+## Alternatives
+
+Generally, the impetus for writing this is i wanted a lightweight orchestrator that could be used for whatever workflow i wanted. 
+To that end, the existing systems were too heavy, or too opinionated on their flows. 
+
+With __infinite you__, you just run a binary, you can check in the workflow/AGENT files and that's it.
+
+
+| Program          | Recursion, FanIn, Stateful | Custom workflows | Agent harness support   | Just a file   | Durable workflows | Relatively stable |
+| ---------------- |:--------------------------:|:----------------:|:-----------------------:|:-------------:|:-----------------:|------------------:|
+| Infinite you     |             X              |           X      |           x             |      x        |                   |         X         |
+| Random Scripts   |             X              |           X      |           x             |      x        |                   |                   |
+| Gas Town         |             X              |                  |           x             |               |                   |         X         |
+| DBOS             |             X              |           X      |                         |               |         X         |         X         |
+| Dagster          |                            |           X      |                         |               |                   |         X         |
+| N8N              |             X              |           X      |                         |               |                   |         X         |
+| Temporal         |             X              |           X      |                         |               |         X         |         X         |
+
+### Custom scripts
+
+You can just write custom scripts with python, bash/powershell:
+- ralph loop
+- auto researcher
+
+I did the same thing, but needed to run the system on my windows and mac laptop and also the thing kept failing as i added more complex stuff to it. 
+
+### [Gas town](https://github.com/gastownhall/gastown)
+
+This is an alternative agent orchestration framework. It works quite well but its rather opinionated on how it does stuff 
+- reliance on doltDB,beads
+- rigid workflow structure. 
+- git 
+
+With __infinite you__, there's no fixed structure so you can do whatever you want with it. i.e. if you want the system to not submit anything and just spawn thirty QA bots reviewers to ensure the code conforms to your standards and is passing all the tests you can do that. 
+
+### Dagster
+This is a standard workflow engine, it works okay, but there's no affordances for agent harnesses so you have to write one yourself. 
+Also its a directed acyclic graph, but work processes are never really DAGs, they're more like spaghetti. In the end I couldn't figure out how to make it do a standard execute (loop) -> review loop. 
+
+### DBOS
+This is a complex durable workflow engine. Its fairly lightweight relative to its alternatives. 
+
+As a comparative, __infinite you__ doesn't have mechanisms for transactional consistency or durability of execution. 
+
+But its still too heavy, since i didn't want to write code. The code vs config thing is a tradeoff, code's too hard to grok quickly frankly, config is verbose but any config with verbosity theoretically induces itself to levels of complexity wherein you end up mapping to code anyways. Unless you're SQL or something. 
+
+
+### Temporal 
+This is also a complex durable workflow engine. 
+This is flexible enough to do what I wanted. 
+This thing is just way too heavy for the use case of just having an AGENT run, relative to DBOS and alternatives. 
+
+### N8N
+This is a robotic process automation tool. It has theoretically what i want, but it generally confused me. Its too heavy. I couldn't really get it to do what i want. 

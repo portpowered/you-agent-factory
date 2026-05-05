@@ -38,6 +38,30 @@ During the query for the factory.json we should include the factory scripts/docs
 The current import/export dialogues that appear when importing a factory is strangely put inside the workflow-activity, it should be exposed as a separate dialogue directly. 
 The buttons should be converged onto the default shadcn buttons styling. 
 
+## Bad interface for outputs
+
+        inputs:
+          type: array
+          description: Work states this workstation can consume before it dispatches.
+          items:
+            $ref: '#/components/schemas/WorkstationIO'
+        outputs:
+          type: array
+          description: Work states emitted after this workstation succeeds.
+          items:
+            $ref: '#/components/schemas/WorkstationIO'
+        onContinue:
+          $ref: '#/components/schemas/WorkstationIO'
+          description: Optional destination emitted when the workstation makes partial progress and should continue iterating.
+        onRejection:
+          $ref: '#/components/schemas/WorkstationIO'
+          description: Optional destination emitted when the worker rejects the current work without a hard failure.
+        onFailure:
+          $ref: '#/components/schemas/WorkstationIO'
+          description: Optional destination emitted when the workstation fails permanently.
+
+The onContinue, onRejection, onFailure are not conformant to the outputs behavior where multiple outputs can occur. Please rewrite the interface to expose multiple arry of outputs for failure/rejection/continue, etc. 
+
 ## quality (P0)
 - we need to improve our overall system quality, to reduce future rework rates and what not
 please look towards implementing our systems and moving towards the standards outlined for both the website and the backend. Generally, keep a checklist as part of the progress towards migration our systems towards alignment with the standards denoted at docs/standards/code/general-website-standards.md and  docs/standards/code/general-backend-standards.md 

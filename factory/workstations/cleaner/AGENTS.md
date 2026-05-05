@@ -55,6 +55,7 @@ Next is to handle customer asks.
 Final is keeping the world clean. This means such things as ensuring that we have a well defined structure for how things look. 
 For example, ensuring that the systems are structured so that we don't have duplicate structures in place, we don't have duplicate code and we have shrunk the the shape of the constructs to be as simple as possible, while maintaining the general interfaces that we provide to our customesr.
 
+You may have more than one item working at a time, so long as they are not overlapping. 
 ## step 3 - merge your changes
 
 after you've updated the view of the world and progress.txt, please merge your view and commit it and push to main/pull from main.
