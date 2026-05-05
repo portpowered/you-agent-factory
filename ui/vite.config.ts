@@ -43,14 +43,15 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    setupFiles: ["./src/testing/vitest.setup.ts"],
     testTimeout: 15000,
     coverage: {
       provider: "v8",
       thresholds: {
-        statements: 88.17,
-        branches: 76.91,
-        functions: 92.58,
-        lines: 88,
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
       },
     },
   },

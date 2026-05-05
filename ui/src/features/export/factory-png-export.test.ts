@@ -129,6 +129,327 @@ describe("writeFactoryExportPng", () => {
       ok: false,
     });
   });
+
+  it("uses createImageBitmap and OffscreenCanvas when the browser exposes them", async () => {
+    const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
+    const close = vi.fn();
+    const drawImage = vi.fn();
+    const convertToBlob = vi.fn(async () => ({
+      arrayBuffer: async () => toArrayBuffer(sourcePng),
+    }));
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({
+        close,
+        height: 1,
+        width: 1,
+      })),
+    );
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class MockOffscreenCanvas {
+        public constructor(
+          public readonly width: number,
+          public readonly height: number,
+        ) {}
+
+        public getContext(_contextID: "2d"): OffscreenCanvasRenderingContext2D {
+          return {
+            drawImage,
+          } as OffscreenCanvasRenderingContext2D;
+        }
+
+        public async convertToBlob(): Promise<Blob> {
+          return await convertToBlob();
+        }
+      },
+    );
+
+    const result = await writeFactoryExportPng({
+      factory: canonicalFactory,
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
+    });
+
+    if (!result.ok) {
+      throw result.error.cause instanceof Error ? result.error.cause : new Error(result.error.message);
+    }
+    expect(result.ok).toBe(true);
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(convertToBlob).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to HTML image and canvas rendering when createImageBitmap is unavailable", async () => {
+    const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
+    const createObjectURL = vi.fn(() => "blob:factory-export");
+    const revokeObjectURL = vi.fn();
+    const drawImage = vi.fn();
+    const originalCreateElement = document.createElement.bind(document);
+    const getContext = vi.fn(() => ({
+      drawImage,
+    }));
+    const toBlob = vi.fn((callback: BlobCallback) => {
+      callback({
+        arrayBuffer: async () => toArrayBuffer(sourcePng),
+      } as Blob);
+    });
+
+    vi.stubGlobal("createImageBitmap", undefined);
+    vi.stubGlobal("OffscreenCanvas", undefined);
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    vi.stubGlobal(
+      "Image",
+      class MockImage {
+        public naturalHeight = 1;
+        public naturalWidth = 1;
+        public onerror: (() => void) | null = null;
+        public onload: (() => void) | null = null;
+
+        public set src(_value: string) {
+          this.onload?.();
+        }
+      },
+    );
+    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+      if (tagName === "canvas") {
+        return {
+          getContext,
+          height: 0,
+          toBlob,
+          width: 0,
+        } as unknown as HTMLCanvasElement;
+      }
+
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+
+    const result = await writeFactoryExportPng({
+      factory: canonicalFactory,
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
+    });
+
+    if (!result.ok) {
+      throw result.error.cause instanceof Error ? result.error.cause : new Error(result.error.message);
+    }
+    expect(result.ok).toBe(true);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(getContext).toHaveBeenCalledWith("2d");
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(toBlob).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:factory-export");
+  });
+
+  it("returns a decode failure when the browser fallback image loader fails", async () => {
+    const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
+    const revokeObjectURL = vi.fn();
+
+    vi.stubGlobal("createImageBitmap", undefined);
+    vi.stubGlobal("OffscreenCanvas", undefined);
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:factory-export"),
+      revokeObjectURL,
+    });
+    vi.stubGlobal(
+      "Image",
+      class MockImage {
+        public onerror: (() => void) | null = null;
+        public onload: (() => void) | null = null;
+
+        public set src(_value: string) {
+          this.onerror?.();
+        }
+      },
+    );
+
+    const result = await writeFactoryExportPng({
+      factory: canonicalFactory,
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "IMAGE_DECODE_FAILED",
+        message: "The selected image could not be decoded for PNG export.",
+      },
+      ok: false,
+    });
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:factory-export");
+  });
+
+  it("returns a decode failure when the browser canvas context is unavailable", async () => {
+    const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({
+        close: vi.fn(),
+        height: 1,
+        width: 1,
+      })),
+    );
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class MockOffscreenCanvas {
+        public constructor(
+          public readonly width: number,
+          public readonly height: number,
+        ) {}
+
+        public getContext(_contextID: "2d"): null {
+          return null;
+        }
+      },
+    );
+
+    const result = await writeFactoryExportPng({
+      factory: canonicalFactory,
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "IMAGE_DECODE_FAILED",
+        message: "The selected image could not be decoded for PNG export.",
+      },
+      ok: false,
+    });
+  });
+
+  it("returns a decode failure when decoded image dimensions are invalid", async () => {
+    const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({
+        close: vi.fn(),
+        height: 0,
+        width: 1,
+      })),
+    );
+
+    const result = await writeFactoryExportPng({
+      factory: canonicalFactory,
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "IMAGE_DECODE_FAILED",
+        message: "The selected image could not be decoded for PNG export.",
+      },
+      ok: false,
+    });
+  });
+
+  it("returns a decode failure when HTML canvas encoding does not produce a blob", async () => {
+    const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
+    const originalCreateElement = document.createElement.bind(document);
+
+    vi.stubGlobal("createImageBitmap", undefined);
+    vi.stubGlobal("OffscreenCanvas", undefined);
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:factory-export"),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.stubGlobal(
+      "Image",
+      class MockImage {
+        public naturalHeight = 1;
+        public naturalWidth = 1;
+        public onerror: (() => void) | null = null;
+        public onload: (() => void) | null = null;
+
+        public set src(_value: string) {
+          this.onload?.();
+        }
+      },
+    );
+    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+      if (tagName === "canvas") {
+        return {
+          getContext: () => ({
+            drawImage() {},
+          }),
+          height: 0,
+          toBlob: (callback: BlobCallback) => {
+            callback(null);
+          },
+          width: 0,
+        } as unknown as HTMLCanvasElement;
+      }
+
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+
+    const result = await writeFactoryExportPng({
+      factory: canonicalFactory,
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "IMAGE_DECODE_FAILED",
+        message: "The selected image could not be decoded for PNG export.",
+      },
+      ok: false,
+    });
+  });
+
+  it("replaces existing Infinite You metadata instead of appending duplicate metadata chunks", async () => {
+    const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
+    const firstExport = await writeFactoryExportPng({
+      factory: {
+        ...canonicalFactory,
+        name: "Factory Export",
+      },
+      image: new Blob([toArrayBuffer(sourcePng)], { type: "image/png" }),
+      rasterizeImageToPngBytes: async () => sourcePng,
+    });
+
+    expect(firstExport.ok).toBe(true);
+    if (!firstExport.ok) {
+      throw new Error("expected initial export to succeed");
+    }
+
+    const secondExport = await writeFactoryExportPng({
+      factory: {
+        ...canonicalFactory,
+        name: "Factory Export Updated",
+      },
+      image: firstExport.blob,
+      rasterizeImageToPngBytes: async () => await blobToUint8Array(firstExport.blob),
+    });
+
+    expect(secondExport.ok).toBe(true);
+    if (!secondExport.ok) {
+      throw new Error("expected replacement export to succeed");
+    }
+
+    const metadataChunks = parsePngChunks(await blobToUint8Array(secondExport.blob)).filter(
+      (chunk) => chunk.type === "iTXt",
+    );
+
+    expect(metadataChunks).toHaveLength(1);
+    expect(readInternationalTextChunk(metadataChunks[0]?.data ?? new Uint8Array())).toEqual({
+      keyword: PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
+      text: JSON.stringify({
+        ...canonicalFactory,
+        name: "Factory Export Updated",
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      }),
+    });
+  });
 });
 
 function fromBase64(value: string): Uint8Array {

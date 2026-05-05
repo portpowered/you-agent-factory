@@ -55,6 +55,11 @@ const canonicalFactory: FactorySchemas["Factory"] = {
 };
 
 describe("readFactoryImportPng", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("returns one normalized import result for a valid Port OS factory PNG", async () => {
     const previewUrl = "blob:factory-preview";
     const revokePreviewImageSrc = vi.fn();
@@ -85,6 +90,45 @@ describe("readFactoryImportPng", () => {
 
     result.value.revokePreviewImageSrc();
     expect(revokePreviewImageSrc).toHaveBeenCalledWith(previewUrl);
+  });
+
+  it("reads factory metadata from PNG tEXt chunks", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => "blob:factory-preview",
+      file: new File(
+        [
+          toArrayBuffer(
+            injectMetadataChunk(
+              fromBase64(ONE_PIXEL_PNG_BASE64),
+              buildChunk(
+                "tEXt",
+                concatBytes([
+                  new TextEncoder().encode(PORT_OS_FACTORY_PNG_METADATA_KEYWORD),
+                  new Uint8Array([0]),
+                  new TextEncoder().encode(
+                    JSON.stringify({
+                      ...canonicalFactory,
+                      name: "Factory Import",
+                      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+                    }),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        ],
+        "factory.png",
+        { type: "image/png" },
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected tEXt metadata import to succeed");
+    }
+
+    expect(result.value.factory.name).toBe("Factory Import");
   });
 
   it("rejects the retired factoryName envelope fallback", async () => {
@@ -402,6 +446,341 @@ describe("readFactoryImportPng", () => {
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
         message: "The Infinite You factory metadata does not contain a valid factory payload.",
+      },
+      ok: false,
+    });
+  });
+
+  it("uses createImageBitmap plus the default preview URL helpers when the browser exposes them", async () => {
+    const close = vi.fn();
+    const createObjectURL = vi.fn(() => "blob:factory-preview");
+    const revokeObjectURL = vi.fn();
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({
+        close,
+      })),
+    );
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+
+    const result = await readFactoryImportPng({
+      file: createFactoryPngFile({
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected import to succeed");
+    }
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(result.value.previewImageSrc).toBe("blob:factory-preview");
+    result.value.revokePreviewImageSrc();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:factory-preview");
+  });
+
+  it("falls back to object URL image validation when createImageBitmap is unavailable", async () => {
+    const createObjectURL = vi
+      .fn()
+      .mockReturnValueOnce("blob:factory-validate")
+      .mockReturnValueOnce("blob:factory-preview");
+    const revokeObjectURL = vi.fn();
+
+    vi.stubGlobal("createImageBitmap", undefined);
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    vi.stubGlobal(
+      "Image",
+      class MockImage {
+        public onerror: (() => void) | null = null;
+        public onload: (() => void) | null = null;
+
+        public set src(_value: string) {
+          this.onload?.();
+        }
+      },
+    );
+
+    const result = await readFactoryImportPng({
+      file: createFactoryPngFile({
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected import to succeed");
+    }
+
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:factory-validate");
+    expect(result.value.previewImageSrc).toBe("blob:factory-preview");
+  });
+
+  it("rejects compressed iTXt metadata chunks as invalid PNG metadata", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: new File(
+        [
+          toArrayBuffer(
+            injectMetadataChunk(
+              fromBase64(ONE_PIXEL_PNG_BASE64),
+              buildChunk(
+                "iTXt",
+                concatBytes([
+                  new TextEncoder().encode(PORT_OS_FACTORY_PNG_METADATA_KEYWORD),
+                  new Uint8Array([0, 1, 0, 0, 0]),
+                  new TextEncoder().encode(
+                    JSON.stringify({
+                      ...canonicalFactory,
+                      name: "Factory Import",
+                      schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+                    }),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        ],
+        "factory.png",
+        { type: "image/png" },
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "PNG_INVALID",
+        message: "The selected PNG image is invalid or truncated.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects malformed tEXt metadata chunks as invalid PNG metadata", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: new File(
+        [
+          toArrayBuffer(
+            injectMetadataChunk(
+              fromBase64(ONE_PIXEL_PNG_BASE64),
+              buildChunk(
+                "tEXt",
+                new TextEncoder().encode(
+                  `${PORT_OS_FACTORY_PNG_METADATA_KEYWORD}${JSON.stringify({
+                    ...canonicalFactory,
+                    name: "Factory Import",
+                    schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+                  })}`,
+                ),
+              ),
+            ),
+          ),
+        ],
+        "factory.png",
+        { type: "image/png" },
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "PNG_INVALID",
+        message: "The selected PNG image is invalid or truncated.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects iTXt metadata chunks that omit the translated keyword terminator", async () => {
+    const encoder = new TextEncoder();
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: new File(
+        [
+          toArrayBuffer(
+            injectMetadataChunk(
+              fromBase64(ONE_PIXEL_PNG_BASE64),
+              buildChunk(
+                "iTXt",
+                concatBytes([
+                  encoder.encode(PORT_OS_FACTORY_PNG_METADATA_KEYWORD),
+                  new Uint8Array([0, 0, 0]),
+                  encoder.encode("en"),
+                  new Uint8Array([0]),
+                  encoder.encode("translated keyword without terminator"),
+                ]),
+              ),
+            ),
+          ),
+        ],
+        "factory.png",
+        { type: "image/png" },
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "PNG_INVALID",
+        message: "The selected PNG image is invalid or truncated.",
+      },
+      ok: false,
+    });
+  });
+
+  it("rejects metadata payloads whose factory name is only whitespace", async () => {
+    const result = await readFactoryImportPng({
+      createPreviewImageSrc: () => {
+        throw new Error("should not create preview");
+      },
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify({
+          ...canonicalFactory,
+          name: "   ",
+          schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+        }),
+      ),
+      validatePreviewImage: async () => {},
+    });
+
+    expect(result).toEqual({
+      error: {
+        code: "PNG_METADATA_INVALID",
+        message: "The Infinite You factory metadata is missing the factory name.",
+      },
+      ok: false,
+    });
+  });
+
+  it("returns a decode failure when the browser fallback image validation cannot load the PNG", async () => {
+    const revokeObjectURL = vi.fn();
+
+    vi.stubGlobal("createImageBitmap", undefined);
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:factory-validate"),
+      revokeObjectURL,
+    });
+    vi.stubGlobal(
+      "Image",
+      class MockImage {
+        public onerror: (() => void) | null = null;
+        public onload: (() => void) | null = null;
+
+        public set src(_value: string) {
+          this.onerror?.();
+        }
+      },
+    );
+
+    const result = await readFactoryImportPng({
+      file: createFactoryPngFile({
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      }),
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "IMAGE_DECODE_FAILED",
+        message: "The selected image could not be decoded for preview.",
+      },
+      ok: false,
+    });
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:factory-validate");
+  });
+
+  it("returns a preview-unavailable failure when preview URL creation is missing after validation succeeds", async () => {
+    const close = vi.fn();
+
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({
+        close,
+      })),
+    );
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: undefined,
+      revokeObjectURL: vi.fn(),
+    });
+
+    const result = await readFactoryImportPng({
+      file: createFactoryPngFile({
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      }),
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "PREVIEW_UNAVAILABLE",
+        message: "The browser could not create a preview for the selected image.",
+      },
+      ok: false,
+    });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a decode failure when the browser exposes neither createImageBitmap nor object URL decoding", async () => {
+    vi.stubGlobal("createImageBitmap", undefined);
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: undefined,
+      revokeObjectURL: vi.fn(),
+    });
+
+    const result = await readFactoryImportPng({
+      file: createFactoryPngFile({
+        factory: {
+          ...canonicalFactory,
+          name: "Factory Import",
+        },
+        schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+      }),
+    });
+
+    expect(result).toEqual({
+      error: {
+        cause: expect.any(Error),
+        code: "IMAGE_DECODE_FAILED",
+        message: "The selected image could not be decoded for preview.",
       },
       ok: false,
     });

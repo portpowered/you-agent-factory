@@ -137,6 +137,251 @@ describe("normalizeFactoryDefinition", () => {
     });
   });
 
+  it("preserves fully populated canonical worker, guard, and workstation options", () => {
+    expect(
+      normalizeFactoryDefinition({
+        factoryDirectory: "/tmp/factory",
+        guards: [
+          {
+            model: "claude-sonnet-4-20250514",
+            modelProvider: "CLAUDE",
+            refreshWindow: "15m",
+            type: "INFERENCE_THROTTLE_GUARD",
+          },
+        ],
+        id: "agent-factory",
+        inputTypes: [{ name: "default", type: "DEFAULT" }],
+        metadata: {
+          owner: "frontend-tests",
+        },
+        name: "agent-factory",
+        resources: [{ capacity: 3, name: "gpu" }],
+        sourceDirectory: "/tmp/source-factory",
+        supportingFiles: {
+          scripts: {
+            draft: "draft.sh",
+          },
+        },
+        workers: [
+          {
+            args: ["--json"],
+            body: "echo ready",
+            command: "runner",
+            executorProvider: "SCRIPT_WRAP",
+            model: "codex-mini",
+            modelProvider: "CODEX",
+            name: "writer",
+            resources: [{ capacity: 1, name: "gpu" }],
+            skipPermissions: true,
+            stopToken: "DONE",
+            timeout: "15m",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "running", type: "PROCESSING" },
+              { name: "done", type: "TERMINAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            behavior: "CRON",
+            body: "plan.sh",
+            copyReferencedScripts: true,
+            cron: {
+              expiryWindow: "5m",
+              jitter: "30s",
+              schedule: "*/5 * * * *",
+              triggerAtStart: true,
+            },
+            env: {
+              MODE: "test",
+            },
+            guards: [
+              {
+                matchConfig: { inputKey: "storyId" },
+                maxVisits: 3,
+                type: "MATCHES_FIELDS",
+                workstation: "Review",
+              },
+            ],
+            id: "draft-station",
+            inputs: [
+              {
+                guards: [
+                  { matchInput: "storyId", type: "SAME_NAME" },
+                  { parentInput: "storyId", type: "ALL_CHILDREN_COMPLETE" },
+                  { spawnedBy: "draft", type: "ANY_CHILD_FAILED" },
+                ],
+                state: "new",
+                workType: "story",
+              },
+            ],
+            limits: {
+              maxExecutionTime: "30m",
+              maxRetries: 2,
+            },
+            name: "Draft",
+            onContinue: [{ state: "running", workType: "story" }],
+            onFailure: [{ state: "failed", workType: "story" }],
+            onRejection: [{ state: "new", workType: "story" }],
+            outputSchema: "schema.json",
+            outputs: [{ state: "done", workType: "story" }],
+            promptFile: "prompt.md",
+            resources: [{ capacity: 1, name: "gpu" }],
+            stopWords: ["DONE"],
+            type: "MODEL_WORKSTATION",
+            worker: "writer",
+            workingDirectory: "/tmp/workdir",
+            worktree: "detached",
+          },
+        ],
+      }),
+    ).toEqual({
+      factoryDirectory: "/tmp/factory",
+      guards: [
+        {
+          model: "claude-sonnet-4-20250514",
+          modelProvider: "CLAUDE",
+          refreshWindow: "15m",
+          type: "INFERENCE_THROTTLE_GUARD",
+        },
+      ],
+      id: "agent-factory",
+      inputTypes: [{ name: "default", type: "DEFAULT" }],
+      metadata: {
+        owner: "frontend-tests",
+      },
+      name: "agent-factory",
+      resources: [{ capacity: 3, name: "gpu" }],
+      sourceDirectory: "/tmp/source-factory",
+      supportingFiles: {
+        scripts: {
+          draft: "draft.sh",
+        },
+      },
+      workers: [
+        {
+          args: ["--json"],
+          body: "echo ready",
+          command: "runner",
+          executorProvider: "SCRIPT_WRAP",
+          model: "codex-mini",
+          modelProvider: "CODEX",
+          name: "writer",
+          resources: [{ capacity: 1, name: "gpu" }],
+          skipPermissions: true,
+          stopToken: "DONE",
+          timeout: "15m",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "new", type: "INITIAL" },
+            { name: "running", type: "PROCESSING" },
+            { name: "done", type: "TERMINAL" },
+            { name: "failed", type: "FAILED" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          behavior: "CRON",
+          body: "plan.sh",
+          copyReferencedScripts: true,
+          cron: {
+            expiryWindow: "5m",
+            jitter: "30s",
+            schedule: "*/5 * * * *",
+            triggerAtStart: true,
+          },
+          env: {
+            MODE: "test",
+          },
+          guards: [
+            {
+              matchConfig: { inputKey: "storyId" },
+              maxVisits: 3,
+              type: "MATCHES_FIELDS",
+              workstation: "Review",
+            },
+          ],
+          id: "draft-station",
+          inputs: [
+            {
+              guards: [
+                { matchInput: "storyId", type: "SAME_NAME" },
+                { parentInput: "storyId", type: "ALL_CHILDREN_COMPLETE" },
+                { spawnedBy: "draft", type: "ANY_CHILD_FAILED" },
+              ],
+              state: "new",
+              workType: "story",
+            },
+          ],
+          limits: {
+            maxExecutionTime: "30m",
+            maxRetries: 2,
+          },
+          name: "Draft",
+          onContinue: [{ state: "running", workType: "story" }],
+          onFailure: [{ state: "failed", workType: "story" }],
+          onRejection: [{ state: "new", workType: "story" }],
+          outputSchema: "schema.json",
+          outputs: [{ state: "done", workType: "story" }],
+          promptFile: "prompt.md",
+          resources: [{ capacity: 1, name: "gpu" }],
+          stopWords: ["DONE"],
+          type: "MODEL_WORKSTATION",
+          worker: "writer",
+          workingDirectory: "/tmp/workdir",
+          worktree: "detached",
+        },
+      ],
+    });
+  });
+
+  it("defaults cron triggerAtStart to false when it is omitted", () => {
+    expect(
+      normalizeFactoryDefinition({
+        name: "agent-factory",
+        workstations: [
+          {
+            cron: {
+              schedule: "0 * * * *",
+            },
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            worker: "writer",
+          },
+        ],
+      }),
+    ).toEqual({
+      name: "agent-factory",
+      workstations: [
+        {
+          cron: {
+            schedule: "0 * * * *",
+            triggerAtStart: false,
+          },
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Draft",
+          outputs: [{ state: "done", workType: "story" }],
+          worker: "writer",
+        },
+      ],
+    });
+  });
+
   it("rejects retired lowercase public enum aliases", () => {
     expect(() =>
       normalizeFactoryDefinition({
