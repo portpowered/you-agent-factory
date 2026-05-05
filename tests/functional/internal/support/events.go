@@ -86,7 +86,7 @@ func DispatchInputsIncludeWorkNameFromHistory(
 ) bool {
 	t.Helper()
 
-	for _, work := range dispatchInputWorksFromHistory(t, events, event, payload) {
+	for _, work := range DispatchInputWorksFromHistory(t, events, event, payload) {
 		if work.Name == workName {
 			return true
 		}
@@ -94,7 +94,7 @@ func DispatchInputsIncludeWorkNameFromHistory(
 	return false
 }
 
-func dispatchInputWorksFromHistory(
+func DispatchInputWorksFromHistory(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
 	event factoryapi.FactoryEvent,
