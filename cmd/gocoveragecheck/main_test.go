@@ -99,7 +99,8 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 	}, "\n"))
 
 	result, totalLine, err := evaluateCoverage(
-		"total: (statements) 82.5%\n",
+		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+			"total: (statements) 82.5%\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -161,16 +162,20 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 	repoRoot := filepath.Clean(t.TempDir())
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
+		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
 		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
 
-	result, _, err := evaluateCoverage(
-		"total: (statements) 81.0%\n",
+	result, totalLine, err := evaluateCoverage(
+		modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/testutil/runtimefixtures\t\tcoverage: 0.0% of statements\n"+
+			"total: (statements) 81.0%\n",
 		profilePath,
 		repoRoot,
 		[]string{
+			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
@@ -179,6 +184,12 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
+	if result.actual != 81.0 {
+		t.Fatalf("actual coverage = %v, want 81.0", result.actual)
+	}
+	if totalLine != "total: (statements) 81.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 81.0%")
+	}
 	if len(result.zeroCoveragePackages) != 0 {
 		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
 	}
@@ -312,7 +323,11 @@ func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 		}
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
-		fmt.Fprint(os.Stdout, "total: (statements) 82.5%\n")
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+				modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n"+
+				"total: (statements) 82.5%\n",
+		)
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)

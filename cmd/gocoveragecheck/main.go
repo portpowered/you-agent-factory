@@ -17,7 +17,10 @@ import (
 	"time"
 )
 
-var totalCoveragePattern = regexp.MustCompile(`total:\s+\(statements\)\s+([0-9.]+)%`)
+var (
+	totalCoveragePattern   = regexp.MustCompile(`total:\s+\(statements\)\s+([0-9.]+)%`)
+	packageCoveragePattern = regexp.MustCompile(`^(\S+)\s+coverage:\s+([0-9.]+)% of statements$`)
+)
 
 const modulePath = "github.com/portpowered/infinite-you"
 
@@ -318,7 +321,7 @@ func evaluateCoverage(report string, profilePath string, repoRoot string, coverP
 		return coverageResult{}, "", err
 	}
 
-	zeroCoveragePackages, err := findZeroCoveragePackages(profilePath, repoRoot, coverPackages)
+	zeroCoveragePackages, err := findZeroCoveragePackages(report, profilePath, repoRoot, coverPackages)
 	if err != nil {
 		return coverageResult{}, "", err
 	}
@@ -329,12 +332,16 @@ func evaluateCoverage(report string, profilePath string, repoRoot string, coverP
 	}, totalLine, nil
 }
 
-func findZeroCoveragePackages(profilePath string, repoRoot string, coverPackages []string) ([]string, error) {
+func findZeroCoveragePackages(report string, profilePath string, repoRoot string, coverPackages []string) ([]string, error) {
 	profileData, err := os.ReadFile(profilePath)
 	if err != nil {
 		return nil, fmt.Errorf("read go coverage profile: %w", err)
 	}
 	packageTotals, err := parseCoverageProfile(profileData, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	reportZeroCoveragePackages, err := parseZeroCoveragePackagesFromReport(report)
 	if err != nil {
 		return nil, err
 	}
@@ -351,12 +358,38 @@ func findZeroCoveragePackages(profilePath string, repoRoot string, coverPackages
 		seen[coverPackage] = struct{}{}
 
 		totals, ok := packageTotals[coverPackage]
-		if !ok || totals.coveredStatements == 0 {
+		if ok && totals.totalStatements > 0 && totals.coveredStatements == 0 {
+			zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
+			continue
+		}
+		if !ok && reportZeroCoveragePackages[coverPackage] {
 			zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
 		}
 	}
 	slices.Sort(zeroCoveragePackages)
 	return zeroCoveragePackages, nil
+}
+
+func parseZeroCoveragePackagesFromReport(report string) (map[string]bool, error) {
+	packages := make(map[string]bool)
+	for _, rawLine := range strings.Split(report, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "total:") {
+			continue
+		}
+		matches := packageCoveragePattern.FindStringSubmatch(line)
+		if len(matches) == 0 {
+			continue
+		}
+		coveragePercent, err := strconv.ParseFloat(matches[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse go coverage package percentage %q: %w", matches[2], err)
+		}
+		if coveragePercent == 0 {
+			packages[matches[1]] = true
+		}
+	}
+	return packages, nil
 }
 
 func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packageCoverageTotals, error) {
