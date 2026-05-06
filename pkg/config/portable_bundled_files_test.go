@@ -64,8 +64,8 @@ Execute {{ (index .Inputs 0).WorkID }}.
 	}
 
 	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
-	assertPortableBundledEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md")
-	assertPortableBundledEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1")
+	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
+	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
 }
 
 func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.T) {
@@ -266,23 +266,6 @@ func assertPortableBundledEntry(t *testing.T, bundledFile interfaces.BundledFile
 	}
 	if bundledFile.Content.Inline != wantInline {
 		t.Fatalf("bundled file inline = %q, want %q", bundledFile.Content.Inline, wantInline)
-	}
-}
-
-func assertPortableBundledEntryWithoutInline(t *testing.T, bundledFile interfaces.BundledFileConfig, wantType, wantTargetPath string) {
-	t.Helper()
-
-	if bundledFile.Type != wantType {
-		t.Fatalf("bundled file type = %q, want %q", bundledFile.Type, wantType)
-	}
-	if bundledFile.TargetPath != wantTargetPath {
-		t.Fatalf("bundled file targetPath = %q, want %q", bundledFile.TargetPath, wantTargetPath)
-	}
-	if bundledFile.Content.Encoding != interfaces.BundledFileEncodingUTF8 {
-		t.Fatalf("bundled file encoding = %q, want %q", bundledFile.Content.Encoding, interfaces.BundledFileEncodingUTF8)
-	}
-	if bundledFile.Content.Inline != "" {
-		t.Fatalf("expected bundled file inline content to be omitted after canonical export, got %q", bundledFile.Content.Inline)
 	}
 }
 

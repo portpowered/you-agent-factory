@@ -20,12 +20,12 @@ var portableBundledRootHelperFiles = []string{"Makefile"}
 
 var portableBundledFactoryRootHelperFiles = []string{"portable-dependencies.json"}
 
-func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig) error {
+func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool) error {
 	if cfg == nil {
 		return nil
 	}
 
-	collected, err := collectSupportedPortableBundledFiles(factoryDir)
+	collected, err := collectSupportedPortableBundledFiles(factoryDir, includeInlineContent)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.Facto
 	return nil
 }
 
-func collectSupportedPortableBundledFiles(factoryDir string) ([]interfaces.BundledFileConfig, error) {
+func collectSupportedPortableBundledFiles(factoryDir string, includeInlineContent bool) ([]interfaces.BundledFileConfig, error) {
 	layout, ok := portableBundledLayoutForFactoryDir(factoryDir)
 	if !ok {
 		return nil, nil
@@ -54,7 +54,7 @@ func collectSupportedPortableBundledFiles(factoryDir string) ([]interfaces.Bundl
 		if dirName == "scripts" {
 			fileType = interfaces.BundledFileTypeScript
 		}
-		collected, err := collectPortableBundledFilesFromDir(rootDir, targetRoot, fileType)
+		collected, err := collectPortableBundledFilesFromDir(rootDir, targetRoot, fileType, includeInlineContent)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func portableBundledLayoutForFactoryDir(factoryDir string) (portableBundledLayou
 	}, true
 }
 
-func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string) ([]interfaces.BundledFileConfig, error) {
+func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string, includeInlineContent bool) ([]interfaces.BundledFileConfig, error) {
 	info, err := os.Stat(sourceDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -186,11 +186,20 @@ func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string) 
 		if err != nil {
 			return fmt.Errorf("resolve bundled file path %s: %w", path, err)
 		}
+		inline := ""
+		if includeInlineContent {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("read portable bundled file %s: %w", path, err)
+			}
+			inline = string(content)
+		}
 		bundledFiles = append(bundledFiles, interfaces.BundledFileConfig{
 			Type:       fileType,
 			TargetPath: filepath.ToSlash(filepath.Join(targetRoot, relativePath)),
 			Content: interfaces.BundledFileContentConfig{
 				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   inline,
 			},
 		})
 		return nil

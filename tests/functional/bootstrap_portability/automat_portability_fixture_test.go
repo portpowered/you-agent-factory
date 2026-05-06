@@ -63,16 +63,16 @@ func TestAutomatPortabilityFixture_ModelsBoundedPortableRuntimeLayout(t *testing
 }
 
 func TestAutomatPortabilityFixture_FlattenPreservesPortableBundleContract(t *testing.T) {
-	_, flattenedCfg, _ := flattenAutomatFixture(t)
+	authoredFactoryDir, flattenedCfg, _ := flattenAutomatFixture(t)
 	if flattenedCfg.ResourceManifest == nil {
 		t.Fatal("expected flattened automat fixture to include resourceManifest")
 	}
 	assertAutomatRequiredToolsManifest(t, flattenedCfg.ResourceManifest.RequiredTools)
 
 	bundledFiles := bundledFilesByTarget(flattenedCfg.ResourceManifest.BundledFiles)
-	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/docs/portable-workflow.md")
-	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1")
-	assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, "factory/scripts/verify-external-tools.ps1")
+	assertAutomatBundledFileContent(t, bundledFiles, "factory/docs/portable-workflow.md", filepath.Join(authoredFactoryDir, automatWorkflowGuide))
+	assertAutomatBundledFileContent(t, bundledFiles, "factory/scripts/prepare-automat-slice.ps1", filepath.Join(authoredFactoryDir, automatPrepareScript))
+	assertAutomatBundledFileContent(t, bundledFiles, "factory/scripts/verify-external-tools.ps1", filepath.Join(authoredFactoryDir, automatVerifyToolsScript))
 
 	dependencyFile, ok := bundledFiles["factory/"+automatDependencyContract]
 	if !ok {
@@ -210,10 +210,6 @@ func TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBounde
 		"factory/scripts/prepare-automat-slice.ps1": filepath.Join(authoredFactoryDir, automatPrepareScript),
 		"factory/scripts/verify-external-tools.ps1": filepath.Join(authoredFactoryDir, automatVerifyToolsScript),
 	} {
-		if strings.HasPrefix(targetLocation, "factory/docs/") || strings.HasPrefix(targetLocation, "factory/scripts/") {
-			assertAutomatBundledFileEntryWithoutInline(t, bundledFiles, targetLocation)
-			continue
-		}
 		assertAutomatBundledFileContent(t, bundledFiles, targetLocation, sourcePath)
 	}
 
