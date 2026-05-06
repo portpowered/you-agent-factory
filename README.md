@@ -11,12 +11,15 @@ Infinite You is an AI agent factory. It orchestrates AI agents for you so you ca
 
 Leverage. 
 
-With __Infinite You__, you codify your entire process of how you do code reviews, write plans, into JSON and markdown files, rather than system specific bash, powershell, etc.
+With __Infinite You__, you codify your process into a workflow with different AGENTs.md and run them as wrappers around OpenAI codex.
 
-With __Infinite you__ you can run 10-100+ agents at once, duplicating the processes you would typically perform yourself, so that you don't havet o.
+For example: 
+- dispatch 10 agents to run independently in separate work trees
+- have one agent loop through a series of tasks, and then have a reviewer review the output and retrigger the loop if it failed
+- tell the agents a series of plans, and run them in dependency order
+- have a cron setup to autonomously look at git tasks or whatever and submit tasks that go through a write/review cycle loop
 
-Alternatives shell scripts in ralph, and autoresearcher, are a bit more brittle and have a tendency to fall over as you extend them.
-We formalize the loops/iterations and flows into a testable code base that won't fall over as much.
+
 
 ## Install
 
