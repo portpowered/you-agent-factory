@@ -22,7 +22,7 @@ Use [Dashboard Mutation Flow Pattern](dashboard-mutation-flow-pattern.md) as the
 - `ui/src/components/dashboard/bento.tsx`
 - `ui/src/components/dashboard/button.tsx`
 - `ui/src/components/dashboard/widget-board.tsx`
-- `ui/src/components/dashboard/typography.ts`
+- `ui/src/components/ui/dashboard-typography.ts`
 
 ### Existing widget and hook patterns
 
