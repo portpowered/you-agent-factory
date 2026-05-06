@@ -49,6 +49,7 @@ func TestPortableBundledFiles_RoundTripAcrossFlattenAndExpand(t *testing.T) {
 	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "docs", "README.md"), "# Portable factory\n")
 	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableBundledRoundTripScriptExecutable(t, filepath.Join(targetDir, "scripts", "execute-story.ps1"))
+	assertPortableBundledPersistedThinManifestFile(t, filepath.Join(targetDir, interfaces.FactoryConfigFile))
 	if _, err := os.Stat(filepath.Join(targetDir, "workers", "executor", interfaces.FactoryAgentsFileName)); err != nil {
 		t.Fatalf("expected expanded worker AGENTS.md: %v", err)
 	}
@@ -215,6 +216,20 @@ func assertPortableBundledLoadedThinManifest(t *testing.T, cfg *interfaces.Facto
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
 	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md")
 	assertBundledFileRoundTripEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1")
+}
+
+func assertPortableBundledPersistedThinManifestFile(t *testing.T, path string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(data)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON(%s): %v", path, err)
+	}
+	assertPortableBundledLoadedThinManifest(t, cfg)
 }
 
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {

@@ -81,7 +81,11 @@ func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.
 			},
 		},
 	}
-	canonical := flattenPortableBundledTestFactory(t, cfg)
+	authoredCfg, err := authoredFactoryConfigForExpandedLayout(cfg)
+	if err != nil {
+		t.Fatalf("authoredFactoryConfigForExpandedLayout: %v", err)
+	}
+	canonical := flattenPortableBundledTestFactory(t, authoredCfg)
 
 	if err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
 		t.Fatalf("writeExpandedFactoryLayout: %v", err)
@@ -91,9 +95,7 @@ func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.
 	assertPortableBundledExpandedFile(t, targetDir, filepath.Join("scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
 	assertPortableBundledExpandedFile(t, targetDir, "Makefile", "test:\n\tgo test ./...\n")
 	assertPortableBundledExecutableScriptMode(t, filepath.Join(targetDir, "scripts", "execute-story.ps1"))
-	if _, err := os.Stat(filepath.Join(targetDir, interfaces.FactoryConfigFile)); err != nil {
-		t.Fatalf("expected expanded factory config: %v", err)
-	}
+	assertPortableBundledPersistedThinManifest(t, filepath.Join(targetDir, interfaces.FactoryConfigFile))
 }
 
 func TestMaterializePortableBundledFiles_ReportsDifferingExistingFileReplacement(t *testing.T) {
@@ -270,6 +272,28 @@ func flattenPortableBundledTestFactory(t *testing.T, cfg *interfaces.FactoryConf
 	return canonical
 }
 
+func assertPortableBundledPersistedThinManifest(t *testing.T, path string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	cfg, err := FactoryConfigFromOpenAPIJSON(data)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON(%s): %v", path, err)
+	}
+	if cfg.ResourceManifest == nil {
+		t.Fatalf("%s resourceManifest = nil, want bundled files", path)
+	}
+	if len(cfg.ResourceManifest.BundledFiles) != 3 {
+		t.Fatalf("%s bundled files = %#v, want 3 entries", path, cfg.ResourceManifest.BundledFiles)
+	}
+	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
+	assertPortableBundledEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md")
+	assertPortableBundledEntryWithoutInline(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1")
+}
+
 func portableBundledFixtureFile(fileType, targetPath, inline string) interfaces.BundledFileConfig {
 	return interfaces.BundledFileConfig{
 		Type:       fileType,
@@ -295,6 +319,23 @@ func assertPortableBundledEntry(t *testing.T, bundledFile interfaces.BundledFile
 	}
 	if bundledFile.Content.Inline != wantInline {
 		t.Fatalf("bundled file inline = %q, want %q", bundledFile.Content.Inline, wantInline)
+	}
+}
+
+func assertPortableBundledEntryWithoutInline(t *testing.T, bundledFile interfaces.BundledFileConfig, wantType, wantTargetPath string) {
+	t.Helper()
+
+	if bundledFile.Type != wantType {
+		t.Fatalf("bundled file type = %q, want %q", bundledFile.Type, wantType)
+	}
+	if bundledFile.TargetPath != wantTargetPath {
+		t.Fatalf("bundled file targetPath = %q, want %q", bundledFile.TargetPath, wantTargetPath)
+	}
+	if bundledFile.Content.Encoding != interfaces.BundledFileEncodingUTF8 {
+		t.Fatalf("bundled file encoding = %q, want %q", bundledFile.Content.Encoding, interfaces.BundledFileEncodingUTF8)
+	}
+	if bundledFile.Content.Inline != "" {
+		t.Fatalf("bundled file inline = %q, want omitted content", bundledFile.Content.Inline)
 	}
 }
 
