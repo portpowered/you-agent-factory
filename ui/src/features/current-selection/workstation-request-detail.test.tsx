@@ -106,6 +106,39 @@ describe("WorkstationRequestDetailCard", () => {
     expect(screen.queryByRole("heading", { name: "Error details" })).toBeNull();
   });
 
+  it("renders request summary fallbacks when projected request identifiers are sparse", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-sparse", {
+          request_id: "",
+          trace_ids: [],
+          transition_id: "review",
+          workstation_name: "",
+        })}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+
+    expect(within(currentSelection).getAllByText("dispatch-review-sparse").length).toBeGreaterThan(0);
+    expect(
+      within(currentSelection).getByText(
+        "Request ID is not available for this workstation request.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).getByText(
+        "Workstation details are not available for this request.",
+      ),
+    ).toBeTruthy();
+    expect(
+      responseDetails.getByText(
+        "Trace details are not available for this workstation request yet.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("renders request-authored markdown prompts through the shared request renderer", () => {
     render(
       <WorkstationRequestDetailCard
@@ -132,6 +165,30 @@ describe("WorkstationRequestDetailCard", () => {
     expect(requestDetails.getByText("Check the latest diff")).toBeTruthy();
     expect(requestDetails.getAllByText("bun test", { selector: "code" })).toHaveLength(2);
     expect(requestDetails.getAllByText("bun test", { selector: "pre code" })).toHaveLength(1);
+  });
+
+  it("renders ordered-list prompts and inline-code edge cases through the shared request renderer", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-ordered", {
+          prompt: [
+            "1. Run `bun run lint`",
+            "2. `bun run test:unit`",
+          ].join("\n"),
+          request_id: "request-ordered-story",
+        })}
+      />,
+    );
+
+    const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
+    const orderedList = requestDetails.getByRole("list");
+    const listItems = within(orderedList).getAllByRole("listitem");
+
+    expect(listItems).toHaveLength(2);
+    expect(listItems[0].textContent).toContain("Run bun run lint");
+    expect(within(listItems[0]).getByText("bun run lint", { selector: "code" })).toBeTruthy();
+    expect(listItems[1].textContent).toContain("bun run test:unit");
+    expect(within(listItems[1]).getByText("bun run test:unit", { selector: "code" })).toBeTruthy();
   });
 
   it("renders plain-text prompts as readable fallback through the shared request renderer", () => {
@@ -263,6 +320,49 @@ describe("WorkstationRequestDetailCard", () => {
     expect(screen.queryByRole("heading", { name: "Inference attempts" })).toBeNull();
   });
 
+  it("renders script-backed request fallbacks when projected script metadata is incomplete", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-script-sparse", {
+          request_id: "request-script-sparse-story",
+          responded_request_count: 0,
+          script_request: {
+            args: [],
+            attempt: undefined,
+            command: "",
+            script_request_id: "",
+          },
+          trace_ids: [],
+        })}
+      />,
+    );
+
+    const requestDetails = within(screen.getByRole("region", { name: "Request details" }));
+    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+
+    expect(
+      requestDetails.getByText(
+        "Script request details are not available for this workstation request.",
+      ),
+    ).toBeTruthy();
+    expect(requestDetails.getByText("Script attempt is not available yet.")).toBeTruthy();
+    expect(
+      requestDetails.getByText(
+        "Script command details are not available for this workstation request.",
+      ),
+    ).toBeTruthy();
+    expect(
+      requestDetails.getByText(
+        "Script arguments are not available for this workstation request.",
+      ),
+    ).toBeTruthy();
+    expect(
+      responseDetails.getByText(
+        "Trace details are not available for this workstation request yet.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("renders successful script-backed workstation-request response details", () => {
     render(
       <WorkstationRequestDetailCard
@@ -340,5 +440,47 @@ describe("WorkstationRequestDetailCard", () => {
     expect(errorDetails.getByText("script_timeout")).toBeTruthy();
     expect(errorDetails.getByText("Script timed out.")).toBeTruthy();
   });
-});
 
+  it("renders script response field fallbacks when a response is present but sparse", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-script-minimal", {
+          request_id: "request-script-minimal-story",
+          responded_request_count: 1,
+          script_request: {
+            args: ["--work", "work-active-story"],
+            attempt: 1,
+            command: "script-tool",
+            script_request_id: "dispatch-review-script-minimal/script-request/1",
+          },
+          script_response: {
+            duration_millis: undefined,
+            failure_type: undefined,
+            outcome: undefined,
+            script_request_id: "",
+            stderr: "   ",
+            stdout: "  ",
+          },
+          trace_ids: [],
+        })}
+      />,
+    );
+
+    const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
+
+    expect(
+      responseDetails.getByText(
+        "Script response details are not available for this workstation request.",
+      ),
+    ).toBeTruthy();
+    expect(
+      responseDetails.getByText("Duration details are not available for this script response yet."),
+    ).toBeTruthy();
+    expect(
+      responseDetails.getByText("Failure type is not available for this script response."),
+    ).toBeTruthy();
+    expect(responseDetails.getByText("Outcome details are not available yet.")).toBeTruthy();
+    expect(responseDetails.getByText("No stdout was recorded for this script response.")).toBeTruthy();
+    expect(responseDetails.getByText("No stderr was recorded for this script response.")).toBeTruthy();
+  });
+});
