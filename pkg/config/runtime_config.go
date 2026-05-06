@@ -85,7 +85,7 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	if err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
-	if err := applySupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg, false); err != nil {
+	if err := ApplySupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
 	runtimeDefs := newRuntimeDefinitionConfig(len(factoryCfg.Workers), len(factoryCfg.Workstations))

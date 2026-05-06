@@ -125,12 +125,12 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 	}
 	if !reflect.DeepEqual(
 		comparableExportImportFactory(r.ImportedFactory),
-		comparableExportImportFactory(r.ImportRequest),
+		comparableExportImportFactory(thinPortableBundledFactory(r.ImportRequest)),
 	) {
 		t.Fatalf(
 			"api contract drift: POST /factory response diverged from submitted payload\ngot:  %#v\nwant: %#v",
 			comparableExportImportFactory(r.ImportedFactory),
-			comparableExportImportFactory(r.ImportRequest),
+			comparableExportImportFactory(thinPortableBundledFactory(r.ImportRequest)),
 		)
 	}
 	if r.CurrentFactory.Name != r.ImportRequest.Name {
@@ -214,6 +214,26 @@ func decodeJSONResponse(t *testing.T, resp *http.Response, target any, message s
 	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
 		t.Fatalf("%s: %v", message, err)
 	}
+}
+
+func thinPortableBundledFactory(factory factoryapi.Factory) factoryapi.Factory {
+	normalized := factory
+	if normalized.SupportingFiles == nil || normalized.SupportingFiles.BundledFiles == nil {
+		return normalized
+	}
+
+	bundledFiles := append([]factoryapi.BundledFile(nil), (*normalized.SupportingFiles.BundledFiles)...)
+	for i := range bundledFiles {
+		switch bundledFiles[i].Type {
+		case factoryapi.DOC, factoryapi.SCRIPT:
+			bundledFiles[i].Content.Inline = ""
+		}
+	}
+
+	supportingFiles := *normalized.SupportingFiles
+	supportingFiles.BundledFiles = &bundledFiles
+	normalized.SupportingFiles = &supportingFiles
+	return normalized
 }
 
 func assertCurrentFactoryPointer(t *testing.T, rootDir, want string) {

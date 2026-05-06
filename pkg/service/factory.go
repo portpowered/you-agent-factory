@@ -1170,7 +1170,8 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 		return factoryapi.Factory{}, fmt.Errorf("marshal factory payload: %w", err)
 	}
 
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, string(namedFactory.Name), payload); err != nil {
+	factoryDir, err := factoryconfig.PersistNamedFactory(rootDir, string(namedFactory.Name), payload)
+	if err != nil {
 		switch {
 		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
 			return factoryapi.Factory{}, factoryconfig.ErrNamedFactoryAlreadyExists
@@ -1184,7 +1185,16 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 	if err := fs.ActivateNamedFactory(ctx, string(namedFactory.Name)); err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return fs.GetCurrentNamedFactory(ctx)
+
+	var workstationLoader factoryconfig.WorkstationLoader
+	if fs.cfg != nil {
+		workstationLoader = fs.cfg.WorkstationLoader
+	}
+	created, err := factoryconfig.LoadRuntimeConfig(factoryDir, workstationLoader)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("load created named factory %q: %w", namedFactory.Name, err)
+	}
+	return fs.serializeNamedFactory(namedFactory.Name, created, false)
 }
 
 // WaitToComplete returns a channel that is closed when all tokens reach
@@ -1230,7 +1240,7 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 		if errors.Is(err, os.ErrNotExist) {
 			currentRuntime := fs.currentRuntimeConfig()
 			if currentRuntime != nil && sameFactoryDir(currentRuntime.FactoryDir(), rootDir) {
-				return fs.serializeCurrentNamedFactory(apisurface.DefaultCurrentFactoryName, currentRuntime)
+				return fs.serializeNamedFactory(apisurface.DefaultCurrentFactoryName, currentRuntime, true)
 			}
 			return factoryapi.Factory{}, ErrCurrentNamedFactoryNotFound
 		}
@@ -1249,16 +1259,28 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 		return factoryapi.Factory{}, fmt.Errorf("load current named factory %q: %w", name, err)
 	}
 
-	return fs.serializeCurrentNamedFactory(factoryapi.FactoryName(name), current)
+	return fs.serializeNamedFactory(factoryapi.FactoryName(name), current, true)
 }
 
-func (fs *FactoryService) serializeCurrentNamedFactory(
+func (fs *FactoryService) serializeNamedFactory(
 	name factoryapi.FactoryName,
 	current *factoryconfig.LoadedFactoryConfig,
+	inlineBundledFiles bool,
 ) (factoryapi.Factory, error) {
+	factoryCfg := current.FactoryConfig()
+	if inlineBundledFiles && factoryCfg != nil {
+		clonedFactoryCfg, err := factoryconfig.CloneFactoryConfig(factoryCfg)
+		if err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
+		}
+		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("inline named factory bundled files: %w", err)
+		}
+		factoryCfg = clonedFactoryCfg
+	}
 	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
 		current.FactoryDir(),
-		current.FactoryConfig(),
+		factoryCfg,
 		current,
 		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
 		replay.WithGeneratedFactoryWorkflowID(fs.workflowID()),

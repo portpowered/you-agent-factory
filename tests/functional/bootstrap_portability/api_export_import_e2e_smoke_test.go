@@ -56,6 +56,7 @@ func TestExportImportSmoke_ImportedFactoryPersistsThinSplitRuntimeLayout(t *test
 	result := harness.Run(t)
 
 	assertImportedFactoryLayoutOmitsInlineRuntimeBodies(t, result.ImportedDir)
+	assertImportedPortableBundledFilesPersistThinAndMaterializeOnDisk(t, result.ImportedDir)
 	assertImportedWorkerBodiesPersistOnlyInAgentsFiles(t, result.ImportedDir, valueOrEmpty(result.ImportedFactory.Workers))
 	assertImportedWorkstationBodiesPersistOnlyInAgentsFiles(t, result.ImportedDir, valueOrEmpty(result.ImportedFactory.Workstations))
 	assertImportedFactoryRuntimeReloadPreservesBodies(t, result.ImportedDir, valueOrEmpty(result.ImportedFactory.Workers), valueOrEmpty(result.ImportedFactory.Workstations))
@@ -189,6 +190,70 @@ func assertImportedFactoryRuntimeReloadPreservesBodies(
 		if runtimeWorkstation.PromptTemplate != stringPtrValue(workstation.Body) {
 			t.Fatalf("runtime workstation %q prompt template = %q, want %q", workstation.Name, runtimeWorkstation.PromptTemplate, stringPtrValue(workstation.Body))
 		}
+	}
+}
+
+func assertImportedPortableBundledFilesPersistThinAndMaterializeOnDisk(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	assertImportedPortableFile(t, filepath.Join(factoryDir, "Makefile"), exportImportPortableMakefileBody)
+	assertImportedPortableFile(t, filepath.Join(factoryDir, "docs", "README.md"), exportImportPortableDocBody)
+	assertImportedPortableFile(t, filepath.Join(factoryDir, "scripts", "execute-story.ps1"), exportImportPortableScriptBody)
+
+	data, err := os.ReadFile(filepath.Join(factoryDir, "factory.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+
+	supportingFiles, ok := payload["supportingFiles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected supportingFiles object, got %#v", payload["supportingFiles"])
+	}
+	bundledFiles, ok := supportingFiles["bundledFiles"].([]any)
+	if !ok || len(bundledFiles) != 3 {
+		t.Fatalf("expected 3 persisted bundled files, got %#v", supportingFiles["bundledFiles"])
+	}
+
+	for _, entry := range bundledFiles {
+		bundledFile, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file object, got %#v", entry)
+		}
+		content, ok := bundledFile["content"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected bundled file content object, got %#v", bundledFile["content"])
+		}
+
+		targetPath, _ := bundledFile["targetPath"].(string)
+		switch targetPath {
+		case exportImportPortableMakefilePath:
+			if got := content["inline"]; got != exportImportPortableMakefileBody {
+				t.Fatalf("persisted root helper inline = %#v, want %q", got, exportImportPortableMakefileBody)
+			}
+		case exportImportPortableDocPath, exportImportPortableScriptPath:
+			if _, ok := content["inline"]; ok {
+				t.Fatalf("persisted bundled inline for %q should be omitted, got %#v", targetPath, content["inline"])
+			}
+		default:
+			t.Fatalf("unexpected persisted bundled targetPath = %#v", targetPath)
+		}
+	}
+}
+
+func assertImportedPortableFile(t *testing.T, path, want string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(data) != want {
+		t.Fatalf("file %s = %q, want %q", path, string(data), want)
 	}
 }
 
