@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -27,6 +28,118 @@ func TestMainExecutesFunctionalLane(t *testing.T) {
 
 	if !called {
 		t.Fatal("main() did not execute the functional lane entrypoint")
+	}
+}
+
+func TestMainRoutesCommandFailureThroughFailf(t *testing.T) {
+	originalExecute := executeFunctionalLane
+	originalStderr := stderrWriter
+	originalExit := exitFunc
+	t.Cleanup(func() {
+		executeFunctionalLane = originalExecute
+		stderrWriter = originalStderr
+		exitFunc = originalExit
+	})
+
+	var stderr bytes.Buffer
+	var exitCode int
+
+	executeFunctionalLane = func() error {
+		return fmt.Errorf("functional lane failed")
+	}
+	stderrWriter = &stderr
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+
+	main()
+
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if got := stderr.String(); got != "functional lane failed\n" {
+		t.Fatalf("main() stderr = %q, want %q", got, "functional lane failed\n")
+	}
+}
+
+func TestFailfWritesFormattedErrorAndExits(t *testing.T) {
+	originalStderr := stderrWriter
+	originalExit := exitFunc
+	t.Cleanup(func() {
+		stderrWriter = originalStderr
+		exitFunc = originalExit
+	})
+
+	var stderr bytes.Buffer
+	var exitCode int
+
+	stderrWriter = &stderr
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+
+	failf("failed package %s (%d)\n", "runtime_api", 2)
+
+	if exitCode != 1 {
+		t.Fatalf("failf() exit code = %d, want 1", exitCode)
+	}
+	if got := stderr.String(); got != "failed package runtime_api (2)\n" {
+		t.Fatalf("failf() stderr = %q, want %q", got, "failed package runtime_api (2)\n")
+	}
+}
+
+func TestParseConfigHonorsExplicitOverrides(t *testing.T) {
+	restoreArgsAndFlags(t)
+
+	os.Args = []string{
+		"functionallane",
+		"-count=3",
+		"-jobs=4",
+		"-root=./tests/functional/runtime_api/...",
+		"-short=false",
+		"-timeout=2m30s",
+	}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	got := parseConfig()
+	want := config{
+		count:   3,
+		jobs:    4,
+		root:    "./tests/functional/runtime_api/...",
+		short:   false,
+		timeout: 150 * time.Second,
+	}
+
+	if got != want {
+		t.Fatalf("parseConfig() = %+v, want %+v", got, want)
+	}
+}
+
+func TestParseConfigNormalizesJobsBelowOne(t *testing.T) {
+	restoreArgsAndFlags(t)
+
+	os.Args = []string{
+		"functionallane",
+		"-jobs=0",
+	}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	got := parseConfig()
+
+	if got.jobs != 1 {
+		t.Fatalf("parseConfig() jobs = %d, want 1", got.jobs)
+	}
+	if got.count != 1 {
+		t.Fatalf("parseConfig() count = %d, want 1", got.count)
+	}
+	if got.root != "./tests/functional/..." {
+		t.Fatalf("parseConfig() root = %q, want %q", got.root, "./tests/functional/...")
+	}
+	if !got.short {
+		t.Fatal("parseConfig() short = false, want true")
+	}
+	if got.timeout != 5*time.Minute {
+		t.Fatalf("parseConfig() timeout = %s, want %s", got.timeout, 5*time.Minute)
 	}
 }
 
@@ -90,6 +203,100 @@ func TestRunFailsWhenNoRunnablePackagesRemain(t *testing.T) {
 	}
 
 	want := "discover functional packages: no test packages found under ./tests/functional/..."
+	if err.Error() != want {
+		t.Fatalf("run() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestRunExecutesDiscoveredFunctionalPackagesWithParsedConfig(t *testing.T) {
+	restoreExecCommand(t)
+	restoreArgsAndFlags(t)
+
+	execCommand = fakeFunctionalLaneCommand
+	os.Args = []string{
+		"functionallane",
+		"-count=3",
+		"-jobs=4",
+		"-timeout=2m0s",
+	}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	testArgsFile := t.TempDir() + "/go-test-args.txt"
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join([]string{
+		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
+		"github.com/portpowered/infinite-you/tests/functional/internal/support",
+		"",
+		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
+	}, "\n"))
+	t.Setenv("FUNCTIONALLANE_HELPER_TEST_ARGS_FILE", testArgsFile)
+
+	if err := run(); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	gotBytes, err := os.ReadFile(testArgsFile)
+	if err != nil {
+		t.Fatalf("read captured go test args: %v", err)
+	}
+
+	gotArgs := strings.Split(strings.TrimSpace(string(gotBytes)), "\n")
+	wantArgs := []string{
+		"test",
+		"-p=4",
+		"-short",
+		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
+		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
+		"-count=3",
+		"-timeout=2m0s",
+	}
+	if !slices.Equal(gotArgs, wantArgs) {
+		t.Fatalf("run() go test args = %v, want %v", gotArgs, wantArgs)
+	}
+}
+
+func TestRunWrapsDiscoveryFailures(t *testing.T) {
+	restoreExecCommand(t)
+	restoreArgsAndFlags(t)
+
+	execCommand = fakeFunctionalLaneCommand
+	os.Args = []string{"functionallane"}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_FAIL", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDERR", "list failed")
+
+	err := run()
+	if err == nil {
+		t.Fatal("run() unexpectedly succeeded")
+	}
+
+	want := "discover functional packages: exit status 2\nlist failed"
+	if err.Error() != want {
+		t.Fatalf("run() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestRunWrapsFunctionalTestExecutionFailures(t *testing.T) {
+	restoreExecCommand(t)
+	restoreArgsAndFlags(t)
+
+	execCommand = fakeFunctionalLaneCommand
+	os.Args = []string{"functionallane"}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", "github.com/portpowered/infinite-you/tests/functional/runtime_api")
+	t.Setenv("FUNCTIONALLANE_HELPER_TEST_FAIL", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_TEST_STDERR", "go test failed")
+
+	err := run()
+	if err == nil {
+		t.Fatal("run() unexpectedly succeeded")
+	}
+
+	want := "run functional lane: exit status 2"
 	if err.Error() != want {
 		t.Fatalf("run() error = %q, want %q", err.Error(), want)
 	}
@@ -186,7 +393,18 @@ func TestFunctionallaneFakeGoProcess(t *testing.T) {
 		}
 		os.Exit(exitCode)
 	case len(args) >= 2 && args[1] == "test":
-		os.Exit(0)
+		if path := os.Getenv("FUNCTIONALLANE_HELPER_TEST_ARGS_FILE"); path != "" {
+			if err := os.WriteFile(path, []byte(strings.Join(args[1:], "\n")), 0o600); err != nil {
+				fmt.Fprintf(os.Stderr, "write fake go test args: %v", err)
+				os.Exit(2)
+			}
+		}
+		fmt.Fprint(os.Stderr, os.Getenv("FUNCTIONALLANE_HELPER_TEST_STDERR"))
+		exitCode := 0
+		if os.Getenv("FUNCTIONALLANE_HELPER_TEST_FAIL") == "1" {
+			exitCode = 2
+		}
+		os.Exit(exitCode)
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
 		os.Exit(2)
