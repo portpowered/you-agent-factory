@@ -20,18 +20,29 @@ type config struct {
 	timeout time.Duration
 }
 
+var executeFunctionalLane = run
+
 func main() {
+	if err := executeFunctionalLane(); err != nil {
+		failf("%v\n", err)
+	}
+}
+
+func run() error {
 	cfg := parseConfig()
 	pkgs, err := discoverPackages(cfg.root)
 	if err != nil {
-		failf("discover functional packages: %v\n", err)
+		return fmt.Errorf("discover functional packages: %w", err)
 	}
 	if len(pkgs) == 0 {
-		failf("discover functional packages: no test packages found under %s\n", cfg.root)
+		return fmt.Errorf("discover functional packages: no test packages found under %s", cfg.root)
 	}
+
 	if err := runFunctionalTests(cfg, pkgs); err != nil {
-		failf("run functional lane: %v\n", err)
+		return fmt.Errorf("run functional lane: %w", err)
 	}
+
+	return nil
 }
 
 func parseConfig() config {
