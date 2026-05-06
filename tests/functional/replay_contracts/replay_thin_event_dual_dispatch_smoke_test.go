@@ -611,11 +611,27 @@ func assertThinEventWorkstationRequestProjection(t *testing.T, smoke dualDispatc
 
 	modelDispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.modelWorkID)
 	model := requests[modelDispatchID]
-	if model.Request.RequestTime == nil || model.Response == nil || model.Response.ResponseText == nil {
-		t.Fatalf("model workstation request projection = %#v, want request time and response text", model)
+	assertReplayProjectionOmitsInferenceFields(
+		t,
+		model.Request,
+		[]string{"requestTime", "prompt", "worktree", "workingDirectory"},
+	)
+	if model.Response == nil {
+		t.Fatalf("model workstation response projection = %#v, want thin dispatch summary without inference response detail", model.Response)
 	}
-	if *model.Response.ResponseText == "" {
-		t.Fatalf("model response text = %q, want non-empty", *model.Response.ResponseText)
+	assertReplayProjectionOmitsInferenceFields(
+		t,
+		model.Response,
+		[]string{"providerSession", "diagnostics", "responseText"},
+	)
+	modelAttempts := worldState.InferenceAttemptsByDispatchID[modelDispatchID]
+	if len(modelAttempts) != 1 {
+		t.Fatalf("model inference attempts = %#v, want one attempt", modelAttempts)
+	}
+	for _, attempt := range modelAttempts {
+		if attempt.RequestTime.IsZero() || attempt.Prompt == "" || attempt.WorkingDirectory == "" || attempt.Worktree == "" || attempt.Response == "" {
+			t.Fatalf("model inference attempt = %#v, want attempt-owned request and response detail", attempt)
+		}
 	}
 
 	scriptDispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.scriptWorkID)
@@ -634,6 +650,23 @@ func assertThinEventWorkstationRequestProjection(t *testing.T, smoke dualDispatc
 	}
 	if script.Request.TraceIds == nil || len(*script.Request.TraceIds) != 1 || (*script.Request.TraceIds)[0] != smoke.traceID {
 		t.Fatalf("script workstation trace IDs = %#v, want [%q]", script.Request.TraceIds, smoke.traceID)
+	}
+}
+
+func assertReplayProjectionOmitsInferenceFields(t *testing.T, payload any, keys []string) {
+	t.Helper()
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal(%T): %v", payload, err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatalf("Unmarshal(%T): %v", payload, err)
+	}
+	for _, key := range keys {
+		if _, ok := raw[key]; ok {
+			t.Fatalf("%T unexpectedly carried retired inference-owned field %q: %#v", payload, key, raw[key])
+		}
 	}
 }
 

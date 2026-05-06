@@ -1,5 +1,4 @@
 import type { InferenceOutcome } from "../events";
-import type { components } from "../generated/openapi";
 
 export type StateCategory = "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
 export type DashboardPlaceKind =

@@ -275,15 +275,11 @@ func assertThinEventSmokeActiveViews(
 	if activeRequestView.Response != nil {
 		t.Fatalf("active workstation request response = %#v, want nil before inference response", activeRequestView.Response)
 	}
-	if activeRequestView.Request.RequestTime != nil ||
-		activeRequestView.Request.Prompt != nil ||
-		activeRequestView.Request.Provider != nil ||
-		activeRequestView.Request.Model != nil ||
-		activeRequestView.Request.WorkingDirectory != nil ||
-		activeRequestView.Request.Worktree != nil ||
-		activeRequestView.Request.RequestMetadata != nil {
-		t.Fatalf("active workstation request = %#v, want omitted dispatch-level inference detail", activeRequestView.Request)
-	}
+	assertRuntimeAPIProjectionOmitsInferenceFields(
+		t,
+		activeRequestView.Request,
+		[]string{"requestTime", "prompt", "provider", "model", "workingDirectory", "worktree", "requestMetadata"},
+	)
 }
 
 func loadThinEventSmokeFinalSnapshot(
@@ -362,6 +358,9 @@ func assertThinEventSmokeFinalState(
 	if finalAttempt.Diagnostics == nil || finalAttempt.Diagnostics.Provider == nil {
 		t.Fatalf("final inference attempt diagnostics = %#v, want provider diagnostics", finalAttempt.Diagnostics)
 	}
+	if finalAttempt.Prompt == "" || finalAttempt.RequestTime.IsZero() {
+		t.Fatalf("final inference attempt = %#v, want prompt and request time", finalAttempt)
+	}
 	completion := completedFunctionalDispatchByID(t, finalState.CompletedDispatches, active.dispatchID)
 	if completion.ProviderSession == nil || completion.ProviderSession.ID != "sess-thin-dispatch-1" || completion.Diagnostics == nil || completion.Diagnostics.Provider == nil {
 		t.Fatalf("completed dispatch = %#v, want provider session and diagnostics derived from inference response", completion)
@@ -392,22 +391,44 @@ func assertThinEventSmokeFinalViews(
 		factoryboundary.BuildFactoryWorldWorkstationRequestProjectionSlice(finalState),
 		dispatchID,
 	)
-	if completedRequestView.Request.RequestMetadata != nil ||
-		completedRequestView.Request.RequestTime != nil ||
-		completedRequestView.Request.Prompt != nil ||
-		completedRequestView.Request.Provider != nil ||
-		completedRequestView.Request.Model != nil ||
-		completedRequestView.Request.WorkingDirectory != nil ||
-		completedRequestView.Request.Worktree != nil {
-		t.Fatalf("completed workstation request inference summary = %#v, want omitted dispatch-level inference detail", completedRequestView.Request)
-	}
-	if completedRequestView.Response == nil ||
-		completedRequestView.Response.ResponseText != nil ||
-		completedRequestView.Response.ProviderSession != nil ||
-		completedRequestView.Response.Diagnostics != nil ||
-		completedRequestView.Response.ResponseMetadata != nil ||
-		completedRequestView.Response.ErrorClass != nil {
+	assertRuntimeAPIProjectionOmitsInferenceFields(
+		t,
+		completedRequestView.Request,
+		[]string{"requestMetadata", "requestTime", "prompt", "provider", "model", "workingDirectory", "worktree"},
+	)
+	if completedRequestView.Response == nil {
 		t.Fatalf("completed workstation request response = %#v, want omitted dispatch-level inference detail", completedRequestView.Response)
+	}
+	assertRuntimeAPIProjectionOmitsInferenceFields(
+		t,
+		completedRequestView.Response,
+		[]string{"responseText", "providerSession", "diagnostics", "responseMetadata", "errorClass"},
+	)
+	completedAttempt := finalState.InferenceAttemptsByDispatchID[dispatchID]
+	if len(completedAttempt) != 1 {
+		t.Fatalf("completed inference attempts = %#v, want one attempt", completedAttempt)
+	}
+	for _, attempt := range completedAttempt {
+		if attempt.Prompt == "" || attempt.Response == "" {
+			t.Fatalf("completed inference attempt = %#v, want attempt-owned prompt/request/response detail", attempt)
+		}
+	}
+}
+
+func assertRuntimeAPIProjectionOmitsInferenceFields(t *testing.T, payload any, keys []string) {
+	t.Helper()
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal(%T): %v", payload, err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatalf("Unmarshal(%T): %v", payload, err)
+	}
+	for _, key := range keys {
+		if _, ok := raw[key]; ok {
+			t.Fatalf("%T unexpectedly carried retired inference-owned field %q: %#v", payload, key, raw[key])
+		}
 	}
 }
 
