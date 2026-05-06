@@ -102,66 +102,31 @@
 
 ## Current Summary
 
-- As of `2026-05-05T15:03:51.1883314-07:00`, `HEAD` on `main` points to
-  `53c8c0d` and matches `origin/main`; the worktree is clean apart from ignored
-  workflow inputs.
+- As of `2026-05-06T01:04:51.9722496-07:00`, `HEAD` on `main` points to
+  `6b95577` and matches `origin/main`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
   execution for `process` and `review`, `executor-slot` capacity `10`, an
   hourly cleaner, and loop breakers.
-- The tracked input surface remains sentinel-only; visible files under
-  `factory/inputs/**` are ignored local residue rather than checked-in repo
-  truth.
-- Merged PR `#69` closed the array-valued workstation non-success route ask on
-  `main`.
-- Merged PR `#83` closed the broad dashboard-header verbosity copy ask on
-  `main`.
-- Merged PR `#84` closed the work-outcome chart axis-label and margin ask on
-  `main`.
-- Merged PR `#85` closed the remaining dashboard branding and header
-  iconography ask on `main`.
-- Merged PR `#86` closed the header button-convergence seam on `main`.
-- Merged PR `#87` closed the submit-work button-tone seam on `main`.
-- Merged PR `#88` closed the broader replay legacy-compat duplication lane on
-  `main`.
-- Merged PR `#89` closed the remaining replay trace-dispatch projection
-  duplication lane on `main`.
-- Merged PR `#93` closed the supported portable bundled-file portability lane
-  on `main`.
-- Merged PR `#94` closed the replay dispatch payload cast-wrapper cleanup on
-  `main`.
-- Merged PR `#95` closed the submit-request shaping dedupe lane on `main`.
-- Merged PR `#92` closed the stale OpenAPI cron post-processing compatibility
-  seam on `main`.
-- Merged PR `#91` closed the hidden singular non-success route compatibility
-  seam on `main`.
-- Merged PR `#97` closed the last stale iconography branch residue on `main`.
-- Merged PR `#98` closed the remaining work-outcome chart padding follow-up on
-  `main`.
-- Merged PR `#100` closed the replay event-stream file-wrapper seam on `main`.
-- Merged PR `#101` closed the backend coverage lane on `main`.
-- The selected-work current-selection ask is now materially satisfied on
-  `main` through PR `#74` plus PR `#77`.
-- The submit-work copy ask remains satisfied on `main` through merged PR `#75`.
-- `gh pr list --state open` now reports three open PRs: `#99`
-  (`workstation-current-selection-cleanup`), `#102`
-  (`work-chaininig-trace-ids`), and `#103` (`code-coverage-frontend`).
-- The tracked local ask diff now explicitly writes the array-valued
-  non-success output-interface request, but that lane is already materially
-  closed on `main` through merged PR `#69`.
-- Merged PR `#96` has already removed the dead submission forwarder package on
-  `main`, and merged PR `#100` has already removed the replay event-stream file
-  wrapper seam that the prior worldview still had queued locally.
-- The local ignored idea
-  `factory/inputs/idea/default/retire-replay-event-stream-file-wrapper-cluster.md`
-  was stale after PR `#100` and needed pruning before any new dispatch.
-- The next non-overlapping cleanup seam is trimming replay-only exported helper
-  surface from `pkg/testutil` and `internal/testpath`, where direct reads and
-  graph traces show helpers such as `WithReplayHarnessDir`,
-  `WithReplayHarnessServiceOptions`, `AssertReplayDiverges`, and
-  `MustClassifiedArtifactPath` are now only consumed by the replay contract
-  tests.
+- The tracked input surface remains sentinel-only; there is no checked-in
+  cleanup request currently queued under `factory/inputs/**`.
+- The local worktree is not clean, but the visible residue is unrelated
+  untracked root and `factory/` files rather than canonical queue state.
+- Recent merged PRs now include `#106`, `#107`, `#108`, `#109`, `#110`, and
+  `#111`; the current open PR set is down to one branch, `#112`
+  (`website-export`).
+- The import/export P0, current-selection, submit-work copy, and dashboard UI
+  asks remain materially closed on `main`; the remaining ask surface is broader
+  program work in standards migration, website coverage, docs audit, manual
+  QA, and systems-quality documentation.
+- The replay fixtures remain historical samples rather than current workflow
+  truth, and one rejection payload is still quoted anomalously in the replay
+  sample.
+- The next non-overlapping cleanup seam is functional test helper duplication:
+  `tests/functional/internal/support/events.go` already owns
+  `LastFactoryEventTick`, while replay-contract and runtime-API suites still
+  carry local `lastFactoryEventTick` copies.
 
 ## 2026-05-05T15:03:51.1883314-07:00 - meta state refresh
 
@@ -1299,3 +1264,37 @@
 - Added a standards-alignment checklist here so the meta loop now carries a
   checked-in running summary of the highest-signal open website and backend
   standards gaps instead of only recording them in prose refresh notes.
+
+## 2026-05-06T01:04:51.9722496-07:00 - meta state refresh
+
+- Switched back to `main`, then ran `git pull --ff-only origin main`; `main`
+  was already current at `6b95577`
+  (`Merge pull request #111 from portpowered/remove-init-default-models`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated tracked versus live workflow inputs with `git ls-files` and
+  `Get-ChildItem -Recurse factory/inputs`, confirming the canonical checked-in
+  input surface is still sentinel-only and had no pre-existing ignored idea
+  residue at the start of this refresh.
+- Re-checked repo movement with `git log --oneline --decorate -12`,
+  `gh pr list --state merged --limit 12`, and `gh pr list --state open --limit 20`,
+  confirming merged PRs `#106` through `#111` are now on `main` and the only
+  open PR is `#112` (`website-export`).
+- Used delegated explorer reads, the code graph, and direct file reads to
+  reject a false deadcode lead in `tests/functional/providers/helpers_test.go`:
+  the baseline entry is not enough by itself because those helpers still serve
+  `functionallong` tests.
+- Confirmed one new non-overlapping cleanup seam in live code instead:
+  `tests/functional/internal/support/events.go` already owns
+  `LastFactoryEventTick`, while
+  `tests/functional/replay_contracts/short_helpers_test.go`,
+  `tests/functional/replay_contracts/replay_record_end_to_end_long_test.go`,
+  and `tests/functional/runtime_api/api_inference_events_test.go` still carry
+  local `lastFactoryEventTick` copies.
+- Queued one fresh ignored idea under
+  `factory/inputs/idea/default/consolidate-functional-factory-event-tick-helpers.md`
+  so the next worker can collapse those suites onto the shared helper without
+  reopening the export lane owned by PR `#112`.
+- Updated the checked-in worldview and summary so they no longer claim stale
+  PR state, stale inbox residue, or a clean worktree.
