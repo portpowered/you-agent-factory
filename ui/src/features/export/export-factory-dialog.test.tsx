@@ -207,6 +207,38 @@ describe("ExportFactoryDialog", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("preserves a typed export name when the initial factory name refreshes mid-dialog", async () => {
+    const { rerender } = render(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Browser Export Factory"
+        isOpen
+        onClose={() => {}}
+      />,
+    );
+
+    const nameInput = screen.getByLabelText("Factory name");
+    fireEvent.change(nameInput, {
+      target: { value: "Roundtrip Browser Export" },
+    });
+    expect((nameInput as HTMLInputElement).value).toBe("Roundtrip Browser Export");
+
+    rerender(
+      <ExportFactoryDialog
+        factory={factory}
+        initialFactoryName="Renamed Browser Export Factory"
+        isOpen
+        onClose={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Factory name") as HTMLInputElement).value).toBe(
+        "Roundtrip Browser Export",
+      );
+    });
+  });
+
   it("surfaces the preparation failure and blocks export when the factory is unavailable", async () => {
     render(
       <ExportFactoryDialog

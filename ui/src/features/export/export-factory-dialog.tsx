@@ -314,6 +314,7 @@ function useExportFactoryDialogState({
   };
 
   useResetExportFactoryDialogState({
+    exportName,
     exportAttemptRef,
     initialFactoryName,
     isOpen,
@@ -443,6 +444,7 @@ function createHandleOpenChange(handleClose: () => void) {
 }
 
 function useResetExportFactoryDialogState({
+  exportName,
   exportAttemptRef,
   initialFactoryName,
   isOpen,
@@ -453,6 +455,7 @@ function useResetExportFactoryDialogState({
   setNameTouched,
   setSelectedImage,
 }: {
+  exportName: string;
   exportAttemptRef: React.RefObject<number>;
   initialFactoryName: string;
   isOpen: boolean;
@@ -463,19 +466,38 @@ function useResetExportFactoryDialogState({
   setNameTouched: (value: boolean) => void;
   setSelectedImage: (value: File | null) => void;
 }) {
+  const previousInitialFactoryNameRef = useRef(initialFactoryName);
+  const wasOpenRef = useRef(false);
+
   useEffect(() => {
     if (!isOpen) {
       exportAttemptRef.current += 1;
+      wasOpenRef.current = false;
+      previousInitialFactoryNameRef.current = initialFactoryName;
       return;
     }
 
-    setDialogState({ status: "idle" });
-    setExportName(initialFactoryName);
-    setSelectedImage(null);
-    setImageSelectionError(null);
-    setImageTouched(false);
-    setNameTouched(false);
+    const previousInitialFactoryName = previousInitialFactoryNameRef.current;
+    const isOpening = !wasOpenRef.current;
+
+    if (isOpening) {
+      setDialogState({ status: "idle" });
+      setExportName(initialFactoryName);
+      setSelectedImage(null);
+      setImageSelectionError(null);
+      setImageTouched(false);
+      setNameTouched(false);
+      wasOpenRef.current = true;
+      previousInitialFactoryNameRef.current = initialFactoryName;
+      return;
+    }
+
+    if (exportName === previousInitialFactoryName) {
+      setExportName(initialFactoryName);
+    }
+    previousInitialFactoryNameRef.current = initialFactoryName;
   }, [
+    exportName,
     exportAttemptRef,
     initialFactoryName,
     isOpen,
