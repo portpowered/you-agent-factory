@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -14,40 +15,54 @@ const (
 	deadcodeTool = "golang.org/x/tools/cmd/deadcode@v0.25.1"
 )
 
+var (
+	commandMain                  = run
+	runDeadcodeCommand           = runDeadcode
+	execCommand                  = exec.Command
+	exitFunc                     = os.Exit
+	stdout             io.Writer = os.Stdout
+	stderr             io.Writer = os.Stderr
+)
+
 func main() {
-	actual, err := runDeadcode()
+	exitFunc(commandMain(os.Args[1:], stdout, stderr))
+}
+
+func run(_ []string, stdout io.Writer, stderr io.Writer) int {
+	actual, err := runDeadcodeCommand()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 
 	actual = normalizeReport(actual)
 	if err := os.MkdirAll("bin", 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "create deadcode output directory: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "create deadcode output directory: %v\n", err)
+		return 1
 	}
 	if err := os.WriteFile(currentPath, []byte(actual), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "write current deadcode report: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "write current deadcode report: %v\n", err)
+		return 1
 	}
 
 	baselineBytes, err := os.ReadFile(baselinePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read deadcode baseline: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "read deadcode baseline: %v\n", err)
+		return 1
 	}
 	baseline := normalizeReport(string(baselineBytes))
 	if baseline != actual {
-		fmt.Fprintf(os.Stderr, "deadcode baseline drift detected; review %s and update %s when intentional\n", currentPath, baselinePath)
-		fmt.Fprintf(os.Stderr, "baseline findings: %d, current findings: %d\n", countFindings(baseline), countFindings(actual))
-		os.Exit(1)
+		fmt.Fprintf(stderr, "deadcode baseline drift detected; review %s and update %s when intentional\n", currentPath, baselinePath)
+		fmt.Fprintf(stderr, "baseline findings: %d, current findings: %d\n", countFindings(baseline), countFindings(actual))
+		return 1
 	}
 
-	fmt.Println("[agent-factory:deadcode] baseline matches")
+	fmt.Fprintln(stdout, "[agent-factory:deadcode] baseline matches")
+	return 0
 }
 
 func runDeadcode() (string, error) {
-	cmd := exec.Command("go", "run", deadcodeTool, "-test", "./...")
+	cmd := execCommand("go", "run", deadcodeTool, "-test", "./...")
 	cmd.Env = deadcodeEnv()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
