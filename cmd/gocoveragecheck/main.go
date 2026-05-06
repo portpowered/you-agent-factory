@@ -5,8 +5,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -20,8 +22,12 @@ var totalCoveragePattern = regexp.MustCompile(`total:\s+\(statements\)\s+([0-9.]
 const modulePath = "github.com/portpowered/infinite-you"
 
 var (
-	defaultCoveragePatterns = []string{"./cmd/factory", "./pkg/..."}
-	defaultTestPatterns     = []string{"./cmd/factory", "./pkg/...", "./tests/functional/..."}
+	defaultCoveragePatterns           = []string{"./cmd/factory", "./pkg/..."}
+	defaultTestPatterns               = []string{"./cmd/factory", "./pkg/...", "./tests/functional/..."}
+	execCommand                       = exec.Command
+	stdoutWriter            io.Writer = os.Stdout
+	stderrWriter            io.Writer = os.Stderr
+	exitFunc                          = os.Exit
 )
 
 type config struct {
@@ -34,16 +40,42 @@ type config struct {
 	timeout   time.Duration
 }
 
+type coverageResult struct {
+	actual               float64
+	zeroCoveragePackages []string
+}
+
+type packageCoverageTotals struct {
+	coveredStatements int
+	totalStatements   int
+}
+
 func main() {
 	cfg := parseConfig()
-	actual, err := run(cfg)
-	if err != nil {
+	if err := execute(cfg); err != nil {
 		failf("%v\n", err)
 	}
-	if actual < cfg.min {
-		failf("go coverage %.1f%% is below minimum %.1f%%\n", actual, cfg.min)
+}
+
+func execute(cfg config) error {
+	result, err := run(cfg)
+	if err != nil {
+		return err
 	}
-	fmt.Printf("Go coverage %.1f%% meets minimum %.1f%%.\n", actual, cfg.min)
+
+	var failures []string
+	if result.actual < cfg.min {
+		failures = append(failures, fmt.Sprintf("go coverage %.1f%% is below minimum %.1f%%", result.actual, cfg.min))
+	}
+	if len(result.zeroCoveragePackages) > 0 {
+		failures = append(failures, formatZeroCoverageFailure(result.zeroCoveragePackages))
+	}
+	if len(failures) > 0 {
+		return errors.New(strings.Join(failures, "\n"))
+	}
+
+	fmt.Fprintf(stdoutWriter, "Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
+	return nil
 }
 
 func parseConfig() config {
@@ -59,17 +91,17 @@ func parseConfig() config {
 	return cfg
 }
 
-func run(cfg config) (float64, error) {
+func run(cfg config) (coverageResult, error) {
 	profilePath := cfg.profile
 	cleanup := func() error { return nil }
 	if profilePath == "" {
 		file, err := os.CreateTemp("", "go-coverage-*.out")
 		if err != nil {
-			return 0, fmt.Errorf("create temp coverage profile: %w", err)
+			return coverageResult{}, fmt.Errorf("create temp coverage profile: %w", err)
 		}
 		profilePath = file.Name()
 		if err := file.Close(); err != nil {
-			return 0, fmt.Errorf("close temp coverage profile: %w", err)
+			return coverageResult{}, fmt.Errorf("close temp coverage profile: %w", err)
 		}
 		cleanup = func() error {
 			return os.Remove(profilePath)
@@ -81,7 +113,7 @@ func run(cfg config) (float64, error) {
 
 	coverPackages, testPackages, err := resolveCoverageLane(cfg)
 	if err != nil {
-		return 0, err
+		return coverageResult{}, err
 	}
 
 	testArgs := []string{
@@ -98,15 +130,15 @@ func run(cfg config) (float64, error) {
 	)
 	testArgs = append(testArgs, testPackages...)
 
-	testCmd := exec.Command("go", testArgs...)
+	testCmd := execCommand("go", testArgs...)
 	testCmd.Env = os.Environ()
-	testCmd.Stdout = os.Stdout
-	testCmd.Stderr = os.Stderr
+	testCmd.Stdout = stdoutWriter
+	testCmd.Stderr = stderrWriter
 	if err := testCmd.Run(); err != nil {
-		return 0, fmt.Errorf("run go test coverage lane: %w", err)
+		return coverageResult{}, fmt.Errorf("run go test coverage lane: %w", err)
 	}
 
-	coverCmd := exec.Command("go", "tool", "cover", "-func", profilePath)
+	coverCmd := execCommand("go", "tool", "cover", "-func", profilePath)
 	coverCmd.Env = os.Environ()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -118,18 +150,22 @@ func run(cfg config) (float64, error) {
 			detail = strings.TrimSpace(stdout.String())
 		}
 		if detail != "" {
-			return 0, fmt.Errorf("summarize go coverage: %w\n%s", err, detail)
+			return coverageResult{}, fmt.Errorf("summarize go coverage: %w\n%s", err, detail)
 		}
-		return 0, fmt.Errorf("summarize go coverage: %w", err)
+		return coverageResult{}, fmt.Errorf("summarize go coverage: %w", err)
 	}
 
-	report := stdout.String()
-	actual, totalLine, err := parseTotalCoverage(report)
+	repoRoot, err := repoRootDir()
 	if err != nil {
-		return 0, err
+		return coverageResult{}, err
 	}
-	fmt.Println(totalLine)
-	return actual, nil
+
+	result, totalLine, err := evaluateCoverage(stdout.String(), profilePath, repoRoot, coverPackages)
+	if err != nil {
+		return coverageResult{}, err
+	}
+	fmt.Fprintln(stdoutWriter, totalLine)
+	return result, nil
 }
 
 func resolveCoverageLane(cfg config) ([]string, []string, error) {
@@ -160,7 +196,7 @@ func resolveTestPackages(cfg config) ([]string, error) {
 
 func listGoPackages(patterns []string, include func(string) bool) ([]string, error) {
 	args := append([]string{"list"}, patterns...)
-	cmd := exec.Command("go", args...)
+	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
 	rootDir, err := repoRootDir()
 	if err != nil {
@@ -276,7 +312,143 @@ func parseTotalCoverage(report string) (float64, string, error) {
 	return value, fmt.Sprintf("total: (statements) %s%%", matches[1]), nil
 }
 
+func evaluateCoverage(report string, profilePath string, repoRoot string, coverPackages []string) (coverageResult, string, error) {
+	actual, totalLine, err := parseTotalCoverage(report)
+	if err != nil {
+		return coverageResult{}, "", err
+	}
+	zeroCoveragePackages, err := findZeroCoveragePackages(profilePath, repoRoot, coverPackages)
+	if err != nil {
+		return coverageResult{}, "", err
+	}
+	return coverageResult{
+		actual:               actual,
+		zeroCoveragePackages: zeroCoveragePackages,
+	}, totalLine, nil
+}
+
+func findZeroCoveragePackages(profilePath string, repoRoot string, coverPackages []string) ([]string, error) {
+	profileData, err := os.ReadFile(profilePath)
+	if err != nil {
+		return nil, fmt.Errorf("read go coverage profile: %w", err)
+	}
+	packageTotals, err := parseCoverageProfile(profileData, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{}, len(coverPackages))
+	zeroCoveragePackages := make([]string, 0, len(coverPackages))
+	for _, coverPackage := range coverPackages {
+		if !isBackendCoveragePackage(coverPackage) {
+			continue
+		}
+		if _, ok := seen[coverPackage]; ok {
+			continue
+		}
+		seen[coverPackage] = struct{}{}
+
+		totals, ok := packageTotals[coverPackage]
+		if !ok || totals.totalStatements == 0 || totals.coveredStatements > 0 {
+			continue
+		}
+		zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
+	}
+	slices.Sort(zeroCoveragePackages)
+	return zeroCoveragePackages, nil
+}
+
+func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packageCoverageTotals, error) {
+	lines := strings.Split(strings.TrimSpace(string(profileData)), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return nil, errors.New("parse go coverage profile: empty profile")
+	}
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "mode:") {
+		return nil, errors.New("parse go coverage profile: missing mode header")
+	}
+
+	packageTotals := make(map[string]packageCoverageTotals)
+	for index, rawLine := range lines[1:] {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) != 3 {
+			return nil, fmt.Errorf("parse go coverage profile: malformed line %d", index+2)
+		}
+
+		filePathWithRanges := fields[0]
+		rangeSeparator := strings.LastIndex(filePathWithRanges, ":")
+		if rangeSeparator < 0 {
+			return nil, fmt.Errorf("parse go coverage profile: malformed file range on line %d", index+2)
+		}
+
+		statementCount, err := strconv.Atoi(fields[1])
+		if err != nil {
+			return nil, fmt.Errorf("parse go coverage profile statements on line %d: %w", index+2, err)
+		}
+		executionCount, err := strconv.Atoi(fields[2])
+		if err != nil {
+			return nil, fmt.Errorf("parse go coverage profile execution count on line %d: %w", index+2, err)
+		}
+
+		importPath, err := coverageImportPath(filePathWithRanges[:rangeSeparator], repoRoot)
+		if err != nil {
+			return nil, fmt.Errorf("parse go coverage profile import path on line %d: %w", index+2, err)
+		}
+
+		totals := packageTotals[importPath]
+		totals.totalStatements += statementCount
+		if executionCount > 0 {
+			totals.coveredStatements += statementCount
+		}
+		packageTotals[importPath] = totals
+	}
+
+	return packageTotals, nil
+}
+
+func coverageImportPath(filePath string, repoRoot string) (string, error) {
+	normalizedPath := filepath.ToSlash(strings.TrimSpace(filePath))
+	if normalizedPath == "" {
+		return "", errors.New("empty file path")
+	}
+
+	switch {
+	case strings.HasPrefix(normalizedPath, modulePath+"/"):
+		return path.Dir(normalizedPath), nil
+	case strings.HasPrefix(normalizedPath, "./"):
+		normalizedPath = strings.TrimPrefix(normalizedPath, "./")
+	case filepath.IsAbs(filePath):
+		relativePath, err := filepath.Rel(repoRoot, filePath)
+		if err != nil {
+			return "", fmt.Errorf("resolve profile path relative to repository root: %w", err)
+		}
+		normalizedPath = filepath.ToSlash(relativePath)
+	}
+
+	normalizedPath = strings.TrimPrefix(normalizedPath, "/")
+	if strings.HasPrefix(normalizedPath, "../") || normalizedPath == ".." {
+		return "", fmt.Errorf("profile path %q escapes repository root", filePath)
+	}
+
+	importDir := path.Dir(normalizedPath)
+	if importDir == "." || importDir == "" {
+		return "", fmt.Errorf("profile path %q does not include a package directory", filePath)
+	}
+	return modulePath + "/" + importDir, nil
+}
+
+func formatZeroCoverageFailure(packages []string) string {
+	return fmt.Sprintf(
+		"go coverage found backend-owned packages with 0%% statement coverage: %s",
+		strings.Join(packages, ", "),
+	)
+}
+
 func failf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format, args...)
-	os.Exit(1)
+	fmt.Fprintf(stderrWriter, format, args...)
+	exitFunc(1)
 }
