@@ -2,10 +2,11 @@
 
 ## world state
 
-- as of `2026-05-06T03:05:05.3321512-07:00`, local `HEAD` on `main` points to
-  `02643f8`
-  (`Merge pull request #119 from portpowered/ralph/dedupe-functional-api-server-harnesses`)
-  and matches `origin/main`
+- as of `2026-05-06T04:04:39.6158725-07:00`, local `HEAD` on `main` points to
+  `c314504`
+  (`Merge branch 'main' of https://github.com/portpowered/infinite-you`) and
+  contains the merged `origin/main` baseline through `cf64128`
+  (`Merge pull request #121 from portpowered/ralph/consolidate-runtime-api-functional-support-helpers`)
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the local worktree is not clean:
   - canonical `factory/inputs/**` remains tracked-sentinel-only
@@ -13,6 +14,8 @@
     `factory/inputs/**`
   - `factory/logs/meta/asks.md` carries a local tracked edit and should be
     treated as user-owned state for this refresh
+  - tracked meta-log updates are required because the last checked-in summary
+    predates merged PR `#121`
   - ignored local workflow residue under `factory/inputs/**` must still be
     treated as operating state rather than checked-in queue truth
 
@@ -49,13 +52,12 @@
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
-- stale ignored residue for merged tasks existed at the start of this refresh:
-  - `factory/inputs/idea/default/retire-transition-topology-runtime-lookup-adapter.md`
-  - `factory/inputs/task/default/consolidate-static-command-runner-test-helpers.md`
-  - `factory/inputs/task/default/dedupe-functional-api-server-harnesses.md`
-  - `factory/inputs/task/default/retire-transition-topology-runtime-lookup-adapter.md`
-- those ignored files were local operating leftovers rather than checked-in
-  queue truth and have been pruned during this refresh
+- the visible ignored local idea residue at the start of this refresh was:
+  - `factory/inputs/idea/default/consolidate-runtime-api-functional-support-helpers.md`
+- that ignored idea was stale queue residue rather than checked-in queue truth
+  because merged PR `#121` already landed the runtime helper dedupe on `main`
+- it has been replaced during this refresh with one narrower follow-up idea:
+  - `factory/inputs/idea/default/collapse-runtime-api-functional-server-lifecycle-owner.md`
 
 ## customer-ask truth
 
@@ -92,6 +94,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#121` `consolidate-runtime-api-functional-support-helpers`, merged on
+    `2026-05-06T10:27:31Z`
   - `#119` `dedupe-functional-api-server-harnesses`, merged on
     `2026-05-06T09:27:38Z`
   - `#118` `retire-transition-topology-runtime-lookup-adapter`, merged on
@@ -106,25 +110,31 @@
   - `#112` `updated website export to support exporting bundled files`, merged
     on `2026-05-06T07:45:59Z`
   - `#111` `remove-init-default-models`, merged on `2026-05-06T07:09:23Z`
-- `gh pr list --state open` currently reports no open PRs
-- there is no currently open PR owning the next helper-cleanup lane
+- `gh pr list --state open` currently reports one open PR:
+  - `#120` `docs: refresh meta world state`
+- PR `#120` is a meta-log refresh branch and does not own the next code cleanup
+  lane
 
 ## next cleanup candidate
 
 - there is no remaining narrow unowned customer-visible ask gap on `main`
-- the next non-overlapping cleanup seam is in runtime API functional helper
-  duplication:
-  - `tests/functional/internal/support/events.go` already owns
-    `StringPointerValue` and `FactoryWorksValue`
-  - `tests/functional/internal/support/harness.go` already owns
-    `HasWorkTokenInPlace`
-  - `tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go`
-    still carries local `factoryWorksValue` and `factoryRelationsValue`
+- the next non-overlapping cleanup seam is the remaining duplicate runtime API
+  functional server lifecycle owner:
+  - `tests/functional/internal/support/api_server.go` already owns
+    `FunctionalAPIServerConfig`, `FunctionalAPIServer`, and
+    `StartFunctionalAPIServer`
+  - `tests/functional/runtime_api/helpers_test.go` already wraps that shared
+    owner for most runtime API suites
+  - `tests/functional/runtime_api/functional_server_test.go` still defines a
+    second lifecycle path with `FunctionalServer`,
+    `StartFunctionalServerWithConfig`, `StartFunctionalServer`,
+    `waitForFunctionalServerAPIHandler`, `waitForFunctionalServiceRuntime`, and
+    `GetEngineStateSnapshot`
   - `tests/functional/runtime_api/api_service_mode_observability_smoke_test.go`
-    still carries local `stringValue` and `hasWorkTokenInPlace`
-- the next dispatch should consolidate those runtime API suites onto the shared
-  support helpers, adding a shared `FactoryRelationsValue` sibling only if
-  needed, without changing runtime API behavior
+    still consumes that duplicate lifecycle surface
+- the next dispatch should collapse runtime API lifecycle startup and readiness
+  waiting onto shared support while preserving the same runtime-visible
+  service-mode assertions
 
 ## theory of mind
 
@@ -144,3 +154,6 @@
   `functionallong` lanes before treating them as dead
 - when a shared functional support helper already exists, prefer collapsing
   local suite copies onto it instead of inventing another abstraction layer
+- when a shared functional support server lifecycle owner already exists, treat
+  remaining package-local test bootstrappers as cleanup seams even if they
+  still keep package-specific request helpers
