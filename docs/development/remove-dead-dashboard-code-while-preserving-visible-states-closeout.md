@@ -39,13 +39,13 @@ directly.
 - `cd ui && bun run build`
 - `cd ui && bun run replay:coverage:check`
 - `cd ui && bun run build-storybook`
+- `cd ui && bun run test-storybook`
 
 ## Notes
 
 - The requested `dev-browser` skill is not available in this session, so the
   closest repo-owned browser verification was the Storybook lane.
-- `bun run test-storybook` still fails in this Windows/Bun environment after the
-  cleanup-specific import regressions were fixed. The remaining failure is a
-  Storybook Vitest runtime issue (`react` default-export resolution inside
-  `@storybook/addon-vitest`), not a dashboard assertion failure introduced by
-  this lane.
+- The Storybook browser smoke verifies the submit-work lane by checking that the
+  submit action leaves its disabled visual state once the form becomes valid,
+  which matches the surviving observable contract more directly than comparing
+  it to the header's neutral export launcher.

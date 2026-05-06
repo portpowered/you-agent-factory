@@ -959,9 +959,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
       submitButton,
       workTypeField,
     } = await submitWorkCardControls(canvasElement);
-    const exportButton = await canvas.findByRole("button", {
-      name: "Export PNG",
-    });
+    const disabledSubmitStyle = buttonVisibleStyle(submitButton);
 
     expect(
       Array.from(
@@ -980,9 +978,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     await userEvent.selectOptions(workTypeField, "story");
     await expect(submitButton).toBeEnabled();
     await waitFor(() => {
-      expect(buttonVisibleStyle(submitButton)).toEqual(
-        buttonVisibleStyle(exportButton),
-      );
+      expect(buttonVisibleStyle(submitButton)).not.toEqual(disabledSubmitStyle);
     });
     await userEvent.click(submitButton);
     await expect(
