@@ -110,7 +110,6 @@ The file watcher monitors this directory tree and automatically watches new subd
 `,
 			factoryWorkersDirName + "/processor/" + factoryAgentsFileName: `---
 type: MODEL_WORKER
-model: gpt-5-codex
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
 resources: ["agent-slot"]
@@ -272,7 +271,6 @@ Keep the plan product-neutral unless the customer request names a specific produ
 `,
 			factoryWorkersDirName + "/planner/" + factoryAgentsFileName: `---
 type: MODEL_WORKER
-model: gpt-5-codex
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
 stopToken: "<COMPLETE>"
@@ -286,7 +284,6 @@ Produce clear, product-neutral planning artifacts that the executor can apply di
 `,
 			factoryWorkersDirName + "/executor/" + factoryAgentsFileName: `---
 type: MODEL_WORKER
-model: gpt-5-codex
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
 stopToken: "<COMPLETE>"

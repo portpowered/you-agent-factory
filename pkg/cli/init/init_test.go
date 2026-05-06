@@ -127,11 +127,11 @@ func TestInit_CreatesDirectoryStructure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read generated worker AGENTS.md: %v", err)
 	}
-	if !strings.Contains(string(workerAgents), "model: gpt-5-codex") {
-		t.Fatalf("generated worker AGENTS.md = %q, want model: gpt-5-codex", string(workerAgents))
-	}
 	if !strings.Contains(string(workerAgents), "modelProvider: CODEX") {
 		t.Fatalf("generated worker AGENTS.md = %q, want modelProvider: CODEX", string(workerAgents))
+	}
+	if strings.Contains(string(workerAgents), "model:") {
+		t.Fatalf("generated worker AGENTS.md = %q, should not contain a default model", string(workerAgents))
 	}
 	if !strings.Contains(string(workerAgents), "executorProvider: SCRIPT_WRAP") {
 		t.Fatalf("generated worker AGENTS.md = %q, want executorProvider: SCRIPT_WRAP", string(workerAgents))
@@ -160,7 +160,7 @@ func TestInit_CreatesDirectoryStructure(t *testing.T) {
 	if strings.Contains(string(workerAgents), "timeout: 2h") {
 		t.Fatal("generated worker AGENTS.md should not use the subprocess fallback as the emitted default")
 	}
-	assertInitScaffoldFilesCanonical(t, base, "gpt-5-codex", "codex")
+	assertInitScaffoldFilesCanonical(t, base, "codex")
 
 	workstationAgentsPath := filepath.Join(base, "workstations", "process", "AGENTS.md")
 	if _, err := os.Stat(workstationAgentsPath); os.IsNotExist(err) {
@@ -188,11 +188,11 @@ func TestInit_ClaudeExecutorCreatesClaudeWorkerScaffold(t *testing.T) {
 	}
 
 	contents := string(workerAgents)
-	if !strings.Contains(contents, "model: claude-sonnet-4-20250514") {
-		t.Fatalf("generated worker AGENTS.md = %q, want Claude model scaffold", contents)
-	}
 	if !strings.Contains(contents, "modelProvider: CLAUDE") {
 		t.Fatalf("generated worker AGENTS.md = %q, want modelProvider: CLAUDE", contents)
+	}
+	if strings.Contains(contents, "model:") {
+		t.Fatalf("generated worker AGENTS.md = %q, should not contain a default model", contents)
 	}
 	if !strings.Contains(contents, "executorProvider: SCRIPT_WRAP") {
 		t.Fatalf("generated worker AGENTS.md = %q, want executorProvider: SCRIPT_WRAP", contents)
@@ -200,10 +200,7 @@ func TestInit_ClaudeExecutorCreatesClaudeWorkerScaffold(t *testing.T) {
 	if !strings.Contains(contents, defaultProcessorSystemBody) {
 		t.Fatalf("generated worker AGENTS.md = %q, want default processor system prompt", contents)
 	}
-	if strings.Contains(contents, "model: gpt-5-codex") {
-		t.Fatalf("generated worker AGENTS.md = %q, should not include default codex model", contents)
-	}
-	assertInitScaffoldFilesCanonical(t, base, "claude-sonnet-4-20250514", "claude")
+	assertInitScaffoldFilesCanonical(t, base, "claude")
 }
 
 func TestInit_LoadRuntimeConfigForDefaultScaffold(t *testing.T) {
@@ -214,7 +211,7 @@ func TestInit_LoadRuntimeConfigForDefaultScaffold(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	assertInitRuntimeConfig(t, base, "gpt-5-codex", "codex")
+	assertInitRuntimeConfig(t, base, "", "codex")
 }
 
 func TestInit_LoadRuntimeConfigForClaudeScaffold(t *testing.T) {
@@ -225,7 +222,7 @@ func TestInit_LoadRuntimeConfigForClaudeScaffold(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	assertInitRuntimeConfig(t, base, "claude-sonnet-4-20250514", "claude")
+	assertInitRuntimeConfig(t, base, "", "claude")
 }
 
 func TestInit_Idempotent(t *testing.T) {
@@ -398,6 +395,7 @@ func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.
 			"skipPermissions: true",
 		})
 		requireOmitsAll(t, workerPath, workerBody, []string{
+			"model:",
 			"model_provider:",
 			"provider:",
 			"stop_token:",
@@ -595,7 +593,7 @@ func assertInitRuntimeConfig(t *testing.T, base, wantModel, wantProvider string)
 	}
 }
 
-func assertInitScaffoldFilesCanonical(t *testing.T, base, wantModel, wantProvider string) {
+func assertInitScaffoldFilesCanonical(t *testing.T, base, wantProvider string) {
 	t.Helper()
 
 	factoryConfigPath := filepath.Join(base, "factory.json")
@@ -650,7 +648,6 @@ func assertInitScaffoldFilesCanonical(t *testing.T, base, wantModel, wantProvide
 	}
 	workerAgents := string(workerAgentsBytes)
 	for _, expected := range []string{
-		"model: " + wantModel,
 		"modelProvider: " + strings.ToUpper(wantProvider),
 		"executorProvider: SCRIPT_WRAP",
 		"timeout: 1h",
@@ -665,5 +662,8 @@ func assertInitScaffoldFilesCanonical(t *testing.T, base, wantModel, wantProvide
 		if strings.Contains(workerAgents, retired) {
 			t.Fatalf("generated worker AGENTS.md should not contain retired %q:\n%s", retired, workerAgents)
 		}
+	}
+	if strings.Contains(workerAgents, "model:") {
+		t.Fatalf("generated worker AGENTS.md should not contain a default model:\n%s", workerAgents)
 	}
 }

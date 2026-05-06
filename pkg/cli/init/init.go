@@ -66,16 +66,13 @@ func parseStarterExecutor(raw string) (starterExecutor, error) {
 }
 
 func defaultModelWorkerAgentsMD(executor starterExecutor) string {
-	model := "gpt-5-codex"
 	modelProvider := "CODEX"
 	if executor == StarterExecutorClaude {
-		model = "claude-sonnet-4-20250514"
 		modelProvider = "CLAUDE"
 	}
 
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
-model: %s
 modelProvider: %s
 executorProvider: SCRIPT_WRAP
 resources:
@@ -84,7 +81,7 @@ resources:
 timeout: 1h
 skipPermissions: true
 ---
-%s`, model, modelProvider, defaultProcessorSystemBody)
+%s`, modelProvider, defaultProcessorSystemBody)
 }
 
 // Init creates the factory directory structure.
