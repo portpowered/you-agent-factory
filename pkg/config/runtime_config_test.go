@@ -343,6 +343,7 @@ func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
 		filepath.Join(factoryDir, interfaces.InputsDir),
+		filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName),
 		filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName),
 	} {

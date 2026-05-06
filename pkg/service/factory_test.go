@@ -5788,6 +5788,86 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkin
 	}
 }
 
+func TestLoadWorkersFromConfig_CanonicalRuntimeLookupResolvesPortableFactoryScriptReferencesAgainstNamedFactoryDir(t *testing.T) {
+	rootDir := t.TempDir()
+	namedFactoryDir := filepath.Join(rootDir, "beta")
+
+	writeScriptWorkerAgentsMDWithCommand(t, namedFactoryDir, "script-worker", "pwsh", []string{"-File", "factory/scripts/execute-story.ps1"})
+	writeRuntimeLookupWorkstationAgentsMD(t, namedFactoryDir, "run-script")
+	if err := os.MkdirAll(filepath.Join(namedFactoryDir, "scripts"), 0o755); err != nil {
+		t.Fatalf("create scripts dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(namedFactoryDir, "scripts", "execute-story.ps1"), []byte("Write-Output 'ok'\n"), 0o644); err != nil {
+		t.Fatalf("write portable script: %v", err)
+	}
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, namedFactoryDir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "run-script",
+			WorkerTypeName: "script-worker",
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "script-worker"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"script-worker": mustLoadWorkerConfig(t, filepath.Join(namedFactoryDir, "workers", "script-worker")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"run-script": mustLoadWorkstationConfig(t, filepath.Join(namedFactoryDir, "workstations", "run-script")),
+		},
+	)
+	loaded.SetRuntimeBaseDir(rootDir)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["script-worker"]
+	if !ok {
+		t.Fatal("expected script-worker executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-runtime-lookup-script-ref",
+		TransitionID:    "t-runtime-lookup-script-ref",
+		WorkerType:      "script-worker",
+		WorkstationName: "run-script",
+		ProjectID:       "agent-factory",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-runtime-lookup-script-ref",
+			Color: interfaces.TokenColor{
+				WorkID: "work-runtime-lookup-script-ref",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if len(runner.request.Args) != 2 {
+		t.Fatalf("command args = %#v, want 2 entries", runner.request.Args)
+	}
+	if got := runner.request.Args[1]; got != filepath.Join(namedFactoryDir, "scripts", "execute-story.ps1") {
+		t.Fatalf("portable script arg = %q, want %q", got, filepath.Join(namedFactoryDir, "scripts", "execute-story.ps1"))
+	}
+	if got := runner.request.WorkDir; got != filepath.Join(rootDir, "workspace") {
+		t.Fatalf("command working directory = %q, want %q", got, filepath.Join(rootDir, "workspace"))
+	}
+}
+
 func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
 
