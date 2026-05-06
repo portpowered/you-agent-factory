@@ -6,6 +6,7 @@ tests/functional/bootstrap_portability/portability_helpers_test.go:26:6: unreach
 tests/functional/bootstrap_portability/portability_helpers_test.go:33:6: unreachable func: writeFactoryTestFile
 tests/functional/guards_batch/helpers_test.go:14:6: unreachable func: providerErrorCorpusEntryForTest
 tests/functional/guards_batch/helpers_test.go:99:29: unreachable func: panickingExecutor.Execute
+tests/functional/internal/support/events.go:23:6: unreachable func: FactoryRelationsValue
 tests/functional/internal/support/fixtures.go:136:6: unreachable func: UpdateFactoryConfig
 tests/functional/providers/helpers_test.go:127:6: unreachable func: buildModelWorkerConfig
 tests/functional/providers/helpers_test.go:179:6: unreachable func: writeNamedWorkerAgents
@@ -61,7 +62,6 @@ tests/functional/replay_contracts/short_helpers_test.go:43:6: unreachable func: 
 tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:40:6: unreachable func: runBoundaryBatchSmokeThroughWatchedFile
 tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:56:6: unreachable func: runBoundaryBatchSmokeThroughHTTP
 tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:99:6: unreachable func: loadBatchBoundarySummary
-tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:167:6: unreachable func: factoryRelationsValue
 tests/functional/smoke/short_helpers_test.go:5:6: unreachable func: simpleServicePipelineConfig
 tests/functional/workflow/helpers_test.go:11:6: unreachable func: newAdhocProcessReviewHarness
 tests/functional/workflow/helpers_test.go:38:6: unreachable func: dispatchesForWorkstation

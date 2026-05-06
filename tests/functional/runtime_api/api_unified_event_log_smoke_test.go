@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
@@ -336,7 +337,7 @@ func assertUnifiedSmokeWorkRequestPayload(t *testing.T, event factoryapi.Factory
 	if stringValueFromFunctionalPtr(event.Context.RequestId) != requestID {
 		t.Fatalf("WORK_REQUEST request_id = %q, want %q", stringValueFromFunctionalPtr(event.Context.RequestId), requestID)
 	}
-	works := factoryWorksValue(workRequest.Works)
+	works := support.FactoryWorksValue(workRequest.Works)
 	if len(works) != 2 {
 		t.Fatalf("WORK_REQUEST works = %#v, want two batch items", works)
 	}

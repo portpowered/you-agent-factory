@@ -117,7 +117,7 @@ func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, request
 			RequestID: requestID,
 			Source:    support.StringPointerValue(payload.Source),
 		}
-		for _, work := range factoryWorksValue(payload.Works) {
+		for _, work := range support.FactoryWorksValue(payload.Works) {
 			summary.Works = append(summary.Works, batchBoundaryWork{
 				Name:         work.Name,
 				WorkID:       support.StringPointerValue(work.WorkId),
@@ -126,7 +126,7 @@ func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, request
 				TraceID:      support.StringPointerValue(work.TraceId),
 			})
 		}
-		for _, relation := range factoryRelationsValue(payload.Relations) {
+		for _, relation := range support.FactoryRelationsValue(payload.Relations) {
 			summary.Relations = append(summary.Relations, batchBoundaryRelation{
 				Type:           string(relation.Type),
 				SourceWorkName: relation.SourceWorkName,
@@ -155,18 +155,4 @@ func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, request
 
 	t.Fatalf("missing WORK_REQUEST event for %q", requestID)
 	return batchBoundarySummary{}
-}
-
-func factoryWorksValue(works *[]factoryapi.Work) []factoryapi.Work {
-	if works == nil {
-		return nil
-	}
-	return *works
-}
-
-func factoryRelationsValue(relations *[]factoryapi.Relation) []factoryapi.Relation {
-	if relations == nil {
-		return nil
-	}
-	return *relations
 }

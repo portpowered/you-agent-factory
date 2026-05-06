@@ -13,13 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
 func sliceValue[T any](values *[]T) []T {
 	if values == nil {
 		return nil
@@ -252,8 +245,8 @@ func TestObservabilitySmoke_CanonicalServiceSnapshotMatchesStateAndDashboardAcro
 	assertStreamDashboardMatchesEngineState(t, "active stream snapshot", activeEngineState, activeStreamSnapshot)
 
 	_, activeWorkItem := findActiveWorkItemByTraceID(t, activeDashboard, traceID)
-	if stringValue(activeWorkItem.TraceId) != traceID {
-		t.Fatalf("active dashboard work item trace ID = %q, want %q", stringValue(activeWorkItem.TraceId), traceID)
+	if support.StringPointerValue(activeWorkItem.TraceId) != traceID {
+		t.Fatalf("active dashboard work item trace ID = %q, want %q", support.StringPointerValue(activeWorkItem.TraceId), traceID)
 	}
 
 	close(dispatchRelease)
@@ -266,7 +259,7 @@ func TestObservabilitySmoke_CanonicalServiceSnapshotMatchesStateAndDashboardAcro
 			return snapshot.FactoryState == "RUNNING" &&
 				snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
 				snapshot.InFlightCount == 0 &&
-				hasWorkTokenInPlace(snapshot.Marking, "task:complete", activeWorkItem.WorkId)
+				support.HasWorkTokenInPlace(snapshot.Marking, "task:complete", activeWorkItem.WorkId)
 		},
 	)
 	if len(completedEngineState.DispatchHistory) == 0 {
@@ -509,7 +502,7 @@ func findActiveWorkItemByTraceID(
 			continue
 		}
 		for _, workItem := range sliceValue(execution.WorkItems) {
-			if stringValue(workItem.TraceId) == traceID {
+			if support.StringPointerValue(workItem.TraceId) == traceID {
 				return execution, workItem
 			}
 		}
@@ -517,7 +510,7 @@ func findActiveWorkItemByTraceID(
 
 	for _, execution := range mapValue(snapshot.Runtime.ActiveExecutionsByDispatchId) {
 		for _, workItem := range sliceValue(execution.WorkItems) {
-			if stringValue(workItem.TraceId) == traceID {
+			if support.StringPointerValue(workItem.TraceId) == traceID {
 				return execution, workItem
 			}
 		}
@@ -525,16 +518,4 @@ func findActiveWorkItemByTraceID(
 
 	t.Fatalf("expected an active dashboard work item for trace %q", traceID)
 	return DashboardActiveExecution{}, DashboardWorkItemRef{}
-}
-
-func hasWorkTokenInPlace(marking petri.MarkingSnapshot, placeID, workID string) bool {
-	for _, token := range marking.Tokens {
-		if token == nil {
-			continue
-		}
-		if token.PlaceID == placeID && token.Color.WorkID == workID {
-			return true
-		}
-	}
-	return false
 }
