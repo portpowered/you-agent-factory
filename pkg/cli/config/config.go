@@ -49,13 +49,18 @@ func ExpandFactoryConfig(cfg FactoryConfigExpandConfig) error {
 		output = os.Stdout
 	}
 
-	targetDir, err := factoryconfig.ExpandFactoryConfigLayout(cfg.Path)
+	targetDir, replacements, err := factoryconfig.ExpandFactoryConfigLayoutWithReport(cfg.Path)
 	if err != nil {
 		return err
 	}
 
 	if _, err := fmt.Fprintf(output, "Expanded factory config into %s\n", targetDir); err != nil {
 		return fmt.Errorf("write expand result: %w", err)
+	}
+	for _, replacement := range replacements {
+		if _, err := fmt.Fprintf(output, "Replaced existing portable bundled file at %s\n", replacement.TargetPath); err != nil {
+			return fmt.Errorf("write expand replacement report: %w", err)
+		}
 	}
 	return nil
 }

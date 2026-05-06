@@ -8,5 +8,6 @@ func WriteExpandedFactoryLayoutForTest(
 	canonical []byte,
 	sourcePath string,
 ) error {
-	return writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, sourcePath)
+	_, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, sourcePath)
+	return err
 }

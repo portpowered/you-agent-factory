@@ -259,6 +259,35 @@ func TestExpandFactoryConfig_WritesPromptFileFromBodyWhenPromptTemplateMissing(t
 	}
 }
 
+func TestExpandFactoryConfig_ReportsReplacedPortableBundledFiles(t *testing.T) {
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	writeCLITestFile(t, factoryPath, `{
+		"name":"expand-config-portable-replacement",
+		"supportingFiles":{
+			"bundledFiles":[
+				{"type":"SCRIPT","targetPath":"factory/scripts/execute-story.ps1","content":{"encoding":"utf-8","inline":"Write-Output 'portable script'\n"}}
+			]
+		},
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers":[{"name":"executor","definition":{"type":"SCRIPT_WORKER","command":"powershell","args":["-File","scripts/execute-story.ps1"],"body":"Run the script."}}],
+		"workstations":[{"name":"execute-story","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}]}]
+	}`)
+	writeCLITestFile(t, filepath.Join(dir, "scripts", "execute-story.ps1"), "Write-Output 'stale script'\n")
+
+	var out bytes.Buffer
+	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out}); err != nil {
+		t.Fatalf("ExpandFactoryConfig: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "Replaced existing portable bundled file at factory/scripts/execute-story.ps1") {
+		t.Fatalf("expected portable bundled replacement report, got %q", out.String())
+	}
+	if got := string(readCLITestFile(t, filepath.Join(dir, "scripts", "execute-story.ps1"))); got != "Write-Output 'portable script'\n" {
+		t.Fatalf("expanded script file = %q, want portable content", got)
+	}
+}
+
 func TestExpandFactoryConfig_PreservesPortableResourceManifestAndMaterializesBundledFiles(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
