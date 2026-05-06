@@ -12,17 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type replayFunctionalServer struct {
@@ -30,6 +24,7 @@ type replayFunctionalServer struct {
 	service *service.FactoryService
 	cancel  context.CancelFunc
 	done    chan struct{}
+	*support.FunctionalAPIServer
 }
 
 func startReplayFunctionalServerWithConfig(
@@ -41,85 +36,27 @@ func startReplayFunctionalServerWithConfig(
 ) *replayFunctionalServer {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	var handler http.Handler
-	readyCh := make(chan struct{})
-
-	cfg := &service.FactoryServiceConfig{
-		Dir:          factoryDir,
-		Port:         1,
-		Logger:       zap.NewNop(),
-		ExtraOptions: extraOpts,
-		APIServerStarter: func(ctx context.Context, f apisurface.APISurface, port int, l *zap.Logger) error {
-			handler = api.NewServer(f, 0, l).Handler()
-			close(readyCh)
-			<-ctx.Done()
-			return nil
-		},
-	}
-	if useMockWorkers {
-		cfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
-	}
-	if configure != nil {
-		configure(cfg)
-	}
-
-	svc, err := service.BuildFactoryService(ctx, cfg)
-	if err != nil {
-		cancel()
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if err := svc.Run(ctx); err != nil && err != context.Canceled {
-			fmt.Printf("replay_contracts FunctionalServer: svc.Run ended: %v\n", err)
-		}
-	}()
-
-	select {
-	case <-readyCh:
-	case <-time.After(5 * time.Second):
-		cancel()
-		t.Fatal("FunctionalServer: timed out waiting for API handler")
-	}
-
-	httpSrv := httptest.NewServer(handler)
-	server := &replayFunctionalServer{
-		httpSrv: httpSrv,
-		service: svc,
-		cancel:  cancel,
-		done:    done,
-	}
-	t.Cleanup(func() {
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-		}
-		httpSrv.Close()
+	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: useMockWorkers,
+		Configure:      configure,
+		ExtraOptions:   extraOpts,
 	})
+	server := &replayFunctionalServer{
+		httpSrv:             base.HTTPServer(),
+		service:             base.Service(),
+		cancel:              base.CancelFunc(),
+		done:                base.Done(),
+		FunctionalAPIServer: base,
+	}
 	return server
-}
-
-func (fs *replayFunctionalServer) URL() string {
-	return fs.httpSrv.URL
 }
 
 func (fs *replayFunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	t.Helper()
 
-	snapshot, err := fs.service.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("get factory events: %v", err)
-	}
+	snapshot := fs.GetEngineStateSnapshot(t)
+	events := fs.GetFactoryEvents(t)
 
 	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
@@ -135,15 +72,6 @@ func (fs *replayFunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	out.Runtime.Session.DispatchedCount = worldView.Runtime.Session.DispatchedCount
 	out.Runtime.Session.FailedCount = worldView.Runtime.Session.FailedCount
 	return out
-}
-
-func (fs *replayFunctionalServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-	snapshot, err := fs.service.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	return snapshot
 }
 
 type DashboardResponse struct {
