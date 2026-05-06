@@ -88,6 +88,61 @@ func TestFailfWritesFormattedErrorAndExits(t *testing.T) {
 	}
 }
 
+func TestParseConfigHonorsExplicitOverrides(t *testing.T) {
+	restoreArgsAndFlags(t)
+
+	os.Args = []string{
+		"functionallane",
+		"-count=3",
+		"-jobs=4",
+		"-root=./tests/functional/runtime_api/...",
+		"-short=false",
+		"-timeout=2m30s",
+	}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	got := parseConfig()
+	want := config{
+		count:   3,
+		jobs:    4,
+		root:    "./tests/functional/runtime_api/...",
+		short:   false,
+		timeout: 150 * time.Second,
+	}
+
+	if got != want {
+		t.Fatalf("parseConfig() = %+v, want %+v", got, want)
+	}
+}
+
+func TestParseConfigNormalizesJobsBelowOne(t *testing.T) {
+	restoreArgsAndFlags(t)
+
+	os.Args = []string{
+		"functionallane",
+		"-jobs=0",
+	}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	got := parseConfig()
+
+	if got.jobs != 1 {
+		t.Fatalf("parseConfig() jobs = %d, want 1", got.jobs)
+	}
+	if got.count != 1 {
+		t.Fatalf("parseConfig() count = %d, want 1", got.count)
+	}
+	if got.root != "./tests/functional/..." {
+		t.Fatalf("parseConfig() root = %q, want %q", got.root, "./tests/functional/...")
+	}
+	if !got.short {
+		t.Fatal("parseConfig() short = false, want true")
+	}
+	if got.timeout != 5*time.Minute {
+		t.Fatalf("parseConfig() timeout = %s, want %s", got.timeout, 5*time.Minute)
+	}
+}
+
 func TestDiscoverPackagesKeepsRunnablePackagesAndExcludesSupport(t *testing.T) {
 	restoreExecCommand(t)
 
