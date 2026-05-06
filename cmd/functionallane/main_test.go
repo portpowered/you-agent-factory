@@ -153,6 +153,53 @@ func TestRunFailsWhenNoRunnablePackagesRemain(t *testing.T) {
 	}
 }
 
+func TestRunExecutesDiscoveredFunctionalPackagesWithParsedConfig(t *testing.T) {
+	restoreExecCommand(t)
+	restoreArgsAndFlags(t)
+
+	execCommand = fakeFunctionalLaneCommand
+	os.Args = []string{
+		"functionallane",
+		"-count=3",
+		"-jobs=4",
+		"-timeout=2m0s",
+	}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	testArgsFile := t.TempDir() + "/go-test-args.txt"
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join([]string{
+		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
+		"github.com/portpowered/infinite-you/tests/functional/internal/support",
+		"",
+		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
+	}, "\n"))
+	t.Setenv("FUNCTIONALLANE_HELPER_TEST_ARGS_FILE", testArgsFile)
+
+	if err := run(); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	gotBytes, err := os.ReadFile(testArgsFile)
+	if err != nil {
+		t.Fatalf("read captured go test args: %v", err)
+	}
+
+	gotArgs := strings.Split(strings.TrimSpace(string(gotBytes)), "\n")
+	wantArgs := []string{
+		"test",
+		"-p=4",
+		"-short",
+		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
+		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
+		"-count=3",
+		"-timeout=2m0s",
+	}
+	if !slices.Equal(gotArgs, wantArgs) {
+		t.Fatalf("run() go test args = %v, want %v", gotArgs, wantArgs)
+	}
+}
+
 func TestRunFunctionalTestsBuildsGoTestInvocation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -244,6 +291,12 @@ func TestFunctionallaneFakeGoProcess(t *testing.T) {
 		}
 		os.Exit(exitCode)
 	case len(args) >= 2 && args[1] == "test":
+		if path := os.Getenv("FUNCTIONALLANE_HELPER_TEST_ARGS_FILE"); path != "" {
+			if err := os.WriteFile(path, []byte(strings.Join(args[1:], "\n")), 0o600); err != nil {
+				fmt.Fprintf(os.Stderr, "write fake go test args: %v", err)
+				os.Exit(2)
+			}
+		}
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
