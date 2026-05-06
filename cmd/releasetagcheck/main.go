@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
@@ -13,20 +14,45 @@ import (
 	"github.com/portpowered/infinite-you/internal/releasetag"
 )
 
+var (
+	commandMain           = run
+	exitFunc              = os.Exit
+	stdout      io.Writer = os.Stdout
+	stderr      io.Writer = os.Stderr
+)
+
 func main() {
-	var tag string
-	var pointsAt string
-	flag.StringVar(&tag, "tag", "", "explicit release tag to validate")
-	flag.StringVar(&pointsAt, "points-at", "", "git revision whose release tag should be resolved")
-	flag.Parse()
+	exitFunc(commandMain(os.Args[1:], stdout, stderr))
+}
+
+func run(args []string, stdout io.Writer, stderr io.Writer) int {
+	tag, pointsAt, err := parseArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
 	resolvedTag, err := resolveTag(context.Background(), tag, pointsAt)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 
-	fmt.Printf("release_tag=%s\n", resolvedTag)
+	fmt.Fprintf(stdout, "release_tag=%s\n", resolvedTag)
+	return 0
+}
+
+func parseArgs(args []string) (string, string, error) {
+	var tag string
+	var pointsAt string
+	flags := flag.NewFlagSet("releasetagcheck", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.StringVar(&tag, "tag", "", "explicit release tag to validate")
+	flags.StringVar(&pointsAt, "points-at", "", "git revision whose release tag should be resolved")
+	if err := flags.Parse(args); err != nil {
+		return "", "", err
+	}
+	return tag, pointsAt, nil
 }
 
 func resolveTag(ctx context.Context, tag string, pointsAt string) (string, error) {
