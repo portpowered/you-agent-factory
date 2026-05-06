@@ -56,14 +56,14 @@ export const DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_ICON_ITEMS = [
 const DEFAULT_CONTAINER_CLASS =
   "pointer-events-none z-10 flex flex-col items-start gap-2 max-[720px]:items-stretch";
 const TOGGLE_BUTTON_CLASS =
-  "dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-accent/35 bg-af-surface/92 px-[0.8rem] py-[0.55rem] text-af-accent shadow-af-card backdrop-blur-[14px] transition-colors hover:bg-af-overlay/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
+  "dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/92 px-[0.8rem] py-[0.55rem] text-af-ink/78 shadow-af-card backdrop-blur-[14px] transition-colors hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
 const PANEL_CLASS =
   "dashboard-body-sm pointer-events-auto max-w-[28rem] rounded-lg border border-af-overlay/8 bg-af-surface/88 px-3 py-3 text-af-ink/78 shadow-af-card backdrop-blur-[14px] max-[720px]:w-full max-[720px]:max-w-none";
 const PANEL_HEADER_CLASS = "mb-2 flex items-center justify-between gap-3";
 const PANEL_TITLE_CLASS =
   "dashboard-eyebrow m-0 text-af-accent";
 const COLLAPSE_BUTTON_CLASS =
-  "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-accent/35 bg-af-accent/10 px-[0.7rem] py-[0.45rem] text-af-accent";
+  "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-overlay/12 bg-af-overlay/6 px-[0.7rem] py-[0.45rem] text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
 const ITEMS_LIST_CLASS =
   "m-0 grid list-none grid-cols-2 gap-x-3 gap-y-2 p-0 max-[520px]:grid-cols-1";
 

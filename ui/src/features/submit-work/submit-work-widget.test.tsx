@@ -60,7 +60,8 @@ describe("SubmitWorkWidget", () => {
     fireEvent.change(requestText, { target: { value: "Review the failed driver trace." } });
 
     expect(submitButton.disabled).toBe(false);
-    expect(screen.getByText("Your request is ready to submit.")).toBeTruthy();
+    expect(screen.queryByText("Your request is ready to submit.")).toBeNull();
+    expect(submitButton.className).toContain("bg-af-accent");
   });
 
   it("shows inline validation and skips the network request when the draft is incomplete", async () => {

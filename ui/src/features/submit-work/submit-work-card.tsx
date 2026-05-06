@@ -67,6 +67,7 @@ export function SubmitWorkCard({
   const hasRequestText = draft.requestText.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
   const canSubmit = hasConfiguredWorkTypes && hasSelectedWorkType && hasRequestText && !isSubmitting;
+  const showStatusMessage = !(status.kind === "guidance" && canSubmit);
   const requestNameID = `${widgetId}-request-name`;
   const requestTextID = `${widgetId}-request-text`;
   const workTypeID = `${widgetId}-work-type`;
@@ -147,18 +148,22 @@ export function SubmitWorkCard({
         </div>
 
         <div className={ACTION_ROW_CLASS}>
-          <p
-            className={cx(HELP_TEXT_CLASS, STATUS_TONE_CLASS_BY_KIND[status.kind])}
-            id={statusID}
-            role={status.kind === "error" || status.kind === "validation-error" ? "alert" : "status"}
-          >
-            {status.message}
-          </p>
+          {showStatusMessage ? (
+            <p
+              className={cx(HELP_TEXT_CLASS, STATUS_TONE_CLASS_BY_KIND[status.kind])}
+              id={statusID}
+              role={status.kind === "error" || status.kind === "validation-error" ? "alert" : "status"}
+            >
+              {status.message}
+            </p>
+          ) : (
+            <div />
+          )}
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
             className="shrink-0"
             disabled={!canSubmit}
-            tone="outline"
+            tone={canSubmit ? "default" : "outline"}
             type="submit"
           >
             {isSubmitting ? "Submitting..." : "Submit work"}

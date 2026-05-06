@@ -71,7 +71,8 @@ const TERMINAL_ROW_HEADER_CLASS =
 const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
-const TERMINAL_TOGGLE_CLASS = "min-h-9 shrink-0 px-[0.65rem] py-[0.45rem] text-xs";
+const TERMINAL_TOGGLE_CLASS =
+  "min-h-9 shrink-0 border-af-overlay/12 bg-af-overlay/6 px-[0.65rem] py-[0.45rem] text-xs text-af-ink/78 hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink";
 const TERMINAL_BUTTON_CLASS = cx(
   "grid h-auto min-h-0 w-full justify-start gap-[0.3rem] border-af-info/35 bg-af-info/10 px-3 py-[0.55rem] text-left text-af-info-ink [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
