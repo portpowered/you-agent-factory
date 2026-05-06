@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"testing"
@@ -83,5 +84,96 @@ func TestRunForwardsVersionAndProgressWriter(t *testing.T) {
 	}
 	if gotOptions.ProgressWriter != out {
 		t.Fatalf("run() progress writer mismatch")
+	}
+}
+
+func TestMainSuccessWritesProgressToStdoutAndExitsZero(t *testing.T) {
+	originalRunReleasePrep := runReleasePrep
+	originalExitFunc := exitFunc
+	originalStdout := stdout
+	originalStderr := stderr
+	originalArgs := os.Args
+	t.Cleanup(func() {
+		runReleasePrep = originalRunReleasePrep
+		exitFunc = originalExitFunc
+		stdout = originalStdout
+		stderr = originalStderr
+		os.Args = originalArgs
+	})
+
+	var gotOptions releaseprep.Options
+	runReleasePrep = func(_ context.Context, options releaseprep.Options) error {
+		gotOptions = options
+		_, err := io.WriteString(options.ProgressWriter, "checking release branch\nready to tag\n")
+		return err
+	}
+
+	var exitCode int
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+	stdout = out
+	stderr = errOut
+	os.Args = []string{"releaseprep", "-version", "v1.2.3"}
+
+	main()
+
+	if exitCode != 0 {
+		t.Fatalf("main() exit code = %d, want 0", exitCode)
+	}
+	if gotOptions.Version != "v1.2.3" {
+		t.Fatalf("main() version = %q, want %q", gotOptions.Version, "v1.2.3")
+	}
+	if gotOptions.ProgressWriter != out {
+		t.Fatalf("main() progress writer mismatch")
+	}
+	if got := out.String(); got != "checking release branch\nready to tag\n" {
+		t.Fatalf("main() stdout = %q", got)
+	}
+	if got := errOut.String(); got != "" {
+		t.Fatalf("main() stderr = %q, want empty", got)
+	}
+}
+
+func TestMainFailureWritesStderrAndExitsNonZero(t *testing.T) {
+	originalRunReleasePrep := runReleasePrep
+	originalExitFunc := exitFunc
+	originalStdout := stdout
+	originalStderr := stderr
+	originalArgs := os.Args
+	t.Cleanup(func() {
+		runReleasePrep = originalRunReleasePrep
+		exitFunc = originalExitFunc
+		stdout = originalStdout
+		stderr = originalStderr
+		os.Args = originalArgs
+	})
+
+	runReleasePrep = func(_ context.Context, options releaseprep.Options) error {
+		return errors.New("release readiness check failed")
+	}
+
+	var exitCode int
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+	stdout = out
+	stderr = errOut
+	os.Args = []string{"releaseprep", "-version", "v1.2.3"}
+
+	main()
+
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if got := out.String(); got != "" {
+		t.Fatalf("main() stdout = %q, want empty", got)
+	}
+	if got := errOut.String(); got != "release readiness check failed\n" {
+		t.Fatalf("main() stderr = %q", got)
 	}
 }
