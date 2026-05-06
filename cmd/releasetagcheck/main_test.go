@@ -3,9 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -233,4 +238,97 @@ func TestRunPointsAtSurfacesGitFailure(t *testing.T) {
 	if got := stderr.String(); got != "list tags pointing at HEAD: exit status 1\nfatal: bad object HEAD\n" {
 		t.Fatalf("run() stderr = %q", got)
 	}
+}
+
+func TestGitTagsPointingAtTrimsNonEmptyTagLines(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFakeGit(t, gitDir, fakeGitConfig{
+		stdout: "  v1.2.3  \n\nrelease-candidate \n \nv1.2.4\n",
+	})
+	t.Setenv("PATH", prependPath(gitDir))
+
+	tags, err := gitTagsPointingAt(context.Background(), "HEAD")
+	if err != nil {
+		t.Fatalf("gitTagsPointingAt() error = %v", err)
+	}
+
+	want := []string{"v1.2.3", "release-candidate", "v1.2.4"}
+	if !equalStrings(tags, want) {
+		t.Fatalf("gitTagsPointingAt() tags = %v, want %v", tags, want)
+	}
+}
+
+func TestGitTagsPointingAtSurfacesTrimmedGitFailureOutput(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFakeGit(t, gitDir, fakeGitConfig{
+		stderr:   "  fatal: bad object HEAD  \n\n",
+		exitCode: 1,
+	})
+	t.Setenv("PATH", prependPath(gitDir))
+
+	_, err := gitTagsPointingAt(context.Background(), "HEAD")
+	if err == nil {
+		t.Fatal("gitTagsPointingAt() unexpectedly succeeded")
+	}
+
+	got := err.Error()
+	if !strings.Contains(got, "list tags pointing at HEAD:") {
+		t.Fatalf("gitTagsPointingAt() error = %q, want revision context", got)
+	}
+	if !strings.Contains(got, "fatal: bad object HEAD") {
+		t.Fatalf("gitTagsPointingAt() error = %q, want trimmed git output", got)
+	}
+	if strings.Contains(got, "  fatal: bad object HEAD  ") {
+		t.Fatalf("gitTagsPointingAt() error = %q, did not want untrimmed git output", got)
+	}
+}
+
+type fakeGitConfig struct {
+	stdout   string
+	stderr   string
+	exitCode int
+}
+
+func writeFakeGit(t *testing.T, dir string, cfg fakeGitConfig) {
+	t.Helper()
+
+	path := filepath.Join(dir, "git")
+	if runtime.GOOS == "windows" {
+		path += ".cmd"
+		contents := "@echo off\r\n" +
+			"powershell -NoProfile -Command \"$out=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + base64.StdEncoding.EncodeToString([]byte(cfg.stdout)) + "')); $err=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + base64.StdEncoding.EncodeToString([]byte(cfg.stderr)) + "')); [Console]::Out.Write($out); [Console]::Error.Write($err); exit " + strconv.Itoa(cfg.exitCode) + "\"\r\n"
+		if err := os.WriteFile(path, []byte(contents), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+		return
+	}
+
+	contents := "#!/bin/sh\n" +
+		"printf '%s' \"" + shellQuoteForDoubleQuotes(cfg.stdout) + "\"\n" +
+		"printf '%s' \"" + shellQuoteForDoubleQuotes(cfg.stderr) + "\" >&2\n" +
+		"exit " + strconv.Itoa(cfg.exitCode) + "\n"
+	if err := os.WriteFile(path, []byte(contents), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+}
+
+func prependPath(dir string) string {
+	return dir + string(os.PathListSeparator) + os.Getenv("PATH")
+}
+
+func equalStrings(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func shellQuoteForDoubleQuotes(value string) string {
+	replacer := strings.NewReplacer("\\", "\\\\", "\"", "\\\"", "\n", "\\n")
+	return replacer.Replace(value)
 }
