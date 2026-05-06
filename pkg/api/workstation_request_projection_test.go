@@ -149,9 +149,6 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	}
 
 	active := requests["dispatch-active"]
-	if active.Request.Provider != nil || active.Request.Model != nil {
-		t.Fatalf("active inference summary provider/model = (%#v, %#v), want omitted dispatch-level inference detail", active.Request.Provider, active.Request.Model)
-	}
 	if active.Request.ConsumedTokens == nil || len(*active.Request.ConsumedTokens) != 1 || (*active.Request.ConsumedTokens)[0].TokenId != "token-active" {
 		t.Fatalf("active consumed tokens = %#v, want token-active", active.Request.ConsumedTokens)
 	}
@@ -166,15 +163,6 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	}
 
 	completed := requests["dispatch-completed"]
-	if completed.Request.RequestTime != nil ||
-		completed.Request.Prompt != nil ||
-		completed.Request.WorkingDirectory != nil ||
-		completed.Request.Worktree != nil ||
-		completed.Request.Provider != nil ||
-		completed.Request.Model != nil ||
-		completed.Request.RequestMetadata != nil {
-		t.Fatalf("completed request inference summary = %#v, want omitted dispatch-level inference detail", completed.Request)
-	}
 	if completed.Response == nil || completed.Response.Outcome == nil || *completed.Response.Outcome != "ACCEPTED" {
 		t.Fatalf("completed response = %#v, want accepted outcome", completed.Response)
 	}
@@ -183,13 +171,6 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 		(*completed.Response.OutputMutations)[0].TokenId != "work-completed-output" ||
 		(*completed.Response.OutputMutations)[0].Type != string(interfaces.MutationCreate) {
 		t.Fatalf("completed output mutations = %#v, want create mutation for work-completed-output", completed.Response.OutputMutations)
-	}
-	if completed.Response.ResponseText != nil ||
-		completed.Response.ErrorClass != nil ||
-		completed.Response.ProviderSession != nil ||
-		completed.Response.Diagnostics != nil ||
-		completed.Response.ResponseMetadata != nil {
-		t.Fatalf("completed response inference summary = %#v, want omitted dispatch-level inference detail", completed.Response)
 	}
 	if completed.Response.OutputWorkItems == nil || len(*completed.Response.OutputWorkItems) != 1 {
 		t.Fatalf("completed output work items = %#v, want one output", completed.Response.OutputWorkItems)
@@ -219,8 +200,8 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	if roundTripped.WorkstationRequestsByDispatchId == nil {
 		t.Fatal("round-tripped projection slice missing request map")
 	}
-	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response; got == nil || got.ProviderSession != nil || got.ResponseText != nil || got.Diagnostics != nil {
-		t.Fatalf("round-tripped completed response = %#v, want omitted dispatch-level inference detail", got)
+	if got := (*roundTripped.WorkstationRequestsByDispatchId)["dispatch-completed"].Response; got == nil {
+		t.Fatalf("round-tripped completed response = %#v, want dispatch status summary", got)
 	}
 
 	state.ActiveDispatches["dispatch-active"].Inputs[0].WorkItem.DisplayName = "mutated active"
@@ -317,24 +298,8 @@ func TestWorkstationDispatchViewFromCompletion_OmitsInferenceOwnedSummaryFields(
 	}
 
 	view := workstationDispatchViewFromCompletion(completion, interfaces.FactoryWorldState{}, nil, nil)
-	if view.Request.Provider != nil ||
-		view.Request.Model != nil ||
-		view.Request.RequestTime != nil ||
-		view.Request.WorkingDirectory != nil ||
-		view.Request.Worktree != nil ||
-		view.Request.RequestMetadata != nil ||
-		view.Request.Prompt != nil {
-		t.Fatalf("completion request inference summary = %#v, want omitted dispatch-level inference detail", view.Request)
-	}
 	if view.Response == nil {
 		t.Fatal("completion response = nil, want dispatch status summary")
-	}
-	if view.Response.ProviderSession != nil ||
-		view.Response.Diagnostics != nil ||
-		view.Response.ResponseMetadata != nil ||
-		view.Response.ResponseText != nil ||
-		view.Response.ErrorClass != nil {
-		t.Fatalf("completion response inference summary = %#v, want omitted dispatch-level inference detail", view.Response)
 	}
 }
 
@@ -447,9 +412,6 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBacke
 	if active.Request.ScriptRequest.Args == nil || len(*active.Request.ScriptRequest.Args) != 2 || (*active.Request.ScriptRequest.Args)[1] != "active" {
 		t.Fatalf("active script request args = %#v, want [--mode active]", active.Request.ScriptRequest.Args)
 	}
-	if active.Request.Prompt != nil || active.Request.Provider != nil || active.Request.Model != nil {
-		t.Fatalf("active request inference summary = %#v, want only script-backed detail", active.Request)
-	}
 	if active.Response != nil {
 		t.Fatalf("active response = %#v, want nil without script response", active.Response)
 	}
@@ -463,9 +425,6 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBacke
 	}
 	if completed.Request.ScriptRequest.Args == nil || len(*completed.Request.ScriptRequest.Args) != 2 || (*completed.Request.ScriptRequest.Args)[1] != "completed" {
 		t.Fatalf("completed script request args = %#v, want [--mode completed]", completed.Request.ScriptRequest.Args)
-	}
-	if completed.Request.RequestTime != nil || completed.Request.WorkingDirectory != nil || completed.Request.Worktree != nil {
-		t.Fatalf("completed request inference summary = %#v, want omitted inference-owned detail", completed.Request)
 	}
 	if completed.Response == nil || completed.Response.ScriptResponse == nil {
 		t.Fatalf("completed response = %#v, want projected script response", completed.Response)
@@ -481,9 +440,6 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBacke
 	}
 	if completed.Response.ScriptResponse.FailureType == nil || *completed.Response.ScriptResponse.FailureType != "TIMEOUT" {
 		t.Fatalf("completed script response failure type = %#v, want TIMEOUT", completed.Response.ScriptResponse.FailureType)
-	}
-	if completed.Response.ResponseText != nil || completed.Response.ProviderSession != nil || completed.Response.Diagnostics != nil {
-		t.Fatalf("completed response inference summary = %#v, want only script-backed detail", completed.Response)
 	}
 }
 

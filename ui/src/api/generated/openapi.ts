@@ -332,19 +332,12 @@ export interface components {
         };
         FactoryWorldWorkstationRequestRequestView: {
             startedAt?: string;
-            requestTime?: string;
             inputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
             inputWorkTypeIds?: string[];
             currentChainingTraceId?: string;
             previousChainingTraceIds?: string[];
             traceIds?: string[];
             consumedTokens?: components["schemas"]["FactoryWorldTokenView"][];
-            prompt?: string;
-            workingDirectory?: string;
-            worktree?: string;
-            provider?: string;
-            model?: string;
-            requestMetadata?: components["schemas"]["StringMap"];
             scriptRequest?: components["schemas"]["FactoryWorldScriptRequestView"];
         };
         FactoryWorldWorkstationRequestResponseView: {
@@ -352,11 +345,6 @@ export interface components {
             feedback?: string;
             failureReason?: string;
             failureMessage?: string;
-            responseText?: string;
-            errorClass?: string;
-            providerSession?: components["schemas"]["ProviderSessionMetadata"];
-            diagnostics?: components["schemas"]["FactoryWorldWorkDiagnostics"];
-            responseMetadata?: components["schemas"]["StringMap"];
             scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
             endTime?: string;
             /** Format: int64 */

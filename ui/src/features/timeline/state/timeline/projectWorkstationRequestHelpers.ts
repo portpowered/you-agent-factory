@@ -303,7 +303,6 @@ export function projectWorkstationDispatchRequest(
   const requestView = runtimeRequest?.request;
   const responseView = runtimeRequest?.response;
   const diagnostics = (
-    responseView?.diagnostics?.provider ??
     latestAttempt?.diagnostics?.provider ??
     completion?.diagnostics?.provider
   ) as
@@ -322,25 +321,23 @@ export function projectWorkstationDispatchRequest(
     failure_message: responseView?.failureMessage ?? completion?.failureMessage,
     failure_reason: responseView?.failureReason ?? completion?.failureReason,
     inference_attempts: inferenceAttempts,
-    model: requestView?.model ?? diagnostics?.model ?? completion?.model ?? dispatch.model,
+    model: diagnostics?.model ?? completion?.model ?? dispatch.model,
     outcome: responseView?.outcome ?? completion?.outcome,
-    prompt: requestView?.prompt ?? latestAttempt?.prompt,
+    prompt: latestAttempt?.prompt,
     provider:
-      requestView?.provider ??
       diagnostics?.provider ??
       latestAttempt?.provider_session?.provider ??
       completion?.providerSession?.provider ??
       dispatch.provider,
-    provider_session: responseView?.providerSession ?? completion?.providerSession,
+    provider_session: latestAttempt?.provider_session ?? completion?.providerSession,
     request_view: requestView,
     request_id: requestIDs[0],
-    request_metadata: requestView?.requestMetadata ?? diagnostics?.requestMetadata,
+    request_metadata: diagnostics?.requestMetadata,
     responded_request_count: counts.respondedCount ?? 0,
     response:
-      responseView?.responseText ??
       latestAttempt?.response ??
       (latestScriptResponse ? undefined : completion?.responseText),
-    response_metadata: responseView?.responseMetadata ?? diagnostics?.responseMetadata,
+    response_metadata: diagnostics?.responseMetadata,
     response_view: responseView,
     script_request: dashboardScriptRequest(latestScriptRequest),
     script_response: dashboardScriptResponse(latestScriptResponse),
@@ -349,15 +346,14 @@ export function projectWorkstationDispatchRequest(
     trace_ids: requestView?.traceIds ?? completion?.traceIDs ?? dispatch.traceIDs,
     transition_id: dispatch.transitionID,
     work_items: completion?.workItems ?? dispatch.workItems,
-    working_directory: requestView?.workingDirectory ?? latestAttempt?.working_directory,
+    working_directory: latestAttempt?.working_directory,
     workstation_name: completion?.workstationName ?? dispatch.workstationName,
     workstation_node_id: dispatch.transitionID,
-    worktree: requestView?.worktree ?? latestAttempt?.worktree,
+    worktree: latestAttempt?.worktree,
   };
 }
 
 export function dispatchHasCustomerWork(dispatch: WorldDispatch): boolean {
   return !dispatch.systemOnly;
 }
-
 

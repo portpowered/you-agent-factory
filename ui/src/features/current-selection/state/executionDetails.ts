@@ -135,14 +135,11 @@ export function selectWorkItemExecutionDetails({
       hasActiveRun,
     ),
     providerSession: selectProviderSessionValue(
-      workstationRequest,
       matchingAttempt,
       matchingTraceDispatch,
       hasActiveRun,
     ),
     providerSessionData:
-      workstationRequest?.response?.providerSession ??
-      workstationRequest?.response?.provider_session ??
       matchingAttempt?.provider_session ??
       matchingTraceDispatch?.provider_session,
     traceIDs: selectTraceIDs(
@@ -233,22 +230,11 @@ function executionIncludesWorkItem(
 }
 
 function selectModelValue(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
+  _workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
   diagnosticsSource: RuntimeDiagnosticsSource | undefined,
   activeExecution: DashboardActiveExecution | undefined,
   hasActiveRun: boolean,
 ): ModelDetailValue {
-  const projectedModel = workstationRequest?.request.model?.trim();
-  if (projectedModel) {
-    return {
-      source: "workstation-request",
-      status: "available",
-      value: projectedModel,
-    };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-  }
   const diagnosticModel = diagnosticsSource?.diagnostics?.provider?.model?.trim();
   if (diagnosticsSource && diagnosticModel) {
     return {
@@ -265,7 +251,7 @@ function selectModelValue(
 }
 
 function selectProviderValue(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
+  _workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
   diagnosticsSource: RuntimeDiagnosticsSource | undefined,
   activeExecution: DashboardActiveExecution | undefined,
   selectedNode: DashboardWorkstationNode | undefined,
@@ -273,17 +259,6 @@ function selectProviderValue(
   matchingTraceDispatch: DashboardTraceDispatch | undefined,
   hasActiveRun: boolean,
 ): ExecutionDetailValue {
-  const projectedProvider = workstationRequest?.request.provider?.trim();
-  if (projectedProvider) {
-    return {
-      source: "workstation-request",
-      status: "available",
-      value: projectedProvider,
-    };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-  }
   const diagnosticProvider = diagnosticsSource?.diagnostics?.provider?.provider?.trim();
   if (diagnosticsSource && diagnosticProvider) {
     return {
@@ -314,26 +289,10 @@ function selectProviderValue(
 }
 
 function selectProviderSessionValue(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
   matchingAttempt: DashboardProviderSessionAttempt | undefined,
   matchingTraceDispatch: DashboardTraceDispatch | undefined,
   hasActiveRun: boolean,
 ): ExecutionDetailValue {
-  const projectedProviderSessionID =
-    (
-      workstationRequest?.response?.providerSession?.id ??
-      workstationRequest?.response?.provider_session?.id
-    )?.trim();
-  if (projectedProviderSessionID) {
-    return {
-      source: "workstation-request",
-      status: "available",
-      value: projectedProviderSessionID,
-    };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-  }
   const providerSessionID =
     matchingAttempt?.provider_session?.id?.trim() ??
     matchingTraceDispatch?.provider_session?.id?.trim();
@@ -344,15 +303,11 @@ function selectProviderSessionValue(
 }
 
 function selectPromptDetails(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
+  _workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
   diagnostics: DashboardWorkDiagnostics | undefined,
   hasActiveRun: boolean,
 ): PromptDiagnosticDetails {
   const promptSource =
-    workstationRequest?.request.requestMetadata?.prompt_source?.trim() ??
-    workstationRequest?.request.request_metadata?.prompt_source?.trim() ??
-    workstationRequest?.request.requestMetadata?.source?.trim() ??
-    workstationRequest?.request.request_metadata?.source?.trim() ??
     diagnostics?.rendered_prompt?.variables?.prompt_source?.trim() ??
     diagnostics?.provider?.request_metadata?.prompt_source?.trim() ??
     diagnostics?.provider?.request_metadata?.source?.trim();
@@ -364,9 +319,6 @@ function selectPromptDetails(
       status: "available",
       systemPromptHash,
     };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
   }
   return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
 }
@@ -390,4 +342,3 @@ function selectTraceIDs(
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
 }
-

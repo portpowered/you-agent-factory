@@ -1,8 +1,6 @@
 import type { InferenceOutcome } from "../events";
 import type { components } from "../generated/openapi";
 
-type FactorySchemas = components["schemas"];
-
 export type StateCategory = "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
 export type DashboardPlaceKind =
   | "work_state"
@@ -190,8 +188,6 @@ export interface DashboardRuntimeWorkstationRequestCounts {
 export interface DashboardRuntimeWorkstationRequestRequest {
   startedAt?: string;
   started_at?: string;
-  requestTime?: string;
-  request_time?: string;
   inputWorkItems?: DashboardWorkItemRef[];
   input_work_items?: DashboardWorkItemRef[];
   inputWorkTypeIds?: string[];
@@ -204,14 +200,6 @@ export interface DashboardRuntimeWorkstationRequestRequest {
   trace_ids?: string[];
   consumedTokens?: DashboardTraceToken[];
   consumed_tokens?: DashboardTraceToken[];
-  prompt?: string;
-  workingDirectory?: string;
-  working_directory?: string;
-  worktree?: string;
-  provider?: string;
-  model?: string;
-  requestMetadata?: Record<string, string>;
-  request_metadata?: Record<string, string>;
   scriptRequest?: DashboardScriptRequest;
   script_request?: DashboardScriptRequest;
 }
@@ -223,15 +211,6 @@ export interface DashboardRuntimeWorkstationRequestResponse {
   failure_reason?: string;
   failureMessage?: string;
   failure_message?: string;
-  responseText?: string;
-  response_text?: string;
-  errorClass?: string;
-  error_class?: string;
-  providerSession?: DashboardProviderSession;
-  provider_session?: DashboardProviderSession;
-  diagnostics?: DashboardWorkDiagnostics | FactorySchemas["FactoryWorldWorkDiagnostics"];
-  responseMetadata?: Record<string, string>;
-  response_metadata?: Record<string, string>;
   scriptResponse?: DashboardScriptResponse;
   script_response?: DashboardScriptResponse;
   endTime?: string;

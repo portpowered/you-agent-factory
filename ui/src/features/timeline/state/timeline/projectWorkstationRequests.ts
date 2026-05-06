@@ -19,12 +19,7 @@ import {
   outputWorkItemsFromCompletion,
   projectWorkstationDispatchRequest,
   requestIDsByWorkItemID,
-  resolveWorkingDirectory,
-  resolveWorkstationRequestProvider,
-  resolveWorktree,
   scriptResponseErrored,
-  workstationRequestMetadata,
-  workstationResponseMetadata,
   workstationScriptRequestForProjection,
   workItemsFromTokens,
 } from "./projectWorkstationRequestHelpers";
@@ -184,19 +179,12 @@ function workstationRequestFromActiveDispatch(
       currentChainingTraceId: dispatch.currentChainingTraceID,
       inputWorkItems,
       inputWorkTypeIds: uniqueSorted(inputWorkItems.map((item) => item.work_type_id ?? "")),
-      model: dispatch.model,
       previousChainingTraceIds: dispatch.previousChainingTraceIDs
         ? [...dispatch.previousChainingTraceIDs]
         : undefined,
-      prompt: latestAttempt?.prompt,
-      provider: resolveWorkstationRequestProvider(undefined, undefined, dispatch),
-      requestMetadata: workstationRequestMetadata(undefined),
-      requestTime: latestAttempt?.request_time,
       scriptRequest: timelineScriptRequest(latestScriptRequest),
       startedAt: dispatch.startedAt,
       traceIds: uniqueSorted(dispatch.traceIDs),
-      workingDirectory: resolveWorkingDirectory(latestAttempt, undefined),
-      worktree: resolveWorktree(latestAttempt, undefined),
     },
     transitionId: dispatch.transitionID,
     workstationName: dispatch.workstationName,
@@ -219,38 +207,22 @@ function workstationRequestFromCompletion(
       currentChainingTraceId: completion.currentChainingTraceID,
       inputWorkItems,
       inputWorkTypeIds: uniqueSorted(inputWorkItems.map((item) => item.work_type_id ?? "")),
-      model: completion.diagnostics?.provider?.model,
       previousChainingTraceIds: completion.previousChainingTraceIDs
         ? [...completion.previousChainingTraceIDs]
         : undefined,
-      prompt: latestAttempt?.prompt,
-      provider: resolveWorkstationRequestProvider(
-        completion.diagnostics,
-        completion.providerSession,
-      ),
-      requestMetadata: workstationRequestMetadata(completion.diagnostics),
-      requestTime: latestAttempt?.request_time,
       scriptRequest: timelineScriptRequest(latestScriptRequest),
       startedAt: completion.startedAt,
       traceIds: uniqueSorted(completion.traceIDs),
-      workingDirectory: resolveWorkingDirectory(latestAttempt, completion.diagnostics),
-      worktree: resolveWorktree(latestAttempt, completion.diagnostics),
     },
     response: {
-      diagnostics: completion.diagnostics,
       durationMillis: completion.durationMillis,
       endTime: completion.endTime,
-      errorClass: latestAttempt?.error_class,
       failureMessage: completion.failureMessage,
       failureReason: completion.failureReason,
       feedback: completion.feedback,
       outcome: completion.outcome,
       outputMutations: completion.outputMutations,
       outputWorkItems: outputWorkItemsFromCompletion(completion),
-      providerSession: completion.providerSession,
-      responseMetadata: workstationResponseMetadata(completion.diagnostics),
-      responseText:
-        latestAttempt?.response ?? (latestScriptResponse ? undefined : completion.responseText),
       scriptResponse: timelineScriptResponse(latestScriptResponse),
     },
     transitionId: completion.transitionID,
@@ -329,5 +301,3 @@ function timelineScriptResponse(
     stdout: response.stdout,
   };
 }
-
-

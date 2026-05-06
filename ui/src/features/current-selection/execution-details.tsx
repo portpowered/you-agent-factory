@@ -5,19 +5,15 @@ import {
 } from "../../components/ui/formatters";
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../components/dashboard/typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
-  INFERENCE_ATTEMPT_TEXT_CLASS,
-  INFERENCE_REQUEST_PROMPT_LABEL,
   InferenceAttemptDetail,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
   TRACE_ACTION_LINK_CLASS,
-  WORKSTATION_RESPONSE_TEXT_LABEL,
   formatExecutionDetailValue,
 } from "./detail-card-shared";
 import type {
@@ -231,16 +227,9 @@ function WorkstationRequestProjectionSection({
         />
         <InferenceAttemptDetail
           code
-          label="requestTime"
-          value={request.requestTime ?? request.request_time}
+          label="startedAt"
+          value={request.startedAt ?? request.started_at}
         />
-        <InferenceAttemptDetail code label="startedAt" value={request.startedAt ?? request.started_at} />
-        <InferenceAttemptDetail
-          code
-          label="workingDirectory"
-          value={request.workingDirectory ?? request.working_directory}
-        />
-        <InferenceAttemptDetail code label="worktree" value={request.worktree} />
         <InferenceAttemptDetail code label="outcome" value={response?.outcome} />
         <InferenceAttemptDetail
           label="duration"
@@ -252,7 +241,6 @@ function WorkstationRequestProjectionSection({
               : undefined
           }
         />
-        <InferenceAttemptDetail code label="errorClass" value={response?.errorClass ?? response?.error_class} />
         <InferenceAttemptDetail
           code
           label="failureReason"
@@ -264,33 +252,9 @@ function WorkstationRequestProjectionSection({
           value={response?.failureMessage ?? response?.failure_message}
         />
       </dl>
-      {request.prompt ? (
-        <div className="grid gap-[0.3rem]">
-          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {INFERENCE_REQUEST_PROMPT_LABEL}
-          </span>
-          <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>{request.prompt}</pre>
-        </div>
-      ) : null}
-      {response?.responseText ?? response?.response_text ? (
-        <div className="grid gap-[0.3rem]">
-          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {WORKSTATION_RESPONSE_TEXT_LABEL}
-          </span>
-          <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>
-            {response?.responseText ?? response?.response_text}
-          </pre>
-        </div>
-      ) : response ? (
-        <p className={DETAIL_COPY_CLASS}>
-          Provider response text is not available on the workstation request projection.
-        </p>
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>
-          The workstation request has not produced a response yet.
-        </p>
-      )}
+      <p className={DETAIL_COPY_CLASS}>
+        Prompt, provider-session, and response-body details are shown under Inference attempts.
+      </p>
     </section>
   );
 }
-

@@ -754,8 +754,6 @@ components:
       properties:
         startedAt:
           type: string
-        requestTime:
-          type: string
         inputWorkItems:
           type: array
           items:
@@ -778,18 +776,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FactoryWorldTokenView'
-        prompt:
-          type: string
-        workingDirectory:
-          type: string
-        worktree:
-          type: string
-        provider:
-          type: string
-        model:
-          type: string
-        requestMetadata:
-          $ref: '#/components/schemas/StringMap'
         scriptRequest:
           $ref: '#/components/schemas/FactoryWorldScriptRequestView'
     FactoryWorldWorkstationRequestResponseView:
@@ -804,16 +790,6 @@ components:
           type: string
         failureMessage:
           type: string
-        responseText:
-          type: string
-        errorClass:
-          type: string
-        providerSession:
-          $ref: '#/components/schemas/ProviderSessionMetadata'
-        diagnostics:
-          $ref: '#/components/schemas/FactoryWorldWorkDiagnostics'
-        responseMetadata:
-          $ref: '#/components/schemas/StringMap'
         scriptResponse:
           $ref: '#/components/schemas/FactoryWorldScriptResponseView'
         endTime:

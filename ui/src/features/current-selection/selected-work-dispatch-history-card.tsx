@@ -38,8 +38,6 @@ import {
   requestInputWorkItems,
   requestOutcome,
   requestOutputWorkItems,
-  requestPrompt,
-  requestResponseText,
   requestScriptRequest,
   requestScriptResponse,
   requestStartedAt,
@@ -149,8 +147,6 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
   const isScriptBackedRequest = scriptRequest !== undefined || scriptResponse !== undefined;
   const sortedInferenceAttempts = requestInferenceAttempts(request);
   const hasInferenceAttempts = sortedInferenceAttempts.length > 0;
-  const hasDispatchPrompt = Boolean(normalizeDetailText(requestPrompt(request)));
-  const hasDispatchResponse = Boolean(normalizeDetailText(requestResponseText(request)));
 
   return {
     counts: requestCounts(request),
@@ -170,18 +166,14 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
       ? "Prompt details are not applicable to this script-backed dispatch."
       : hasInferenceAttempts
         ? "Inference request details are shown under Inference attempts."
-        : hasDispatchPrompt
-          ? "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded."
-          : "Inference request details are not available for this dispatch yet.",
+        : "Inference request details are not available for this dispatch yet.",
     responseUnavailableCopy: isScriptBackedRequest
       ? ""
       : hasInferenceAttempts
         ? "Inference response details are shown under Inference attempts."
         : hasFailureDetails
           ? "Inference response details are unavailable because this dispatch ended before any attempt details were recorded."
-          : hasDispatchResponse
-            ? "Inference response details are unavailable at the dispatch level. Check back once attempts are recorded."
-            : "Inference response details are not available for this dispatch yet.",
+          : "Inference response details are not available for this dispatch yet.",
     scriptRequest,
     scriptResponse,
     sortedInferenceAttempts,

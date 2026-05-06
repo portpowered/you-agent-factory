@@ -218,12 +218,12 @@ describe("WorkItemDetailCard summary", () => {
     expect(dispatchHistory.getByText("trace-active-story")).toBeTruthy();
     expect(
       requestDetails.getByText(
-        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+        "Inference request details are not available for this dispatch yet.",
       ),
     ).toBeTruthy();
     expect(
       responseDetails.getByText(
-        "Inference response details are unavailable at the dispatch level. Check back once attempts are recorded.",
+        "Inference response details are not available for this dispatch yet.",
       ),
     ).toBeTruthy();
     expect(
@@ -713,7 +713,7 @@ describe("WorkItemDetailCard summary", () => {
       within(
         screen.getByRole("region", { name: "Request details" }),
       ).getByText(
-        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+        "Inference request details are not available for this dispatch yet.",
       ),
     ).toBeTruthy();
     expect(
@@ -854,7 +854,7 @@ describe("WorkItemDetailCard summary", () => {
 
     expect(
       requestDetails.getByText(
-        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+        "Inference request details are not available for this dispatch yet.",
       ),
     ).toBeTruthy();
     expect(

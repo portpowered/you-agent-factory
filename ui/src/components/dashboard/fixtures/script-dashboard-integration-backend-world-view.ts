@@ -105,36 +105,15 @@ export const scriptDashboardIntegrationBackendWorkstationRequestsByDispatchID = 
         },
       ],
       input_work_type_ids: ["story"],
-      model: "gpt-5.4",
-      prompt: "Review the inference-backed dashboard story.",
-      provider: "codex",
-      request_metadata: {
-        prompt_source: scriptDashboardIntegrationFixtureIDs.inferencePromptSource,
-        source: "script-dashboard-integration-fixture",
-      },
-      request_time: "2026-04-19T12:00:12Z",
       started_at: "2026-04-19T12:00:11Z",
       trace_ids: [scriptDashboardIntegrationFixtureIDs.inferenceTraceID],
-      working_directory: "/work/inference-dashboard",
-      worktree: "/work/inference-dashboard/.worktrees/story",
     },
     response: {
       duration_millis: scriptDashboardIntegrationFixtureIDs.inferenceDurationMillis,
       end_time: "2026-04-19T12:00:14Z",
       outcome: "ACCEPTED",
-      provider_session: {
-        id: scriptDashboardIntegrationFixtureIDs.inferenceProviderSessionID,
-        kind: "session_id",
-        provider: "codex",
-      },
-      response_metadata: {
-        provider_session_id: scriptDashboardIntegrationFixtureIDs.inferenceProviderSessionID,
-        retry_count: "0",
-      },
-      response_text: scriptDashboardIntegrationFixtureIDs.inferenceResponseText,
     },
     transition_id: "review",
     workstation_name: "Review",
   },
 } satisfies Record<string, DashboardRuntimeWorkstationRequest>;
-
