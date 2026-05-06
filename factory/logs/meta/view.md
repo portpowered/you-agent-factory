@@ -2,11 +2,11 @@
 
 ## world state
 
-- as of `2026-05-06T05:07:16.1578424-07:00`, local `HEAD` on
-  `meta-refresh-world-state-20260506-050415` points to `e47cbe3`
-  (`docs: refresh meta world state`); local `main` also points to `e47cbe3`
-  and contains the merged `origin/main` baseline through `cee2465`
-  (`Merge pull request #122 from portpowered/ralph/collapse-runtime-api-functional-server-lifecycle-owner`)
+- as of `2026-05-06T06:04:20.9377891-07:00`, local `HEAD` on
+  `meta-refresh-world-state-20260506-050415` points to `fd5c0a0`
+  (`docs: refresh meta world state`) and has been rebased onto live
+  `origin/main` through `2d79be4`
+  (`Merge pull request #124 from portpowered/ralph/add-backend-zero-coverage-package-gate`)
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the local worktree is not clean:
   - canonical `factory/inputs/**` remains tracked-sentinel-only
@@ -15,7 +15,7 @@
   - `factory/logs/meta/asks.md` carries a local tracked edit and should be
     treated as user-owned state for this refresh
   - tracked meta-log updates are required because the last checked-in summary
-    predates merged PR `#122`
+    predates merged PR `#124`
   - ignored local workflow residue under `factory/inputs/**` must still be
     treated as operating state rather than checked-in queue truth
 
@@ -53,13 +53,13 @@
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
 - the visible ignored local idea residue at the start of this refresh was:
-  - `factory/inputs/idea/default/collapse-runtime-api-functional-server-lifecycle-owner.md`
+  - `factory/inputs/idea/default/add-backend-zero-coverage-package-gate.md`
 - that ignored idea was stale queue residue rather than checked-in queue truth
-  because merged PR `#122` already landed that runtime API lifecycle cleanup
-  on `main`
+  because merged PR `#124` already landed that backend zero-coverage gate on
+  `main`
 - it has been replaced during this refresh with one narrower customer-ask
   follow-up idea:
-  - `factory/inputs/idea/default/add-backend-zero-coverage-package-gate.md`
+  - `factory/inputs/idea/default/close-backend-coverage-profile-gap.md`
 
 ## customer-ask truth
 
@@ -96,6 +96,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#124` `add-backend-zero-coverage-package-gate`, merged on
+    `2026-05-06T12:39:23Z`
   - `#122` `collapse-runtime-api-functional-server-lifecycle-owner`, merged on
     `2026-05-06T11:29:08Z`
   - `#121` `consolidate-runtime-api-functional-support-helpers`, merged on
@@ -128,13 +130,20 @@
   - `Makefile` already exposes `test-coverage-go` with
     `GO_COVERAGE_MIN ?= 80.0`
   - `.github/workflows/ci.yml` already enforces that repo-owned command in CI
-  - `cmd/gocoveragecheck/main.go` currently fails only on total statement
-    coverage, which can still hide backend packages at `0%`
-  - `cmd/gocoveragecheck/main_test.go` already owns focused unit coverage for
-    the lane-selection logic
-- the next idea should extend `cmd/gocoveragecheck` so the backend coverage
-  lane fails when an included backend package lands at `0%` statement coverage
-  while preserving the current package exclusions and repo-owned CI entrypoint
+  - merged PR `#124` already rejects backend packages that appear in the
+    coverage profile with `0%` covered statements
+  - the live command still prints `coverage: 0.0% of statements` for backend
+    packages such as `pkg/apisurface`, `pkg/buffers`, and `pkg/cli/default`
+    while exiting successfully at `86.4%` total coverage
+  - `cmd/gocoveragecheck/main.go` currently skips packages missing from the
+    parsed profile map in `findZeroCoveragePackages`, so absent packages evade
+    the zero-coverage failure entirely
+  - `cmd/gocoveragecheck/main_test.go` covers present zero-coverage packages
+    and exclusions but not the missing-from-profile case
+- the next idea should tighten `cmd/gocoveragecheck` so the backend coverage
+  lane also rejects backend-owned packages that report `0.0%` coverage while
+  never appearing in the coverage profile, without changing the existing
+  aggregate threshold, package exclusions, or CI entrypoint
 
 ## theory of mind
 
@@ -163,3 +172,6 @@
 - aggregate coverage floors can hide `0%` backend packages; the first useful
   ratchet is per-package zero-coverage rejection inside the existing coverage
   lane, not a broad threshold jump
+- a zero-coverage gate that only consults the coverage profile is still
+  incomplete because untouched backend packages can show `0.0%` in `go test`
+  output yet never materialize in the profile map

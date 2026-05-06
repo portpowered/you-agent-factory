@@ -184,6 +184,43 @@
   `main`, then pushed branch `meta-refresh-world-state-20260506-050415` and
   opened PR `#123` for the latest refresh.
 
+## 2026-05-06T06:04:20.9377891-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git rebased the meta branch
+  onto live `origin/main`, pulling in merged PR `#124`
+  (`add-backend-zero-coverage-package-gate`) while preserving the user-owned
+  tracked edit in `factory/logs/meta/asks.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, recent PR
+  state, the tracked-versus-ignored `factory/inputs/**` surface, and the live
+  backend coverage gate after the `#124` merge.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs`, confirming the checked-in inboxes
+  remain sentinel-only while the visible idea file is ignored local operating
+  state.
+- Confirmed the previously queued ignored idea
+  `factory/inputs/idea/default/add-backend-zero-coverage-package-gate.md` is
+  stale because merged PR `#124` already landed that exact cleanup on `main`,
+  so it should be replaced rather than re-queued.
+- Used direct reads, a delegated explorer pass, and a live
+  `go run ./cmd/gocoveragecheck -min 80.0` run to identify the next narrower
+  gap in the same lane: backend packages can still print
+  `coverage: 0.0% of statements` and evade failure when they never appear in
+  the parsed coverage-profile map.
+- Verified the live evidence for that gap on `main`: `pkg/apisurface`,
+  `pkg/buffers`, and `pkg/cli/default` still report `0.0%` coverage while
+  `cmd/gocoveragecheck` exits successfully at `86.4%` total coverage.
+- Confirmed the exact code seam in `cmd/gocoveragecheck/main.go`:
+  `findZeroCoveragePackages` currently skips `!ok` profile-map misses instead
+  of treating them as backend zero-coverage failures, and
+  `cmd/gocoveragecheck/main_test.go` does not yet cover that absent-package
+  case.
+- Queued one replacement ignored idea under
+  `factory/inputs/idea/default/close-backend-coverage-profile-gap.md` so the
+  next worker can close that profile-gap loophole without broadening into a
+  higher aggregate threshold or a multi-package test-authoring effort.
+
 ## 2026-05-06T04:04:39.6158725-07:00 - meta state refresh
 
 - Ran `git pull --no-rebase --autostash origin main`; Git merged `origin/main`
