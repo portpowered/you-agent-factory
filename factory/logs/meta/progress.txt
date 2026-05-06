@@ -93,6 +93,9 @@
 - When deadcode-baseline entries still have live callers, compare the shared
   helper against suite-local copies before deleting it; duplicated test-helper
   ownership is often the real seam.
+- When a test-helper file is split by build tags, check both the default and
+  `functionallong` lanes before treating it as dead; replay-contract helpers
+  can look unused in one lane while still serving the other.
 - Treat graph or delegated explorer suggestions as provisional after a
   fast-forward; confirm the seam still exists on live `main` with `git log`,
   `rg`, and direct file reads before dispatching new cleanup work.
@@ -316,6 +319,45 @@
 - Website/backend: the next narrow simplification candidate is removing the
   remaining replay dispatch payload cast wrappers after the broader replay
   compat lanes closed through PR `#88` and PR `#89`.
+
+## 2026-05-05T16:33:00-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; Git fast-forwarded `main` from `187a072` to
+  `a73fb01`, which pulled in merged PR `#105`
+  (`dedupe-functional-dispatch-history-test-helpers`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend
+  standards, the tracked-versus-ignored `factory/inputs/**` surface, recent PR
+  state, the current deadcode baseline, and the live functional helper code.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs`, confirming the checked-in inboxes
+  remain sentinel-only while the visible idea file is ignored local operating
+  state.
+- Re-checked repo movement with `gh pr list --state open --limit 20`,
+  `gh pr list --state merged --limit 12`, and `git log --oneline -12`,
+  confirming PR `#105` is now merged on `main` and `#103` remains the only
+  open PR.
+- Invalidated the previously queued ignored idea
+  `factory/inputs/idea/default/dedupe-functional-dispatch-history-test-helpers.md`
+  because merged PR `#105` already landed that exact cleanup on `main`, so the
+  file was stale and had to be pruned.
+- Used direct reads, graph traces, `rg`, and one delegated explorer pass to
+  validate the next seam. The explorer suggested a replay helper file deletion,
+  but live `rg` and file reads showed those helpers are still used across the
+  short and `functionallong` replay-contract lanes, so that candidate was
+  rejected as stale.
+- Verified the next narrow non-overlapping cleanup seam in live code:
+  `tests/functional/internal/support/fixtures.go` already owns
+  `WriteAgentConfig` and `AssertArgsContainSequence`, while
+  `tests/functional/guards_batch/helpers_test.go`,
+  `tests/functional/runtime_api/runtime_support_test.go`, and
+  `tests/functional/smoke/service_config_override_alignment_test.go` still
+  carry suite-local copies of those same helper behaviors.
+- Queued one replacement ignored idea under
+  `factory/inputs/idea/default/dedupe-functional-agent-config-and-arg-sequence-test-helpers.md`
+  so the next worker can consolidate that helper ownership without reopening
+  frontend coverage, replay artifact compatibility, or runtime behavior.
 
 ## 2026-05-04T11:03:58.9091119-07:00 - meta state refresh
 

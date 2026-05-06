@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-05T16:03:16.6459180-07:00`, local `HEAD` on `main` points to
-  `187a072`
-  (`Merge pull request #104 from portpowered/ralph/trim-replay-only-testutil-helper-surface`)
+- as of `2026-05-05T16:33:00-07:00`, local `HEAD` on `main` points to
+  `a73fb01`
+  (`Merge pull request #105 from portpowered/ralph/dedupe-functional-dispatch-history-test-helpers`)
   and matches `origin/main`
 - the local worktree is clean apart from ignored workflow inputs
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
@@ -44,7 +44,7 @@
   channel fallback
 - the visible canonical inboxes now contain the tracked `.gitkeep` sentinels
   plus one ignored local idea residue:
-  `factory/inputs/idea/default/dedupe-functional-dispatch-history-test-helpers.md`
+  `factory/inputs/idea/default/dedupe-functional-agent-config-and-arg-sequence-test-helpers.md`
 
 ## customer-ask truth
 
@@ -183,19 +183,30 @@
   - replay artifact smoke and replay regression coverage still protect copied
     factory replay success plus expected divergence behavior through observable
     runtime outcomes
+- merged PR `#105` closed the duplicate functional dispatch-history helper
+  lane on `main`:
+  - `tests/functional/runtime_api/api_cron_workstations_smoke_test.go` now
+    routes dispatch-input reconstruction through
+    `tests/functional/internal/support/events.go`
+  - `tests/functional/internal/support/events.go` no longer carries the extra
+    local helper breadth that only existed to support the cron smoke's private
+    copy
+  - guards-batch and cron runtime assertions still prove the same observable
+    history behavior through live factory events
 - there is still no remaining narrow unowned customer-visible ask gap on
   `main`; the next non-overlapping cleanup candidate now comes from the
   broader backend quality lane:
-  - `docs/development/deadcode-baseline.txt` still flags helper clusters under
-    `pkg/testutil` and `tests/functional/internal/support`, but direct reads
-    and graph traces now show several of those helpers still have live test
-    callers
-  - the narrowest remaining seam is duplicate dispatch-history helper
-    ownership between `tests/functional/internal/support/events.go` and
-    `tests/functional/runtime_api/api_cron_workstations_smoke_test.go`
-  - both files currently carry the same work-request history and input-work ID
-    reconstruction helpers, so the next cleanup should consolidate those
-    helpers without changing the observable cron or guards-batch behavior
+  - `tests/functional/internal/support/fixtures.go` already owns
+    `WriteAgentConfig`
+  - `tests/functional/internal/support/fixtures.go` already owns
+    `AssertArgsContainSequence`
+  - `tests/functional/guards_batch/helpers_test.go`,
+    `tests/functional/runtime_api/runtime_support_test.go`, and
+    `tests/functional/smoke/service_config_override_alignment_test.go` still
+    carry suite-local copies of those same helper behaviors
+  - the next cleanup should consolidate those tests onto the shared helper
+    ownership without changing observable provider-command, runtime-config, or
+    guards-batch behavior
 - the remaining ask surface beyond that is broader program work:
   - the general standards-migration checklist ask is still open in
     `factory/logs/meta/asks.md`
@@ -219,6 +230,8 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#105` `dedupe-functional-dispatch-history-test-helpers`, merged on
+    `2026-05-05T23:16:03Z`
   - `#104` `trim-replay-only-testutil-helper-surface`, merged on
     `2026-05-05T22:23:43Z`
   - `#102` `work-chaininig-trace-ids`, merged on `2026-05-05T21:39:26Z`
@@ -331,6 +344,9 @@
 - when a deadcode-baseline entry still has live callers, compare it against
   suite-local helper copies before queueing deletion; duplicated functional
   helper ownership can be the real simplification seam
+- when a helper file is split by build tags, validate usage in both the short
+  and `functionallong` lanes before treating it as dead; replay-contract helper
+  files can look unused in one lane while still serving the other
 - graph and explorer results can lag behind a fast-forwarded `main`; verify any
   suggested cleanup seam against live `git log`, `rg`, and direct file reads
   before writing a new queue item
