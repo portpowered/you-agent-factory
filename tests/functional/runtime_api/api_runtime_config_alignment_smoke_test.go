@@ -111,7 +111,7 @@ func assertRuntimeConfigAlignmentRejectsGeneratedFactoryAlias(t *testing.T, muta
 
 func testRuntimeConfigAlignmentRejectsSplitWorkerModelProviderAlias(t *testing.T) {
 	dir := setupRuntimeConfigAlignmentFactory(t)
-	writeAgentConfig(t, dir, "reviewer", `---
+	support.WriteAgentConfig(t, dir, "reviewer", `---
 type: MODEL_WORKER
 model: claude-sonnet-4-20250514
 model_provider: claude
@@ -298,7 +298,7 @@ func runtimeConfigAlignmentCronWorkstationConfig() map[string]any {
 func writeRuntimeConfigAlignmentAgentConfigs(t *testing.T, dir string) {
 	t.Helper()
 
-	writeAgentConfig(t, dir, "reviewer", `---
+	support.WriteAgentConfig(t, dir, "reviewer", `---
 type: MODEL_WORKER
 model: claude-sonnet-4-20250514
 modelProvider: claude
@@ -309,7 +309,7 @@ stopToken: COMPLETE
 ---
 You are the review worker.
 `)
-	writeAgentConfig(t, dir, "executor", `---
+	support.WriteAgentConfig(t, dir, "executor", `---
 type: SCRIPT_WORKER
 command: echo
 resources:
@@ -318,7 +318,7 @@ resources:
 ---
 You are the execution worker.
 `)
-	writeAgentConfig(t, dir, "cron-worker", `---
+	support.WriteAgentConfig(t, dir, "cron-worker", `---
 type: MODEL_WORKER
 model: gpt-5.4
 modelProvider: openai

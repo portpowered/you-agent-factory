@@ -44,7 +44,7 @@ func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testi
 			"stopWords":   []string{"BLOCKED"},
 		}},
 	})
-	writeAgentConfig(t, dir, "executor", `---
+	support.WriteAgentConfig(t, dir, "executor", `---
 type: MODEL_WORKER
 executorProvider: codex-cli
 modelProvider: openai

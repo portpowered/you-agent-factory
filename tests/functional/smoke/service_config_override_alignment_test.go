@@ -97,8 +97,8 @@ args:
 	if providerReq.Command != string(workers.ModelProviderCodex) {
 		t.Fatalf("provider command = %q, want %q", providerReq.Command, workers.ModelProviderCodex)
 	}
-	assertArgsContainSequence(t, providerReq.Args, []string{"exec"})
-	assertArgsContainSequence(t, providerReq.Args, []string{"--model", "gpt-5-codex"})
+	support.AssertArgsContainSequence(t, providerReq.Args, []string{"exec"})
+	support.AssertArgsContainSequence(t, providerReq.Args, []string{"--model", "gpt-5-codex"})
 	if providerReq.Args[len(providerReq.Args)-1] != "-" {
 		t.Fatalf("provider prompt placeholder = %q, want -", providerReq.Args[len(providerReq.Args)-1])
 	}
@@ -114,20 +114,6 @@ args:
 	if !containsString(providerReq.Execution.WorkIDs, "mixed-command-smoke-work") {
 		t.Fatalf("provider execution work IDs = %v, want mixed-command-smoke-work", providerReq.Execution.WorkIDs)
 	}
-}
-
-func assertArgsContainSequence(t *testing.T, args []string, want []string) {
-	t.Helper()
-
-	if len(want) == 0 {
-		return
-	}
-	for start := 0; start+len(want) <= len(args); start++ {
-		if reflect.DeepEqual(args[start:start+len(want)], want) {
-			return
-		}
-	}
-	t.Fatalf("args = %v, want contiguous sequence %v", args, want)
 }
 
 func containsString(values []string, want string) bool {

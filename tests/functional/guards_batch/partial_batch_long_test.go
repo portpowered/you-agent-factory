@@ -75,7 +75,7 @@ func TestPartialBatch_TemplateResolvesFromTags(t *testing.T) {
 		Tags:       map[string]string{"branch": "feature-abc"},
 	})
 
-	writeAgentConfig(t, dir, "exec-worker", `---
+	support.WriteAgentConfig(t, dir, "exec-worker", `---
 type: MODEL_WORKER
 model: gpt-5-codex
 modelProvider: codex
@@ -106,7 +106,7 @@ Process the task input.
 	if call.Command != string(workers.ModelProviderCodex) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderCodex, call.Command)
 	}
-	assertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
 	if got := call.Args[len(call.Args)-1]; got != "-" {
 		t.Fatalf("expected codex stdin placeholder '-', got %q", got)
 	}
@@ -127,7 +127,7 @@ func TestPartialBatch_ProviderExitFailureRoutesTokenToFailedWithContext(t *testi
 		Payload:    []byte("provider exit failure payload"),
 	})
 
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
@@ -162,7 +162,7 @@ Process the input task.
 	if call.Command != string(workers.ModelProviderClaude) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
 	}
-	assertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-exit-failure"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-exit-failure"})
 
 	snap := h.Marking()
 	for _, tok := range snap.Tokens {
@@ -186,7 +186,7 @@ func TestPartialBatch_RetryableProviderFailuresRetryThroughScriptWrapPath(t *tes
 		Payload:    []byte("provider retry payload"),
 	})
 
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
@@ -219,7 +219,7 @@ Process the input task.
 	if call.Command != string(workers.ModelProviderClaude) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
 	}
-	assertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
 }
 
 func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails(t *testing.T) {
@@ -252,7 +252,7 @@ func throttledProviderFailureHarness(t *testing.T) (*testutil.ServiceTestHarness
 		Payload:    []byte("provider throttle payload"),
 	})
 
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
