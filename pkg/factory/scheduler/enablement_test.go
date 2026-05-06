@@ -34,6 +34,9 @@ func (l *capturingLogger) Warn(msg string, keysAndValues ...any) {
 func (l *capturingLogger) Error(msg string, keysAndValues ...any) {
 	l.entries = append(l.entries, logEntry{level: "error", msg: msg, args: keysAndValues})
 }
+func (l *capturingLogger) Verbose(msg string, keysAndValues ...any) {
+	l.entries = append(l.entries, logEntry{level: "verbose", msg: msg, args: keysAndValues})
+}
 
 func (l *capturingLogger) entryMatches(e *logEntry, substr string) bool {
 	if strings.Contains(e.msg, substr) {

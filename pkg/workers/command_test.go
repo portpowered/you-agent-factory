@@ -17,7 +17,8 @@ import (
 )
 
 type recordingCommandLogger struct {
-	infos []recordedCommandLog
+	infos    []recordedCommandLog
+	verboses []recordedCommandLog
 }
 
 type recordedCommandLog struct {
@@ -34,6 +35,12 @@ func (l *recordingCommandLogger) Info(msg string, keysAndValues ...any) {
 }
 func (l *recordingCommandLogger) Warn(_ string, _ ...any)  {}
 func (l *recordingCommandLogger) Error(_ string, _ ...any) {}
+func (l *recordingCommandLogger) Verbose(msg string, keysAndValues ...any) {
+	l.verboses = append(l.verboses, recordedCommandLog{
+		msg:    msg,
+		fields: commandLogFieldsMap(keysAndValues...),
+	})
+}
 
 type fixedCommandRunnerWithError struct {
 	result CommandResult
@@ -212,9 +219,14 @@ func assertLoggingCommandRunnerCase(t *testing.T, tc loggingCommandRunnerCase) {
 	if len(logger.infos) != 2 {
 		t.Fatalf("logged info records = %d, want 2", len(logger.infos))
 	}
+	if len(logger.verboses) != 2 {
+		t.Fatalf("logged verbose records = %d, want 2", len(logger.verboses))
+	}
 
 	assertLoggingCommandRunnerRequestLog(t, logger.infos[0].fields)
 	assertLoggingCommandRunnerCompletionLog(t, logger.infos[1].fields, req, tc)
+	assertLoggingCommandRunnerVerboseRequestLog(t, logger.verboses[0].fields)
+	assertLoggingCommandRunnerVerboseCompletionLog(t, logger.verboses[1].fields, req)
 }
 
 func loggingCommandRunnerTestRequest() CommandRequest {
@@ -255,6 +267,19 @@ func assertLoggingCommandRunnerRequestLog(t *testing.T, fields map[string]any) {
 	}
 }
 
+func assertLoggingCommandRunnerVerboseRequestLog(t *testing.T, fields map[string]any) {
+	t.Helper()
+	if fields["event_name"] != WorkLogEventCommandRunnerRequestDetails {
+		t.Fatalf("verbose request event_name = %#v, want %q", fields["event_name"], WorkLogEventCommandRunnerRequestDetails)
+	}
+	if fields["args_count"] != 2 {
+		t.Fatalf("verbose request args_count = %#v, want 2", fields["args_count"])
+	}
+	if fields["stdin_bytes"] != len([]byte("stdin")) {
+		t.Fatalf("verbose request stdin_bytes = %#v, want %d", fields["stdin_bytes"], len([]byte("stdin")))
+	}
+}
+
 func assertLoggingCommandRunnerCompletionLog(t *testing.T, fields map[string]any, req CommandRequest, tc loggingCommandRunnerCase) {
 	t.Helper()
 	if fields["event_name"] != WorkLogEventCommandRunnerCompleted {
@@ -288,6 +313,22 @@ func assertLoggingCommandRunnerCommandData(t *testing.T, fields map[string]any, 
 	}
 	if hasStderr {
 		t.Fatalf("completion unexpectedly includes stderr = %#v", stderr)
+	}
+}
+
+func assertLoggingCommandRunnerVerboseCompletionLog(t *testing.T, fields map[string]any, req CommandRequest) {
+	t.Helper()
+	if fields["event_name"] != WorkLogEventCommandRunnerOutputDetails {
+		t.Fatalf("verbose completion event_name = %#v, want %q", fields["event_name"], WorkLogEventCommandRunnerOutputDetails)
+	}
+	if fields["command"] != req.Command {
+		t.Fatalf("verbose completion command = %#v, want %q", fields["command"], req.Command)
+	}
+	if _, ok := fields["args_count"]; ok {
+		t.Fatalf("verbose completion unexpectedly includes args_count = %#v", fields["args_count"])
+	}
+	if fields["stdout_bytes"] == nil || fields["stderr_bytes"] == nil {
+		t.Fatalf("verbose completion missing output byte counters: %#v", fields)
 	}
 }
 

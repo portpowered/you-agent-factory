@@ -7,7 +7,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
-} from "./typography";
+} from "../../components/ui/dashboard-typography";
 import { FailureTrendCard, ReworkTrendCard, TimingTrendCard } from "./trend-cards";
 import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "./trends";
 
@@ -158,4 +158,3 @@ export const FailureTrendConstrainedWidth = {
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
-

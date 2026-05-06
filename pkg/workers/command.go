@@ -49,7 +49,7 @@ func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (Comm
 
 	logger.Info("command runner: request received",
 		commandRequestLogFields(req)...)
-	logging.Verbose(logger, "command runner: verbose request details",
+	logger.Verbose("command runner: verbose request details",
 		commandRequestDetailsLogFields(req)...)
 
 	started := time.Now()
@@ -58,7 +58,7 @@ func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (Comm
 
 	logger.Info("command runner: request completed",
 		commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
-	logging.Verbose(logger, "command runner: verbose output details",
+	logger.Verbose("command runner: verbose output details",
 		commandOutputDetailsLogFields(req, result, duration)...)
 
 	return result, err

@@ -3,6 +3,12 @@ import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
 
 const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
+const storybookInteropDeps = [
+  "react",
+  "react-dom",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+] as const;
 const proxiedAPIPaths = ["/events", "/factory", "/work"] as const;
 const apiProxy = Object.fromEntries(
   proxiedAPIPaths.map((path) => [
@@ -28,6 +34,10 @@ export default defineConfig({
   esbuild: {
     jsxDev: false,
   },
+  optimizeDeps: {
+    include: [...storybookInteropDeps],
+    needsInterop: [...storybookInteropDeps],
+  },
   plugins: [react(), tailwindcss()],
   server: {
     host: true,
@@ -41,6 +51,9 @@ export default defineConfig({
     strictPort: true,
   },
   test: {
+    deps: {
+      interopDefault: true,
+    },
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/testing/vitest.setup.ts"],

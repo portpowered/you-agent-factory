@@ -45,7 +45,7 @@ run git pull and make the workspace be up to date to remote
 ## Step 2 - based on the above results decide on one of the following:
 1. update your meta view of the world
 2. handle a customer ask
-3. create a task to dispatch to make a change to the world, please ensure that there are at least three tasks running at any given time.
+3. create a task to dispatch to make a change to the world.
 
 Most important of all though is that your meta view of the world has to be right and updated.
 You should always have a view of the world that is consistent with the world, that is to say, what does the world look like, what is the problems in the world, what is the best way to fix things overall.

@@ -12,21 +12,44 @@ const (
 	publicFactoryWorkstationKindCron     = "CRON"
 )
 
+func normalizePublicWorkstationKind(value string, acceptInternal bool, preserveUnknown bool) string {
+	trimmed := strings.TrimSpace(value)
+	switch trimmed {
+	case "":
+		return ""
+	case publicFactoryWorkstationKindStandard:
+		return publicFactoryWorkstationKindStandard
+	case publicFactoryWorkstationKindRepeater:
+		return publicFactoryWorkstationKindRepeater
+	case publicFactoryWorkstationKindCron:
+		return publicFactoryWorkstationKindCron
+	default:
+		if acceptInternal {
+			switch trimmed {
+			case string(WorkstationKindStandard):
+				return publicFactoryWorkstationKindStandard
+			case string(WorkstationKindRepeater):
+				return publicFactoryWorkstationKindRepeater
+			case string(WorkstationKindCron):
+				return publicFactoryWorkstationKindCron
+			}
+		}
+		if preserveUnknown {
+			return trimmed
+		}
+		return ""
+	}
+}
+
 // CanonicalPublicWorkstationKind returns the public factory-config enum value
 // for a runtime workstation kind while preserving unknown values verbatim.
 func CanonicalPublicWorkstationKind(kind WorkstationKind) string {
-	switch strings.TrimSpace(string(kind)) {
-	case "":
-		return ""
-	case string(WorkstationKindStandard), publicFactoryWorkstationKindStandard:
-		return publicFactoryWorkstationKindStandard
-	case string(WorkstationKindRepeater), publicFactoryWorkstationKindRepeater:
-		return publicFactoryWorkstationKindRepeater
-	case string(WorkstationKindCron), publicFactoryWorkstationKindCron:
-		return publicFactoryWorkstationKindCron
-	default:
-		return strings.TrimSpace(string(kind))
-	}
+	return normalizePublicWorkstationKind(string(kind), true, true)
+}
+
+// StrictPublicWorkstationKind canonicalizes supported public workstation kinds and rejects unknown values.
+func StrictPublicWorkstationKind(value string) string {
+	return normalizePublicWorkstationKind(value, false, false)
 }
 
 // GeneratedPublicWorkstationKind returns the generated workstation kind enum.

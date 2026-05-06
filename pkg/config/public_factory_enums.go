@@ -32,12 +32,6 @@ var publicFactoryInputKindAliases = map[string]string{
 	"DEFAULT": publicFactoryInputKindDefault,
 }
 
-var publicFactoryWorkstationKindAliases = map[string]string{
-	publicFactoryWorkstationKindCron:     publicFactoryWorkstationKindCron,
-	publicFactoryWorkstationKindRepeater: publicFactoryWorkstationKindRepeater,
-	publicFactoryWorkstationKindStandard: publicFactoryWorkstationKindStandard,
-}
-
 var publicFactoryGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeVisitCount:          publicFactoryGuardTypeVisitCount,
 	publicFactoryGuardTypeMatchesFields:       publicFactoryGuardTypeMatchesFields,
@@ -178,7 +172,7 @@ func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) 
 	if kind == nil {
 		return ""
 	}
-	switch canonicalPublicFactoryEnumValue(string(*kind), publicFactoryWorkstationKindAliases) {
+	switch interfaces.StrictPublicWorkstationKind(string(*kind)) {
 	case publicFactoryWorkstationKindStandard:
 		return interfaces.WorkstationKindStandard
 	case publicFactoryWorkstationKindRepeater:

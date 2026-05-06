@@ -12,7 +12,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import type { DashboardTrace } from "../../api/dashboard/types";
 
@@ -209,4 +209,3 @@ describe("TraceGridBentoCard", () => {
     expect(screen.getByText("network failed")).toBeTruthy();
   });
 });
-
