@@ -303,7 +303,7 @@ func loadThinEventSmokeFinalSnapshot(
 	if err != nil {
 		t.Fatalf("decode final inference response payload: %v", err)
 	}
-	finalState, err := projections.ReconstructFactoryWorldState(artifact.Events, lastFactoryEventTick(artifact.Events))
+	finalState, err := projections.ReconstructFactoryWorldState(artifact.Events, support.LastFactoryEventTick(artifact.Events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState final tick: %v", err)
 	}
@@ -1009,16 +1009,6 @@ func mapValue[K comparable, V any](values *map[K]V) map[K]V {
 		return nil
 	}
 	return *values
-}
-
-func lastFactoryEventTick(events []factoryapi.FactoryEvent) int {
-	tick := 0
-	for _, event := range events {
-		if event.Context.Tick > tick {
-			tick = event.Context.Tick
-		}
-	}
-	return tick
 }
 
 func worldViewDispatchHistoryContainsTrace(view interfaces.FactoryWorldView, dispatchID, traceID string) bool {
