@@ -124,6 +124,43 @@ func TestEvaluateCoverageFlagsZeroCoverageBackendPackages(t *testing.T) {
 	}
 }
 
+func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
+		"",
+	}, "\n"))
+
+	result, totalLine, err := evaluateCoverage(
+		"total: (statements) 81.0%\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/service",
+			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/testutil/runtimefixtures",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	if result.actual != 81.0 {
+		t.Fatalf("actual coverage = %v, want 81.0", result.actual)
+	}
+	if totalLine != "total: (statements) 81.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 81.0%")
+	}
+	if len(result.zeroCoveragePackages) != 0 {
+		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
+	}
+}
+
 func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 	t.Parallel()
 
