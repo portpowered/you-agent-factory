@@ -165,6 +165,45 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithOKSummary(t *
 	}
 }
 
+func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithCoverpkgOKSummary(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		"",
+	}, "\n"))
+
+	result, totalLine, err := evaluateCoverage(
+		"total: (statements) 82.5%\n",
+		"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+			modulePath + "/pkg/generatedclient",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	if result.actual != 82.5 {
+		t.Fatalf("actual coverage = %v, want 82.5", result.actual)
+	}
+	if totalLine != "total: (statements) 82.5%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 82.5%")
+	}
+
+	wantZeroCoverage := []string{modulePath + "/pkg/config"}
+	if !slices.Equal(result.zeroCoveragePackages, wantZeroCoverage) {
+		t.Fatalf("zero coverage packages = %v, want %v", result.zeroCoveragePackages, wantZeroCoverage)
+	}
+}
+
 func TestEvaluateCoverageFlagsBackendPackagesPresentWithZeroCoverage(t *testing.T) {
 	t.Parallel()
 
@@ -251,6 +290,45 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithOKSummary(t *testi
 		"total: (statements) 81.0%\n",
 		"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n"+
 			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/service",
+			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/testutil/runtimefixtures",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	if result.actual != 81.0 {
+		t.Fatalf("actual coverage = %v, want 81.0", result.actual)
+	}
+	if totalLine != "total: (statements) 81.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 81.0%")
+	}
+	if len(result.zeroCoveragePackages) != 0 {
+		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
+	}
+}
+
+func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithCoverpkgOKSummary(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
+		"",
+	}, "\n"))
+
+	result, totalLine, err := evaluateCoverage(
+		"total: (statements) 81.0%\n",
+		"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n"+
+			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/testutil/runtimefixtures, "+modulePath+"/pkg/service\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -425,6 +503,59 @@ func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 	}
 }
 
+func TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary(t *testing.T) {
+	if os.Getenv("GO_WANT_GOCOVERAGECHECK_MAIN_HELPER") == "1" {
+		originalArgs := os.Args
+		originalFlagSet := flag.CommandLine
+		originalExecCommand := execCommand
+		originalStdout := stdoutWriter
+		originalStderr := stderrWriter
+		originalExit := exitFunc
+		defer func() {
+			os.Args = originalArgs
+			flag.CommandLine = originalFlagSet
+			execCommand = originalExecCommand
+			stdoutWriter = originalStdout
+			stderrWriter = originalStderr
+			exitFunc = originalExit
+		}()
+
+		flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
+		os.Args = []string{
+			"gocoveragecheck",
+			"-min=80",
+			"-coverpkg=" + strings.Join([]string{
+				modulePath + "/pkg/config",
+				modulePath + "/pkg/service",
+				modulePath + "/pkg/generatedclient",
+			}, ","),
+			"-packages=./pkg/config",
+		}
+		execCommand = fakeGoCoverageCommandWithCoverpkgOKSummary
+		main()
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary")
+	cmd.Env = append(os.Environ(), "GO_WANT_GOCOVERAGECHECK_MAIN_HELPER=1")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("main() unexpectedly succeeded")
+	}
+
+	got := string(output)
+	if !strings.Contains(got, "total: (statements) 82.5%") {
+		t.Fatalf("main() output = %q, want total coverage line", got)
+	}
+	wantFailure := "go coverage found backend-owned packages with 0% statement coverage: " + modulePath + "/pkg/config"
+	if !strings.Contains(got, wantFailure) {
+		t.Fatalf("main() output = %q, want zero-coverage failure %q", got, wantFailure)
+	}
+	if strings.Contains(got, wantFailure+", "+modulePath+"/pkg/generatedclient") {
+		t.Fatalf("main() output = %q, did not expect excluded package in zero-coverage failure", got)
+	}
+}
+
 func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 	args, ok := helperCommandArgs(os.Args)
 	if !ok || len(args) == 0 || args[0] != "go" {
@@ -501,6 +632,16 @@ func fakeGoCoverageCommandWithOKSummary(name string, args ...string) *exec.Cmd {
 	return exec.Command(testBinary, cmdArgs...)
 }
 
+func fakeGoCoverageCommandWithCoverpkgOKSummary(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcessWithCoverpkgOKSummary", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
 func TestGoCoverageCheckFakeGoProcessWithOKSummary(t *testing.T) {
 	args, ok := helperCommandArgs(os.Args)
 	if !ok || len(args) == 0 || args[0] != "go" {
@@ -533,6 +674,52 @@ func TestGoCoverageCheckFakeGoProcessWithOKSummary(t *testing.T) {
 		fmt.Fprint(os.Stdout,
 			"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements\n"+
 				"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n",
+		)
+		os.Exit(0)
+	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/service/factory.go:1.1,2.1\t80.0%\n"+
+				"total: (statements) 82.5%\n",
+		)
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
+		os.Exit(2)
+	}
+}
+
+func TestGoCoverageCheckFakeGoProcessWithCoverpkgOKSummary(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) == 0 || args[0] != "go" {
+		return
+	}
+
+	switch {
+	case len(args) >= 2 && args[1] == "test":
+		profilePath := ""
+		for _, arg := range args[2:] {
+			if strings.HasPrefix(arg, "-coverprofile=") {
+				profilePath = strings.TrimPrefix(arg, "-coverprofile=")
+				break
+			}
+		}
+		if profilePath == "" {
+			fmt.Fprint(os.Stderr, "missing coverprofile argument")
+			os.Exit(2)
+		}
+		profile := strings.Join([]string{
+			"mode: count",
+			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+			modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+			"",
+		}, "\n")
+		if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "write fake profile: %v", err)
+			os.Exit(2)
+		}
+		fmt.Fprint(os.Stdout,
+			"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n"+
+				"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n",
 		)
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
