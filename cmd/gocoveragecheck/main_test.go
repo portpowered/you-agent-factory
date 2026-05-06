@@ -1,7 +1,10 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -205,6 +208,102 @@ func TestFormatZeroCoverageFailure(t *testing.T) {
 	}
 }
 
+func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
+	if os.Getenv("GO_WANT_GOCOVERAGECHECK_MAIN_HELPER") == "1" {
+		originalArgs := os.Args
+		originalFlagSet := flag.CommandLine
+		originalExecCommand := execCommand
+		originalStdout := stdoutWriter
+		originalStderr := stderrWriter
+		originalExit := exitFunc
+		defer func() {
+			os.Args = originalArgs
+			flag.CommandLine = originalFlagSet
+			execCommand = originalExecCommand
+			stdoutWriter = originalStdout
+			stderrWriter = originalStderr
+			exitFunc = originalExit
+		}()
+
+		flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
+		os.Args = []string{
+			"gocoveragecheck",
+			"-min=80",
+			"-coverpkg=" + strings.Join([]string{
+				modulePath + "/pkg/config",
+				modulePath + "/pkg/service",
+				modulePath + "/pkg/generatedclient",
+			}, ","),
+			"-packages=./pkg/config",
+		}
+		execCommand = fakeGoCoverageCommand
+		main()
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestMainFailsWithZeroCoveragePackageSummary")
+	cmd.Env = append(os.Environ(), "GO_WANT_GOCOVERAGECHECK_MAIN_HELPER=1")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("main() unexpectedly succeeded")
+	}
+
+	got := string(output)
+	if !strings.Contains(got, "total: (statements) 82.5%") {
+		t.Fatalf("main() output = %q, want total coverage line", got)
+	}
+	wantFailure := "go coverage found backend-owned packages with 0% statement coverage: " + modulePath + "/pkg/config"
+	if !strings.Contains(got, wantFailure) {
+		t.Fatalf("main() output = %q, want zero-coverage failure %q", got, wantFailure)
+	}
+	if strings.Contains(got, modulePath+"/pkg/generatedclient") {
+		t.Fatalf("main() output = %q, did not expect excluded package in zero-coverage failure", got)
+	}
+}
+
+func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) == 0 || args[0] != "go" {
+		return
+	}
+
+	switch {
+	case len(args) >= 2 && args[1] == "test":
+		profilePath := ""
+		for _, arg := range args[2:] {
+			if strings.HasPrefix(arg, "-coverprofile=") {
+				profilePath = strings.TrimPrefix(arg, "-coverprofile=")
+				break
+			}
+		}
+		if profilePath == "" {
+			fmt.Fprint(os.Stderr, "missing coverprofile argument")
+			os.Exit(2)
+		}
+		profile := strings.Join([]string{
+			"mode: count",
+			modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+			modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+			"",
+		}, "\n")
+		if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "write fake profile: %v", err)
+			os.Exit(2)
+		}
+		os.Exit(0)
+	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+				"total: (statements) 82.5%\n",
+		)
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
+		os.Exit(2)
+	}
+}
+
 func writeCoverageProfile(t *testing.T, contents string) string {
 	t.Helper()
 
@@ -213,4 +312,24 @@ func writeCoverageProfile(t *testing.T, contents string) string {
 		t.Fatalf("write coverage profile: %v", err)
 	}
 	return profilePath
+}
+
+func fakeGoCoverageCommand(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcess", "--", name}, args...)
+	cmd := exec.Command(testBinary, cmdArgs...)
+	return cmd
+}
+
+func helperCommandArgs(argv []string) ([]string, bool) {
+	for index, arg := range argv {
+		if arg == "--" {
+			return argv[index+1:], true
+		}
+	}
+	return nil, false
 }

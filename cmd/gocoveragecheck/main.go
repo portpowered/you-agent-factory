@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -21,8 +22,12 @@ var totalCoveragePattern = regexp.MustCompile(`total:\s+\(statements\)\s+([0-9.]
 const modulePath = "github.com/portpowered/infinite-you"
 
 var (
-	defaultCoveragePatterns = []string{"./cmd/factory", "./pkg/..."}
-	defaultTestPatterns     = []string{"./cmd/factory", "./pkg/...", "./tests/functional/..."}
+	defaultCoveragePatterns           = []string{"./cmd/factory", "./pkg/..."}
+	defaultTestPatterns               = []string{"./cmd/factory", "./pkg/...", "./tests/functional/..."}
+	execCommand                       = exec.Command
+	stdoutWriter            io.Writer = os.Stdout
+	stderrWriter            io.Writer = os.Stderr
+	exitFunc                          = os.Exit
 )
 
 type config struct {
@@ -47,9 +52,15 @@ type packageCoverageTotals struct {
 
 func main() {
 	cfg := parseConfig()
+	if err := execute(cfg); err != nil {
+		failf("%v\n", err)
+	}
+}
+
+func execute(cfg config) error {
 	result, err := run(cfg)
 	if err != nil {
-		failf("%v\n", err)
+		return err
 	}
 
 	var failures []string
@@ -60,9 +71,11 @@ func main() {
 		failures = append(failures, formatZeroCoverageFailure(result.zeroCoveragePackages))
 	}
 	if len(failures) > 0 {
-		failf("%s\n", strings.Join(failures, "\n"))
+		return errors.New(strings.Join(failures, "\n"))
 	}
-	fmt.Printf("Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
+
+	fmt.Fprintf(stdoutWriter, "Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
+	return nil
 }
 
 func parseConfig() config {
@@ -117,15 +130,15 @@ func run(cfg config) (coverageResult, error) {
 	)
 	testArgs = append(testArgs, testPackages...)
 
-	testCmd := exec.Command("go", testArgs...)
+	testCmd := execCommand("go", testArgs...)
 	testCmd.Env = os.Environ()
-	testCmd.Stdout = os.Stdout
-	testCmd.Stderr = os.Stderr
+	testCmd.Stdout = stdoutWriter
+	testCmd.Stderr = stderrWriter
 	if err := testCmd.Run(); err != nil {
 		return coverageResult{}, fmt.Errorf("run go test coverage lane: %w", err)
 	}
 
-	coverCmd := exec.Command("go", "tool", "cover", "-func", profilePath)
+	coverCmd := execCommand("go", "tool", "cover", "-func", profilePath)
 	coverCmd.Env = os.Environ()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -151,7 +164,7 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
-	fmt.Println(totalLine)
+	fmt.Fprintln(stdoutWriter, totalLine)
 	return result, nil
 }
 
@@ -183,7 +196,7 @@ func resolveTestPackages(cfg config) ([]string, error) {
 
 func listGoPackages(patterns []string, include func(string) bool) ([]string, error) {
 	args := append([]string{"list"}, patterns...)
-	cmd := exec.Command("go", args...)
+	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
 	rootDir, err := repoRootDir()
 	if err != nil {
@@ -436,6 +449,6 @@ func formatZeroCoverageFailure(packages []string) string {
 }
 
 func failf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format, args...)
-	os.Exit(1)
+	fmt.Fprintf(stderrWriter, format, args...)
+	exitFunc(1)
 }
