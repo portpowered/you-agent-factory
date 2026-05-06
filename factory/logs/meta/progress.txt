@@ -114,9 +114,9 @@
 
 ## Current Summary
 
-- As of `2026-05-06T05:04:15.1266160-07:00`, `HEAD` on `main` points to
-  `d17acf1`, a local docs refresh commit that contains `origin/main` through
-  merged PR `#122`.
+- As of `2026-05-06T05:07:16.1578424-07:00`, `HEAD` points to `e47cbe3` on
+  branch `meta-refresh-world-state-20260506-050415`; local `main` also points
+  to `e47cbe3` and contains `origin/main` through merged PR `#122`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -128,8 +128,8 @@
   user-owned tracked edit; ignored workflow files under `factory/inputs/**`
   remain operating state rather than canonical queue truth.
 - Recent merged PRs now include `#112`, `#113`, `#114`, `#115`, `#117`,
-  `#118`, `#119`, `#121`, and `#122`; open PR `#120` is only the meta refresh
-  branch and does not own the next code cleanup lane.
+  `#118`, `#119`, `#121`, and `#122`; open PRs `#120` and `#123` are only
+  meta refresh branches and do not own the next code cleanup lane.
 - The import/export P0, current-selection, submit-work copy, and dashboard UI
   asks remain materially closed on `main`; the remaining ask surface is broader
   program work in standards migration, website coverage, docs audit, manual
@@ -142,7 +142,7 @@
   and `cmd/gocoveragecheck`, but the current aggregate threshold can still
   hide backend-owned packages with `0%` statement coverage.
 
-## 2026-05-06T05:04:15.1266160-07:00 - meta state refresh
+## 2026-05-06T05:07:16.1578424-07:00 - meta state refresh
 
 - Ran `git pull --rebase --autostash origin main`; Git rebased the local docs
   refresh commits onto `origin/main`, bringing in merged PR `#122`
@@ -178,6 +178,11 @@
   `factory/inputs/idea/default/add-backend-zero-coverage-package-gate.md`
   so the next worker can tighten the backend testing gate without broadening
   into a multi-package coverage campaign or a frontend quality lane.
+- Committed the tracked worldview/progress refresh as
+  `e47cbe3` (`docs: refresh meta world state`), attempted `git push origin main`
+  but GitHub rejected the direct push because required status checks gate
+  `main`, then pushed branch `meta-refresh-world-state-20260506-050415` and
+  opened PR `#123` for the latest refresh.
 
 ## 2026-05-06T04:04:39.6158725-07:00 - meta state refresh
 

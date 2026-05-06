@@ -2,10 +2,10 @@
 
 ## world state
 
-- as of `2026-05-06T05:04:15.1266160-07:00`, local `HEAD` on `main` points to
-  `d17acf1`
-  (`docs: refresh meta world state`) and contains the merged `origin/main`
-  baseline through `cee2465`
+- as of `2026-05-06T05:07:16.1578424-07:00`, local `HEAD` on
+  `meta-refresh-world-state-20260506-050415` points to `e47cbe3`
+  (`docs: refresh meta world state`); local `main` also points to `e47cbe3`
+  and contains the merged `origin/main` baseline through `cee2465`
   (`Merge pull request #122 from portpowered/ralph/collapse-runtime-api-functional-server-lifecycle-owner`)
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the local worktree is not clean:
@@ -114,10 +114,11 @@
   - `#112` `updated website export to support exporting bundled files`, merged
     on `2026-05-06T07:45:59Z`
   - `#111` `remove-init-default-models`, merged on `2026-05-06T07:09:23Z`
-- `gh pr list --state open` currently reports one open PR:
+- `gh pr list --state open` currently reports two open PRs:
+  - `#123` `docs: refresh meta world state`
   - `#120` `docs: refresh meta world state`
-- PR `#120` is a meta-log refresh branch and does not own the next code cleanup
-  lane
+- PRs `#120` and `#123` are meta-log refresh branches and do not own the next
+  code cleanup lane; `#123` is the latest pushed refresh branch for this turn
 
 ## next cleanup candidate
 
