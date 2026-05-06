@@ -1,6 +1,6 @@
 import { useSelectionHistoryStore } from "./state/selectionHistoryStore";
 import { cx } from "../../lib/cx";
-import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../components/dashboard/typography";
+import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../components/ui/dashboard-typography";
 import { DETAIL_CARD_WIDE_CLASS } from "../../components/dashboard/widget-board";
 import { DashboardWidgetFrame } from "../../components/ui";
 import type { SelectionDetailLayoutProps } from "./detail-card-types";
@@ -55,4 +55,3 @@ export function SelectionDetailLayout({
     </DashboardWidgetFrame>
   );
 }
-

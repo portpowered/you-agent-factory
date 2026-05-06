@@ -2,7 +2,7 @@ import { cx } from "../../lib/cx";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import {
   formatDurationMillis,

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/dashboard/typography";
+import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
 import { formatWorkItemLabel } from "../../components/ui/formatters";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
@@ -204,4 +204,3 @@ function InferenceAttemptDetailLink({
     </div>
   );
 }
-

@@ -243,6 +243,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		logger.Error("failed to load factory config", zap.Error(err))
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}
+	warnPortableBundledReplacementReport(logger, "runtime config load replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	warnReplayMetadataMismatches(cfg, replayArtifact, logger)
 	clock := cfg.Clock
 	if clock == nil && replayArtifact != nil {
@@ -419,6 +420,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 	if err != nil {
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}
+	warnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
 
 	mapper := factoryconfig.ConfigMapper{}
@@ -1055,6 +1057,21 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 			zap.String("current", warning.Current),
 		)
 	}
+}
+
+func warnPortableBundledReplacementReport(
+	logger *zap.Logger,
+	message string,
+	replacements []factoryconfig.PortableBundledFileReplacement,
+) {
+	if logger == nil || len(replacements) == 0 {
+		return
+	}
+	targets := make([]string, 0, len(replacements))
+	for _, replacement := range replacements {
+		targets = append(targets, replacement.TargetPath)
+	}
+	logger.Warn(message, zap.Strings("target_paths", targets))
 }
 
 func runtimeWorkflowContext(cfg *interfaces.FactoryConfig) *factory_context.FactoryContext {

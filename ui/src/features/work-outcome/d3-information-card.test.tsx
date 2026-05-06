@@ -140,6 +140,9 @@ describe("D3CompletionInformationCard", () => {
     expect(within(chart).getByText("Ticks")).toBeTruthy();
     expect(within(chart).getByText("Work count")).toBeTruthy();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
+    const chartRegion = within(card).getByLabelText("Work outcome chart region");
+    expect(chartRegion.className).toContain("px-4");
+    expect(chartRegion.className).toContain("sm:px-5");
     expect(chart.className).toContain("px-5");
     expect(chart.className).toContain("pb-5");
     expect(chart.className).toContain("pt-4");

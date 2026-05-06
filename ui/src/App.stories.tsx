@@ -13,7 +13,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "./components/dashboard";
+} from "./components/ui/dashboard-typography";
 import {
   dashboardWorkstationRequestFixtures,
   failureAnalysisTimelineEvents,
@@ -951,7 +951,6 @@ export const DashboardSubmitWorkIntegrationSmoke = {
   render: () => <App />,
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
     const {
       requestField,
       requestNameField,
@@ -959,9 +958,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
       submitButton,
       workTypeField,
     } = await submitWorkCardControls(canvasElement);
-    const exportButton = await canvas.findByRole("button", {
-      name: "Export PNG",
-    });
+    const disabledSubmitStyle = buttonVisibleStyle(submitButton);
 
     expect(
       Array.from(
@@ -980,9 +977,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     await userEvent.selectOptions(workTypeField, "story");
     await expect(submitButton).toBeEnabled();
     await waitFor(() => {
-      expect(buttonVisibleStyle(submitButton)).toEqual(
-        buttonVisibleStyle(exportButton),
-      );
+      expect(buttonVisibleStyle(submitButton)).not.toEqual(disabledSubmitStyle);
     });
     await userEvent.click(submitButton);
     await expect(

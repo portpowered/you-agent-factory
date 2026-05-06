@@ -20,7 +20,7 @@ import { cx } from "../../lib/cx";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import type { DashboardWorkRelation } from "../../api/dashboard/types";
 import {
   getCachedTraceGraphLayout,
@@ -338,4 +338,3 @@ function relationEdgeID(relation: DashboardWorkRelation, index: number): string 
     relation.request_id ?? "",
   ].join("|");
 }
-

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   DASHBOARD_RETIRED_TEXT_SIZE_LITERALS,
   DASHBOARD_TYPOGRAPHY_CONTRACT,
-} from "./typography";
+} from "../ui/dashboard-typography";
 
 function getRole(
   role: (typeof DASHBOARD_TYPOGRAPHY_CONTRACT)[number]["role"],
@@ -54,4 +54,3 @@ describe("dashboard typography contract", () => {
     expect(getRole("supportingText").minimumRem).toBeGreaterThan(0.78);
   });
 });
-

@@ -24,7 +24,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "./components/dashboard";
+} from "./components/ui/dashboard-typography";
 import {
   buildDashboardSnapshotFixture,
   dashboardWorkstationRequestFixtures,

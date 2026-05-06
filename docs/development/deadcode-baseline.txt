@@ -1,6 +1,3 @@
-pkg/testutil/service_harness.go:121:6: unreachable func: WithExecutionBaseDir
-pkg/testutil/testutil.go:81:6: unreachable func: WriteSeedMarkdownFile
-pkg/testutil/testutil.go:109:6: unreachable func: WriteSeedBatchFile
 tests/functional/bootstrap_portability/cli_relative_working_directory_test.go:9:6: unreachable func: writeRelativeWorkingDirectoryFactoryConfig
 tests/functional/bootstrap_portability/cli_relative_working_directory_test.go:46:6: unreachable func: writeRelativeWorkingDirectoryWorkstationConfig
 tests/functional/bootstrap_portability/helpers_test.go:119:32: unreachable func: functionalAPIServer.SubmitWork
@@ -14,9 +11,6 @@ tests/functional/guards_batch/helpers_test.go:14:6: unreachable func: providerEr
 tests/functional/guards_batch/helpers_test.go:99:29: unreachable func: panickingExecutor.Execute
 tests/functional/internal/support/events.go:145:6: unreachable func: LastFactoryEventTick
 tests/functional/internal/support/fixtures.go:136:6: unreachable func: UpdateFactoryConfig
-tests/functional/internal/support/harness.go:53:6: unreachable func: CountFactoryEvents
-tests/functional/internal/support/provider.go:33:6: unreachable func: AcceptedCommandResults
-tests/functional/internal/support/provider.go:41:6: unreachable func: ProviderCommandRequestsForWorker
 tests/functional/providers/helpers_test.go:131:6: unreachable func: buildModelWorkerConfig
 tests/functional/providers/helpers_test.go:183:6: unreachable func: writeNamedWorkerAgents
 tests/functional/providers/helpers_test.go:209:6: unreachable func: writeExecutionTemplateWorkstationAgents

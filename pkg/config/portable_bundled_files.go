@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -20,12 +21,12 @@ var portableBundledRootHelperFiles = []string{"Makefile"}
 
 var portableBundledFactoryRootHelperFiles = []string{"portable-dependencies.json"}
 
-func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig) error {
+func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool) error {
 	if cfg == nil {
 		return nil
 	}
 
-	collected, err := collectSupportedPortableBundledFiles(factoryDir)
+	collected, err := collectSupportedPortableBundledFiles(factoryDir, includeInlineContent)
 	if err != nil {
 		return err
 	}
@@ -40,7 +41,7 @@ func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.Facto
 	return nil
 }
 
-func collectSupportedPortableBundledFiles(factoryDir string) ([]interfaces.BundledFileConfig, error) {
+func collectSupportedPortableBundledFiles(factoryDir string, includeInlineContent bool) ([]interfaces.BundledFileConfig, error) {
 	layout, ok := portableBundledLayoutForFactoryDir(factoryDir)
 	if !ok {
 		return nil, nil
@@ -54,7 +55,7 @@ func collectSupportedPortableBundledFiles(factoryDir string) ([]interfaces.Bundl
 		if dirName == "scripts" {
 			fileType = interfaces.BundledFileTypeScript
 		}
-		collected, err := collectPortableBundledFilesFromDir(rootDir, targetRoot, fileType)
+		collected, err := collectPortableBundledFilesFromDir(rootDir, targetRoot, fileType, includeInlineContent)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +162,7 @@ func portableBundledLayoutForFactoryDir(factoryDir string) (portableBundledLayou
 	}, true
 }
 
-func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string) ([]interfaces.BundledFileConfig, error) {
+func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string, includeInlineContent bool) ([]interfaces.BundledFileConfig, error) {
 	info, err := os.Stat(sourceDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -186,11 +187,20 @@ func collectPortableBundledFilesFromDir(sourceDir, targetRoot, fileType string) 
 		if err != nil {
 			return fmt.Errorf("resolve bundled file path %s: %w", path, err)
 		}
+		inline := ""
+		if includeInlineContent {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("read portable bundled file %s: %w", path, err)
+			}
+			inline = string(content)
+		}
 		bundledFiles = append(bundledFiles, interfaces.BundledFileConfig{
 			Type:       fileType,
 			TargetPath: filepath.ToSlash(filepath.Join(targetRoot, relativePath)),
 			Content: interfaces.BundledFileContentConfig{
 				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   inline,
 			},
 		})
 		return nil
@@ -261,24 +271,45 @@ func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfi
 	return merged
 }
 
-func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryConfig) error {
+type PortableBundledFileReplacement struct {
+	TargetPath string
+}
+
+func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryConfig) ([]PortableBundledFileReplacement, error) {
 	resolvedWrites, err := preparePortableBundledFileWrites(targetDir, cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	replacements := make([]PortableBundledFileReplacement, 0)
 	for _, write := range resolvedWrites {
 		if err := os.MkdirAll(filepath.Dir(write.targetPath), 0o755); err != nil {
-			return fmt.Errorf("create bundled file directory for %s: %w", write.targetPath, err)
+			return nil, fmt.Errorf("create bundled file directory for %s: %w", write.targetPath, err)
+		}
+		replaced, err := portableBundledFileReplacementNeeded(write.targetPath, []byte(write.content))
+		if err != nil {
+			return nil, fmt.Errorf("inspect bundled file %s: %w", write.targetPath, err)
+		}
+		if replaced {
+			replacements = append(replacements, PortableBundledFileReplacement{TargetPath: write.targetLocation})
 		}
 		if err := writePortableBundledFile(write.targetPath, []byte(write.content), write.mode); err != nil {
-			return fmt.Errorf("write bundled file %s: %w", write.targetPath, err)
+			return nil, fmt.Errorf("write bundled file %s: %w", write.targetPath, err)
 		}
 	}
 	if err := normalizeSupportedPortableBundledFileModes(targetDir, cfg); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return replacements, nil
+}
+
+func clonePortableBundledFileReplacements(replacements []PortableBundledFileReplacement) []PortableBundledFileReplacement {
+	if len(replacements) == 0 {
+		return nil
+	}
+	cloned := make([]PortableBundledFileReplacement, len(replacements))
+	copy(cloned, replacements)
+	return cloned
 }
 
 func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryConfig) ([]portableBundledFileWrite, error) {
@@ -309,18 +340,20 @@ func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryC
 			return nil, fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
 		}
 		resolvedWrites = append(resolvedWrites, portableBundledFileWrite{
-			targetPath: target.path,
-			content:    bundledFile.Content.Inline,
-			mode:       portableBundledFileMode(bundledFile),
+			targetPath:     target.path,
+			targetLocation: bundledFile.TargetPath,
+			content:        bundledFile.Content.Inline,
+			mode:           portableBundledFileMode(bundledFile),
 		})
 	}
 	return resolvedWrites, nil
 }
 
 type portableBundledFileWrite struct {
-	targetPath string
-	content    string
-	mode       fs.FileMode
+	targetPath     string
+	targetLocation string
+	content        string
+	mode           fs.FileMode
 }
 
 type portableBundledResolvedTarget struct {
@@ -343,6 +376,17 @@ func writePortableBundledFile(path string, data []byte, mode fs.FileMode) error 
 		return err
 	}
 	return nil
+}
+
+func portableBundledFileReplacementNeeded(path string, next []byte) (bool, error) {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return !bytes.Equal(current, next), nil
 }
 
 func normalizeSupportedPortableBundledFileModes(factoryDir string, cfg *interfaces.FactoryConfig) error {

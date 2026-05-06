@@ -7,7 +7,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
@@ -161,4 +161,3 @@ function StatePositionWorkListItem({
     </li>
   );
 }
-

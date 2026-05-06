@@ -7,7 +7,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
-} from "./typography";
+} from "../../components/ui/dashboard-typography";
 import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "./trends";
 import { describe, it, vi, expect } from "vitest";
 
@@ -184,4 +184,3 @@ describe("dashboard trend cards", () => {
     );
   });
 });
-

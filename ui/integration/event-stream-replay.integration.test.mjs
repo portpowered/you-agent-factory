@@ -766,7 +766,11 @@ async function assertFactoryExportRoundTrip() {
     const exportDialogButton = exportDialog.getByRole("button", {
       name: "Export PNG",
     });
-    expect(await exportDialogButton.isEnabled()).toBe(true);
+    await expect
+      .poll(async () => await exportDialogButton.isEnabled(), {
+        timeout: uiInteractionTimeoutMs,
+      })
+      .toBe(true);
 
     await exportDialogButton.click();
     const exportOutcome = await Promise.race([

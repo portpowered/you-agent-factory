@@ -10,7 +10,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
@@ -273,7 +273,7 @@ function WorkstationActiveWorkList({
               return (
                 <li
                   className={cx(
-                    "grid min-w-0 gap-[0.45rem] rounded-lg border border-af-info/20 bg-af-info/8 px-3 py-2",
+                    "grid min-w-0 gap-[0.45rem] rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
                   key={`${execution.dispatch_id}-${workIdentifier}`}
@@ -361,4 +361,3 @@ function WorkstationActiveWorkList({
     </section>
   );
 }
-

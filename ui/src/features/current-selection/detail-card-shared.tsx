@@ -9,7 +9,7 @@ import {
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import type {
   InferenceAttemptDetailProps,
@@ -27,7 +27,7 @@ export const PROVIDER_SESSION_CARD_CLASS =
 export const HISTORY_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 [&_h4]:m-0";
 export const HISTORY_TOGGLE_CLASS = cx(
-  "shrink-0 cursor-pointer rounded-lg border border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.45rem] text-af-accent",
+  "shrink-0 cursor-pointer rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-[0.65rem] py-[0.45rem] text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const WORKSTATION_SUMMARY_ITEM_CLASS =
@@ -63,7 +63,7 @@ export const REQUEST_SELECTION_STATUS_CLASS = cx(
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const WORK_SELECTION_BUTTON_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.45rem] text-xs font-bold text-af-accent outline-af-accent transition hover:bg-af-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2";
+  "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-[0.65rem] py-[0.45rem] text-xs font-bold text-af-ink/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
 export const REQUEST_HISTORY_TEXT_CLASS = cx(
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,

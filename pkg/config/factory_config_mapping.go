@@ -846,14 +846,10 @@ func bundledFilesAPIFromInternal(bundledFiles []interfaces.BundledFileConfig) *[
 }
 
 func bundledFileContentAPIFromInternal(file interfaces.BundledFileConfig) factoryapi.BundledFileContent {
-	content := factoryapi.BundledFileContent{
+	return factoryapi.BundledFileContent{
 		Encoding: factoryapi.BundledFileContentEncoding(file.Content.Encoding),
 		Inline:   file.Content.Inline,
 	}
-	if shouldOmitSupportedPortableBundledInline(file) {
-		content.Inline = ""
-	}
-	return content
 }
 
 func shouldOmitSupportedPortableBundledInline(file interfaces.BundledFileConfig) bool {
@@ -896,6 +892,10 @@ func dropSupportedPortableBundledInlineContent(payload any) {
 		}
 		content, ok := bundledFile["content"].(map[string]any)
 		if !ok {
+			continue
+		}
+		inline, _ := content["inline"].(string)
+		if strings.TrimSpace(inline) != "" {
 			continue
 		}
 		delete(content, "inline")

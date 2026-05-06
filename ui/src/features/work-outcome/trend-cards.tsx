@@ -12,7 +12,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import {
   THROUGHPUT_RANGE_OPTIONS,
   type FailureTrendModel,
@@ -355,4 +355,3 @@ function TrendAxes() {
 function isThroughputRangeID(value: string): value is ThroughputRangeID {
   return THROUGHPUT_RANGE_OPTIONS.some((option) => option.id === value);
 }
-

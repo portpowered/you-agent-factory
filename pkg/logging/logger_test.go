@@ -12,12 +12,19 @@ type spyLogger struct {
 	infoCalls  []string
 	warnCalls  []string
 	errorCalls []string
+	verboseCalls []verboseCall
 }
 
 func (s *spyLogger) Debug(msg string, _ ...any) { s.debugCalls = append(s.debugCalls, msg) }
 func (s *spyLogger) Info(msg string, _ ...any)  { s.infoCalls = append(s.infoCalls, msg) }
 func (s *spyLogger) Warn(msg string, _ ...any)  { s.warnCalls = append(s.warnCalls, msg) }
 func (s *spyLogger) Error(msg string, _ ...any) { s.errorCalls = append(s.errorCalls, msg) }
+func (s *spyLogger) Verbose(msg string, keysAndValues ...any) {
+	s.verboseCalls = append(s.verboseCalls, verboseCall{
+		msg:           msg,
+		keysAndValues: append([]any(nil), keysAndValues...),
+	})
+}
 
 type verboseCall struct {
 	msg           string
@@ -26,14 +33,6 @@ type verboseCall struct {
 
 type verboseSpyLogger struct {
 	spyLogger
-	verboseCalls []verboseCall
-}
-
-func (s *verboseSpyLogger) Verbose(msg string, keysAndValues ...any) {
-	s.verboseCalls = append(s.verboseCalls, verboseCall{
-		msg:           msg,
-		keysAndValues: append([]any(nil), keysAndValues...),
-	})
 }
 
 func TestSpyLogger_ImplementsLogger(t *testing.T) {
@@ -78,10 +77,10 @@ func TestEnsureLogger_NonNilReturnsSame(t *testing.T) {
 	}
 }
 
-func TestVerbose_ForwardsToVerboseCapableLogger(t *testing.T) {
+func TestLogger_VerboseRecordsFields(t *testing.T) {
 	logger := &verboseSpyLogger{}
 
-	Verbose(logger, "verbose message", "worker", "alpha", "attempt", 2)
+	logger.Verbose("verbose message", "worker", "alpha", "attempt", 2)
 
 	if len(logger.verboseCalls) != 1 {
 		t.Fatalf("expected 1 verbose call, got %d", len(logger.verboseCalls))
@@ -100,13 +99,14 @@ func TestVerbose_ForwardsToVerboseCapableLogger(t *testing.T) {
 	}
 }
 
-func TestVerbose_IgnoresPlainLogger(t *testing.T) {
+func TestLogger_VerboseIsAvailableOnLoggerContract(t *testing.T) {
 	logger := &spyLogger{}
 
-	Verbose(logger, "verbose message", "worker", "alpha")
+	var contract Logger = logger
+	contract.Verbose("verbose message", "worker", "alpha")
 
-	if len(logger.debugCalls) != 0 || len(logger.infoCalls) != 0 || len(logger.warnCalls) != 0 || len(logger.errorCalls) != 0 {
-		t.Fatalf("expected plain logger to ignore verbose emission, got debug=%v info=%v warn=%v error=%v", logger.debugCalls, logger.infoCalls, logger.warnCalls, logger.errorCalls)
+	if len(logger.verboseCalls) != 1 {
+		t.Fatalf("expected verbose call through Logger contract, got %d", len(logger.verboseCalls))
 	}
 }
 
