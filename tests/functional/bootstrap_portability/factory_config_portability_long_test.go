@@ -507,7 +507,7 @@ func assertFlattenedInlineScriptStandaloneExecutes(t *testing.T, standaloneDir s
 	t.Helper()
 
 	h := testutil.NewServiceTestHarness(t, standaloneDir,
-		testutil.WithCommandRunner(successRunner("flattened inline script accepted")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("flattened inline script accepted")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 

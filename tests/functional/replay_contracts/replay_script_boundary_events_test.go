@@ -27,20 +27,6 @@ func (r processErrorCommandRunner) Run(_ context.Context, _ workers.CommandReque
 	return workers.CommandResult{Stderr: []byte(r.stderr)}, errors.New("exec: file not found")
 }
 
-type fakeCommandRunner struct {
-	stdout   string
-	stderr   string
-	exitCode int
-}
-
-func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
-}
-
-func successRunner(stdout string) workers.CommandRunner {
-	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
-}
-
 func TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundary(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	writeScriptWorkerArgsFixture(t, dir)
@@ -54,7 +40,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundar
 	})
 
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
@@ -77,7 +63,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResp
 	})
 
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithRecordPath(recordPath),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)

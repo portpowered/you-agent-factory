@@ -61,3 +61,21 @@ func TestCountFactoryEvents_CountsMatchingEventTypes(t *testing.T) {
 		t.Fatalf("CountFactoryEvents(dispatch response) = %d, want 1", got)
 	}
 }
+
+func TestNewStaticSuccessCommandRunner_ReturnsFixedStdoutWithoutFailureFields(t *testing.T) {
+	runner := NewStaticSuccessCommandRunner("script-output-ok")
+
+	result, err := runner.Run(context.Background(), workers.CommandRequest{Command: "script-tool"})
+	if err != nil {
+		t.Fatalf("runner.Run: %v", err)
+	}
+	if got := string(result.Stdout); got != "script-output-ok" {
+		t.Fatalf("result.Stdout = %q, want %q", got, "script-output-ok")
+	}
+	if got := string(result.Stderr); got != "" {
+		t.Fatalf("result.Stderr = %q, want empty", got)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("result.ExitCode = %d, want 0", result.ExitCode)
+	}
+}

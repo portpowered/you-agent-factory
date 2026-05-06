@@ -15,8 +15,20 @@ type RecordingCommandRunner struct {
 	requests []workers.CommandRequest
 }
 
+type staticSuccessCommandRunner struct {
+	stdout []byte
+}
+
+func NewStaticSuccessCommandRunner(stdout string) workers.CommandRunner {
+	return &staticSuccessCommandRunner{stdout: []byte(stdout)}
+}
+
 func NewRecordingCommandRunner(stdout string) *RecordingCommandRunner {
 	return &RecordingCommandRunner{stdout: []byte(stdout)}
+}
+
+func (r *staticSuccessCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
 }
 
 func (r *RecordingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
@@ -54,3 +66,4 @@ Process the input task.
 }
 
 var _ workers.CommandRunner = (*RecordingCommandRunner)(nil)
+var _ workers.CommandRunner = (*staticSuccessCommandRunner)(nil)

@@ -120,10 +120,6 @@ func (r *templateCaptureCommandRunner) LastRequest() workers.CommandRequest {
 	return r.request
 }
 
-func successRunner(stdout string) workers.CommandRunner {
-	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
-}
-
 func failureRunner(stderr string) workers.CommandRunner {
 	return &fakeCommandRunner{stderr: stderr, exitCode: 1}
 }

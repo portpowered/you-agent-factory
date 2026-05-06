@@ -1,13 +1,11 @@
 package bootstrap_portability
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func assertTokenPayload(t *testing.T, snap *petri.MarkingSnapshot, placeID, want string) {
@@ -23,20 +21,6 @@ func assertTokenPayload(t *testing.T, snap *petri.MarkingSnapshot, placeID, want
 	}
 
 	t.Fatalf("no token found in %s", placeID)
-}
-
-type fakeCommandRunner struct {
-	stdout   string
-	stderr   string
-	exitCode int
-}
-
-func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
-}
-
-func successRunner(stdout string) workers.CommandRunner {
-	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
 }
 
 func writeFatFactoryJSON(t *testing.T, dir, content string) {

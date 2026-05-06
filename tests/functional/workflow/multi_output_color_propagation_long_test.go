@@ -26,7 +26,7 @@ func TestMultiOutputColorPropagation(t *testing.T) {
 	})
 
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(successRunner("split-output")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("split-output")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
@@ -82,7 +82,7 @@ func TestMultiOutputColorPropagation_NameAvailableDownstream(t *testing.T) {
 	})
 
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(successRunner("downstream-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("downstream-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 

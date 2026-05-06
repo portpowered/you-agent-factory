@@ -30,7 +30,7 @@ func TestNtoN_TypeMatching(t *testing.T) {
 	})
 
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(successRunner("review-done")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("review-done")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
