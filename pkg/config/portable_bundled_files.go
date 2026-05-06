@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -270,24 +271,36 @@ func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfi
 	return merged
 }
 
-func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryConfig) error {
+type portableBundledFileReplacement struct {
+	TargetPath string
+}
+
+func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryConfig) ([]portableBundledFileReplacement, error) {
 	resolvedWrites, err := preparePortableBundledFileWrites(targetDir, cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	replacements := make([]portableBundledFileReplacement, 0)
 	for _, write := range resolvedWrites {
 		if err := os.MkdirAll(filepath.Dir(write.targetPath), 0o755); err != nil {
-			return fmt.Errorf("create bundled file directory for %s: %w", write.targetPath, err)
+			return nil, fmt.Errorf("create bundled file directory for %s: %w", write.targetPath, err)
+		}
+		replaced, err := portableBundledFileReplacementNeeded(write.targetPath, []byte(write.content))
+		if err != nil {
+			return nil, fmt.Errorf("inspect bundled file %s: %w", write.targetPath, err)
+		}
+		if replaced {
+			replacements = append(replacements, portableBundledFileReplacement{TargetPath: write.targetLocation})
 		}
 		if err := writePortableBundledFile(write.targetPath, []byte(write.content), write.mode); err != nil {
-			return fmt.Errorf("write bundled file %s: %w", write.targetPath, err)
+			return nil, fmt.Errorf("write bundled file %s: %w", write.targetPath, err)
 		}
 	}
 	if err := normalizeSupportedPortableBundledFileModes(targetDir, cfg); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return replacements, nil
 }
 
 func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryConfig) ([]portableBundledFileWrite, error) {
@@ -318,18 +331,20 @@ func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryC
 			return nil, fmt.Errorf("resolve bundled file %q: %w", bundledFile.TargetPath, err)
 		}
 		resolvedWrites = append(resolvedWrites, portableBundledFileWrite{
-			targetPath: target.path,
-			content:    bundledFile.Content.Inline,
-			mode:       portableBundledFileMode(bundledFile),
+			targetPath:     target.path,
+			targetLocation: bundledFile.TargetPath,
+			content:        bundledFile.Content.Inline,
+			mode:           portableBundledFileMode(bundledFile),
 		})
 	}
 	return resolvedWrites, nil
 }
 
 type portableBundledFileWrite struct {
-	targetPath string
-	content    string
-	mode       fs.FileMode
+	targetPath     string
+	targetLocation string
+	content        string
+	mode           fs.FileMode
 }
 
 type portableBundledResolvedTarget struct {
@@ -352,6 +367,17 @@ func writePortableBundledFile(path string, data []byte, mode fs.FileMode) error 
 		return err
 	}
 	return nil
+}
+
+func portableBundledFileReplacementNeeded(path string, next []byte) (bool, error) {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return !bytes.Equal(current, next), nil
 }
 
 func normalizeSupportedPortableBundledFileModes(factoryDir string, cfg *interfaces.FactoryConfig) error {

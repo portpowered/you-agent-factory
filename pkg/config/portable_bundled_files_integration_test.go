@@ -90,6 +90,31 @@ func TestPortableBundledFiles_LoadRuntimeConfigMaterializesStandalonePortableCon
 	assertPortableBundledLoadedWorker(t, loaded)
 }
 
+func TestPortableBundledFiles_LoadRuntimeConfigOverwritesDifferingExistingFile(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+
+	flattened, err := factoryconfig.FlattenFactoryConfig(sourceDir)
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+
+	portableDir := t.TempDir()
+	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(portablePath, flattened, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", portablePath, err)
+	}
+	copyPortableBundledDiskBackedExport(t, projectDir, sourceDir, portableDir)
+	writePortableBundledRoundTripFile(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"), "Write-Output 'stale script'\n")
+
+	loaded, err := factoryconfig.LoadRuntimeConfig(portableDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(standalone portable config with stale file): %v", err)
+	}
+
+	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
+	assertPortableBundledLoadedWorker(t, loaded)
+}
+
 func TestPortableBundledFiles_LoadRuntimeConfigAcceptsThinDiskBackedManifest(t *testing.T) {
 	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
 

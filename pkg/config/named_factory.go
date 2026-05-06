@@ -210,7 +210,7 @@ func writeNamedFactoryLayout(targetDir string, cfg *interfaces.FactoryConfig, ca
 	if err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations); err != nil {
 		return err
 	}
-	if err := materializePortableBundledFiles(targetDir, cfg); err != nil {
+	if _, err := materializePortableBundledFiles(targetDir, cfg); err != nil {
 		return err
 	}
 	inputsDir := filepath.Join(targetDir, interfaces.InputsDir)

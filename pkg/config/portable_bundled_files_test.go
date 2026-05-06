@@ -96,6 +96,35 @@ func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.
 	}
 }
 
+func TestMaterializePortableBundledFiles_ReportsDifferingExistingFileReplacement(t *testing.T) {
+	targetDir := t.TempDir()
+	existingScriptPath := filepath.Join(targetDir, "scripts", "execute-story.ps1")
+	writePortableBundledTestFile(t, existingScriptPath, "Write-Output 'stale script'\n")
+	writePortableBundledTestFile(t, filepath.Join(targetDir, "docs", "README.md"), "# Portable factory\n")
+
+	cfg := &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{
+				portableBundledFixtureFile(interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n"),
+				portableBundledFixtureFile(interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n"),
+			},
+		},
+	}
+
+	replacements, err := materializePortableBundledFiles(targetDir, cfg)
+	if err != nil {
+		t.Fatalf("materializePortableBundledFiles: %v", err)
+	}
+	if len(replacements) != 1 {
+		t.Fatalf("replacement report = %#v, want one differing bundled file", replacements)
+	}
+	if replacements[0].TargetPath != "factory/scripts/execute-story.ps1" {
+		t.Fatalf("replacement targetPath = %q, want factory/scripts/execute-story.ps1", replacements[0].TargetPath)
+	}
+	assertPortableBundledExpandedFile(t, targetDir, filepath.Join("scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
+	assertPortableBundledExpandedFile(t, targetDir, filepath.Join("docs", "README.md"), "# Portable factory\n")
+}
+
 func TestPortableBundledTargetPath_MaterializesSupportedPortablePaths(t *testing.T) {
 	targetDir := t.TempDir()
 

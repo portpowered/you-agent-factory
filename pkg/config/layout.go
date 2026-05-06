@@ -455,7 +455,7 @@ func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.Fac
 	if err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations); err != nil {
 		return err
 	}
-	if err := materializePortableBundledFiles(targetDir, cfg); err != nil {
+	if _, err := materializePortableBundledFiles(targetDir, cfg); err != nil {
 		return err
 	}
 	if err := copySupportedPortableBundledFilesFromSource(sourceDir, targetDir, cfg); err != nil {
