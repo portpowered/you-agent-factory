@@ -135,8 +135,10 @@ func run(cfg config) (coverageResult, error) {
 
 	testCmd := execCommand("go", testArgs...)
 	testCmd.Env = os.Environ()
-	testCmd.Stdout = stdoutWriter
-	testCmd.Stderr = stderrWriter
+	var testStdout bytes.Buffer
+	var testStderr bytes.Buffer
+	testCmd.Stdout = io.MultiWriter(stdoutWriter, &testStdout)
+	testCmd.Stderr = io.MultiWriter(stderrWriter, &testStderr)
 	if err := testCmd.Run(); err != nil {
 		return coverageResult{}, fmt.Errorf("run go test coverage lane: %w", err)
 	}
@@ -163,7 +165,12 @@ func run(cfg config) (coverageResult, error) {
 		return coverageResult{}, err
 	}
 
-	result, totalLine, err := evaluateCoverage(stdout.String(), profilePath, repoRoot, coverPackages)
+	packageSummaryReport := testStdout.String()
+	if testStderr.Len() > 0 {
+		packageSummaryReport += "\n" + testStderr.String()
+	}
+
+	result, totalLine, err := evaluateCoverage(stdout.String(), packageSummaryReport, profilePath, repoRoot, coverPackages)
 	if err != nil {
 		return coverageResult{}, err
 	}
@@ -315,13 +322,13 @@ func parseTotalCoverage(report string) (float64, string, error) {
 	return value, fmt.Sprintf("total: (statements) %s%%", matches[1]), nil
 }
 
-func evaluateCoverage(report string, profilePath string, repoRoot string, coverPackages []string) (coverageResult, string, error) {
-	actual, totalLine, err := parseTotalCoverage(report)
+func evaluateCoverage(totalReport string, packageSummaryReport string, profilePath string, repoRoot string, coverPackages []string) (coverageResult, string, error) {
+	actual, totalLine, err := parseTotalCoverage(totalReport)
 	if err != nil {
 		return coverageResult{}, "", err
 	}
 
-	zeroCoveragePackages, err := findZeroCoveragePackages(report, profilePath, repoRoot, coverPackages)
+	zeroCoveragePackages, err := findZeroCoveragePackages(packageSummaryReport, profilePath, repoRoot, coverPackages)
 	if err != nil {
 		return coverageResult{}, "", err
 	}
