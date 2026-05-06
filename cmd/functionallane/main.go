@@ -21,6 +21,7 @@ type config struct {
 }
 
 var executeFunctionalLane = run
+var execCommand = exec.Command
 
 func main() {
 	if err := executeFunctionalLane(); err != nil {
@@ -61,7 +62,7 @@ func parseConfig() config {
 
 func discoverPackages(root string) ([]string, error) {
 	args := []string{"list", root}
-	cmd := exec.Command("go", args...)
+	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -94,7 +95,7 @@ func runFunctionalTests(cfg config, pkgs []string) error {
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 
-	cmd := exec.Command("go", args...)
+	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
