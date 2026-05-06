@@ -99,11 +99,14 @@
 - Treat graph or delegated explorer suggestions as provisional after a
   fast-forward; confirm the seam still exists on live `main` with `git log`,
   `rg`, and direct file reads before dispatching new cleanup work.
+- After a helper-dedupe PR merges, scan adjacent suites in the same package for
+  leftover nil-unwrapper or token-search clones; the highest-value follow-up is
+  often a smaller local closeout rather than a brand new seam.
 
 ## Current Summary
 
-- As of `2026-05-06T01:04:51.9722496-07:00`, `HEAD` on `main` points to
-  `6b95577` and matches `origin/main`.
+- As of `2026-05-06T03:05:05.3321512-07:00`, `HEAD` on `main` points to
+  `02643f8` and matches `origin/main`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -111,11 +114,11 @@
   hourly cleaner, and loop breakers.
 - The tracked input surface remains sentinel-only; there is no checked-in
   cleanup request currently queued under `factory/inputs/**`.
-- The local worktree is not clean, but the visible residue is unrelated
-  untracked root and `factory/` files rather than canonical queue state.
-- Recent merged PRs now include `#106`, `#107`, `#108`, `#109`, `#110`, and
-  `#111`; the current open PR set is down to one branch, `#112`
-  (`website-export`).
+- The local worktree is not clean because `factory/logs/meta/asks.md` carries a
+  user-owned tracked edit; ignored workflow files under `factory/inputs/**`
+  remain operating state rather than canonical queue truth.
+- Recent merged PRs now include `#112`, `#113`, `#114`, `#115`, `#117`,
+  `#118`, and `#119`; there are currently no open PRs.
 - The import/export P0, current-selection, submit-work copy, and dashboard UI
   asks remain materially closed on `main`; the remaining ask surface is broader
   program work in standards migration, website coverage, docs audit, manual
@@ -123,10 +126,11 @@
 - The replay fixtures remain historical samples rather than current workflow
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
-- The next non-overlapping cleanup seam is functional test helper duplication:
-  `tests/functional/internal/support/events.go` already owns
-  `LastFactoryEventTick`, while replay-contract and runtime-API suites still
-  carry local `lastFactoryEventTick` copies.
+- The next non-overlapping cleanup seam is runtime-API functional helper
+  duplication: shared support already owns `StringPointerValue`,
+  `FactoryWorksValue`, and `HasWorkTokenInPlace`, while
+  `api_batch_submission_boundary_smoke_test.go` and
+  `api_service_mode_observability_smoke_test.go` still carry local clones.
 
 ## 2026-05-05T15:03:51.1883314-07:00 - meta state refresh
 
@@ -1298,3 +1302,40 @@
   reopening the export lane owned by PR `#112`.
 - Updated the checked-in worldview and summary so they no longer claim stale
   PR state, stale inbox residue, or a clean worktree.
+
+## 2026-05-06T03:05:05.3321512-07:00 - meta state refresh
+
+- Ran `git pull`; Git fast-forwarded `main` from `6481da1` to `02643f8`, which
+  pulled in merged PR `#117`, merged PR `#118`, and merged PR `#119`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, and `factory/README.md`.
+- Re-validated tracked versus ignored workflow inputs with `git ls-files
+  factory/inputs` and `Get-ChildItem -Recurse factory/inputs`, confirming the
+  checked-in inboxes remain sentinel-only while the visible idea/task files
+  were ignored local operating residue.
+- Re-checked repo movement with `git log --oneline --decorate -12`,
+  `gh pr list --state merged --limit 12`, and `gh pr list --state open --limit 20`,
+  confirming merged PRs `#112` through `#119` are now on `main` and that there
+  are no open PRs.
+- Pruned stale ignored workflow residue for already merged tasks:
+  `factory/inputs/idea/default/retire-transition-topology-runtime-lookup-adapter.md`,
+  `factory/inputs/task/default/consolidate-static-command-runner-test-helpers.md`,
+  `factory/inputs/task/default/dedupe-functional-api-server-harnesses.md`, and
+  `factory/inputs/task/default/retire-transition-topology-runtime-lookup-adapter.md`.
+- Used delegated explorer passes plus direct file reads to invalidate the prior
+  recorded tick-helper seam as stale after merged PR `#114`; the shared
+  `support.LastFactoryEventTick` migration is already largely closed on `main`.
+- Confirmed one new narrow non-overlapping cleanup seam in live code instead:
+  `tests/functional/internal/support/events.go` and
+  `tests/functional/internal/support/harness.go` already own helper patterns
+  that `tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go`
+  and `tests/functional/runtime_api/api_service_mode_observability_smoke_test.go`
+  still duplicate locally.
+- Queued one fresh ignored idea under
+  `factory/inputs/idea/default/consolidate-runtime-api-functional-support-helpers.md`
+  so the next worker can collapse those runtime-API helper clones onto the
+  shared support owners without reopening the recently merged replay or
+  command-runner lanes.
+- Updated the checked-in worldview and summary so they no longer claim stale
+  PR ownership, stale queue residue, or the old tick-helper next seam.

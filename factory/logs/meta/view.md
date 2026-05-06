@@ -2,17 +2,19 @@
 
 ## world state
 
-- as of `2026-05-06T01:04:51.9722496-07:00`, local `HEAD` on `main` points to
-  `6b95577`
-  (`Merge pull request #111 from portpowered/remove-init-default-models`) and
-  matches `origin/main`
+- as of `2026-05-06T03:05:05.3321512-07:00`, local `HEAD` on `main` points to
+  `02643f8`
+  (`Merge pull request #119 from portpowered/ralph/dedupe-functional-api-server-harnesses`)
+  and matches `origin/main`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the local worktree is not clean:
   - canonical `factory/inputs/**` remains tracked-sentinel-only
   - there is no checked-in cleanup request currently queued under
     `factory/inputs/**`
-  - unrelated untracked local residue exists at the repo root and under
-    `factory/` and should not be treated as canonical queue state
+  - `factory/logs/meta/asks.md` carries a local tracked edit and should be
+    treated as user-owned state for this refresh
+  - ignored local workflow residue under `factory/inputs/**` must still be
+    treated as operating state rather than checked-in queue truth
 
 ## workflow truth
 
@@ -47,9 +49,13 @@
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
-- there is no pre-existing ignored idea residue in the canonical inboxes at the
-  start of this refresh; any new idea file written this turn is fresh local
-  operating state rather than stale carry-over
+- stale ignored residue for merged tasks existed at the start of this refresh:
+  - `factory/inputs/idea/default/retire-transition-topology-runtime-lookup-adapter.md`
+  - `factory/inputs/task/default/consolidate-static-command-runner-test-helpers.md`
+  - `factory/inputs/task/default/dedupe-functional-api-server-harnesses.md`
+  - `factory/inputs/task/default/retire-transition-topology-runtime-lookup-adapter.md`
+- those ignored files were local operating leftovers rather than checked-in
+  queue truth and have been pruned during this refresh
 
 ## customer-ask truth
 
@@ -64,7 +70,7 @@
 - the remaining open asks in `factory/logs/meta/asks.md` are broader program
   work rather than narrow customer-visible regressions:
   - standards-migration checklist tracking
-  - website `90%` coverage target
+  - backend and website `100%` coverage target
   - docs audit
   - manual QA
   - systems-quality documentation
@@ -86,36 +92,39 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#119` `dedupe-functional-api-server-harnesses`, merged on
+    `2026-05-06T09:27:38Z`
+  - `#118` `retire-transition-topology-runtime-lookup-adapter`, merged on
+    `2026-05-06T09:26:11Z`
+  - `#117` `consolidate-static-command-runner-test-helpers`, merged on
+    `2026-05-06T09:22:29Z`
+  - `#115` `Import niceties`, merged on `2026-05-06T08:53:55Z`
+  - `#114` `consolidate-functional-factory-event-tick-helpers`, merged on
+    `2026-05-06T08:18:50Z`
+  - `#113` `docs: refresh meta world state`, merged on
+    `2026-05-06T08:08:40Z`
+  - `#112` `updated website export to support exporting bundled files`, merged
+    on `2026-05-06T07:45:59Z`
   - `#111` `remove-init-default-models`, merged on `2026-05-06T07:09:23Z`
-  - `#110` `workstation-request-current-selection-cleanup`, merged on
-    `2026-05-06T03:28:00Z`
-  - `#109` `inline-supporting-file-content-on-export-and-thin-factory-import`,
-    merged on `2026-05-06T03:23:17Z`
-  - `#108` `remove-deadcode-2026-may`, merged on `2026-05-06T03:05:09Z`
-  - `#107` `Branch check`, merged on `2026-05-06T02:56:30Z`
-  - `#106` `dedupe-functional-agent-config-and-arg-sequence-test-helpers`,
-    merged on `2026-05-06T00:15:17Z`
-  - `#105` `dedupe-functional-dispatch-history-test-helpers`, merged on
-    `2026-05-05T23:16:03Z`
-- `gh pr list --state open` currently reports one open PR:
-  - `#112` `website-export`, opened on `2026-05-06T07:45:59Z`
-- PR `#112` owns the current export/bundled-file work on its branch, so new
-  cleanup dispatches should avoid portability/export overlap until that lane
-  merges or closes
+- `gh pr list --state open` currently reports no open PRs
+- there is no currently open PR owning the next helper-cleanup lane
 
 ## next cleanup candidate
 
 - there is no remaining narrow unowned customer-visible ask gap on `main`
-- the next non-overlapping cleanup seam is in functional test helper
+- the next non-overlapping cleanup seam is in runtime API functional helper
   duplication:
   - `tests/functional/internal/support/events.go` already owns
-    `LastFactoryEventTick`
-  - `tests/functional/replay_contracts/short_helpers_test.go`
-  - `tests/functional/replay_contracts/replay_record_end_to_end_long_test.go`
-  - `tests/functional/runtime_api/api_inference_events_test.go`
-    still carry local `lastFactoryEventTick` copies
-- the next dispatch should consolidate those suites onto the shared support
-  helper without changing replay, runtime API, or projection behavior
+    `StringPointerValue` and `FactoryWorksValue`
+  - `tests/functional/internal/support/harness.go` already owns
+    `HasWorkTokenInPlace`
+  - `tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go`
+    still carries local `factoryWorksValue` and `factoryRelationsValue`
+  - `tests/functional/runtime_api/api_service_mode_observability_smoke_test.go`
+    still carries local `stringValue` and `hasWorkTokenInPlace`
+- the next dispatch should consolidate those runtime API suites onto the shared
+  support helpers, adding a shared `FactoryRelationsValue` sibling only if
+  needed, without changing runtime API behavior
 
 ## theory of mind
 
@@ -127,6 +136,9 @@
 - when the current branch is not `main`, refresh the worldview from live
   `main` before queueing cleanup work; branch-local open PRs can otherwise hide
   overlap
+- after a helper-dedupe PR merges, inspect adjacent suites in the same package
+  for smaller leftover nil-unwrapper or token-search clones before inventing a
+  new helper owner
 - deadcode-baseline output is only a candidate generator:
   build-tagged functional helpers must be checked in both default and
   `functionallong` lanes before treating them as dead
