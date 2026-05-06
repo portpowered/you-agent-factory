@@ -2540,12 +2540,12 @@ describe("App", () => {
       verify: (currentSelection: HTMLElement) => {
         expect(
           within(currentSelection).getByText(
-            "Response text is not available for this workstation request yet.",
+            "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
           ),
         ).toBeTruthy();
         expect(
           within(currentSelection).getByText(
-            "Response metadata is not available for this workstation request yet.",
+            "No inference events are available for this selected work item.",
           ),
         ).toBeTruthy();
       },
@@ -2886,16 +2886,6 @@ describe("App", () => {
       ).length,
     ).toBeTruthy();
     expect(
-      within(completedSelection).getByText(
-        runtimeDetailsFixtureIDs.completedProviderSessionID,
-      ),
-    ).toBeTruthy();
-    expect(
-      within(completedSelection).getByText(
-        runtimeDetailsFixtureIDs.completedPromptSource,
-      ),
-    ).toBeTruthy();
-    expect(
       within(completedSelection).getByRole("heading", {
         name: "Inference attempts",
       }),
@@ -2956,7 +2946,7 @@ describe("App", () => {
     ).toBeNull();
     expect(
       within(pendingSelection).getByText(
-        "Inference request details are not available for this dispatch yet.",
+        "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
     expect(
@@ -3083,16 +3073,6 @@ describe("App", () => {
       within(inferenceSelection).getByRole("heading", {
         name: "Inference attempts",
       }),
-    ).toBeTruthy();
-    expect(
-      within(inferenceSelection).getByText(
-        scriptDashboardIntegrationFixtureIDs.inferenceProviderSessionID,
-      ),
-    ).toBeTruthy();
-    expect(
-      within(inferenceSelection).getByText(
-        scriptDashboardIntegrationFixtureIDs.inferencePromptSource,
-      ),
     ).toBeTruthy();
     expect(
       within(inferenceSelection).getAllByText(

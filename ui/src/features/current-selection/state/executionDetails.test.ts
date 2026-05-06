@@ -78,25 +78,13 @@ const successfulWorkstationRequest: DashboardRuntimeWorkstationRequest = {
   request: {
     input_work_items: [selectedWorkItem],
     input_work_type_ids: ["story"],
-    model: "gpt-5.4",
-    prompt: "Review the runtime story.",
-    provider: "codex",
-    request_metadata: {
-      prompt_source: "factory-renderer",
-    },
-    request_time: "2026-04-18T12:00:01Z",
     started_at: "2026-04-18T12:00:00Z",
     trace_ids: ["trace-runtime"],
-    working_directory: "/work/project",
-    worktree: "/work/project/.worktrees/story",
   },
   response: {
-    diagnostics: completedAttempt.diagnostics,
     duration_millis: 1200,
     end_time: "2026-04-18T12:00:02Z",
     outcome: "ACCEPTED",
-    provider_session: completedAttempt.provider_session,
-    response_text: "The story is complete.",
   },
   transition_id: "review",
   workstation_name: "Review",
@@ -149,36 +137,13 @@ describe("selectWorkItemExecutionDetails", () => {
     expect(details.dispatchID).toBe("dispatch-runtime");
     expect(details.elapsedStartTimestamp).toBe("2026-04-18T12:00:00Z");
     expect(details.workstationName).toBe("Review");
-    expect(details.provider).toEqual({
-      source: "workstation-request",
-      status: "available",
-      value: "codex",
-    });
-    expect(details.model).toEqual({
-      source: "workstation-request",
-      status: "available",
-      value: "gpt-5.4",
-    });
-    expect(details.providerSession).toEqual({
-      source: "workstation-request",
-      status: "available",
-      value: "session-runtime",
-    });
-    expect(details.prompt).toEqual({
-      promptSource: "factory-renderer",
-      source: "diagnostics",
-      status: "available",
-      systemPromptHash: "sha256:system-runtime",
-    });
     expect(details.workstationRequest).toEqual(successfulWorkstationRequest);
     expect(details.workstationRequest?.counts).toEqual({
       dispatched_count: 2,
       errored_count: 1,
       responded_count: 1,
     });
-    expect(details.workstationRequest?.response?.response_text).toBe(
-      "The story is complete.",
-    );
+    expect(details.workstationRequest?.response?.duration_millis).toBe(1200);
     expect(details.inferenceAttempts.map((attempt) => attempt.inference_request_id)).toEqual([
       "dispatch-runtime/inference-request/1",
       "dispatch-runtime/inference-request/2",
@@ -220,17 +185,8 @@ describe("selectWorkItemExecutionDetails", () => {
           dispatch_id: "dispatch-runtime",
           request: {
             input_work_items: [selectedWorkItem],
-            model: "gpt-5.4-mini",
-            prompt: "Inspect the runtime request before any response arrives.",
-            provider: "codex",
-            request_metadata: {
-              prompt_source: "request-projection",
-            },
-            request_time: "2026-04-18T12:00:01Z",
             started_at: "2026-04-18T12:00:00Z",
             trace_ids: ["trace-runtime"],
-            working_directory: "/work/request-only",
-            worktree: "/work/request-only/.worktrees/runtime",
           },
           transition_id: "review",
           workstation_name: "Review",
@@ -238,25 +194,10 @@ describe("selectWorkItemExecutionDetails", () => {
       },
     });
 
-    expect(details.provider).toEqual({
-      source: "workstation-request",
-      status: "available",
-      value: "codex",
-    });
-    expect(details.model).toEqual({
-      source: "workstation-request",
-      status: "available",
-      value: "gpt-5.4-mini",
-    });
-    expect(details.providerSession).toEqual({ status: "pending" });
-    expect(details.prompt).toEqual({
-      promptSource: "request-projection",
-      source: "diagnostics",
-      status: "available",
-      systemPromptHash: undefined,
-    });
+    expect(details.dispatchID).toBe("dispatch-runtime");
+    expect(details.workstationName).toBe("Review");
     expect(details.workstationRequest?.response).toBeUndefined();
-    expect(details.workstationRequest?.request.prompt).toContain("Inspect the runtime request");
+    expect(details.workstationRequest?.request.started_at).toBe("2026-04-18T12:00:00Z");
     expect(details.workstationRequest?.counts).toEqual({
       dispatched_count: 1,
       errored_count: 0,
@@ -280,22 +221,15 @@ describe("selectWorkItemExecutionDetails", () => {
           dispatch_id: "dispatch-runtime",
           request: {
             input_work_items: [selectedWorkItem],
-            model: "gpt-5.4",
-            prompt: "Retry the runtime story.",
-            provider: "codex",
-            request_time: "2026-04-18T12:00:03Z",
             started_at: "2026-04-18T12:00:00Z",
             trace_ids: ["trace-runtime"],
           },
           response: {
-            diagnostics: completedAttempt.diagnostics,
             durationMillis: 875,
             end_time: "2026-04-18T12:00:04Z",
-            error_class: "rate_limited",
             failure_message: "Provider rate limit exceeded.",
             failure_reason: "rate_limited",
             outcome: "FAILED",
-            provider_session: completedAttempt.provider_session,
           },
           transition_id: "review",
           workstation_name: "Review",
@@ -303,26 +237,16 @@ describe("selectWorkItemExecutionDetails", () => {
       },
     });
 
-    expect(details.provider).toEqual({
-      source: "workstation-request",
-      status: "available",
-      value: "codex",
-    });
-    expect(details.providerSession).toEqual({
-      source: "workstation-request",
-      status: "available",
-      value: "session-runtime",
-    });
+    expect(details.dispatchID).toBe("dispatch-runtime");
     expect(details.workstationRequest?.response).toMatchObject({
       durationMillis: 875,
-      error_class: "rate_limited",
       failure_message: "Provider rate limit exceeded.",
       failure_reason: "rate_limited",
       outcome: "FAILED",
     });
   });
 
-  it("keeps active-run model details pending when the workstation has a configured model but the run has none", () => {
+  it("keeps workstation identity details available when a run has no nested inference attempts yet", () => {
     const details = selectWorkItemExecutionDetails({
       activeExecution: {
         ...activeExecution,
@@ -334,17 +258,12 @@ describe("selectWorkItemExecutionDetails", () => {
       workItem: selectedWorkItem,
     });
 
-    expect(details.provider).toEqual({
-      source: "workstation",
-      status: "available",
-      value: "codex",
-    });
-    expect(details.model).toEqual({ status: "pending" });
-    expect(details.providerSession).toEqual({ status: "pending" });
-    expect(details.prompt).toEqual({ status: "pending" });
+    expect(details.dispatchID).toBe("dispatch-runtime");
+    expect(details.workstationName).toBe("Review");
+    expect(details.inferenceAttempts).toEqual([]);
   });
 
-  it("derives completed-run details from matching provider session attempts", () => {
+  it("derives completed-run identity details from matching provider session attempts", () => {
     const details = selectWorkItemExecutionDetails({
       providerSessions: [completedAttempt],
       selectedNode,
@@ -352,25 +271,10 @@ describe("selectWorkItemExecutionDetails", () => {
     });
 
     expect(details.dispatchID).toBe("dispatch-runtime");
-    expect(details.provider).toEqual({
-      source: "provider-diagnostics",
-      status: "available",
-      value: "codex",
-    });
-    expect(details.model).toEqual({
-      source: "provider-diagnostics",
-      status: "available",
-      value: "gpt-5.4",
-    });
-    expect(details.providerSession).toEqual({
-      source: "provider-session",
-      status: "available",
-      value: "session-runtime",
-    });
-    expect(details.prompt.status).toBe("available");
+    expect(details.workstationName).toBe("Review");
   });
 
-  it("omits historical model details when no run metadata exists even if the workstation has a configured model", () => {
+  it("falls back to workstation identity when provider-session details are absent", () => {
     const details = selectWorkItemExecutionDetails({
       providerSessions: [
         {
@@ -386,12 +290,8 @@ describe("selectWorkItemExecutionDetails", () => {
       workItem: selectedWorkItem,
     });
 
-    expect(details.model).toEqual({ status: "omitted" });
-    expect(details.provider).toEqual({
-      source: "provider-diagnostics",
-      status: "available",
-      value: "codex",
-    });
+    expect(details.dispatchID).toBe("dispatch-runtime");
+    expect(details.workstationName).toBe("Review");
   });
 
   it("does not use provider sessions from another work item", () => {
@@ -412,9 +312,7 @@ describe("selectWorkItemExecutionDetails", () => {
     });
 
     expect(details.dispatchID).toBeUndefined();
-    expect(details.providerSession).toEqual({ status: "unavailable" });
-    expect(details.model).toEqual({ status: "omitted" });
-    expect(details.prompt).toEqual({ status: "unavailable" });
+    expect(details.workstationName).toBeUndefined();
     expect(details.inferenceAttempts).toEqual([]);
   });
 
@@ -460,7 +358,7 @@ describe("selectWorkItemExecutionDetails", () => {
     ]);
   });
 
-  it("exposes only safe prompt hashes or source metadata from diagnostics", () => {
+  it("does not project provider diagnostics onto execution details", () => {
     const details = selectWorkItemExecutionDetails({
       providerSessions: [
         {
@@ -488,14 +386,9 @@ describe("selectWorkItemExecutionDetails", () => {
       workItem: selectedWorkItem,
     });
 
-    expect(details.prompt).toEqual({
-      promptSource: "factory-renderer",
-      source: "diagnostics",
-      status: "available",
-      systemPromptHash: "sha256:system-runtime",
-    });
     expect(JSON.stringify(details)).not.toContain("Never expose this raw system prompt.");
     expect(JSON.stringify(details)).not.toContain("Never expose this raw user message.");
+    expect(JSON.stringify(details)).not.toContain("factory-renderer");
+    expect(JSON.stringify(details)).not.toContain("sha256:system-runtime");
   });
 });
-

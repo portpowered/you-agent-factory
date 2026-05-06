@@ -7,7 +7,6 @@ import type {
   DashboardTraceDispatch,
   DashboardTraceMutation,
   DashboardTraceToken,
-  DashboardWorkDiagnostics,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
@@ -221,7 +220,6 @@ function cloneRuntimeWorkstationRequestRequest(
     })),
     inputWorkItems: request.inputWorkItems?.map(cloneWorkItemRef),
     inputWorkTypeIds: request.inputWorkTypeIds ? [...request.inputWorkTypeIds] : undefined,
-    requestMetadata: request.requestMetadata ? { ...request.requestMetadata } : undefined,
     traceIds: request.traceIds ? [...request.traceIds] : undefined,
   };
 }
@@ -233,46 +231,8 @@ function cloneRuntimeWorkstationRequestResponse(
     return undefined;
   }
 
-  const diagnostics = response.diagnostics as
-    | (DashboardWorkDiagnostics & {
-        provider?: DashboardWorkDiagnostics["provider"] & {
-          requestMetadata?: Record<string, string>;
-          responseMetadata?: Record<string, string>;
-        };
-        renderedPrompt?: {
-          systemPromptHash?: string;
-          userMessageHash?: string;
-          variables?: Record<string, string>;
-        };
-      })
-    | undefined;
-
   return {
     ...response,
-    diagnostics: diagnostics
-      ? {
-          ...diagnostics,
-          provider: diagnostics.provider
-            ? {
-                ...diagnostics.provider,
-                requestMetadata: diagnostics.provider.requestMetadata
-                  ? { ...diagnostics.provider.requestMetadata }
-                  : undefined,
-                responseMetadata: diagnostics.provider.responseMetadata
-                  ? { ...diagnostics.provider.responseMetadata }
-                  : undefined,
-              }
-            : undefined,
-          renderedPrompt: diagnostics.renderedPrompt
-            ? {
-                ...diagnostics.renderedPrompt,
-                variables: diagnostics.renderedPrompt.variables
-                  ? { ...diagnostics.renderedPrompt.variables }
-                  : undefined,
-              }
-            : undefined,
-        }
-      : undefined,
     outputMutations: response.outputMutations?.map((mutation) => ({
       ...mutation,
       resulting_token: mutation.resulting_token
@@ -285,8 +245,6 @@ function cloneRuntimeWorkstationRequestResponse(
         : undefined,
     })),
     outputWorkItems: response.outputWorkItems?.map(cloneWorkItemRef),
-    providerSession: response.providerSession ? { ...response.providerSession } : undefined,
-    responseMetadata: response.responseMetadata ? { ...response.responseMetadata } : undefined,
   };
 }
 
@@ -332,5 +290,4 @@ export function cloneInferenceAttemptsByDispatchID(
 
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
-
 

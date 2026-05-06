@@ -38,8 +38,6 @@ import {
   requestInputWorkItems,
   requestOutcome,
   requestOutputWorkItems,
-  requestPrompt,
-  requestResponseText,
   requestScriptRequest,
   requestScriptResponse,
   requestStartedAt,
@@ -92,26 +90,44 @@ export function DispatchHistoryCard({
         selectedWorkID={selectedWorkID}
         view={view}
       />
-      <DispatchResponseSection
-        activeTraceID={activeTraceID}
-        onSelectTraceID={onSelectTraceID}
-        onSelectWorkID={onSelectWorkID}
-        selectedWorkID={selectedWorkID}
-        traceTargetId={traceTargetId}
-        view={view}
-      />
-      {view.sortedInferenceAttempts.length > 0 ? (
-        <DispatchInferenceAttemptsSection attempts={view.sortedInferenceAttempts} />
-      ) : null}
       {view.isScriptBackedRequest ? (
-        <DispatchScriptAttemptsSection
-          normalizedStderr={view.normalizedScriptStderr}
-          normalizedStdout={view.normalizedScriptStdout}
-          request={request}
-          scriptRequest={view.scriptRequest}
-          scriptResponse={view.scriptResponse}
-        />
-      ) : null}
+        <>
+          <DispatchResponseSection
+            activeTraceID={activeTraceID}
+            onSelectTraceID={onSelectTraceID}
+            onSelectWorkID={onSelectWorkID}
+            selectedWorkID={selectedWorkID}
+            traceTargetId={traceTargetId}
+            view={view}
+          />
+          <DispatchScriptAttemptsSection
+            normalizedStderr={view.normalizedScriptStderr}
+            normalizedStdout={view.normalizedScriptStdout}
+            request={request}
+            scriptRequest={view.scriptRequest}
+            scriptResponse={view.scriptResponse}
+          />
+        </>
+      ) : (
+        <>
+          <DispatchTraceSection
+            activeTraceID={activeTraceID}
+            onSelectTraceID={onSelectTraceID}
+            onSelectWorkID={onSelectWorkID}
+            selectedWorkID={selectedWorkID}
+            traceTargetId={traceTargetId}
+            view={view}
+          />
+          <DispatchInferenceAttemptsSection
+            attempts={view.sortedInferenceAttempts}
+            emptyCopy={
+              view.hasFailureDetails
+                ? "No inference attempt details were recorded before this dispatch ended."
+                : "No inference attempt details have been recorded for this dispatch yet."
+            }
+          />
+        </>
+      )}
       {view.hasFailureDetails ? <DispatchFailureSection view={view} /> : null}
     </article>
   );
@@ -131,8 +147,6 @@ interface DispatchHistoryView {
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
   outputWorkItems: ReturnType<typeof dedupeWorkItems>;
-  requestUnavailableCopy: string;
-  responseUnavailableCopy: string;
   scriptRequest: ReturnType<typeof requestScriptRequest>;
   scriptResponse: ReturnType<typeof requestScriptResponse>;
   sortedInferenceAttempts: ReturnType<typeof requestInferenceAttempts>;
@@ -148,9 +162,6 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
   const hasFailureDetails = Boolean(failureReason || failureMessage || errorClass);
   const isScriptBackedRequest = scriptRequest !== undefined || scriptResponse !== undefined;
   const sortedInferenceAttempts = requestInferenceAttempts(request);
-  const hasInferenceAttempts = sortedInferenceAttempts.length > 0;
-  const hasDispatchPrompt = Boolean(normalizeDetailText(requestPrompt(request)));
-  const hasDispatchResponse = Boolean(normalizeDetailText(requestResponseText(request)));
 
   return {
     counts: requestCounts(request),
@@ -166,22 +177,6 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
     normalizedScriptStdout: normalizeDetailText(scriptResponse?.stdout),
     outcome: requestOutcome(request),
     outputWorkItems: dedupeWorkItems(requestOutputWorkItems(request)),
-    requestUnavailableCopy: isScriptBackedRequest
-      ? "Prompt details are not applicable to this script-backed dispatch."
-      : hasInferenceAttempts
-        ? "Inference request details are shown under Inference attempts."
-        : hasDispatchPrompt
-          ? "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded."
-          : "Inference request details are not available for this dispatch yet.",
-    responseUnavailableCopy: isScriptBackedRequest
-      ? ""
-      : hasInferenceAttempts
-        ? "Inference response details are shown under Inference attempts."
-        : hasFailureDetails
-          ? "Inference response details are unavailable because this dispatch ended before any attempt details were recorded."
-          : hasDispatchResponse
-            ? "Inference response details are unavailable at the dispatch level. Check back once attempts are recorded."
-            : "Inference response details are not available for this dispatch yet.",
     scriptRequest,
     scriptResponse,
     sortedInferenceAttempts,
@@ -261,23 +256,35 @@ function DispatchRequestSection({
 }) {
   return (
     <DispatchDetailSection title="Request details">
-      <p className={DETAIL_COPY_CLASS}>{view.requestUnavailableCopy}</p>
-      <DispatchDetailList
-        entries={[
-          {
-            label: "Script request ID",
-            value: view.scriptRequest?.script_request_id,
-            code: true,
-          },
-          {
-            label: "Script attempt",
-            value:
-              view.scriptRequest?.attempt !== undefined ? String(view.scriptRequest.attempt) : undefined,
-          },
-          { label: "Command", value: view.scriptRequest?.command, code: true },
-        ]}
-      />
-      <ScriptArgsSection args={view.scriptRequest?.args} />
+      {view.isScriptBackedRequest ? (
+        <>
+          <p className={DETAIL_COPY_CLASS}>
+            Prompt details are not applicable to this script-backed dispatch.
+          </p>
+          <DispatchDetailList
+            entries={[
+              {
+                label: "Script request ID",
+                value: view.scriptRequest?.script_request_id,
+                code: true,
+              },
+              {
+                label: "Script attempt",
+                value:
+                  view.scriptRequest?.attempt !== undefined
+                    ? String(view.scriptRequest.attempt)
+                    : undefined,
+              },
+              { label: "Command", value: view.scriptRequest?.command, code: true },
+            ]}
+          />
+          <ScriptArgsSection args={view.scriptRequest?.args} />
+        </>
+      ) : (
+        <p className={DETAIL_COPY_CLASS}>
+          Inference request details are shown under Inference attempts.
+        </p>
+      )}
       <WorkItemActionGroup
         items={view.inputWorkItems}
         label="Input work"
@@ -305,11 +312,40 @@ function DispatchResponseSection({
 }) {
   return (
     <DispatchDetailSection title="Response details">
-      {view.isScriptBackedRequest ? (
-        <ScriptResponseContent view={view} />
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>{view.responseUnavailableCopy}</p>
-      )}
+      <ScriptResponseContent view={view} />
+      <WorkItemActionGroup
+        items={view.outputWorkItems}
+        label="Output work"
+        onSelectWorkID={onSelectWorkID}
+        selectedWorkID={selectedWorkID}
+      />
+      <TraceActionGroup
+        activeTraceID={activeTraceID}
+        onSelectTraceID={onSelectTraceID}
+        traceIDs={view.traceIDs}
+        traceTargetId={traceTargetId}
+      />
+    </DispatchDetailSection>
+  );
+}
+
+function DispatchTraceSection({
+  activeTraceID,
+  onSelectTraceID,
+  onSelectWorkID,
+  selectedWorkID,
+  traceTargetId,
+  view,
+}: {
+  activeTraceID?: string | null;
+  onSelectTraceID?: (traceID: string) => void;
+  onSelectWorkID?: (workID: string) => void;
+  selectedWorkID: string;
+  traceTargetId: string;
+  view: DispatchHistoryView;
+}) {
+  return (
+    <DispatchDetailSection title="Trace details">
       <WorkItemActionGroup
         items={view.outputWorkItems}
         label="Output work"

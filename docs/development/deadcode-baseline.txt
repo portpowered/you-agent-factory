@@ -59,8 +59,9 @@ tests/functional/replay_contracts/replay_live_helpers_test.go:346:6: unreachable
 tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:521:6: unreachable func: assertThinEventReconstructedModelReader
 tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:553:6: unreachable func: assertThinEventReconstructedScriptReader
 tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:603:6: unreachable func: assertThinEventWorkstationRequestProjection
-tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:640:6: unreachable func: thinEventDispatchIDForWork
-tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:657:6: unreachable func: thinEventCompletedDispatchForID
+tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:656:6: unreachable func: assertReplayProjectionOmitsInferenceFields
+tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:673:6: unreachable func: thinEventDispatchIDForWork
+tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:690:6: unreachable func: thinEventCompletedDispatchForID
 tests/functional/replay_contracts/short_helpers_test.go:26:6: unreachable func: replayEventCount
 tests/functional/replay_contracts/short_helpers_test.go:43:6: unreachable func: factoryRelationsValue
 tests/functional/replay_contracts/short_helpers_test.go:64:6: unreachable func: lastFactoryEventTick

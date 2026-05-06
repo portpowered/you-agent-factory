@@ -9,16 +9,6 @@ properties:
     type: string
   failureMessage:
     type: string
-  responseText:
-    type: string
-  errorClass:
-    type: string
-  providerSession:
-    $ref: '../events/ProviderSessionMetadata.yaml'
-  diagnostics:
-    $ref: './FactoryWorldWorkDiagnostics.yaml'
-  responseMetadata:
-    $ref: '../shared/StringMap.yaml'
   scriptResponse:
     $ref: './FactoryWorldScriptResponseView.yaml'
   endTime:

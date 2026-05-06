@@ -199,8 +199,11 @@ describe("WorkItemDetailCard summary", () => {
     const requestDetails = within(
       screen.getByRole("region", { name: "Request details" }),
     );
-    const responseDetails = within(
-      screen.getByRole("region", { name: "Response details" }),
+    const traceDetails = within(
+      screen.getByRole("region", { name: "Trace details" }),
+    );
+    const inferenceAttempts = within(
+      screen.getByRole("region", { name: "Inference attempts" }),
     );
     expect(
       within(currentSelection).queryByRole("heading", {
@@ -218,19 +221,15 @@ describe("WorkItemDetailCard summary", () => {
     expect(dispatchHistory.getByText("trace-active-story")).toBeTruthy();
     expect(
       requestDetails.getByText(
-        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+        "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
     expect(
-      responseDetails.getByText(
-        "Inference response details are unavailable at the dispatch level. Check back once attempts are recorded.",
+      inferenceAttempts.getByText(
+        "No inference attempt details have been recorded for this dispatch yet.",
       ),
     ).toBeTruthy();
-    expect(
-      within(currentSelection).queryByRole("heading", {
-        name: "Inference attempts",
-      }),
-    ).toBeNull();
+    expect(traceDetails.getByRole("link", { name: "trace-active-story" })).toBeTruthy();
     expect(
       screen.queryByText("Never expose this raw system prompt."),
     ).toBeNull();
@@ -312,10 +311,6 @@ describe("WorkItemDetailCard summary", () => {
       dispatchID,
       elapsedStartTimestamp: execution.started_at,
       inferenceAttempts: [],
-      model: { status: "omitted" },
-      prompt: { status: "unavailable" },
-      provider: { status: "unavailable" },
-      providerSession: { status: "unavailable" },
       traceIDs: [],
       workstationName: selectedNode.workstation_name,
       workID: workItem.work_id,
@@ -432,10 +427,6 @@ describe("WorkItemDetailCard summary", () => {
           dispatchID,
           elapsedStartTimestamp: execution.started_at,
           inferenceAttempts: [],
-          model: { status: "omitted" },
-          prompt: { status: "pending" },
-          provider: { status: "pending" },
-          providerSession: { status: "pending" },
           traceIDs: [workItem.trace_id ?? "trace-active-story"],
           workstationName: selectedNode.workstation_name,
           workID: workItem.work_id,
@@ -604,23 +595,6 @@ describe("WorkItemDetailCard summary", () => {
       dispatchID,
       elapsedStartTimestamp: execution.started_at,
       inferenceAttempts: [],
-      model: { status: "omitted" },
-      prompt: {
-        promptSource: "factory-renderer",
-        source: "diagnostics",
-        status: "available",
-        systemPromptHash: "sha256:system-runtime",
-      },
-      provider: {
-        source: "provider-diagnostics",
-        status: "available",
-        value: "codex",
-      },
-      providerSession: {
-        source: "provider-session",
-        status: "available",
-        value: "sess-active-story",
-      },
       traceIDs: ["trace-active-story"],
       workstationName: selectedNode.workstation_name,
       workID: workItem.work_id,
@@ -701,8 +675,11 @@ describe("WorkItemDetailCard summary", () => {
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
-    const responseDetails = within(
-      screen.getByRole("region", { name: "Response details" }),
+    const traceDetails = within(
+      screen.getByRole("region", { name: "Trace details" }),
+    );
+    const inferenceAttempts = within(
+      screen.getByRole("region", { name: "Inference attempts" }),
     );
     expect(
       within(currentSelection).getByRole("heading", {
@@ -713,12 +690,12 @@ describe("WorkItemDetailCard summary", () => {
       within(
         screen.getByRole("region", { name: "Request details" }),
       ).getByText(
-        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+        "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
     expect(
-      responseDetails.getByText(
-        "Inference response details are not available for this dispatch yet.",
+      inferenceAttempts.getByText(
+        "No inference attempt details have been recorded for this dispatch yet.",
       ),
     ).toBeTruthy();
     expect(
@@ -732,7 +709,7 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      responseDetails.getByRole("link", { name: "trace-active-story" }),
+      traceDetails.getByRole("link", { name: "trace-active-story" }),
     ).toBeTruthy();
   });
 
@@ -774,7 +751,7 @@ describe("WorkItemDetailCard summary", () => {
     );
 
     const traceLink = within(
-      screen.getByRole("region", { name: "Response details" }),
+      screen.getByRole("region", { name: "Trace details" }),
     ).getByRole("link", { name: "trace-active-story" });
 
     expect(traceLink.getAttribute("href")).toBe("#trace");
@@ -854,7 +831,7 @@ describe("WorkItemDetailCard summary", () => {
 
     expect(
       requestDetails.getByText(
-        "Inference request details are unavailable at the dispatch level. Check back once attempts are recorded.",
+        "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
     expect(
@@ -1087,9 +1064,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toHaveLength(1);
     expect(
       within(
-        screen.getByRole("region", { name: "Response details" }),
+        screen.getByRole("region", { name: "Inference attempts" }),
       ).getByText(
-        "Inference response details are unavailable because this dispatch ended before any attempt details were recorded.",
+        "No inference attempt details were recorded before this dispatch ended.",
       ),
     ).toBeTruthy();
     expect(
@@ -1313,7 +1290,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toHaveLength(1);
   });
 
-  it("keeps rejected dispatch request and response details paired on the same history row", () => {
+  it("keeps rejected dispatch request details and attempt diagnostics paired on the same history row", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
 
@@ -1377,11 +1354,6 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       within(
         within(dispatchCard).getByRole("region", { name: "Request details" }),
       ).getByText("Inference request details are shown under Inference attempts."),
-    ).toBeTruthy();
-    expect(
-      within(
-        within(dispatchCard).getByRole("region", { name: "Response details" }),
-      ).getByText("Inference response details are shown under Inference attempts."),
     ).toBeTruthy();
     expect(
       within(

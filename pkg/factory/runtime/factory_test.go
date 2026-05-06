@@ -403,14 +403,16 @@ func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *t
 	}
 
 	successRequest := requestViewForWork(t, worldState, "work-safe-success")
-	assertSafeBoundaryRequestView(t, successRequest, "", "", "", "")
+	assertSafeBoundaryRequestView(t, worldState, successRequest, "work-safe-success", "resp-safe-success", "", "", "")
 	failureRequest := requestViewForWork(t, worldState, "work-safe-failure")
-	assertSafeBoundaryRequestView(t, failureRequest, "", string(interfaces.ProviderErrorFamilyRetryable), string(interfaces.ProviderErrorTypeTimeout), "provider timed out")
+	assertSafeBoundaryRequestView(t, worldState, failureRequest, "work-safe-failure", "sess-safe-failure", string(interfaces.ProviderErrorFamilyRetryable), string(interfaces.ProviderErrorTypeTimeout), "provider timed out")
 	windowsRequest := requestViewForWork(t, worldState, "work-safe-windows-process-failure")
 	assertSafeBoundaryRequestView(
 		t,
+		worldState,
 		windowsRequest,
-		"",
+		"work-safe-windows-process-failure",
+		"sess-safe-windows-4294967295",
 		string(interfaces.ProviderErrorFamilyRetryable),
 		string(interfaces.ProviderErrorTypeInternalServerError),
 		"provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)",
@@ -1743,7 +1745,9 @@ func requestViewForWork(t *testing.T, state interfaces.FactoryWorldState, workID
 
 func assertSafeBoundaryRequestView(
 	t *testing.T,
+	state interfaces.FactoryWorldState,
 	request factoryapi.FactoryWorldWorkstationRequestView,
+	workID string,
 	sessionID string,
 	family string,
 	providerFailureType string,
@@ -1753,36 +1757,29 @@ func assertSafeBoundaryRequestView(
 	if request.Response == nil {
 		t.Fatalf("request response = nil, want response for %#v", request)
 	}
-	if sessionID == "" {
-		if request.Response.ProviderSession != nil {
-			t.Fatalf("response provider session = %#v, want nil without inference response", request.Response.ProviderSession)
+	assertRuntimeSafeBoundaryOmittedInferenceFields(t, request.Request, []string{"provider", "model", "requestMetadata", "workingDirectory", "worktree"})
+	assertRuntimeSafeBoundaryOmittedInferenceFields(t, request.Response, []string{"providerSession", "diagnostics", "responseMetadata"})
+
+	attempt, ok := inferenceAttemptForWork(t, state, workID)
+	if ok {
+		if attempt.ProviderSession == nil || attempt.ProviderSession.ID != sessionID {
+			t.Fatalf("inference attempt provider session = %#v, want %q", attempt.ProviderSession, sessionID)
 		}
-		if request.Response.Diagnostics != nil {
-			t.Fatalf("response diagnostics = %#v, want nil without inference response", request.Response.Diagnostics)
+		if attempt.Diagnostics == nil || attempt.Diagnostics.Provider == nil || attempt.Diagnostics.RenderedPrompt == nil {
+			t.Fatalf("inference attempt diagnostics = %#v, want safe diagnostics", attempt.Diagnostics)
 		}
-		if request.Response.ResponseMetadata != nil {
-			t.Fatalf("response metadata = %#v, want nil without inference response", request.Response.ResponseMetadata)
+		if attempt.Diagnostics.Provider.Provider != "codex" || attempt.Diagnostics.Provider.Model != "gpt-5.4" {
+			t.Fatalf("inference attempt provider/model = %#v, want codex/gpt-5.4", attempt.Diagnostics.Provider)
+		}
+		if attempt.Diagnostics.Provider.RequestMetadata == nil || attempt.Diagnostics.Provider.RequestMetadata["worker_type"] != "mock" {
+			t.Fatalf("inference attempt request metadata = %#v, want worker_type=mock", attempt.Diagnostics.Provider.RequestMetadata)
+		}
+		if attempt.Diagnostics.Provider.ResponseMetadata == nil || attempt.Diagnostics.Provider.ResponseMetadata["provider_session_id"] != sessionID {
+			t.Fatalf("inference attempt response metadata = %#v, want provider_session_id=%q", attempt.Diagnostics.Provider.ResponseMetadata, sessionID)
 		}
 	} else {
-		if request.Request.Provider == nil || *request.Request.Provider != "codex" ||
-			request.Request.Model == nil || *request.Request.Model != "gpt-5.4" {
-			t.Fatalf("request provider/model = %#v/%#v, want codex/gpt-5.4", request.Request.Provider, request.Request.Model)
-		}
-		if request.Request.RequestMetadata == nil || (*request.Request.RequestMetadata)["worker_type"] != "mock" {
-			t.Fatalf("request metadata = %#v, want worker_type=mock", request.Request.RequestMetadata)
-		}
-		if request.Request.WorkingDirectory == nil || request.Request.Worktree == nil {
-			t.Fatalf("request working directory/worktree = %#v, want allowlisted metadata projected", request.Request)
-		}
-		if request.Response.ProviderSession == nil || stringValueForRuntimeTest(request.Response.ProviderSession.Id) != sessionID {
-			t.Fatalf("response provider session = %#v, want %q", request.Response.ProviderSession, sessionID)
-		}
-		if request.Response.Diagnostics == nil || request.Response.Diagnostics.Provider == nil || request.Response.Diagnostics.RenderedPrompt == nil {
-			t.Fatalf("response diagnostics = %#v, want safe diagnostics", request.Response.Diagnostics)
-		}
-		if request.Response.ResponseMetadata == nil || (*request.Response.ResponseMetadata)["provider_session_id"] != sessionID {
-			t.Fatalf("response metadata = %#v, want provider_session_id=%q", request.Response.ResponseMetadata, sessionID)
-		}
+		// This fixture emits direct WorkResult diagnostics without inference events,
+		// so replay reconstructs a thin dispatch summary only.
 	}
 	if family == "" && stringValueForRuntimeTest(request.Response.FailureReason) != "" {
 		t.Fatalf("failure reason = %q, want empty for successful request", stringValueForRuntimeTest(request.Response.FailureReason))
@@ -1794,13 +1791,53 @@ func assertSafeBoundaryRequestView(
 		if stringValueForRuntimeTest(request.Response.FailureMessage) != failureMessage {
 			t.Fatalf("failure message = %q, want %q", stringValueForRuntimeTest(request.Response.FailureMessage), failureMessage)
 		}
-		if request.Response.Diagnostics != nil {
-			if request.Response.Diagnostics.Provider == nil || request.Response.Diagnostics.Provider.ResponseMetadata == nil || (*request.Response.Diagnostics.Provider.ResponseMetadata)["retry_count"] != "2" {
-				t.Fatalf("response metadata = %#v, want retry_count=2 for failed request", request.Response.Diagnostics.Provider.ResponseMetadata)
+		if ok {
+			metadata := attempt.Diagnostics.Provider.ResponseMetadata
+			if metadata == nil || metadata["retry_count"] != "2" {
+				t.Fatalf("response metadata = %#v, want retry_count=2 for failed request", metadata)
 			}
 		}
 	}
 }
+
+func inferenceAttemptForWork(
+	t *testing.T,
+	state interfaces.FactoryWorldState,
+	workID string,
+) (interfaces.FactoryWorldInferenceAttempt, bool) {
+	t.Helper()
+	request := requestViewForWork(t, state, workID)
+	attempts := state.InferenceAttemptsByDispatchID[request.DispatchId]
+	if len(attempts) == 0 {
+		return interfaces.FactoryWorldInferenceAttempt{}, false
+	}
+	if len(attempts) != 1 {
+		t.Fatalf("inference attempts for dispatch %q = %#v, want one attempt for work %q", request.DispatchId, attempts, workID)
+	}
+	for _, attempt := range attempts {
+		return attempt, true
+	}
+	t.Fatalf("missing inference attempt for dispatch %q", request.DispatchId)
+	return interfaces.FactoryWorldInferenceAttempt{}, false
+}
+
+func assertRuntimeSafeBoundaryOmittedInferenceFields(t *testing.T, payload any, keys []string) {
+	t.Helper()
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal(%T): %v", payload, err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatalf("Unmarshal(%T): %v", payload, err)
+	}
+	for _, key := range keys {
+		if _, ok := raw[key]; ok {
+			t.Fatalf("%T unexpectedly carried retired inference-owned field %q: %#v", payload, key, raw[key])
+		}
+	}
+}
+
 
 func assertNoAuthRemediationText(t *testing.T, body string) {
 	t.Helper()

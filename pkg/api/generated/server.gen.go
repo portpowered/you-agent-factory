@@ -508,35 +508,23 @@ type FactoryWorldWorkstationRequestRequestView struct {
 	CurrentChainingTraceId   *string                        `json:"currentChainingTraceId,omitempty"`
 	InputWorkItems           *[]FactoryWorldWorkItemRef     `json:"inputWorkItems,omitempty"`
 	InputWorkTypeIds         *[]string                      `json:"inputWorkTypeIds,omitempty"`
-	Model                    *string                        `json:"model,omitempty"`
 	PreviousChainingTraceIds *[]string                      `json:"previousChainingTraceIds,omitempty"`
-	Prompt                   *string                        `json:"prompt,omitempty"`
-	Provider                 *string                        `json:"provider,omitempty"`
-	RequestMetadata          *StringMap                     `json:"requestMetadata,omitempty"`
-	RequestTime              *string                        `json:"requestTime,omitempty"`
 	ScriptRequest            *FactoryWorldScriptRequestView `json:"scriptRequest,omitempty"`
 	StartedAt                *string                        `json:"startedAt,omitempty"`
 	TraceIds                 *[]string                      `json:"traceIds,omitempty"`
-	WorkingDirectory         *string                        `json:"workingDirectory,omitempty"`
-	Worktree                 *string                        `json:"worktree,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
-	Diagnostics      *FactoryWorldWorkDiagnostics    `json:"diagnostics,omitempty"`
-	DurationMillis   *int64                          `json:"durationMillis,omitempty"`
-	EndTime          *string                         `json:"endTime,omitempty"`
-	ErrorClass       *string                         `json:"errorClass,omitempty"`
-	FailureMessage   *string                         `json:"failureMessage,omitempty"`
-	FailureReason    *string                         `json:"failureReason,omitempty"`
-	Feedback         *string                         `json:"feedback,omitempty"`
-	Outcome          *string                         `json:"outcome,omitempty"`
-	OutputMutations  *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
-	OutputWorkItems  *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
-	ProviderSession  *ProviderSessionMetadata        `json:"providerSession,omitempty"`
-	ResponseMetadata *StringMap                      `json:"responseMetadata,omitempty"`
-	ResponseText     *string                         `json:"responseText,omitempty"`
-	ScriptResponse   *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
+	DurationMillis  *int64                          `json:"durationMillis,omitempty"`
+	EndTime         *string                         `json:"endTime,omitempty"`
+	FailureMessage  *string                         `json:"failureMessage,omitempty"`
+	FailureReason   *string                         `json:"failureReason,omitempty"`
+	Feedback        *string                         `json:"feedback,omitempty"`
+	Outcome         *string                         `json:"outcome,omitempty"`
+	OutputMutations *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
+	OutputWorkItems *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
+	ScriptResponse  *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestView defines model for FactoryWorldWorkstationRequestView.

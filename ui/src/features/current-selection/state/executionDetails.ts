@@ -1,45 +1,18 @@
 import type {
   DashboardActiveExecution,
   DashboardInferenceAttempt,
-  DashboardProviderSession,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardTrace,
   DashboardTraceDispatch,
-  DashboardWorkDiagnostics,
   DashboardWorkItemRef,
   DashboardWorkstationNode,
 } from "../../../api/dashboard";
-import { type ExecutionDetailSource, type RuntimeDiagnosticsSource, selectDiagnosticsSource } from "./diagnosticsSource";
-
-
-
-export type ExecutionDetailValue =
-  | { status: "available"; source: ExecutionDetailSource; value: string }
-  | { status: "pending" }
-  | { status: "unavailable" };
-
-export type ModelDetailValue = ExecutionDetailValue | { status: "omitted" };
-
-export type PromptDiagnosticDetails =
-  | {
-      status: "available";
-      source: "diagnostics";
-      systemPromptHash?: string;
-      promptSource?: string;
-    }
-  | { status: "pending" }
-  | { status: "unavailable" };
 
 export interface SelectedWorkItemExecutionDetails {
   dispatchID?: string;
   elapsedStartTimestamp?: string;
   inferenceAttempts: DashboardInferenceAttempt[];
-  model: ModelDetailValue;
-  prompt: PromptDiagnosticDetails;
-  provider: ExecutionDetailValue;
-  providerSessionData?: DashboardProviderSession;
-  providerSession: ExecutionDetailValue;
   traceIDs: string[];
   workstationRequest?: DashboardRuntimeWorkstationRequest;
   workstationName?: string;
@@ -88,16 +61,6 @@ export function selectWorkItemExecutionDetails({
     matchingAttempt,
     matchingTraceDispatch,
   );
-  const hasActiveRun =
-    activeExecution !== undefined &&
-    (activeExecution.dispatch_id === selectedDispatchID ||
-      executionIncludesWorkItem(activeExecution, workItem.work_id));
-  const diagnosticsSource = selectDiagnosticsSource(
-    workstationRequest,
-    activeExecution,
-    matchingAttempt,
-    matchingTraceDispatch,
-  );
   const resolvedDispatchID =
     workstationRequest?.dispatchId ??
     selectedDispatchID ??
@@ -114,37 +77,6 @@ export function selectWorkItemExecutionDetails({
       inferenceAttemptsByDispatchID,
       resolvedDispatchID,
     ),
-    model: selectModelValue(
-      workstationRequest,
-      diagnosticsSource,
-      activeExecution,
-      hasActiveRun,
-    ),
-    prompt: selectPromptDetails(
-      workstationRequest,
-      diagnosticsSource?.diagnostics,
-      hasActiveRun,
-    ),
-    provider: selectProviderValue(
-      workstationRequest,
-      diagnosticsSource,
-      activeExecution,
-      selectedNode,
-      matchingAttempt,
-      matchingTraceDispatch,
-      hasActiveRun,
-    ),
-    providerSession: selectProviderSessionValue(
-      workstationRequest,
-      matchingAttempt,
-      matchingTraceDispatch,
-      hasActiveRun,
-    ),
-    providerSessionData:
-      workstationRequest?.response?.providerSession ??
-      workstationRequest?.response?.provider_session ??
-      matchingAttempt?.provider_session ??
-      matchingTraceDispatch?.provider_session,
     traceIDs: selectTraceIDs(
       workstationRequest,
       activeExecution,
@@ -225,152 +157,6 @@ function selectMatchingTraceDispatch(
   return candidates[candidates.length - 1];
 }
 
-function executionIncludesWorkItem(
-  execution: DashboardActiveExecution,
-  workID: string,
-): boolean {
-  return execution.work_items?.some((item) => item.work_id === workID) ?? false;
-}
-
-function selectModelValue(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
-  diagnosticsSource: RuntimeDiagnosticsSource | undefined,
-  activeExecution: DashboardActiveExecution | undefined,
-  hasActiveRun: boolean,
-): ModelDetailValue {
-  const projectedModel = workstationRequest?.request.model?.trim();
-  if (projectedModel) {
-    return {
-      source: "workstation-request",
-      status: "available",
-      value: projectedModel,
-    };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-  }
-  const diagnosticModel = diagnosticsSource?.diagnostics?.provider?.model?.trim();
-  if (diagnosticsSource && diagnosticModel) {
-    return {
-      source: diagnosticsSource.source,
-      status: "available",
-      value: diagnosticModel,
-    };
-  }
-  const activeModel = activeExecution?.model?.trim();
-  if (activeModel) {
-    return { source: "active-execution", status: "available", value: activeModel };
-  }
-  return hasActiveRun ? { status: "pending" } : { status: "omitted" };
-}
-
-function selectProviderValue(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
-  diagnosticsSource: RuntimeDiagnosticsSource | undefined,
-  activeExecution: DashboardActiveExecution | undefined,
-  selectedNode: DashboardWorkstationNode | undefined,
-  matchingAttempt: DashboardProviderSessionAttempt | undefined,
-  matchingTraceDispatch: DashboardTraceDispatch | undefined,
-  hasActiveRun: boolean,
-): ExecutionDetailValue {
-  const projectedProvider = workstationRequest?.request.provider?.trim();
-  if (projectedProvider) {
-    return {
-      source: "workstation-request",
-      status: "available",
-      value: projectedProvider,
-    };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-  }
-  const diagnosticProvider = diagnosticsSource?.diagnostics?.provider?.provider?.trim();
-  if (diagnosticsSource && diagnosticProvider) {
-    return {
-      source: diagnosticsSource.source,
-      status: "available",
-      value: diagnosticProvider,
-    };
-  }
-  const providerSessionProvider =
-    matchingAttempt?.provider_session?.provider?.trim() ??
-    matchingTraceDispatch?.provider_session?.provider?.trim();
-  if (providerSessionProvider) {
-    return {
-      source: "provider-session",
-      status: "available",
-      value: providerSessionProvider,
-    };
-  }
-  const activeProvider = activeExecution?.provider?.trim();
-  if (activeProvider) {
-    return { source: "active-execution", status: "available", value: activeProvider };
-  }
-  const workstationProvider = selectedNode?.provider?.trim();
-  if (workstationProvider) {
-    return { source: "workstation", status: "available", value: workstationProvider };
-  }
-  return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-}
-
-function selectProviderSessionValue(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
-  matchingAttempt: DashboardProviderSessionAttempt | undefined,
-  matchingTraceDispatch: DashboardTraceDispatch | undefined,
-  hasActiveRun: boolean,
-): ExecutionDetailValue {
-  const projectedProviderSessionID =
-    (
-      workstationRequest?.response?.providerSession?.id ??
-      workstationRequest?.response?.provider_session?.id
-    )?.trim();
-  if (projectedProviderSessionID) {
-    return {
-      source: "workstation-request",
-      status: "available",
-      value: projectedProviderSessionID,
-    };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-  }
-  const providerSessionID =
-    matchingAttempt?.provider_session?.id?.trim() ??
-    matchingTraceDispatch?.provider_session?.id?.trim();
-  if (providerSessionID) {
-    return { source: "provider-session", status: "available", value: providerSessionID };
-  }
-  return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-}
-
-function selectPromptDetails(
-  workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
-  diagnostics: DashboardWorkDiagnostics | undefined,
-  hasActiveRun: boolean,
-): PromptDiagnosticDetails {
-  const promptSource =
-    workstationRequest?.request.requestMetadata?.prompt_source?.trim() ??
-    workstationRequest?.request.request_metadata?.prompt_source?.trim() ??
-    workstationRequest?.request.requestMetadata?.source?.trim() ??
-    workstationRequest?.request.request_metadata?.source?.trim() ??
-    diagnostics?.rendered_prompt?.variables?.prompt_source?.trim() ??
-    diagnostics?.provider?.request_metadata?.prompt_source?.trim() ??
-    diagnostics?.provider?.request_metadata?.source?.trim();
-  const systemPromptHash = diagnostics?.rendered_prompt?.system_prompt_hash?.trim();
-  if (systemPromptHash || promptSource) {
-    return {
-      promptSource,
-      source: "diagnostics",
-      status: "available",
-      systemPromptHash,
-    };
-  }
-  if (workstationRequest) {
-    return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-  }
-  return hasActiveRun ? { status: "pending" } : { status: "unavailable" };
-}
-
 function selectTraceIDs(
   workstationRequest: DashboardRuntimeWorkstationRequest | undefined,
   activeExecution: DashboardActiveExecution | undefined,
@@ -390,4 +176,3 @@ function selectTraceIDs(
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
 }
-

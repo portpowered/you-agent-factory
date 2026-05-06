@@ -44,21 +44,27 @@ export function requestOutputWorkItems(request: SelectedWorkRequestHistoryItem) 
 }
 
 export function requestPrompt(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.prompt ?? request.request_view?.prompt
-    : request.request.prompt;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.prompt;
+  }
+
+  return undefined;
 }
 
 export function requestProvider(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.provider ?? request.request_view?.provider
-    : request.request.provider;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.provider;
+  }
+
+  return undefined;
 }
 
 export function requestModel(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.model ?? request.request_view?.model
-    : request.request.model;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.model;
+  }
+
+  return undefined;
 }
 
 export function requestTraceIDs(request: SelectedWorkRequestHistoryItem) {
@@ -70,9 +76,11 @@ export function requestTraceIDs(request: SelectedWorkRequestHistoryItem) {
 }
 
 export function requestStartedAt(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.started_at ?? request.request_view?.started_at ?? request.request_view?.request_time
-    : request.request.started_at ?? request.request.request_time;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.started_at ?? request.request_view?.started_at;
+  }
+
+  return request.request.startedAt ?? request.request.started_at;
 }
 
 export function requestDurationMillis(request: SelectedWorkRequestHistoryItem) {
@@ -85,15 +93,19 @@ export function requestDurationMillis(request: SelectedWorkRequestHistoryItem) {
 }
 
 export function requestWorkingDirectory(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.working_directory ?? request.request_view?.working_directory
-    : request.request.working_directory;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.working_directory;
+  }
+
+  return undefined;
 }
 
 export function requestWorktree(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.worktree ?? request.request_view?.worktree
-    : request.request.worktree;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.worktree;
+  }
+
+  return undefined;
 }
 
 export function requestOutcome(request: SelectedWorkRequestHistoryItem) {
@@ -106,15 +118,19 @@ export function requestOutcome(request: SelectedWorkRequestHistoryItem) {
 }
 
 export function requestProviderSession(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.provider_session ?? request.response_view?.provider_session
-    : request.response?.provider_session;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.provider_session;
+  }
+
+  return undefined;
 }
 
 export function requestResponseText(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.response ?? request.response_view?.response_text
-    : request.response?.response_text;
+  if (isProjectedWorkstationRequest(request)) {
+    return request.response;
+  }
+
+  return undefined;
 }
 
 export function requestFailureReason(request: SelectedWorkRequestHistoryItem) {
@@ -130,9 +146,11 @@ export function requestFailureMessage(request: SelectedWorkRequestHistoryItem) {
 }
 
 export function requestErrorClass(request: SelectedWorkRequestHistoryItem) {
-  return isProjectedWorkstationRequest(request)
-    ? request.response_view?.error_class
-    : request.response?.error_class;
+  if (isProjectedWorkstationRequest(request)) {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 export function requestScriptRequest(request: SelectedWorkRequestHistoryItem) {

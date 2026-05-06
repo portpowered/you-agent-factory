@@ -756,21 +756,17 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 
 	requestPayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestRequestView")
 	requestPayloadProperties := schemaProperties(t, requestPayload, "FactoryWorldWorkstationRequestRequestView")
-	assertSchemaPropertiesPresent(t, requestPayloadProperties, "FactoryWorldWorkstationRequestRequestView", "startedAt", "requestTime", "prompt", "workingDirectory", "worktree", "provider", "model")
+	assertSchemaPropertiesPresent(t, requestPayloadProperties, "FactoryWorldWorkstationRequestRequestView", "startedAt")
 	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
-	assertPropertyRef(t, requestPayloadProperties, "requestMetadata", "#/components/schemas/StringMap")
 	assertPropertyRef(t, requestPayloadProperties, "scriptRequest", "#/components/schemas/FactoryWorldScriptRequestView")
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
-	assertPropertyRef(t, responsePayloadProperties, "providerSession", "#/components/schemas/ProviderSessionMetadata")
-	assertPropertyRef(t, responsePayloadProperties, "diagnostics", "#/components/schemas/FactoryWorldWorkDiagnostics")
-	assertPropertyRef(t, responsePayloadProperties, "responseMetadata", "#/components/schemas/StringMap")
 	assertPropertyRef(t, responsePayloadProperties, "scriptResponse", "#/components/schemas/FactoryWorldScriptResponseView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
-	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "responseText", "errorClass", "endTime", "durationMillis")
+	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
 }
 
 func assertWorkstationRequestScriptBoundarySchemas(t *testing.T, schemas map[string]any) {
@@ -2141,12 +2137,6 @@ func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any)
 	requestPayloadProperties := schemaProperties(t, requestPayload, "FactoryWorldWorkstationRequestRequestView")
 	for _, field := range []string{
 		"startedAt",
-		"requestTime",
-		"prompt",
-		"workingDirectory",
-		"worktree",
-		"provider",
-		"model",
 		"currentChainingTraceId",
 	} {
 		if _, ok := requestPayloadProperties[field].(map[string]any); !ok {
@@ -2156,7 +2146,6 @@ func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any)
 	assertStringArrayProperty(t, requestPayloadProperties, "previousChainingTraceIds")
 	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
-	assertPropertyRef(t, requestPayloadProperties, "requestMetadata", "#/components/schemas/StringMap")
 }
 
 func assertWorkstationRequestWorkRefSchemas(t *testing.T, schemas map[string]any) {
@@ -2186,9 +2175,6 @@ func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
-	assertPropertyRef(t, responsePayloadProperties, "providerSession", "#/components/schemas/ProviderSessionMetadata")
-	assertPropertyRef(t, responsePayloadProperties, "diagnostics", "#/components/schemas/FactoryWorldWorkDiagnostics")
-	assertPropertyRef(t, responsePayloadProperties, "responseMetadata", "#/components/schemas/StringMap")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
 	for _, field := range []string{
@@ -2196,8 +2182,6 @@ func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any
 		"feedback",
 		"failureReason",
 		"failureMessage",
-		"responseText",
-		"errorClass",
 		"endTime",
 		"durationMillis",
 	} {

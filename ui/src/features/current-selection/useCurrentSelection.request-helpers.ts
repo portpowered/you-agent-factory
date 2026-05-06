@@ -1,4 +1,5 @@
 import type {
+  DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardSnapshot,
@@ -34,7 +35,13 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
 
   return Object.fromEntries(
     Object.entries(snapshot.runtime.workstation_requests_by_dispatch_id).map(
-      ([dispatchID, request]) => [dispatchID, toDashboardWorkstationRequest(request)],
+      ([dispatchID, request]) => [
+        dispatchID,
+        toDashboardWorkstationRequest(
+          request,
+          snapshot.runtime.inference_attempts_by_dispatch_id?.[dispatchID],
+        ),
+      ],
     ),
   );
 }
@@ -168,6 +175,7 @@ export function requestDispatchID(
 
 export function toDashboardWorkstationRequest(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+  inferenceAttemptsByRequestID?: Record<string, DashboardInferenceAttempt>,
 ): DashboardWorkstationRequest {
   if ("workstation_node_id" in request) {
     return request;
@@ -179,16 +187,9 @@ export function toDashboardWorkstationRequest(
     errored_request_count: request.counts.erroredCount ?? request.counts.errored_count ?? 0,
     failure_message: request.response?.failureMessage ?? request.response?.failure_message,
     failure_reason: request.response?.failureReason ?? request.response?.failure_reason,
-    inference_attempts: [],
-    model: request.request.model,
+    inference_attempts: sortInferenceAttempts(inferenceAttemptsByRequestID),
     outcome: request.response?.outcome,
-    prompt: request.request.prompt,
-    provider: request.request.provider,
-    provider_session: request.response?.providerSession ?? request.response?.provider_session,
-    request_metadata: request.request.requestMetadata ?? request.request.request_metadata,
     responded_request_count: request.counts.respondedCount ?? request.counts.responded_count ?? 0,
-    response: request.response?.responseText ?? request.response?.response_text,
-    response_metadata: request.response?.responseMetadata ?? request.response?.response_metadata,
     script_request: request.request.scriptRequest ?? request.request.script_request,
     script_response: request.response?.scriptResponse ?? request.response?.script_response,
     started_at: request.request.startedAt ?? request.request.started_at,
@@ -196,11 +197,25 @@ export function toDashboardWorkstationRequest(
     trace_ids: request.request.traceIds ?? request.request.trace_ids,
     transition_id: request.transitionId ?? request.transition_id ?? "",
     work_items: requestWorkItems(request),
-    working_directory: request.request.workingDirectory ?? request.request.working_directory,
     workstation_name: request.workstationName ?? request.workstation_name,
     workstation_node_id: request.transitionId ?? request.transition_id ?? "",
-    worktree: request.request.worktree,
   };
+}
+
+function sortInferenceAttempts(
+  inferenceAttemptsByRequestID: Record<string, DashboardInferenceAttempt> | undefined,
+): DashboardInferenceAttempt[] {
+  if (!inferenceAttemptsByRequestID) {
+    return [];
+  }
+
+  return Object.values(inferenceAttemptsByRequestID).sort((left, right) => {
+    if (left.attempt !== right.attempt) {
+      return left.attempt - right.attempt;
+    }
+
+    return left.inference_request_id.localeCompare(right.inference_request_id);
+  });
 }
 
 function sortDispatchRequests(requests: DispatchWorkstationRequest[]): DispatchWorkstationRequest[] {
@@ -307,9 +322,7 @@ function requestOutputWorkItems(
 }
 
 function requestProviderSession(request: DispatchWorkstationRequest) {
-  return "request" in request
-    ? request.response?.providerSession ?? request.response?.provider_session
-    : request.provider_session;
+  return "request" in request ? undefined : request.provider_session;
 }
 
 function requestOutcome(request: DispatchWorkstationRequest): string {
@@ -328,7 +341,6 @@ function requestFailureMessage(request: DispatchWorkstationRequest): string | un
     : request.failure_message;
 }
 
-function requestDiagnostics(request: DispatchWorkstationRequest) {
-  return "request" in request ? request.response?.diagnostics : undefined;
+function requestDiagnostics(_request: DispatchWorkstationRequest) {
+  return undefined;
 }
-
