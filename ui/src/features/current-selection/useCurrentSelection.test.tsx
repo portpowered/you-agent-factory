@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 
 import type {
   DashboardActiveExecution,
+  DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardSnapshot,
@@ -148,6 +149,29 @@ function buildProviderSessionAttempt({
   };
 }
 
+function buildInferenceAttempt({
+  attempt,
+  dispatchID,
+  response,
+  worktree,
+}: {
+  attempt: number;
+  dispatchID: string;
+  response?: string;
+  worktree?: string;
+}): DashboardInferenceAttempt {
+  return {
+    attempt,
+    dispatch_id: dispatchID,
+    inference_request_id: `${dispatchID}/inference/${attempt}`,
+    prompt: `Prompt ${attempt}`,
+    request_time: `2026-04-08T12:00:0${attempt}Z`,
+    response,
+    transition_id: "review",
+    worktree,
+  };
+}
+
 function buildActiveExecution(
   dispatchID: string,
   workItems: DashboardWorkItemRef[],
@@ -170,10 +194,12 @@ function buildActiveExecution(
 
 function buildSnapshot({
   activeExecution,
+  inferenceAttemptsByDispatchID = {},
   providerSessions = [],
   runtimeRequestsByDispatchID = {},
 }: {
   activeExecution?: DashboardActiveExecution;
+  inferenceAttemptsByDispatchID?: Record<string, Record<string, DashboardInferenceAttempt>>;
   providerSessions?: DashboardProviderSessionAttempt[];
   runtimeRequestsByDispatchID?: Record<string, DashboardRuntimeWorkstationRequest>;
 }): DashboardSnapshot {
@@ -194,6 +220,7 @@ function buildSnapshot({
       current_work_items_by_place_id: activeExecution
         ? { "story:review": activeExecution.work_items ?? [] }
         : {},
+      inference_attempts_by_dispatch_id: inferenceAttemptsByDispatchID,
       session: {
         ...runtime.session,
         provider_sessions: providerSessions,
@@ -243,6 +270,15 @@ function SelectionHarness({
       <div data-testid="dispatch-attempts">
         {currentSelection.selectedWorkDispatchAttempts
           .map((attempt) => attempt.dispatch_id)
+          .join(",")}
+      </div>
+      <div data-testid="history-inference-attempts">
+        {currentSelection.selectedWorkRequestHistory
+          .flatMap((request) =>
+            "inference_attempts" in request
+              ? request.inference_attempts.map((attempt) => attempt.inference_request_id)
+              : [],
+          )
           .join(",")}
       </div>
       <div data-testid="provider-sessions">
@@ -358,6 +394,21 @@ describe("useCurrentSelection", () => {
 
   it("falls back to normalized runtime workstation requests when the cached projection map is empty", async () => {
     const selectedWorkItem = buildWorkItem("work-runtime-fallback", "Runtime Fallback Story");
+    const inferenceAttemptsByDispatchID = {
+      "dispatch-review-runtime-fallback": {
+        "dispatch-review-runtime-fallback/inference/2": buildInferenceAttempt({
+          attempt: 2,
+          dispatchID: "dispatch-review-runtime-fallback",
+          response: "Second response",
+        }),
+        "dispatch-review-runtime-fallback/inference/1": buildInferenceAttempt({
+          attempt: 1,
+          dispatchID: "dispatch-review-runtime-fallback",
+          response: "First response",
+          worktree: "tree-runtime",
+        }),
+      },
+    };
     const runtimeRequestsByDispatchID = {
       "dispatch-review-runtime-fallback": buildRuntimeWorkstationRequest({
         dispatchID: "dispatch-review-runtime-fallback",
@@ -370,6 +421,7 @@ describe("useCurrentSelection", () => {
     render(
       <SelectionHarness
         snapshot={buildSnapshot({
+          inferenceAttemptsByDispatchID,
           providerSessions: [
             buildProviderSessionAttempt({
               dispatchID: "dispatch-review-runtime-fallback",
@@ -394,6 +446,9 @@ describe("useCurrentSelection", () => {
         "dispatch-review-runtime-fallback",
       );
       expect(screen.getByTestId("provider-sessions").textContent).toBe("sess-runtime-fallback");
+      expect(screen.getByTestId("history-inference-attempts").textContent).toBe(
+        "dispatch-review-runtime-fallback/inference/1,dispatch-review-runtime-fallback/inference/2",
+      );
     });
   });
 
@@ -549,5 +604,4 @@ describe("useCurrentSelection", () => {
     });
   });
 });
-
 

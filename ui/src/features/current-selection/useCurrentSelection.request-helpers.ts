@@ -1,4 +1,5 @@
 import type {
+  DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardSnapshot,
@@ -34,7 +35,13 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
 
   return Object.fromEntries(
     Object.entries(snapshot.runtime.workstation_requests_by_dispatch_id).map(
-      ([dispatchID, request]) => [dispatchID, toDashboardWorkstationRequest(request)],
+      ([dispatchID, request]) => [
+        dispatchID,
+        toDashboardWorkstationRequest(
+          request,
+          snapshot.runtime.inference_attempts_by_dispatch_id?.[dispatchID],
+        ),
+      ],
     ),
   );
 }
@@ -168,6 +175,7 @@ export function requestDispatchID(
 
 export function toDashboardWorkstationRequest(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+  inferenceAttemptsByRequestID?: Record<string, DashboardInferenceAttempt>,
 ): DashboardWorkstationRequest {
   if ("workstation_node_id" in request) {
     return request;
@@ -179,7 +187,7 @@ export function toDashboardWorkstationRequest(
     errored_request_count: request.counts.erroredCount ?? request.counts.errored_count ?? 0,
     failure_message: request.response?.failureMessage ?? request.response?.failure_message,
     failure_reason: request.response?.failureReason ?? request.response?.failure_reason,
-    inference_attempts: [],
+    inference_attempts: sortInferenceAttempts(inferenceAttemptsByRequestID),
     outcome: request.response?.outcome,
     responded_request_count: request.counts.respondedCount ?? request.counts.responded_count ?? 0,
     script_request: request.request.scriptRequest ?? request.request.script_request,
@@ -192,6 +200,22 @@ export function toDashboardWorkstationRequest(
     workstation_name: request.workstationName ?? request.workstation_name,
     workstation_node_id: request.transitionId ?? request.transition_id ?? "",
   };
+}
+
+function sortInferenceAttempts(
+  inferenceAttemptsByRequestID: Record<string, DashboardInferenceAttempt> | undefined,
+): DashboardInferenceAttempt[] {
+  if (!inferenceAttemptsByRequestID) {
+    return [];
+  }
+
+  return Object.values(inferenceAttemptsByRequestID).sort((left, right) => {
+    if (left.attempt !== right.attempt) {
+      return left.attempt - right.attempt;
+    }
+
+    return left.inference_request_id.localeCompare(right.inference_request_id);
+  });
 }
 
 function sortDispatchRequests(requests: DispatchWorkstationRequest[]): DispatchWorkstationRequest[] {

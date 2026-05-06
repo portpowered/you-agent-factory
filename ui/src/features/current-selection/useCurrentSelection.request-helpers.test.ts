@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardSnapshot,
@@ -126,15 +127,38 @@ function buildAttempt(
   };
 }
 
+function buildInferenceAttempt(
+  dispatchID: string,
+  attempt: number,
+  overrides: Partial<DashboardInferenceAttempt> = {},
+): DashboardInferenceAttempt {
+  return {
+    attempt,
+    dispatch_id: dispatchID,
+    inference_request_id: `${dispatchID}/inference/${attempt}`,
+    prompt: `Prompt ${attempt}`,
+    request_time: `2026-04-08T12:00:0${attempt}Z`,
+    transition_id: "review",
+    ...overrides,
+  };
+}
+
 describe("useCurrentSelection.request-helpers", () => {
   it("resolves projected requests from explicit maps or runtime snapshots", () => {
     const explicitProjected = {
       "dispatch-projected": buildProjectedRequest("dispatch-projected"),
     };
+    const runtimeInferenceAttempts = {
+      "dispatch-runtime/inference/2": buildInferenceAttempt("dispatch-runtime", 2),
+      "dispatch-runtime/inference/1": buildInferenceAttempt("dispatch-runtime", 1),
+    };
     const snapshot: DashboardSnapshot = {
       ...buildEmptyDashboardRuntimeFixture(),
       runtime: {
         ...buildEmptyDashboardRuntimeFixture(),
+        inference_attempts_by_dispatch_id: {
+          "dispatch-runtime": runtimeInferenceAttempts,
+        },
         workstation_requests_by_dispatch_id: {
           "dispatch-runtime": buildRuntimeRequest("dispatch-runtime"),
         },
@@ -149,6 +173,7 @@ describe("useCurrentSelection.request-helpers", () => {
     ).toEqual({
       "dispatch-runtime": toDashboardWorkstationRequest(
         snapshot.runtime.workstation_requests_by_dispatch_id["dispatch-runtime"],
+        runtimeInferenceAttempts,
       ),
     });
     expect(
@@ -312,6 +337,10 @@ describe("useCurrentSelection.request-helpers", () => {
 
   it("converts runtime requests to projected requests and exposes request-owned work items", () => {
     const runtime = buildRuntimeRequest("dispatch-runtime");
+    const runtimeInferenceAttempts = {
+      "dispatch-runtime/inference/2": buildInferenceAttempt("dispatch-runtime", 2),
+      "dispatch-runtime/inference/1": buildInferenceAttempt("dispatch-runtime", 1),
+    };
     const camelCaseRuntime = buildRuntimeRequest("dispatch-runtime-camel", {
       counts: {
         dispatchedCount: 2,
@@ -371,6 +400,38 @@ describe("useCurrentSelection.request-helpers", () => {
       failure_message: "Runtime failure message",
       failure_reason: "runtime_failed",
       inference_attempts: [],
+      outcome: "FAILED",
+      responded_request_count: 1,
+      script_request: {
+        args: ["--work", workAlpha.work_id],
+        attempt: 1,
+        command: "script-tool",
+        script_request_id: "dispatch-runtime/script-request/1",
+      },
+      script_response: {
+        attempt: 1,
+        duration_millis: 640,
+        outcome: "SUCCEEDED",
+        script_request_id: "dispatch-runtime/script-request/1",
+      },
+      started_at: "2026-04-08T12:00:00Z",
+      total_duration_millis: 640,
+      trace_ids: ["trace-alpha"],
+      transition_id: "review",
+      work_items: [workAlpha, workBeta],
+      workstation_name: "Review",
+      workstation_node_id: "review",
+    });
+    expect(toDashboardWorkstationRequest(runtime, runtimeInferenceAttempts)).toEqual({
+      dispatch_id: "dispatch-runtime",
+      dispatched_request_count: 1,
+      errored_request_count: 0,
+      failure_message: "Runtime failure message",
+      failure_reason: "runtime_failed",
+      inference_attempts: [
+        buildInferenceAttempt("dispatch-runtime", 1),
+        buildInferenceAttempt("dispatch-runtime", 2),
+      ],
       outcome: "FAILED",
       responded_request_count: 1,
       script_request: {
