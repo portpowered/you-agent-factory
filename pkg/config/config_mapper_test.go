@@ -1958,6 +1958,9 @@ func TestConfigMapping_WorkstationTypeDefaultsToStandard(t *testing.T) {
 	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
 		t.Fatalf("default standard workstation should reject through failure routing, got %+v", tr.RejectionArcs)
 	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("default standard workstation should fail through failed-state routing, got %+v", tr.FailureArcs)
+	}
 }
 
 func TestConfigMapping_WorkstationTypeExplicitStandard(t *testing.T) {
@@ -2035,10 +2038,10 @@ func TestConfigMapping_WorkstationTypeRepeater(t *testing.T) {
 
 	tr := net.Transitions["processor"]
 	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:init" {
-		t.Errorf("expected auto rejection arc to task:init, got %+v", tr.RejectionArcs)
+		t.Fatalf("expected auto rejection arc to task:init, got %+v", tr.RejectionArcs)
 	}
 	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
-		t.Errorf("expected auto failure arc to task:failed, got %+v", tr.FailureArcs)
+		t.Fatalf("expected auto failure arc to task:failed, got %+v", tr.FailureArcs)
 	}
 }
 

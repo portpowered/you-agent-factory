@@ -136,6 +136,9 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 			"task:init":        {ID: "task:init", TypeID: "task", State: "init"},
 			"task:complete":    {ID: "task:complete", TypeID: "task", State: "complete"},
 			"task:failed":      {ID: "task:failed", TypeID: "task", State: "failed"},
+			"page:ready":       {ID: "page:ready", TypeID: "page", State: "ready"},
+			"page:complete":    {ID: "page:complete", TypeID: "page", State: "complete"},
+			"page:failed":      {ID: "page:failed", TypeID: "page", State: "failed"},
 			"worker:available": {ID: "worker:available", TypeID: "worker", State: "available"},
 		},
 		Transitions: map[string]*petri.Transition{
@@ -150,12 +153,33 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 					{PlaceID: "worker:available", Direction: petri.ArcOutput},
 				},
 			},
+			"fan-in": {
+				ID: "fan-in",
+				InputArcs: []petri.Arc{
+					{PlaceID: "task:init", Direction: petri.ArcInput},
+					{PlaceID: "page:ready", Direction: petri.ArcInput},
+					{PlaceID: "worker:available", Direction: petri.ArcInput},
+				},
+				OutputArcs: []petri.Arc{
+					{PlaceID: "task:complete", Direction: petri.ArcOutput},
+					{PlaceID: "page:complete", Direction: petri.ArcOutput},
+					{PlaceID: "worker:available", Direction: petri.ArcOutput},
+				},
+			},
 		},
 		WorkTypes: map[string]*WorkType{
 			"task": {
 				ID: "task",
 				States: []StateDefinition{
 					{Value: "init", Category: StateCategoryInitial},
+					{Value: "complete", Category: StateCategoryTerminal},
+					{Value: "failed", Category: StateCategoryFailed},
+				},
+			},
+			"page": {
+				ID: "page",
+				States: []StateDefinition{
+					{Value: "ready", Category: StateCategoryInitial},
 					{Value: "complete", Category: StateCategoryTerminal},
 					{Value: "failed", Category: StateCategoryFailed},
 				},
@@ -179,5 +203,33 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 	}
 	if transition.FailureArcs[0].PlaceID != "task:failed" {
 		t.Fatalf("failure arc PlaceID = %q, want %q", transition.FailureArcs[0].PlaceID, "task:failed")
+	}
+
+	fanIn := net.Transitions["fan-in"]
+	if len(fanIn.FailureArcs) != 2 {
+		t.Fatalf("fan-in failure arc count = %d, want 2", len(fanIn.FailureArcs))
+	}
+	failurePlaces := map[string]struct{}{}
+	for _, arc := range fanIn.FailureArcs {
+		failurePlaces[arc.PlaceID] = struct{}{}
+	}
+	if _, ok := failurePlaces["task:failed"]; !ok {
+		t.Fatalf("fan-in failure arcs = %+v, want task:failed destination", fanIn.FailureArcs)
+	}
+	if _, ok := failurePlaces["page:failed"]; !ok {
+		t.Fatalf("fan-in failure arcs = %+v, want page:failed destination", fanIn.FailureArcs)
+	}
+	if len(fanIn.RejectionArcs) != 2 {
+		t.Fatalf("fan-in rejection arc count = %d, want 2", len(fanIn.RejectionArcs))
+	}
+	rejectionPlaces := map[string]struct{}{}
+	for _, arc := range fanIn.RejectionArcs {
+		rejectionPlaces[arc.PlaceID] = struct{}{}
+	}
+	if _, ok := rejectionPlaces["task:failed"]; !ok {
+		t.Fatalf("fan-in rejection arcs = %+v, want task:failed destination", fanIn.RejectionArcs)
+	}
+	if _, ok := rejectionPlaces["page:failed"]; !ok {
+		t.Fatalf("fan-in rejection arcs = %+v, want page:failed destination", fanIn.RejectionArcs)
 	}
 }
