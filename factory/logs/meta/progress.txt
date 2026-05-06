@@ -105,12 +105,18 @@
 - When shared functional test support already owns API server startup, treat
   any remaining package-local lifecycle bootstrappers as cleanup seams and
   preserve only package-specific request helpers.
+- When a broad coverage ask remains open, prefer tightening the existing
+  repo-owned coverage command and CI lane before queuing a wide package-by-
+  package test-authoring program.
+- An aggregate backend coverage floor can still hide `0%` packages; the first
+  useful ratchet is to fail the existing coverage lane on zero-coverage
+  backend packages and print the offenders explicitly.
 
 ## Current Summary
 
-- As of `2026-05-06T04:04:39.6158725-07:00`, `HEAD` on `main` points to
-  `c314504`, a local merge that contains `origin/main` through merged PR
-  `#121`.
+- As of `2026-05-06T05:04:15.1266160-07:00`, `HEAD` on `main` points to
+  `d17acf1`, a local docs refresh commit that contains `origin/main` through
+  merged PR `#122`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -122,8 +128,8 @@
   user-owned tracked edit; ignored workflow files under `factory/inputs/**`
   remain operating state rather than canonical queue truth.
 - Recent merged PRs now include `#112`, `#113`, `#114`, `#115`, `#117`,
-  `#118`, `#119`, and `#121`; open PR `#120` is only the meta refresh branch
-  and does not own the next code cleanup lane.
+  `#118`, `#119`, `#121`, and `#122`; open PR `#120` is only the meta refresh
+  branch and does not own the next code cleanup lane.
 - The import/export P0, current-selection, submit-work copy, and dashboard UI
   asks remain materially closed on `main`; the remaining ask surface is broader
   program work in standards migration, website coverage, docs audit, manual
@@ -131,12 +137,47 @@
 - The replay fixtures remain historical samples rather than current workflow
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
-- The next non-overlapping cleanup seam is the remaining duplicate runtime API
-  functional-server lifecycle owner in
-  `tests/functional/runtime_api/functional_server_test.go`, because shared
-  lifecycle support already exists in
-  `tests/functional/internal/support/api_server.go` and is already used by
-  `tests/functional/runtime_api/helpers_test.go`.
+- The next non-overlapping dispatch is the backend zero-coverage-package gate:
+  the repo already enforces backend coverage through `make test-coverage-go`
+  and `cmd/gocoveragecheck`, but the current aggregate threshold can still
+  hide backend-owned packages with `0%` statement coverage.
+
+## 2026-05-06T05:04:15.1266160-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git rebased the local docs
+  refresh commits onto `origin/main`, bringing in merged PR `#122`
+  (`collapse-runtime-api-functional-server-lifecycle-owner`) while preserving
+  the user-owned tracked edit in `factory/logs/meta/asks.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, recent PR
+  state, the tracked-versus-ignored `factory/inputs/**` surface, and the live
+  backend coverage lane plus adjacent runtime API test helpers.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse factory/inputs`, confirming the checked-in inboxes
+  remain sentinel-only while the visible idea file is ignored local operating
+  state.
+- Confirmed the previously queued ignored idea
+  `factory/inputs/idea/default/collapse-runtime-api-functional-server-lifecycle-owner.md`
+  is stale because merged PR `#122` already landed that exact cleanup on
+  `main`, so it should be removed from local queue residue.
+- Verified with `git log`, `gh pr list`, direct file reads, and delegated
+  explorer passes that PR `#120` remains meta-only and does not own the next
+  execution lane.
+- Checked the broad P0 testing ask against the live repo-owned enforcement
+  surface:
+  `Makefile` still routes backend coverage through `make test-coverage-go`,
+  `.github/workflows/ci.yml` still calls that target, and
+  `cmd/gocoveragecheck/main.go` still fails only on total statement coverage.
+- Rejected the previously recorded runtime API lifecycle seam as stale after
+  merged PR `#122`, then selected one narrower ask-driven follow-up instead:
+  extend `cmd/gocoveragecheck` so the existing backend coverage lane fails when
+  an included backend package has `0%` statement coverage and reports the
+  offenders explicitly.
+- Queued one replacement ignored idea under
+  `factory/inputs/idea/default/add-backend-zero-coverage-package-gate.md`
+  so the next worker can tighten the backend testing gate without broadening
+  into a multi-package coverage campaign or a frontend quality lane.
 
 ## 2026-05-06T04:04:39.6158725-07:00 - meta state refresh
 

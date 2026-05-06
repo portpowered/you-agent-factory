@@ -2,11 +2,11 @@
 
 ## world state
 
-- as of `2026-05-06T04:04:39.6158725-07:00`, local `HEAD` on `main` points to
-  `c314504`
-  (`Merge branch 'main' of https://github.com/portpowered/infinite-you`) and
-  contains the merged `origin/main` baseline through `cf64128`
-  (`Merge pull request #121 from portpowered/ralph/consolidate-runtime-api-functional-support-helpers`)
+- as of `2026-05-06T05:04:15.1266160-07:00`, local `HEAD` on `main` points to
+  `d17acf1`
+  (`docs: refresh meta world state`) and contains the merged `origin/main`
+  baseline through `cee2465`
+  (`Merge pull request #122 from portpowered/ralph/collapse-runtime-api-functional-server-lifecycle-owner`)
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the local worktree is not clean:
   - canonical `factory/inputs/**` remains tracked-sentinel-only
@@ -15,7 +15,7 @@
   - `factory/logs/meta/asks.md` carries a local tracked edit and should be
     treated as user-owned state for this refresh
   - tracked meta-log updates are required because the last checked-in summary
-    predates merged PR `#121`
+    predates merged PR `#122`
   - ignored local workflow residue under `factory/inputs/**` must still be
     treated as operating state rather than checked-in queue truth
 
@@ -53,11 +53,13 @@
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
 - the visible ignored local idea residue at the start of this refresh was:
-  - `factory/inputs/idea/default/consolidate-runtime-api-functional-support-helpers.md`
-- that ignored idea was stale queue residue rather than checked-in queue truth
-  because merged PR `#121` already landed the runtime helper dedupe on `main`
-- it has been replaced during this refresh with one narrower follow-up idea:
   - `factory/inputs/idea/default/collapse-runtime-api-functional-server-lifecycle-owner.md`
+- that ignored idea was stale queue residue rather than checked-in queue truth
+  because merged PR `#122` already landed that runtime API lifecycle cleanup
+  on `main`
+- it has been replaced during this refresh with one narrower customer-ask
+  follow-up idea:
+  - `factory/inputs/idea/default/add-backend-zero-coverage-package-gate.md`
 
 ## customer-ask truth
 
@@ -72,7 +74,7 @@
 - the remaining open asks in `factory/logs/meta/asks.md` are broader program
   work rather than narrow customer-visible regressions:
   - standards-migration checklist tracking
-  - backend and website `100%` coverage target
+  - backend and website `100%` coverage target plus stronger test enforcement
   - docs audit
   - manual QA
   - systems-quality documentation
@@ -94,8 +96,10 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#122` `collapse-runtime-api-functional-server-lifecycle-owner`, merged on
+    `2026-05-06T11:29:08Z`
   - `#121` `consolidate-runtime-api-functional-support-helpers`, merged on
-    `2026-05-06T10:27:31Z`
+    `2026-05-06T10:20:03Z`
   - `#119` `dedupe-functional-api-server-harnesses`, merged on
     `2026-05-06T09:27:38Z`
   - `#118` `retire-transition-topology-runtime-lookup-adapter`, merged on
@@ -118,23 +122,18 @@
 ## next cleanup candidate
 
 - there is no remaining narrow unowned customer-visible ask gap on `main`
-- the next non-overlapping cleanup seam is the remaining duplicate runtime API
-  functional server lifecycle owner:
-  - `tests/functional/internal/support/api_server.go` already owns
-    `FunctionalAPIServerConfig`, `FunctionalAPIServer`, and
-    `StartFunctionalAPIServer`
-  - `tests/functional/runtime_api/helpers_test.go` already wraps that shared
-    owner for most runtime API suites
-  - `tests/functional/runtime_api/functional_server_test.go` still defines a
-    second lifecycle path with `FunctionalServer`,
-    `StartFunctionalServerWithConfig`, `StartFunctionalServer`,
-    `waitForFunctionalServerAPIHandler`, `waitForFunctionalServiceRuntime`, and
-    `GetEngineStateSnapshot`
-  - `tests/functional/runtime_api/api_service_mode_observability_smoke_test.go`
-    still consumes that duplicate lifecycle surface
-- the next dispatch should collapse runtime API lifecycle startup and readiness
-  waiting onto shared support while preserving the same runtime-visible
-  service-mode assertions
+- the next non-overlapping dispatch should advance the broad P0 testing ask
+  through the existing backend coverage gate instead of inventing a new lane:
+  - `Makefile` already exposes `test-coverage-go` with
+    `GO_COVERAGE_MIN ?= 80.0`
+  - `.github/workflows/ci.yml` already enforces that repo-owned command in CI
+  - `cmd/gocoveragecheck/main.go` currently fails only on total statement
+    coverage, which can still hide backend packages at `0%`
+  - `cmd/gocoveragecheck/main_test.go` already owns focused unit coverage for
+    the lane-selection logic
+- the next idea should extend `cmd/gocoveragecheck` so the backend coverage
+  lane fails when an included backend package lands at `0%` statement coverage
+  while preserving the current package exclusions and repo-owned CI entrypoint
 
 ## theory of mind
 
@@ -157,3 +156,9 @@
 - when a shared functional support server lifecycle owner already exists, treat
   remaining package-local test bootstrappers as cleanup seams even if they
   still keep package-specific request helpers
+- when a broad quality or coverage ask is open, prefer tightening an existing
+  repo-owned enforcement seam before queueing a repo-wide test-authoring
+  program
+- aggregate coverage floors can hide `0%` backend packages; the first useful
+  ratchet is per-package zero-coverage rejection inside the existing coverage
+  lane, not a broad threshold jump
