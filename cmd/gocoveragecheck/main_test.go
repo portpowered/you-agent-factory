@@ -483,6 +483,60 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	}
 }
 
+func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
+	originalArgs := os.Args
+	originalFlagSet := flag.CommandLine
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	originalExit := exitFunc
+	t.Cleanup(func() {
+		os.Args = originalArgs
+		flag.CommandLine = originalFlagSet
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+		exitFunc = originalExit
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	var exitCode int
+
+	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
+	os.Args = []string{
+		"gocoveragecheck",
+		"-min=90",
+		"-coverpkg=" + strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		"-packages=./pkg/config",
+	}
+	execCommand = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+
+	main()
+
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); !strings.Contains(got, "total: (statements) 82.5%") {
+		t.Fatalf("main() stdout = %q, want total coverage line", got)
+	}
+	if got := stdout.String(); strings.Contains(got, "meets minimum") {
+		t.Fatalf("main() stdout = %q, did not expect success message", got)
+	}
+	wantFailure := "go coverage 82.5% is below minimum 90.0%\n"
+	if got := stderr.String(); got != wantFailure {
+		t.Fatalf("main() stderr = %q, want %q", got, wantFailure)
+	}
+}
+
 func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 	if os.Getenv("GO_WANT_GOCOVERAGECHECK_MAIN_HELPER") == "1" {
 		originalArgs := os.Args
