@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -23,10 +24,12 @@ func main() {
 }
 
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
-	version, err := parseArgs(args)
+	version, err := parseArgs(args, stderr)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
 	}
 
 	if err := runReleasePrep(context.Background(), releaseprep.Options{
@@ -40,10 +43,10 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func parseArgs(args []string) (string, error) {
+func parseArgs(args []string, stderr io.Writer) (string, error) {
 	var version string
 	flags := flag.NewFlagSet("releaseprep", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
+	flags.SetOutput(stderr)
 	flags.StringVar(&version, "version", "", "release semver tag, for example v1.2.3")
 	if err := flags.Parse(args); err != nil {
 		return "", err
