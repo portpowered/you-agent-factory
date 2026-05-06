@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import { buildDashboardWorkstationRequestFixture } from "../../components/dashboard/fixtures";
+import {
+  buildDashboardInferenceAttemptFixture,
+  buildDashboardWorkstationRequestFixture,
+} from "../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
@@ -350,16 +353,22 @@ describe("CurrentSelectionWidget", () => {
     const selectedWorkstationRequest = buildDashboardWorkstationRequestFixture(
       "dispatch-review-markdown",
       {
-        prompt: [
-          "## Review checklist",
-          "",
-          "- Check the latest diff",
-          "- Run `bun test` before approval",
-          "",
-          "```text",
-          "bun test",
-          "```",
-        ].join("\n"),
+        inference_attempts: [
+          buildDashboardInferenceAttemptFixture("dispatch-review-markdown", {
+            attempt: 1,
+            inference_request_id: "dispatch-review-markdown/inference-request/1",
+            prompt: [
+              "## Review checklist",
+              "",
+              "- Check the latest diff",
+              "- Run `bun test` before approval",
+              "",
+              "```text",
+              "bun test",
+              "```",
+            ].join("\n"),
+          }),
+        ],
         request_id: "request-markdown-story",
       },
     );
@@ -391,13 +400,17 @@ describe("CurrentSelectionWidget", () => {
     ).toBeGreaterThan(0);
     expect(
       within(currentSelection).getByRole("heading", {
-        level: 2,
-        name: "Review checklist",
+        name: "Inference attempts",
       }),
     ).toBeTruthy();
-    expect(within(currentSelection).getByRole("list")).toBeTruthy();
     expect(
-      within(currentSelection).getByText("Check the latest diff"),
+      within(currentSelection).getByText(/## Review checklist/),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).getByText(/- Check the latest diff/),
+    ).toBeTruthy();
+    expect(
+      within(currentSelection).getByText(/```text/),
     ).toBeTruthy();
     expect(
       within(currentSelection).queryByRole("heading", { name: "Active work" }),

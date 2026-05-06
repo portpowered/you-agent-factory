@@ -1,17 +1,14 @@
-import { formatDurationMillis, formatProviderSession } from "../../components/ui/formatters";
+import { formatDurationMillis } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
-  INFERENCE_ATTEMPT_TEXT_CLASS,
   MetadataSection,
   normalizeDetailText,
-  RequestAuthoredText,
   RequestCountSection,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
-  WORKSTATION_RESPONSE_TEXT_LABEL,
 } from "./detail-card-shared";
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { InferenceAttemptsSection } from "./execution-details";
@@ -23,25 +20,30 @@ export function WorkstationRequestDetailCard({
   widgetId = "current-selection",
 }: WorkstationRequestDetailCardProps) {
   const view = buildWorkstationRequestDetailView(request);
+  const showInferenceAttempts = !view.isScriptBackedRequest;
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <WorkstationRequestSummary request={request} view={view} />
       <RequestCountSection request={request} />
       <RequestDetailsSection request={request} view={view} />
-      <MetadataSection
-        emptyMessage="Request metadata is not available for this workstation request."
-        metadata={request.request_metadata}
-        title="Request metadata"
-      />
+      {view.isScriptBackedRequest ? (
+        <MetadataSection
+          emptyMessage="Request metadata is not available for this workstation request."
+          metadata={request.request_metadata}
+          title="Request metadata"
+        />
+      ) : null}
       <ResponseDetailsSection request={request} view={view} />
-      <MetadataSection
-        emptyMessage={view.responseMetadataUnavailableCopy}
-        metadata={request.response_metadata}
-        title="Response metadata"
-      />
+      {view.isScriptBackedRequest ? (
+        <MetadataSection
+          emptyMessage={view.responseMetadataUnavailableCopy}
+          metadata={request.response_metadata}
+          title="Response metadata"
+        />
+      ) : null}
       <ErrorDetailsSection view={view} />
-      {request.inference_attempts.length > 0 ? (
+      {showInferenceAttempts ? (
         <InferenceAttemptsSection attempts={request.inference_attempts} />
       ) : null}
     </SelectionDetailLayout>
@@ -51,17 +53,14 @@ export function WorkstationRequestDetailCard({
 interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
   isScriptBackedRequest: boolean;
-  modelUnavailableCopy: string;
+  inferenceRequestDetailsCopy: string;
+  inferenceResponseDetailsCopy: string;
   normalizedFailureMessage: string | undefined;
   normalizedFailureReason: string | undefined;
-  normalizedPrompt: string | undefined;
-  normalizedResponse: string | undefined;
   normalizedScriptStderr: string | undefined;
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
-  providerUnavailableCopy: string;
   responseMetadataUnavailableCopy: string;
-  responseUnavailableCopy: string;
   scriptResponseUnavailableCopy: string;
   totalDurationMillis: number | undefined;
 }
@@ -79,28 +78,21 @@ function buildWorkstationRequestDetailView(
 
   return {
     hasFailureDetails,
+    inferenceRequestDetailsCopy:
+      "Prompt, request payload, working-directory, and worktree details are shown under Inference attempts when available.",
+    inferenceResponseDetailsCopy:
+      "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
     isScriptBackedRequest,
-    modelUnavailableCopy: isScriptBackedRequest
-      ? "Model details are not applicable to this script-backed workstation request."
-      : "Model details are not available for this workstation request.",
     normalizedFailureMessage,
     normalizedFailureReason,
-    normalizedPrompt: normalizeDetailText(request.prompt),
-    normalizedResponse: normalizeDetailText(request.response),
     normalizedScriptStderr: normalizeDetailText(request.script_response?.stderr),
     normalizedScriptStdout: normalizeDetailText(request.script_response?.stdout),
     outcome: request.outcome ?? request.script_response?.outcome,
-    providerUnavailableCopy: isScriptBackedRequest
-      ? "Provider details are not applicable to this script-backed workstation request."
-      : "Provider details are not available for this workstation request.",
     responseMetadataUnavailableCopy: hasErroredRequest
       ? "Response metadata is unavailable because this workstation request ended with an error."
       : isScriptBackedRequest
         ? "Response metadata is not available for this script-backed workstation request."
         : "Response metadata is not available for this workstation request yet.",
-    responseUnavailableCopy: hasErroredRequest
-      ? "Response text is unavailable because this workstation request ended with an error."
-      : "Response text is not available for this workstation request yet.",
     scriptResponseUnavailableCopy: hasErroredRequest
       ? "Script response details are unavailable because this workstation request ended with an error."
       : "Script response details are not available for this workstation request yet.",
@@ -149,26 +141,6 @@ function WorkstationRequestSummary({
           </dd>
         </div>
         <div>
-          <dt>Provider</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {request.provider ? (
-              <code className={RUNTIME_DETAIL_CODE_CLASS}>{request.provider}</code>
-            ) : (
-              view.providerUnavailableCopy
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Model</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {request.model ? (
-              <code className={RUNTIME_DETAIL_CODE_CLASS}>{request.model}</code>
-            ) : (
-              view.modelUnavailableCopy
-            )}
-          </dd>
-        </div>
-        <div>
           <dt>Outcome</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {view.outcome ? view.outcome : "Outcome details are not available yet."}
@@ -194,42 +166,19 @@ function RequestDetailsSection({
   request: WorkstationRequestDetailCardProps["request"];
   view: WorkstationRequestDetailView;
 }) {
+  if (!view.isScriptBackedRequest) {
+    return (
+      <section aria-label="Request details" className={RUNTIME_DETAILS_SECTION_CLASS}>
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request details</h4>
+        <p className={DETAIL_COPY_CLASS}>{view.inferenceRequestDetailsCopy}</p>
+      </section>
+    );
+  }
+
   return (
     <section aria-label="Request details" className={RUNTIME_DETAILS_SECTION_CLASS}>
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request details</h4>
       <dl>
-        <div>
-          <dt>Working directory</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {request.working_directory ? (
-              <code className={RUNTIME_DETAIL_CODE_CLASS}>{request.working_directory}</code>
-            ) : (
-              "Working directory details are not available for this workstation request."
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Worktree</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {request.worktree ? (
-              <code className={RUNTIME_DETAIL_CODE_CLASS}>{request.worktree}</code>
-            ) : (
-              "Worktree details are not available for this workstation request."
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Prompt</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.normalizedPrompt ? (
-              <RequestAuthoredText value={view.normalizedPrompt} />
-            ) : request.script_request ? (
-              "Prompt details are not applicable to this script-backed workstation request."
-            ) : (
-              "Prompt details are not available for this workstation request yet."
-            )}
-          </dd>
-        </div>
         <ScriptRequestFields request={request} />
       </dl>
     </section>
@@ -401,31 +350,12 @@ function InferenceResponseDetails({
   view: WorkstationRequestDetailView;
 }) {
   return (
-    <dl>
-      <div>
-        <dt>Provider session</dt>
-        <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-          {request.provider_session?.id ? (
-            <code className={RUNTIME_DETAIL_CODE_CLASS}>
-              {formatProviderSession(request.provider_session)}
-            </code>
-          ) : (
-            "Provider session details are not available for this workstation request."
-          )}
-        </dd>
-      </div>
-      <TraceIDField traceIDs={request.trace_ids} />
-      <div>
-        <dt>{WORKSTATION_RESPONSE_TEXT_LABEL}</dt>
-        <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-          {view.normalizedResponse ? (
-            <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>{view.normalizedResponse}</pre>
-          ) : (
-            view.responseUnavailableCopy
-          )}
-        </dd>
-      </div>
-    </dl>
+    <>
+      <dl>
+        <TraceIDField traceIDs={request.trace_ids} />
+      </dl>
+      <p className={DETAIL_COPY_CLASS}>{view.inferenceResponseDetailsCopy}</p>
+    </>
   );
 }
 

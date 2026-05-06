@@ -1086,13 +1086,11 @@ export const WorkstationRequestSelectionNoResponse = {
     ).toBeVisible();
     await expect(
       currentSelection.getByText(
-        "Response text is not available for this workstation request yet.",
+        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
       ),
     ).toBeVisible();
     await expect(
-      currentSelection.getByText(
-        "Response metadata is not available for this workstation request yet.",
-      ),
+      currentSelection.getByText("No inference events are available for this selected work item."),
     ).toBeVisible();
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
@@ -1116,6 +1114,9 @@ export const WorkstationRequestSelectionRejected = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
+    const inferenceAttempts = within(
+      currentSelection.getByRole("region", { name: "Inference attempts" }),
+    );
     const responseDetails = within(
       currentSelection.getByRole("region", { name: "Response details" }),
     );
@@ -1129,8 +1130,13 @@ export const WorkstationRequestSelectionRejected = {
       ),
     ).toBeVisible();
     await expect(
-      responseDetails.getByText(
+      inferenceAttempts.getByText(
         "The active story needs revision before it can continue.",
+      ),
+    ).toBeVisible();
+    await expect(
+      responseDetails.getByText(
+        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
       ),
     ).toBeVisible();
     await expect(
@@ -1169,12 +1175,17 @@ export const WorkstationRequestSelectionErrored = {
       currentSelection.getAllByText("request-error-story").length,
     ).toBeGreaterThan(0);
     await expect(
+      currentSelection.getByRole("heading", { name: "Inference attempts" }),
+    ).toBeVisible();
+    await expect(
       currentSelection.getByText(
         "Review the blocked story and explain the failure.",
       ),
     ).toBeVisible();
     await expect(
-      currentSelection.getByRole("heading", { name: "Inference attempts" }),
+      currentSelection.getByText(
+        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
+      ),
     ).toBeVisible();
     expect(
       currentSelection.getAllByText("provider_rate_limit").length,
@@ -1182,16 +1193,6 @@ export const WorkstationRequestSelectionErrored = {
     await expect(
       errorDetails.getByText(
         "Provider rate limit exceeded while reviewing the story.",
-      ),
-    ).toBeVisible();
-    await expect(
-      currentSelection.getByText(
-        "Response text is unavailable because this workstation request ended with an error.",
-      ),
-    ).toBeVisible();
-    await expect(
-      currentSelection.getByText(
-        "Response metadata is unavailable because this workstation request ended with an error.",
       ),
     ).toBeVisible();
     expect(
@@ -1692,7 +1693,12 @@ export const FailureAnalysisEventReplaySmoke = {
       failedSelection.getAllByText("provider_rate_limit").length,
     ).toBeGreaterThan(0);
     await expect(
-      failedSelection.getByText(/codex \/ session_id \/ sess-blocked-analysis/),
+      failedSelection.getByText("No inference events are available for this selected work item."),
+    ).toBeVisible();
+    await expect(
+      failedSelection.getByText(
+        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
+      ),
     ).toBeVisible();
     expect(
       failedSelection.getAllByText(

@@ -2540,12 +2540,12 @@ describe("App", () => {
       verify: (currentSelection: HTMLElement) => {
         expect(
           within(currentSelection).getByText(
-            "Response text is not available for this workstation request yet.",
+            "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
           ),
         ).toBeTruthy();
         expect(
           within(currentSelection).getByText(
-            "Response metadata is not available for this workstation request yet.",
+            "No inference events are available for this selected work item.",
           ),
         ).toBeTruthy();
       },
