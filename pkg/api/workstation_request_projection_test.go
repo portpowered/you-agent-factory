@@ -303,6 +303,86 @@ func TestWorkstationDispatchViewFromCompletion_OmitsInferenceOwnedSummaryFields(
 	}
 }
 
+func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesPendingDispatchWithoutInferenceFallback(t *testing.T) {
+	workItem := interfaces.FactoryWorkItem{
+		ID:          "work-pending",
+		WorkTypeID:  "task",
+		DisplayName: "Pending story",
+		TraceID:     "trace-pending",
+		PlaceID:     "task:review",
+	}
+	state := interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			workItem.ID: workItem,
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-pending": {
+				DispatchID:   "dispatch-pending",
+				TransitionID: "review",
+				Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+				Provider:     "openai",
+				Model:        "gpt-5.4",
+				StartedAt:    time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC),
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID:  "token-pending",
+					PlaceID:  workItem.PlaceID,
+					WorkItem: &workItem,
+				}},
+				WorkItemIDs: []string{workItem.ID},
+				TraceIDs:    []string{workItem.TraceID},
+			},
+		},
+	}
+
+	slice := BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+	if slice.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("workstation request slice missing generated projection map")
+	}
+	view := (*slice.WorkstationRequestsByDispatchId)["dispatch-pending"]
+	if view.Response != nil {
+		t.Fatalf("pending response = %#v, want nil without script or inference response", view.Response)
+	}
+	if view.Counts.DispatchedCount != 0 || view.Counts.RespondedCount != 0 || view.Counts.ErroredCount != 0 {
+		t.Fatalf("pending counts = %#v, want zero inference/script counts before attempts exist", view.Counts)
+	}
+	if view.Request.InputWorkItems == nil || len(*view.Request.InputWorkItems) != 1 {
+		t.Fatalf("pending request input work items = %#v, want one dispatch-scoped work item", view.Request.InputWorkItems)
+	}
+	if view.Request.TraceIds == nil || len(*view.Request.TraceIds) != 1 || (*view.Request.TraceIds)[0] != "trace-pending" {
+		t.Fatalf("pending request trace ids = %#v, want [trace-pending]", view.Request.TraceIds)
+	}
+
+	encoded, err := json.Marshal(view)
+	if err != nil {
+		t.Fatalf("Marshal(view): %v", err)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatalf("Unmarshal(raw view): %v", err)
+	}
+	requestView, ok := raw["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("raw request view = %#v, want object", raw["request"])
+	}
+	for _, retiredKey := range []string{
+		"model",
+		"prompt",
+		"provider",
+		"request_metadata",
+		"request_time",
+		"working_directory",
+		"worktree",
+	} {
+		if value, exists := requestView[retiredKey]; exists {
+			t.Fatalf("raw request view unexpectedly carried retired inference field %q = %#v", retiredKey, value)
+		}
+	}
+	if value, exists := raw["response"]; exists {
+		t.Fatalf("raw view unexpectedly carried response block before attempts exist: %#v", value)
+	}
+}
+
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesScriptBackedDispatchDetails(t *testing.T) {
 	t0 := time.Date(2026, 4, 23, 9, 0, 0, 0, time.UTC)
 	workItem := interfaces.FactoryWorkItem{
