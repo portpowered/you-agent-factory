@@ -669,7 +669,7 @@ func buildTargetWorkflowNet(maxVisits int) (*agentstate.Net, error) {
 		},
 	}
 
-	agentstate.NormalizeTransitionTopology(net)
+	agentstate.NormalizeTransitionTopology(net, nil)
 
 	validator := validation.NewCompositeValidator(
 		&validation.ReachabilityValidator{},

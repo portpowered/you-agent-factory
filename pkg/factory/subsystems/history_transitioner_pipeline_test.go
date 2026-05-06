@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -95,7 +94,7 @@ func TestHistoryTransitionerPipeline_FailedRoutesUsingConsumedDispatchTokens(t *
 func TestHistoryTransitionerPipeline_FailedWithoutFailureArcs_UsesConsumedDispatchTokensForFallback(t *testing.T) {
 	n := buildPipelineNet()
 	n.Transitions["t1"].FailureArcs = nil
-	state.NormalizeTransitionTopology(n)
+	state.NormalizeTransitionTopology(n, nil)
 	tp := newTestPipeline(n)
 	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeFailed, Error: "agent crashed"})
 	createdAt := time.Date(2026, time.April, 6, 9, 0, 0, 0, time.UTC)
@@ -683,10 +682,8 @@ func buildPipelineNet() *state.Net {
 func buildRepeaterPipelineNet() *state.Net {
 	n := buildPipelineNet()
 	n.Transitions["t1"].RejectionArcs = nil
-	state.NormalizeTransitionTopology(n, runtimefixtures.RuntimeWorkstationLookupFixture{
-		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"t1": {Name: "t1", Kind: interfaces.WorkstationKindRepeater},
-		},
+	state.NormalizeTransitionTopology(n, map[string]interfaces.WorkstationKind{
+		"t1": interfaces.WorkstationKindRepeater,
 	})
 	return n
 }

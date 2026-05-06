@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
@@ -189,7 +188,6 @@ func TestConfigMapping_ValidationRejectsInvalidOnRejection(t *testing.T) {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -222,6 +220,7 @@ func TestConfigMapping_ValidationRejectsInvalidOnFailure(t *testing.T) {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -563,10 +562,10 @@ func TestConfigMapping_LowersFactoryInferenceThrottleGuardOnlyAcrossMatchingWork
 				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
 			},
 			{
-				Name: "logical-step",
-				Type: interfaces.WorkstationTypeLogical,
-				Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
-				Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+				Name:    "logical-step",
+				Type:    interfaces.WorkstationTypeLogical,
+				Inputs:  []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+				Outputs: []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
 			},
 		},
 	}
@@ -1928,6 +1927,7 @@ func TestConfigMapping_WorkstationTypeDefaultsToStandard(t *testing.T) {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -1955,8 +1955,11 @@ func TestConfigMapping_WorkstationTypeDefaultsToStandard(t *testing.T) {
 	if tr == nil {
 		t.Fatal("expected mapped transition for processor")
 	}
-	if len(tr.RejectionArcs) != 0 {
-		t.Fatalf("default standard workstation should not add rejection arcs, got %+v", tr.RejectionArcs)
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("default standard workstation should reject through failure routing, got %+v", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("default standard workstation should fail through failed-state routing, got %+v", tr.FailureArcs)
 	}
 }
 
@@ -1968,6 +1971,7 @@ func TestConfigMapping_WorkstationTypeExplicitStandard(t *testing.T) {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -1992,8 +1996,11 @@ func TestConfigMapping_WorkstationTypeExplicitStandard(t *testing.T) {
 	}
 
 	tr := net.Transitions["processor"]
-	if got := workstationconfig.Kind(tr, factoryConfigWorkstationLookup(input)); got != interfaces.WorkstationKindStandard {
-		t.Errorf("expected derived workstation kind %q, got %q", interfaces.WorkstationKindStandard, got)
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("explicit standard workstation should reject through failure routing, got %+v", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("explicit standard workstation should fail to task:failed, got %+v", tr.FailureArcs)
 	}
 }
 
@@ -2030,14 +2037,11 @@ func TestConfigMapping_WorkstationTypeRepeater(t *testing.T) {
 	}
 
 	tr := net.Transitions["processor"]
-	if got := workstationconfig.Kind(tr, factoryConfigWorkstationLookup(input)); got != interfaces.WorkstationKindRepeater {
-		t.Errorf("expected derived workstation kind %q, got %q", interfaces.WorkstationKindRepeater, got)
-	}
 	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:init" {
-		t.Errorf("expected auto rejection arc to task:init, got %+v", tr.RejectionArcs)
+		t.Fatalf("expected auto rejection arc to task:init, got %+v", tr.RejectionArcs)
 	}
 	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
-		t.Errorf("expected auto failure arc to task:failed, got %+v", tr.FailureArcs)
+		t.Fatalf("expected auto failure arc to task:failed, got %+v", tr.FailureArcs)
 	}
 }
 
@@ -2050,6 +2054,7 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 				States: []interfaces.StateConfig{
 					{Name: "init", Type: interfaces.StateTypeInitial},
 					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			},
 		},
@@ -2079,9 +2084,6 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	tr := net.Transitions["daily-refresh"]
 	if tr == nil {
 		t.Fatal("expected cron transition")
-	}
-	if got := workstationconfig.Kind(tr, factoryConfigWorkstationLookup(input)); got != interfaces.WorkstationKindCron {
-		t.Errorf("expected derived workstation kind %q, got %q", interfaces.WorkstationKindCron, got)
 	}
 	if len(tr.InputArcs) != 2 {
 		t.Fatalf("expected required cron input plus time input, got %+v", tr.InputArcs)
@@ -2133,6 +2135,12 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	}
 	if len(tr.OutputArcs) != 1 || tr.OutputArcs[0].PlaceID != "task:init" {
 		t.Fatalf("expected cron output to be preserved, got %+v", tr.OutputArcs)
+	}
+	if len(tr.RejectionArcs) != 1 || tr.RejectionArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("expected cron rejection to follow failure routing, got %+v", tr.RejectionArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("expected cron failure to route to task:failed, got %+v", tr.FailureArcs)
 	}
 }
 
