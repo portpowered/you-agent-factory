@@ -91,7 +91,7 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 	if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
-	assertGeneratedInitScaffoldCanonical(t, dir, "gpt-5-codex", "codex")
+	assertGeneratedInitScaffoldCanonical(t, dir, "codex")
 
 	// Step 2: Write a seed file into the generated preseed directory.
 	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "init factory e2e test"}`))
@@ -135,7 +135,7 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 	if calls[0].UserMessage == "" {
 		t.Error("expected non-empty user message from rendered workstations/process/AGENTS.md template")
 	}
-	assertInitProviderRequest(t, calls[0], "gpt-5-codex", "codex")
+	assertInitProviderRequest(t, calls[0], "", "codex")
 }
 
 func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
@@ -144,7 +144,7 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 	if err := initcmd.Init(initcmd.InitConfig{Dir: dir, Executor: "claude"}); err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
-	assertGeneratedInitScaffoldCanonical(t, dir, "claude-sonnet-4-20250514", "claude")
+	assertGeneratedInitScaffoldCanonical(t, dir, "claude")
 
 	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "claude init factory e2e test"}`))
 	assertCanonicalStarterInboxState(t, dir)
@@ -177,7 +177,7 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 	if len(calls) == 0 {
 		t.Fatal("expected at least 1 provider call")
 	}
-	assertInitProviderRequest(t, calls[0], "claude-sonnet-4-20250514", "claude")
+	assertInitProviderRequest(t, calls[0], "", "claude")
 }
 
 // TestInitFactory_FailureRouting verifies that the init-generated factory
@@ -279,7 +279,7 @@ func assertCanonicalStarterInboxState(t *testing.T, dir string) {
 	}
 }
 
-func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantModel, wantProvider string) {
+func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantProvider string) {
 	t.Helper()
 
 	factoryJSONBytes, err := os.ReadFile(filepath.Join(dir, "factory.json"))
@@ -323,7 +323,6 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantModel, wantProv
 	}
 	workerAgents := string(workerAgentsBytes)
 	for _, expected := range []string{
-		"model: " + wantModel,
 		"modelProvider: " + strings.ToUpper(wantProvider),
 		"executorProvider: SCRIPT_WRAP",
 		"skipPermissions: true",
@@ -338,5 +337,8 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantModel, wantProv
 		if strings.Contains(workerAgents, retired) {
 			t.Fatalf("generated worker AGENTS.md should not contain retired %q:\n%s", retired, workerAgents)
 		}
+	}
+	if strings.Contains(workerAgents, "model:") {
+		t.Fatalf("generated worker AGENTS.md should not contain a default model:\n%s", workerAgents)
 	}
 }
