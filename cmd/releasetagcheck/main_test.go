@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"os"
 	"testing"
@@ -120,6 +122,115 @@ func TestRunRequiresOneTagInput(t *testing.T) {
 		t.Fatalf("run() stdout = %q, want empty", got)
 	}
 	if got := stderr.String(); got != "provide -tag or -points-at\n" {
+		t.Fatalf("run() stderr = %q", got)
+	}
+}
+
+func TestRunPointsAtSuccess(t *testing.T) {
+	originalListGitTagsPointingAt := listGitTagsPointingAt
+	t.Cleanup(func() {
+		listGitTagsPointingAt = originalListGitTagsPointingAt
+	})
+
+	var gotRevision string
+	listGitTagsPointingAt = func(_ context.Context, revision string) ([]string, error) {
+		gotRevision = revision
+		return []string{"not-a-release-tag", "v1.2.3"}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-points-at", "HEAD"}, &stdout, &stderr)
+
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+	if gotRevision != "HEAD" {
+		t.Fatalf("lookup revision = %q, want %q", gotRevision, "HEAD")
+	}
+	if got := stdout.String(); got != "release_tag=v1.2.3\n" {
+		t.Fatalf("run() stdout = %q, want %q", got, "release_tag=v1.2.3\n")
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunPointsAtFailsWithoutSemverTag(t *testing.T) {
+	originalListGitTagsPointingAt := listGitTagsPointingAt
+	t.Cleanup(func() {
+		listGitTagsPointingAt = originalListGitTagsPointingAt
+	})
+
+	listGitTagsPointingAt = func(_ context.Context, revision string) ([]string, error) {
+		return []string{"build-123"}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-points-at", "HEAD"}, &stdout, &stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("run() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "expected exactly one semver release tag for HEAD, found []\n" {
+		t.Fatalf("run() stderr = %q", got)
+	}
+}
+
+func TestRunPointsAtFailsWithMultipleSemverTags(t *testing.T) {
+	originalListGitTagsPointingAt := listGitTagsPointingAt
+	t.Cleanup(func() {
+		listGitTagsPointingAt = originalListGitTagsPointingAt
+	})
+
+	listGitTagsPointingAt = func(_ context.Context, revision string) ([]string, error) {
+		return []string{"v1.2.4", "v1.2.3"}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-points-at", "HEAD"}, &stdout, &stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("run() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "expected exactly one semver release tag for HEAD, found [\"v1.2.3\" \"v1.2.4\"]\n" {
+		t.Fatalf("run() stderr = %q", got)
+	}
+}
+
+func TestRunPointsAtSurfacesGitFailure(t *testing.T) {
+	originalListGitTagsPointingAt := listGitTagsPointingAt
+	t.Cleanup(func() {
+		listGitTagsPointingAt = originalListGitTagsPointingAt
+	})
+
+	listGitTagsPointingAt = func(_ context.Context, revision string) ([]string, error) {
+		return nil, errors.New("list tags pointing at HEAD: exit status 1\nfatal: bad object HEAD")
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-points-at", "HEAD"}, &stdout, &stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("run() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "list tags pointing at HEAD: exit status 1\nfatal: bad object HEAD\n" {
 		t.Fatalf("run() stderr = %q", got)
 	}
 }
