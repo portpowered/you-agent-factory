@@ -63,13 +63,13 @@ func TestNamedFactoryAPI_RoundTripsPortableBundledFilesThroughCanonicalFactoryCo
 	})
 
 	created := createNamedFactoryFromBody(t, server.URL(), "beta", "beta-task", functionalNamedFactoryBodyWithBundledFiles("beta", "beta-task"))
-	assertFunctionalNamedFactoryBundledFiles(t, created, "created response")
+	assertFunctionalNamedFactoryBundledFilesWithoutInlineScriptsAndDocs(t, created, "created response")
 
 	current := getNamedFactoryCurrent(t, server.URL())
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
-	assertFunctionalNamedFactoryBundledFiles(t, current, "current response")
+	assertFunctionalNamedFactoryBundledFilesWithInlineScriptsAndDocs(t, current, "current response")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertFunctionalPortableFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
@@ -184,7 +184,7 @@ func functionalNamedFactoryPayloadJSON(name, workType string) string {
 	}`
 }
 
-func assertFunctionalNamedFactoryBundledFiles(t *testing.T, namedFactory factoryapi.Factory, contextLabel string) {
+func assertFunctionalNamedFactoryBundledFilesWithoutInlineScriptsAndDocs(t *testing.T, namedFactory factoryapi.Factory, contextLabel string) {
 	t.Helper()
 
 	if namedFactory.SupportingFiles == nil || namedFactory.SupportingFiles.BundledFiles == nil {
@@ -197,6 +197,21 @@ func assertFunctionalNamedFactoryBundledFiles(t *testing.T, namedFactory factory
 	assertFunctionalBundledFileEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n", contextLabel)
 	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", contextLabel)
 	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", contextLabel)
+}
+
+func assertFunctionalNamedFactoryBundledFilesWithInlineScriptsAndDocs(t *testing.T, namedFactory factoryapi.Factory, contextLabel string) {
+	t.Helper()
+
+	if namedFactory.SupportingFiles == nil || namedFactory.SupportingFiles.BundledFiles == nil {
+		t.Fatalf("%s supportingFiles = %#v, want bundled files", contextLabel, namedFactory.SupportingFiles)
+	}
+	bundledFiles := *namedFactory.SupportingFiles.BundledFiles
+	if len(bundledFiles) != 3 {
+		t.Fatalf("%s bundled files = %#v, want 3 entries", contextLabel, bundledFiles)
+	}
+	assertFunctionalBundledFileEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n", contextLabel)
+	assertFunctionalBundledFileEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n", contextLabel)
+	assertFunctionalBundledFileEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n", contextLabel)
 }
 
 func assertFunctionalBundledFileEntry(

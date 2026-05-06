@@ -9,11 +9,19 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
+)
+
+const (
+	exportImportPortableMakefilePath = "Makefile"
+	exportImportPortableMakefileBody = "test:\n\tgo test ./...\n"
+	exportImportPortableDocPath      = "factory/docs/README.md"
+	exportImportPortableDocBody      = "# Portable factory\n"
+	exportImportPortableScriptPath   = "factory/scripts/execute-story.ps1"
+	exportImportPortableScriptBody   = "Write-Output 'portable script'\n"
 )
 
 type exportImportFixtureExpectations struct {
@@ -35,27 +43,15 @@ func newExportImportFixture(t *testing.T) exportImportFixture {
 
 	authoredFactoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 
-	loaded, err := config.LoadRuntimeConfig(authoredFactoryDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig(%s): %v", authoredFactoryDir, err)
-	}
-
 	canonicalFactoryJSON, err := config.FlattenFactoryConfig(authoredFactoryDir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(%s): %v", authoredFactoryDir, err)
 	}
+	canonicalFactoryJSON = withExportImportPortableBundledFiles(t, canonicalFactoryJSON)
 
 	flattenedFactory, err := config.GeneratedFactoryFromOpenAPIJSON(canonicalFactoryJSON)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(flattened): %v", err)
-	}
-
-	generatedExportFactory, err := replay.GeneratedFactoryFromLoadedConfig(
-		loaded,
-		replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
-	)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
 
 	return exportImportFixture{
@@ -63,8 +59,52 @@ func newExportImportFixture(t *testing.T) exportImportFixture {
 		CanonicalFactoryJSON:  canonicalFactoryJSON,
 		Expected:              buildExportImportFixtureExpectations(t, flattenedFactory),
 		FlattenedFactory:      flattenedFactory,
-		GeneratedExportFactor: generatedExportFactory,
+		GeneratedExportFactor: flattenedFactory,
 	}
+}
+
+func withExportImportPortableBundledFiles(t *testing.T, canonicalFactoryJSON []byte) []byte {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(canonicalFactoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(canonical export/import fixture): %v", err)
+	}
+
+	payload["supportingFiles"] = map[string]any{
+		"bundledFiles": []map[string]any{
+			{
+				"type":       "ROOT_HELPER",
+				"targetPath": exportImportPortableMakefilePath,
+				"content": map[string]any{
+					"encoding": "utf-8",
+					"inline":   exportImportPortableMakefileBody,
+				},
+			},
+			{
+				"type":       "DOC",
+				"targetPath": exportImportPortableDocPath,
+				"content": map[string]any{
+					"encoding": "utf-8",
+					"inline":   exportImportPortableDocBody,
+				},
+			},
+			{
+				"type":       "SCRIPT",
+				"targetPath": exportImportPortableScriptPath,
+				"content": map[string]any{
+					"encoding": "utf-8",
+					"inline":   exportImportPortableScriptBody,
+				},
+			},
+		},
+	}
+
+	updated, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal(canonical export/import fixture with bundled files): %v", err)
+	}
+	return updated
 }
 
 func buildExportImportFixtureExpectations(

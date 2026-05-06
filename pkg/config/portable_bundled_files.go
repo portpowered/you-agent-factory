@@ -21,7 +21,10 @@ var portableBundledRootHelperFiles = []string{"Makefile"}
 
 var portableBundledFactoryRootHelperFiles = []string{"portable-dependencies.json"}
 
-func applySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool) error {
+// ApplySupportedPortableBundledFiles merges supported portable bundled files
+// discovered on disk into cfg, optionally inlining file content for API/export
+// callers that need a self-contained manifest.
+func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool) error {
 	if cfg == nil {
 		return nil
 	}
