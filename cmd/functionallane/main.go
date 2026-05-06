@@ -20,18 +20,30 @@ type config struct {
 	timeout time.Duration
 }
 
+var executeFunctionalLane = run
+var execCommand = exec.Command
+
 func main() {
+	if err := executeFunctionalLane(); err != nil {
+		failf("%v\n", err)
+	}
+}
+
+func run() error {
 	cfg := parseConfig()
 	pkgs, err := discoverPackages(cfg.root)
 	if err != nil {
-		failf("discover functional packages: %v\n", err)
+		return fmt.Errorf("discover functional packages: %w", err)
 	}
 	if len(pkgs) == 0 {
-		failf("discover functional packages: no test packages found under %s\n", cfg.root)
+		return fmt.Errorf("discover functional packages: no test packages found under %s", cfg.root)
 	}
+
 	if err := runFunctionalTests(cfg, pkgs); err != nil {
-		failf("run functional lane: %v\n", err)
+		return fmt.Errorf("run functional lane: %w", err)
 	}
+
+	return nil
 }
 
 func parseConfig() config {
@@ -50,7 +62,7 @@ func parseConfig() config {
 
 func discoverPackages(root string) ([]string, error) {
 	args := []string{"list", root}
-	cmd := exec.Command("go", args...)
+	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -83,7 +95,7 @@ func runFunctionalTests(cfg config, pkgs []string) error {
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 
-	cmd := exec.Command("go", args...)
+	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
