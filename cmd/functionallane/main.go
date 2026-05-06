@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -22,6 +23,8 @@ type config struct {
 
 var executeFunctionalLane = run
 var execCommand = exec.Command
+var stderrWriter io.Writer = os.Stderr
+var exitFunc = os.Exit
 
 func main() {
 	if err := executeFunctionalLane(); err != nil {
@@ -103,6 +106,6 @@ func runFunctionalTests(cfg config, pkgs []string) error {
 }
 
 func failf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format, args...)
-	os.Exit(1)
+	fmt.Fprintf(stderrWriter, format, args...)
+	exitFunc(1)
 }

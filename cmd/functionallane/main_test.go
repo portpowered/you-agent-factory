@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -27,6 +28,63 @@ func TestMainExecutesFunctionalLane(t *testing.T) {
 
 	if !called {
 		t.Fatal("main() did not execute the functional lane entrypoint")
+	}
+}
+
+func TestMainRoutesCommandFailureThroughFailf(t *testing.T) {
+	originalExecute := executeFunctionalLane
+	originalStderr := stderrWriter
+	originalExit := exitFunc
+	t.Cleanup(func() {
+		executeFunctionalLane = originalExecute
+		stderrWriter = originalStderr
+		exitFunc = originalExit
+	})
+
+	var stderr bytes.Buffer
+	var exitCode int
+
+	executeFunctionalLane = func() error {
+		return fmt.Errorf("functional lane failed")
+	}
+	stderrWriter = &stderr
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+
+	main()
+
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if got := stderr.String(); got != "functional lane failed\n" {
+		t.Fatalf("main() stderr = %q, want %q", got, "functional lane failed\n")
+	}
+}
+
+func TestFailfWritesFormattedErrorAndExits(t *testing.T) {
+	originalStderr := stderrWriter
+	originalExit := exitFunc
+	t.Cleanup(func() {
+		stderrWriter = originalStderr
+		exitFunc = originalExit
+	})
+
+	var stderr bytes.Buffer
+	var exitCode int
+
+	stderrWriter = &stderr
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+
+	failf("failed package %s (%d)\n", "runtime_api", 2)
+
+	if exitCode != 1 {
+		t.Fatalf("failf() exit code = %d, want 1", exitCode)
+	}
+	if got := stderr.String(); got != "failed package runtime_api (2)\n" {
+		t.Fatalf("failf() stderr = %q, want %q", got, "failed package runtime_api (2)\n")
 	}
 }
 
