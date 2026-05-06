@@ -87,21 +87,20 @@ func TestResolveCoverageLaneOverrides(t *testing.T) {
 	}
 }
 
-func TestEvaluateCoverageFlagsZeroCoverageBackendPackages(t *testing.T) {
+func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := filepath.Clean(t.TempDir())
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
-		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
 		"",
 	}, "\n"))
 
 	result, totalLine, err := evaluateCoverage(
-		"github.com/portpowered/infinite-you/pkg/config\t\tcoverage: 0.0% of statements\n"+
-			"total: (statements) 82.5%\n",
+		"total: (statements) 82.5%\n",
+		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -127,6 +126,37 @@ func TestEvaluateCoverageFlagsZeroCoverageBackendPackages(t *testing.T) {
 	}
 }
 
+func TestEvaluateCoverageFlagsBackendPackagesPresentWithZeroCoverage(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+		"",
+	}, "\n"))
+
+	result, _, err := evaluateCoverage(
+		"total: (statements) 81.0%\n",
+		"",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	wantZeroCoverage := []string{modulePath + "/pkg/config"}
+	if !slices.Equal(result.zeroCoveragePackages, wantZeroCoverage) {
+		t.Fatalf("zero coverage packages = %v, want %v", result.zeroCoveragePackages, wantZeroCoverage)
+	}
+}
+
 func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 	t.Parallel()
 
@@ -141,6 +171,8 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
+		modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/testutil/runtimefixtures\t\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -177,6 +209,7 @@ func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 
 	result, _, err := evaluateCoverage(
 		"total: (statements) 80.0%\n",
+		"",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -256,7 +289,7 @@ func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 	if !strings.Contains(got, wantFailure) {
 		t.Fatalf("main() output = %q, want zero-coverage failure %q", got, wantFailure)
 	}
-	if strings.Contains(got, modulePath+"/pkg/generatedclient") {
+	if strings.Contains(got, wantFailure+", "+modulePath+"/pkg/generatedclient") {
 		t.Fatalf("main() output = %q, did not expect excluded package in zero-coverage failure", got)
 	}
 }
@@ -282,7 +315,6 @@ func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 		}
 		profile := strings.Join([]string{
 			"mode: count",
-			modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
 			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 			modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
 			"",
@@ -291,10 +323,14 @@ func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 			fmt.Fprintf(os.Stderr, "write fake profile: %v", err)
 			os.Exit(2)
 		}
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+				modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n",
+		)
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
 		fmt.Fprint(os.Stdout,
-			modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/service/factory.go:1.1,2.1\t80.0%\n"+
 				"total: (statements) 82.5%\n",
 		)
 		os.Exit(0)
@@ -321,8 +357,7 @@ func fakeGoCoverageCommand(name string, args ...string) *exec.Cmd {
 	}
 
 	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcess", "--", name}, args...)
-	cmd := exec.Command(testBinary, cmdArgs...)
-	return cmd
+	return exec.Command(testBinary, cmdArgs...)
 }
 
 func helperCommandArgs(argv []string) ([]string, bool) {
