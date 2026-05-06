@@ -317,10 +317,12 @@ func evaluateCoverage(report string, profilePath string, repoRoot string, coverP
 	if err != nil {
 		return coverageResult{}, "", err
 	}
+
 	zeroCoveragePackages, err := findZeroCoveragePackages(profilePath, repoRoot, coverPackages)
 	if err != nil {
 		return coverageResult{}, "", err
 	}
+
 	return coverageResult{
 		actual:               actual,
 		zeroCoveragePackages: zeroCoveragePackages,
@@ -349,10 +351,9 @@ func findZeroCoveragePackages(profilePath string, repoRoot string, coverPackages
 		seen[coverPackage] = struct{}{}
 
 		totals, ok := packageTotals[coverPackage]
-		if !ok || totals.totalStatements == 0 || totals.coveredStatements > 0 {
-			continue
+		if !ok || totals.coveredStatements == 0 {
+			zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
 		}
-		zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
 	}
 	slices.Sort(zeroCoveragePackages)
 	return zeroCoveragePackages, nil

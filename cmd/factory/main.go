@@ -3,6 +3,8 @@ package main
 
 import "github.com/portpowered/infinite-you/pkg/cli"
 
+var executeCLI = cli.Execute
+
 func main() {
-	cli.Execute()
+	executeCLI()
 }

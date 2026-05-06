@@ -87,21 +87,19 @@ func TestResolveCoverageLaneOverrides(t *testing.T) {
 	}
 }
 
-func TestEvaluateCoverageFlagsZeroCoverageBackendPackages(t *testing.T) {
+func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := filepath.Clean(t.TempDir())
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
-		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
 		"",
 	}, "\n"))
 
 	result, totalLine, err := evaluateCoverage(
-		"github.com/portpowered/infinite-you/pkg/config\t\tcoverage: 0.0% of statements\n"+
-			"total: (statements) 82.5%\n",
+		"total: (statements) 82.5%\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -127,24 +125,52 @@ func TestEvaluateCoverageFlagsZeroCoverageBackendPackages(t *testing.T) {
 	}
 }
 
+func TestEvaluateCoverageFlagsBackendPackagesPresentWithZeroCoverage(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+		"",
+	}, "\n"))
+
+	result, _, err := evaluateCoverage(
+		"total: (statements) 81.0%\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	wantZeroCoverage := []string{modulePath + "/pkg/config"}
+	if !slices.Equal(result.zeroCoveragePackages, wantZeroCoverage) {
+		t.Fatalf("zero coverage packages = %v, want %v", result.zeroCoveragePackages, wantZeroCoverage)
+	}
+}
+
 func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := filepath.Clean(t.TempDir())
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
-		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
 		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
 
-	result, totalLine, err := evaluateCoverage(
+	result, _, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
 		profilePath,
 		repoRoot,
 		[]string{
-			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
@@ -153,12 +179,6 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
-	if result.actual != 81.0 {
-		t.Fatalf("actual coverage = %v, want 81.0", result.actual)
-	}
-	if totalLine != "total: (statements) 81.0%" {
-		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 81.0%")
-	}
 	if len(result.zeroCoveragePackages) != 0 {
 		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
 	}
@@ -282,7 +302,6 @@ func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 		}
 		profile := strings.Join([]string{
 			"mode: count",
-			modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
 			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 			modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
 			"",
@@ -293,10 +312,7 @@ func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 		}
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
-		fmt.Fprint(os.Stdout,
-			modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
-				"total: (statements) 82.5%\n",
-		)
+		fmt.Fprint(os.Stdout, "total: (statements) 82.5%\n")
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
@@ -321,8 +337,7 @@ func fakeGoCoverageCommand(name string, args ...string) *exec.Cmd {
 	}
 
 	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcess", "--", name}, args...)
-	cmd := exec.Command(testBinary, cmdArgs...)
-	return cmd
+	return exec.Command(testBinary, cmdArgs...)
 }
 
 func helperCommandArgs(argv []string) ([]string, bool) {
