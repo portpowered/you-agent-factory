@@ -66,7 +66,7 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 			Content: "model review complete. COMPLETE",
 		}},
 	})
-	runner := newRecordingCommandRunner("script dispatch complete")
+	runner := support.NewRecordingCommandRunner("script dispatch complete")
 	harness := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithCommandRunner(runner),

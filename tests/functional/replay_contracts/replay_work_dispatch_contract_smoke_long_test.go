@@ -170,7 +170,7 @@ func runRecordedWorkDispatchContractSmoke(t *testing.T, scenario dispatchContrac
 		}
 	})
 
-	runner := newRecordingCommandRunner(scenario.commandOutput)
+	runner := support.NewRecordingCommandRunner(scenario.commandOutput)
 	harness := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithCommandRunner(runner),
