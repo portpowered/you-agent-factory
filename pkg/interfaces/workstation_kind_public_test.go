@@ -43,6 +43,48 @@ func TestGeneratedPublicWorkstationKind(t *testing.T) {
 	}
 }
 
+func TestStrictPublicWorkstationKind(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "canonical public standard kind",
+			input: publicFactoryWorkstationKindStandard,
+			want:  publicFactoryWorkstationKindStandard,
+		},
+		{
+			name:  "trimmed public repeater",
+			input: "  REPEATER  ",
+			want:  publicFactoryWorkstationKindRepeater,
+		},
+		{
+			name:  "internal lowercase kind rejected",
+			input: string(WorkstationKindCron),
+			want:  "",
+		},
+		{
+			name:  "unknown kind rejected",
+			input: "custom-kind",
+			want:  "",
+		},
+		{
+			name:  "whitespace only rejected",
+			input: "   ",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StrictPublicWorkstationKind(tt.input); got != tt.want {
+				t.Fatalf("StrictPublicWorkstationKind(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGeneratedPublicWorkstationKindPtr(t *testing.T) {
 	if got := GeneratedPublicWorkstationKindPtr(WorkstationKind("   ")); got != nil {
 		t.Fatalf("GeneratedPublicWorkstationKindPtr returned %#v, want nil for whitespace-only input", got)
