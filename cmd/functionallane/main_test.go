@@ -200,6 +200,53 @@ func TestRunExecutesDiscoveredFunctionalPackagesWithParsedConfig(t *testing.T) {
 	}
 }
 
+func TestRunWrapsDiscoveryFailures(t *testing.T) {
+	restoreExecCommand(t)
+	restoreArgsAndFlags(t)
+
+	execCommand = fakeFunctionalLaneCommand
+	os.Args = []string{"functionallane"}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_FAIL", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDERR", "list failed")
+
+	err := run()
+	if err == nil {
+		t.Fatal("run() unexpectedly succeeded")
+	}
+
+	want := "discover functional packages: exit status 2\nlist failed"
+	if err.Error() != want {
+		t.Fatalf("run() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestRunWrapsFunctionalTestExecutionFailures(t *testing.T) {
+	restoreExecCommand(t)
+	restoreArgsAndFlags(t)
+
+	execCommand = fakeFunctionalLaneCommand
+	os.Args = []string{"functionallane"}
+	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
+
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", "github.com/portpowered/infinite-you/tests/functional/runtime_api")
+	t.Setenv("FUNCTIONALLANE_HELPER_TEST_FAIL", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_TEST_STDERR", "go test failed")
+
+	err := run()
+	if err == nil {
+		t.Fatal("run() unexpectedly succeeded")
+	}
+
+	want := "run functional lane: exit status 2"
+	if err.Error() != want {
+		t.Fatalf("run() error = %q, want %q", err.Error(), want)
+	}
+}
+
 func TestRunFunctionalTestsBuildsGoTestInvocation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -297,7 +344,12 @@ func TestFunctionallaneFakeGoProcess(t *testing.T) {
 				os.Exit(2)
 			}
 		}
-		os.Exit(0)
+		fmt.Fprint(os.Stderr, os.Getenv("FUNCTIONALLANE_HELPER_TEST_STDERR"))
+		exitCode := 0
+		if os.Getenv("FUNCTIONALLANE_HELPER_TEST_FAIL") == "1" {
+			exitCode = 2
+		}
+		os.Exit(exitCode)
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
 		os.Exit(2)
