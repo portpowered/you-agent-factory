@@ -5,7 +5,7 @@ import type {
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import {
   formatList,

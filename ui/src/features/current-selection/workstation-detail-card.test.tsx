@@ -6,7 +6,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import {
   buildDashboardWorkstationRequestFixture,
   dashboardWorkstationRequestFixtures,
@@ -758,4 +758,3 @@ describe("WorkstationDetailCard", () => {
     expect(sessionMetadata.className).toContain(DASHBOARD_BODY_CODE_CLASS);
   });
 });
-

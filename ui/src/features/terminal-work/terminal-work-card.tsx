@@ -11,7 +11,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
@@ -234,4 +234,3 @@ function renderTerminalWorkContext(item: TerminalWorkItem, status: TerminalWorkS
     </span>
   );
 }
-

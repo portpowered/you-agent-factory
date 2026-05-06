@@ -6,7 +6,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS } from "../../components/dashboard/widget-board";
 
 const DIALOG_OVERLAY_CLASS =
@@ -175,4 +175,3 @@ export function DashboardMessagePanel({
     </div>
   );
 }
-

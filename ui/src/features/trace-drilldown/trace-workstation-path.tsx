@@ -20,7 +20,7 @@ import { cx } from "../../lib/cx";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import {
   formatTraceOutcome,
   formatTypedWorkItemLabel,
@@ -437,4 +437,3 @@ function outcomeToneClassName(outcome: string | undefined): string {
       return "border-af-overlay/12 bg-af-canvas";
   }
 }
-

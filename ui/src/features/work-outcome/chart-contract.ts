@@ -1,5 +1,5 @@
 import { cx } from "../../lib/cx";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/dashboard/typography";
+import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
 
 export type DashboardChartSemanticRole =
   | "queued"
@@ -132,4 +132,3 @@ export function getDashboardWorkChartSeriesDefinitions<
     ...getDashboardWorkChartSeriesStyle(definition.key),
   }));
 }
-

@@ -5,7 +5,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "./typography";
+} from "../../components/ui/dashboard-typography";
 import type { DashboardProviderSessionAttempt } from "../../api/dashboard/types";
 
 const failedAttempt: DashboardProviderSessionAttempt = {
@@ -141,4 +141,3 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(screen.getByText("No failed work recorded yet.")).toBeTruthy();
   });
 });
-

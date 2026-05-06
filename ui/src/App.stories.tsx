@@ -13,7 +13,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "./components/dashboard";
+} from "./components/ui/dashboard-typography";
 import {
   dashboardWorkstationRequestFixtures,
   failureAnalysisTimelineEvents,

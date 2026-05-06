@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/dashboard/typography";
+import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { StateNodeDetailCard } from "./state-node-detail";
 
@@ -231,4 +231,3 @@ describe("StateNodeDetailCard", () => {
     });
   });
 });
-

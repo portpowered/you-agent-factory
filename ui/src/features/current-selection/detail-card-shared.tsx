@@ -9,7 +9,7 @@ import {
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import type { ExecutionDetailValue, ModelDetailValue } from "./state/executionDetails";
 import type {
@@ -422,4 +422,3 @@ function stableListKeys(items: string[]): Array<{ item: string; key: string }> {
     };
   });
 }
-

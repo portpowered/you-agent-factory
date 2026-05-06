@@ -11,7 +11,7 @@ import {
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "../../components/dashboard/typography";
+} from "../../components/ui/dashboard-typography";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
@@ -364,4 +364,3 @@ function resolveTraceWorkItems(trace: DashboardTrace): DashboardWorkItemRef[] {
 
   return [...itemsByID.values()].sort((left, right) => left.work_id.localeCompare(right.work_id));
 }
-
