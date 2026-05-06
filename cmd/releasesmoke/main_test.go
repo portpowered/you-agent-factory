@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"testing"
@@ -94,5 +95,127 @@ func TestRunForwardsParsedConfigToHarness(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunSuccessWritesStructuredJSONToStdout(t *testing.T) {
+	originalRunReleaseSmoke := runReleaseSmoke
+	t.Cleanup(func() {
+		runReleaseSmoke = originalRunReleaseSmoke
+	})
+
+	wantResult := releasesmoke.Result{
+		BaseURL:            "http://127.0.0.1:7777",
+		DashboardURL:       "http://127.0.0.1:7777/dashboard",
+		WorkspacePath:      "C:/tmp/releasesmoke-workspace",
+		ObservedEventTypes: []string{"factory.started", "work.completed"},
+	}
+	runReleaseSmoke = func(_ context.Context, cfg releasesmoke.Config) (releasesmoke.Result, error) {
+		return wantResult, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-binary", "dist/factory", "-fixture", "testdata/fixture", "-timeout", "45s"}, &stdout, &stderr)
+
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+
+	var got releasesmoke.Result
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("run() stdout JSON decode error = %v\noutput:\n%s", err, stdout.String())
+	}
+	if got.BaseURL != wantResult.BaseURL {
+		t.Fatalf("run() stdout baseUrl = %q, want %q", got.BaseURL, wantResult.BaseURL)
+	}
+	if got.DashboardURL != wantResult.DashboardURL {
+		t.Fatalf("run() stdout dashboardUrl = %q, want %q", got.DashboardURL, wantResult.DashboardURL)
+	}
+	if got.WorkspacePath != wantResult.WorkspacePath {
+		t.Fatalf("run() stdout workspacePath = %q, want %q", got.WorkspacePath, wantResult.WorkspacePath)
+	}
+	if len(got.ObservedEventTypes) != len(wantResult.ObservedEventTypes) {
+		t.Fatalf("run() stdout observedEventTypes len = %d, want %d", len(got.ObservedEventTypes), len(wantResult.ObservedEventTypes))
+	}
+	for index, wantType := range wantResult.ObservedEventTypes {
+		if got.ObservedEventTypes[index] != wantType {
+			t.Fatalf("run() stdout observedEventTypes[%d] = %q, want %q", index, got.ObservedEventTypes[index], wantType)
+		}
+	}
+	if stdout.String() == "" || stdout.String()[0] != '{' {
+		t.Fatalf("run() stdout = %q, want JSON object output", stdout.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte("\n  \"baseUrl\": ")) {
+		t.Fatalf("run() stdout = %q, want indented JSON field", stdout.String())
+	}
+}
+
+func TestRunFailureWritesStructuredJSONToStderrAndReturnsNonZero(t *testing.T) {
+	originalRunReleaseSmoke := runReleaseSmoke
+	t.Cleanup(func() {
+		runReleaseSmoke = originalRunReleaseSmoke
+	})
+
+	wantFailure := &releasesmoke.Failure{
+		Phase:              "verify_events",
+		Message:            "timed out waiting for work.completed",
+		BinaryPath:         "dist/factory",
+		FixturePath:        "testdata/fixture",
+		BaseURL:            "http://127.0.0.1:7777",
+		DashboardURL:       "http://127.0.0.1:7777/dashboard",
+		WorkspacePath:      "C:/tmp/releasesmoke-workspace",
+		ObservedEventTypes: []string{"factory.started"},
+	}
+	runReleaseSmoke = func(_ context.Context, cfg releasesmoke.Config) (releasesmoke.Result, error) {
+		return releasesmoke.Result{}, wantFailure
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-binary", "dist/factory", "-fixture", "testdata/fixture", "-timeout", "45s"}, &stdout, &stderr)
+
+	if exitCode == 0 {
+		t.Fatalf("run() exit code = %d, want non-zero", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+
+	var got releasesmoke.Failure
+	if err := json.Unmarshal(stderr.Bytes(), &got); err != nil {
+		t.Fatalf("run() stderr JSON decode error = %v\noutput:\n%s", err, stderr.String())
+	}
+	if got.Phase != wantFailure.Phase {
+		t.Fatalf("run() stderr phase = %q, want %q", got.Phase, wantFailure.Phase)
+	}
+	if got.Message != wantFailure.Message {
+		t.Fatalf("run() stderr message = %q, want %q", got.Message, wantFailure.Message)
+	}
+	if got.BinaryPath != wantFailure.BinaryPath {
+		t.Fatalf("run() stderr binaryPath = %q, want %q", got.BinaryPath, wantFailure.BinaryPath)
+	}
+	if got.FixturePath != wantFailure.FixturePath {
+		t.Fatalf("run() stderr fixturePath = %q, want %q", got.FixturePath, wantFailure.FixturePath)
+	}
+	if got.BaseURL != wantFailure.BaseURL {
+		t.Fatalf("run() stderr baseUrl = %q, want %q", got.BaseURL, wantFailure.BaseURL)
+	}
+	if got.DashboardURL != wantFailure.DashboardURL {
+		t.Fatalf("run() stderr dashboardUrl = %q, want %q", got.DashboardURL, wantFailure.DashboardURL)
+	}
+	if got.WorkspacePath != wantFailure.WorkspacePath {
+		t.Fatalf("run() stderr workspacePath = %q, want %q", got.WorkspacePath, wantFailure.WorkspacePath)
+	}
+	if len(got.ObservedEventTypes) != 1 || got.ObservedEventTypes[0] != "factory.started" {
+		t.Fatalf("run() stderr observedEventTypes = %v, want [factory.started]", got.ObservedEventTypes)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("\n  \"phase\": ")) {
+		t.Fatalf("run() stderr = %q, want indented JSON field", stderr.String())
 	}
 }
