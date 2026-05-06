@@ -19,7 +19,7 @@ func TestScriptExecutor_Success(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 	)
 
 	h.RunUntilComplete(t, 5*time.Second)
@@ -55,7 +55,7 @@ func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(successRunner("new-payload")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("new-payload")),
 	)
 
 	h.RunUntilComplete(t, 5*time.Second)
@@ -91,7 +91,7 @@ func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(successRunner("success-output")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("success-output")),
 	)
 
 	h.RunUntilComplete(t, 5*time.Second)
@@ -207,7 +207,7 @@ func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(successRunner("output")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("output")),
 	)
 
 	h.RunUntilComplete(t, 5*time.Second)
@@ -440,7 +440,7 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 
 		h := testutil.NewServiceTestHarness(t, dir,
 			testutil.WithFullWorkerPoolAndScriptWrap(),
-			testutil.WithCommandRunner(successRunner("template-case-ok")),
+			testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("template-case-ok")),
 		)
 
 		h.RunUntilComplete(t, 10*time.Second)
@@ -459,7 +459,7 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 
 		h := testutil.NewServiceTestHarness(t, dir,
 			testutil.WithFullWorkerPoolAndScriptWrap(),
-			testutil.WithCommandRunner(successRunner("payload-only-ok")),
+			testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("payload-only-ok")),
 		)
 
 		h.RunUntilComplete(t, 10*time.Second)
@@ -477,7 +477,7 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 
 		h := testutil.NewServiceTestHarness(t, dir,
 			testutil.WithFullWorkerPoolAndScriptWrap(),
-			testutil.WithCommandRunner(successRunner("empty-input-ok")),
+			testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("empty-input-ok")),
 		)
 
 		if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{

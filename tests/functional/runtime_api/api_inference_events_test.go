@@ -62,7 +62,7 @@ func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
 		Payload:    []byte("script input"),
 	})
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
@@ -981,20 +981,6 @@ func functionalProviderSessionByDispatchID(
 	}
 	t.Fatalf("provider sessions = %#v, want dispatch %q", sessions, dispatchID)
 	return interfaces.FactoryWorldProviderSessionRecord{}
-}
-
-type fakeCommandRunner struct {
-	stdout   string
-	stderr   string
-	exitCode int
-}
-
-func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
-}
-
-func successRunner(stdout string) workers.CommandRunner {
-	return &fakeCommandRunner{stdout: stdout, exitCode: 0}
 }
 
 func sliceValue[T any](values *[]T) []T {

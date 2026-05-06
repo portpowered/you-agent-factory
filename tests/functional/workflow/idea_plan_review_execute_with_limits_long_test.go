@@ -31,7 +31,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnScriptExecution(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
@@ -66,7 +66,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnIdeation(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
@@ -104,7 +104,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorDueToRepeatingTooMuch(t *
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
@@ -145,7 +145,7 @@ func TestIdeaPlanExecuteReviewWithLimitsFailsOnExecutorFullPass(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
@@ -189,7 +189,7 @@ func TestIdeaPlanExecuteReviewWithLimits_TraceLineageAndOutcomes(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(successRunner("script-output-ok")),
+		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
