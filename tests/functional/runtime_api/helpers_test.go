@@ -2,7 +2,6 @@ package runtime_api
 
 import (
 	"context"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -13,11 +12,7 @@ import (
 )
 
 type functionalAPIServer struct {
-	httpSrv *httptest.Server
 	factory apisurface.APISurface
-	service *service.FactoryService
-	cancel  context.CancelFunc
-	done    <-chan struct{}
 	*support.FunctionalAPIServer
 }
 
@@ -80,16 +75,6 @@ func startFunctionalServerWithConfig(
 		ExtraOptions:              extraOpts,
 		CaptureAPISurface: func(surface apisurface.APISurface) {
 			runtimeFactory = surface
-		},
-		CaptureService: func(svc *service.FactoryService) {
-			server.service = svc
-		},
-		CaptureHTTPServer: func(httpSrv *httptest.Server) {
-			server.httpSrv = httpSrv
-		},
-		CaptureShutdown: func(cancel context.CancelFunc, done <-chan struct{}) {
-			server.cancel = cancel
-			server.done = done
 		},
 	})
 	server.factory = runtimeFactory

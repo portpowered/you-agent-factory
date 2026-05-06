@@ -1077,10 +1077,7 @@ func (fs *functionalAPIServer) GetDashboard(t *testing.T) DashboardResponse {
 	t.Helper()
 
 	snapshot := fs.GetEngineStateSnapshot(t)
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("get factory events: %v", err)
-	}
+	events := fs.GetFactoryEvents(t)
 	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("reconstruct world state: %v", err)

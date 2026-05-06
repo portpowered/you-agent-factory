@@ -1,7 +1,6 @@
 package runtime_api
 
 import (
-	"context"
 	"sort"
 	"testing"
 	"time"
@@ -113,10 +112,7 @@ func waitForRuntimeAPIWorkRequestEvent(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		events, err := server.service.GetFactoryEvents(context.Background())
-		if err != nil {
-			t.Fatalf("GetFactoryEvents: %v", err)
-		}
+		events := server.GetFactoryEvents(t)
 		for _, event := range events {
 			if event.Type == factoryapi.FactoryEventTypeWorkRequest &&
 				support.StringPointerValue(event.Context.RequestId) == requestID {

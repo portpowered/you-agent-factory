@@ -136,17 +136,12 @@ func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayRea
 	}
 
 	select {
-	case <-server.done:
+	case <-server.Done():
 		t.Fatal("service-mode runtime exited after returning to idle; expected it to stay alive until cancellation")
 	case <-time.After(500 * time.Millisecond):
 	}
 
-	server.cancel()
-	select {
-	case <-server.done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("service-mode runtime did not stop after cancellation")
-	}
+	server.Stop(t)
 }
 
 // portos:func-length-exception owner=agent-factory reason=observability-runtime-api-smoke review=2026-07-19 removal=split-snapshot-dashboard-status-and-event-assertions-before-next-observability-smoke-change
@@ -301,11 +296,18 @@ func TestObservabilitySmoke_CanonicalServiceSnapshotMatchesStateAndDashboardAcro
 	)
 	assertStreamDashboardMatchesEngineState(t, "completed stream snapshot", completedEngineState, completedStreamSnapshot)
 
-	server.cancel()
 	select {
-	case <-server.done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("service-mode runtime did not stop after cancellation")
+	case <-server.Done():
+		t.Fatal("service-mode runtime exited after returning to idle; expected canonical observability coverage to prove it stays alive until cancellation")
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	server.Stop(t)
+
+	select {
+	case <-server.Done():
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("service-mode runtime did not exit after explicit cancellation")
 	}
 }
 

@@ -2,7 +2,6 @@ package runtime_api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -99,10 +98,7 @@ func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID 
 func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, requestID string) batchBoundarySummary {
 	t.Helper()
 
-	events, err := server.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	events := server.GetFactoryEvents(t)
 
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeWorkRequest || support.StringPointerValue(event.Context.RequestId) != requestID {

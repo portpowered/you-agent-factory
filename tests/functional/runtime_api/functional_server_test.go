@@ -7,31 +7,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type FunctionalServer struct {
-	httpSrv *httptest.Server
 	factory factory.APIFactory
-	service *service.FactoryService
-	cancel  context.CancelFunc
-	done    chan struct{}
+	*support.FunctionalAPIServer
 }
 
 type DashboardStream struct {
@@ -54,7 +48,7 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	resp, err := http.Post(fs.httpSrv.URL+"/work", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(fs.URL()+"/work", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -87,10 +81,7 @@ func (fs *FunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	t.Helper()
 
 	snapshot := fs.GetEngineStateSnapshot(t)
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("get factory events: %v", err)
-	}
+	events := fs.GetFactoryEvents(t)
 
 	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
@@ -654,7 +645,7 @@ func dashboardCompatWorkTypeID(workTypeID string) string {
 
 func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
-	resp, err := http.Get(fs.httpSrv.URL + "/work")
+	resp, err := http.Get(fs.URL() + "/work")
 	if err != nil {
 		t.Fatalf("GET /work: %v", err)
 	}
@@ -673,7 +664,7 @@ func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fs.httpSrv.URL+"/events", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fs.URL()+"/events", nil)
 	if err != nil {
 		cancel()
 		t.Fatalf("build events stream request: %v", err)
@@ -707,15 +698,6 @@ func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 
 	t.Cleanup(stream.Close)
 	return stream
-}
-
-func (fs *FunctionalServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-	engineState, err := fs.service.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	return engineState
 }
 
 func (stream *DashboardStream) readSnapshots() {
@@ -900,93 +882,21 @@ func StartFunctionalServerWithConfig(
 ) *FunctionalServer {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	var handler http.Handler
+	fs := &FunctionalServer{}
 	var runtimeFactory apisurface.APISurface
-	readyCh := make(chan struct{})
-
-	cfg := &service.FactoryServiceConfig{
-		Dir:          factoryDir,
-		Port:         1,
-		Logger:       zap.NewNop(),
-		ExtraOptions: extraOpts,
-		APIServerStarter: func(ctx context.Context, f apisurface.APISurface, port int, l *zap.Logger) error {
-			runtimeFactory = f
-			apiSrv := api.NewServer(f, 0, l)
-			handler = apiSrv.Handler()
-			close(readyCh)
-			<-ctx.Done()
-			return nil
+	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            useMockWorkers,
+		WaitForServiceModeRuntime: true,
+		Configure:                 configure,
+		ExtraOptions:              extraOpts,
+		CaptureAPISurface: func(surface apisurface.APISurface) {
+			runtimeFactory = surface
 		},
-	}
-	if useMockWorkers {
-		cfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
-	}
-	if configure != nil {
-		configure(cfg)
-	}
-
-	svc, err := service.BuildFactoryService(ctx, cfg)
-	if err != nil {
-		cancel()
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if err := svc.Run(ctx); err != nil && err != context.Canceled {
-			fmt.Printf("FunctionalServer: svc.Run ended: %v\n", err)
-		}
-	}()
-
-	waitForFunctionalServerAPIHandler(t, readyCh, cancel)
-	if cfg.RuntimeMode == interfaces.RuntimeModeService {
-		waitForFunctionalServiceRuntime(t, svc, cancel)
-	}
-
-	httpSrv := httptest.NewServer(handler)
-	fs := &FunctionalServer{
-		httpSrv: httpSrv,
-		factory: runtimeFactory,
-		service: svc,
-		cancel:  cancel,
-		done:    done,
-	}
-	t.Cleanup(func() {
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-		}
-		httpSrv.Close()
 	})
+	fs.factory = runtimeFactory
+	fs.FunctionalAPIServer = base
 	return fs
-}
-
-func waitForFunctionalServerAPIHandler(t *testing.T, readyCh <-chan struct{}, cancel context.CancelFunc) {
-	t.Helper()
-	select {
-	case <-readyCh:
-	case <-time.After(5 * time.Second):
-		cancel()
-		t.Fatal("FunctionalServer: timed out waiting for API handler")
-	}
-}
-
-func waitForFunctionalServiceRuntime(t *testing.T, svc *service.FactoryService, cancel context.CancelFunc) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		snapshot, err := svc.GetEngineStateSnapshot(context.Background())
-		if err == nil && snapshot.FactoryState == string(interfaces.FactoryStateRunning) {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	cancel()
-	t.Fatal("FunctionalServer: timed out waiting for service runtime startup")
 }
 
 func StartFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool, extraOpts ...factory.FactoryOption) *FunctionalServer {

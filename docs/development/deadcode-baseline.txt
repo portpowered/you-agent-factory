@@ -59,9 +59,9 @@ tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:
 tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_test.go:690:6: unreachable func: thinEventCompletedDispatchForID
 tests/functional/replay_contracts/short_helpers_test.go:26:6: unreachable func: replayEventCount
 tests/functional/replay_contracts/short_helpers_test.go:43:6: unreachable func: factoryRelationsValue
-tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:40:6: unreachable func: runBoundaryBatchSmokeThroughWatchedFile
-tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:56:6: unreachable func: runBoundaryBatchSmokeThroughHTTP
-tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:99:6: unreachable func: loadBatchBoundarySummary
+tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:39:6: unreachable func: runBoundaryBatchSmokeThroughWatchedFile
+tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:55:6: unreachable func: runBoundaryBatchSmokeThroughHTTP
+tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:98:6: unreachable func: loadBatchBoundarySummary
 tests/functional/smoke/short_helpers_test.go:5:6: unreachable func: simpleServicePipelineConfig
 tests/functional/workflow/helpers_test.go:11:6: unreachable func: newAdhocProcessReviewHarness
 tests/functional/workflow/helpers_test.go:38:6: unreachable func: dispatchesForWorkstation

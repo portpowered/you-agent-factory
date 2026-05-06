@@ -53,10 +53,7 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 		}
 		waitForGeneratedWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
 
-		events, err := server.service.GetFactoryEvents(context.Background())
-		if err != nil {
-			t.Fatalf("GetFactoryEvents: %v", err)
-		}
+		events := server.GetFactoryEvents(t)
 		support.AssertSingleWorkRequestEvent(t, events, request.RequestId, workID, "task")
 	})
 
@@ -147,10 +144,7 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 			t.Fatalf("cron work type = %q, want %q", record.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
 		}
 
-		events, err := server.service.GetFactoryEvents(context.Background())
-		if err != nil {
-			t.Fatalf("GetFactoryEvents: %v", err)
-		}
+		events := server.GetFactoryEvents(t)
 		assertWorkRequestEventIncludesWorkID(t, events, record.Request.WorkID, "poll-for-work")
 	})
 }
