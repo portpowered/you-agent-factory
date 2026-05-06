@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -29,6 +28,9 @@ type FunctionalAPIServerConfig struct {
 	Configure                 func(*service.FactoryServiceConfig)
 	ExtraOptions              []factory.FactoryOption
 	CaptureAPISurface         func(apisurface.APISurface)
+	CaptureService            func(*service.FactoryService)
+	CaptureHTTPServer         func(*httptest.Server)
+	CaptureShutdown           func(context.CancelFunc, <-chan struct{})
 }
 
 type FunctionalAPIServer struct {
@@ -88,6 +90,15 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	}
 
 	httpSrv := httptest.NewServer(handler)
+	if cfg.CaptureService != nil {
+		cfg.CaptureService(svc)
+	}
+	if cfg.CaptureHTTPServer != nil {
+		cfg.CaptureHTTPServer(httpSrv)
+	}
+	if cfg.CaptureShutdown != nil {
+		cfg.CaptureShutdown(cancel, done)
+	}
 	server := &FunctionalAPIServer{
 		httpSrv: httpSrv,
 		service: svc,
@@ -136,22 +147,6 @@ func (fs *FunctionalAPIServer) URL() string {
 	return fs.httpSrv.URL
 }
 
-func (fs *FunctionalAPIServer) HTTPServer() *httptest.Server {
-	return fs.httpSrv
-}
-
-func (fs *FunctionalAPIServer) Service() *service.FactoryService {
-	return fs.service
-}
-
-func (fs *FunctionalAPIServer) CancelFunc() context.CancelFunc {
-	return fs.cancel
-}
-
-func (fs *FunctionalAPIServer) Done() chan struct{} {
-	return fs.done
-}
-
 func (fs *FunctionalAPIServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
 
@@ -160,14 +155,4 @@ func (fs *FunctionalAPIServer) GetEngineStateSnapshot(t *testing.T) *interfaces.
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
 	return snapshot
-}
-
-func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
-	t.Helper()
-
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	return events
 }

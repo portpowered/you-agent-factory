@@ -23,7 +23,7 @@ type replayFunctionalServer struct {
 	httpSrv *httptest.Server
 	service *service.FactoryService
 	cancel  context.CancelFunc
-	done    chan struct{}
+	done    <-chan struct{}
 	*support.FunctionalAPIServer
 }
 
@@ -36,19 +36,24 @@ func startReplayFunctionalServerWithConfig(
 ) *replayFunctionalServer {
 	t.Helper()
 
+	server := &replayFunctionalServer{}
 	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
 		UseMockWorkers: useMockWorkers,
 		Configure:      configure,
 		ExtraOptions:   extraOpts,
+		CaptureService: func(svc *service.FactoryService) {
+			server.service = svc
+		},
+		CaptureHTTPServer: func(httpSrv *httptest.Server) {
+			server.httpSrv = httpSrv
+		},
+		CaptureShutdown: func(cancel context.CancelFunc, done <-chan struct{}) {
+			server.cancel = cancel
+			server.done = done
+		},
 	})
-	server := &replayFunctionalServer{
-		httpSrv:             base.HTTPServer(),
-		service:             base.Service(),
-		cancel:              base.CancelFunc(),
-		done:                base.Done(),
-		FunctionalAPIServer: base,
-	}
+	server.FunctionalAPIServer = base
 	return server
 }
 
@@ -56,7 +61,10 @@ func (fs *replayFunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	t.Helper()
 
 	snapshot := fs.GetEngineStateSnapshot(t)
-	events := fs.GetFactoryEvents(t)
+	events, err := fs.service.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("get factory events: %v", err)
+	}
 
 	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {

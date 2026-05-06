@@ -17,7 +17,7 @@ type functionalAPIServer struct {
 	factory apisurface.APISurface
 	service *service.FactoryService
 	cancel  context.CancelFunc
-	done    chan struct{}
+	done    <-chan struct{}
 	*support.FunctionalAPIServer
 }
 
@@ -70,6 +70,7 @@ func startFunctionalServerWithConfig(
 ) *functionalAPIServer {
 	t.Helper()
 
+	server := &functionalAPIServer{}
 	var runtimeFactory apisurface.APISurface
 	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
@@ -80,15 +81,19 @@ func startFunctionalServerWithConfig(
 		CaptureAPISurface: func(surface apisurface.APISurface) {
 			runtimeFactory = surface
 		},
+		CaptureService: func(svc *service.FactoryService) {
+			server.service = svc
+		},
+		CaptureHTTPServer: func(httpSrv *httptest.Server) {
+			server.httpSrv = httpSrv
+		},
+		CaptureShutdown: func(cancel context.CancelFunc, done <-chan struct{}) {
+			server.cancel = cancel
+			server.done = done
+		},
 	})
-	server := &functionalAPIServer{
-		httpSrv:             base.HTTPServer(),
-		factory:             runtimeFactory,
-		service:             base.Service(),
-		cancel:              base.CancelFunc(),
-		done:                base.Done(),
-		FunctionalAPIServer: base,
-	}
+	server.factory = runtimeFactory
+	server.FunctionalAPIServer = base
 	return server
 }
 

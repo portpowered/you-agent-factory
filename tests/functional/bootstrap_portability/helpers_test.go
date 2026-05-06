@@ -26,17 +26,18 @@ func startFunctionalServerWithConfig(
 	extraOpts ...factory.FactoryOption,
 ) *functionalAPIServer {
 	t.Helper()
+	server := &functionalAPIServer{}
 	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		UseMockWorkers:            useMockWorkers,
 		WaitForServiceModeRuntime: true,
 		Configure:                 configure,
 		ExtraOptions:              extraOpts,
+		CaptureService: func(svc *service.FactoryService) {
+			server.service = svc
+		},
 	})
-	server := &functionalAPIServer{
-		service:             base.Service(),
-		FunctionalAPIServer: base,
-	}
+	server.FunctionalAPIServer = base
 	return server
 }
 
