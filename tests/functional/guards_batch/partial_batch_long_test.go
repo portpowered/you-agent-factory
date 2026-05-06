@@ -106,7 +106,7 @@ Process the task input.
 	if call.Command != string(workers.ModelProviderCodex) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderCodex, call.Command)
 	}
-	assertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
 	if got := call.Args[len(call.Args)-1]; got != "-" {
 		t.Fatalf("expected codex stdin placeholder '-', got %q", got)
 	}
@@ -162,7 +162,7 @@ Process the input task.
 	if call.Command != string(workers.ModelProviderClaude) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
 	}
-	assertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-exit-failure"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-exit-failure"})
 
 	snap := h.Marking()
 	for _, tok := range snap.Tokens {
@@ -219,7 +219,7 @@ Process the input task.
 	if call.Command != string(workers.ModelProviderClaude) {
 		t.Fatalf("expected command %q, got %q", workers.ModelProviderClaude, call.Command)
 	}
-	assertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
 }
 
 func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails(t *testing.T) {

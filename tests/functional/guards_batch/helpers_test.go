@@ -11,25 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func assertArgsContainSequence(t *testing.T, args, want []string) {
-	t.Helper()
-
-	for i := 0; i <= len(args)-len(want); i++ {
-		match := true
-		for j := range want {
-			if args[i+j] != want[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return
-		}
-	}
-
-	t.Fatalf("expected args %v to contain sequence %v", args, want)
-}
-
 func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.ProviderErrorCorpusEntry {
 	t.Helper()
 	return support.ProviderErrorCorpusEntry(t, name)
