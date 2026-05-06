@@ -23,7 +23,7 @@ func TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact(t 
 		HasNoTokenInPlace("task:failed").
 		HasNoTokenInPlace(dualDispatchSmokeScriptWorkType + ":failed")
 
-	finalTick := lastFactoryEventTick(smoke.artifact.Events)
+	finalTick := support.LastFactoryEventTick(smoke.artifact.Events)
 	worldState, err := projections.ReconstructFactoryWorldState(smoke.artifact.Events, finalTick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
