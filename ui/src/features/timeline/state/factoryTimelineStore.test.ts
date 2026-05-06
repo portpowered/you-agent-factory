@@ -2625,10 +2625,18 @@ describe("factory timeline reconstruction", () => {
         responded_count: 1,
       },
       request: {
-        prompt: "Review this timeline story.",
+        input_work_items: [
+          {
+            display_name: "Timeline Story",
+            trace_id: "trace-1",
+            work_id: "work-1",
+            work_type_id: "story",
+          },
+        ],
       },
       response: {
-        response_text: "The story is ready for review.",
+        duration_millis: 1250,
+        outcome: "ACCEPTED",
       },
     });
   });
@@ -2660,13 +2668,7 @@ describe("factory timeline reconstruction", () => {
           },
         ],
         input_work_type_ids: ["story"],
-        model: "gpt-5.4",
-        prompt: "Review this timeline story.",
-        provider: "openai",
-        request_time: "2026-04-16T12:00:04Z",
         trace_ids: ["trace-1"],
-        working_directory: "/work/project",
-        worktree: "/work/project/.worktrees/story",
       },
       transition_id: "review",
       workstation_name: "Review",
@@ -2694,18 +2696,6 @@ describe("factory timeline reconstruction", () => {
         "dispatch-1"
       ],
     ).toMatchObject({
-      request: {
-        model: "gpt-5.4",
-        prompt: "Review this timeline story.",
-        provider: "openai",
-        request_metadata: {
-          prompt_source: "factory-renderer",
-          session_id: "session-1",
-        },
-        request_time: "2026-04-16T12:00:04Z",
-        working_directory: "/work/project",
-        worktree: "/work/project/.worktrees/story",
-      },
       counts: {
         dispatched_count: 1,
         errored_count: 0,
@@ -2713,11 +2703,6 @@ describe("factory timeline reconstruction", () => {
       },
       response: {
         duration_millis: 1250,
-        response_metadata: {
-          provider_session_id: "session-1",
-          retry_count: "0",
-        },
-        response_text: "The story is ready for review.",
         outcome: "ACCEPTED",
         output_work_items: [
           {
@@ -2727,9 +2712,6 @@ describe("factory timeline reconstruction", () => {
             work_type_id: "story",
           },
         ],
-        provider_session: {
-          id: "session-1",
-        },
       },
     });
 
@@ -2788,29 +2770,15 @@ describe("factory timeline reconstruction", () => {
         "dispatch-failed"
       ],
     ).toMatchObject({
-      request: {
-        model: "claude-3.7",
-        prompt: "Retry the blocked story.",
-        provider: "anthropic",
-        request_metadata: {
-          prompt_source: "factory-renderer",
-        },
-        working_directory: "/work/error",
-        worktree: "/work/error/.worktrees/story",
-      },
       counts: {
         dispatched_count: 1,
         errored_count: 1,
         responded_count: 0,
       },
       response: {
-        error_class: "rate_limited",
         failure_message: "Provider rate limit exceeded.",
         failure_reason: "throttled",
         outcome: "FAILED",
-        response_metadata: {
-          retry_count: "1",
-        },
       },
     });
   });
@@ -2855,13 +2823,7 @@ describe("factory timeline reconstruction", () => {
           },
         ],
         input_work_type_ids: ["story"],
-        model: "gpt-5.4",
-        prompt: "Review this timeline story.",
-        provider: "openai",
-        request_time: "2026-04-16T12:00:04Z",
         trace_ids: ["trace-1"],
-        working_directory: "/work/project",
-        worktree: "/work/project/.worktrees/story",
       },
     });
     expect(
@@ -2881,9 +2843,9 @@ describe("factory timeline reconstruction", () => {
     );
 
     expect(Object.keys(successfulProjected.workstationRequestsByDispatchID)).toEqual(["dispatch-1"]);
-    expect(
-      successfulProjected.workstationRequestsByDispatchID["dispatch-1"],
-    ).toMatchObject({
+    const successfulRequest =
+      successfulProjected.workstationRequestsByDispatchID["dispatch-1"];
+    expect(successfulRequest).toMatchObject({
       counts: {
         dispatched_count: 1,
         errored_count: 0,
@@ -2892,9 +2854,6 @@ describe("factory timeline reconstruction", () => {
       dispatch_id: "dispatch-1",
       dispatched_request_count: 1,
       errored_request_count: 0,
-      model: "gpt-5.4",
-      prompt: "Review this timeline story.",
-      provider: "openai",
       request_view: {
         input_work_items: [
           {
@@ -2905,23 +2864,10 @@ describe("factory timeline reconstruction", () => {
           },
         ],
         input_work_type_ids: ["story"],
-        model: "gpt-5.4",
-        prompt: "Review this timeline story.",
-        provider: "openai",
-        request_metadata: {
-          prompt_source: "review-template",
-        },
-        request_time: "2026-04-16T12:00:04Z",
         trace_ids: ["trace-1"],
-        working_directory: "/work/project",
-        worktree: "/work/project/.worktrees/story",
       },
       request_id: "request-work-1",
-      request_metadata: {
-        prompt_source: "review-template",
-      },
       responded_request_count: 1,
-      response: "The story is ready for review.",
       response_view: {
         duration_millis: 1250,
         outcome: "ACCEPTED",
@@ -2933,22 +2879,34 @@ describe("factory timeline reconstruction", () => {
             work_type_id: "story",
           },
         ],
-        provider_session: {
-          id: "session-1",
-        },
-        response_metadata: {
-          response_status: "ok",
-        },
-        response_text: "The story is ready for review.",
-      },
-      response_metadata: {
-        response_status: "ok",
       },
       total_duration_millis: 1250,
       transition_id: "review",
-      working_directory: "/work/project",
       workstation_name: "Review",
       workstation_node_id: "review",
+    });
+    expect(successfulRequest.inference_attempts).toHaveLength(1);
+    expect(successfulRequest.inference_attempts[0]).toMatchObject({
+      diagnostics: {
+        provider: {
+          model: "gpt-5.4",
+          provider: "openai",
+          request_metadata: {
+            prompt_source: "review-template",
+          },
+          response_metadata: {
+            response_status: "ok",
+          },
+        },
+      },
+      prompt: "Review this timeline story.",
+      provider_session: {
+        id: "session-1",
+        kind: "session_id",
+        provider: "codex",
+      },
+      response: "The story is ready for review.",
+      working_directory: "/work/project",
       worktree: "/work/project/.worktrees/story",
     });
     const thinSuccessfulProjected = buildFactoryTimelineSnapshot(
@@ -2994,9 +2952,9 @@ describe("factory timeline reconstruction", () => {
       ],
       6,
     );
-    expect(
-      rejectedProjected.workstationRequestsByDispatchID["dispatch-rejected"],
-    ).toMatchObject({
+    const rejectedProjection =
+      rejectedProjected.workstationRequestsByDispatchID["dispatch-rejected"];
+    expect(rejectedProjection).toMatchObject({
       counts: {
         dispatched_count: 1,
         errored_count: 0,
@@ -3013,10 +2971,7 @@ describe("factory timeline reconstruction", () => {
             work_type_id: "story",
           },
         ],
-        prompt: "Review the story and explain why it needs more work.",
-        provider: "codex",
       },
-      response: "The story needs another pass before approval.",
       response_view: {
         feedback: "Please fix the missing acceptance test.",
         outcome: "REJECTED",
@@ -3028,11 +2983,14 @@ describe("factory timeline reconstruction", () => {
             work_type_id: "story",
           },
         ],
-        provider_session: {
-          id: "session-rejected",
-        },
-        response_text: "The story needs another pass before approval.",
       },
+    });
+    expect(rejectedProjection.inference_attempts).toHaveLength(1);
+    expect(rejectedProjection.inference_attempts[0]).toMatchObject({
+      prompt: "Review the story and explain why it needs more work.",
+      response: "The story needs another pass before approval.",
+      working_directory: "/work/rejected",
+      worktree: "/work/rejected/.worktrees/story",
     });
 
     const failedDispatchInferenceRequest = event(
@@ -3093,16 +3051,19 @@ describe("factory timeline reconstruction", () => {
       dispatch_id: "dispatch-failed",
       failure_message: "Provider rate limit exceeded.",
       failure_reason: "throttled",
-      request_view: {
-        prompt: "Retry the blocked story.",
-        provider: "anthropic",
-      },
       response_view: {
-        error_class: "rate_limited",
         failure_message: "Provider rate limit exceeded.",
         failure_reason: "throttled",
         outcome: "FAILED",
       },
+      inference_attempts: [
+        expect.objectContaining({
+          prompt: "Retry the blocked story.",
+          error_class: "rate_limited",
+          working_directory: "/work/error",
+          worktree: "/work/error/.worktrees/story",
+        }),
+      ],
     });
   });
 
@@ -3245,18 +3206,6 @@ describe("factory timeline reconstruction", () => {
       outcome: "ACCEPTED",
       response: "Legacy replay output",
       response_view: {
-        diagnostics: {
-          provider: {
-            model: "gpt-5.4-mini",
-            provider: "openai",
-            request_metadata: {
-              prompt_source: "legacy-review",
-            },
-            response_metadata: {
-              provider_session_id: "legacy-session-1",
-            },
-          },
-        },
         output_work_items: [
           {
             display_name: "Legacy Timeline Story",
@@ -3266,12 +3215,9 @@ describe("factory timeline reconstruction", () => {
             work_type_id: "story",
           },
         ],
-        provider_session: {
-          id: "legacy-session-1",
-          provider: "openai",
-        },
       },
       workstation_name: "Legacy Review",
+      inference_attempts: [],
     });
     expect(
       completedProjected.tracesByWorkID["work-legacy"]?.dispatches[0],

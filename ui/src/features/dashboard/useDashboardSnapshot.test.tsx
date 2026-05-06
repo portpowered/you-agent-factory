@@ -323,13 +323,17 @@ describe("useDashboardSnapshot", () => {
             work_type_id: "story",
           },
         ],
-        prompt: "Review the canonical story.",
       },
       response_view: {
         duration_millis: 850,
         outcome: "ACCEPTED",
-        response_text: "Canonical review complete.",
       },
+      inference_attempts: [
+        expect.objectContaining({
+          prompt: "Review the canonical story.",
+          response: "Canonical review complete.",
+        }),
+      ],
       workstation_name: "Review",
     });
     expect(snapshot?.runtime.session.provider_sessions).toMatchObject([
@@ -386,8 +390,20 @@ describe("useDashboardSnapshot", () => {
     ).toMatchObject({
       dispatch_id: "dispatch-story-1",
       request_view: {
-        prompt: "Review the canonical story.",
+        input_work_items: [
+          {
+            display_name: "Canonical Story",
+            trace_id: "trace-story-1",
+            work_id: "work-story-1",
+            work_type_id: "story",
+          },
+        ],
       },
+      inference_attempts: [
+        expect.objectContaining({
+          prompt: "Review the canonical story.",
+        }),
+      ],
       workstation_name: "Review",
     });
     expect(
@@ -409,8 +425,12 @@ describe("useDashboardSnapshot", () => {
     ).toMatchObject({
       response_view: {
         outcome: "ACCEPTED",
-        response_text: "Canonical review complete.",
       },
+      inference_attempts: [
+        expect.objectContaining({
+          response: "Canonical review complete.",
+        }),
+      ],
     });
   });
 
@@ -444,5 +464,3 @@ describe("useDashboardSnapshot", () => {
     expect(window.__agentFactoryTimelineDebug__?.summarize().selectedTick).toBe(4);
   });
 });
-
-

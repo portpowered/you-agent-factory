@@ -35,8 +35,10 @@ import {
 
 export function DispatchInferenceAttemptsSection({
   attempts,
+  emptyCopy,
 }: {
   attempts: DashboardInferenceAttempt[];
+  emptyCopy?: string;
 }) {
   return (
     <section
@@ -45,9 +47,13 @@ export function DispatchInferenceAttemptsSection({
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Inference attempts</h4>
       <div className="grid gap-[0.65rem]">
-        {attempts.map((attempt) => (
-          <InferenceAttemptCard attempt={attempt} key={attempt.inference_request_id} />
-        ))}
+        {attempts.length > 0
+          ? attempts.map((attempt) => (
+              <InferenceAttemptCard attempt={attempt} key={attempt.inference_request_id} />
+            ))
+          : emptyCopy
+            ? <p className={DETAIL_COPY_CLASS}>{emptyCopy}</p>
+            : null}
       </div>
     </section>
   );

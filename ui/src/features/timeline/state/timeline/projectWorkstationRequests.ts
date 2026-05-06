@@ -14,7 +14,6 @@ import {
   attemptHasError,
   attemptHasResponse,
   dispatchHasCustomerWork,
-  latestWorkstationAttempt,
   latestWorkstationScriptResponse,
   outputWorkItemsFromCompletion,
   projectWorkstationDispatchRequest,
@@ -166,11 +165,10 @@ export function projectWorkstationDispatchRequestsByID({
 
 function workstationRequestFromActiveDispatch(
   dispatch: WorldDispatch,
-  attempts: Record<string, DashboardInferenceAttempt> | undefined,
+  _attempts: Record<string, DashboardInferenceAttempt> | undefined,
   latestScriptRequest: WorldScriptRequest | undefined,
 ): TimelineWorkstationRequest {
   const inputWorkItems = workItemsFromTokens(dispatch.consumedTokens, dispatch.workItems);
-  const latestAttempt = latestWorkstationAttempt(attempts);
   return {
     counts: workstationRequestCounts(undefined, undefined, undefined),
     dispatchId: dispatch.dispatchID,
@@ -193,12 +191,11 @@ function workstationRequestFromActiveDispatch(
 
 function workstationRequestFromCompletion(
   completion: WorldCompletion,
-  attempts: Record<string, DashboardInferenceAttempt> | undefined,
+  _attempts: Record<string, DashboardInferenceAttempt> | undefined,
   latestScriptRequest: WorldScriptRequest | undefined,
   latestScriptResponse: WorldScriptResponse | undefined,
 ): TimelineWorkstationRequest {
   const inputWorkItems = workItemsFromTokens(completion.consumedTokens, completion.workItems);
-  const latestAttempt = latestWorkstationAttempt(attempts);
   return {
     counts: workstationRequestCounts(undefined, undefined, undefined),
     dispatchId: completion.dispatchID,
