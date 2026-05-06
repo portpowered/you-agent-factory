@@ -3,7 +3,6 @@ package state
 import (
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -14,28 +13,42 @@ import (
 // failed state. Standard workstations without explicit rejection arcs also reject
 // into those failed-state arcs. Runtime routing can then use a single outcome ->
 // arc-set path.
-func NormalizeTransitionTopology(net *Net, runtimeConfigs ...interfaces.RuntimeWorkstationLookup) {
+func NormalizeTransitionTopology(net *Net, workstationKinds map[string]interfaces.WorkstationKind) {
 	if net == nil {
 		return
 	}
-	runtimeConfig := interfaces.FirstRuntimeWorkstationLookup(runtimeConfigs...)
 	for _, transition := range net.Transitions {
 		ensureDefaultFailureArcs(net, transition)
-		ensureDefaultRejectionArcs(net, transition, runtimeConfig)
+		ensureDefaultRejectionArcs(net, transition, workstationKinds)
 	}
 }
 
-func ensureDefaultRejectionArcs(net *Net, transition *petri.Transition, runtimeConfig interfaces.RuntimeWorkstationLookup) {
+func ensureDefaultRejectionArcs(net *Net, transition *petri.Transition, workstationKinds map[string]interfaces.WorkstationKind) {
 	if transition == nil || len(transition.RejectionArcs) > 0 {
 		return
 	}
 
-	if workstationconfig.Kind(transition, runtimeConfig) == interfaces.WorkstationKindRepeater {
+	if transitionWorkstationKind(transition, workstationKinds) == interfaces.WorkstationKindRepeater {
 		appendWorkInputArcs(net, transition, &transition.RejectionArcs, "auto-rejection")
 		return
 	}
 
 	transition.RejectionArcs = cloneArcs(transition.FailureArcs, transition.ID, "auto-rejection")
+}
+
+func transitionWorkstationKind(transition *petri.Transition, workstationKinds map[string]interfaces.WorkstationKind) interfaces.WorkstationKind {
+	if transition == nil || len(workstationKinds) == 0 {
+		return ""
+	}
+	if transition.Name != "" {
+		if kind, ok := workstationKinds[transition.Name]; ok {
+			return kind
+		}
+	}
+	if transition.ID == "" || transition.ID == transition.Name {
+		return ""
+	}
+	return workstationKinds[transition.ID]
 }
 
 func appendWorkInputArcs(net *Net, transition *petri.Transition, target *[]petri.Arc, suffix string) {

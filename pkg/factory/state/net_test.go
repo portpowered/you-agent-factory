@@ -5,7 +5,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 func TestPlaceID(t *testing.T) {
@@ -164,10 +163,8 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 		},
 	}
 
-	NormalizeTransitionTopology(net, runtimefixtures.RuntimeWorkstationLookupFixture{
-		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"repeat": {Name: "repeat", Kind: interfaces.WorkstationKindRepeater},
-		},
+	NormalizeTransitionTopology(net, map[string]interfaces.WorkstationKind{
+		"repeat": interfaces.WorkstationKindRepeater,
 	})
 
 	transition := net.Transitions["repeat"]

@@ -508,7 +508,7 @@ func buildTestNet(id string, workTypes []*state.WorkType, resources []*state.Res
 		n.Transitions[transition.ID] = transition
 	}
 
-	state.NormalizeTransitionTopology(n)
+	state.NormalizeTransitionTopology(n, nil)
 
 	validator := validation.NewCompositeValidator(
 		&validation.ReachabilityValidator{},
