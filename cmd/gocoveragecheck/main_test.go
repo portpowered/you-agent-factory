@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -397,6 +398,145 @@ func TestFormatZeroCoverageFailure(t *testing.T) {
 	}
 }
 
+func TestExecuteReportsPassingCoverage(t *testing.T) {
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	execCommand = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min: 80,
+		coverpkg: strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		packages: "./pkg/config",
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v", err)
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "total: (statements) 82.5%") {
+		t.Fatalf("execute() stdout = %q, want total coverage line", got)
+	}
+	wantSuccess := "Go coverage 82.5% meets minimum 80.0%."
+	if !strings.Contains(got, wantSuccess) {
+		t.Fatalf("execute() stdout = %q, want success message %q", got, wantSuccess)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	execCommand = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min: 90,
+		coverpkg: strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		packages: "./pkg/config",
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "total: (statements) 82.5%") {
+		t.Fatalf("execute() stdout = %q, want total coverage line", got)
+	}
+	wantFailure := "go coverage 82.5% is below minimum 90.0%"
+	if err.Error() != wantFailure {
+		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
+	}
+	if strings.Contains(got, "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect success message", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
+	originalArgs := os.Args
+	originalFlagSet := flag.CommandLine
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	originalExit := exitFunc
+	t.Cleanup(func() {
+		os.Args = originalArgs
+		flag.CommandLine = originalFlagSet
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+		exitFunc = originalExit
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	var exitCode int
+
+	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
+	os.Args = []string{
+		"gocoveragecheck",
+		"-min=90",
+		"-coverpkg=" + strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		"-packages=./pkg/config",
+	}
+	execCommand = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+
+	main()
+
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); !strings.Contains(got, "total: (statements) 82.5%") {
+		t.Fatalf("main() stdout = %q, want total coverage line", got)
+	}
+	if got := stdout.String(); strings.Contains(got, "meets minimum") {
+		t.Fatalf("main() stdout = %q, did not expect success message", got)
+	}
+	wantFailure := "go coverage 82.5% is below minimum 90.0%\n"
+	if got := stderr.String(); got != wantFailure {
+		t.Fatalf("main() stderr = %q, want %q", got, wantFailure)
+	}
+}
+
 func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 	if os.Getenv("GO_WANT_GOCOVERAGECHECK_MAIN_HELPER") == "1" {
 		originalArgs := os.Args
@@ -622,6 +762,16 @@ func fakeGoCoverageCommand(name string, args ...string) *exec.Cmd {
 	return exec.Command(testBinary, cmdArgs...)
 }
 
+func fakeGoCoverageCommandPassing(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcessPassing", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
 func fakeGoCoverageCommandWithOKSummary(name string, args ...string) *exec.Cmd {
 	testBinary, err := os.Executable()
 	if err != nil {
@@ -679,6 +829,50 @@ func TestGoCoverageCheckFakeGoProcessWithOKSummary(t *testing.T) {
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
 		fmt.Fprint(os.Stdout,
 			modulePath+"/pkg/service/factory.go:1.1,2.1\t80.0%\n"+
+				"total: (statements) 82.5%\n",
+		)
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
+		os.Exit(2)
+	}
+}
+
+func TestGoCoverageCheckFakeGoProcessPassing(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) == 0 || args[0] != "go" {
+		return
+	}
+
+	switch {
+	case len(args) >= 2 && args[1] == "test":
+		profilePath := ""
+		for _, arg := range args[2:] {
+			if strings.HasPrefix(arg, "-coverprofile=") {
+				profilePath = strings.TrimPrefix(arg, "-coverprofile=")
+				break
+			}
+		}
+		if profilePath == "" {
+			fmt.Fprint(os.Stderr, "missing coverprofile argument")
+			os.Exit(2)
+		}
+		profile := strings.Join([]string{
+			"mode: count",
+			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+			"",
+		}, "\n")
+		if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "write fake profile: %v", err)
+			os.Exit(2)
+		}
+		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		os.Exit(0)
+	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/config/config.go:1.1,2.1\t75.0%\n"+
+				modulePath+"/pkg/service/factory.go:1.1,2.1\t100.0%\n"+
 				"total: (statements) 82.5%\n",
 		)
 		os.Exit(0)
