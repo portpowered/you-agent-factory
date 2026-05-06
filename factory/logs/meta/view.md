@@ -2,17 +2,22 @@
 
 ## world state
 
-- as of `2026-05-06T01:04:51.9722496-07:00`, local `HEAD` on `main` points to
-  `6b95577`
-  (`Merge pull request #111 from portpowered/remove-init-default-models`) and
-  matches `origin/main`
+- as of `2026-05-06T05:04:15.1266160-07:00`, local `HEAD` on `main` points to
+  `d17acf1`
+  (`docs: refresh meta world state`) and contains the merged `origin/main`
+  baseline through `cee2465`
+  (`Merge pull request #122 from portpowered/ralph/collapse-runtime-api-functional-server-lifecycle-owner`)
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the local worktree is not clean:
   - canonical `factory/inputs/**` remains tracked-sentinel-only
   - there is no checked-in cleanup request currently queued under
     `factory/inputs/**`
-  - unrelated untracked local residue exists at the repo root and under
-    `factory/` and should not be treated as canonical queue state
+  - `factory/logs/meta/asks.md` carries a local tracked edit and should be
+    treated as user-owned state for this refresh
+  - tracked meta-log updates are required because the last checked-in summary
+    predates merged PR `#122`
+  - ignored local workflow residue under `factory/inputs/**` must still be
+    treated as operating state rather than checked-in queue truth
 
 ## workflow truth
 
@@ -47,9 +52,14 @@
   contract and no longer accepts direct
   `factory/inputs/<work-type>/<file>` submissions as an implicit `default`
   channel fallback
-- there is no pre-existing ignored idea residue in the canonical inboxes at the
-  start of this refresh; any new idea file written this turn is fresh local
-  operating state rather than stale carry-over
+- the visible ignored local idea residue at the start of this refresh was:
+  - `factory/inputs/idea/default/collapse-runtime-api-functional-server-lifecycle-owner.md`
+- that ignored idea was stale queue residue rather than checked-in queue truth
+  because merged PR `#122` already landed that runtime API lifecycle cleanup
+  on `main`
+- it has been replaced during this refresh with one narrower customer-ask
+  follow-up idea:
+  - `factory/inputs/idea/default/add-backend-zero-coverage-package-gate.md`
 
 ## customer-ask truth
 
@@ -64,7 +74,7 @@
 - the remaining open asks in `factory/logs/meta/asks.md` are broader program
   work rather than narrow customer-visible regressions:
   - standards-migration checklist tracking
-  - website `90%` coverage target
+  - backend and website `100%` coverage target plus stronger test enforcement
   - docs audit
   - manual QA
   - systems-quality documentation
@@ -86,36 +96,44 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
+  - `#122` `collapse-runtime-api-functional-server-lifecycle-owner`, merged on
+    `2026-05-06T11:29:08Z`
+  - `#121` `consolidate-runtime-api-functional-support-helpers`, merged on
+    `2026-05-06T10:20:03Z`
+  - `#119` `dedupe-functional-api-server-harnesses`, merged on
+    `2026-05-06T09:27:38Z`
+  - `#118` `retire-transition-topology-runtime-lookup-adapter`, merged on
+    `2026-05-06T09:26:11Z`
+  - `#117` `consolidate-static-command-runner-test-helpers`, merged on
+    `2026-05-06T09:22:29Z`
+  - `#115` `Import niceties`, merged on `2026-05-06T08:53:55Z`
+  - `#114` `consolidate-functional-factory-event-tick-helpers`, merged on
+    `2026-05-06T08:18:50Z`
+  - `#113` `docs: refresh meta world state`, merged on
+    `2026-05-06T08:08:40Z`
+  - `#112` `updated website export to support exporting bundled files`, merged
+    on `2026-05-06T07:45:59Z`
   - `#111` `remove-init-default-models`, merged on `2026-05-06T07:09:23Z`
-  - `#110` `workstation-request-current-selection-cleanup`, merged on
-    `2026-05-06T03:28:00Z`
-  - `#109` `inline-supporting-file-content-on-export-and-thin-factory-import`,
-    merged on `2026-05-06T03:23:17Z`
-  - `#108` `remove-deadcode-2026-may`, merged on `2026-05-06T03:05:09Z`
-  - `#107` `Branch check`, merged on `2026-05-06T02:56:30Z`
-  - `#106` `dedupe-functional-agent-config-and-arg-sequence-test-helpers`,
-    merged on `2026-05-06T00:15:17Z`
-  - `#105` `dedupe-functional-dispatch-history-test-helpers`, merged on
-    `2026-05-05T23:16:03Z`
 - `gh pr list --state open` currently reports one open PR:
-  - `#112` `website-export`, opened on `2026-05-06T07:45:59Z`
-- PR `#112` owns the current export/bundled-file work on its branch, so new
-  cleanup dispatches should avoid portability/export overlap until that lane
-  merges or closes
+  - `#120` `docs: refresh meta world state`
+- PR `#120` is a meta-log refresh branch and does not own the next code cleanup
+  lane
 
 ## next cleanup candidate
 
 - there is no remaining narrow unowned customer-visible ask gap on `main`
-- the next non-overlapping cleanup seam is in functional test helper
-  duplication:
-  - `tests/functional/internal/support/events.go` already owns
-    `LastFactoryEventTick`
-  - `tests/functional/replay_contracts/short_helpers_test.go`
-  - `tests/functional/replay_contracts/replay_record_end_to_end_long_test.go`
-  - `tests/functional/runtime_api/api_inference_events_test.go`
-    still carry local `lastFactoryEventTick` copies
-- the next dispatch should consolidate those suites onto the shared support
-  helper without changing replay, runtime API, or projection behavior
+- the next non-overlapping dispatch should advance the broad P0 testing ask
+  through the existing backend coverage gate instead of inventing a new lane:
+  - `Makefile` already exposes `test-coverage-go` with
+    `GO_COVERAGE_MIN ?= 80.0`
+  - `.github/workflows/ci.yml` already enforces that repo-owned command in CI
+  - `cmd/gocoveragecheck/main.go` currently fails only on total statement
+    coverage, which can still hide backend packages at `0%`
+  - `cmd/gocoveragecheck/main_test.go` already owns focused unit coverage for
+    the lane-selection logic
+- the next idea should extend `cmd/gocoveragecheck` so the backend coverage
+  lane fails when an included backend package lands at `0%` statement coverage
+  while preserving the current package exclusions and repo-owned CI entrypoint
 
 ## theory of mind
 
@@ -127,8 +145,20 @@
 - when the current branch is not `main`, refresh the worldview from live
   `main` before queueing cleanup work; branch-local open PRs can otherwise hide
   overlap
+- after a helper-dedupe PR merges, inspect adjacent suites in the same package
+  for smaller leftover nil-unwrapper or token-search clones before inventing a
+  new helper owner
 - deadcode-baseline output is only a candidate generator:
   build-tagged functional helpers must be checked in both default and
   `functionallong` lanes before treating them as dead
 - when a shared functional support helper already exists, prefer collapsing
   local suite copies onto it instead of inventing another abstraction layer
+- when a shared functional support server lifecycle owner already exists, treat
+  remaining package-local test bootstrappers as cleanup seams even if they
+  still keep package-specific request helpers
+- when a broad quality or coverage ask is open, prefer tightening an existing
+  repo-owned enforcement seam before queueing a repo-wide test-authoring
+  program
+- aggregate coverage floors can hide `0%` backend packages; the first useful
+  ratchet is per-package zero-coverage rejection inside the existing coverage
+  lane, not a broad threshold jump
