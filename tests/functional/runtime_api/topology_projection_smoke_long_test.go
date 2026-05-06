@@ -3,7 +3,6 @@
 package runtime_api
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -68,10 +67,7 @@ Process {{ (index .Inputs 0).WorkID }}.
 	server := startFunctionalServer(t, dir, false, factory.WithServiceMode())
 	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
 	requireFunctionalEventStreamPrelude(t, stream)
-	events, err := server.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	events := server.GetFactoryEvents(t)
 	if len(events) == 0 {
 		t.Fatal("expected at least one factory event")
 	}

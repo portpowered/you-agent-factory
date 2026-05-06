@@ -1,7 +1,6 @@
 package runtime_api
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/url"
@@ -51,10 +50,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 func assertCleanupSmokeCanonicalFactoryEvents(t *testing.T, server *functionalAPIServer, workID string) {
 	t.Helper()
 
-	events, err := server.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	events := server.GetFactoryEvents(t)
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeWorkRequest)
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchRequest)
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchResponse)

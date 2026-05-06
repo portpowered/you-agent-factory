@@ -231,13 +231,7 @@ func nextUnifiedSmokeEvent(t *testing.T, stream *factoryEventHTTPStream, timeout
 
 func stopFunctionalServerForRecording(t *testing.T, server *functionalAPIServer) {
 	t.Helper()
-
-	server.cancel()
-	select {
-	case <-server.done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for functional server to stop and flush recording")
-	}
+	server.Stop(t)
 }
 
 func assertUnifiedSmokeArtifactHasEventTypes(t *testing.T, artifact *interfaces.ReplayArtifact, wantSubsequence []factoryapi.FactoryEventType) {

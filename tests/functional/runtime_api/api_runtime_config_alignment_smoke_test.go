@@ -1089,10 +1089,7 @@ func assertRuntimeConfigAlignmentDispatchHistory(t *testing.T, history []interfa
 func assertRuntimeConfigAlignmentEventHistory(t *testing.T, server *functionalAPIServer) {
 	t.Helper()
 
-	events, err := server.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	events := server.GetFactoryEvents(t)
 	for _, eventType := range []factoryapi.FactoryEventType{
 		factoryapi.FactoryEventTypeRunRequest,
 		factoryapi.FactoryEventTypeInitialStructureRequest,

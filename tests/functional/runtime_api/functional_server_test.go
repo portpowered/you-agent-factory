@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -25,11 +24,8 @@ import (
 )
 
 type FunctionalServer struct {
-	httpSrv *httptest.Server
 	factory factory.APIFactory
-	service *service.FactoryService
-	cancel  context.CancelFunc
-	done    <-chan struct{}
+	*support.FunctionalAPIServer
 }
 
 type DashboardStream struct {
@@ -52,7 +48,7 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	resp, err := http.Post(fs.httpSrv.URL+"/work", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(fs.URL()+"/work", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -85,10 +81,7 @@ func (fs *FunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	t.Helper()
 
 	snapshot := fs.GetEngineStateSnapshot(t)
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("get factory events: %v", err)
-	}
+	events := fs.GetFactoryEvents(t)
 
 	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
@@ -652,7 +645,7 @@ func dashboardCompatWorkTypeID(workTypeID string) string {
 
 func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
-	resp, err := http.Get(fs.httpSrv.URL + "/work")
+	resp, err := http.Get(fs.URL() + "/work")
 	if err != nil {
 		t.Fatalf("GET /work: %v", err)
 	}
@@ -671,7 +664,7 @@ func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fs.httpSrv.URL+"/events", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fs.URL()+"/events", nil)
 	if err != nil {
 		cancel()
 		t.Fatalf("build events stream request: %v", err)
@@ -705,15 +698,6 @@ func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 
 	t.Cleanup(stream.Close)
 	return stream
-}
-
-func (fs *FunctionalServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-	engineState, err := fs.service.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	return engineState
 }
 
 func (stream *DashboardStream) readSnapshots() {
@@ -900,7 +884,7 @@ func StartFunctionalServerWithConfig(
 
 	fs := &FunctionalServer{}
 	var runtimeFactory apisurface.APISurface
-	support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		UseMockWorkers:            useMockWorkers,
 		WaitForServiceModeRuntime: true,
@@ -909,18 +893,9 @@ func StartFunctionalServerWithConfig(
 		CaptureAPISurface: func(surface apisurface.APISurface) {
 			runtimeFactory = surface
 		},
-		CaptureService: func(svc *service.FactoryService) {
-			fs.service = svc
-		},
-		CaptureHTTPServer: func(httpSrv *httptest.Server) {
-			fs.httpSrv = httpSrv
-		},
-		CaptureShutdown: func(cancel context.CancelFunc, done <-chan struct{}) {
-			fs.cancel = cancel
-			fs.done = done
-		},
 	})
 	fs.factory = runtimeFactory
+	fs.FunctionalAPIServer = base
 	return fs
 }
 

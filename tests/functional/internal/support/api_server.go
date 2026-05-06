@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/api"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -155,4 +156,29 @@ func (fs *FunctionalAPIServer) GetEngineStateSnapshot(t *testing.T) *interfaces.
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
 	return snapshot
+}
+
+func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	events, err := fs.service.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	return events
+}
+
+func (fs *FunctionalAPIServer) Done() <-chan struct{} {
+	return fs.done
+}
+
+func (fs *FunctionalAPIServer) Stop(t *testing.T) {
+	t.Helper()
+
+	fs.cancel()
+	select {
+	case <-fs.done:
+	case <-time.After(functionalServerReadyTimeout):
+		t.Fatal("FunctionalServer: timed out waiting for shutdown")
+	}
 }

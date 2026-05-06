@@ -1,7 +1,6 @@
 package runtime_api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -572,10 +571,7 @@ func countPublicCronSmokeTokens(snap *interfaces.EngineStateSnapshot[petri.Marki
 func assertCronTimeWorkRetainedInCanonicalHistory(t *testing.T, fs *functionalAPIServer, timeWorkID string, workstation string) {
 	t.Helper()
 
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	events := fs.GetFactoryEvents(t)
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
 			continue
@@ -598,10 +594,7 @@ func assertCronTimeWorkRetainedInCanonicalHistory(t *testing.T, fs *functionalAP
 func assertRequiredInputCronHistory(t *testing.T, fs *functionalAPIServer, dispatchID string, signalWorkID string) {
 	t.Helper()
 
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	events := fs.GetFactoryEvents(t)
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
 			continue
