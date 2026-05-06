@@ -1260,7 +1260,7 @@ export const SelectedWorkDispatchHistorySmoke = {
     ).toBeVisible();
     await expect(
       within(activeCard).getByText(
-        "Inference response details are not available for this dispatch yet.",
+        "No inference attempt details have been recorded for this dispatch yet.",
       ),
     ).toBeVisible();
     await expect(

@@ -15,33 +15,6 @@ describe("ExecutionDetailsSection", () => {
       dispatchID: "dispatch-review",
       elapsedStartTimestamp: "2026-04-08T12:00:00Z",
       inferenceAttempts: [],
-      model: {
-        source: "active-execution",
-        status: "available",
-        value: "gpt-5.4",
-      },
-      prompt: {
-        promptSource: "factory-renderer",
-        source: "diagnostics",
-        status: "available",
-        systemPromptHash: "sha256:system",
-      },
-      provider: {
-        source: "provider-diagnostics",
-        status: "available",
-        value: "codex",
-      },
-      providerSession: {
-        source: "provider-session",
-        status: "available",
-        value: "session-1",
-      },
-      providerSessionData: {
-        id: "session-1",
-        kind: "session_id",
-        local_jsonl_path: "C:\\logs\\session-1.jsonl",
-        provider: "codex",
-      },
       traceIDs: ["trace-alpha", "trace-beta"],
       workstationName: "Review",
       workstationRequest: {
@@ -77,15 +50,6 @@ describe("ExecutionDetailsSection", () => {
     );
 
     const section = screen.getByRole("region", { name: "Execution details" });
-    expect(within(section).getByText("gpt-5.4")).toBeTruthy();
-    expect(within(section).getByText("Source:")).toBeTruthy();
-    expect(within(section).getByText("factory-renderer")).toBeTruthy();
-    expect(within(section).getByText("sha256:system")).toBeTruthy();
-    expect(
-      within(section).getByRole("link", {
-        name: "session-1",
-      }).getAttribute("href"),
-    ).toContain("file:///");
     expect(within(section).getByText("dispatch-review")).toBeTruthy();
     expect(within(section).getByText("Review")).toBeTruthy();
     expect(
@@ -126,19 +90,6 @@ describe("ExecutionDetailsSection", () => {
       dispatchID: undefined,
       elapsedStartTimestamp: undefined,
       inferenceAttempts: [],
-      model: { status: "omitted" },
-      prompt: { status: "pending" },
-      provider: { status: "pending" },
-      providerSession: {
-        source: "provider-session",
-        status: "available",
-        value: "session-2",
-      },
-      providerSessionData: {
-        id: "session-2",
-        kind: "session_id",
-        provider: "codex",
-      },
       traceIDs: [],
       workstationName: undefined,
       workID: "work-2",
@@ -154,12 +105,6 @@ describe("ExecutionDetailsSection", () => {
     );
 
     const section = screen.getByRole("region", { name: "Execution details" });
-    expect(within(section).queryByText("Model")).toBeNull();
-    expect(
-      within(section).getByText(
-        "Prompt details are not available for this selected run yet.",
-      ),
-    ).toBeTruthy();
     expect(
       within(section).getByText("Dispatch ID is not available for this selected run."),
     ).toBeTruthy();
@@ -181,7 +126,6 @@ describe("ExecutionDetailsSection", () => {
     expect(within(section).queryByRole("link", { name: "Open trace" })).toBeNull();
     expect(within(section).queryByRole("region", { name: "Workstation request" })).toBeNull();
     expect(within(section).queryByRole("region", { name: "Inference attempts" })).toBeNull();
-    expect(within(section).getByText("session-2")).toBeTruthy();
   });
 });
 

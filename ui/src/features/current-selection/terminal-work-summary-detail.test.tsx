@@ -55,19 +55,6 @@ describe("TerminalWorkSummaryCard", () => {
       dispatchID: "dispatch-done-story",
       elapsedStartTimestamp: "2026-04-08T12:00:00Z",
       inferenceAttempts: [],
-      model: { source: "provider-diagnostics", status: "available", value: "gpt-5.4" },
-      prompt: {
-        promptSource: "factory-renderer",
-        source: "diagnostics",
-        status: "available",
-        systemPromptHash: "sha256:system-runtime",
-      },
-      provider: { source: "provider-diagnostics", status: "available", value: "codex" },
-      providerSession: {
-        source: "provider-session",
-        status: "available",
-        value: "sess-done-story",
-      },
       traceIDs: ["trace-done-story"],
       workstationName: "Complete",
       workID: "work-done-story",
@@ -83,16 +70,10 @@ describe("TerminalWorkSummaryCard", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Execution details" })).toBeTruthy();
-    expect(screen.getByText("sess-done-story")).toBeTruthy();
     expect(screen.getByText("dispatch-done-story")).toBeTruthy();
     expect(screen.getByText("trace-done-story")).toBeTruthy();
-    expect(screen.getByText("factory-renderer")).toBeTruthy();
-    expect(screen.getByText("sha256:system-runtime")).toBeTruthy();
-    expect(screen.getByText("gpt-5.4")).toBeTruthy();
-    expect(screen.getByText("codex")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open trace" }).getAttribute("href")).toBe(
       "#trace",
     );
   });
 });
-

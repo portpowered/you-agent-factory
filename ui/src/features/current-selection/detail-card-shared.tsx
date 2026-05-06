@@ -11,7 +11,6 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/dashboard/typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
-import type { ExecutionDetailValue, ModelDetailValue } from "./state/executionDetails";
 import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
@@ -133,18 +132,6 @@ export function InferenceAttemptDetail({
       </dd>
     </div>
   );
-}
-
-export function formatExecutionDetailValue(
-  detail: ExecutionDetailValue | ModelDetailValue,
-  label: "Model" | "Provider" | "Provider session",
-) {
-  if (detail.status === "available") {
-    return <code className={RUNTIME_DETAIL_CODE_CLASS}>{detail.value}</code>;
-  }
-
-  const suffix = detail.status === "pending" ? " yet." : ".";
-  return `${label} details are not available for this selected run${suffix}`;
 }
 
 export function RequestCountSection({ request }: RequestCountSectionProps) {
@@ -422,4 +409,3 @@ function stableListKeys(items: string[]): Array<{ item: string; key: string }> {
     };
   });
 }
-

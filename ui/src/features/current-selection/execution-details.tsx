@@ -1,7 +1,6 @@
 import {
   formatDurationFromISO,
   formatDurationMillis,
-  getProviderSessionLogTarget,
 } from "../../components/ui/formatters";
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -14,7 +13,6 @@ import {
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
   TRACE_ACTION_LINK_CLASS,
-  formatExecutionDetailValue,
 } from "./detail-card-shared";
 import type {
   ExecutionDetailsSectionProps,
@@ -31,50 +29,11 @@ export function ExecutionDetailsSection({
   traceTargetId,
 }: ExecutionDetailsSectionProps) {
   const hasTraceIDs = details.traceIDs.length > 0;
-  const providerSessionLogTarget = getProviderSessionLogTarget(
-    details.providerSessionData,
-    details.elapsedStartTimestamp,
-  );
 
   return (
     <section aria-label="Execution details" className={RUNTIME_DETAILS_SECTION_CLASS}>
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Execution details</h4>
       <dl>
-        <div>
-          <dt>Provider</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {formatExecutionDetailValue(details.provider, "Provider")}
-          </dd>
-        </div>
-        {details.model.status !== "omitted" ? (
-          <div>
-            <dt>Model</dt>
-            <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-              {formatExecutionDetailValue(details.model, "Model")}
-            </dd>
-          </div>
-        ) : null}
-        <PromptDiagnosticDetail prompt={details.prompt} />
-        <div>
-          <dt>Provider session</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {details.providerSession.status === "available" ? (
-              providerSessionLogTarget ? (
-                <a
-                  className={TRACE_ACTION_LINK_CLASS}
-                  href={providerSessionLogTarget.href}
-                  title={providerSessionLogTarget.display}
-                >
-                  {details.providerSession.value}
-                </a>
-              ) : (
-                <code className={RUNTIME_DETAIL_CODE_CLASS}>{details.providerSession.value}</code>
-              )
-            ) : (
-              formatExecutionDetailValue(details.providerSession, "Provider session")
-            )}
-          </dd>
-        </div>
         <div>
           <dt>Dispatch ID</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
@@ -162,40 +121,6 @@ export function InferenceAttemptsSection({ attempts }: InferenceAttemptsSectionP
         </p>
       )}
     </section>
-  );
-}
-
-function PromptDiagnosticDetail({ prompt }: { prompt: ExecutionDetailsSectionProps["details"]["prompt"] }) {
-  if (prompt.status === "available") {
-    return (
-      <div>
-        <dt>Prompt</dt>
-        <dd className="grid gap-[0.25rem]">
-          {prompt.promptSource ? (
-            <span className={RUNTIME_DETAIL_VALUE_CLASS}>
-              Source: <code className={RUNTIME_DETAIL_CODE_CLASS}>{prompt.promptSource}</code>
-            </span>
-          ) : null}
-          {prompt.systemPromptHash ? (
-            <span className={RUNTIME_DETAIL_VALUE_CLASS}>
-              System prompt hash:{" "}
-              <code className={RUNTIME_DETAIL_CODE_CLASS}>{prompt.systemPromptHash}</code>
-            </span>
-          ) : null}
-        </dd>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <dt>Prompt</dt>
-      <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-        {prompt.status === "pending"
-          ? "Prompt details are not available for this selected run yet."
-          : "Prompt details are not available for this selected run."}
-      </dd>
-    </div>
   );
 }
 
