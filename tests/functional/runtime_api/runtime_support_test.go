@@ -3,10 +3,7 @@ package runtime_api
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
-	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -76,15 +73,4 @@ var retiredFunctionalFactoryEventTypes = []string{
 	"DISPATCH_COMPLETED",
 	"FACTORY_STATE_CHANGE",
 	"RUN_FINISHED",
-}
-
-func writeAgentConfig(t *testing.T, dir, workerName, content string) {
-	t.Helper()
-	path := filepath.Join(dir, "workers", workerName, "AGENTS.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("create worker config dir %s: %v", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
 }

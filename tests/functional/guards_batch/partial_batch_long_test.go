@@ -75,7 +75,7 @@ func TestPartialBatch_TemplateResolvesFromTags(t *testing.T) {
 		Tags:       map[string]string{"branch": "feature-abc"},
 	})
 
-	writeAgentConfig(t, dir, "exec-worker", `---
+	support.WriteAgentConfig(t, dir, "exec-worker", `---
 type: MODEL_WORKER
 model: gpt-5-codex
 modelProvider: codex
@@ -127,7 +127,7 @@ func TestPartialBatch_ProviderExitFailureRoutesTokenToFailedWithContext(t *testi
 		Payload:    []byte("provider exit failure payload"),
 	})
 
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
@@ -186,7 +186,7 @@ func TestPartialBatch_RetryableProviderFailuresRetryThroughScriptWrapPath(t *tes
 		Payload:    []byte("provider retry payload"),
 	})
 
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude
@@ -252,7 +252,7 @@ func throttledProviderFailureHarness(t *testing.T) (*testutil.ServiceTestHarness
 		Payload:    []byte("provider throttle payload"),
 	})
 
-	writeAgentConfig(t, dir, "worker-a", `---
+	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
 model: test-model
 modelProvider: claude

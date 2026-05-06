@@ -3,8 +3,6 @@ package guards_batch
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -12,18 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-func writeAgentConfig(t *testing.T, dir, workerName, content string) {
-	t.Helper()
-
-	path := filepath.Join(dir, "workers", workerName, "AGENTS.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("create worker config dir %s: %v", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
 
 func assertArgsContainSequence(t *testing.T, args, want []string) {
 	t.Helper()
