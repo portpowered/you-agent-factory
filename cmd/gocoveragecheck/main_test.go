@@ -1,7 +1,10 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -79,4 +82,98 @@ func TestResolveCoverageLaneOverrides(t *testing.T) {
 	if !slices.Equal(testPackages, wantTests) {
 		t.Fatalf("test packages = %v, want %v", testPackages, wantTests)
 	}
+}
+
+func TestEvaluateCoverageFlagsZeroCoverageBackendPackages(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		"",
+	}, "\n"))
+
+	result, totalLine, err := evaluateCoverage(
+		"github.com/portpowered/infinite-you/pkg/config\t\tcoverage: 0.0% of statements\n"+
+			"total: (statements) 82.5%\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+			modulePath + "/pkg/generatedclient",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	if result.actual != 82.5 {
+		t.Fatalf("actual coverage = %v, want 82.5", result.actual)
+	}
+	if totalLine != "total: (statements) 82.5%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 82.5%")
+	}
+
+	wantZeroCoverage := []string{modulePath + "/pkg/config"}
+	if !slices.Equal(result.zeroCoveragePackages, wantZeroCoverage) {
+		t.Fatalf("zero coverage packages = %v, want %v", result.zeroCoveragePackages, wantZeroCoverage)
+	}
+}
+
+func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		"pkg\\config\\config.go:1.1,2.1 2 0",
+		"pkg\\service\\factory.go:1.1,2.1 4 1",
+		"",
+	}, "\n"))
+
+	result, _, err := evaluateCoverage(
+		"total: (statements) 80.0%\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	wantZeroCoverage := []string{modulePath + "/pkg/config"}
+	if !slices.Equal(result.zeroCoveragePackages, wantZeroCoverage) {
+		t.Fatalf("zero coverage packages = %v, want %v", result.zeroCoveragePackages, wantZeroCoverage)
+	}
+}
+
+func TestFormatZeroCoverageFailure(t *testing.T) {
+	t.Parallel()
+
+	got := formatZeroCoverageFailure([]string{
+		modulePath + "/pkg/config",
+		modulePath + "/pkg/service",
+	})
+	want := "go coverage found backend-owned packages with 0% statement coverage: " +
+		modulePath + "/pkg/config, " + modulePath + "/pkg/service"
+	if got != want {
+		t.Fatalf("formatZeroCoverageFailure() = %q, want %q", got, want)
+	}
+}
+
+func writeCoverageProfile(t *testing.T, contents string) string {
+	t.Helper()
+
+	profilePath := filepath.Join(t.TempDir(), "coverage.out")
+	if err := os.WriteFile(profilePath, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write coverage profile: %v", err)
+	}
+	return profilePath
 }
