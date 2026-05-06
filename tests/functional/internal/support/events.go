@@ -20,6 +20,13 @@ func FactoryWorksValue(value *[]factoryapi.Work) []factoryapi.Work {
 	return *value
 }
 
+func FactoryRelationsValue(value *[]factoryapi.Relation) []factoryapi.Relation {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
 func AssertSingleWorkRequestEvent(t *testing.T, events []factoryapi.FactoryEvent, requestID, workID, workTypeName string) {
 	t.Helper()
 
