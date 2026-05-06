@@ -241,7 +241,29 @@ func writeNamedFactoryLayout(targetDir string, cfg *interfaces.FactoryConfig, ca
 	if err := os.MkdirAll(inputsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create inputs directory %s: %w", inputsDir, err)
 	}
+	if err := ensureDefaultInputChannelDirectories(targetDir, cfg); err != nil {
+		return nil, err
+	}
 	return replacements, nil
+}
+
+func ensureDefaultInputChannelDirectories(targetDir string, cfg *interfaces.FactoryConfig) error {
+	if cfg == nil {
+		return nil
+	}
+
+	for _, workType := range cfg.WorkTypes {
+		workTypeName := strings.TrimSpace(workType.Name)
+		if workTypeName == "" {
+			continue
+		}
+
+		channelDir := filepath.Join(targetDir, interfaces.InputsDir, workTypeName, interfaces.DefaultChannelName)
+		if err := os.MkdirAll(channelDir, 0o755); err != nil {
+			return fmt.Errorf("create inputs/%s/%s directory: %w", workTypeName, interfaces.DefaultChannelName, err)
+		}
+	}
+	return nil
 }
 
 func requireFactoryConfig(factoryDir string) error {

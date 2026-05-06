@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
@@ -29,6 +30,7 @@ const (
 type ScriptExecutor struct {
 	Command       string
 	Args          []string
+	FactoryDir    string
 	CommandRunner CommandRunner
 	Logger        logging.Logger
 	recorder      ScriptEventRecorder
@@ -47,6 +49,14 @@ func WithScriptEventRecorder(recorder ScriptEventRecorder) ScriptExecutorOption 
 		if recorder != nil {
 			se.recorder = recorder
 		}
+	}
+}
+
+// WithScriptFactoryDir resolves portable factory/scripts/... references against
+// the active factory directory before subprocess execution.
+func WithScriptFactoryDir(factoryDir string) ScriptExecutorOption {
+	return func(se *ScriptExecutor) {
+		se.FactoryDir = strings.TrimSpace(factoryDir)
 	}
 }
 
@@ -131,8 +141,8 @@ func (se *ScriptExecutor) commandRequest(request interfaces.WorkstationExecution
 		return CommandRequest{}, err
 	}
 	commandReq := subprocessRequestBase(request.Dispatch)
-	commandReq.Command = se.Command
-	commandReq.Args = resolvedArgs
+	commandReq.Command = resolvePortableFactoryScriptReference(se.FactoryDir, se.Command)
+	commandReq.Args = resolvePortableFactoryScriptReferences(se.FactoryDir, resolvedArgs)
 	commandReq.Env = buildEnv(request)
 	commandReq.WorkDir = executionWorkDir(request)
 	commandReq.InputTokens = cloneRawInputTokens(request.InputTokens)
@@ -448,6 +458,36 @@ func executionWorkDir(request interfaces.WorkstationExecutionRequest) string {
 		return request.Worktree
 	}
 	return ""
+}
+
+func resolvePortableFactoryScriptReferences(factoryDir string, args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+
+	resolved := make([]string, len(args))
+	for i, arg := range args {
+		resolved[i] = resolvePortableFactoryScriptReference(factoryDir, arg)
+	}
+	return resolved
+}
+
+func resolvePortableFactoryScriptReference(factoryDir, raw string) string {
+	if strings.TrimSpace(factoryDir) == "" {
+		return raw
+	}
+
+	trimmed := strings.TrimSpace(raw)
+	normalized := filepath.ToSlash(trimmed)
+	if !strings.HasPrefix(normalized, "factory/scripts/") {
+		return raw
+	}
+
+	relativePath := strings.TrimPrefix(normalized, "factory/scripts/")
+	if relativePath == "" {
+		return raw
+	}
+	return filepath.Join(factoryDir, "scripts", filepath.FromSlash(relativePath))
 }
 
 // Compile-time check.

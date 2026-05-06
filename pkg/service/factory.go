@@ -1551,6 +1551,9 @@ func buildWorkerExecutor(
 		}
 	case interfaces.WorkerTypeScript:
 		var scriptOpts []workers.ScriptExecutorOption
+		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
+			scriptOpts = append(scriptOpts, workers.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
+		}
 		if scriptRecorder != nil {
 			scriptOpts = append(scriptOpts, workers.WithScriptEventRecorder(scriptRecorder))
 		}
