@@ -60,13 +60,3 @@ func stringSlicePointerValue(value *[]string) []string {
 	}
 	return *value
 }
-
-func lastFactoryEventTick(events []factoryapi.FactoryEvent) int {
-	tick := 0
-	for _, event := range events {
-		if event.Context.Tick > tick {
-			tick = event.Context.Tick
-		}
-	}
-	return tick
-}

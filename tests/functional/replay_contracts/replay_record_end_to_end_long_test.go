@@ -298,7 +298,7 @@ func assertGeneratedReplayRequestMetadata(t *testing.T, events []factoryapi.Fact
 		t.Fatalf("generated relation metadata = %#v, want generated-beta depends on generated-alpha complete", relations)
 	}
 
-	world, err := projections.ReconstructFactoryWorldState(events, lastFactoryEventTick(events))
+	world, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -372,16 +372,6 @@ func replayWorkRequestEventsFromEvents(t *testing.T, events []factoryapi.Factory
 		})
 	}
 	return out
-}
-
-func lastFactoryEventTick(events []factoryapi.FactoryEvent) int {
-	tick := 0
-	for _, event := range events {
-		if event.Context.Tick > tick {
-			tick = event.Context.Tick
-		}
-	}
-	return tick
 }
 
 func snapshotContainsWorkID(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], workID string) bool {
