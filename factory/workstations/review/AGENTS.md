@@ -62,7 +62,7 @@ Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or
 
 ### Step 6 - merge if correct. 
 
-If you believe that the PR is complete, please merge the PR. 
+If you believe that the PR is complete and the CI passes, please merge the PR. 
 
 If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
 
