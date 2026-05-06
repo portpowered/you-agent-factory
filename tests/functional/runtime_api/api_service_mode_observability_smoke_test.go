@@ -296,7 +296,19 @@ func TestObservabilitySmoke_CanonicalServiceSnapshotMatchesStateAndDashboardAcro
 	)
 	assertStreamDashboardMatchesEngineState(t, "completed stream snapshot", completedEngineState, completedStreamSnapshot)
 
+	select {
+	case <-server.Done():
+		t.Fatal("service-mode runtime exited after returning to idle; expected canonical observability coverage to prove it stays alive until cancellation")
+	case <-time.After(500 * time.Millisecond):
+	}
+
 	server.Stop(t)
+
+	select {
+	case <-server.Done():
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("service-mode runtime did not exit after explicit cancellation")
+	}
 }
 
 type staticOutcomeExecutor struct {
