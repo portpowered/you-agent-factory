@@ -111,6 +111,10 @@
 - An aggregate backend coverage floor can still hide `0%` packages; the first
   useful ratchet is to fail the existing coverage lane on zero-coverage
   backend packages and print the offenders explicitly.
+- When a repo-owned `Makefile` target shells through a thin command under
+  `cmd/`, prefer adding a local callable seam plus package-local entrypoint
+  tests in that command owner before pushing coverage assertions down into
+  unrelated CLI or runtime packages.
 
 ## Current Summary
 
@@ -220,6 +224,41 @@
   `factory/inputs/idea/default/close-backend-coverage-profile-gap.md` so the
   next worker can close that profile-gap loophole without broadening into a
   higher aggregate threshold or a multi-package test-authoring effort.
+
+## 2026-05-06T07:04:44.5861978-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git rebased the meta branch
+  onto live `origin/main`, pulling in merged PR `#125`
+  (`close-backend-coverage-profile-gap`) while preserving the user-owned
+  tracked edit in `factory/logs/meta/asks.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, recent PR
+  state, the tracked-versus-ignored `factory/inputs/**` surface, and the live
+  repo-owned backend quality lane after the `#125` merge.
+- Re-validated tracked queue truth with `git ls-files factory/inputs`,
+  `rg --files -uu factory/inputs`, and `Get-ChildItem -Recurse factory/inputs`,
+  confirming the checked-in inboxes remain sentinel-only while the visible idea
+  file is ignored local operating state.
+- Confirmed the previously queued ignored idea
+  `factory/inputs/idea/default/close-backend-coverage-profile-gap.md` is stale
+  because merged PR `#125` already landed that exact cleanup on `main`, so it
+  should be replaced rather than re-queued.
+- Verified with `gh pr diff 125`, delegated explorer inspection, and direct
+  reads of `cmd/gocoveragecheck/main.go`, `cmd/gocoveragecheck/main_test.go`,
+  and `cmd/factory/main_test.go` that `main` now closes the recorded
+  report-versus-profile gap and also covers the thin `cmd/factory` entrypoint
+  through a command-local callable seam.
+- Used direct reads of `Makefile` and `cmd/functionallane/main.go` to identify
+  the next narrower sibling seam in the same ask lane: `make test-functional`
+  still shells through the repo-owned `cmd/functionallane` command, which owns
+  functional package discovery and invocation behavior, but it still has no
+  checked-in `cmd/functionallane/main_test.go`.
+- Queued one replacement ignored idea under
+  `factory/inputs/idea/default/cover-functionallane-command-entrypoint.md` so
+  the next worker can make that repo-owned functional-lane command directly
+  testable without broadening into new functional scenarios, coverage-threshold
+  changes, or a wider package-by-package campaign.
 
 ## 2026-05-06T04:04:39.6158725-07:00 - meta state refresh
 
