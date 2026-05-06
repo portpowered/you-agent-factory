@@ -19,7 +19,7 @@ import (
 
 var (
 	totalCoveragePattern   = regexp.MustCompile(`total:\s+\(statements\)\s+([0-9.]+)%`)
-	packageCoveragePattern = regexp.MustCompile(`^(\S+)\s+coverage:\s+([0-9.]+)% of statements$`)
+	packageCoveragePattern = regexp.MustCompile(`^(?:ok\s+)?(\S+)(?:\s+\S+)*\s+coverage:\s+([0-9.]+)% of statements$`)
 )
 
 const modulePath = "github.com/portpowered/infinite-you"
