@@ -11,12 +11,6 @@ type Logger interface {
 	Info(msg string, keysAndValues ...any)
 	Warn(msg string, keysAndValues ...any)
 	Error(msg string, keysAndValues ...any)
-}
-
-// verboseLogger is an optional extension for loggers that can emit records
-// only when the caller explicitly enabled verbose runtime diagnostics.
-type verboseLogger interface {
-	Logger
 	Verbose(msg string, keysAndValues ...any)
 }
 
@@ -37,14 +31,6 @@ func EnsureLogger(l Logger) Logger {
 		return NoopLogger{}
 	}
 	return l
-}
-
-// Verbose emits a verbose-only log record when the logger supports that
-// optional mode. Plain Logger implementations ignore verbose records.
-func Verbose(l Logger, msg string, keysAndValues ...any) {
-	if logger, ok := l.(verboseLogger); ok {
-		logger.Verbose(msg, keysAndValues...)
-	}
 }
 
 // BuildLogger creates a zap.Logger with the appropriate verbosity level.
