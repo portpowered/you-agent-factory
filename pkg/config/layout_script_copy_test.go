@@ -18,7 +18,7 @@ func TestWriteExpandedFactoryLayout_CopiesReferencedScriptForOptedInScriptWorkst
 	scriptPath := filepath.Join(sourceDir, "scripts", "setup-workspace.py")
 	writeLayoutScriptTestFile(t, scriptPath, "#!/usr/bin/env python3\nprint('portable setup')\n")
 
-	if err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
+	if _, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
 		t.Fatalf("writeExpandedFactoryLayout: %v", err)
 	}
 
@@ -55,7 +55,7 @@ func TestWriteExpandedFactoryLayout_DoesNotCopyReferencedScriptWhenOptOut(t *tes
 	canonical := flattenLayoutTestFactory(t, cfg)
 	writeLayoutScriptTestFile(t, filepath.Join(sourceDir, "scripts", "execute-story.ps1"), "Write-Output 'portable'\n")
 
-	if err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
+	if _, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
 		t.Fatalf("writeExpandedFactoryLayout: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestWriteExpandedFactoryLayout_SkipsInterpreterFlagValuesBeforeScriptPath(t
 	canonical := flattenLayoutTestFactory(t, cfg)
 	writeLayoutScriptTestFile(t, filepath.Join(sourceDir, "scripts", "run.ts"), "console.log('portable');\n")
 
-	if err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
+	if _, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
 		t.Fatalf("writeExpandedFactoryLayout: %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestWriteExpandedFactoryLayout_RejectsUnsafeReferencedScriptPaths(t *testin
 			cfg := portableScriptFactoryConfig(true, command, tt.args)
 			canonical := flattenLayoutTestFactory(t, cfg)
 
-			err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile))
+			_, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile))
 			if err == nil {
 				t.Fatal("expected unsafe referenced script path to fail")
 			}

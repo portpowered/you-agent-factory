@@ -70,44 +70,53 @@ func FlattenFactoryConfig(path string) ([]byte, error) {
 // ExpandFactoryConfigLayout writes a split factory directory layout from a
 // canonical factory.json file and returns the directory that received the files.
 func ExpandFactoryConfigLayout(path string) (string, error) {
+	targetDir, _, err := ExpandFactoryConfigLayoutWithReport(path)
+	return targetDir, err
+}
+
+// ExpandFactoryConfigLayoutWithReport writes a split factory directory layout
+// from a canonical factory.json file and reports any differing portable
+// bundled files that were overwritten during materialization.
+func ExpandFactoryConfigLayoutWithReport(path string) (string, []PortableBundledFileReplacement, error) {
 	if path == "" {
-		return "", fmt.Errorf("factory config path is required")
+		return "", nil, fmt.Errorf("factory config path is required")
 	}
 
 	data, sourcePath, targetDir, err := readFactoryConfigExpansionSource(path)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	mapper := NewFactoryConfigMapper()
 	factoryCfg, err := mapper.Expand(data)
 	if err != nil {
-		return "", fmt.Errorf("parse factory config %s: %w", sourcePath, err)
+		return "", nil, fmt.Errorf("parse factory config %s: %w", sourcePath, err)
 	}
 	if err := validatePortableBundledFilesForExpandOnPath(filepath.Dir(sourcePath), factoryCfg); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	cfgForExpandedFiles, err := InlineRuntimeDefinitions(targetDir, factoryCfg, InlineRuntimeDefinitionOptions{})
 	if err != nil {
-		return "", fmt.Errorf("load split runtime definitions for expand %s: %w", targetDir, err)
+		return "", nil, fmt.Errorf("load split runtime definitions for expand %s: %w", targetDir, err)
 	}
 	if cfgForExpandedFiles == nil {
 		cfgForExpandedFiles = factoryCfg
 	}
 	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfgForExpandedFiles)
 	if err != nil {
-		return "", fmt.Errorf("normalize authored factory config %s: %w", sourcePath, err)
+		return "", nil, fmt.Errorf("normalize authored factory config %s: %w", sourcePath, err)
 	}
 	canonical, err := mapper.Flatten(authoredFactoryCfg)
 	if err != nil {
-		return "", fmt.Errorf("normalize factory config %s: %w", sourcePath, err)
+		return "", nil, fmt.Errorf("normalize factory config %s: %w", sourcePath, err)
 	}
 
-	if err := writeExpandedFactoryLayout(filepath.Dir(sourcePath), targetDir, cfgForExpandedFiles, canonical, sourcePath); err != nil {
-		return "", err
+	replacements, err := writeExpandedFactoryLayout(filepath.Dir(sourcePath), targetDir, cfgForExpandedFiles, canonical, sourcePath)
+	if err != nil {
+		return "", nil, err
 	}
-	return targetDir, nil
+	return targetDir, replacements, nil
 }
 
 // InlineRuntimeDefinitions returns a copy of cfg with any runtime definitions
@@ -432,39 +441,40 @@ func readFactoryConfigExpansionSource(path string) ([]byte, string, string, erro
 	return data, sourcePath, targetDir, nil
 }
 
-func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.FactoryConfig, canonical []byte, sourcePath string) error {
+func writeExpandedFactoryLayout(sourceDir, targetDir string, cfg *interfaces.FactoryConfig, canonical []byte, sourcePath string) ([]PortableBundledFileReplacement, error) {
 	if _, err := preparePortableBundledFileWrites(targetDir, cfg); err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return fmt.Errorf("create factory directory %s: %w", targetDir, err)
+		return nil, fmt.Errorf("create factory directory %s: %w", targetDir, err)
 	}
 
 	formatted, err := formatCanonicalFactoryJSON(canonical, sourcePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	factoryPath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
 	if err := os.WriteFile(factoryPath, formatted, 0o644); err != nil {
-		return fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
+		return nil, fmt.Errorf("write canonical factory config %s: %w", factoryPath, err)
 	}
 
 	if err := writeExpandedWorkerFiles(targetDir, cfg.Workers); err != nil {
-		return err
+		return nil, err
 	}
 	if err := writeExpandedWorkstationFiles(targetDir, cfg.Workstations); err != nil {
-		return err
+		return nil, err
 	}
-	if _, err := materializePortableBundledFiles(targetDir, cfg); err != nil {
-		return err
+	replacements, err := materializePortableBundledFiles(targetDir, cfg)
+	if err != nil {
+		return nil, err
 	}
 	if err := copySupportedPortableBundledFilesFromSource(sourceDir, targetDir, cfg); err != nil {
-		return err
+		return nil, err
 	}
 	if err := writeExpandedReferencedScripts(sourceDir, targetDir, cfg); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return replacements, nil
 }
 
 func copySupportedPortableBundledFilesFromSource(sourceDir, targetDir string, cfg *interfaces.FactoryConfig) error {

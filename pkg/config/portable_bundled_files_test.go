@@ -87,7 +87,7 @@ func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.
 	}
 	canonical := flattenPortableBundledTestFactory(t, authoredCfg)
 
-	if err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
+	if _, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile)); err != nil {
 		t.Fatalf("writeExpandedFactoryLayout: %v", err)
 	}
 
@@ -197,7 +197,7 @@ func TestWriteExpandedFactoryLayout_RejectsUnsafePortableBundledFileTargetsBefor
 			}
 			canonical := flattenPortableBundledTestFactory(t, cfg)
 
-			err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile))
+			_, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile))
 			if err == nil {
 				t.Fatal("expected unsafe bundled file target to fail")
 			}
@@ -233,7 +233,7 @@ func TestWriteExpandedFactoryLayout_RejectsPortableBundledFileTargetsThatEscapeT
 	}
 	canonical := flattenPortableBundledTestFactory(t, cfg)
 
-	err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile))
+	_, err := writeExpandedFactoryLayout(sourceDir, targetDir, cfg, canonical, filepath.Join(sourceDir, interfaces.FactoryConfigFile))
 	if err == nil {
 		t.Fatal("expected bundled file target to fail when a filesystem link escapes the expand target")
 	}

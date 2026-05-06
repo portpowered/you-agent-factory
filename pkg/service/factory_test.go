@@ -594,6 +594,98 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 	}
 }
 
+func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(t *testing.T) {
+	projectDir := t.TempDir()
+	sourceDir := filepath.Join(projectDir, "factory")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(factory): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "Makefile"), []byte("test:\n\tgo test ./...\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(Makefile): %v", err)
+	}
+	writeFactoryJSON(t, sourceDir, map[string]any{
+		"name": "portable-runtime",
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{
+				{
+					"type":       "SCRIPT",
+					"targetPath": "factory/scripts/execute-story.ps1",
+					"content": map[string]any{
+						"encoding": "utf-8",
+						"inline":   servicePortableBundledScriptBody,
+					},
+				},
+			},
+		},
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":    "worker-a",
+			"type":    "SCRIPT_WORKER",
+			"command": "powershell",
+			"args":    []string{"-File", "scripts/execute-story.ps1"},
+		}},
+		"workstations": []map[string]any{{
+			"name":    "process",
+			"worker":  "worker-a",
+			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+		}},
+	})
+	writeWorkstationAgentsMD(t, sourceDir, "process")
+	if err := os.MkdirAll(filepath.Join(sourceDir, "scripts"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(factory/scripts): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "scripts", "execute-story.ps1"), []byte("Write-Output 'stale script'\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(portable script): %v", err)
+	}
+
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               sourceDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.logSink != nil {
+		defer func() {
+			if err := svc.logSink.Close(); err != nil {
+				t.Fatalf("Close(runtime log sink): %v", err)
+			}
+		}()
+	}
+
+	if svc.runtimeCfg == nil {
+		t.Fatal("expected runtime config after portable load")
+	}
+	warnings := observedLogs.FilterMessage("runtime config load replaced portable bundled files").All()
+	if len(warnings) != 1 {
+		t.Fatalf("replacement warning count = %d, want 1", len(warnings))
+	}
+	fields := warnings[0].ContextMap()
+	targetPaths, ok := fields["target_paths"].([]any)
+	if !ok {
+		t.Fatalf("replacement warning target_paths = %#v, want []any", fields["target_paths"])
+	}
+	if len(targetPaths) != 1 || targetPaths[0] != "factory/scripts/execute-story.ps1" {
+		t.Fatalf("replacement warning target_paths = %#v, want [factory/scripts/execute-story.ps1]", targetPaths)
+	}
+	data, err := os.ReadFile(filepath.Join(sourceDir, "scripts", "execute-story.ps1"))
+	if err != nil {
+		t.Fatalf("ReadFile(portable script): %v", err)
+	}
+	if got := string(data); got != servicePortableBundledScriptBody {
+		t.Fatalf("materialized script after replacement = %q, want %q", got, servicePortableBundledScriptBody)
+	}
+}
+
 func TestFactoryService_CreateNamedFactory_RejectsReservedCurrentFactoryName(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)

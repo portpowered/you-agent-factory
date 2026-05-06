@@ -12,10 +12,11 @@ import (
 // LoadedFactoryConfig is the effective runtime configuration assembled from
 // factory.json plus any worker/workstation AGENTS.md definitions available on disk.
 type LoadedFactoryConfig struct {
-	factoryDir     string
-	runtimeBaseDir string
-	factory        *interfaces.FactoryConfig
-	lookup         *runtimeDefinitionLookupMaps
+	factoryDir                  string
+	runtimeBaseDir              string
+	factory                     *interfaces.FactoryConfig
+	lookup                      *runtimeDefinitionLookupMaps
+	portableBundledReplacements []PortableBundledFileReplacement
 }
 
 var _ interfaces.RuntimeConfigLookup = (*LoadedFactoryConfig)(nil)
@@ -80,7 +81,8 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	if err != nil {
 		return nil, err
 	}
-	if _, err := materializePortableBundledFiles(resolvedFactoryDir, factoryCfg); err != nil {
+	replacements, err := materializePortableBundledFiles(resolvedFactoryDir, factoryCfg)
+	if err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
 	if err := applySupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg, false); err != nil {
@@ -110,7 +112,12 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 		runtimeDefs.workers[worker.Name] = def
 	}
 
-	return NewLoadedFactoryConfig(resolvedFactoryDir, factoryCfg, runtimeDefs)
+	loaded, err := NewLoadedFactoryConfig(resolvedFactoryDir, factoryCfg, runtimeDefs)
+	if err != nil {
+		return nil, err
+	}
+	loaded.portableBundledReplacements = clonePortableBundledFileReplacements(replacements)
+	return loaded, nil
 }
 
 // FactoryDir returns the source directory used to load the factory config.
@@ -155,6 +162,15 @@ func (c *LoadedFactoryConfig) FactoryConfig() *interfaces.FactoryConfig {
 		return nil
 	}
 	return c.factory
+}
+
+// PortableBundledFileReplacements returns bundled file target paths that were
+// overwritten while materializing inline portable content during runtime load.
+func (c *LoadedFactoryConfig) PortableBundledFileReplacements() []PortableBundledFileReplacement {
+	if c == nil {
+		return nil
+	}
+	return clonePortableBundledFileReplacements(c.portableBundledReplacements)
 }
 
 // WorkstationConfigs returns the effective workstation definitions by name.

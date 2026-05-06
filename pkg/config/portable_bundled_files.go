@@ -271,17 +271,17 @@ func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfi
 	return merged
 }
 
-type portableBundledFileReplacement struct {
+type PortableBundledFileReplacement struct {
 	TargetPath string
 }
 
-func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryConfig) ([]portableBundledFileReplacement, error) {
+func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryConfig) ([]PortableBundledFileReplacement, error) {
 	resolvedWrites, err := preparePortableBundledFileWrites(targetDir, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	replacements := make([]portableBundledFileReplacement, 0)
+	replacements := make([]PortableBundledFileReplacement, 0)
 	for _, write := range resolvedWrites {
 		if err := os.MkdirAll(filepath.Dir(write.targetPath), 0o755); err != nil {
 			return nil, fmt.Errorf("create bundled file directory for %s: %w", write.targetPath, err)
@@ -291,7 +291,7 @@ func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryCo
 			return nil, fmt.Errorf("inspect bundled file %s: %w", write.targetPath, err)
 		}
 		if replaced {
-			replacements = append(replacements, portableBundledFileReplacement{TargetPath: write.targetLocation})
+			replacements = append(replacements, PortableBundledFileReplacement{TargetPath: write.targetLocation})
 		}
 		if err := writePortableBundledFile(write.targetPath, []byte(write.content), write.mode); err != nil {
 			return nil, fmt.Errorf("write bundled file %s: %w", write.targetPath, err)
@@ -301,6 +301,15 @@ func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryCo
 		return nil, err
 	}
 	return replacements, nil
+}
+
+func clonePortableBundledFileReplacements(replacements []PortableBundledFileReplacement) []PortableBundledFileReplacement {
+	if len(replacements) == 0 {
+		return nil
+	}
+	cloned := make([]PortableBundledFileReplacement, len(replacements))
+	copy(cloned, replacements)
+	return cloned
 }
 
 func preparePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryConfig) ([]portableBundledFileWrite, error) {

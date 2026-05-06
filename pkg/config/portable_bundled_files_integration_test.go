@@ -111,6 +111,13 @@ func TestPortableBundledFiles_LoadRuntimeConfigOverwritesDifferingExistingFile(t
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(standalone portable config with stale file): %v", err)
 	}
+	replacements := loaded.PortableBundledFileReplacements()
+	if len(replacements) != 1 {
+		t.Fatalf("portable bundled replacements = %#v, want one replacement", replacements)
+	}
+	if replacements[0].TargetPath != "factory/scripts/execute-story.ps1" {
+		t.Fatalf("portable bundled replacement targetPath = %q, want %q", replacements[0].TargetPath, "factory/scripts/execute-story.ps1")
+	}
 
 	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
 	assertPortableBundledLoadedWorker(t, loaded)
