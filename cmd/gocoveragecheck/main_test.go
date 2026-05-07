@@ -911,11 +911,19 @@ func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
 
 func TestRunWrapsCoverSummaryFailureUsingStderrDetail(t *testing.T) {
 	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
 	defer func() {
 		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
 	}()
 
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	execCommand = fakeGoCoverageCommandCoverFailsWithStderr
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
 
 	_, err := run(config{
 		coverpkg: modulePath + "/pkg/config",
@@ -939,11 +947,19 @@ func TestRunWrapsCoverSummaryFailureUsingStderrDetail(t *testing.T) {
 
 func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
 	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
 	defer func() {
 		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
 	}()
 
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	execCommand = fakeGoCoverageCommandCoverFailsWithStdout
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
 
 	_, err := run(config{
 		coverpkg: modulePath + "/pkg/config",
@@ -967,11 +983,19 @@ func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
 
 func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
 	defer func() {
 		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
 	}()
 
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	execCommand = fakeGoCoverageCommandTestFailsWithoutDetail
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
 
 	_, err := run(config{
 		coverpkg: modulePath + "/pkg/config",
@@ -990,11 +1014,19 @@ func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 
 func TestRunWrapsCoverSummaryFailureWithoutDetail(t *testing.T) {
 	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
 	defer func() {
 		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
 	}()
 
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	execCommand = fakeGoCoverageCommandCoverFailsWithoutDetail
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
 
 	_, err := run(config{
 		coverpkg: modulePath + "/pkg/config",
