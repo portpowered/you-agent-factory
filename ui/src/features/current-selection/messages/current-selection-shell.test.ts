@@ -12,12 +12,15 @@ describe("getCurrentSelectionShellMessages", () => {
   });
 
   it.each([
-    ["en", "Current selection"],
-    ["zh", "当前选择"],
-    ["ko", "현재 선택"],
-    ["ja", "現在の選択"],
-  ] as const)("resolves %s catalog copy", (locale, expectedTitle) => {
-    expect(getCurrentSelectionShellMessages(locale).title).toBe(expectedTitle);
+    ["en", "Current selection", "Open trace"],
+    ["zh", "当前选择", "打开追踪"],
+    ["ko", "현재 선택", "추적 열기"],
+    ["ja", "現在の選択", "トレースを開く"],
+  ] as const)("resolves %s catalog copy", (locale, expectedTitle, expectedOpenTraceAction) => {
+    const messages = getCurrentSelectionShellMessages(locale);
+
+    expect(messages.title).toBe(expectedTitle);
+    expect(messages.openTraceAction).toBe(expectedOpenTraceAction);
   });
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
@@ -28,6 +31,9 @@ describe("getCurrentSelectionShellMessages", () => {
     );
     expect(getCurrentSelectionShellMessages("fr").title).toBe(
       defaultMessages.title,
+    );
+    expect(getCurrentSelectionShellMessages("fr").failureReasonLabel).toBe(
+      defaultMessages.failureReasonLabel,
     );
   });
 });

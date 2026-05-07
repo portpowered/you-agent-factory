@@ -1,12 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
-import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { DETAIL_CARD_NOW, inferenceAttempt } from "./detail-card-test-helpers";
 import {
   ExecutionDetailsSection,
   InferenceAttemptsSection,
 } from "./execution-details";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 
 describe("ExecutionDetailsSection", () => {
   it("renders available execution details with trace actions and workstation request projection guidance", () => {
@@ -55,8 +54,12 @@ describe("ExecutionDetailsSection", () => {
     expect(
       within(section).getByRole("link", { name: "trace-alpha (selected)" }),
     ).toBeTruthy();
-    expect(within(section).getByRole("link", { name: "trace-beta" })).toBeTruthy();
-    expect(within(section).getByRole("link", { name: "Open trace" })).toBeTruthy();
+    expect(
+      within(section).getByRole("link", { name: "trace-beta" }),
+    ).toBeTruthy();
+    expect(
+      within(section).getByRole("link", { name: "Open trace" }),
+    ).toBeTruthy();
 
     const workstationRequest = within(section).getByRole("region", {
       name: "Workstation request",
@@ -65,8 +68,12 @@ describe("ExecutionDetailsSection", () => {
     expect(within(workstationRequest).getAllByText("1")).toHaveLength(2);
     expect(within(workstationRequest).getByText("FAILED")).toBeTruthy();
     expect(within(workstationRequest).getByText("640ms")).toBeTruthy();
-    expect(within(workstationRequest).getByText("provider_timeout")).toBeTruthy();
-    expect(within(workstationRequest).getByText("Provider timed out.")).toBeTruthy();
+    expect(
+      within(workstationRequest).getByText("provider_timeout"),
+    ).toBeTruthy();
+    expect(
+      within(workstationRequest).getByText("Provider timed out."),
+    ).toBeTruthy();
     expect(
       within(workstationRequest).getByText(
         "Prompt, provider-session, and response-body details are shown under Inference attempts.",
@@ -106,7 +113,9 @@ describe("ExecutionDetailsSection", () => {
 
     const section = screen.getByRole("region", { name: "Execution details" });
     expect(
-      within(section).getByText("Dispatch ID is not available for this selected run."),
+      within(section).getByText(
+        "Dispatch ID is not available for this selected run.",
+      ),
     ).toBeTruthy();
     expect(
       within(section).getByText(
@@ -123,9 +132,15 @@ describe("ExecutionDetailsSection", () => {
         "Trace details are not available for this selected run.",
       ).length,
     ).toBeGreaterThan(0);
-    expect(within(section).queryByRole("link", { name: "Open trace" })).toBeNull();
-    expect(within(section).queryByRole("region", { name: "Workstation request" })).toBeNull();
-    expect(within(section).queryByRole("region", { name: "Inference attempts" })).toBeNull();
+    expect(
+      within(section).queryByRole("link", { name: "Open trace" }),
+    ).toBeNull();
+    expect(
+      within(section).queryByRole("region", { name: "Workstation request" }),
+    ).toBeNull();
+    expect(
+      within(section).queryByRole("region", { name: "Inference attempts" }),
+    ).toBeNull();
   });
 });
 

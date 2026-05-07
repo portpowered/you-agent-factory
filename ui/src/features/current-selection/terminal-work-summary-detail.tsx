@@ -1,5 +1,9 @@
-import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
+import {
+  DETAIL_COPY_CLASS,
+  WIDGET_SUBTITLE_CLASS,
+} from "../../components/dashboard/widget-board";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
+import { useCurrentSelectionShellMessages } from "./current-selection-locale";
 import { normalizeDetailText } from "./detail-card-shared";
 import type { TerminalWorkSummaryCardProps } from "./detail-card-types";
 import { ExecutionDetailsSection } from "./execution-details";
@@ -13,6 +17,7 @@ export function TerminalWorkSummaryCard({
   status,
   widgetId = "current-selection",
 }: TerminalWorkSummaryCardProps) {
+  const messages = useCurrentSelectionShellMessages();
   const normalizedFailureReason = normalizeDetailText(failureReason);
   const normalizedFailureMessage = normalizeDetailText(failureMessage);
 
@@ -21,22 +26,30 @@ export function TerminalWorkSummaryCard({
       <p className={WIDGET_SUBTITLE_CLASS}>{label}</p>
       <dl>
         <div>
-          <dt>Status</dt>
-          <dd>{status === "completed" ? "Completed" : "Failed"}</dd>
+          <dt>{messages.statusLabel}</dt>
+          <dd>
+            {status === "completed"
+              ? messages.completedStatus
+              : messages.failedStatus}
+          </dd>
         </div>
         <div>
-          <dt>Source</dt>
-          <dd>Current workstation run summary</dd>
+          <dt>{messages.sourceLabel}</dt>
+          <dd>{messages.sourceSummary}</dd>
         </div>
         {status === "failed" ? (
           <>
             <div>
-              <dt>Failure reason</dt>
-              <dd>{normalizedFailureReason ?? "Failure reason unavailable"}</dd>
+              <dt>{messages.failureReasonLabel}</dt>
+              <dd>
+                {normalizedFailureReason ?? messages.failureReasonUnavailable}
+              </dd>
             </div>
             <div>
-              <dt>Failure message</dt>
-              <dd>{normalizedFailureMessage ?? "Failure message unavailable"}</dd>
+              <dt>{messages.failureMessageLabel}</dt>
+              <dd>
+                {normalizedFailureMessage ?? messages.failureMessageUnavailable}
+              </dd>
             </div>
           </>
         ) : null}
@@ -45,17 +58,20 @@ export function TerminalWorkSummaryCard({
       normalizedFailureReason === undefined &&
       normalizedFailureMessage === undefined ? (
         <p className={DETAIL_COPY_CLASS}>
-          Failure details are unavailable for this failed work item.
+          {messages.failureDetailsUnavailable}
         </p>
       ) : status === "completed" ? (
         <p className={DETAIL_COPY_CLASS}>
-          Completed terminal work is retained in the session summary.
+          {messages.completedTerminalWorkSummary}
         </p>
       ) : null}
       {executionDetails ? (
-        <ExecutionDetailsSection details={executionDetails} now={now} traceTargetId="trace" />
+        <ExecutionDetailsSection
+          details={executionDetails}
+          now={now}
+          traceTargetId="trace"
+        />
       ) : null}
     </SelectionDetailLayout>
   );
 }
-

@@ -1,19 +1,27 @@
 import { render, screen } from "@testing-library/react";
-import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { DETAIL_CARD_NOW } from "./detail-card-test-helpers";
+import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { TerminalWorkSummaryCard } from "./terminal-work-summary-detail";
 
 describe("TerminalWorkSummaryCard", () => {
   it("renders terminal work summaries through a focused card", () => {
-    render(<TerminalWorkSummaryCard label="work-failed-story" status="failed" />);
+    render(
+      <TerminalWorkSummaryCard label="work-failed-story" status="failed" />,
+    );
 
-    expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Current selection" }),
+    ).toBeTruthy();
     expect(screen.getByText("work-failed-story")).toBeTruthy();
     expect(screen.getByText("Failed")).toBeTruthy();
     expect(screen.getByText("Failure reason")).toBeTruthy();
     expect(screen.getByText("Failure reason unavailable")).toBeTruthy();
     expect(screen.getByText("Failure message unavailable")).toBeTruthy();
-    expect(screen.getByText("Failure details are unavailable for this failed work item.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Failure details are unavailable for this failed work item.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders failure details for failed terminal work summaries", () => {
@@ -29,7 +37,11 @@ describe("TerminalWorkSummaryCard", () => {
     expect(screen.getByText("Failure reason")).toBeTruthy();
     expect(screen.getByText("provider_rate_limit")).toBeTruthy();
     expect(screen.getByText("Failure message")).toBeTruthy();
-    expect(screen.getByText("Provider rate limit exceeded while generating the repair.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Provider rate limit exceeded while generating the repair.",
+      ),
+    ).toBeTruthy();
   });
 
   it("does not render failure fields for completed terminal work summaries", () => {
@@ -46,8 +58,16 @@ describe("TerminalWorkSummaryCard", () => {
     expect(screen.getByText("Completed")).toBeTruthy();
     expect(screen.queryByText("Failure reason")).toBeNull();
     expect(screen.queryByText("provider_rate_limit")).toBeNull();
-    expect(screen.queryByText("Failure details are unavailable for this failed work item.")).toBeNull();
-    expect(screen.getByText("Completed terminal work is retained in the session summary.")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Failure details are unavailable for this failed work item.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        "Completed terminal work is retained in the session summary.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders execution details for selected terminal work when diagnostics are retained", () => {
@@ -69,11 +89,13 @@ describe("TerminalWorkSummaryCard", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Execution details" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Execution details" }),
+    ).toBeTruthy();
     expect(screen.getByText("dispatch-done-story")).toBeTruthy();
     expect(screen.getByText("trace-done-story")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open trace" }).getAttribute("href")).toBe(
-      "#trace",
-    );
+    expect(
+      screen.getByRole("link", { name: "Open trace" }).getAttribute("href"),
+    ).toBe("#trace");
   });
 });
