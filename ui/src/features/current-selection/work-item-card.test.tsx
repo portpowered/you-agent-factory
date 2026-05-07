@@ -5,13 +5,13 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../components/dashboard/fixtures";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
   inferenceAttempt,
   workstationRequest,
 } from "./detail-card-test-helpers";
-import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
@@ -230,7 +230,9 @@ describe("WorkItemDetailCard summary", () => {
         "No inference attempt details have been recorded for this dispatch yet.",
       ),
     ).toBeTruthy();
-    expect(traceDetails.getByRole("link", { name: "trace-active-story" })).toBeTruthy();
+    expect(
+      traceDetails.getByRole("link", { name: "trace-active-story" }),
+    ).toBeTruthy();
     expect(
       screen.queryByText("Never expose this raw system prompt."),
     ).toBeNull();
@@ -688,9 +690,7 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(
-        screen.getByRole("region", { name: "Request details" }),
-      ).getByText(
+      within(screen.getByRole("region", { name: "Request details" })).getByText(
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
@@ -954,7 +954,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
-      throw new Error("expected dispatch history card with nested inference attempts");
+      throw new Error(
+        "expected dispatch history card with nested inference attempts",
+      );
     }
 
     const inferenceAttempts = within(dispatchCard).getByRole("region", {
@@ -971,11 +973,15 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(attemptCards[0]).getByText("gpt-5.4-mini")).toBeTruthy();
     expect(within(attemptCards[1]).getByText("codex")).toBeTruthy();
     expect(
-      within(attemptCards[1]).getByText("codex / session_id / sess-ready-request"),
+      within(attemptCards[1]).getByText(
+        "codex / session_id / sess-ready-request",
+      ),
     ).toBeTruthy();
     expect(within(attemptCards[1]).getByText("740ms")).toBeTruthy();
     expect(
-      within(attemptCards[1]).getByText("Retry the review with the latest context."),
+      within(attemptCards[1]).getByText(
+        "Retry the review with the latest context.",
+      ),
     ).toBeTruthy();
     expect(
       within(attemptCards[1]).getByText("Ready for the next workstation."),
@@ -1184,7 +1190,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
             nodeId: selectedNode.node_id,
             workItem,
           }}
-          workstationRequests={[dashboardWorkstationRequestFixtures.scriptPending]}
+          workstationRequests={[
+            dashboardWorkstationRequestFixtures.scriptPending,
+          ]}
         />
       </CurrentSelectionLocaleProvider>,
     );
@@ -1216,6 +1224,65 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
+  });
+
+  it("falls back to default dispatch-history copy for an unsupported locale", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="fr">
+        <WorkItemDetailCard
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          dispatchAttempts={[]}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[
+            dashboardWorkstationRequestFixtures.scriptPending,
+          ]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected fallback dispatch history card");
+    }
+
+    expect(
+      within(dispatchCard).getByRole("region", {
+        name: "Request details",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).getByRole("region", {
+        name: "Response details",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).getByText(
+        "No script response yet for this dispatch.",
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("Workstation")).toBeTruthy();
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {
@@ -1411,11 +1478,15 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(
         within(dispatchCard).getByRole("region", { name: "Request details" }),
-      ).getByText("Inference request details are shown under Inference attempts."),
+      ).getByText(
+        "Inference request details are shown under Inference attempts.",
+      ),
     ).toBeTruthy();
     expect(
       within(
-        within(dispatchCard).getByRole("region", { name: "Inference attempts" }),
+        within(dispatchCard).getByRole("region", {
+          name: "Inference attempts",
+        }),
       ).getByText(
         `codex / session_id / ${dashboardWorkstationRequestFixtures.rejected.inference_attempts?.[0]?.provider_session?.id}`,
       ),
