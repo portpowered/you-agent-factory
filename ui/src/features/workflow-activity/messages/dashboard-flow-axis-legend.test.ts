@@ -22,6 +22,48 @@ describe("getDashboardFlowAxisLegendMessages", () => {
     );
   });
 
+  it.each([
+    [
+      "en",
+      "Graph legend",
+      "Expand Graph legend",
+      "Collapse Graph legend",
+      "Queue legend icon",
+    ],
+    [
+      "zh",
+      "图表图例",
+      "展开图表图例",
+      "收起图表图例",
+      "队列图例图标",
+    ],
+    [
+      "ko",
+      "그래프 범례",
+      "그래프 범례 펼치기",
+      "그래프 범례 접기",
+      "대기열 범례 아이콘",
+    ],
+    [
+      "ja",
+      "グラフの凡例",
+      "グラフの凡例 を開く",
+      "グラフの凡例 を閉じる",
+      "キュー の凡例アイコン",
+    ],
+  ] as const)(
+    "resolves %s helper labels through the locale catalog",
+    (locale, title, expectedExpandLabel, expectedCollapseLabel, expectedIconLabel) => {
+      const messages = getDashboardFlowAxisLegendMessages(locale);
+
+      expect(messages.expandToggleLabel(title)).toBe(expectedExpandLabel);
+      expect(messages.collapseToggleLabel(title)).toBe(expectedCollapseLabel);
+      expect(messages.iconLabel(messages.iconLabels.queue)).toBe(
+        expectedIconLabel,
+      );
+    },
+  );
+
   it("falls back to the default locale when the locale is missing or unsupported", () => {
     const defaultMessages = getDashboardFlowAxisLegendMessages("en");
 
