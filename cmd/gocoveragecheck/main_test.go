@@ -830,6 +830,154 @@ func TestResolveCoverageLaneFailsWhenDefaultCoverageDiscoveryMatchesNoBackendPac
 	}
 }
 
+func TestResolveCoverageLaneFailsWhenDefaultTestDiscoveryMatchesNoBackendPackages(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoListCommandWithCoverageButNoTestPackages
+
+	_, _, err := resolveCoverageLane(config{})
+	if err == nil {
+		t.Fatal("resolveCoverageLane() unexpectedly succeeded")
+	}
+
+	want := "resolve go coverage lane: no packages matched"
+	if err.Error() != want {
+		t.Fatalf("resolveCoverageLane() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
+	originalExecCommand := execCommand
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	defer func() {
+		execCommand = originalExecCommand
+		if chdirErr := os.Chdir(originalDir); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+
+	repoRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoRoot, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o600); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	nestedDir := filepath.Join(repoRoot, "cmd", "gocoveragecheck")
+	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.Chdir(nestedDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	execCommand = fakeGoListCommandWithDuplicatesAndExcludedPackages
+
+	packages, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	if err != nil {
+		t.Fatalf("listGoPackages() error = %v", err)
+	}
+
+	want := []string{
+		modulePath + "/cmd/factory",
+		modulePath + "/pkg/config",
+	}
+	if !slices.Equal(packages, want) {
+		t.Fatalf("listGoPackages() = %v, want %v", packages, want)
+	}
+}
+
+func TestRepoRootDirFindsNearestAncestorWithGoMod(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalDir); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+
+	repoRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoRoot, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o600); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	nestedDir := filepath.Join(repoRoot, "pkg", "service", "nested")
+	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.Chdir(nestedDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	got, err := repoRootDir()
+	if err != nil {
+		t.Fatalf("repoRootDir() error = %v", err)
+	}
+	if got != repoRoot {
+		t.Fatalf("repoRootDir() = %q, want %q", got, repoRoot)
+	}
+}
+
+func TestRepoRootDirFailsWhenNoGoModExists(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalDir); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+
+	workingDir := filepath.Join(t.TempDir(), "pkg", "service")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.Chdir(workingDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	_, err = repoRootDir()
+	if err == nil {
+		t.Fatal("repoRootDir() unexpectedly succeeded")
+	}
+	if err.Error() != "resolve repository root: go.mod not found" {
+		t.Fatalf("repoRootDir() error = %q, want missing go.mod error", err.Error())
+	}
+}
+
+func TestFindZeroCoveragePackagesSkipsPackagesWithZeroStatements(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 0 0",
+		"",
+	}, "\n"))
+
+	zeroCoveragePackages, err := findZeroCoveragePackages(
+		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/generatedclient",
+		},
+	)
+	if err != nil {
+		t.Fatalf("findZeroCoveragePackages() error = %v", err)
+	}
+	if len(zeroCoveragePackages) != 0 {
+		t.Fatalf("findZeroCoveragePackages() = %v, want none", zeroCoveragePackages)
+	}
+}
+
 func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
@@ -1429,6 +1577,35 @@ func TestGoListCommandWithExcludedPackagesOnly(t *testing.T) {
 	os.Exit(0)
 }
 
+func TestGoListCommandWithCoverageButNoTestPackages(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	if slices.Contains(args[2:], "./tests/functional/...") {
+		fmt.Fprintln(os.Stdout, modulePath+"/tests/functional/internal/support")
+		os.Exit(0)
+	}
+
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config")
+	os.Exit(0)
+}
+
+func TestGoListCommandWithDuplicatesAndExcludedPackages(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/generatedclient")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures")
+	fmt.Fprintln(os.Stdout, modulePath+"/cmd/factory")
+	os.Exit(0)
+}
+
 func helperCommandArgs(argv []string) ([]string, bool) {
 	for index, arg := range argv {
 		if arg == "--" {
@@ -1507,5 +1684,25 @@ func fakeGoListCommandWithExcludedPackagesOnly(name string, args ...string) *exe
 	}
 
 	cmdArgs := append([]string{"-test.run=TestGoListCommandWithExcludedPackagesOnly", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandWithCoverageButNoTestPackages(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandWithCoverageButNoTestPackages", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandWithDuplicatesAndExcludedPackages(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandWithDuplicatesAndExcludedPackages", "--", name}, args...)
 	return exec.Command(testBinary, cmdArgs...)
 }
