@@ -16,11 +16,12 @@ The main technologies that are used are:
 
 docs/ -> general documentation about the package, best practices for users, etc
 docs/architecture/ -> architecture notes and data model writeups
-docs/development/ -> active engineering notes, inventories, audits, and implementation closeout docs
-docs/guides/ -> task-oriented user and developer guides
-docs/processes/ -> process-specific reference docs and relevant-file maps
+docs/internal/ -> internal maintainer-only documentation, standards, resources, and process guidance
+docs/internal/development/ -> active engineering notes, inventories, audits, and implementation closeout docs
+docs/internal/processes/ -> process-specific reference docs and relevant-file maps
+docs/internal/resources/ -> internal documentation assets and screenshots
+docs/internal/standards/ -> coding and workflow standards that should guide changes
 docs/reference/ -> reference material for config, resources, workers, and templates
-docs/standards/ -> coding and workflow standards that should guide changes
 
 pkg/ -> golang codebase for backend server, CLI
 pkg/api/ -> API-facing server code, generated contracts, and API test data
@@ -49,6 +50,6 @@ examples/ -> example factory directories of infinite-you
 
 ## standards
 please read the appropriate standards when performing the appropriate operation
-1. docs/standards/code/code-review-standards.md for when reviewing changes
-2. docs/standards/code/general-backend-standards.md for when modifying the backend
-3. docs/standards/code/general-website-standards.md for when modifying the frontend
+1. docs/internal/standards/code/code-review-standards.md for when reviewing changes
+2. docs/internal/standards/code/general-backend-standards.md for when modifying the backend
+3. docs/internal/standards/code/general-website-standards.md for when modifying the frontend

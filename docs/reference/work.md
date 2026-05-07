@@ -11,7 +11,7 @@ defines the work types, states, workers, workstations, resources, and routing
 behavior that the runtime turns into a Petri-net execution model.
 
 Use this guide when writing or reviewing `factory.json`. For the JSON file you
-drop into `inputs/<workType>/...`, see [Batch Inputs](guides/batch-inputs.md).
+drop into `inputs/<workType>/...`, see [Batch Inputs](batch-inputs.md).
 
 ## Minimal Factory
 
@@ -57,7 +57,7 @@ factory/
 
 For the canonical watched-file and API request shape, minimum-field reference,
 and submitted `PARENT_CHILD` example, use
-[Batch Inputs](guides/batch-inputs.md). The overview below is intentionally
+[Batch Inputs](batch-inputs.md). The overview below is intentionally
 summary-only.
 
 ### Field Reference for structured schema
@@ -309,7 +309,7 @@ Runtime fields such as `type`, `promptFile`, `promptTemplate`,
 `limits.maxExecutionTime`, `stopWords`, `workingDirectory`, `worktree`, and
 `env` can live either inline on the
 workstation entry or in `workstations/<name>/AGENTS.md`. See
-[Workstations](workstations.md) for the full workstation guide.
+[Workstations](workstations-and-workers.md) for the full workstation guide.
 
 ## Config Portability For Script-Backed Layouts
 
@@ -534,9 +534,9 @@ At runtime:
 
 ## Related
 
-- [Workstations](workstations.md)
-- [Batch Inputs](guides/batch-inputs.md)
-- [Parent-Aware Fan-In](guides/parent-aware-fan-in.md)
-- [Workstation Guards And Guarded Loop Breakers](guides/workstation-guards-and-guarded-loop-breakers.md)
+- [Workstations](workstations-and-workers.md)
+- [Batch Inputs](batch-inputs.md)
+- [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
+- [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 - [Prompt Template Variables](prompt-variables.md)
 - [Author AGENTS.md](authoring-agents-md.md)

@@ -410,4 +410,4 @@ For complete current examples that include workers and workstations, see:
 - [Authoring Workflows](./authoring-workflows.md#failure-routing-and-provider-behavior) — how normalized worker failures interact with workflow arcs and retry loops
 - [Authoring Workflows](./authoring-workflows.md) — current `factory.json` workflow topology and mock-worker workflow checks
 - [Prompt Variables Reference](./prompt-variables.md) — complete variable listing with examples
-- [Architecture](./development/architecture.md) — engine design and subsystem details
+- [Architecture](../internal/development/architecture.md) — engine design and subsystem details

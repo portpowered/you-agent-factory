@@ -11,7 +11,7 @@ single operator workflow for versioned releases.
 - Only pushed tags matching `v*` are allowed to trigger release publication in
   GitHub Actions.
 - Phase one release outputs are GitHub release archives, checksums, and the
-  Homebrew cask metadata generated from those same release assets.
+  hosted installer assets generated from that same tagged release.
 
 ## Why Tag On `main`
 
@@ -55,19 +55,18 @@ that output for every supported installation path:
 
 - GoReleaser builds the tagged `infinite-you` archives and checksum file from
   `.goreleaser.yml`.
-- The same GoReleaser run updates the `portpowered/cask` tap on `main` by
-  writing the generated cask file to `Casks/infinite-you.rb`.
-- The publish workflow then uploads the repo-owned `install.sh` from the tagged
+- The publish workflow then uploads the repo-owned `scripts/install.sh` from the tagged
   commit as a GitHub release asset, so the hosted installer URL becomes:
 
 ```text
 https://github.com/portpowered/infinite-you/releases/download/vX.Y.Z/install.sh
 ```
 
-For consumers, the expected Homebrew install command remains:
+- The publish workflow also uploads the repo-owned `scripts/install.ps1` from the
+  tagged commit as a GitHub release asset for Windows installs:
 
-```bash
-brew install --cask portpowered/cask/infinite-you
+```text
+https://github.com/portpowered/infinite-you/releases/download/vX.Y.Z/install.ps1
 ```
 
 The latest-release fallback installer path remains:
@@ -76,29 +75,16 @@ The latest-release fallback installer path remains:
 curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh
 ```
 
+For Windows PowerShell consumers, the latest-release fallback installer path
+remains:
+
+```powershell
+irm https://github.com/portpowered/infinite-you/releases/latest/download/install.ps1 | iex
+```
+
 Those install surfaces must keep pointing at the same tagged GitHub release.
-Do not publish a separate Homebrew-only build, a hand-edited cask, or a
-different installer artifact path.
-
-## Homebrew Tap Setup
-
-Before the first automated cask publication can succeed, maintainers must
-prepare the tap and credentials expected by `.goreleaser.yml` and
-`.github/workflows/release.yml`:
-
-- The Homebrew tap repository is `portpowered/cask`.
-- The generated cask is committed on the tap's `main` branch under
-  `Casks/infinite-you.rb`.
-- GitHub Actions needs a `HOMEBREW_TAP_GITHUB_TOKEN` secret with permission to
-  push to `portpowered/cask`.
-- The token must be available to the release publish workflow because
-  GoReleaser reads it from the `HOMEBREW_TAP_GITHUB_TOKEN` environment variable
-  declared in `.goreleaser.yml`.
-
-If the tap repository layout, branch, or secret name changes, update both the
-GoReleaser config and the release workflow in the same review. The maintainer
-guide, workflow, and config must continue to describe one identical tap
-publication contract.
+Do not publish a separate package-manager-only build or a different installer
+artifact path that bypasses the tagged archive and checksum flow.
 
 ## Supported `go install` Path
 
@@ -143,10 +129,8 @@ After the push:
 - The release workflow should ignore non-semver branch pushes for publication.
 - Maintainers should monitor the workflow until the release assets and checksums
   are available on the GitHub release page.
-- Homebrew consumers should be able to install the published cask through
-  `brew install --cask portpowered/cask/infinite-you`.
-- The hosted installer should be reachable from the tag-specific release asset
-  URL and the latest-download URL after the asset upload step completes.
+- The hosted installers should be reachable from the tag-specific release asset
+  URLs and the latest-download URLs after the asset upload step completes.
 - Release verification should keep both a repo-owned `go install ./cmd/factory`
   smoke step and an outside-the-repo public-module smoke of
   `go install github.com/portpowered/infinite-you/cmd/factory@latest` so the
@@ -158,19 +142,14 @@ After the push:
 Interpret post-publish failures by the job that reported them:
 
 - `Publish GitHub Release` failures usually mean GoReleaser could not build or
-  upload the tagged archives, checksums, or Homebrew cask update. Check the
-  GoReleaser logs first, then confirm the tag points at the intended commit and
-  that `HOMEBREW_TAP_GITHUB_TOKEN` is present with push access to
-  `portpowered/cask`.
-- `Verify Homebrew Cask Publication` failures mean the tap checkout or the
-  generated `tap/Casks/infinite-you.rb` content is wrong for the tagged
-  release. Confirm the cask version, asset URL, checksum, and install behavior
-  match the published release artifacts.
-- `Smoke Hosted install.sh` failures mean the uploaded `install.sh` asset or
-  its runtime archive-selection and checksum logic is wrong. Verify the release
-  contains the expected `install.sh` asset, that the installer URL resolves,
-  and that the referenced archive and checksum files exist for the target
-  platform.
+  upload the tagged archives or checksums. Check the GoReleaser logs first,
+  then confirm the tag points at the intended commit and the workflow still
+  has the expected GitHub release permissions.
+- `Smoke Hosted Installer` failures mean the uploaded `install.sh` or
+  `install.ps1` asset, or its runtime archive-selection and checksum logic, is
+  wrong. Verify the release contains the expected installer assets, that the
+  installer URLs resolve, and that the referenced archive and checksum files
+  exist for the target platform.
 - `Verify Go Install Surface` failures mean the source-install contract for
   `cmd/factory` regressed. Reproduce first with the focused repo-owned
   `tests/release` `go install ./cmd/factory` smoke, then confirm the public

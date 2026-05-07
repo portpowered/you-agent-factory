@@ -69,7 +69,7 @@ should be throttled.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Factory JSON and work configuration](../work.md)
-- [Author AGENTS.md](../authoring-agents-md.md)
-- [Workstations and workers](../workstations.md)
-- [Workstation guards and guarded loop breakers](../guides/workstation-guards-and-guarded-loop-breakers.md)
+- [Factory JSON and work configuration](work.md)
+- [Author AGENTS.md](authoring-agents-md.md)
+- [Workstations and workers](workstations-and-workers.md)
+- [Workstation guards and guarded loop breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)

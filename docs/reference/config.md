@@ -186,8 +186,8 @@ through arbitrary project files outside the documented allowlist.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Author workflows](../authoring-workflows.md)
-- [Factory JSON and work configuration](../work.md)
-- [Workstations and workers](../workstations.md)
-- [Author AGENTS.md](../authoring-agents-md.md)
-- [Batch inputs](../guides/batch-inputs.md)
+- [Author workflows](authoring-workflows.md)
+- [Factory JSON and work configuration](work.md)
+- [Workstations and workers](workstations-and-workers.md)
+- [Author AGENTS.md](authoring-agents-md.md)
+- [Batch inputs](batch-inputs.md)

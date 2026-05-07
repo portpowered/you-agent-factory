@@ -17,13 +17,13 @@ func TestFactoryConfigDocsAndExamples_UseCanonicalPublicContractFields(t *testin
 	repoRoot := mustRepoRoot(t)
 	targetFiles := append([]string{
 		filepath.Join(repoRoot, "README.md"),
-		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "authoring-workflows.md"),
-		filepath.Join(repoRoot, "docs", "work.md"),
-		filepath.Join(repoRoot, "docs", "workstations.md"),
-		filepath.Join(repoRoot, "docs", "run-timeline.md"),
-		filepath.Join(repoRoot, "docs", "guides", "parent-aware-fan-in.md"),
-		filepath.Join(repoRoot, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "reference", "work.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
+		filepath.Join(repoRoot, "docs", "internal", "development", "run-timeline.md"),
+		filepath.Join(repoRoot, "docs", "internal", "development", "parent-aware-fan-in.md"),
+		filepath.Join(repoRoot, "docs", "internal", "development", "workstation-guards-and-guarded-loop-breakers.md"),
 		filepath.Join(repoRoot, "factory", "README.md"),
 		filepath.Join(repoRoot, "factory", "workers", "processor", "AGENTS.md"),
 		filepath.Join(repoRoot, "factory", "workers", "workspace-setup", "AGENTS.md"),
@@ -110,10 +110,10 @@ func TestFactoryConfigDocsAndExamples_UseExecutionLimitsForWorkstationTimeouts(t
 
 	repoRoot := mustRepoRoot(t)
 	targetFiles := []string{
-		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "authoring-workflows.md"),
-		filepath.Join(repoRoot, "docs", "workstations.md"),
-		filepath.Join(repoRoot, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
+		filepath.Join(repoRoot, "docs", "internal", "development", "workstation-guards-and-guarded-loop-breakers.md"),
 	}
 
 	workstationTypePattern := regexp.MustCompile(`(?m)^type:\s*(MODEL_WORKSTATION|LOGICAL_MOVE)\s*$`)
@@ -147,11 +147,11 @@ func TestFactoryConfigDocsAndExamples_UseAlignedRuntimeResourceContract(t *testi
 
 	repoRoot := mustRepoRoot(t)
 	targetFiles := append([]string{
-		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "authoring-workflows.md"),
-		filepath.Join(repoRoot, "docs", "work.md"),
-		filepath.Join(repoRoot, "docs", "workstations.md"),
-		filepath.Join(repoRoot, "docs", "guides", "workstation-guards-and-guarded-loop-breakers.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-workflows.md"),
+		filepath.Join(repoRoot, "docs", "reference", "work.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
+		filepath.Join(repoRoot, "docs", "internal", "development", "workstation-guards-and-guarded-loop-breakers.md"),
 		filepath.Join(repoRoot, "README.md"),
 		filepath.Join(repoRoot, "pkg", "cli", "init", "init.go"),
 		filepath.Join(repoRoot, "tests", "adhoc", "factory", "factory.json"),
@@ -222,8 +222,8 @@ func TestFactoryConfigDocsAndExamples_StopWordsExamplesDoNotAdvertiseRejectedRou
 
 	repoRoot := mustRepoRoot(t)
 	targetFiles := []string{
-		filepath.Join(repoRoot, "docs", "authoring-agents-md.md"),
-		filepath.Join(repoRoot, "docs", "workstations.md"),
+		filepath.Join(repoRoot, "docs", "reference", "authoring-agents-md.md"),
+		filepath.Join(repoRoot, "docs", "reference", "workstations-and-workers.md"),
 	}
 
 	var offenses []string

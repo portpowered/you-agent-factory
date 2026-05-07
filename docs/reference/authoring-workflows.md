@@ -12,8 +12,8 @@ instructions in `workers/<name>/AGENTS.md`, and workstation prompts in
 `workstations/<name>/AGENTS.md`.
 
 Use [Factory JSON And Work Configuration](work.md) for the field-by-field
-reference, [Workstations And Workers](workstations.md) for prompt and cron
-fields, and [Batch Inputs](guides/batch-inputs.md) for the watched-file and API
+reference, [Workstations And Workers](workstations-and-workers.md) for prompt and cron
+fields, and [Batch Inputs](batch-inputs.md) for the watched-file and API
 request shape.
 
 ## Recommended Layout
@@ -399,17 +399,17 @@ If no entry matches, mock-worker mode returns the default accepted result.
 - Keep prompt-heavy worker and workstation runtime fields in split `AGENTS.md`
   files unless you intentionally need a single-file config.
 - Add a guarded `LOGICAL_MOVE` workstation for repeater or review loops.
-- Use [Batch Inputs](guides/batch-inputs.md) for `FACTORY_REQUEST_BATCH`
+- Use [Batch Inputs](batch-inputs.md) for `FACTORY_REQUEST_BATCH`
   request files.
-- Use [Workstations And Workers](workstations.md) for cron, prompt templates,
+- Use [Workstations And Workers](workstations-and-workers.md) for cron, prompt templates,
   timeouts, and runtime field details.
 
 ## Related
 
 - [Factory JSON And Work Configuration](work.md)
-- [Workstations And Workers](workstations.md)
-- [Batch Inputs](guides/batch-inputs.md)
-- [Parent-Aware Fan-In](guides/parent-aware-fan-in.md)
-- [Workstation Guards And Guarded Loop Breakers](guides/workstation-guards-and-guarded-loop-breakers.md)
+- [Workstations And Workers](workstations-and-workers.md)
+- [Batch Inputs](batch-inputs.md)
+- [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
+- [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 - [Prompt Template Variables](prompt-variables.md)
 - [README](../README.md)

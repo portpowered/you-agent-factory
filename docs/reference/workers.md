@@ -127,7 +127,7 @@ execution adapter should run it.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Author AGENTS.md](../authoring-agents-md.md)
+- [Author AGENTS.md](authoring-agents-md.md)
 - [Workstations reference](workstations.md)
-- [Workstations and workers](../workstations.md)
-- [Factory JSON and work configuration](../work.md)
+- [Workstations and workers](workstations-and-workers.md)
+- [Factory JSON and work configuration](work.md)

@@ -128,7 +128,7 @@ Pair repeaters with a guarded loop-breaker workstation:
 }
 ```
 
-See [Workstation Guards And Guarded Loop Breakers](guides/workstation-guards-and-guarded-loop-breakers.md)
+See [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 for the full comparison between a workstation-level guard and a guarded
 loop-breaker route.
 
@@ -434,7 +434,7 @@ workstation should wait for those children. Keep parent-aware fan-in on
 `workstations[].inputs[].guards[]`; the old workstation-level `join` field is
 retired.
 
-See [Parent-Aware Fan-In](guides/parent-aware-fan-in.md) for the full
+See [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md) for the full
 authoring guide, including `ALL_CHILDREN_COMPLETE`, `ANY_CHILD_FAILED`,
 `parentInput`, and `spawnedBy`.
 
@@ -449,7 +449,7 @@ workstation.
 If the names differ, the referenced input is missing, or either token does not
 have a usable authored work name, the workstation stays disabled.
 
-See [Workstation Guards And Guarded Loop Breakers](guides/workstation-guards-and-guarded-loop-breakers.md)
+See [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 for the representative plan-item/task-item example and the comparison against
 workstation-level guards.
 
@@ -460,7 +460,7 @@ whether a workstation may fire; they do not create a failure or terminal route.
 Prefer a guarded `LOGICAL_MOVE` workstation for common loop-breaking routes
 because it states the source and target places explicitly.
 
-See [Workstation Guards And Guarded Loop Breakers](guides/workstation-guards-and-guarded-loop-breakers.md)
+See [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 for the full comparison.
 
 ## Complete Example
@@ -578,8 +578,8 @@ verification, and report the result.
 ## Related
 
 - [Factory JSON And Work Configuration](work.md)
-- [Batch Inputs](guides/batch-inputs.md)
-- [Parent-Aware Fan-In](guides/parent-aware-fan-in.md)
-- [Workstation Guards And Guarded Loop Breakers](guides/workstation-guards-and-guarded-loop-breakers.md)
+- [Batch Inputs](batch-inputs.md)
+- [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
+- [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 - [Prompt Template Variables](prompt-variables.md)
 - [Author AGENTS.md](authoring-agents-md.md)

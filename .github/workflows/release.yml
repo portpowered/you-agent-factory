@@ -99,10 +99,9 @@ jobs:
       - name: Publish GitHub release assets from the tagged commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
         run: go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --clean -f .goreleaser.yml
 
-      - name: Upload hosted install.sh release asset
+      - name: Upload hosted installer release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -111,74 +110,11 @@ jobs:
           gh release upload "${{ needs.resolve-release-tag.outputs.release_tag }}" \
             --repo "${{ github.event.workflow_run.repository.full_name }}" \
             --clobber \
-            install.sh
-
-  verify-homebrew-cask:
-    name: Verify Homebrew Cask Publication
-    needs:
-      - resolve-release-tag
-      - publish-release
-    runs-on: macos-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Check out Homebrew tap
-        uses: actions/checkout@v4
-        with:
-          repository: portpowered/cask
-          ref: main
-          path: tap
-          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-
-      - name: Verify published cask metadata matches the tagged release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_version="${{ needs.resolve-release-tag.outputs.release_version }}"
-          release_tag="${{ needs.resolve-release-tag.outputs.release_tag }}"
-          cask_path="$(pwd)/tap/Casks/infinite-you.rb"
-          metadata_dir="$(pwd)/release-metadata"
-          checksum_name="infinite-you_${release_version}_checksums.txt"
-          intel_archive="infinite-you_${release_version}_darwin_amd64.tar.gz"
-          arm_archive="infinite-you_${release_version}_darwin_arm64.tar.gz"
-
-          mkdir -p "$metadata_dir"
-          gh release download "$release_tag" \
-            --repo "${{ github.event.workflow_run.repository.full_name }}" \
-            --pattern "$checksum_name" \
-            --dir "$metadata_dir"
-
-          checksum_path="$metadata_dir/$checksum_name"
-          intel_sha="$(awk -v name="$intel_archive" '$2 == name { print $1; exit }' "$checksum_path")"
-          arm_sha="$(awk -v name="$arm_archive" '$2 == name { print $1; exit }' "$checksum_path")"
-
-          test -n "$intel_sha"
-          test -n "$arm_sha"
-          grep -F "version \"${release_version}\"" "$cask_path"
-          grep -F "$intel_archive" "$cask_path"
-          grep -F "$arm_archive" "$cask_path"
-          grep -F "$intel_sha" "$cask_path"
-          grep -F "$arm_sha" "$cask_path"
-
-      - name: Install published Homebrew cask from tap
-        shell: bash
-        run: |
-          set -euo pipefail
-          brew install --cask "$(pwd)/tap/Casks/infinite-you.rb"
-
-      - name: Verify installed Homebrew binary starts successfully
-        shell: bash
-        run: |
-          set -euo pipefail
-          infinite-you --help >/dev/null
+            scripts/install.sh \
+            scripts/install.ps1
 
   smoke-hosted-installer:
-    name: Smoke Hosted install.sh (${{ matrix.os_id }})
+    name: Smoke Hosted Installer (${{ matrix.os_id }})
     needs:
       - resolve-release-tag
       - publish-release
@@ -191,6 +127,8 @@ jobs:
             runner: ubuntu-latest
           - os_id: macos
             runner: macos-latest
+          - os_id: windows
+            runner: windows-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -198,6 +136,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Smoke hosted install.sh against the published release
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
@@ -206,6 +145,16 @@ jobs:
             "$install_url" \
             "${{ needs.resolve-release-tag.outputs.release_version }}" \
             "$(pwd)/installed-bin"
+
+      - name: Smoke hosted install.ps1 against the published release
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installUrl = "https://github.com/${{ github.event.workflow_run.repository.full_name }}/releases/download/${{ needs.resolve-release-tag.outputs.release_tag }}/install.ps1"
+          ./scripts/release/smoke-install.ps1 `
+            -InstallScriptUrl $installUrl `
+            -InstallVersion "${{ needs.resolve-release-tag.outputs.release_version }}" `
+            -InstallDir (Join-Path (Get-Location) "installed-bin")
 
   verify-go-install:
     name: Verify Go Install Surface

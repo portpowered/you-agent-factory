@@ -25,7 +25,7 @@ You are an autonomous coding agent working on a software project.
 5.10. Treat AI-authored code with extra scrutiny and verify real APIs, real behavior, and existing project patterns.
 6. Perform the changes requested by said user story. 
 7. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
-8. Update the relevant docs/processes/{*-relevant-files}.md files if you discover reusable patterns.
+8. Update the relevant docs/internal/processes/{*-relevant-files}.md files if you discover reusable patterns.
 9. If checks pass, commit ALL code/doc changes except `prd.json`, `prd.md` and `progress.txt` with message: `feat: [Story ID] - [Story Title]`
 10. Update the PRD to set `passes: true` for the completed story
 11. Append your progress to `progress.txt`.

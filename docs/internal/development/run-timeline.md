@@ -25,7 +25,7 @@ curl -N http://127.0.0.1:7437/events
 
 Each `data:` frame is one `FactoryEvent`. Events are ordered by `context.sequence`. Replay and selected-tick views use `context.tick` to explain what the factory knew at a logical point in the run.
 
-If you are upgrading an older consumer, read [Migrate event type names](event-vocabulary-migration.md) before updating your event filters.
+If you are upgrading an older consumer, update any legacy event filters to the current public event names before switching over.
 
 ## Timeline Order
 
@@ -253,7 +253,6 @@ Start investigation with `expected_event_id` in the recorded artifact, then comp
 
 ## Next Steps
 
-- [Migrate event type names](event-vocabulary-migration.md)
-- [Record and replay a run](record-replay.md)
-- [Author workflows](authoring-workflows.md)
+- [Agent Factory record and replay](record-replay.md)
+- [Author workflows](../reference/authoring-workflows.md)
 - [Run the live dashboard](development/live-dashboard.md)

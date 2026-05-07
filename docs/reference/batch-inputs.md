@@ -273,8 +273,8 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 
 ## Related
 
-- [Work](../work.md)
-- [Author workflows](../authoring-workflows.md)
-- [Parent-aware fan-in](parent-aware-fan-in.md)
-- [Workstations](../workstations.md)
-- [Prompt variables](../prompt-variables.md)
+- [Work](../reference/work.md)
+- [Author workflows](../reference/authoring-workflows.md)
+- [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)
+- [Workstations](../reference/workstations-and-workers.md)
+- [Prompt variables](../reference/prompt-variables.md)

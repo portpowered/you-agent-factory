@@ -46,31 +46,18 @@ def read_prd(prd_path):
 
 
 def sync_main(repo_root):
-    """Fetch origin and fast-forward local main if behind."""
-    run_git("pull", "origin", cwd=repo_root)
+    """Run git pull unless the repo has no upstream configured."""
+    result = run_git("pull", cwd=repo_root, check=False)
+    if result.returncode == 0:
+        return
 
-    local = run_git("rev-parse", "refs/heads/main", cwd=repo_root).stdout.strip()
-    remote = run_git(
-        "rev-parse", "refs/remotes/origin/main", cwd=repo_root, check=False
+    stderr = result.stderr.lower()
+    if "there is no tracking information for the current branch" in stderr:
+        return
+
+    raise RuntimeError(
+        f"git pull failed (exit {result.returncode}): {result.stderr.strip()}"
     )
-    if remote.returncode != 0:
-        return  # no remote main, skip sync
-
-    remote_sha = remote.stdout.strip()
-    if local == remote_sha:
-        return  # already up to date
-
-    # Check if local main is an ancestor of remote (i.e., behind).
-    merge_base = run_git(
-        "merge-base", "--is-ancestor", "refs/heads/main", "refs/remotes/origin/main",
-        cwd=repo_root,
-        check=False,
-    )
-    if merge_base.returncode == 0:
-        # Local is behind — fast-forward without checkout.
-        run_git(
-            "update-ref", "refs/heads/main", remote_sha, cwd=repo_root
-        )
 
 
 def prune_worktrees(repo_root):

@@ -189,4 +189,4 @@ Input {{ $i }}: {{ $input.WorkID }} — {{ $input.Payload }}
 
 - `pkg/workers/prompt.go` — `PromptData`, `PromptHistory`, `PromptContext` struct definitions
 - `pkg/workers/workstation_executor.go` — how prompts are rendered and dispatched
-- `docs/authoring-workflows.md` — workflow and workstation authoring guide
+- `docs/reference/authoring-workflows.md` — workflow and workstation authoring guide
