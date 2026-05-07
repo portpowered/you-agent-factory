@@ -524,6 +524,35 @@ func TestParseZeroCoveragePackagesFromReport(t *testing.T) {
 	}
 }
 
+func TestParseTotalCoverageRejectsMalformedPercentageToken(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := parseTotalCoverage("total: (statements) 1.2.3%\n")
+	if err == nil {
+		t.Fatal("parseTotalCoverage() unexpectedly succeeded")
+	}
+
+	wantErr := "parse go coverage percentage \"1.2.3\": strconv.ParseFloat: parsing \"1.2.3\": invalid syntax"
+	if err.Error() != wantErr {
+		t.Fatalf("parseTotalCoverage() error = %q, want %q", err.Error(), wantErr)
+	}
+}
+
+func TestParseZeroCoveragePackagesFromReportRejectsMalformedPercentageToken(t *testing.T) {
+	t.Parallel()
+
+	report := modulePath + "/pkg/config\t\tcoverage: 1.2.3% of statements\n"
+	_, err := parseZeroCoveragePackagesFromReport(report)
+	if err == nil {
+		t.Fatal("parseZeroCoveragePackagesFromReport() unexpectedly succeeded")
+	}
+
+	wantErr := "parse go coverage package percentage \"1.2.3\": strconv.ParseFloat: parsing \"1.2.3\": invalid syntax"
+	if err.Error() != wantErr {
+		t.Fatalf("parseZeroCoveragePackagesFromReport() error = %q, want %q", err.Error(), wantErr)
+	}
+}
+
 func TestParseCoverageProfileRejectsMalformedInputs(t *testing.T) {
 	t.Parallel()
 
