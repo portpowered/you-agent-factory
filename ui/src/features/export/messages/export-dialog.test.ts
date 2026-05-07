@@ -38,4 +38,14 @@ describe("getExportDialogMessages", () => {
     expect(messages.selectedImageLabel("cover.png")).toContain("cover.png");
     expect(messages.triggerLabel).toBe("PNG をエクスポート");
   });
+
+  it.each([
+    ["ko", "factory-aurora.png", "cover.png"],
+    ["zh", "factory-aurora.png", "cover.png"],
+  ] as const)("keeps %s interpolation helpers available for coverage-sensitive locales", (locale, filename, imageName) => {
+    const messages = getExportDialogMessages(locale);
+
+    expect(messages.successMessage(filename)).toContain(filename);
+    expect(messages.selectedImageLabel(imageName)).toContain(imageName);
+  });
 });
