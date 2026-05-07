@@ -133,7 +133,7 @@ function ScriptRequestAttemptCard({
         <InferenceAttemptDetail label="Worktree" code value={requestWorktree(request)} />
         <InferenceAttemptDetail label="Command" code value={scriptRequest.command} />
       </dl>
-      <ScriptArgsSection args={scriptRequest.args} />
+      <ScriptArgsSection args={scriptRequest.args} label="Resolved args" />
     </article>
   );
 }
