@@ -291,7 +291,10 @@ function DispatchRequestSection({
               { label: messages.commandLabel, value: view.scriptRequest?.command, code: true },
             ]}
           />
-          <ScriptArgsSection args={view.scriptRequest?.args} />
+          <ScriptArgsSection
+            args={view.scriptRequest?.args}
+            label={messages.resolvedArgsLabel}
+          />
         </>
       ) : (
         <p className={DETAIL_COPY_CLASS}>
@@ -301,8 +304,13 @@ function DispatchRequestSection({
       <WorkItemActionGroup
         items={view.inputWorkItems}
         label={messages.inputWorkLabel}
+        openWorkItemActionLabel={messages.openWorkItemActionLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
+        selectWorkItemAccessibleLabel={
+          messages.selectWorkItemAccessibleLabel
+        }
+        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
     </DispatchDetailSection>
   );
@@ -331,12 +339,19 @@ function DispatchResponseSection({
       <WorkItemActionGroup
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
+        openWorkItemActionLabel={messages.openWorkItemActionLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
+        selectWorkItemAccessibleLabel={
+          messages.selectWorkItemAccessibleLabel
+        }
+        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}
+        label={messages.traceIdsLabel}
         onSelectTraceID={onSelectTraceID}
+        selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
         traceTargetId={traceTargetId}
       />
@@ -366,12 +381,19 @@ function DispatchTraceSection({
       <WorkItemActionGroup
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
+        openWorkItemActionLabel={messages.openWorkItemActionLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
+        selectWorkItemAccessibleLabel={
+          messages.selectWorkItemAccessibleLabel
+        }
+        workSelectedActionLabel={messages.workSelectedActionLabel}
       />
       <TraceActionGroup
         activeTraceID={activeTraceID}
+        label={messages.traceIdsLabel}
         onSelectTraceID={onSelectTraceID}
+        selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
         traceTargetId={traceTargetId}
       />

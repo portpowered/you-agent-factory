@@ -1172,8 +1172,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       getSelectedWorkItemFixture();
 
     render(
-      <CurrentSelectionLocaleProvider locale="ja">
+        <CurrentSelectionLocaleProvider locale="ja">
         <WorkItemDetailCard
+          activeTraceID="trace-active-story"
           executionDetails={selectWorkItemExecutionDetails({
             activeExecution: execution,
             dispatchID,
@@ -1213,6 +1214,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         name: "リクエストの詳細",
       }),
     ).toBeTruthy();
+    const localizedRequestDetails = within(dispatchCard).getByRole("region", {
+      name: "リクエストの詳細",
+    });
     expect(
       within(dispatchCard).getByRole("region", {
         name: "応答の詳細",
@@ -1229,6 +1233,21 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(dispatchCard).getByText("応答数")).toBeTruthy();
     expect(within(dispatchCard).getByText("エラー数")).toBeTruthy();
     expect(within(dispatchCard).getByText("保留中")).toBeTruthy();
+    expect(
+      within(localizedRequestDetails).getByText("解決済み引数"),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).getByRole("button", {
+        name: "作業項目 Active Story を選択",
+      }),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("作業を選択中")).toBeTruthy();
+    expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
+    expect(
+      within(dispatchCard).getByRole("link", {
+        name: "trace-active-story（選択中）",
+      }),
+    ).toBeTruthy();
   });
 
   it("falls back to default dispatch-history copy for an unsupported locale", () => {
@@ -1238,6 +1257,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     render(
       <CurrentSelectionLocaleProvider locale="fr">
         <WorkItemDetailCard
+          activeTraceID="trace-active-story"
           executionDetails={selectWorkItemExecutionDetails({
             activeExecution: execution,
             dispatchID,
@@ -1277,6 +1297,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         name: "Request details",
       }),
     ).toBeTruthy();
+    const fallbackRequestDetails = within(dispatchCard).getByRole("region", {
+      name: "Request details",
+    });
     expect(
       within(dispatchCard).getByRole("region", {
         name: "Response details",
@@ -1288,6 +1311,21 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(within(dispatchCard).getByText("Workstation")).toBeTruthy();
+    expect(
+      within(fallbackRequestDetails).getByText("Resolved args"),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).getByRole("button", {
+        name: "Select work item Active Story",
+      }),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("Work selected")).toBeTruthy();
+    expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
+    expect(
+      within(dispatchCard).getByRole("link", {
+        name: "trace-active-story (selected)",
+      }),
+    ).toBeTruthy();
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {

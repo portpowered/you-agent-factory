@@ -26,7 +26,10 @@ export interface CurrentSelectionDispatchHistoryMessages {
   pendingOutcome: string;
   promptDetailsNotApplicable: string;
   requestDetailsTitle: string;
+  resolvedArgsLabel: string;
   respondedCountLabel: string;
+  selectedTraceSuffix: string;
+  selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
   responseDetailsTitle: string;
   scriptAttemptLabel: string;
   scriptRequestIdLabel: string;
@@ -34,10 +37,13 @@ export interface CurrentSelectionDispatchHistoryMessages {
   stderrLabel: string;
   stdoutLabel: string;
   traceDetailsTitle: string;
+  traceIdsLabel: string;
   transitionIdLabel: string;
   unknownDispatchId: string;
   unknownDispatchTitle: string;
+  openWorkItemActionLabel: (workItemLabel: string) => string;
   workstationLabel: string;
+  workSelectedActionLabel: string;
 }
 
 const currentSelectionDispatchHistoryMessagesByLocale = {
@@ -68,7 +74,11 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     promptDetailsNotApplicable:
       "Prompt details are not applicable to this script-backed dispatch.",
     requestDetailsTitle: "Request details",
+    resolvedArgsLabel: "Resolved args",
     respondedCountLabel: "respondedCount",
+    selectedTraceSuffix: " (selected)",
+    selectWorkItemAccessibleLabel: (workItemLabel: string) =>
+      `Select work item ${workItemLabel}`,
     responseDetailsTitle: "Response details",
     scriptAttemptLabel: "Script attempt",
     scriptRequestIdLabel: "Script request ID",
@@ -76,10 +86,14 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     stderrLabel: "Stderr",
     stdoutLabel: "Stdout",
     traceDetailsTitle: "Trace details",
+    traceIdsLabel: "Trace IDs",
     transitionIdLabel: "Transition ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "Unknown dispatch",
+    openWorkItemActionLabel: (workItemLabel: string) =>
+      `Open ${workItemLabel}`,
     workstationLabel: "Workstation",
+    workSelectedActionLabel: "Work selected",
   },
   ja: {
     commandLabel: "コマンド",
@@ -108,7 +122,11 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     promptDetailsNotApplicable:
       "このスクリプトベースのディスパッチではプロンプトの詳細は適用されません。",
     requestDetailsTitle: "リクエストの詳細",
+    resolvedArgsLabel: "解決済み引数",
     respondedCountLabel: "応答数",
+    selectedTraceSuffix: "（選択中）",
+    selectWorkItemAccessibleLabel: (workItemLabel: string) =>
+      `作業項目 ${workItemLabel} を選択`,
     responseDetailsTitle: "応答の詳細",
     scriptAttemptLabel: "スクリプト試行",
     scriptRequestIdLabel: "スクリプトリクエスト ID",
@@ -116,10 +134,14 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     stderrLabel: "標準エラー",
     stdoutLabel: "標準出力",
     traceDetailsTitle: "トレースの詳細",
+    traceIdsLabel: "トレース ID",
     transitionIdLabel: "遷移 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "不明なディスパッチ",
+    openWorkItemActionLabel: (workItemLabel: string) =>
+      `${workItemLabel} を開く`,
     workstationLabel: "ワークステーション",
+    workSelectedActionLabel: "作業を選択中",
   },
   ko: {
     commandLabel: "명령",
@@ -148,7 +170,11 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     promptDetailsNotApplicable:
       "이 스크립트 기반 디스패치에는 프롬프트 세부 정보를 적용할 수 없습니다.",
     requestDetailsTitle: "요청 세부 정보",
+    resolvedArgsLabel: "해결된 인수",
     respondedCountLabel: "응답 수",
+    selectedTraceSuffix: " (선택됨)",
+    selectWorkItemAccessibleLabel: (workItemLabel: string) =>
+      `작업 항목 ${workItemLabel} 선택`,
     responseDetailsTitle: "응답 세부 정보",
     scriptAttemptLabel: "스크립트 시도",
     scriptRequestIdLabel: "스크립트 요청 ID",
@@ -156,10 +182,14 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     stderrLabel: "표준 오류",
     stdoutLabel: "표준 출력",
     traceDetailsTitle: "추적 세부 정보",
+    traceIdsLabel: "추적 ID",
     transitionIdLabel: "전환 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "알 수 없는 디스패치",
+    openWorkItemActionLabel: (workItemLabel: string) =>
+      `${workItemLabel} 열기`,
     workstationLabel: "워크스테이션",
+    workSelectedActionLabel: "작업 선택됨",
   },
   zh: {
     commandLabel: "命令",
@@ -184,7 +214,11 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     pendingOutcome: "等待中",
     promptDetailsNotApplicable: "这个脚本分派不适用提示词详情。",
     requestDetailsTitle: "请求详情",
+    resolvedArgsLabel: "已解析参数",
     respondedCountLabel: "响应次数",
+    selectedTraceSuffix: "（已选中）",
+    selectWorkItemAccessibleLabel: (workItemLabel: string) =>
+      `选择工作项 ${workItemLabel}`,
     responseDetailsTitle: "响应详情",
     scriptAttemptLabel: "脚本尝试",
     scriptRequestIdLabel: "脚本请求 ID",
@@ -192,10 +226,14 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     stderrLabel: "标准错误",
     stdoutLabel: "标准输出",
     traceDetailsTitle: "追踪详情",
+    traceIdsLabel: "追踪 ID",
     transitionIdLabel: "转换 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "未知分派",
+    openWorkItemActionLabel: (workItemLabel: string) =>
+      `打开 ${workItemLabel}`,
     workstationLabel: "工作站",
+    workSelectedActionLabel: "已选中工作项",
   },
 } satisfies LocalizedMessages<CurrentSelectionDispatchHistoryMessages>;
 

@@ -13,14 +13,20 @@ import {
 } from "./detail-card-shared";
 import type { dedupeWorkItems } from "./selected-work-dispatch-history-helpers";
 
-export function ScriptArgsSection({ args }: { args: string[] | undefined }) {
+export function ScriptArgsSection({
+  args,
+  label,
+}: {
+  args: string[] | undefined;
+  label: string;
+}) {
   if (!args || args.length === 0) {
     return null;
   }
 
   return (
     <div className="grid gap-[0.3rem]">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Resolved args</span>
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <div className="grid gap-[0.25rem]">
         {args.map((arg) => (
           <code className={RUNTIME_DETAIL_CODE_CLASS} key={arg}>
@@ -100,13 +106,19 @@ export function DispatchDetailList({
 export function WorkItemActionGroup({
   items,
   label,
+  openWorkItemActionLabel,
   onSelectWorkID,
   selectedWorkID,
+  selectWorkItemAccessibleLabel,
+  workSelectedActionLabel,
 }: {
   items: ReturnType<typeof dedupeWorkItems>;
   label: string;
+  openWorkItemActionLabel: (workItemLabel: string) => string;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
+  selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
+  workSelectedActionLabel: string;
 }) {
   if (items.length === 0) {
     return null;
@@ -118,7 +130,9 @@ export function WorkItemActionGroup({
       <div className="flex flex-wrap gap-[0.45rem]">
         {items.map((workItem) => (
           <button
-            aria-label={`Select work item ${formatWorkItemLabel(workItem)}`}
+            aria-label={selectWorkItemAccessibleLabel(
+              formatWorkItemLabel(workItem),
+            )}
             aria-pressed={selectedWorkID === workItem.work_id}
             className={WORK_SELECTION_BUTTON_CLASS}
             key={`${label}-${workItem.work_id}`}
@@ -126,8 +140,8 @@ export function WorkItemActionGroup({
             type="button"
           >
             {selectedWorkID === workItem.work_id
-              ? "Work selected"
-              : `Open ${formatWorkItemLabel(workItem)}`}
+              ? workSelectedActionLabel
+              : openWorkItemActionLabel(formatWorkItemLabel(workItem))}
           </button>
         ))}
       </div>
@@ -137,12 +151,16 @@ export function WorkItemActionGroup({
 
 export function TraceActionGroup({
   activeTraceID,
+  label,
   onSelectTraceID,
+  selectedTraceSuffix,
   traceIDs,
   traceTargetId,
 }: {
   activeTraceID?: string | null;
+  label: string;
   onSelectTraceID?: (traceID: string) => void;
+  selectedTraceSuffix: string;
   traceIDs: string[];
   traceTargetId: string;
 }) {
@@ -152,7 +170,7 @@ export function TraceActionGroup({
 
   return (
     <div className="grid gap-[0.3rem]">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Trace IDs</span>
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <div className="flex flex-wrap gap-[0.45rem]">
         {traceIDs.map((traceID) => (
           <a
@@ -162,7 +180,7 @@ export function TraceActionGroup({
             onClick={() => onSelectTraceID?.(traceID)}
           >
             {traceID}
-            {activeTraceID === traceID ? " (selected)" : ""}
+            {activeTraceID === traceID ? selectedTraceSuffix : ""}
           </a>
         ))}
       </div>
