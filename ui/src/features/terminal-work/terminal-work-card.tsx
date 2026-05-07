@@ -1,17 +1,8 @@
 import { useState } from "react";
-
-import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
-import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
-import { cx } from "../../lib/cx";
-import {
-  formatProviderSession,
-  formatTraceOutcome,
-} from "../../components/ui/formatters";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/ui/dashboard-typography";
+import type {
+  DashboardProviderSessionAttempt,
+  DashboardWorkItemRef,
+} from "../../api/dashboard/types";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
@@ -24,10 +15,19 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../../components/ui/collapsible";
-import type {
-  DashboardProviderSessionAttempt,
-  DashboardWorkItemRef,
-} from "../../api/dashboard/types";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../components/ui/dashboard-typography";
+import {
+  formatProviderSession,
+  formatTraceOutcome,
+} from "../../components/ui/formatters";
+import { cx } from "../../lib/cx";
+import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
+import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
+import { getTerminalWorkMessages } from "./messages";
 
 export type TerminalWorkStatus = "completed" | "failed";
 
@@ -44,6 +44,7 @@ export interface CompletedFailedWorkstationCardProps {
   className?: string;
   completedItems: TerminalWorkItem[];
   failedItems: TerminalWorkItem[];
+  locale?: string;
   onMove?: (widgetId: "terminal-work", direction: "left" | "right") => void;
   onSelectItem: (status: TerminalWorkStatus, item: TerminalWorkItem) => void;
   order?: number;
@@ -55,16 +56,21 @@ export interface CompletedFailedWorkstationCardProps {
 interface TerminalWorkRowProps {
   emptyMessage: string;
   expanded: boolean;
+  fallbackMessage: string;
+  iconLabel: string;
+  itemCountLabel: string;
   items: TerminalWorkItem[];
   onExpandedChange: (expanded: boolean) => void;
   onSelectItem: (item: TerminalWorkItem) => void;
   selectedLabel?: string;
   status: TerminalWorkStatus;
   title: string;
+  toggleLabel: string;
 }
 
 const TERMINAL_ROWS_CLASS = "grid gap-[0.8rem]";
-const TERMINAL_ROW_CLASS = "grid gap-3 rounded-lg border border-af-overlay/8 p-[0.85rem]";
+const TERMINAL_ROW_CLASS =
+  "grid gap-3 rounded-lg border border-af-overlay/8 p-[0.85rem]";
 const TERMINAL_FAILED_ROW_CLASS = "border-af-danger/50";
 const TERMINAL_ROW_HEADER_CLASS =
   "mb-[0.55rem] flex items-center justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-ink/58";
@@ -77,7 +83,8 @@ const TERMINAL_BUTTON_CLASS = cx(
   "grid h-auto min-h-0 w-full justify-start gap-[0.3rem] border-af-info/35 bg-af-info/10 px-3 py-[0.55rem] text-left text-af-info-ink [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
-const TERMINAL_BUTTON_FAILED_CLASS = "border-af-danger/35 bg-af-danger/10 text-af-danger-ink";
+const TERMINAL_BUTTON_FAILED_CLASS =
+  "border-af-danger/35 bg-af-danger/10 text-af-danger-ink";
 const TERMINAL_BUTTON_SELECTED_CLASS =
   "border-af-accent/55 bg-af-accent/14 text-af-accent shadow-af-accent-chip";
 const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
@@ -86,49 +93,74 @@ const TERMINAL_BUTTON_META_CLASS = cx(
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 
-function terminalStatusIconKind(status: TerminalWorkStatus): GraphSemanticIconKind {
+function terminalStatusIconKind(
+  status: TerminalWorkStatus,
+): GraphSemanticIconKind {
   return status === "failed" ? "failed" : "terminal";
 }
 
 function terminalStatusIconClassName(status: TerminalWorkStatus): string {
-  return status === "failed" ? "text-af-danger-ink/78" : "text-af-success-ink/76";
+  return status === "failed"
+    ? "text-af-danger-ink/78"
+    : "text-af-success-ink/76";
 }
 
 export function CompletedFailedWorkstationCard({
   className = "",
   completedItems,
   failedItems,
+  locale,
   onSelectItem,
   selectedItem = null,
-  title = "Completed and failed work",
+  title,
 }: CompletedFailedWorkstationCardProps) {
   const [completedExpanded, setCompletedExpanded] = useState(true);
   const [failedExpanded, setFailedExpanded] = useState(true);
-  const cardClassName = cx(DASHBOARD_WIDGET_CLASS, DETAIL_CARD_CLASS, className);
+  const cardClassName = cx(
+    DASHBOARD_WIDGET_CLASS,
+    DETAIL_CARD_CLASS,
+    className,
+  );
+  const messages = getTerminalWorkMessages(locale);
+  const resolvedTitle = title ?? messages.cardTitle;
 
   return (
-    <AgentBentoCard className={cardClassName} title={title}>
+    <AgentBentoCard className={cardClassName} title={resolvedTitle}>
       <fieldset className={TERMINAL_ROWS_CLASS}>
-        <legend className="sr-only">Terminal work outcomes</legend>
+        <legend className="sr-only">{messages.legendLabel}</legend>
         <TerminalWorkRow
-          emptyMessage="No completed work recorded yet."
+          emptyMessage={messages.emptyState("completed")}
           expanded={completedExpanded}
+          fallbackMessage={messages.sessionSummaryFallback("completed")}
+          iconLabel={messages.iconLabel("completed")}
+          itemCountLabel={messages.itemCountLabel(completedItems.length)}
           items={completedItems}
           onExpandedChange={setCompletedExpanded}
           onSelectItem={(item) => onSelectItem("completed", item)}
-          selectedLabel={selectedItem?.status === "completed" ? selectedItem.label : undefined}
+          selectedLabel={
+            selectedItem?.status === "completed"
+              ? selectedItem.label
+              : undefined
+          }
+          toggleLabel={messages.disclosureLabel(completedExpanded)}
           status="completed"
-          title="Completed"
+          title={messages.rowTitle("completed")}
         />
         <TerminalWorkRow
-          emptyMessage="No failed work recorded yet."
+          emptyMessage={messages.emptyState("failed")}
           expanded={failedExpanded}
+          fallbackMessage={messages.sessionSummaryFallback("failed")}
+          iconLabel={messages.iconLabel("failed")}
+          itemCountLabel={messages.itemCountLabel(failedItems.length)}
           items={failedItems}
           onExpandedChange={setFailedExpanded}
           onSelectItem={(item) => onSelectItem("failed", item)}
-          selectedLabel={selectedItem?.status === "failed" ? selectedItem.label : undefined}
+          selectedLabel={
+            selectedItem?.status === "failed" ? selectedItem.label : undefined
+          }
+          toggleLabel={messages.disclosureLabel(failedExpanded)}
           status="failed"
-          title="Failed"
+          title={messages.rowTitle("failed")}
         />
       </fieldset>
     </AgentBentoCard>
@@ -138,20 +170,25 @@ export function CompletedFailedWorkstationCard({
 function TerminalWorkRow({
   emptyMessage,
   expanded,
+  fallbackMessage,
+  iconLabel,
+  itemCountLabel,
   items,
   onExpandedChange,
   onSelectItem,
   selectedLabel,
   status,
   title,
+  toggleLabel,
 }: TerminalWorkRowProps) {
   const rowId = `terminal-work-${status}-items`;
-  const itemCountLabel = `${items.length} ${items.length === 1 ? "item" : "items"}`;
-  const iconLabel = status === "failed" ? "Failed work" : "Completed work";
 
   return (
     <section
-      className={cx(TERMINAL_ROW_CLASS, status === "failed" && TERMINAL_FAILED_ROW_CLASS)}
+      className={cx(
+        TERMINAL_ROW_CLASS,
+        status === "failed" && TERMINAL_FAILED_ROW_CLASS,
+      )}
       aria-labelledby={`${rowId}-heading`}
       data-terminal-work-status={status}
     >
@@ -167,7 +204,10 @@ function TerminalWorkRow({
                 kind={terminalStatusIconKind(status)}
                 label={iconLabel}
               />
-              <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${rowId}-heading`}>
+              <h4
+                className={DASHBOARD_SECTION_HEADING_CLASS}
+                id={`${rowId}-heading`}
+              >
                 {title}
               </h4>
             </div>
@@ -181,7 +221,7 @@ function TerminalWorkRow({
               size="sm"
               tone="secondary"
             >
-              {expanded ? "Collapse" : "Expand"}
+              {toggleLabel}
             </Button>
           </CollapsibleTrigger>
         </div>
@@ -194,16 +234,21 @@ function TerminalWorkRow({
                 className={cx(
                   TERMINAL_BUTTON_CLASS,
                   status === "failed" && TERMINAL_BUTTON_FAILED_CLASS,
-                  selectedLabel === item.label && TERMINAL_BUTTON_SELECTED_CLASS,
+                  selectedLabel === item.label &&
+                    TERMINAL_BUTTON_SELECTED_CLASS,
                 )}
-                data-selected={selectedLabel === item.label ? "true" : undefined}
+                data-selected={
+                  selectedLabel === item.label ? "true" : undefined
+                }
                 key={`${status}-${item.label}`}
                 onClick={() => onSelectItem(item)}
                 size="sm"
                 tone="outline"
               >
-                <span className={TERMINAL_BUTTON_LABEL_CLASS}>{item.label}</span>
-                {renderTerminalWorkContext(item, status)}
+                <span className={TERMINAL_BUTTON_LABEL_CLASS}>
+                  {item.label}
+                </span>
+                {renderTerminalWorkContext(item, fallbackMessage)}
               </Button>
             ))
           ) : (
@@ -215,22 +260,25 @@ function TerminalWorkRow({
   );
 }
 
-function renderTerminalWorkContext(item: TerminalWorkItem, status: TerminalWorkStatus) {
+function renderTerminalWorkContext(
+  item: TerminalWorkItem,
+  fallbackMessage: string,
+) {
   const latestAttempt = item.attempts?.[item.attempts.length - 1];
   if (!latestAttempt) {
     return (
-      <span className={TERMINAL_BUTTON_META_CLASS}>
-        {status === "failed" ? "Failed status recorded by session summary." : "Completed by session summary."}
-      </span>
+      <span className={TERMINAL_BUTTON_META_CLASS}>{fallbackMessage}</span>
     );
   }
 
-  const workstation = latestAttempt.workstation_name || latestAttempt.transition_id;
+  const workstation =
+    latestAttempt.workstation_name || latestAttempt.transition_id;
   const providerSession = formatProviderSession(latestAttempt.provider_session);
 
   return (
     <span className={TERMINAL_BUTTON_META_CLASS}>
-      {formatTraceOutcome(latestAttempt.outcome)} at {workstation}; {providerSession}
+      {formatTraceOutcome(latestAttempt.outcome)} at {workstation};{" "}
+      {providerSession}
     </span>
   );
 }
