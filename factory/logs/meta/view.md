@@ -2,9 +2,10 @@
 
 ## world state
 
-- as of `2026-05-07T02:06:20.9186342-07:00`, local `HEAD` on `main` points to
-  `bf2ea7e` (`Merge pull request #138 from portpowered/branchling`) and is
-  current with `origin/main`
+- as of `2026-05-07T03:02:15.3916934-07:00`, local `HEAD` on `main` points to
+  `41ae281` (`Merge branch 'main' of https://github.com/portpowered/infinite-you`)
+  and already contains upstream `origin/main` through merged PR `#140`
+  (`retire-deadcodecheck-gotypesalias-compat-shim`) at `08acc2f`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - before this refresh, the only visible tracked local edit was the
   user-maintained canonical ask file `factory/logs/meta/asks.md`
@@ -36,15 +37,15 @@
 - `.gitignore` still keeps live workflow submissions under `factory/inputs/**`
   out of normal commits except for those sentinel paths
 - the previously queued ignored idea
-  `factory/inputs/idea/default/cover-gocoveragecheck-helper-runtime-and-parser-branches.md`
-  is stale on live `main` because merged PR `#137` landed that exact lane on
-  `2026-05-07T03:23:26Z`
+  `factory/inputs/idea/default/retire-deadcodecheck-gotypesalias-compat-shim.md`
+  is now stale on live `main` because merged PR `#140` landed that exact lane
+  on `2026-05-07T09:34:50Z`
 - after pruning that stale residue, the maintainer-owned ignored queue should
   carry three fresh non-overlapping idea files so the autonomous lane matches
   the standing ask to keep at least three tasks running:
   - `audit-repository-against-2026-website-and-backend-checklists.md`
   - `localize-and-accessibility-harden-import-preview-dialog.md`
-  - `retire-deadcodecheck-gotypesalias-compat-shim.md`
+  - `cover-releasesmoke-command-owner-parse-and-json-error-branches.md`
 
 ## customer-ask truth
 
@@ -64,13 +65,14 @@
   - `backend-development-checklist.md`
   - `asks.md`
 - there is still no checked-in repo-wide review record mapping this repository
-  against those external checklist documents; the only checked-in alignment
-  checklist found this turn is the narrower import/export lane record at
-  `docs/internal/development/import-export-standards-alignment-checklist.md`
-- the UI still lacks shared localization infrastructure:
-  - `ui/src/i18n` does not exist on live `main`
+  against those external checklist documents on live `main`; PR `#141`
+  currently owns that audit lane, but it is not merged yet
+- the UI still lacks shared localization infrastructure on live `main`:
+  - `ui/src/i18n` does not exist
   - `ui/package.json` does not currently carry an automated accessibility test
     dependency such as `axe-core` or a wrapper matcher
+  - PR `#142` owns the first narrow import-preview lane for those gaps, but it
+    is not merged yet
 
 ## replay truth
 
@@ -85,37 +87,40 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
-  - `#138` `Branchling`, merged on `2026-05-07T08:23:18Z`
+  - `#140` `retire-deadcodecheck-gotypesalias-compat-shim`, merged on
+    `2026-05-07T09:34:50Z`
+  - `#138` `Branchling`, merged on `2026-05-07T08:30:28Z`
   - `#137` `cover-gocoveragecheck-helper-runtime-and-parser-branches`, merged
-    on `2026-05-07T03:23:26Z`
-  - `#136` `Windows release`, merged on `2026-05-07T00:19:46Z`
+    on `2026-05-07T03:38:27Z`
+  - `#136` `Windows release`, merged on `2026-05-07T01:38:06Z`
   - `#135` `cover-functionallane-command-owner-error-and-entrypoint-branches`,
-    merged on `2026-05-06T23:18:17Z`
-  - `#134` `cover-gocoveragecheck-command-owner-threshold-and-entrypoint-branches`,
-    merged on `2026-05-06T22:18:52Z`
-- `gh pr list --state open` still reports only the two older meta-refresh PRs:
+    merged on `2026-05-06T23:28:08Z`
+- `gh pr list --state open` now reports:
+  - `#142` `localize-and-accessibility-harden-import-preview-dialog`
+  - `#141` `audit-repository-against-2026-website-and-backend-checklists`
+  - `#139` `docs: refresh meta world state`
   - `#123` `docs: refresh meta world state`
   - `#120` `docs: refresh meta world state`
-- those open PRs do not own the next code cleanup or checklist-alignment lane
+- PRs `#141` and `#142` already own the current checklist-audit and
+  import-preview standards lanes, so the next replacement task must avoid
+  those file and behavior surfaces
 
 ## next cleanup candidates
 
-- repo-wide standards evidence remains the highest-priority open ask because
-  there is still no checked-in audit mapping this repository to the current
-  external backend and website checklists
-- the narrowest current UI standards lane is the import preview dialog:
-  - `ui/src/features/import/dashboard-import-preview-dialog.tsx` still owns a
-    concentrated set of hardcoded user-visible strings
-  - `ui/src/features/import/dashboard-import-preview-dialog.test.tsx` and
-    `.stories.tsx` already provide focused verification seams
-  - the repo still lacks `ui/src/i18n` and automated accessibility assertions
-    for that feature surface
-- the narrowest current backend simplification lane is in `cmd/deadcodecheck`:
-  - `runDeadcode()` still injects a `GODEBUG=gotypesalias=1` compatibility shim
-    through `deadcodeEnv()` and `ensureGoTypesAliasEnabled()`
-  - live manual command checks on the supported Go `1.24.x` toolchain succeed
-    both with and without that override, so the shim now appears to be
-    redundant legacy handling rather than a live policy requirement
+- the repo-wide standards audit remains the highest-priority checklist ask on
+  live `main`, but PR `#141` already owns that documentation lane
+- the narrowest current UI standards lane remains the import preview dialog,
+  but PR `#142` already owns that feature-local localization and accessibility
+  work
+- the next non-overlapping repo-owned backend testing seam is now in
+  `cmd/releasesmoke`:
+  - merged PR `#128` already covered the thin `main()` entrypoint routing
+  - `go test -cover ./cmd/...` still reports `83.3%` statement coverage for
+    `cmd/releasesmoke`
+  - `cmd/releasesmoke/main.go` still carries uncovered parse-error and
+    `writeJSON` encode-failure branches in the command-owner boundary
+  - `cmd/releasesmoke/main_test.go` already provides a focused package-local
+    seam to add those assertions without widening into release harness changes
 
 ## theory of mind
 
@@ -126,11 +131,14 @@
   checked-in contract versus ignored operating residue
 - when a previously queued idea lands on `main`, prune the ignored residue and
   refresh the next seam from live code and PR state before queuing anything
-  else; merged PR `#137` invalidated the previously recorded next seam within
-  hours
+  else; merged PR `#140` invalidated one of the three active backlog slots
+  within the same cycle
 - when the customer ask requires at least three tasks in flight, satisfy that
   ask with three narrow non-overlapping idea files rather than one broad batch
   unless dependency ordering is actually required
 - when checklist conformance is still undocumented, queue one audit lane plus
   smaller implementation-ready follow-ups instead of claiming alignment from
   standards intent alone
+- when one queued lane merges while sibling PRs are still open, replace only
+  the merged slot with a new non-overlapping idea instead of re-queuing work
+  already owned by the open PRs

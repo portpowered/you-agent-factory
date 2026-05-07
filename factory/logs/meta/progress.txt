@@ -145,12 +145,15 @@
   regression tests but still trails sibling maintainer commands on package
   coverage, prefer adding command-owner success and threshold-branch coverage
   there before widening scope into low-coverage application packages.
+- When a standards audit PR or a checklist follow-up PR is already open, treat
+  its branch and changed-file surface as owned; replace only merged or stale
+  backlog slots instead of queueing a second idea over the same files.
 
 ## Current Summary
 
-- As of `2026-05-07T02:06:20.9186342-07:00`, `HEAD` points to `bf2ea7e` on
-  branch `main`; live `origin/main` is the same commit through merged PR
-  `#138`.
+- As of `2026-05-07T03:02:15.3916934-07:00`, `HEAD` points to `41ae281` on
+  branch `main` and already contains merged PR `#140`
+  (`retire-deadcodecheck-gotypesalias-compat-shim`) from `origin/main`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -162,9 +165,10 @@
   user-owned tracked edit and the maintainer meta refresh updates the tracked
   view/progress docs; ignored workflow files under `factory/inputs/**` remain
   operating state rather than canonical queue truth.
-- Recent merged PRs now include `#134`, `#135`, `#136`, `#137`, and `#138`;
-  open PRs `#120` and `#123` are still only meta refresh branches and do not
-  own the next code cleanup lane.
+- Recent merged PRs now include `#135`, `#136`, `#137`, `#138`, and `#140`;
+  open PRs `#141` and `#142` now own the active checklist-audit and
+  import-preview standards lanes, while `#139`, `#123`, and `#120` remain
+  older meta refresh branches.
 - The canonical ask surface remains the quality-oriented rewrite in
   `factory/logs/meta/asks.md`; the active asks are external checklist
   alignment, stronger backend and website testing, ongoing simplification, and
@@ -173,12 +177,13 @@
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
 - The previously queued ignored idea
-  `cover-gocoveragecheck-helper-runtime-and-parser-branches` is stale because
-  merged PR `#137` landed that exact lane on `main`.
+  `retire-deadcodecheck-gotypesalias-compat-shim` is stale because merged PR
+  `#140` landed that exact lane on `main`.
 - The next maintainer-owned operating queue should hold three non-overlapping
   ideas together:
   repo-wide checklist audit evidence, import-preview localization plus
-  accessibility hardening, and deadcodecheck legacy-shim retirement.
+  accessibility hardening, and releasesmoke command-owner parse/json branch
+  coverage.
 
 ## 2026-05-06T16:03:38.4962364-07:00 - meta state refresh
 
@@ -1937,3 +1942,39 @@
   `audit-repository-against-2026-website-and-backend-checklists.md`,
   `localize-and-accessibility-harden-import-preview-dialog.md`, and
   `retire-deadcodecheck-gotypesalias-compat-shim.md`.
+
+## 2026-05-07T03:02:15.3916934-07:00 - meta state refresh
+
+- Ran `git pull` while local `main` was already one commit ahead of
+  `origin/main`; Git merged in upstream `08acc2f` so local `HEAD` advanced to
+  `41ae281` and now includes merged PR `#140`
+  (`retire-deadcodecheck-gotypesalias-compat-shim`) without disturbing the
+  user-owned tracked edit in `factory/logs/meta/asks.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, current PR
+  state, the tracked-versus-ignored `factory/inputs/**` surface, and the live
+  repo-owned `cmd/` candidate seams.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse -Force factory/inputs`, confirming the checked-in
+  inboxes remain sentinel-only while the visible idea files are ignored local
+  operating residue.
+- Confirmed the previously queued ignored idea
+  `factory/inputs/idea/default/retire-deadcodecheck-gotypesalias-compat-shim.md`
+  is stale because merged PR `#140` already landed that exact cleanup on
+  `main`, so it should be pruned rather than left in the live queue.
+- Re-checked open PR ownership with `gh pr view 141` and `gh pr view 142`,
+  confirming those branches already own the repository-wide checklist audit and
+  the import-preview localization/accessibility lane; they should count toward
+  the standing three-task ask and block overlapping follow-up queue work.
+- Verified with direct reads of `cmd/releasesmoke/main.go` and
+  `cmd/releasesmoke/main_test.go`, `gh pr list --search "releasesmoke"`,
+  and fresh `go test -cover ./cmd/...` plus `go tool cover -func` output that
+  the next narrow non-overlapping backend testing seam is `cmd/releasesmoke`:
+  PR `#128` already closed the thin entrypoint routing, but the package still
+  leaves uncovered parse-error and `writeJSON` encode-failure branches and
+  reports `83.3%` statement coverage in the repo-owned command lane.
+- Replaced the stale deadcode slot with one fresh ignored idea under
+  `factory/inputs/idea/default/cover-releasesmoke-command-owner-parse-and-json-error-branches.md`
+  so the operating backlog returns to three narrow active lanes without
+  overlapping PR `#141` or `#142`.
