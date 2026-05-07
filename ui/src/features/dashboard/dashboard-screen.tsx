@@ -1,3 +1,4 @@
+import { resolveSupportedLocale } from "../../i18n";
 import { DashboardBento } from "../bento";
 import { useDashboardBentoStore } from "../bento/state/dashboardBentoStore";
 import {
@@ -14,6 +15,7 @@ export function DashboardScreen() {
   const { snapshot, isInitialLoading, error } = useDashboardSnapshot({
     refreshToken,
   });
+  const locale = getDashboardLocale();
 
   if (isInitialLoading) {
     return (
@@ -41,9 +43,22 @@ export function DashboardScreen() {
 
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
-      <DashboardHeader />
-      <DashboardBento />
-      <DashboardExportDialog />
+      <DashboardHeader locale={locale} />
+      <DashboardBento locale={locale} />
+      <DashboardExportDialog locale={locale} />
     </main>
   );
+}
+
+function getDashboardLocale(): string {
+  if (typeof document !== "undefined" && document.documentElement.lang) {
+    return resolveSupportedLocale(document.documentElement.lang);
+  }
+
+  if (typeof navigator !== "undefined") {
+    const preferredLocale = navigator.languages[0] ?? navigator.language;
+    return resolveSupportedLocale(preferredLocale);
+  }
+
+  return resolveSupportedLocale(undefined);
 }
