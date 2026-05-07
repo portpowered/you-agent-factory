@@ -356,7 +356,8 @@ describe("CurrentSelectionWidget", () => {
         inference_attempts: [
           buildDashboardInferenceAttemptFixture("dispatch-review-markdown", {
             attempt: 1,
-            inference_request_id: "dispatch-review-markdown/inference-request/1",
+            inference_request_id:
+              "dispatch-review-markdown/inference-request/1",
             prompt: [
               "## Review checklist",
               "",
@@ -409,9 +410,7 @@ describe("CurrentSelectionWidget", () => {
     expect(
       within(currentSelection).getByText(/- Check the latest diff/),
     ).toBeTruthy();
-    expect(
-      within(currentSelection).getByText(/```text/),
-    ).toBeTruthy();
+    expect(within(currentSelection).getByText(/```text/)).toBeTruthy();
     expect(
       within(currentSelection).queryByRole("heading", { name: "Active work" }),
     ).toBeNull();
@@ -448,12 +447,8 @@ describe("CurrentSelectionWidget", () => {
         name: "現在の選択",
       }),
     ).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "選択を元に戻す" }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "選択をやり直す" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "選択を元に戻す" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "選択をやり直す" })).toBeTruthy();
     expect(
       screen.getByText(
         "ライブの詳細を確認するには、ワークステーション、作業項目、または状態ノードを選択してください。",

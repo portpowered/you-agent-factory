@@ -1,10 +1,10 @@
-import { useSelectionHistoryStore } from "./state/selectionHistoryStore";
-import { cx } from "../../lib/cx";
-import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../components/ui/dashboard-typography";
 import { DETAIL_CARD_WIDE_CLASS } from "../../components/dashboard/widget-board";
 import { DashboardWidgetFrame } from "../../components/ui";
-import type { SelectionDetailLayoutProps } from "./detail-card-types";
+import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../components/ui/dashboard-typography";
+import { cx } from "../../lib/cx";
 import { useCurrentSelectionShellMessages } from "./current-selection-locale";
+import type { SelectionDetailLayoutProps } from "./detail-card-types";
+import { useSelectionHistoryStore } from "./state/selectionHistoryStore";
 
 const SELECTION_HISTORY_ACTIONS_CLASS = "flex items-center gap-2";
 const SELECTION_HISTORY_BUTTON_CLASS = cx(

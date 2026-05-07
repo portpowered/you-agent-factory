@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
 
 import {
-  getCurrentSelectionShellMessages,
   type CurrentSelectionShellMessages,
+  getCurrentSelectionShellMessages,
 } from "./messages/current-selection-shell";
 
 const CurrentSelectionLocaleContext =
