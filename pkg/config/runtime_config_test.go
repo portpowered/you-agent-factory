@@ -1783,7 +1783,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 }
 
 func TestNewLoadedFactoryConfig_MergesRuntimeDefinitionsOntoCanonicalConfig(t *testing.T) {
-	runtimeDefs := newRuntimeDefinitionConfig(1, 1)
+	runtimeDefs := newRuntimeDefinitionLookupMaps(1, 1)
 	runtimeDefs.workers["executor"] = &interfaces.WorkerConfig{
 		Type:        interfaces.WorkerTypeScript,
 		Command:     "go",
@@ -1813,19 +1813,21 @@ func TestNewLoadedFactoryConfig_MergesRuntimeDefinitionsOntoCanonicalConfig(t *t
 }
 
 func TestNewLoadedFactoryConfig_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAreMissing(t *testing.T) {
-	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), newRuntimeDefinitionConfig(0, 0))
+	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), newRuntimeDefinitionLookupMaps(0, 0))
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	worker, ok := loaded.Worker("executor")
+	var lookup interfaces.RuntimeDefinitionLookup = loaded
+
+	worker, ok := lookup.Worker("executor")
 	if !ok {
 		t.Fatal("expected canonical worker")
 	}
 	if worker.Type != interfaces.WorkerTypeModel || worker.Model != "canonical-model" {
 		t.Fatalf("canonical worker fields were not preserved: %#v", worker)
 	}
-	assertCanonicalMergeWorkstation(t, loaded)
+	assertCanonicalMergeWorkstation(t, lookup)
 }
 
 func TestNewLoadedFactoryConfig_LoadsCanonicalConfigWithoutRuntimeConfig(t *testing.T) {
@@ -1834,11 +1836,13 @@ func TestNewLoadedFactoryConfig_LoadsCanonicalConfigWithoutRuntimeConfig(t *test
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	assertCanonicalRuntimeConfigLookupFactoryDir(t, loaded, "factory-dir")
-	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, loaded, "factory-dir")
-	assertCanonicalRuntimeDefinitionLookupByName(t, loaded, "executor", "review")
-	assertRuntimeDefinitionLookupMissesByName(t, loaded, "missing-worker", "missing-workstation")
-	assertCanonicalMergeWorkstation(t, loaded)
+	var lookup interfaces.RuntimeConfigLookup = loaded
+
+	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, "factory-dir")
+	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, "factory-dir")
+	assertCanonicalRuntimeDefinitionLookupByName(t, lookup, "executor", "review")
+	assertRuntimeDefinitionLookupMissesByName(t, lookup, "missing-worker", "missing-workstation")
+	assertCanonicalMergeWorkstation(t, lookup)
 }
 
 func TestLoadedFactoryConfig_RuntimeBaseDirOverrideAndFallbackKeepsCanonicalLookupContract(t *testing.T) {
@@ -1847,33 +1851,37 @@ func TestLoadedFactoryConfig_RuntimeBaseDirOverrideAndFallbackKeepsCanonicalLook
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	assertCanonicalRuntimeConfigLookupFactoryDir(t, loaded, "factory-dir")
-	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, loaded, "factory-dir")
+	var lookup interfaces.RuntimeConfigLookup = loaded
+
+	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, "factory-dir")
+	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, "factory-dir")
 
 	loaded.SetRuntimeBaseDir(" runtime-base/child/.. ")
 
-	assertCanonicalRuntimeConfigLookupFactoryDir(t, loaded, "factory-dir")
-	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, loaded, "runtime-base")
+	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, "factory-dir")
+	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, "runtime-base")
 
 	loaded.SetRuntimeBaseDir(" \t ")
 
-	assertCanonicalRuntimeConfigLookupFactoryDir(t, loaded, "factory-dir")
-	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, loaded, "factory-dir")
+	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, "factory-dir")
+	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, "factory-dir")
 }
 
 func TestLoadedFactoryConfig_SetRuntimeBaseDirNilReceiverNoops(t *testing.T) {
 	var loaded *LoadedFactoryConfig
+	var lookup interfaces.RuntimeConfigLookup = loaded
 
 	loaded.SetRuntimeBaseDir("runtime-base")
 
-	assertCanonicalRuntimeConfigLookupFactoryDir(t, loaded, "")
-	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, loaded, "")
+	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, "")
+	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, "")
 }
 
 func TestLoadedFactoryConfig_RuntimeLookupNilReceiverReturnsMisses(t *testing.T) {
 	var loaded *LoadedFactoryConfig
+	var lookup interfaces.RuntimeDefinitionLookup = loaded
 
-	assertRuntimeDefinitionLookupMissesByName(t, loaded, "executor", "review")
+	assertRuntimeDefinitionLookupMissesByName(t, lookup, "executor", "review")
 }
 
 func TestLoadRuntimeConfig_ExposesEffectiveRuntimeDefinitionsThroughCanonicalLookup(t *testing.T) {
@@ -1918,7 +1926,12 @@ Runtime prompt.
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
-	worker, ok := loaded.Worker("executor")
+	var lookup interfaces.RuntimeConfigLookup = loaded
+
+	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, factoryDir)
+	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, factoryDir)
+
+	worker, ok := lookup.Worker("executor")
 	if !ok || worker == nil {
 		t.Fatalf("Worker(executor) = %#v ok=%v, want runtime worker hit", worker, ok)
 	}
@@ -1929,7 +1942,7 @@ Runtime prompt.
 		t.Fatalf("factory worker = %#v, want canonical lookup worker %#v", loaded.FactoryConfig().Workers[0], worker)
 	}
 
-	workstation, ok := loaded.Workstation("execute-story")
+	workstation, ok := lookup.Workstation("execute-story")
 	if !ok || workstation == nil {
 		t.Fatalf("Workstation(execute-story) = %#v ok=%v, want runtime workstation hit", workstation, ok)
 	}
@@ -1940,7 +1953,7 @@ Runtime prompt.
 		t.Fatalf("factory workstation = %#v, want canonical lookup workstation %#v", loaded.FactoryConfig().Workstations[0], workstation)
 	}
 
-	assertRuntimeDefinitionLookupMissesByName(t, loaded, "missing-worker", "missing-workstation")
+	assertRuntimeDefinitionLookupMissesByName(t, lookup, "missing-worker", "missing-workstation")
 }
 
 func assertCanonicalRuntimeConfigLookupFactoryDir(t *testing.T, lookup interfaces.RuntimeConfigLookup, want string) {
@@ -2061,9 +2074,9 @@ func assertMergedWorkstation(t *testing.T, loaded *LoadedFactoryConfig) {
 	}
 }
 
-func assertCanonicalMergeWorkstation(t *testing.T, loaded *LoadedFactoryConfig) {
+func assertCanonicalMergeWorkstation(t *testing.T, lookup interfaces.RuntimeDefinitionLookup) {
 	t.Helper()
-	workstation, ok := loaded.Workstation("review")
+	workstation, ok := lookup.Workstation("review")
 	if !ok {
 		t.Fatal("expected canonical workstation")
 	}

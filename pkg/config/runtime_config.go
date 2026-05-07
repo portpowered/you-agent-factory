@@ -88,7 +88,7 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	if err := ApplySupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
-	runtimeDefs := newRuntimeDefinitionConfig(len(factoryCfg.Workers), len(factoryCfg.Workstations))
+	runtimeDefs := newRuntimeDefinitionLookupMaps(len(factoryCfg.Workers), len(factoryCfg.Workstations))
 
 	inlineDefinitionsRequired := hasInlineRuntimeDefinitions(factoryCfg)
 	for _, workstation := range factoryCfg.Workstations {
@@ -175,28 +175,26 @@ func (c *LoadedFactoryConfig) PortableBundledFileReplacements() []PortableBundle
 
 // WorkstationConfigs returns the effective workstation definitions by name.
 func (c *LoadedFactoryConfig) WorkstationConfigs() map[string]*interfaces.FactoryWorkstationConfig {
-	lookup := c.runtimeDefinitionLookup()
-	if lookup == nil {
+	if c == nil || c.lookup == nil {
 		return nil
 	}
-	return lookup.workstations
+	return c.lookup.workstations
 }
 
 // Worker returns the loaded worker definition for the given configured worker name.
 func (c *LoadedFactoryConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
-	return c.runtimeDefinitionLookup().Worker(name)
+	if c == nil {
+		return nil, false
+	}
+	return c.lookup.Worker(name)
 }
 
 // Workstation returns the canonical loaded workstation entry for the given configured workstation name.
 func (c *LoadedFactoryConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
-	return c.runtimeDefinitionLookup().Workstation(name)
-}
-
-func (c *LoadedFactoryConfig) runtimeDefinitionLookup() *runtimeDefinitionLookupMaps {
 	if c == nil {
-		return nil
+		return nil, false
 	}
-	return c.lookup
+	return c.lookup.Workstation(name)
 }
 
 type runtimeDefinitionLookupMaps struct {
@@ -220,13 +218,7 @@ func (c *runtimeDefinitionLookupMaps) Workstation(name string) (*interfaces.Fact
 	return def, ok
 }
 
-type runtimeDefinitionConfig = runtimeDefinitionLookupMaps
-
-var _ interfaces.RuntimeDefinitionLookup = (*runtimeDefinitionConfig)(nil)
-
-func newRuntimeDefinitionConfig(workerCount, workstationCount int) *runtimeDefinitionConfig {
-	return newRuntimeDefinitionLookupMaps(workerCount, workstationCount)
-}
+var _ interfaces.RuntimeDefinitionLookup = (*runtimeDefinitionLookupMaps)(nil)
 
 func newRuntimeDefinitionLookupMaps(workerCount, workstationCount int) *runtimeDefinitionLookupMaps {
 	return &runtimeDefinitionLookupMaps{
