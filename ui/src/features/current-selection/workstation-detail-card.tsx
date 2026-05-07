@@ -35,6 +35,7 @@ import {
 
 export function WorkstationDetailCard({
   activeExecutions,
+  locale,
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -51,7 +52,7 @@ export function WorkstationDetailCard({
   );
 
   return (
-    <SelectionDetailLayout widgetId={widgetId}>
+    <SelectionDetailLayout locale={locale} widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
       <WorkstationActiveWorkList
         executions={activeExecutions}
