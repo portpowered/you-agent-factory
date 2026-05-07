@@ -20,7 +20,6 @@ export function WorkItemDetailCard({
   activeTraceID,
   dispatchAttempts,
   executionDetails,
-  locale,
   onSelectTraceID,
   onSelectWorkID,
   selectedNode,
@@ -36,7 +35,7 @@ export function WorkItemDetailCard({
   );
 
   return (
-    <SelectionDetailLayout locale={locale} widgetId={widgetId}>
+    <SelectionDetailLayout widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>
         {formatWorkItemLabel(selection.workItem)}
       </p>

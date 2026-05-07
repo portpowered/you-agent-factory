@@ -16,7 +16,6 @@ const SCRIPT_OUTPUT_TEXT_CLASS =
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]";
 
 export function WorkstationRequestDetailCard({
-  locale,
   request,
   widgetId = "current-selection",
 }: WorkstationRequestDetailCardProps) {
@@ -24,7 +23,7 @@ export function WorkstationRequestDetailCard({
   const showInferenceAttempts = !view.isScriptBackedRequest;
 
   return (
-    <SelectionDetailLayout locale={locale} widgetId={widgetId}>
+    <SelectionDetailLayout widgetId={widgetId}>
       <WorkstationRequestSummary request={request} view={view} />
       <RequestCountSection request={request} />
       <RequestDetailsSection request={request} view={view} />

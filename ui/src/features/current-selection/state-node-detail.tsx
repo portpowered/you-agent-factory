@@ -26,7 +26,6 @@ const STATE_PLACE_CURRENT_WORK_HEADING = "Current work";
 export function StateNodeDetailCard({
   currentWorkItems,
   failedWorkDetailsByWorkID,
-  locale,
   onSelectWorkItem,
   place,
   terminalHistoryWorkItems = [],
@@ -39,7 +38,7 @@ export function StateNodeDetailCard({
   const visibleWorkItems = usesRetainedWorkItems ? terminalHistoryWorkItems : currentWorkItems;
 
   return (
-    <SelectionDetailLayout locale={locale} widgetId={widgetId}>
+    <SelectionDetailLayout widgetId={widgetId}>
       <div className="mt-0 grid gap-[0.18rem]" title={placeLabel}>
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{placeLabelParts.workType}</span>
         <span className={WIDGET_SUBTITLE_CLASS}>{placeLabelParts.stateValue}</span>

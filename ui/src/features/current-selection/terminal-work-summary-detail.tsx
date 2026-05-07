@@ -13,7 +13,6 @@ export function TerminalWorkSummaryCard({
   failureMessage,
   failureReason,
   label,
-  locale,
   now = Date.now(),
   status,
   widgetId = "current-selection",
@@ -23,7 +22,7 @@ export function TerminalWorkSummaryCard({
   const normalizedFailureMessage = normalizeDetailText(failureMessage);
 
   return (
-    <SelectionDetailLayout locale={locale} widgetId={widgetId}>
+    <SelectionDetailLayout widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{label}</p>
       <dl>
         <div>

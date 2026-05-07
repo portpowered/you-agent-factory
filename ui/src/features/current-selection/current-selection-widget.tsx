@@ -63,7 +63,6 @@ export function CurrentSelectionWidget({
       <WorkItemDetailCard
         activeTraceID={activeTraceID}
         executionDetails={selectedWorkExecutionDetails}
-        locale={locale}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={selectWorkByID}
         dispatchAttempts={selectedWorkDispatchAttempts}
@@ -77,7 +76,6 @@ export function CurrentSelectionWidget({
   } else if (selectedWorkstationRequest) {
     detailCard = (
       <WorkstationRequestDetailCard
-        locale={locale}
         request={selectedWorkstationRequest}
         widgetId={widgetId}
       />
@@ -87,7 +85,6 @@ export function CurrentSelectionWidget({
       <StateNodeDetailCard
         currentWorkItems={selectedStateCurrentWorkItems}
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
-        locale={locale}
         onSelectWorkItem={(workItem) =>
           selectStateWorkItem(selectedStatePlace, workItem)
         }
@@ -101,7 +98,6 @@ export function CurrentSelectionWidget({
     detailCard = (
       <WorkstationDetailCard
         activeExecutions={selectedNodeActiveExecutions}
-        locale={locale}
         now={now}
         onSelectWorkID={selectWorkByID}
         onSelectWorkstationRequest={selectWorkstationRequest}
