@@ -27,6 +27,8 @@ import {
   TraceActionGroup,
   WorkItemActionGroup,
 } from "./selected-work-dispatch-history-card-shared";
+import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
+import type { CurrentSelectionDispatchHistoryMessages } from "./messages/current-selection-dispatch-history";
 import {
   dedupeWorkItems,
   requestCounts,
@@ -68,6 +70,7 @@ export function DispatchHistoryCard({
   selectedWorkID,
   traceTargetId,
 }: DispatchHistoryCardProps) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
   const view = buildDispatchHistoryView(request);
   const isCurrentDispatch = currentDispatchID === request.dispatch_id;
 
@@ -81,11 +84,13 @@ export function DispatchHistoryCard({
       <DispatchHistoryHeader
         dispatchID={request.dispatch_id}
         isCurrentDispatch={isCurrentDispatch}
+        messages={messages}
         outcome={view.outcome}
         workstationLabel={request.workstation_name || request.transition_id}
       />
-      <DispatchSummaryDetails request={request} view={view} />
+      <DispatchSummaryDetails messages={messages} request={request} view={view} />
       <DispatchRequestSection
+        messages={messages}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
         view={view}
@@ -94,6 +99,7 @@ export function DispatchHistoryCard({
         <>
           <DispatchResponseSection
             activeTraceID={activeTraceID}
+            messages={messages}
             onSelectTraceID={onSelectTraceID}
             onSelectWorkID={onSelectWorkID}
             selectedWorkID={selectedWorkID}
@@ -112,6 +118,7 @@ export function DispatchHistoryCard({
         <>
           <DispatchTraceSection
             activeTraceID={activeTraceID}
+            messages={messages}
             onSelectTraceID={onSelectTraceID}
             onSelectWorkID={onSelectWorkID}
             selectedWorkID={selectedWorkID}
@@ -122,13 +129,13 @@ export function DispatchHistoryCard({
             attempts={view.sortedInferenceAttempts}
             emptyCopy={
               view.hasFailureDetails
-                ? "No inference attempt details were recorded before this dispatch ended."
-                : "No inference attempt details have been recorded for this dispatch yet."
+                ? messages.inferenceAttemptsEmptyEnded
+                : messages.inferenceAttemptsEmptyPending
             }
           />
         </>
       )}
-      {view.hasFailureDetails ? <DispatchFailureSection view={view} /> : null}
+      {view.hasFailureDetails ? <DispatchFailureSection messages={messages} view={view} /> : null}
     </article>
   );
 }
@@ -187,11 +194,13 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
 function DispatchHistoryHeader({
   dispatchID,
   isCurrentDispatch,
+  messages,
   outcome,
   workstationLabel,
 }: {
   dispatchID: string | undefined;
   isCurrentDispatch: boolean;
+  messages: CurrentSelectionDispatchHistoryMessages;
   outcome: string | undefined;
   workstationLabel: string | undefined;
 }) {
@@ -199,11 +208,11 @@ function DispatchHistoryHeader({
     <div className="flex items-start justify-between gap-[0.8rem]">
       <div className="grid min-w-0 gap-[0.18rem]">
         <strong className="min-w-0 [overflow-wrap:anywhere]">
-          {workstationLabel || dispatchID || "Unknown dispatch"}
+          {workstationLabel || dispatchID || messages.unknownDispatchTitle}
         </strong>
         <div className="flex flex-wrap items-center gap-[0.45rem]">
           <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-            {outcome ?? "PENDING"}
+            {outcome ?? messages.pendingOutcome}
           </p>
           {isCurrentDispatch ? (
             <span
@@ -212,33 +221,35 @@ function DispatchHistoryHeader({
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
             >
-              Current dispatch
+              {messages.currentDispatchBadge}
             </span>
           ) : null}
         </div>
       </div>
-      <span className={EXECUTION_PILL_CLASS}>{dispatchID || "unknown-dispatch"}</span>
+      <span className={EXECUTION_PILL_CLASS}>{dispatchID || messages.unknownDispatchId}</span>
     </div>
   );
 }
 
 function DispatchSummaryDetails({
+  messages,
   request,
   view,
 }: {
+  messages: CurrentSelectionDispatchHistoryMessages;
   request: SelectedWorkRequestHistoryItem;
   view: DispatchHistoryView;
 }) {
   return (
     <dl className={cx("mt-[0.65rem]", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
-      <InferenceAttemptDetail label="Workstation" value={request.workstation_name} />
-      <InferenceAttemptDetail label="Transition ID" code value={request.transition_id} />
-      <InferenceAttemptDetail label="dispatchedCount" value={view.counts.dispatchedCount} />
-      <InferenceAttemptDetail label="respondedCount" value={view.counts.respondedCount} />
-      <InferenceAttemptDetail label="erroredCount" value={view.counts.erroredCount} />
-      <InferenceAttemptDetail label="Started at" value={requestStartedAt(request)} />
+      <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
+      <InferenceAttemptDetail label={messages.transitionIdLabel} code value={request.transition_id} />
+      <InferenceAttemptDetail label={messages.dispatchedCountLabel} value={view.counts.dispatchedCount} />
+      <InferenceAttemptDetail label={messages.respondedCountLabel} value={view.counts.respondedCount} />
+      <InferenceAttemptDetail label={messages.erroredCountLabel} value={view.counts.erroredCount} />
+      <InferenceAttemptDetail label={messages.startedAtLabel} value={requestStartedAt(request)} />
       <InferenceAttemptDetail
-        label="Duration"
+        label={messages.durationLabel}
         value={view.durationMillis !== undefined ? formatDurationMillis(view.durationMillis) : undefined}
       />
     </dl>
@@ -246,48 +257,50 @@ function DispatchSummaryDetails({
 }
 
 function DispatchRequestSection({
+  messages,
   onSelectWorkID,
   selectedWorkID,
   view,
 }: {
+  messages: CurrentSelectionDispatchHistoryMessages;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title="Request details">
+    <DispatchDetailSection title={messages.requestDetailsTitle}>
       {view.isScriptBackedRequest ? (
         <>
           <p className={DETAIL_COPY_CLASS}>
-            Prompt details are not applicable to this script-backed dispatch.
+            {messages.promptDetailsNotApplicable}
           </p>
           <DispatchDetailList
             entries={[
               {
-                label: "Script request ID",
+                label: messages.scriptRequestIdLabel,
                 value: view.scriptRequest?.script_request_id,
                 code: true,
               },
               {
-                label: "Script attempt",
+                label: messages.scriptAttemptLabel,
                 value:
                   view.scriptRequest?.attempt !== undefined
                     ? String(view.scriptRequest.attempt)
                     : undefined,
               },
-              { label: "Command", value: view.scriptRequest?.command, code: true },
+              { label: messages.commandLabel, value: view.scriptRequest?.command, code: true },
             ]}
           />
           <ScriptArgsSection args={view.scriptRequest?.args} />
         </>
       ) : (
         <p className={DETAIL_COPY_CLASS}>
-          Inference request details are shown under Inference attempts.
+          {messages.inferenceRequestGuidance}
         </p>
       )}
       <WorkItemActionGroup
         items={view.inputWorkItems}
-        label="Input work"
+        label={messages.inputWorkLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
       />
@@ -297,6 +310,7 @@ function DispatchRequestSection({
 
 function DispatchResponseSection({
   activeTraceID,
+  messages,
   onSelectTraceID,
   onSelectWorkID,
   selectedWorkID,
@@ -304,6 +318,7 @@ function DispatchResponseSection({
   view,
 }: {
   activeTraceID?: string | null;
+  messages: CurrentSelectionDispatchHistoryMessages;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
@@ -311,11 +326,11 @@ function DispatchResponseSection({
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title="Response details">
-      <ScriptResponseContent view={view} />
+    <DispatchDetailSection title={messages.responseDetailsTitle}>
+      <ScriptResponseContent messages={messages} view={view} />
       <WorkItemActionGroup
         items={view.outputWorkItems}
-        label="Output work"
+        label={messages.outputWorkLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
       />
@@ -331,6 +346,7 @@ function DispatchResponseSection({
 
 function DispatchTraceSection({
   activeTraceID,
+  messages,
   onSelectTraceID,
   onSelectWorkID,
   selectedWorkID,
@@ -338,6 +354,7 @@ function DispatchTraceSection({
   view,
 }: {
   activeTraceID?: string | null;
+  messages: CurrentSelectionDispatchHistoryMessages;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
@@ -345,10 +362,10 @@ function DispatchTraceSection({
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title="Trace details">
+    <DispatchDetailSection title={messages.traceDetailsTitle}>
       <WorkItemActionGroup
         items={view.outputWorkItems}
-        label="Output work"
+        label={messages.outputWorkLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
       />
@@ -363,12 +380,14 @@ function DispatchTraceSection({
 }
 
 function ScriptResponseContent({
+  messages,
   view,
 }: {
+  messages: CurrentSelectionDispatchHistoryMessages;
   view: DispatchHistoryView;
 }) {
   if (!view.scriptResponse) {
-    return <p className={DETAIL_COPY_CLASS}>No script response yet for this dispatch.</p>;
+    return <p className={DETAIL_COPY_CLASS}>{messages.noScriptResponseYet}</p>;
   }
 
   return (
@@ -376,43 +395,43 @@ function ScriptResponseContent({
       <DispatchDetailList
         entries={[
           {
-            label: "Script request ID",
+            label: messages.scriptRequestIdLabel,
             value: scriptRequestID(view.scriptResponse),
             code: true,
           },
           {
-            label: "Script attempt",
+            label: messages.scriptAttemptLabel,
             value:
               scriptAttemptNumber(view.scriptResponse) !== undefined
                 ? String(scriptAttemptNumber(view.scriptResponse))
                 : undefined,
           },
-          { label: "Outcome", value: view.scriptResponse.outcome },
+          { label: messages.outcomeLabel, value: view.scriptResponse.outcome },
           {
-            label: "Duration",
+            label: messages.durationLabel,
             value:
               scriptResponseDurationMillis(view.scriptResponse) !== undefined
                 ? formatDurationMillis(scriptResponseDurationMillis(view.scriptResponse) ?? 0)
                 : undefined,
           },
           {
-            label: "Exit code",
+            label: messages.exitCodeLabel,
             value:
               scriptResponseExitCode(view.scriptResponse) !== undefined
                 ? String(scriptResponseExitCode(view.scriptResponse))
                 : undefined,
           },
-          { label: "Failure type", value: scriptResponseFailureType(view.scriptResponse) },
+          { label: messages.failureTypeLabel, value: scriptResponseFailureType(view.scriptResponse) },
         ]}
       />
       <ScriptOutputSection
-        emptyMessage="No stdout was recorded for this script response."
-        label="Stdout"
+        emptyMessage={messages.noStdoutRecorded}
+        label={messages.stdoutLabel}
         value={view.normalizedScriptStdout}
       />
       <ScriptOutputSection
-        emptyMessage="No stderr was recorded for this script response."
-        label="Stderr"
+        emptyMessage={messages.noStderrRecorded}
+        label={messages.stderrLabel}
         value={view.normalizedScriptStderr}
       />
     </>
@@ -420,17 +439,19 @@ function ScriptResponseContent({
 }
 
 function DispatchFailureSection({
+  messages,
   view,
 }: {
+  messages: CurrentSelectionDispatchHistoryMessages;
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title="Failure details">
+    <DispatchDetailSection title={messages.failureDetailsTitle}>
       <DispatchDetailList
         entries={[
-          { label: "Failure reason", value: view.failureReason },
-          { label: "Failure message", value: view.failureMessage },
-          { label: "Failure type", code: true, value: view.failureType },
+          { label: messages.failureReasonLabel, value: view.failureReason },
+          { label: messages.failureMessageLabel, value: view.failureMessage },
+          { label: messages.failureTypeLabel, code: true, value: view.failureType },
         ]}
       />
     </DispatchDetailSection>

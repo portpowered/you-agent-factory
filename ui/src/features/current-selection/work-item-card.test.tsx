@@ -11,6 +11,7 @@ import {
   inferenceAttempt,
   workstationRequest,
 } from "./detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
@@ -1158,6 +1159,63 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).queryByText("No response yet for this dispatch."),
     ).toBeNull();
+  });
+
+  it("renders localized dispatch-history card copy for a supported non-default locale", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="ja">
+        <WorkItemDetailCard
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          dispatchAttempts={[]}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[dashboardWorkstationRequestFixtures.scriptPending]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected localized dispatch history card");
+    }
+
+    expect(
+      within(dispatchCard).getByRole("region", {
+        name: "リクエストの詳細",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).getByRole("region", {
+        name: "応答の詳細",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).getByText(
+        "このディスパッチにはまだスクリプト応答がありません。",
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {
