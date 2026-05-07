@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"maps"
@@ -446,9 +447,15 @@ func TestEvaluateCoverageFailsWhenCoverageProfileCannotBeRead(t *testing.T) {
 	if err == nil {
 		t.Fatal("evaluateCoverage() unexpectedly succeeded")
 	}
-	wantErr := fmt.Sprintf("read go coverage profile: open %s: The system cannot find the file specified.", missingProfilePath)
-	if err.Error() != wantErr {
-		t.Fatalf("evaluateCoverage() error = %q, want %q", err.Error(), wantErr)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("evaluateCoverage() error = %v, want os.ErrNotExist", err)
+	}
+	wantErrPrefix := "read go coverage profile:"
+	if !strings.HasPrefix(err.Error(), wantErrPrefix) {
+		t.Fatalf("evaluateCoverage() error = %q, want prefix %q", err.Error(), wantErrPrefix)
+	}
+	if !strings.Contains(err.Error(), missingProfilePath) {
+		t.Fatalf("evaluateCoverage() error = %q, want missing path %q", err.Error(), missingProfilePath)
 	}
 }
 
