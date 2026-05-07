@@ -87,6 +87,38 @@ func TestRunForwardsVersionAndProgressWriter(t *testing.T) {
 	}
 }
 
+func TestRunReturnsZeroOnFlagHelpWithoutExecutingReleasePrep(t *testing.T) {
+	originalRunReleasePrep := runReleasePrep
+	t.Cleanup(func() {
+		runReleasePrep = originalRunReleasePrep
+	})
+
+	runReleasePrep = func(_ context.Context, options releaseprep.Options) error {
+		t.Fatal("runReleasePrep should not be called when flag parsing returns help")
+		return nil
+	}
+
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	exitCode := run([]string{"-h"}, out, errOut)
+
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+	if got := out.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := errOut.String(); got == "" {
+		t.Fatal("run() stderr was empty, want help output")
+	}
+	if !bytes.Contains(errOut.Bytes(), []byte("Usage of releaseprep:\n")) {
+		t.Fatalf("run() stderr = %q, want usage header", errOut.String())
+	}
+	if !bytes.Contains(errOut.Bytes(), []byte("-version string")) {
+		t.Fatalf("run() stderr = %q, want version flag usage", errOut.String())
+	}
+}
+
 func TestMainSuccessWritesProgressToStdoutAndExitsZero(t *testing.T) {
 	originalRunReleasePrep := runReleasePrep
 	originalExitFunc := exitFunc
