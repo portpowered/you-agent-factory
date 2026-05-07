@@ -43,6 +43,7 @@ const exportCoverImagePath = path.resolve(
   packageRoot,
   "..",
   "docs",
+  "internal",
   "resources",
   "dashboard.png",
 );
