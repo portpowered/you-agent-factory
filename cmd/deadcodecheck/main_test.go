@@ -186,6 +186,57 @@ func TestRunDeadcodeFailurePreservesContextAndToolStderr(t *testing.T) {
 	}
 }
 
+func TestRunSuccessfulDeadcodePassesThroughToolStderr(t *testing.T) {
+	restoreExecCommand(t)
+	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
+	t.Setenv("DEADCODECHECK_HELPER_STDOUT", "pkg/foo.go: Example\n")
+	t.Setenv("DEADCODECHECK_HELPER_STDERR", "fake deadcode stderr\n")
+	execCommand = fakeDeadcodecheckCommand
+
+	tempDir := t.TempDir()
+	writeDeadcodeBaseline(t, tempDir, "pkg/foo.go: Example\n")
+	chdirForTest(t, tempDir)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	readStderr, writeStderr, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	originalStderr := os.Stderr
+	os.Stderr = writeStderr
+	defer func() {
+		os.Stderr = originalStderr
+	}()
+
+	exitCode := run(nil, stdout, stderr)
+
+	if err := writeStderr.Close(); err != nil {
+		t.Fatalf("close stderr writer: %v", err)
+	}
+	passthroughStderr, err := io.ReadAll(readStderr)
+	if err != nil {
+		t.Fatalf("read passthrough stderr: %v", err)
+	}
+	if err := readStderr.Close(); err != nil {
+		t.Fatalf("close stderr reader: %v", err)
+	}
+
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+	if got := stdout.String(); got != "[agent-factory:deadcode] baseline matches\n" {
+		t.Fatalf("run() stdout = %q, want baseline match message", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty command stderr on successful passthrough", got)
+	}
+	if got := string(passthroughStderr); got != "fake deadcode stderr\n" {
+		t.Fatalf("passthrough stderr = %q, want helper stderr", got)
+	}
+}
+
 func TestRunFailsWhenCurrentOutputDirectorySetupFails(t *testing.T) {
 	restore := stubDeadcodecheckCommand(t, "pkg/foo.go: Example\n", nil)
 	defer restore()
