@@ -75,7 +75,7 @@ func (fs *FactoryService) registerCronJobs(
 	schedulerClock clockwork.Clock,
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
-	runtimeCfg interfaces.RuntimeConfigLookup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	submitter workRequestSubmitter,
 ) int {
 	registered := 0
@@ -112,7 +112,7 @@ func (fs *FactoryService) registerCronJob(
 	ctx context.Context,
 	scheduler gocron.Scheduler,
 	schedulerClock clockwork.Clock,
-	runtimeCfg interfaces.RuntimeConfigLookup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	ws interfaces.FactoryWorkstationConfig,
 	schedule string,
@@ -137,7 +137,7 @@ func (fs *FactoryService) registerCronJob(
 func (fs *FactoryService) triggerCronAtStart(
 	ctx context.Context,
 	schedulerClock clockwork.Clock,
-	runtimeCfg interfaces.RuntimeConfigLookup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	ws interfaces.FactoryWorkstationConfig,
 	submitter workRequestSubmitter,
@@ -150,7 +150,7 @@ func (fs *FactoryService) triggerCronAtStart(
 
 func (fs *FactoryService) runCronJob(
 	ctx context.Context,
-	runtimeCfg interfaces.RuntimeConfigLookup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
@@ -193,22 +193,18 @@ func (fs *FactoryService) submitCronTick(
 	firedAt time.Time,
 ) error {
 	runtimeCfg := fs.currentRuntimeConfig()
+	workflowIdentity := ""
+	runtimeLookup := interfaces.FirstRuntimeWorkstationLookup(runtimeCfg)
 	if runtimeCfg == nil {
-		return fs.submitCronTickForRuntime(ctx, nil, "", fs.currentRuntimeSubmitter(), ws, firedAt)
+		return fs.submitCronTickForRuntime(ctx, runtimeLookup, workflowIdentity, fs.currentRuntimeSubmitter(), ws, firedAt)
 	}
-	return fs.submitCronTickForRuntime(
-		ctx,
-		runtimeCfg,
-		fs.cronWorkflowIdentity(runtimeCfg.FactoryDir()),
-		fs.currentRuntimeSubmitter(),
-		ws,
-		firedAt,
-	)
+	workflowIdentity = fs.cronWorkflowIdentity(runtimeCfg.FactoryDir())
+	return fs.submitCronTickForRuntime(ctx, runtimeLookup, workflowIdentity, fs.currentRuntimeSubmitter(), ws, firedAt)
 }
 
 func (fs *FactoryService) submitCronTickForRuntime(
 	ctx context.Context,
-	runtimeCfg interfaces.RuntimeConfigLookup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	submitter workRequestSubmitter,
 	ws interfaces.FactoryWorkstationConfig,
@@ -250,7 +246,7 @@ func (fs *FactoryService) submitCronTickForRuntime(
 
 func (fs *FactoryService) submitCronTickAttempt(
 	ctx context.Context,
-	runtimeCfg interfaces.RuntimeConfigLookup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	submitter workRequestSubmitter,
 	ws interfaces.FactoryWorkstationConfig,
