@@ -4,14 +4,13 @@ import {
 import {
   DashboardMessagePanel,
 } from "./mutation-dialog";
+import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 import type {
   FactoryPngDropState,
   ReadFactoryImportPngError,
 } from "../import";
 
-const GRAPH_DROP_HINT = "Drop an Infinite You PNG onto this graph to start import.";
-const GRAPH_IMPORT_ERROR_TITLE = "Factory import failed";
-const GRAPH_IMPORT_LOADING_TITLE = "Validating factory PNG";
+const defaultMessages = getWorkflowActivityGraphImportMessages(undefined);
 
 export function graphDropStateAttribute(dropState: FactoryPngDropState): string {
   return dropState.status;
@@ -21,13 +20,13 @@ function graphDropOverlayCopy(dropState: FactoryPngDropState): { message: string
   switch (dropState.status) {
     case "drag-active":
       return {
-        message: GRAPH_DROP_HINT,
-        title: "Import factory PNG",
+        message: defaultMessages.graphDropHint,
+        title: defaultMessages.graphDropTitle,
       };
     case "reading":
       return {
-        message: `${dropState.fileName} is being parsed and validated locally before import continues.`,
-        title: GRAPH_IMPORT_LOADING_TITLE,
+        message: defaultMessages.graphDropReadingMessage(dropState.fileName),
+        title: defaultMessages.graphImportLoadingTitle,
       };
     default:
       return null;
@@ -37,23 +36,23 @@ function graphDropOverlayCopy(dropState: FactoryPngDropState): { message: string
 function graphImportErrorCopy(error: ReadFactoryImportPngError): string {
   switch (error.code) {
     case "NOT_PNG_FILE":
-      return "Drop a PNG image exported by Infinite You.";
+      return defaultMessages.importErrorNotPngFile;
     case "PNG_METADATA_MISSING":
-      return "This PNG does not include the Infinite You factory metadata needed for import.";
+      return defaultMessages.importErrorMetadataMissing;
     case "UNSUPPORTED_SCHEMA_VERSION":
-      return error.details?.schemaVersion
-        ? `This PNG uses unsupported Infinite You factory metadata version ${error.details.schemaVersion}.`
-        : "This PNG uses an unsupported Infinite You factory metadata version.";
+      return defaultMessages.importErrorUnsupportedSchemaVersion(
+        error.details?.schemaVersion,
+      );
     case "PNG_METADATA_INVALID":
     case "FACTORY_PAYLOAD_INVALID":
-      return "The embedded Infinite You factory metadata is invalid, so the current factory was left unchanged.";
+      return defaultMessages.importErrorEmbeddedMetadataInvalid;
     case "IMAGE_DECODE_FAILED":
     case "PREVIEW_UNAVAILABLE":
-      return "The browser could not validate this PNG for import preview, so the current factory was left unchanged.";
+      return defaultMessages.importErrorPreviewUnavailable;
     case "FILE_READ_FAILED":
-      return "The browser could not read the dropped file. Try dropping the PNG again.";
+      return defaultMessages.importErrorFileReadFailed;
     case "PNG_INVALID":
-      return "This PNG appears truncated or malformed, so import stopped before any activation request.";
+      return defaultMessages.importErrorPngInvalid;
     default:
       return error.message;
   }
@@ -106,7 +105,7 @@ export function GraphImportErrorPanel({
       className="mt-4 min-h-0 px-5 py-4"
       compact={true}
       role="alert"
-      title={GRAPH_IMPORT_ERROR_TITLE}
+      title={defaultMessages.graphImportErrorTitle}
       tone="error"
     >
       <p className="m-0">

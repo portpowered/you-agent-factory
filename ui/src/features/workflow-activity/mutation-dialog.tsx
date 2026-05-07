@@ -8,6 +8,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS } from "../../components/dashboard/widget-board";
+import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 
 const DIALOG_OVERLAY_CLASS =
   "z-50 flex items-center justify-center bg-af-canvas/78 p-4 backdrop-blur-sm";
@@ -32,6 +33,7 @@ const MESSAGE_PANEL_TONE_CLASS = {
   error: "border-af-danger/30 bg-af-danger/8 text-af-danger-ink",
   neutral: "border-af-overlay/10 bg-af-overlay/4 text-af-ink/82",
 } as const;
+const defaultMessages = getWorkflowActivityGraphImportMessages(undefined);
 
 export interface DashboardMutationDialogProps {
   children: ReactNode;
@@ -39,6 +41,7 @@ export interface DashboardMutationDialogProps {
   closeLabel?: string;
   description?: ReactNode;
   footer?: ReactNode;
+  flowLabel?: string;
   media?: ReactNode;
   onClose?: () => void;
   overlayClassName?: string;
@@ -60,9 +63,10 @@ export interface DashboardMessagePanelProps {
 export function DashboardMutationDialog({
   children,
   closeDisabled = false,
-  closeLabel = "Close dialog",
+  closeLabel = defaultMessages.dialogCloseLabel,
   description,
   footer,
+  flowLabel = defaultMessages.dialogFlowLabel,
   media,
   onClose,
   overlayClassName = "fixed inset-0 px-5 py-6",
@@ -98,7 +102,7 @@ export function DashboardMutationDialog({
           <div className={DIALOG_MAIN_CLASS}>
             <header className={DIALOG_HEADER_CLASS}>
               <div className="grid gap-2">
-                <p className={DIALOG_EYEBROW_CLASS}>Mutation flow</p>
+                <p className={DIALOG_EYEBROW_CLASS}>{flowLabel}</p>
                 <h2 className={DIALOG_TITLE_CLASS} id={titleId}>
                   {title}
                 </h2>
