@@ -384,6 +384,47 @@ func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 	}
 }
 
+func TestEvaluateCoverageFailsWhenTotalCoverageCannotBeParsed(t *testing.T) {
+	t.Parallel()
+
+	profilePath := writeCoverageProfile(t, "mode: count\n")
+
+	_, _, err := evaluateCoverage(
+		"not a total report\n",
+		"",
+		profilePath,
+		filepath.Clean(t.TempDir()),
+		[]string{modulePath + "/pkg/config"},
+	)
+	if err == nil {
+		t.Fatal("evaluateCoverage() unexpectedly succeeded")
+	}
+	if err.Error() != "parse go coverage total: missing total statements line" {
+		t.Fatalf("evaluateCoverage() error = %q, want parse total failure", err.Error())
+	}
+}
+
+func TestEvaluateCoverageFailsWhenCoverageProfileCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	missingProfilePath := filepath.Join(t.TempDir(), "missing.out")
+
+	_, _, err := evaluateCoverage(
+		"total: (statements) 82.5%\n",
+		"",
+		missingProfilePath,
+		filepath.Clean(t.TempDir()),
+		[]string{modulePath + "/pkg/config"},
+	)
+	if err == nil {
+		t.Fatal("evaluateCoverage() unexpectedly succeeded")
+	}
+	wantErr := fmt.Sprintf("read go coverage profile: open %s: The system cannot find the file specified.", missingProfilePath)
+	if err.Error() != wantErr {
+		t.Fatalf("evaluateCoverage() error = %q, want %q", err.Error(), wantErr)
+	}
+}
+
 func TestParseTotalCoverageFailsWhenTotalLineMissing(t *testing.T) {
 	t.Parallel()
 
@@ -423,6 +464,11 @@ func TestParseCoverageProfileRejectsMalformedInputs(t *testing.T) {
 		wantErr     string
 	}{
 		{
+			name:        "empty profile",
+			profileData: "",
+			wantErr:     "parse go coverage profile: empty profile",
+		},
+		{
 			name:        "missing mode header",
 			profileData: "pkg/config/config.go:1.1,2.1 2 1\n",
 			wantErr:     "parse go coverage profile: missing mode header",
@@ -446,6 +492,11 @@ func TestParseCoverageProfileRejectsMalformedInputs(t *testing.T) {
 			name:        "invalid execution count",
 			profileData: "mode: count\npkg/config/config.go:1.1,2.1 2 nope\n",
 			wantErr:     "parse go coverage profile execution count on line 2: strconv.Atoi: parsing \"nope\": invalid syntax",
+		},
+		{
+			name:        "import path escapes repository root",
+			profileData: "mode: count\n../outside/pkg/config.go:1.1,2.1 2 1\n",
+			wantErr:     "parse go coverage profile import path on line 2: profile path \"../outside/pkg/config.go\" escapes repository root",
 		},
 	}
 
@@ -508,6 +559,49 @@ func TestCoverageImportPathRejectsMalformedPaths(t *testing.T) {
 			}
 			if err.Error() != tc.wantErr {
 				t.Fatalf("coverageImportPath() error = %q, want %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestCoverageImportPathNormalizesSupportedPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	absolutePath := filepath.Join(repoRoot, "pkg", "config", "config.go")
+	cases := []struct {
+		name     string
+		filePath string
+		want     string
+	}{
+		{
+			name:     "module qualified path",
+			filePath: modulePath + "/pkg/config/config.go",
+			want:     modulePath + "/pkg/config",
+		},
+		{
+			name:     "relative path with dot prefix",
+			filePath: "./pkg/config/config.go",
+			want:     modulePath + "/pkg/config",
+		},
+		{
+			name:     "absolute path inside repository root",
+			filePath: absolutePath,
+			want:     modulePath + "/pkg/config",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := coverageImportPath(tc.filePath, repoRoot)
+			if err != nil {
+				t.Fatalf("coverageImportPath() error = %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("coverageImportPath() = %q, want %q", got, tc.want)
 			}
 		})
 	}
