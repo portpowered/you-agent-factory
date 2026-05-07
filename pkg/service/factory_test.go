@@ -1639,43 +1639,6 @@ func cronFactoryConfigWithTriggerAtStart(schedule string, triggerAtStart bool) m
 	return cfg
 }
 
-func mixedCronFactoryConfigForServiceTest(validSchedule string) map[string]any {
-	return map[string]any{
-		"name": "factory",
-		"workTypes": []map[string]any{
-			{
-				"name": "task",
-				"states": []map[string]string{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
-			},
-		},
-		"workers": []map[string]string{{"name": "cron-worker"}},
-		"workstations": []map[string]any{
-			{
-				"name":     "manual-step",
-				"behavior": "STANDARD",
-				"worker":   "cron-worker",
-				"inputs":   []map[string]string{{"workType": "task", "state": "init"}},
-				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
-			},
-			{
-				"name":     "valid-cron",
-				"behavior": "CRON",
-				"worker":   "cron-worker",
-				"cron": map[string]any{
-					"schedule":       validSchedule,
-					"expiryWindow":   "500ms",
-					"triggerAtStart": true,
-				},
-				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
-			},
-		},
-	}
-}
-
 func cronLoadedFactoryConfigForServiceTest(t *testing.T, factoryDir string, triggerAtStart bool) *config.LoadedFactoryConfig {
 	t.Helper()
 
@@ -1791,55 +1754,99 @@ func TestFactoryService_ServiceModeCronScheduleConfigStartsAndStopsService(t *te
 	}
 }
 
-func TestFactoryService_ServiceModeCronRegistrationSkipsNonCronAndTriggersOnlyCronWorkstations(t *testing.T) {
+func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCronWorkstations(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	dir := t.TempDir()
-	writeFactoryJSON(t, dir, mixedCronFactoryConfigForServiceTest("* * * * *"))
-	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
-		t.Fatalf("create inputs dir: %v", err)
-	}
-
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               dir,
-		RuntimeMode:       interfaces.RuntimeModeService,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.New(logCore),
-		Clock:             fakeClock,
-		ExtraOptions: []factory.FactoryOption{
-			factory.WithSubmissionRecorder(nonBlockingSubmissionRecorder(observedSubmissions)),
+	currentFactory := &aggregateSnapshotFactory{}
+	replacementFactory := &aggregateSnapshotFactory{}
+	validCron := interfaces.FactoryWorkstationConfig{
+		Name: "valid-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "* * * * *",
+			TriggerAtStart: true,
 		},
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
 	}
+	manual := interfaces.FactoryWorkstationConfig{
+		Name: "manual-step",
+		Kind: interfaces.WorkstationKindStandard,
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "complete",
+		}},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		"factory-alpha",
+		&interfaces.FactoryConfig{
+			WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{manual, validCron},
+		},
+		nil,
+		map[string]*interfaces.FactoryWorkstationConfig{
+			manual.Name:    &manual,
+			validCron.Name: &validCron,
+		},
+	)
+	observedRequests := make(chan interfaces.WorkRequest, 8)
+	replacementFactory.submitFunc = func(_ context.Context, request interfaces.WorkRequest) error {
+		select {
+		case observedRequests <- request:
+		default:
+			t.Fatalf("cron request channel overflow")
+		}
+		return nil
+	}
+	svc := &FactoryService{
+		cfg:     &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		factory: currentFactory,
+		logger:  zap.New(logCore),
+		clock:   fakeClock,
+	}
+	handle := &liveRuntimeHandle{
+		runtime: &replacementFactoryRuntime{
+			factory:    replacementFactory,
+			runtimeCfg: runtimeCfg,
+		},
+	}
+	sidecarCtx, cancelSidecars := context.WithCancel(context.Background())
+	defer cancelSidecars()
 
-	runCtx, cancelRun := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.Run(runCtx)
-	}()
+	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(handle)
 
-	startupRecord := waitForCronSubmission(t, observedSubmissions, time.Second)
-	assertCronSubmissionNominalAtForWorkstation(t, startupRecord, start, "valid-cron")
+	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestNominalAt(t, startupRequest, start)
+	if got := startupRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+		t.Fatalf("startup cron workstation tag = %q, want valid-cron", got)
+	}
 
 	waitForFakeClockWaiters(t, fakeClock, 1)
-	assertNoCronSubmissionQueued(t, observedSubmissions)
+	assertNoCronWorkRequestQueued(t, observedRequests)
 	fakeClock.Advance(time.Minute)
-	scheduledRecord := waitForCronSubmission(t, observedSubmissions, time.Second)
-	assertCronSubmissionNominalAtForWorkstation(t, scheduledRecord, start.Add(time.Minute), "valid-cron")
-	assertNoCronSubmissionQueued(t, observedSubmissions)
+	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestNominalAt(t, scheduledRequest, start.Add(time.Minute))
+	if got := scheduledRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+		t.Fatalf("scheduled cron workstation tag = %q, want valid-cron", got)
+	}
+	assertNoCronWorkRequestQueued(t, observedRequests)
 
-	cancelRun()
-	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("Run after cancellation: %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for service-mode cron scheduler to stop")
+	if currentFactory.submitCalls != 0 {
+		t.Fatalf("current runtime submit calls = %d, want 0", currentFactory.submitCalls)
+	}
+	if replacementFactory.submitCalls != 2 {
+		t.Fatalf("replacement runtime submit calls = %d, want 2", replacementFactory.submitCalls)
 	}
 
 	registered := observedLogs.FilterMessage("cron watcher registered").All()
