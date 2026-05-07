@@ -6,6 +6,7 @@ import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
 } from "../flowchart";
+import { getDashboardFlowAxisLegendMessages } from "./messages/dashboard-flow-axis-legend";
 import {
   ReactFlowCurrentActivityCard,
   currentActivityGraphKey,
@@ -39,6 +40,7 @@ import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore"
 interface RenderCurrentActivityOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
+  locale?: string;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
@@ -98,6 +100,7 @@ function expectFixedWorkstationNodeDimensions(node: Element | null) {
 function renderCurrentActivity({
   activateFactory,
   importController,
+  locale,
   onFactoryActivated,
   onFactoryImportReady,
   readFactoryImportFile,
@@ -119,6 +122,7 @@ function renderCurrentActivity({
     <ReactFlowCurrentActivityCard
       activateFactory={activateFactory}
       importController={importController}
+      locale={locale}
       now={Date.parse("2026-04-08T12:00:04Z")}
       onFactoryActivated={onFactoryActivated}
       onFactoryImportReady={onFactoryImportReady}
@@ -200,11 +204,14 @@ function createFileDropTransfer(files: File[]): {
 }
 
 async function expandGraphLegend(): Promise<HTMLElement> {
-  const expandButton = await screen.findByRole("button", { name: "Expand graph legend" });
+  const messages = getDashboardFlowAxisLegendMessages("en");
+  const expandButton = await screen.findByRole("button", {
+    name: messages.expandToggleLabel("graph legend"),
+  });
 
   fireEvent.click(expandButton);
 
-  return await screen.findByLabelText("Graph legend");
+  return await screen.findByLabelText(messages.title);
 }
 
 function dashboardSnapshotWithLongWorkstationAndActiveWorkLabels(): DashboardSnapshot {
@@ -487,6 +494,7 @@ describe("ReactFlowCurrentActivityCard", () => {
   });
 
   it("scopes file drag-over and drop handling to the graph viewport and opens a preview", async () => {
+    const legendMessages = getDashboardFlowAxisLegendMessages("en");
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const onFactoryImportReady = vi.fn<(value: FactoryPngImportValue, file: File) => void>();
@@ -502,7 +510,9 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
 
     const viewport = await screen.findByRole("region", { name: "Work graph viewport" });
-    const legendToggle = screen.getByRole("button", { name: "Expand graph legend" });
+    const legendToggle = screen.getByRole("button", {
+      name: legendMessages.expandToggleLabel("graph legend"),
+    });
 
     fireEvent.dragOver(legendToggle, createFileDropTransfer([file]));
 
@@ -1570,6 +1580,8 @@ describe("ReactFlowCurrentActivityCard", () => {
   });
 
   it("renders a twenty-node workflow fixture for larger graphs", async () => {
+    const legendMessages = getDashboardFlowAxisLegendMessages("en");
+
     renderCurrentActivity({ snapshot: twentyNodeDashboardSnapshot });
 
     expect(await screen.findByRole("button", { name: "Select Station 20 workstation" })).toBeTruthy();
@@ -1581,12 +1593,37 @@ describe("ReactFlowCurrentActivityCard", () => {
       .toBe("queue");
     const _legend = await expandGraphLegend();
     expect(
-      within(screen.getByLabelText("Graph legend"))
-        .getByRole("img", { name: "Standard workstation legend icon" })
+      within(screen.getByLabelText(legendMessages.title))
+        .getByRole("img", { name: legendMessages.iconLabel(legendMessages.iconLabels.workstation) })
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("workstation");
     expect(screen.queryByText("Workstation Definition")).toBeNull();
     expect(screen.getByRole("button", { name: "Select story:step-6 state" })).toBeTruthy();
+  });
+
+  it("renders localized legend copy for the workflow graph without changing the graph interactions", async () => {
+    const messages = getDashboardFlowAxisLegendMessages("ja");
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+      locale: "ja",
+    });
+
+    const expandButton = await screen.findByRole("button", {
+      name: messages.expandToggleLabel(messages.title),
+    });
+
+    fireEvent.click(expandButton);
+
+    const legend = await screen.findByLabelText(messages.title);
+
+    expect(within(legend).getByText(messages.edgeLabels.activeFlow)).toBeTruthy();
+    expect(
+      within(legend).getByRole("img", {
+        name: messages.iconLabel(messages.iconLabels.workstation),
+      }).getAttribute("data-graph-semantic-icon"),
+    ).toBe("workstation");
+    expect(await screen.findByRole("button", { name: "Select Review workstation" })).toBeTruthy();
   });
 
   it("uses persisted graph node positions when the topology remounts", async () => {

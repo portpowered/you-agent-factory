@@ -24,8 +24,8 @@ import { CURRENT_ACTIVITY_NODE_TYPES, type CurrentActivityNode } from "../flowch
 import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
 import {
   DashboardFlowAxisLegend,
-  DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_EDGE_ITEMS,
-  DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_ICON_ITEMS,
+  getDefaultDashboardFlowAxisLegendEdgeItems,
+  getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
 import {
   buildActiveGraphHighlights,
@@ -90,6 +90,7 @@ export type CurrentActivitySelection =
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
+  locale?: string;
   now: number;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
@@ -317,8 +318,9 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
       <DashboardFlowAxisLegend
         className="absolute left-7 top-7 max-[720px]:left-4 max-[720px]:right-4"
         defaultExpanded={false}
-        edgeItems={DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_EDGE_ITEMS}
-        iconItems={DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_ICON_ITEMS}
+        edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(props.locale)}
+        iconItems={getDefaultDashboardFlowAxisLegendIconItems(props.locale)}
+        locale={props.locale}
       />
 
       <div className="relative min-h-0 flex-1">

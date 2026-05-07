@@ -13,6 +13,7 @@ import {
 
 interface WorkflowActivityBentoCardProps {
   importController: CurrentActivityImportController;
+  locale?: string;
   now: number;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
@@ -30,6 +31,7 @@ const GRAPH_PANEL_SHELL_CLASS = "relative h-full min-h-0";
 
 export function WorkflowActivityBentoCard({
   importController,
+  locale,
   now,
   selection,
   snapshot,
@@ -42,6 +44,7 @@ export function WorkflowActivityBentoCard({
       <section className={GRAPH_PANEL_SHELL_CLASS}>
         <ReactFlowCurrentActivityCard
           importController={importController}
+          locale={locale}
           now={now}
           selection={toCurrentActivitySelection(selection)}
           snapshot={snapshot}
