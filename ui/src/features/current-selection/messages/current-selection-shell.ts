@@ -40,6 +40,10 @@ export interface CurrentSelectionShellMessages {
   workstationRequestHeading: string;
   workstationRequestRegionLabel: string;
   workstationUnavailable: string;
+  redoAccessibleLabel: string;
+  redoLabel: string;
+  undoAccessibleLabel: string;
+  undoLabel: string;
 }
 
 const currentSelectionShellMessagesByLocale = {
@@ -81,6 +85,8 @@ const currentSelectionShellMessagesByLocale = {
     traceUnavailable: "Trace details are not available for this selected run.",
     undoAction: "Undo",
     undoActionLabel: "Undo selection",
+    undoAccessibleLabel: "Undo selection",
+    undoLabel: "Undo",
     workstationLabel: "Workstation",
     workstationRequestGuidance:
       "Prompt, provider-session, and response-body details are shown under Inference attempts.",
@@ -88,6 +94,8 @@ const currentSelectionShellMessagesByLocale = {
     workstationRequestRegionLabel: "Workstation request",
     workstationUnavailable:
       "Workstation details are not available for this selected run.",
+    redoAccessibleLabel: "Redo selection",
+    redoLabel: "Redo",
   },
   ja: {
     completedStatus: "完了",
@@ -117,6 +125,8 @@ const currentSelectionShellMessagesByLocale = {
     selectedTraceSuffix: "（選択中）",
     redoAction: "やり直す",
     redoActionLabel: "選択をやり直す",
+    redoAccessibleLabel: "選択をやり直す",
+    redoLabel: "やり直す",
     sourceLabel: "ソース",
     sourceSummary: "現在のワークステーション実行概要",
     statusLabel: "ステータス",
@@ -127,6 +137,8 @@ const currentSelectionShellMessagesByLocale = {
     traceUnavailable: "この選択中の実行ではトレースの詳細を利用できません。",
     undoAction: "元に戻す",
     undoActionLabel: "選択を元に戻す",
+    undoAccessibleLabel: "選択を元に戻す",
+    undoLabel: "元に戻す",
     workstationLabel: "ワークステーション",
     workstationRequestGuidance:
       "プロンプト、provider-session、response-body の詳細は推論試行の下に表示されます。",
@@ -163,6 +175,8 @@ const currentSelectionShellMessagesByLocale = {
     selectedTraceSuffix: " (선택됨)",
     redoAction: "다시 실행",
     redoActionLabel: "선택 다시 실행",
+    redoAccessibleLabel: "선택 다시 실행",
+    redoLabel: "다시 실행",
     sourceLabel: "원본",
     sourceSummary: "현재 워크스테이션 실행 요약",
     statusLabel: "상태",
@@ -173,6 +187,8 @@ const currentSelectionShellMessagesByLocale = {
     traceUnavailable: "선택한 실행에서는 추적 세부 정보를 사용할 수 없습니다.",
     undoAction: "실행 취소",
     undoActionLabel: "선택 실행 취소",
+    undoAccessibleLabel: "선택 실행 취소",
+    undoLabel: "실행 취소",
     workstationLabel: "워크스테이션",
     workstationRequestGuidance:
       "프롬프트, provider-session, response-body 세부 정보는 추론 시도 아래에 표시됩니다.",
@@ -204,6 +220,8 @@ const currentSelectionShellMessagesByLocale = {
     selectedTraceSuffix: "（已选中）",
     redoAction: "重做",
     redoActionLabel: "重做选择",
+    redoAccessibleLabel: "重做所选内容",
+    redoLabel: "重做",
     sourceLabel: "来源",
     sourceSummary: "当前工作站运行摘要",
     statusLabel: "状态",
@@ -213,6 +231,8 @@ const currentSelectionShellMessagesByLocale = {
     traceUnavailable: "当前所选运行暂时没有追踪详情。",
     undoAction: "撤销",
     undoActionLabel: "撤销选择",
+    undoAccessibleLabel: "撤销所选内容",
+    undoLabel: "撤销",
     workstationLabel: "工作站",
     workstationRequestGuidance:
       "提示词、provider-session 和 response-body 详情显示在推理尝试下方。",
