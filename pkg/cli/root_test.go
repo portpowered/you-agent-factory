@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -21,6 +22,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 )
+
+type errWriter struct {
+	err error
+}
+
+func (w errWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
 
 func TestNewRootCommand_HasSubcommands(t *testing.T) {
 	root := NewRootCommand()
@@ -130,6 +139,24 @@ func TestDocsCommand_RejectsUnsupportedTopic(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `unknown command "unknown"`) {
 		t.Fatalf("unsupported docs topic error = %q", err.Error())
+	}
+}
+
+func TestDocsCommand_SupportedTopicReturnsConfiguredWriterFailure(t *testing.T) {
+	topic := docscli.SupportedTopics()[0]
+	wantErr := fmt.Errorf("write %s docs output: boom", topic)
+
+	root := NewRootCommand()
+	root.SetOut(errWriter{err: wantErr})
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"docs", topic})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected docs topic write to fail")
+	}
+	if err != wantErr {
+		t.Fatalf("docs topic write error = %v, want %v", err, wantErr)
 	}
 }
 
@@ -422,6 +449,51 @@ func TestNewRootCommand_DoesNotExposeRemovedAuditStateSurfaces(t *testing.T) {
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected removed audit state-surfaces command to fail")
 	}
+}
+
+func TestExecute_ExitsWithStatusOneWhenRootCommandFails(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=TestExecute_HelperProcess", "--", "docs", "unknown")
+	cmd.Env = append(os.Environ(), "GO_WANT_EXECUTE_HELPER=1")
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("expected Execute helper process to exit with failure")
+	}
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("Execute helper error = %T, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Fatalf("Execute helper exit code = %d, want 1", exitErr.ExitCode())
+	}
+}
+
+func TestExecute_HelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_EXECUTE_HELPER") != "1" {
+		return
+	}
+
+	argsIndex := 1
+	for ; argsIndex < len(os.Args); argsIndex++ {
+		if os.Args[argsIndex] == "--" {
+			argsIndex++
+			break
+		}
+	}
+	if argsIndex > len(os.Args) {
+		fmt.Fprintln(os.Stderr, "missing helper args")
+		os.Exit(2)
+	}
+
+	originalArgs := os.Args
+	defer func() {
+		os.Args = originalArgs
+	}()
+	os.Args = append([]string{originalArgs[0]}, originalArgs[argsIndex:]...)
+
+	Execute()
+	os.Exit(0)
 }
 
 func writeRootTestFile(t *testing.T, path, content string) {
