@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"time"
@@ -1638,6 +1639,43 @@ func cronFactoryConfigWithTriggerAtStart(schedule string, triggerAtStart bool) m
 	return cfg
 }
 
+func mixedCronFactoryConfigForServiceTest(validSchedule string) map[string]any {
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "cron-worker"}},
+		"workstations": []map[string]any{
+			{
+				"name":     "manual-step",
+				"behavior": "STANDARD",
+				"worker":   "cron-worker",
+				"inputs":   []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "task", "state": "complete"}},
+			},
+			{
+				"name":     "valid-cron",
+				"behavior": "CRON",
+				"worker":   "cron-worker",
+				"cron": map[string]any{
+					"schedule":       validSchedule,
+					"expiryWindow":   "500ms",
+					"triggerAtStart": true,
+				},
+				"outputs": []map[string]string{{"workType": "task", "state": "init"}},
+			},
+		},
+	}
+}
+
 func cronLoadedFactoryConfigForServiceTest(t *testing.T, factoryDir string, triggerAtStart bool) *config.LoadedFactoryConfig {
 	t.Helper()
 
@@ -1750,6 +1788,184 @@ func TestFactoryService_ServiceModeCronScheduleConfigStartsAndStopsService(t *te
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for service-mode factory service to stop")
+	}
+}
+
+func TestFactoryService_ServiceModeCronRegistrationSkipsNonCronAndTriggersOnlyCronWorkstations(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, mixedCronFactoryConfigForServiceTest("* * * * *"))
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+		Clock:             fakeClock,
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithSubmissionRecorder(nonBlockingSubmissionRecorder(observedSubmissions)),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	startupRecord := waitForCronSubmission(t, observedSubmissions, time.Second)
+	assertCronSubmissionNominalAtForWorkstation(t, startupRecord, start, "valid-cron")
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	assertNoCronSubmissionQueued(t, observedSubmissions)
+	fakeClock.Advance(time.Minute)
+	scheduledRecord := waitForCronSubmission(t, observedSubmissions, time.Second)
+	assertCronSubmissionNominalAtForWorkstation(t, scheduledRecord, start.Add(time.Minute), "valid-cron")
+	assertNoCronSubmissionQueued(t, observedSubmissions)
+
+	cancelRun()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service-mode cron scheduler to stop")
+	}
+
+	registered := observedLogs.FilterMessage("cron watcher registered").All()
+	if len(registered) != 1 {
+		t.Fatalf("registered cron watcher count = %d, want 1", len(registered))
+	}
+	if got := registered[0].ContextMap()["workstation"]; got != "valid-cron" {
+		t.Fatalf("registered cron watcher workstation = %#v, want valid-cron", got)
+	}
+	started := observedLogs.FilterMessage("cron scheduler started").All()
+	if len(started) != 1 {
+		t.Fatalf("cron scheduler started log count = %d, want 1", len(started))
+	}
+	if got := started[0].ContextMap()["jobs"]; got != int64(1) {
+		t.Fatalf("cron scheduler started jobs = %#v, want 1", got)
+	}
+}
+
+func TestFactoryService_StartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingValidCronJobs(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	observedRequests := make(chan interfaces.WorkRequest, 8)
+	validCron := interfaces.FactoryWorkstationConfig{
+		Name: "valid-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "* * * * *",
+			TriggerAtStart: true,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	invalidCron := interfaces.FactoryWorkstationConfig{
+		Name: "invalid-cron",
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{
+			Schedule:       "not-a-cron",
+			TriggerAtStart: true,
+		},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		"factory-alpha",
+		&interfaces.FactoryConfig{
+			WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{validCron, invalidCron},
+		},
+		nil,
+		map[string]*interfaces.FactoryWorkstationConfig{
+			validCron.Name:   &validCron,
+			invalidCron.Name: &invalidCron,
+		},
+	)
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		logger: zap.New(logCore),
+		clock:  fakeClock,
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	svc.startCronWatchersForRuntime(
+		runCtx,
+		&sidecars,
+		"factory-alpha",
+		runtimeCfg.FactoryConfig(),
+		runtimeCfg,
+		func(_ context.Context, request interfaces.WorkRequest) error {
+			select {
+			case observedRequests <- request:
+			default:
+				t.Fatalf("cron request channel overflow")
+			}
+			return nil
+		},
+	)
+	t.Cleanup(func() {
+		cancelRun()
+		sidecars.Wait()
+	})
+
+	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestNominalAt(t, startupRequest, start)
+	if got := startupRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+		t.Fatalf("startup cron workstation tag = %q, want valid-cron", got)
+	}
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	assertNoCronWorkRequestQueued(t, observedRequests)
+	fakeClock.Advance(time.Minute)
+	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestNominalAt(t, scheduledRequest, start.Add(time.Minute))
+	if got := scheduledRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+		t.Fatalf("scheduled cron workstation tag = %q, want valid-cron", got)
+	}
+	assertNoCronWorkRequestQueued(t, observedRequests)
+
+	registered := observedLogs.FilterMessage("cron watcher registered").All()
+	if len(registered) != 1 {
+		t.Fatalf("registered cron watcher count = %d, want 1", len(registered))
+	}
+	if got := registered[0].ContextMap()["workstation"]; got != "valid-cron" {
+		t.Fatalf("registered cron watcher workstation = %#v, want valid-cron", got)
+	}
+
+	disabled := observedLogs.FilterMessage("cron watcher disabled").All()
+	if len(disabled) != 1 {
+		t.Fatalf("disabled cron watcher count = %d, want 1", len(disabled))
+	}
+	if got := disabled[0].ContextMap()["workstation"]; got != "invalid-cron" {
+		t.Fatalf("disabled cron watcher workstation = %#v, want invalid-cron", got)
+	}
+
+	started := observedLogs.FilterMessage("cron scheduler started").All()
+	if len(started) != 1 {
+		t.Fatalf("cron scheduler started log count = %d, want 1", len(started))
+	}
+	if got := started[0].ContextMap()["jobs"]; got != int64(1) {
+		t.Fatalf("cron scheduler started jobs = %#v, want 1", got)
 	}
 }
 
@@ -2041,13 +2257,17 @@ func waitForCronSubmission(t *testing.T, submissions <-chan interfaces.FactorySu
 }
 
 func assertCronSubmissionNominalAt(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time) {
+	assertCronSubmissionNominalAtForWorkstation(t, record, want, "poll-for-work")
+}
+
+func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time, workstation string) {
 	t.Helper()
 	got := record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt]
 	if got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
 	}
-	if record.Request.Tags[cronWorkstationTag] != "poll-for-work" {
-		t.Fatalf("cron workstation tag = %q, want poll-for-work", record.Request.Tags[cronWorkstationTag])
+	if record.Request.Tags[cronWorkstationTag] != workstation {
+		t.Fatalf("cron workstation tag = %q, want %s", record.Request.Tags[cronWorkstationTag], workstation)
 	}
 }
 
@@ -2056,6 +2276,36 @@ func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan interfaces.Fa
 	select {
 	case record := <-submissions:
 		t.Fatalf("cron submission observed unexpectedly: %#v", record)
+	default:
+	}
+}
+
+func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest, timeout time.Duration) interfaces.WorkRequest {
+	t.Helper()
+	select {
+	case request := <-requests:
+		if len(request.Works) != 1 || request.Works[0].WorkTypeID != interfaces.SystemTimeWorkTypeID {
+			t.Fatalf("cron work request works = %#v, want one internal time work item", request.Works)
+		}
+		return request
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for cron work request")
+	}
+	return interfaces.WorkRequest{}
+}
+
+func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest, want time.Time) {
+	t.Helper()
+	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]; got != want.Format(time.RFC3339Nano) {
+		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
+	}
+}
+
+func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan interfaces.WorkRequest) {
+	t.Helper()
+	select {
+	case request := <-requests:
+		t.Fatalf("cron work request observed unexpectedly: %#v", request)
 	default:
 	}
 }
