@@ -384,6 +384,135 @@ func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 	}
 }
 
+func TestParseTotalCoverageFailsWhenTotalLineMissing(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := parseTotalCoverage(modulePath + "/pkg/config/config.go:1.1,2.1\t75.0%\n")
+	if err == nil {
+		t.Fatal("parseTotalCoverage() unexpectedly succeeded")
+	}
+	if err.Error() != "parse go coverage total: missing total statements line" {
+		t.Fatalf("parseTotalCoverage() error = %q, want missing total line error", err.Error())
+	}
+}
+
+func TestParseTotalCoverageSynthesizesNormalizedTotalLine(t *testing.T) {
+	t.Parallel()
+
+	report := modulePath + "/pkg/config/config.go:1.1,2.1\t75.0%\nsummary total: (statements) 82.5%\n"
+	actual, totalLine, err := parseTotalCoverage(report)
+	if err != nil {
+		t.Fatalf("parseTotalCoverage() error = %v", err)
+	}
+
+	if actual != 82.5 {
+		t.Fatalf("actual coverage = %v, want 82.5", actual)
+	}
+	if totalLine != "total: (statements) 82.5%" {
+		t.Fatalf("total line = %q, want normalized fallback line", totalLine)
+	}
+}
+
+func TestParseCoverageProfileRejectsMalformedInputs(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	cases := []struct {
+		name        string
+		profileData string
+		wantErr     string
+	}{
+		{
+			name:        "missing mode header",
+			profileData: "pkg/config/config.go:1.1,2.1 2 1\n",
+			wantErr:     "parse go coverage profile: missing mode header",
+		},
+		{
+			name:        "malformed line shape",
+			profileData: "mode: count\npkg/config/config.go:1.1,2.1 2\n",
+			wantErr:     "parse go coverage profile: malformed line 2",
+		},
+		{
+			name:        "malformed file range",
+			profileData: "mode: count\npkg/config/config.go 2 1\n",
+			wantErr:     "parse go coverage profile: malformed file range on line 2",
+		},
+		{
+			name:        "invalid statement count",
+			profileData: "mode: count\npkg/config/config.go:1.1,2.1 nope 1\n",
+			wantErr:     "parse go coverage profile statements on line 2: strconv.Atoi: parsing \"nope\": invalid syntax",
+		},
+		{
+			name:        "invalid execution count",
+			profileData: "mode: count\npkg/config/config.go:1.1,2.1 2 nope\n",
+			wantErr:     "parse go coverage profile execution count on line 2: strconv.Atoi: parsing \"nope\": invalid syntax",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := parseCoverageProfile([]byte(tc.profileData), repoRoot)
+			if err == nil {
+				t.Fatal("parseCoverageProfile() unexpectedly succeeded")
+			}
+			if err.Error() != tc.wantErr {
+				t.Fatalf("parseCoverageProfile() error = %q, want %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestCoverageImportPathRejectsMalformedPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	outsidePath := filepath.Join(repoRoot, "..", "outside", "pkg", "config.go")
+	cases := []struct {
+		name     string
+		filePath string
+		wantErr  string
+	}{
+		{
+			name:     "empty path",
+			filePath: " \t ",
+			wantErr:  "empty file path",
+		},
+		{
+			name:     "repository escape",
+			filePath: outsidePath,
+			wantErr:  fmt.Sprintf("profile path %q escapes repository root", outsidePath),
+		},
+		{
+			name:     "module qualified without package directory",
+			filePath: modulePath,
+			wantErr:  fmt.Sprintf("profile path %q does not include a package directory", modulePath),
+		},
+		{
+			name:     "relative path without package directory",
+			filePath: "config.go",
+			wantErr:  "profile path \"config.go\" does not include a package directory",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := coverageImportPath(tc.filePath, repoRoot)
+			if err == nil {
+				t.Fatal("coverageImportPath() unexpectedly succeeded")
+			}
+			if err.Error() != tc.wantErr {
+				t.Fatalf("coverageImportPath() error = %q, want %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestFormatZeroCoverageFailure(t *testing.T) {
 	t.Parallel()
 
