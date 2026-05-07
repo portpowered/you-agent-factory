@@ -10,49 +10,57 @@ import type {
   ReadFactoryImportPngError,
 } from "../import";
 
-const defaultMessages = getWorkflowActivityGraphImportMessages(undefined);
-
 export function graphDropStateAttribute(dropState: FactoryPngDropState): string {
   return dropState.status;
 }
 
-function graphDropOverlayCopy(dropState: FactoryPngDropState): { message: string; title: string } | null {
+function graphDropOverlayCopy(
+  dropState: FactoryPngDropState,
+  locale?: string,
+): { message: string; title: string } | null {
+  const messages = getWorkflowActivityGraphImportMessages(locale);
+
   switch (dropState.status) {
     case "drag-active":
       return {
-        message: defaultMessages.graphDropHint,
-        title: defaultMessages.graphDropTitle,
+        message: messages.graphDropHint,
+        title: messages.graphDropTitle,
       };
     case "reading":
       return {
-        message: defaultMessages.graphDropReadingMessage(dropState.fileName),
-        title: defaultMessages.graphImportLoadingTitle,
+        message: messages.graphDropReadingMessage(dropState.fileName),
+        title: messages.graphImportLoadingTitle,
       };
     default:
       return null;
   }
 }
 
-function graphImportErrorCopy(error: ReadFactoryImportPngError): string {
+function graphImportErrorCopy(
+  error: ReadFactoryImportPngError,
+  locale?: string,
+): string {
+  const messages = getWorkflowActivityGraphImportMessages(locale);
+
   switch (error.code) {
     case "NOT_PNG_FILE":
-      return defaultMessages.importErrorNotPngFile;
+      return messages.importErrorNotPngFile;
     case "PNG_METADATA_MISSING":
-      return defaultMessages.importErrorMetadataMissing;
+      return messages.importErrorMetadataMissing;
     case "UNSUPPORTED_SCHEMA_VERSION":
-      return defaultMessages.importErrorUnsupportedSchemaVersion(
+      return messages.importErrorUnsupportedSchemaVersion(
         error.details?.schemaVersion,
       );
     case "PNG_METADATA_INVALID":
     case "FACTORY_PAYLOAD_INVALID":
-      return defaultMessages.importErrorEmbeddedMetadataInvalid;
+      return messages.importErrorEmbeddedMetadataInvalid;
     case "IMAGE_DECODE_FAILED":
     case "PREVIEW_UNAVAILABLE":
-      return defaultMessages.importErrorPreviewUnavailable;
+      return messages.importErrorPreviewUnavailable;
     case "FILE_READ_FAILED":
-      return defaultMessages.importErrorFileReadFailed;
+      return messages.importErrorFileReadFailed;
     case "PNG_INVALID":
-      return defaultMessages.importErrorPngInvalid;
+      return messages.importErrorPngInvalid;
     default:
       return error.message;
   }
@@ -60,10 +68,11 @@ function graphImportErrorCopy(error: ReadFactoryImportPngError): string {
 
 interface GraphDropOverlayProps {
   dropState: FactoryPngDropState;
+  locale?: string;
 }
 
-export function GraphDropOverlay({ dropState }: GraphDropOverlayProps) {
-  const copy = graphDropOverlayCopy(dropState);
+export function GraphDropOverlay({ dropState, locale }: GraphDropOverlayProps) {
+  const copy = graphDropOverlayCopy(dropState, locale);
   if (!copy) {
     return null;
   }
@@ -86,32 +95,36 @@ export function GraphDropOverlay({ dropState }: GraphDropOverlayProps) {
 interface GraphImportErrorPanelProps {
   error: ReadFactoryImportPngError;
   fileName: string;
+  locale?: string;
   onDismiss: () => void;
 }
 
 export function GraphImportErrorPanel({
   error,
   fileName,
+  locale,
   onDismiss,
 }: GraphImportErrorPanelProps) {
+  const messages = getWorkflowActivityGraphImportMessages(locale);
+
   return (
     <DashboardMessagePanel
       action={(
         <Button onClick={onDismiss} tone="outline" type="button">
-          Dismiss
+          {messages.dismissAction}
         </Button>
       )}
       ariaLive="assertive"
       className="mt-4 min-h-0 px-5 py-4"
       compact={true}
       role="alert"
-      title={defaultMessages.graphImportErrorTitle}
+      title={messages.graphImportErrorTitle}
       tone="error"
     >
       <p className="m-0">
         <span className="font-semibold">{fileName}</span>
         {" "}
-        {graphImportErrorCopy(error)}
+        {graphImportErrorCopy(error, locale)}
       </p>
     </DashboardMessagePanel>
   );

@@ -33,8 +33,10 @@ import {
 } from "../flowchart";
 import { buildGraphLayout } from "../flowchart/layout";
 import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
+import { getImportPreviewDialogMessages } from "../import/messages/import-preview-dialog";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import { getDashboardFlowAxisLegendMessages } from "./messages/dashboard-flow-axis-legend";
+import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import {
   currentActivityGraphKey,
@@ -2025,6 +2027,68 @@ describe("ReactFlowCurrentActivityCard", () => {
     expect(
       await screen.findByRole("button", { name: "Select Review workstation" }),
     ).toBeTruthy();
+  });
+
+  it("renders localized graph-import overlay and preview dialog shell copy without changing import behavior", async () => {
+    const graphMessages = getWorkflowActivityGraphImportMessages("ja");
+    const previewMessages = getImportPreviewDialogMessages("ja");
+    const file = new File(["png"], "factory-import.png", { type: "image/png" });
+    const importValue = createFactoryImportValue();
+    const onFactoryImportReady =
+      vi.fn<(value: FactoryPngImportValue, file: File) => void>();
+    const readFactoryImportFile = vi
+      .fn<ReadFactoryImportFile>()
+      .mockResolvedValue({
+        ok: true,
+        value: importValue,
+      });
+
+    renderCurrentActivity({
+      locale: "ja",
+      onFactoryImportReady,
+      readFactoryImportFile,
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    const viewport = await screen.findByRole("region", {
+      name: "Work graph viewport",
+    });
+
+    fireEvent.dragOver(viewport, createFileDropTransfer([file]));
+
+    expect(screen.getByText(graphMessages.graphDropTitle)).toBeTruthy();
+    expect(screen.getByText(graphMessages.graphDropHint)).toBeTruthy();
+
+    fireEvent.drop(viewport, createFileDropTransfer([file]));
+
+    const previewDialog = await screen.findByRole("dialog", {
+      name: previewMessages.title,
+    });
+
+    expect(
+      within(previewDialog).getByRole("button", {
+        name: previewMessages.closeLabel,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("falls back to English graph-import copy for unsupported locales", async () => {
+    const graphMessages = getWorkflowActivityGraphImportMessages("en");
+    const file = new File(["png"], "factory-import.png", { type: "image/png" });
+
+    renderCurrentActivity({
+      locale: "fr-CA",
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    const viewport = await screen.findByRole("region", {
+      name: "Work graph viewport",
+    });
+
+    fireEvent.dragOver(viewport, createFileDropTransfer([file]));
+
+    expect(screen.getByText(graphMessages.graphDropTitle)).toBeTruthy();
+    expect(screen.getByText(graphMessages.graphDropHint)).toBeTruthy();
   });
 
   it("falls back to English legend copy for unsupported workflow graph locales", async () => {

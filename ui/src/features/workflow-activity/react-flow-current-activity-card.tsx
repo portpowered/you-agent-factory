@@ -458,11 +458,12 @@ export function ReactFlowCurrentActivityCard(
               style={GRAPH_CONTROLS_STYLE}
             />
           </ReactFlow>
-          <GraphDropOverlay dropState={imports.dropState} />
+          <GraphDropOverlay dropState={imports.dropState} locale={props.locale} />
         </section>
         {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
           <FactoryImportPreviewDialog
             activationState={imports.activationState}
+            locale={props.locale}
             onCancel={() => {
               imports.clearActivationError();
               imports.closeImportPreview();
@@ -477,6 +478,7 @@ export function ReactFlowCurrentActivityCard(
           <GraphImportErrorPanel
             error={imports.dropState.error}
             fileName={imports.dropState.fileName}
+            locale={props.locale}
             onDismiss={imports.clearError}
           />
         ) : null}

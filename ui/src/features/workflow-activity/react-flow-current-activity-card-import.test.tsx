@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { ReadFactoryImportPngError } from "../import";
+import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 import {
   GraphDropOverlay,
   GraphImportErrorPanel,
@@ -24,26 +25,35 @@ describe("react-flow-current-activity-card-import", () => {
     ).toBe("error");
   });
 
-  it("renders drag-active and reading overlay copy and hides idle state", () => {
+  it("renders localized drag-active and reading overlay copy and hides idle state", () => {
+    const japaneseMessages = getWorkflowActivityGraphImportMessages("ja");
     const { rerender } = render(<GraphDropOverlay dropState={{ status: "idle" }} />);
 
-    expect(screen.queryByText("Import factory PNG")).toBeNull();
+    expect(screen.queryByText(japaneseMessages.graphDropTitle)).toBeNull();
 
-    rerender(<GraphDropOverlay dropState={{ status: "drag-active" }} />);
+    rerender(<GraphDropOverlay dropState={{ status: "drag-active" }} locale="ja" />);
 
-    expect(screen.getByText("Import factory PNG")).toBeTruthy();
-    expect(screen.getByText("Drop an Infinite You PNG onto this graph to start import.")).toBeTruthy();
+    expect(screen.getByText(japaneseMessages.graphDropTitle)).toBeTruthy();
+    expect(screen.getByText(japaneseMessages.graphDropHint)).toBeTruthy();
 
     rerender(
-      <GraphDropOverlay dropState={{ fileName: "factory.png", status: "reading" }} />,
+      <GraphDropOverlay
+        dropState={{ fileName: "factory.png", status: "reading" }}
+        locale="ja"
+      />,
     );
 
-    expect(screen.getByText("Validating factory PNG")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "factory.png is being parsed and validated locally before import continues.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText(japaneseMessages.graphImportLoadingTitle)).toBeTruthy();
+    expect(screen.getByText(japaneseMessages.graphDropReadingMessage("factory.png"))).toBeTruthy();
+  });
+
+  it("falls back to default English overlay copy for unsupported locales", () => {
+    const englishMessages = getWorkflowActivityGraphImportMessages("en");
+
+    render(<GraphDropOverlay dropState={{ status: "drag-active" }} locale="fr-CA" />);
+
+    expect(screen.getByText(englishMessages.graphDropTitle)).toBeTruthy();
+    expect(screen.getByText(englishMessages.graphDropHint)).toBeTruthy();
   });
 
   it.each([
@@ -100,6 +110,7 @@ describe("react-flow-current-activity-card-import", () => {
   ] as const)(
     "renders import error copy for %s",
     (code, details, expectedMessage) => {
+      const englishMessages = getWorkflowActivityGraphImportMessages("en");
       render(
         <GraphImportErrorPanel
           error={{
@@ -108,19 +119,21 @@ describe("react-flow-current-activity-card-import", () => {
             message: "Fallback error message.",
           } satisfies ReadFactoryImportPngError}
           fileName="factory.png"
+          locale="en"
           onDismiss={vi.fn()}
         />,
       );
 
       expect(screen.getByRole("alert")).toBeTruthy();
-      expect(screen.getByText("Factory import failed")).toBeTruthy();
+      expect(screen.getByText(englishMessages.graphImportErrorTitle)).toBeTruthy();
       expect(screen.getByText("factory.png")).toBeTruthy();
       expect(screen.getByText(expectedMessage)).toBeTruthy();
     },
   );
 
-  it("falls back to the backend-provided error message and dismisses the panel", () => {
+  it("renders localized dismiss copy and falls back to the backend-provided error message", () => {
     const onDismiss = vi.fn();
+    const japaneseMessages = getWorkflowActivityGraphImportMessages("ja");
 
     const { rerender } = render(
       <GraphImportErrorPanel
@@ -129,11 +142,12 @@ describe("react-flow-current-activity-card-import", () => {
           message: "Custom browser validation failure.",
         }}
         fileName="factory.png"
+        locale="ja"
         onDismiss={onDismiss}
       />,
     );
 
-    expect(screen.getByText("Drop a PNG image exported by Infinite You.")).toBeTruthy();
+    expect(screen.getByText(japaneseMessages.importErrorNotPngFile)).toBeTruthy();
 
     rerender(
       <GraphImportErrorPanel
@@ -142,13 +156,16 @@ describe("react-flow-current-activity-card-import", () => {
           message: "Custom browser validation failure.",
         }}
         fileName="factory.png"
+        locale="ja"
         onDismiss={onDismiss}
       />,
     );
 
     expect(screen.getByText("Custom browser validation failure.")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: japaneseMessages.dismissAction }),
+    );
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
