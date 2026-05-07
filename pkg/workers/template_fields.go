@@ -28,7 +28,7 @@ func ResolveTemplateFields(
 	envTemplates map[string]string,
 	tokens []interfaces.Token,
 	wfCtx *factory_context.FactoryContext,
-	worktreeTemplate ...string,
+	worktreeTemplate string,
 ) (*ResolvedFields, error) {
 	data := buildPromptData(tokens, wfCtx)
 	result := &ResolvedFields{
@@ -53,9 +53,8 @@ func ResolveTemplateFields(
 		result.Env[key] = resolved
 	}
 
-	// Resolve worktree template (optional variadic parameter for backwards compatibility).
-	if len(worktreeTemplate) > 0 && worktreeTemplate[0] != "" {
-		resolved, err := resolveTemplate("worktree", worktreeTemplate[0], data)
+	if worktreeTemplate != "" {
+		resolved, err := resolveTemplate("worktree", worktreeTemplate, data)
 		if err != nil {
 			return nil, fmt.Errorf("worktree: %w", err)
 		}
