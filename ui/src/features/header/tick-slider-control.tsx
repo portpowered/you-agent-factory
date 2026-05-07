@@ -1,8 +1,12 @@
-import { useMemo, type ChangeEvent } from "react";
-
-import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
+import { type ChangeEvent, useMemo } from "react";
 import { cx } from "../../lib/cx";
+import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
+import {
+  getHeaderControlsMessages,
+  HEADER_CURRENT_TICK_TOKEN,
+  HEADER_MAX_TICK_TOKEN,
+} from "./messages/header-controls";
 
 const TICK_SLIDER_SHELL_CLASS = cx(
   "flex min-w-0 w-full flex-wrap items-center gap-3 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-3 py-2",
@@ -19,6 +23,10 @@ interface TimelineBounds {
   maxTick: number;
   minTick: number;
   tickCount: number;
+}
+
+export interface TickSliderControlProps {
+  locale?: string;
 }
 
 function timelineBounds(
@@ -51,7 +59,17 @@ function timelineBounds(
   };
 }
 
-export function TickSliderControl() {
+function formatCurrentTickStatus(
+  template: string,
+  currentTick: number,
+  maxTick: number,
+): string {
+  return template
+    .replaceAll(HEADER_CURRENT_TICK_TOKEN, String(currentTick))
+    .replaceAll(HEADER_MAX_TICK_TOKEN, String(maxTick));
+}
+
+export function TickSliderControl({ locale }: TickSliderControlProps) {
   const eventTicks = useFactoryTimelineStore((state) =>
     state.events.map((event) => event.context.tick),
   );
@@ -76,6 +94,7 @@ export function TickSliderControl() {
     Math.max(selectedTick, bounds.minTick),
     bounds.maxTick,
   );
+  const messages = getHeaderControlsMessages(locale);
 
   const handleTickChange = (event: ChangeEvent<HTMLInputElement>) => {
     selectTick(Number(event.target.value));
@@ -84,9 +103,9 @@ export function TickSliderControl() {
   return (
     <div className={TICK_SLIDER_SHELL_CLASS}>
       <label className={TICK_SLIDER_LABEL_CLASS}>
-        Timeline tick
+        {messages.sliderLabel}
         <input
-          aria-label="Timeline tick"
+          aria-label={messages.sliderAriaLabel}
           className={TICK_SLIDER_INPUT_CLASS}
           disabled={isDisabled}
           max={bounds.maxTick}
@@ -99,13 +118,17 @@ export function TickSliderControl() {
 
       <span className={TICK_SLIDER_STATUS_CLASS}>
         {isDisabled
-          ? "Waiting for more ticks"
-          : `Tick ${displayedTick} of ${bounds.maxTick}`}
+          ? messages.waitingForMoreTicks
+          : formatCurrentTickStatus(
+              messages.currentTickStatusTemplate,
+              displayedTick,
+              bounds.maxTick,
+            )}
       </span>
 
       <DashboardHeaderActionButton
         className={cx(mode === "current" && "opacity-75")}
-        aria-label="Return to current tick"
+        aria-label={messages.returnToCurrentTickLabel}
         disabled={isDisabled || mode === "current"}
         onClick={setCurrentMode}
       >
