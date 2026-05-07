@@ -9,6 +9,7 @@ import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 
 export interface WorkflowActivityWidgetProps {
   importController: CurrentActivityImportController;
+  locale?: string;
   now: number;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkItem: (
@@ -24,6 +25,7 @@ export interface WorkflowActivityWidgetProps {
 
 export function WorkflowActivityWidget({
   importController,
+  locale,
   now,
   onSelectStateNode,
   onSelectWorkItem,
@@ -34,6 +36,7 @@ export function WorkflowActivityWidget({
   return (
     <WorkflowActivityBentoCard
       importController={importController}
+      locale={locale}
       now={now}
       selection={selection}
       snapshot={snapshot}

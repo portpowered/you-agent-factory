@@ -4,29 +4,43 @@ import {
   applyNodeChanges,
   Background,
   Controls,
-  ReactFlow,
   type FitViewOptions,
   type NodeChange,
+  ReactFlow,
 } from "@xyflow/react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { DashboardActiveExecution, DashboardSnapshot, DashboardWorkItemRef } from "../../api/dashboard/types";
+import type {
+  DashboardActiveExecution,
+  DashboardSnapshot,
+  DashboardWorkItemRef,
+} from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
 import { cx } from "../../lib/cx";
-import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
+import {
+  CURRENT_ACTIVITY_NODE_TYPES,
+  type CurrentActivityNode,
+} from "../flowchart/current-activity-nodes";
+import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
 import {
   FactoryImportPreviewDialog,
   type FactoryPngImportValue,
   type ReadFactoryImportFile,
 } from "../import";
-import { CURRENT_ACTIVITY_NODE_TYPES, type CurrentActivityNode } from "../flowchart/current-activity-nodes";
-import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
+import {
+  type CurrentActivityImportController,
+  useCurrentActivityImportController,
+} from "./current-activity-import-controller";
 import {
   DashboardFlowAxisLegend,
-  DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_EDGE_ITEMS,
-  DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_ICON_ITEMS,
+  getDefaultDashboardFlowAxisLegendEdgeItems,
+  getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
+import {
+  groupActiveExecutionsByWorkstationNodeID,
+  useActiveExecutions,
+} from "./react-flow-current-activity-card-active-executions";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
@@ -39,18 +53,15 @@ import {
   initialFocusNodes,
 } from "./react-flow-current-activity-card-graph";
 import {
+  GraphDropOverlay,
+  GraphImportErrorPanel,
+  graphDropStateAttribute,
+} from "./react-flow-current-activity-card-import";
+import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "./react-flow-current-activity-card-keys";
-import {
-  GraphDropOverlay,
-  graphDropStateAttribute,
-  GraphImportErrorPanel,
-} from "./react-flow-current-activity-card-import";
-import {
-  type CurrentActivityImportController,
-  useCurrentActivityImportController,
-} from "./current-activity-import-controller";
+import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
 export {
   currentActivityGraphKey,
@@ -61,7 +72,8 @@ const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
 const GRAPH_BACKGROUND_GAP = 24;
 const GRAPH_BACKGROUND_SIZE = 1;
 
-type CSSPropertiesWithVariables = CSSProperties & Record<`--${string}`, string | number>;
+type CSSPropertiesWithVariables = CSSProperties &
+  Record<`--${string}`, string | number>;
 
 const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   "--xy-controls-box-shadow": "none",
@@ -72,7 +84,8 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   "--xy-controls-button-border-color-props":
     "rgb(from var(--color-af-overlay) r g b / 0.08)",
   "--xy-controls-button-color-hover-props": "var(--color-af-ink)",
-  "--xy-controls-button-color-props": "rgb(from var(--color-af-ink) r g b / 0.72)",
+  "--xy-controls-button-color-props":
+    "rgb(from var(--color-af-ink) r g b / 0.72)",
   backgroundColor: "rgb(from var(--color-af-surface) r g b / 0.88)",
   border: "1px solid rgb(from var(--color-af-overlay) r g b / 0.08)",
   borderRadius: 8,
@@ -90,6 +103,7 @@ export type CurrentActivitySelection =
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
+  locale?: string;
   now: number;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
@@ -112,7 +126,8 @@ function useGraphLayout(snapshot: DashboardSnapshot) {
     [snapshot.topology],
   );
   const layoutTopology = useMemo(() => snapshot.topology, [snapshot.topology]);
-  const [graphLayout, setGraphLayout] = useState<GraphLayout>(EMPTY_GRAPH_LAYOUT);
+  const [graphLayout, setGraphLayout] =
+    useState<GraphLayout>(EMPTY_GRAPH_LAYOUT);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +140,8 @@ function useGraphLayout(snapshot: DashboardSnapshot) {
     }
 
     const inFlightLayout =
-      GRAPH_LAYOUT_PROMISE_CACHE.get(topologyKey) ?? buildGraphLayout(layoutTopology);
+      GRAPH_LAYOUT_PROMISE_CACHE.get(topologyKey) ??
+      buildGraphLayout(layoutTopology);
     GRAPH_LAYOUT_PROMISE_CACHE.set(topologyKey, inFlightLayout);
 
     inFlightLayout
@@ -151,54 +167,39 @@ function useGraphLayout(snapshot: DashboardSnapshot) {
   return graphLayout;
 }
 
-function useCurrentActivityGraphViewModel({
+function useCurrentActivityBaseNodes({
+  activeExecutionsByWorkstationNodeID,
+  activeGraphHighlights,
+  activeItemLabelsByPlaceId,
+  graphLayout,
+  handleAssignments,
   now,
   onSelectStateNode,
   onSelectWorkItem,
   onSelectWorkstation,
   selection,
   snapshot,
+  storedNodePositions,
 }: Pick<
   ReactFlowCurrentActivityCardProps,
-  "now" | "onSelectStateNode" | "onSelectWorkItem" | "onSelectWorkstation" | "selection" | "snapshot"
->) {
-  const activeExecutions = useMemo(
-    () =>
-      snapshot.runtime.active_dispatch_ids
-        ?.map((dispatchId) => snapshot.runtime.active_executions_by_dispatch_id?.[dispatchId])
-        .filter((execution): execution is DashboardActiveExecution => execution !== undefined) ??
-      [],
-    [snapshot.runtime.active_dispatch_ids, snapshot.runtime.active_executions_by_dispatch_id],
-  );
-  const activeExecutionsByWorkstationNodeID = useMemo(
-    () =>
-      activeExecutions.reduce<Record<string, DashboardActiveExecution[]>>((accumulator, execution) => {
-        const executions = accumulator[execution.workstation_node_id] ?? [];
-        accumulator[execution.workstation_node_id] = [...executions, execution];
-        return accumulator;
-      }, {}),
-    [activeExecutions],
-  );
-  const graphLayout = useGraphLayout(snapshot);
-  const graphKey = useMemo(() => currentActivityGraphKey(graphLayout), [graphLayout]);
-  const storedNodePositions = useCurrentActivityGraphStore(
-    (state) => state.positionsByGraphKey[graphKey] ?? EMPTY_NODE_POSITIONS,
-  );
-  const setStoredNodePosition = useCurrentActivityGraphStore((state) => state.setNodePosition);
-  const visibleGraphEdges = useMemo(() => buildVisibleGraphEdges(graphLayout), [graphLayout]);
-  const handleAssignments = useMemo(
-    () => buildHandleAssignments(visibleGraphEdges),
-    [visibleGraphEdges],
-  );
-  const activeGraphHighlights = useMemo(
-    () => buildActiveGraphHighlights(activeExecutions, visibleGraphEdges),
-    [activeExecutions, visibleGraphEdges],
-  );
-  const activeItemLabelsByPlaceId = useMemo(
-    () => buildActiveItemLabelsByPlaceId(activeExecutions),
-    [activeExecutions],
-  );
-  const baseNodes = useMemo<CurrentActivityNode[]>(
+  | "now"
+  | "onSelectStateNode"
+  | "onSelectWorkItem"
+  | "onSelectWorkstation"
+  | "selection"
+  | "snapshot"
+> & {
+  activeExecutionsByWorkstationNodeID: Record<
+    string,
+    DashboardActiveExecution[]
+  >;
+  activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
+  activeItemLabelsByPlaceId: ReturnType<typeof buildActiveItemLabelsByPlaceId>;
+  graphLayout: GraphLayout;
+  handleAssignments: ReturnType<typeof buildHandleAssignments>;
+  storedNodePositions: typeof EMPTY_NODE_POSITIONS;
+}) {
+  return useMemo<CurrentActivityNode[]>(
     () =>
       buildCurrentActivityNodes({
         activeExecutionsByWorkstationNodeID,
@@ -229,11 +230,77 @@ function useCurrentActivityGraphViewModel({
       storedNodePositions,
     ],
   );
+}
+
+function useCurrentActivityGraphViewModel({
+  now,
+  onSelectStateNode,
+  onSelectWorkItem,
+  onSelectWorkstation,
+  selection,
+  snapshot,
+}: Pick<
+  ReactFlowCurrentActivityCardProps,
+  | "now"
+  | "onSelectStateNode"
+  | "onSelectWorkItem"
+  | "onSelectWorkstation"
+  | "selection"
+  | "snapshot"
+>) {
+  const activeExecutions = useActiveExecutions(snapshot);
+  const activeExecutionsByWorkstationNodeID = useMemo(
+    () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
+    [activeExecutions],
+  );
+  const graphLayout = useGraphLayout(snapshot);
+  const graphKey = useMemo(
+    () => currentActivityGraphKey(graphLayout),
+    [graphLayout],
+  );
+  const storedNodePositions = useCurrentActivityGraphStore(
+    (state) => state.positionsByGraphKey[graphKey] ?? EMPTY_NODE_POSITIONS,
+  );
+  const setStoredNodePosition = useCurrentActivityGraphStore(
+    (state) => state.setNodePosition,
+  );
+  const visibleGraphEdges = useMemo(
+    () => buildVisibleGraphEdges(graphLayout),
+    [graphLayout],
+  );
+  const handleAssignments = useMemo(
+    () => buildHandleAssignments(visibleGraphEdges),
+    [visibleGraphEdges],
+  );
+  const activeGraphHighlights = useMemo(
+    () => buildActiveGraphHighlights(activeExecutions, visibleGraphEdges),
+    [activeExecutions, visibleGraphEdges],
+  );
+  const activeItemLabelsByPlaceId = useMemo(
+    () => buildActiveItemLabelsByPlaceId(activeExecutions),
+    [activeExecutions],
+  );
+  const baseNodes = useCurrentActivityBaseNodes({
+    activeExecutionsByWorkstationNodeID,
+    activeGraphHighlights,
+    activeItemLabelsByPlaceId,
+    graphLayout,
+    handleAssignments,
+    now,
+    onSelectStateNode,
+    onSelectWorkItem,
+    onSelectWorkstation,
+    selection,
+    snapshot,
+    storedNodePositions,
+  });
   const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
 
   useEffect(() => {
     setNodes((currentNodes) => {
-      const currentPositions = new Map(currentNodes.map((node) => [node.id, node.position]));
+      const currentPositions = new Map(
+        currentNodes.map((node) => [node.id, node.position]),
+      );
       return baseNodes.map((node) => ({
         ...node,
         position: currentPositions.get(node.id) ?? node.position,
@@ -242,10 +309,18 @@ function useCurrentActivityGraphViewModel({
   }, [baseNodes]);
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((currentNodes) => applyNodeChanges(changes, currentNodes) as CurrentActivityNode[]);
+    setNodes(
+      (currentNodes) =>
+        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
+    );
   }, []);
   const edges = useMemo(
-    () => buildGraphEdges(activeGraphHighlights, handleAssignments, visibleGraphEdges),
+    () =>
+      buildGraphEdges(
+        activeGraphHighlights,
+        handleAssignments,
+        visibleGraphEdges,
+      ),
     [activeGraphHighlights, handleAssignments, visibleGraphEdges],
   );
   const initialFitViewOptions = useMemo<FitViewOptions>(
@@ -262,7 +337,9 @@ function useCurrentActivityGraphViewModel({
     edges,
     graphKey,
     handleNodesChange,
-    initialFitViewKey: initialFitViewOptions.nodes?.map((node) => node.id).join(":") || "full-graph",
+    initialFitViewKey:
+      initialFitViewOptions.nodes?.map((node) => node.id).join(":") ||
+      "full-graph",
     initialFitViewOptions,
     nodes,
     setStoredNodePosition,
@@ -291,7 +368,9 @@ function EmptyCurrentActivityCard() {
   );
 }
 
-export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCardProps) {
+export function ReactFlowCurrentActivityCard(
+  props: ReactFlowCurrentActivityCardProps,
+) {
   const graph = useCurrentActivityGraphViewModel(props);
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
@@ -307,7 +386,9 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
   }
 
   const readyImportPreviewState =
-    imports.importPreviewState.status === "ready" ? imports.importPreviewState : null;
+    imports.importPreviewState.status === "ready"
+      ? imports.importPreviewState
+      : null;
 
   return (
     <section
@@ -317,8 +398,9 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
       <DashboardFlowAxisLegend
         className="absolute left-7 top-7 max-[720px]:left-4 max-[720px]:right-4"
         defaultExpanded={false}
-        edgeItems={DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_EDGE_ITEMS}
-        iconItems={DEFAULT_DASHBOARD_FLOW_AXIS_LEGEND_ICON_ITEMS}
+        edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(props.locale)}
+        iconItems={getDefaultDashboardFlowAxisLegendIconItems(props.locale)}
+        locale={props.locale}
       />
 
       <div className="relative min-h-0 flex-1">
@@ -326,12 +408,15 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
           aria-label="Work graph viewport"
           className={cx(
             "relative h-full min-h-0 overflow-hidden rounded-[1.4rem] border transition-colors",
-            (imports.dropState.status === "drag-active" || imports.dropState.status === "reading") &&
+            (imports.dropState.status === "drag-active" ||
+              imports.dropState.status === "reading") &&
               "border-af-accent/35 bg-af-accent/6",
             imports.dropState.status === "error" && "border-af-danger/18",
             imports.dropState.status === "idle" && "border-transparent",
           )}
-          data-current-activity-drop-state={graphDropStateAttribute(imports.dropState)}
+          data-current-activity-drop-state={graphDropStateAttribute(
+            imports.dropState,
+          )}
           data-current-activity-flow
           onDragEnter={imports.onDragEnter}
           onDragLeave={imports.onDragLeave}
@@ -350,7 +435,11 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
             nodesDraggable={true}
             onNodeDragStop={(_, node) => {
               if (graph.graphKey) {
-                graph.setStoredNodePosition(graph.graphKey, node.id, node.position);
+                graph.setStoredNodePosition(
+                  graph.graphKey,
+                  node.id,
+                  node.position,
+                );
               }
             }}
             onNodesChange={graph.handleNodesChange}
@@ -358,7 +447,11 @@ export function ReactFlowCurrentActivityCard(props: ReactFlowCurrentActivityCard
             proOptions={{ hideAttribution: true }}
             zoomOnScroll
           >
-            <Background color={GRAPH_BACKGROUND_COLOR} gap={GRAPH_BACKGROUND_GAP} size={GRAPH_BACKGROUND_SIZE} />
+            <Background
+              color={GRAPH_BACKGROUND_COLOR}
+              gap={GRAPH_BACKGROUND_GAP}
+              size={GRAPH_BACKGROUND_SIZE}
+            />
             <Controls
               fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
               showInteractive={false}

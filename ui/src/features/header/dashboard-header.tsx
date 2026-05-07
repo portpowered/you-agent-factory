@@ -12,6 +12,7 @@ import { useExportDialogStore } from "../export/state/exportDialogStore";
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
+import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const PANEL_CLASS =
   "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
@@ -50,21 +51,25 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
     (state) => state.openExportDialog,
   );
   const exportMessages = getExportDialogMessages(locale);
+  const headerMessages = getHeaderControlsMessages(locale);
 
   if (!snapshot) {
     return null;
   }
 
   return (
-    <section className={DASHBOARD_TOOLBAR_CLASS} aria-label="dashboard summary">
+    <section
+      className={DASHBOARD_TOOLBAR_CLASS}
+      aria-label={headerMessages.dashboardSummaryLabel}
+    >
       <h1 className={DASHBOARD_TITLE_CLASS}>
         <DashboardBrandLockup wordmarkClassName="truncate" />
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
-        <TickSliderControl />
+        <TickSliderControl locale={locale} />
         <div className={STREAM_STATUS_SHELL_CLASS}>
           <div
-            aria-label={streamStatusLabel(streamState.status)}
+            aria-label={streamStatusLabel(streamState.status, locale)}
             className={streamStatusClassName(streamState.status)}
             role="status"
           >
@@ -110,15 +115,20 @@ function streamStatusClassName(status: DashboardStreamState["status"]): string {
   );
 }
 
-function streamStatusLabel(status: DashboardStreamState["status"]): string {
+function streamStatusLabel(
+  status: DashboardStreamState["status"],
+  locale?: string,
+): string {
+  const messages = getHeaderControlsMessages(locale);
+
   if (status === "live") {
-    return "Infinite You event stream live";
+    return messages.streamStatusLiveLabel;
   }
   if (status === "offline") {
-    return "Infinite You event stream offline";
+    return messages.streamStatusOfflineLabel;
   }
 
-  return "Infinite You event stream connecting";
+  return messages.streamStatusConnectingLabel;
 }
 
 function StreamStatusIcon({

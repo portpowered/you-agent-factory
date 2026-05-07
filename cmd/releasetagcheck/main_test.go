@@ -131,6 +131,23 @@ func TestRunRequiresOneTagInput(t *testing.T) {
 	}
 }
 
+func TestRunInvalidFlagPreservesParseFailureContract(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-unknown"}, &stdout, &stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("run() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "flag provided but not defined: -unknown\n" {
+		t.Fatalf("run() stderr = %q", got)
+	}
+}
+
 func TestRunPointsAtSuccess(t *testing.T) {
 	originalListGitTagsPointingAt := listGitTagsPointingAt
 	t.Cleanup(func() {

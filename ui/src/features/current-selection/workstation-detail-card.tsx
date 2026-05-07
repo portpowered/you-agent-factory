@@ -19,7 +19,6 @@ import {
   HISTORY_TOGGLE_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
-  RUNTIME_DETAIL_CODE_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "./detail-card-shared";
@@ -29,12 +28,14 @@ import type {
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
 } from "./detail-card-types";
+import { getWorkstationDetailMessages } from "./messages";
 import {
   CollapsibleProviderSessionAttempts,
 } from "./provider-session-attempts";
 
 export function WorkstationDetailCard({
   activeExecutions,
+  locale,
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -45,6 +46,7 @@ export function WorkstationDetailCard({
   workstationRequests = [],
   widgetId = "current-selection",
 }: WorkstationDetailCardProps) {
+  const messages = getWorkstationDetailMessages(locale);
   const hasProjectedRequestHistory = workstationRequests.length > 0;
   const workstationRequestsByDispatchID = Object.fromEntries(
     workstationRequests.map((request) => [request.dispatch_id, request]),
@@ -55,6 +57,7 @@ export function WorkstationDetailCard({
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
       <WorkstationActiveWorkList
         executions={activeExecutions}
+        messages={messages}
         now={now}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
@@ -68,12 +71,18 @@ export function WorkstationDetailCard({
         historyCount={
           hasProjectedRequestHistory ? workstationRequests.length : providerSessions.length
         }
-        historyLabel={hasProjectedRequestHistory ? "Historical requests" : "Historical runs"}
+        historyLabel={
+          hasProjectedRequestHistory
+            ? messages.historicalRequestsLabel
+            : messages.historicalRunsLabel
+        }
+        messages={messages}
         selectedNode={selectedNode}
       />
       {hasProjectedRequestHistory ? (
         <CollapsibleWorkstationRequests
           key={selectedNode.node_id}
+          messages={messages}
           now={now}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
           requests={workstationRequests}
@@ -83,16 +92,21 @@ export function WorkstationDetailCard({
         <CollapsibleProviderSessionAttempts
           key={selectedNode.node_id}
           attempts={providerSessions}
-          emptyMessage="No workstation runs have been recorded for this workstation yet."
+          collapseActionLabel={messages.collapseAction}
+          emptyMessage={messages.noWorkstationRuns}
+          expandActionLabel={messages.expandAction}
+          historyItemCountLabel={messages.historyRunCountLabel}
+          messages={messages}
           onSelectWorkID={onSelectWorkID}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
           renderHeading={(attempt) =>
-            attempt.work_items?.map(formatWorkItemLabel).join(", ") || "Unknown work"
+            attempt.work_items?.map(formatWorkItemLabel).join(", ") ||
+            messages.unknownWorkLabel
           }
           resetKey={selectedNode.node_id}
           selectedRequestDispatchID={selectedRequest?.dispatch_id}
           selectedWorkID={selectedWorkID}
-          title="Run history"
+          title={messages.runHistoryHeading}
           workstationKind={selectedNode.workstation_kind}
           workstationRequestsByDispatchID={workstationRequestsByDispatchID}
         />
@@ -105,23 +119,30 @@ function WorkstationSummary({
   activeRunCount,
   historyCount,
   historyLabel,
+  messages,
   selectedNode,
 }: WorkstationSummaryProps) {
   return (
     <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Workstation summary</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.summaryHeading}</h4>
       <ul className="m-0 grid list-none gap-2 p-0 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
-        <WorkstationSummaryItem label="Worker type" value={selectedNode.worker_type || "Unknown"} />
-        <WorkstationSummaryItem label="Kind" value={selectedNode.workstation_kind || "standard"} />
         <WorkstationSummaryItem
-          label="Input work types"
+          label={messages.workerTypeLabel}
+          value={selectedNode.worker_type || messages.unknownWorkerTypeValue}
+        />
+        <WorkstationSummaryItem
+          label={messages.kindLabel}
+          value={selectedNode.workstation_kind || messages.kindDefaultValue}
+        />
+        <WorkstationSummaryItem
+          label={messages.inputWorkTypesLabel}
           value={formatList(selectedNode.input_work_type_ids)}
         />
         <WorkstationSummaryItem
-          label="Output work types"
+          label={messages.outputWorkTypesLabel}
           value={formatList(selectedNode.output_work_type_ids)}
         />
-        <WorkstationSummaryItem label="Active runs" value={activeRunCount} />
+        <WorkstationSummaryItem label={messages.activeRunsLabel} value={activeRunCount} />
         <WorkstationSummaryItem label={historyLabel} value={historyCount} />
       </ul>
     </section>
@@ -138,11 +159,13 @@ function WorkstationSummaryItem({ label, value }: WorkstationSummaryItemProps) {
 }
 
 function CollapsibleWorkstationRequests({
+  messages,
   now,
   onSelectWorkstationRequest,
   requests,
   resetKey,
 }: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
   onSelectWorkstationRequest?: WorkstationDetailCardProps["onSelectWorkstationRequest"];
   requests: NonNullable<WorkstationDetailCardProps["workstationRequests"]>;
@@ -150,7 +173,7 @@ function CollapsibleWorkstationRequests({
 }) {
   const [expanded, setExpanded] = useState(false);
   const historyID = `workstation-request-history-${resetKey}`;
-  const itemCountLabel = `${requests.length} ${requests.length === 1 ? "request" : "requests"}`;
+  const itemCountLabel = messages.historyRequestCountLabel(requests.length);
 
   useEffect(() => {
     setExpanded(false);
@@ -161,7 +184,7 @@ function CollapsibleWorkstationRequests({
       <div className={HISTORY_HEADER_CLASS}>
         <div className="grid min-w-0 gap-[0.18rem]">
           <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${historyID}-heading`}>
-            Request history
+            {messages.requestHistoryHeading}
           </h4>
           <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
             {itemCountLabel}
@@ -174,7 +197,7 @@ function CollapsibleWorkstationRequests({
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
-          {expanded ? "Collapse" : "Expand"}
+          {expanded ? messages.collapseAction : messages.expandAction}
         </button>
       </div>
       {expanded ? (
@@ -194,10 +217,12 @@ function CollapsibleWorkstationRequests({
                     ? "RESPONDED"
                     : "PENDING");
               const requestSummary = request.script_request
-                ? `Script command ${request.script_request.command}`
-                : request.provider
-                  ? `Provider ${request.provider}${request.model ? ` / ${request.model}` : ""}`
-                  : "Projected workstation request";
+                ? messages.scriptCommandSummary(
+                    request.script_request.command ?? messages.unavailableValue,
+                  )
+                : request.provider != null
+                  ? messages.providerSummary(request.provider, request.model)
+                  : messages.projectedWorkstationRequestSummary;
 
               return (
                 <article className={PROVIDER_SESSION_CARD_CLASS} key={request.dispatch_id}>
@@ -214,27 +239,28 @@ function CollapsibleWorkstationRequests({
                     </p>
                     {request.started_at ? (
                       <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-                        Started {formatDurationFromISO(request.started_at, now)} ago
+                        {messages.requestStatusStartedAgo(formatDurationFromISO(request.started_at, now))}
                       </p>
                     ) : null}
                   </div>
                   {onSelectWorkstationRequest ? (
                     <button
-                      aria-label={`Select request ${requestLabel} (${request.dispatch_id})`}
+                      aria-label={messages.selectRequestLabel(
+                        requestLabel,
+                        request.dispatch_id,
+                      )}
                       className={WORK_SELECTION_BUTTON_CLASS}
                       onClick={() => onSelectWorkstationRequest(request)}
                       type="button"
                     >
-                      Open request
+                      {messages.openRequestAction}
                     </button>
                   ) : null}
                 </article>
               );
             })
           ) : (
-            <p className={DETAIL_COPY_CLASS}>
-              No workstation requests have been recorded for this workstation yet.
-            </p>
+            <p className={DETAIL_COPY_CLASS}>{messages.noWorkstationRequests}</p>
           )}
         </div>
       ) : null}
@@ -244,6 +270,7 @@ function CollapsibleWorkstationRequests({
 
 function WorkstationActiveWorkList({
   executions,
+  messages,
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
@@ -254,7 +281,7 @@ function WorkstationActiveWorkList({
 }: WorkstationActiveWorkListProps) {
   return (
     <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Active work</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.activeWorkHeading}</h4>
       {executions.length > 0 ? (
         <ul className="m-0 grid list-none gap-[0.65rem] p-0">
           {executions.flatMap((execution) => {
@@ -266,8 +293,10 @@ function WorkstationActiveWorkList({
             return workItems.map((workItem) => {
               const request = workstationRequestsByDispatchID?.[execution.dispatch_id];
               const traceID = workItem?.trace_id ?? execution.trace_ids?.[0];
-              const workIdentifier = workItem?.work_id ?? traceID ?? "Unavailable";
-              const workLabel = workItem ? formatWorkItemLabel(workItem) : "Unknown active work";
+              const workIdentifier = workItem?.work_id ?? traceID ?? messages.unavailableValue;
+              const workLabel = workItem
+                ? formatWorkItemLabel(workItem)
+                : messages.unknownActiveWorkLabel;
               const requestSelected = selectedRequest?.dispatch_id === execution.dispatch_id;
 
               return (
@@ -286,25 +315,25 @@ function WorkstationActiveWorkList({
                     )}
                   >
                     <div>
-                      <dt>Work ID</dt>
+                      <dt>{messages.workIdLabel}</dt>
                       <dd className="[overflow-wrap:anywhere]">{workIdentifier}</dd>
                     </div>
                     {traceID ? (
                       <div>
-                        <dt>Trace ID</dt>
+                        <dt>{messages.traceIdLabel}</dt>
                         <dd className="[overflow-wrap:anywhere]">{traceID}</dd>
                       </div>
                     ) : null}
                     <div>
-                      <dt>Elapsed</dt>
+                      <dt>{messages.elapsedLabel}</dt>
                       <dd>{formatDurationFromISO(execution.started_at, now)}</dd>
                     </div>
                     <div>
-                      <dt>Dispatch</dt>
+                      <dt>{messages.dispatchLabel}</dt>
                       <dd className="[overflow-wrap:anywhere]">{execution.dispatch_id}</dd>
                     </div>
                     <div>
-                      <dt>Station</dt>
+                      <dt>{messages.stationLabel}</dt>
                       <dd className="[overflow-wrap:anywhere]">
                         {execution.workstation_name ?? selectedNode.workstation_name}
                       </dd>
@@ -312,41 +341,44 @@ function WorkstationActiveWorkList({
                   </dl>
                   {workItem && onSelectWorkID ? (
                     <button
-                      aria-label={`Select work item ${workLabel}`}
+                      aria-label={messages.selectWorkItemLabel(workLabel)}
                       aria-pressed={selectedWorkID === workItem.work_id}
                       className={WORK_SELECTION_BUTTON_CLASS}
                       onClick={() => onSelectWorkID(workItem.work_id)}
                       type="button"
                     >
-                      {selectedWorkID === workItem.work_id ? "Work selected" : "Open work item"}
+                      {selectedWorkID === workItem.work_id
+                        ? messages.workSelectedAction
+                        : messages.openWorkItemAction}
                     </button>
                   ) : workItem ? null : (
                     <p className={REQUEST_SELECTION_STATUS_CLASS}>
-                      Work details unavailable for dispatch{" "}
-                      <code className={RUNTIME_DETAIL_CODE_CLASS}>{execution.dispatch_id}</code>.
+                      {messages.workDetailsUnavailable(execution.dispatch_id)}
                     </p>
                   )}
                   {requestSelected ? (
                     <p className={REQUEST_SELECTION_STATUS_CLASS}>
-                      Selected request:{" "}
-                      <code className={RUNTIME_DETAIL_CODE_CLASS}>{execution.dispatch_id}</code>.
+                      {messages.selectedRequestLabel(execution.dispatch_id)}
                     </p>
                   ) : null}
                   {onSelectWorkstationRequest ? (
                     request ? (
                       <button
-                        aria-label={`Select workstation request ${request.dispatch_id}`}
+                        aria-label={messages.selectWorkstationRequestLabel(
+                          request.dispatch_id,
+                        )}
                         aria-pressed={requestSelected}
                         className={WORK_SELECTION_BUTTON_CLASS}
                         onClick={() => onSelectWorkstationRequest(request)}
                         type="button"
                       >
-                        {requestSelected ? "Request selected" : "Open request details"}
+                        {requestSelected
+                          ? messages.requestSelectedAction
+                          : messages.openRequestDetailsAction}
                       </button>
                     ) : (
                       <p className={REQUEST_SELECTION_STATUS_CLASS}>
-                        Request details unavailable for dispatch{" "}
-                        <code className={RUNTIME_DETAIL_CODE_CLASS}>{execution.dispatch_id}</code>.
+                        {messages.requestDetailsUnavailable(execution.dispatch_id)}
                       </p>
                     )
                   ) : null}
@@ -356,7 +388,7 @@ function WorkstationActiveWorkList({
           })}
         </ul>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>No active work is running on this workstation.</p>
+        <p className={DETAIL_COPY_CLASS}>{messages.activeWorkEmpty}</p>
       )}
     </section>
   );
