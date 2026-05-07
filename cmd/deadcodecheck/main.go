@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	baselinePath = "docs/development/deadcode-baseline.txt"
+	baselinePath = "docs/internal/development/deadcode-baseline.txt"
 	currentPath  = "bin/deadcode-current.txt"
 	deadcodeTool = "golang.org/x/tools/cmd/deadcode@v0.25.1"
 )
