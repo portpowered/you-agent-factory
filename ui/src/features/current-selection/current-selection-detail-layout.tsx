@@ -30,22 +30,22 @@ export function SelectionDetailLayout({
         <div className={SELECTION_HISTORY_ACTIONS_CLASS}>
           {headerAction}
           <button
-            aria-label={messages.undoActionLabel}
+            aria-label={messages.undoAccessibleLabel}
             className={SELECTION_HISTORY_BUTTON_CLASS}
             disabled={!canUndo}
             onClick={() => undoSelection()}
             type="button"
           >
-            {messages.undoAction}
+            {messages.undoLabel}
           </button>
           <button
-            aria-label={messages.redoActionLabel}
+            aria-label={messages.redoAccessibleLabel}
             className={SELECTION_HISTORY_BUTTON_CLASS}
             disabled={!canRedo}
             onClick={() => redoSelection()}
             type="button"
           >
-            {messages.redoAction}
+            {messages.redoLabel}
           </button>
         </div>
       }
