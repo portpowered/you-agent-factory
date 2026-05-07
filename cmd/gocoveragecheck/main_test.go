@@ -612,6 +612,54 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	}
 }
 
+func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T) {
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	execCommand = fakeGoCoverageCommand
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min: 90,
+		coverpkg: strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+			modulePath + "/pkg/generatedclient",
+		}, ","),
+		packages: "./pkg/config",
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "total: (statements) 82.5%") {
+		t.Fatalf("execute() stdout = %q, want total coverage line", got)
+	}
+	wantFailure := strings.Join([]string{
+		"go coverage 82.5% is below minimum 90.0%",
+		"go coverage found backend-owned packages with 0% statement coverage: " + modulePath + "/pkg/config",
+	}, "\n")
+	if err.Error() != wantFailure {
+		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
+	}
+	if strings.Contains(got, "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect success message", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
 func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
 	originalExecCommand := execCommand
 	originalStdout := stdoutWriter
