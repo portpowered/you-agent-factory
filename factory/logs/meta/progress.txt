@@ -1,5 +1,9 @@
 ## Codebase Patterns
 
+- When a customer ask points at an external checklist repository and this repo
+  has no checked-in review record for it yet, treat conformance as unproven and
+  queue either a narrow audit lane or a smaller repo-owned enforcement seam
+  instead of marking the checklist ask satisfied from intent alone.
 - Validate repo-truth claims about `factory/inputs/**` with `git ls-files`
   before trusting visible local files; the repo tracks sentinels while live
   work items are ignored.
@@ -1862,3 +1866,34 @@
   so the next worker can raise package-local command coverage for the
   maintainer-owned backend coverage gate without changing coverage policy,
   widening the lane scope, or broadening into package-by-package test authoring.
+
+## 2026-05-06T20:04:20.2572074-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`; the checkout was already current on `main` at
+  `22e20d8` after merged PR `#136` (`Windows release`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, current PR
+  state, the tracked-versus-ignored `factory/inputs/**` surface, the backend
+  and website standards, and the live maintainer-owned `cmd/` packages.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Force factory/inputs/idea/default`, confirming the checked-in
+  inboxes remain sentinel-only and the canonical idea inbox currently has no
+  ignored residue beyond `.gitkeep`.
+- Confirmed the previously recorded `cmd/functionallane` seam is now closed on
+  live `main` through merged PR `#135`; `go test -cover ./cmd/functionallane`
+  now reports `100.0%` statement coverage.
+- Checked the live linked `portpowered/checklists` repository and confirmed the
+  customer-ask URLs still point at the current `2026` website and backend
+  checklist documents, but found no checked-in repo-wide review record mapping
+  this repository to those external checklists yet.
+- Verified the next narrow non-overlapping quality seam in live code is back in
+  `cmd/gocoveragecheck`: `make test-coverage-go` still routes through that
+  repo-owned command, `go test -cover ./cmd/gocoveragecheck` still reports
+  `78.5%`, and remaining uncovered branches concentrate in package-local helper
+  and subprocess-wrapper paths such as temp-profile lifecycle handling, package
+  discovery wrappers, and malformed coverage-profile or path parsing.
+- Queued one fresh ignored idea under
+  `factory/inputs/idea/default/cover-gocoveragecheck-helper-runtime-and-parser-branches.md`
+  so the next worker can tighten that backend coverage gate without changing
+  thresholds, package-selection policy, or CI wiring.
