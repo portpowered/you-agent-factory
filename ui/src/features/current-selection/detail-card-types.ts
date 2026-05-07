@@ -19,12 +19,11 @@ import type { DashboardWorkItemSelection } from "./types";
 export interface SelectionDetailLayoutProps {
   children: ReactNode;
   headerAction?: ReactNode;
-  locale?: string;
+  locale?: string | null;
   widgetId?: string;
 }
 
 export interface NoSelectionDetailCardProps {
-  locale?: string;
   widgetId?: string;
 }
 
@@ -43,7 +42,7 @@ export interface StatePositionWorkListItemProps {
 export interface StateNodeDetailCardProps {
   currentWorkItems: DashboardWorkItemRef[];
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
-  locale?: string;
+  locale?: string | null;
   onSelectWorkItem?: (workItem: DashboardWorkItemRef) => void;
   place: DashboardPlaceRef;
   terminalHistoryWorkItems?: DashboardWorkItemRef[];
@@ -83,7 +82,7 @@ export interface WorkItemDetailCardProps {
   activeTraceID?: string | null;
   dispatchAttempts: DashboardProviderSessionAttempt[];
   executionDetails: SelectedWorkItemExecutionDetails;
-  locale?: string;
+  locale?: string | null;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedNode?: DashboardWorkstationNode | null;
@@ -96,7 +95,7 @@ export interface WorkItemDetailCardProps {
 
 export interface WorkstationDetailCardProps {
   activeExecutions: DashboardActiveExecution[];
-  locale?: string;
+  locale?: string | null;
   now: number;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
@@ -172,7 +171,7 @@ export interface SelectedWorkDispatchHistorySectionProps {
 }
 
 export interface WorkstationRequestDetailCardProps {
-  locale?: string;
+  locale?: string | null;
   request: DashboardWorkstationRequest;
   widgetId?: string;
 }
@@ -182,7 +181,7 @@ export interface TerminalWorkSummaryCardProps {
   failureMessage?: string;
   failureReason?: string;
   label: string;
-  locale?: string;
+  locale?: string | null;
   now?: number;
   status: "completed" | "failed";
   widgetId?: string;

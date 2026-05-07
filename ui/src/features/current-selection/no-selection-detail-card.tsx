@@ -4,7 +4,6 @@ import { useCurrentSelectionShellMessages } from "./current-selection-locale";
 import type { NoSelectionDetailCardProps } from "./detail-card-types";
 
 export function NoSelectionDetailCard({
-  locale,
   widgetId = "current-selection",
 }: NoSelectionDetailCardProps) {
   const messages = useCurrentSelectionShellMessages();

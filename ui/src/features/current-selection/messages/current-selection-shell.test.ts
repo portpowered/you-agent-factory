@@ -25,13 +25,14 @@ describe("getCurrentSelectionShellMessages", () => {
       expectedUndoLabel,
       expectedRedoLabel,
     ) => {
-    const messages = getCurrentSelectionShellMessages(locale);
+      const messages = getCurrentSelectionShellMessages(locale);
 
-    expect(messages.title).toBe(expectedTitle);
-    expect(messages.openTraceAction).toBe(expectedOpenTraceAction);
-    expect(messages.undoLabel).toBe(expectedUndoLabel);
-    expect(messages.redoLabel).toBe(expectedRedoLabel);
-  });
+      expect(messages.title).toBe(expectedTitle);
+      expect(messages.openTraceAction).toBe(expectedOpenTraceAction);
+      expect(messages.undoLabel).toBe(expectedUndoLabel);
+      expect(messages.redoLabel).toBe(expectedRedoLabel);
+    },
+  );
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
     const defaultMessages = getCurrentSelectionShellMessages("en");
@@ -57,5 +58,4 @@ describe("getCurrentSelectionShellMessages", () => {
       expect(messages.redoAccessibleLabel).toBe(expectedRedoAccessibleLabel);
     },
   );
-  });
 });
