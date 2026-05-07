@@ -33,12 +33,18 @@ describe("DashboardFlowAxisLegend", () => {
       name: messages.collapseToggleLabel("graph legend"),
     });
     const queueLabel = legend.querySelector("[data-legend-icon='queue'] span");
-    const activeFlowLabel = legend.querySelector("[data-legend-edge='active-flow'] span:last-child");
+    const activeFlowLabel = legend.querySelector(
+      "[data-legend-edge='active-flow'] span:last-child",
+    );
 
     expect(legendScope.getByText(messages.edgeLabels.activeFlow)).toBeTruthy();
     expect(legendScope.getByText(messages.edgeLabels.failurePath)).toBeTruthy();
-    expect(legend.querySelector("[data-legend-edge='active-flow']")).toBeTruthy();
-    expect(legend.querySelector("[data-legend-edge='failure-path']")).toBeTruthy();
+    expect(
+      legend.querySelector("[data-legend-edge='active-flow']"),
+    ).toBeTruthy();
+    expect(
+      legend.querySelector("[data-legend-edge='failure-path']"),
+    ).toBeTruthy();
     expect(legend.querySelector("[data-legend-flow]")).toBeTruthy();
     expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
     expect(legend.className).toContain("dashboard-body-sm");
@@ -61,7 +67,9 @@ describe("DashboardFlowAxisLegend", () => {
       [messages.iconLabels["active-work"], "active-work"],
       [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {
-      const icon = legendScope.getByRole("img", { name: messages.iconLabel(label) });
+      const icon = legendScope.getByRole("img", {
+        name: messages.iconLabel(label),
+      });
 
       expect(icon.getAttribute("data-graph-semantic-icon")).toBe(kind);
       expect(legendScope.getByText(label)).toBeTruthy();
@@ -72,7 +80,9 @@ describe("DashboardFlowAxisLegend", () => {
 
     expect(screen.queryByLabelText(messages.title)).toBeNull();
     expect(
-      screen.getByRole("button", { name: messages.expandToggleLabel("graph legend") }),
+      screen.getByRole("button", {
+        name: messages.expandToggleLabel("graph legend"),
+      }),
     ).toBeTruthy();
   });
 
@@ -89,7 +99,9 @@ describe("DashboardFlowAxisLegend", () => {
       />,
     );
 
-    const legendContainer = document.querySelector("[data-dashboard-flow-axis-legend]");
+    const legendContainer = document.querySelector(
+      "[data-dashboard-flow-axis-legend]",
+    );
     const legend = screen.getByLabelText("Current activity legend");
     const collapseButton = screen.getByRole("button", {
       name: messages.collapseToggleLabel("current activity legend"),
@@ -98,8 +110,12 @@ describe("DashboardFlowAxisLegend", () => {
     expect(legendContainer?.className).toContain("relative");
     expect(legendContainer?.className).toContain("top-0");
     expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
-    expect(within(legend).getByText(messages.edgeLabels.activeFlow)).toBeTruthy();
-    expect(within(legend).queryByText(messages.edgeLabels.failurePath)).toBeNull();
+    expect(
+      within(legend).getByText(messages.edgeLabels.activeFlow),
+    ).toBeTruthy();
+    expect(
+      within(legend).queryByText(messages.edgeLabels.failurePath),
+    ).toBeNull();
     expect(within(legend).getByText(messages.iconLabels.queue)).toBeTruthy();
     expect(within(legend).queryByText(messages.iconLabels.terminal)).toBeNull();
     expect(legend.className).toContain("dashboard-body-sm");
@@ -127,10 +143,43 @@ describe("DashboardFlowAxisLegend", () => {
 
     const legend = screen.getByLabelText(messages.title);
 
-    expect(within(legend).getByText(messages.edgeLabels.activeFlow)).toBeTruthy();
+    expect(
+      within(legend).getByText(messages.edgeLabels.activeFlow),
+    ).toBeTruthy();
     expect(
       within(legend).getByRole("img", {
         name: messages.iconLabel(messages.iconLabels.queue),
+      }),
+    ).toBeTruthy();
+  });
+
+  it("falls back to the default English legend copy when the locale is unsupported", () => {
+    const messages = getDashboardFlowAxisLegendMessages("en");
+
+    render(
+      <DashboardFlowAxisLegend
+        edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("fr-CA")}
+        iconItems={getDefaultDashboardFlowAxisLegendIconItems("fr-CA")}
+        locale="fr-CA"
+      />,
+    );
+
+    const expandButton = screen.getByRole("button", {
+      name: messages.expandToggleLabel("graph legend"),
+    });
+
+    expect(screen.getByText(messages.minimizedLabel)).toBeTruthy();
+
+    fireEvent.click(expandButton);
+
+    const legend = screen.getByLabelText(messages.title);
+
+    expect(
+      within(legend).getByText(messages.edgeLabels.failurePath),
+    ).toBeTruthy();
+    expect(
+      within(legend).getByRole("img", {
+        name: messages.iconLabel(messages.iconLabels.workstation),
       }),
     ).toBeTruthy();
   });
