@@ -26,6 +26,7 @@ func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
 		nil,
 		tokens,
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -56,6 +57,7 @@ func TestResolveTemplateFields_Env(t *testing.T) {
 		},
 		tokens,
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -97,6 +99,7 @@ func TestResolveTemplateFields_ProjectVariableUsesTag(t *testing.T) {
 		},
 		tokens,
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -128,6 +131,7 @@ func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefau
 		},
 		tokens,
 		&factory_context.FactoryContext{ProjectID: "analytics-platform"},
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected context fallback error: %v", err)
@@ -148,6 +152,7 @@ func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefau
 		},
 		tokens,
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected neutral fallback error: %v", err)
@@ -170,6 +175,7 @@ func TestResolveTemplateFields_InvalidTemplate(t *testing.T) {
 		nil,
 		tokens,
 		nil,
+		"",
 	)
 	if err == nil {
 		t.Fatal("expected error for invalid template")
@@ -196,6 +202,7 @@ func TestResolveTemplateFields_MissingTagKey(t *testing.T) {
 		nil,
 		tokens,
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -226,6 +233,7 @@ func TestResolveTemplateFields_WorkIDAndPayload(t *testing.T) {
 		},
 		tokens,
 		nil,
+		"",
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -252,12 +260,82 @@ func TestResolveTemplateFields_EnvInvalidTemplate(t *testing.T) {
 		},
 		tokens,
 		nil,
+		"",
 	)
 	if err == nil {
 		t.Fatal("expected error for invalid env template")
 	}
 	if !strings.Contains(err.Error(), "env[BAD]") {
 		t.Errorf("error should mention env[BAD]: %s", err.Error())
+	}
+}
+
+func TestResolveTemplateFields_Worktree(t *testing.T) {
+	tokens := []interfaces.Token{
+		{
+			ID: "tok-1",
+			Color: interfaces.TokenColor{
+				WorkID: "work-1",
+				Tags:   map[string]string{"branch": "feature-xyz"},
+			},
+		},
+	}
+
+	resolved, err := ResolveTemplateFields(
+		"",
+		nil,
+		tokens,
+		nil,
+		`worktrees/{{ index (index .Inputs 0).Tags "branch" }}`,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolved.Worktree != "worktrees/feature-xyz" {
+		t.Fatalf("expected worktrees/feature-xyz, got %s", resolved.Worktree)
+	}
+}
+
+func TestResolveTemplateFields_ResolvesExplicitRuntimeFieldsTogether(t *testing.T) {
+	tokens := []interfaces.Token{
+		{
+			ID: "tok-1",
+			Color: interfaces.TokenColor{
+				WorkID: "work-1",
+				Tags: map[string]string{
+					"branch":  "feature-xyz",
+					"project": "inventory-service",
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveTemplateFields(
+		`/workspace/{{ index (index .Inputs 0).Tags "branch" }}`,
+		map[string]string{
+			"PROJECT": `{{ index (index .Inputs 0).Tags "project" }}`,
+			"BRANCH":  `{{ index (index .Inputs 0).Tags "branch" }}`,
+		},
+		tokens,
+		nil,
+		`worktrees/{{ index (index .Inputs 0).Tags "branch" }}`,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolved.WorkingDirectory != "/workspace/feature-xyz" {
+		t.Fatalf("expected /workspace/feature-xyz, got %s", resolved.WorkingDirectory)
+	}
+	if resolved.Env["PROJECT"] != "inventory-service" {
+		t.Fatalf("expected PROJECT=inventory-service, got %s", resolved.Env["PROJECT"])
+	}
+	if resolved.Env["BRANCH"] != "feature-xyz" {
+		t.Fatalf("expected BRANCH=feature-xyz, got %s", resolved.Env["BRANCH"])
+	}
+	if resolved.Worktree != "worktrees/feature-xyz" {
+		t.Fatalf("expected worktrees/feature-xyz, got %s", resolved.Worktree)
 	}
 }
 

@@ -145,12 +145,25 @@
   regression tests but still trails sibling maintainer commands on package
   coverage, prefer adding command-owner success and threshold-branch coverage
   there before widening scope into low-coverage application packages.
+- When a standards audit PR or a checklist follow-up PR is already open, treat
+  its branch and changed-file surface as owned; replace only merged or stale
+  backlog slots instead of queueing a second idea over the same files.
+- When the customer-linked external checklist repository omits one of the
+  requested documents, record that missing source as an evidence gap and avoid
+  inferring checklist content that is not actually retrievable on that date.
+- After a localized dashboard dialog merges, re-read the adjacent header
+  controls and status accessibility labels next; concentrated English-only
+  residue often remains there rather than in another dialog.
+- When a helper still carries an explicitly backwards-compatible variadic
+  parameter but the live production caller already passes one concrete explicit
+  value, prefer deleting the shim over preserving two call shapes.
 
 ## Current Summary
 
-- As of `2026-05-06T16:03:38.4962364-07:00`, `HEAD` points to `a25885a` on
-  branch `meta-refresh-world-state-20260506-050415`; live `origin/main` points
-  to `4f21b7b` through merged PR `#134`.
+- As of `2026-05-07T05:03:44.1967849-07:00`, `HEAD` points to `3d0c461` on
+  branch `main`, is ahead of `origin/main` by three local meta commits, and
+  already contains merged PR `#147` (`localize-export-dialog-and-trigger`) from
+  `origin/main`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -159,25 +172,113 @@
 - The tracked input surface remains sentinel-only; there is no checked-in
   cleanup request currently queued under `factory/inputs/**`.
 - The local worktree is not clean because `factory/logs/meta/asks.md` carries a
-  user-owned tracked edit; ignored workflow files under `factory/inputs/**`
-  remain operating state rather than canonical queue truth.
-- Recent merged PRs now include `#112`, `#113`, `#114`, `#115`, `#117`,
-  `#118`, `#119`, `#121`, `#122`, `#124`, `#125`, `#126`, `#127`, `#128`,
-  `#129`, `#130`, `#132`, `#133`, and `#134`; open PRs `#120` and `#123` are only
-  meta refresh branches and do not own the next code cleanup lane.
-- The canonical ask surface is now the user-owned quality-only rewrite in
+  user-owned tracked edit and the maintainer meta refresh updates the tracked
+  view/progress docs; ignored workflow files under `factory/inputs/**` remain
+  operating state rather than canonical queue truth.
+- Recent merged PRs now include `#146` and `#147`; open PR `#141` owns the
+  active checklist-audit lane, while `#145`, `#143`, `#139`, `#123`, and
+  `#120` remain meta refresh branches.
+- The canonical ask surface remains the quality-oriented rewrite in
   `factory/logs/meta/asks.md`; the active asks are external checklist
-  alignment plus stronger backend and website testing toward a declared
-  `100%` minimum.
+  alignment, stronger backend and website testing, ongoing simplification, and
+  maintaining at least three non-overlapping tasks in flight.
 - The replay fixtures remain historical samples rather than current workflow
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
-- The next non-overlapping dispatch is the `cmd/functionallane`
-  command-owner error and entrypoint lane: PR `#126` already covered the thin
-  command-entrypoint routing seam on `main`, but the repo-owned functional
-  lane still lacks direct coverage for `main` failure routing, `failf` exit
-  behavior, `run()` success, and wrapped discovery or execution failures while
-  package coverage sits at `82.0%`.
+- The external website and backend checklist URLs remain readable on
+  `2026-05-07`, but the linked external `asks.md` URL still does not produce a
+  readable checklist document and must be treated as a source-evidence gap.
+- The previously queued ignored ideas `localize-export-dialog-and-trigger` and
+  `narrow-cron-watcher-runtime-lookup-contract` are stale because merged PRs
+  `#147` and `#146` landed those exact lanes on `main`.
+- The next maintainer-owned operating queue should hold three non-overlapping
+  ideas together: repo-wide checklist audit evidence,
+  `retire-template-fields-variadic-worktree-shim`, and
+  `localize-dashboard-header-timeline-and-stream-status`.
+
+## 2026-05-07T05:03:44.1967849-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git rebased local `main`
+  onto live `origin/main`, pulling in merged PR `#146`
+  (`narrow-cron-watcher-runtime-lookup-contract`) and merged PR `#147`
+  (`localize-export-dialog-and-trigger`) while preserving the user-owned
+  tracked edit in `factory/logs/meta/asks.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, current PR state, the tracked-versus-ignored
+  `factory/inputs/**` surface, and the live external checklist sources.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse -Force factory/inputs`, confirming the checked-in
+  inboxes remain sentinel-only while the visible idea files are ignored local
+  operating residue.
+- Confirmed the previously queued ignored ideas
+  `factory/inputs/idea/default/localize-export-dialog-and-trigger.md` and
+  `factory/inputs/idea/default/narrow-cron-watcher-runtime-lookup-contract.md`
+  are stale because merged PR `#147` and merged PR `#146` already landed those
+  exact cleanup lanes on `main`, then pruned those ignored residues locally.
+- Re-checked the linked external checklist sources on `2026-05-07` and
+  confirmed the website and backend checklist documents remain readable, while
+  the linked `portpowered/checklists` `asks.md` source still does not resolve
+  to a readable document and must remain an evidence gap instead of an assumed
+  requirement source.
+- Used delegated explorer passes, graph-backed discovery, direct code reads,
+  and current `go test -cover ./cmd/...` output to choose two fresh
+  non-overlapping replacements for the merged queue slots:
+  `pkg/workers/template_fields.go` plus
+  `pkg/workers/workstation_executor.go` for the next small backend
+  simplification seam, and `ui/src/features/header/tick-slider-control.tsx`
+  plus `ui/src/features/header/dashboard-header.tsx` for the next narrow
+  dashboard-header localization seam.
+- Recorded one backup backend testing seam from direct command coverage checks
+  as well: `cmd/releaseprep/main.go` still leaves the explicit `flag.ErrHelp`
+  branch and direct parse-failure routing as a small command-owner coverage
+  closeout, but it is now a backup seam rather than one of the three active
+  backlog slots.
+
+## 2026-05-07T04:04:43.0744927-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`, saw a divergent local branch because the checkout
+  was ahead by prior meta commits and behind by merged upstream work, then
+  stashed the user-owned tracked edit in `factory/logs/meta/asks.md`, merged
+  `origin/main` with `git pull --no-edit`, and restored the ask-file edit.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, current PR state, the tracked-versus-ignored
+  `factory/inputs/**` surface, the live external checklist sources, and the
+  live backend and UI candidate seams.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse -Force factory/inputs`, confirming the checked-in
+  inboxes remain sentinel-only while the visible idea files are ignored local
+  operating residue.
+- Confirmed the previously queued ignored ideas
+  `factory/inputs/idea/default/localize-and-accessibility-harden-import-preview-dialog.md`
+  and
+  `factory/inputs/idea/default/cover-releasesmoke-command-owner-parse-and-json-error-branches.md`
+  are stale because merged PR `#142` and merged PR `#144` already landed those
+  exact cleanup lanes on `main`, so they should be pruned rather than left in
+  the active queue.
+- Re-checked repo movement with `gh pr list --state open --limit 20` and
+  `gh pr list --state merged --limit 10`, confirming `#142` and `#144` are now
+  merged while `#141` remains the only live checklist-audit implementation
+  lane.
+- Checked the linked external checklist sources again on `2026-05-07` and
+  confirmed the website and backend checklist documents remain readable, while
+  the linked `portpowered/checklists` `asks.md` source still does not resolve
+  to a readable document and must stay recorded as an evidence gap instead of a
+  silently assumed requirement source.
+- Used delegated explorer passes plus direct file reads to identify two fresh
+  non-overlapping replacements for the stale queue slots:
+  `ui/src/features/export/export-factory-dialog.tsx` plus
+  `ui/src/features/header/dashboard-header.tsx` for the next feature-local
+  localization seam, and `pkg/service/cron_watcher.go` plus
+  `pkg/interfaces/runtime_lookup.go` for the next narrow runtime-interface
+  simplification seam.
+- Recorded one backup backend testing seam from delegated inspection as well:
+  `cmd/releaseprep/main.go` still leaves the explicit `flag.ErrHelp` branch
+  without direct package-local coverage, but it is now a smaller next-up
+  candidate rather than one of the three active backlog slots.
 
 ## 2026-05-06T16:03:38.4962364-07:00 - meta state refresh
 
@@ -1897,3 +1998,78 @@
   `factory/inputs/idea/default/cover-gocoveragecheck-helper-runtime-and-parser-branches.md`
   so the next worker can tighten that backend coverage gate without changing
   thresholds, package-selection policy, or CI wiring.
+
+## 2026-05-07T02:06:20.9186342-07:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash`; the checkout was already current on
+  `main` at `bf2ea7e` after merged PR `#138` (`Branchling`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, current PR state, the tracked-versus-ignored
+  `factory/inputs/**` surface, and the live repo-owned `cmd/` and `ui/`
+  candidate seams.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse -Force factory/inputs`, confirming the checked-in
+  inboxes remain sentinel-only while the visible idea file was ignored local
+  operating residue.
+- Confirmed the previously queued ignored idea
+  `factory/inputs/idea/default/cover-gocoveragecheck-helper-runtime-and-parser-branches.md`
+  is stale because merged PR `#137` already landed that exact cleanup on
+  `main`, so it should be pruned rather than re-queued.
+- Re-checked the live `portpowered/checklists` customer references and
+  confirmed there is still no checked-in repo-wide audit record for the linked
+  `website-development-checklist.md`, `backend-development-checklist.md`, and
+  `asks.md` documents; only the narrower import/export checklist record exists.
+- Verified the next narrow UI checklist-alignment seam is
+  `ui/src/features/import/dashboard-import-preview-dialog.tsx`: the repo still
+  has no `ui/src/i18n` directory or automated accessibility test dependency in
+  `ui/package.json`, while that dialog keeps concentrated hardcoded copy and
+  already has focused test and Storybook seams for a small follow-up.
+- Verified the next narrow backend simplification seam is the
+  `cmd/deadcodecheck` `GODEBUG=gotypesalias=1` compatibility path: the shim is
+  still present in `runDeadcode()`, `deadcodeEnv()`, and
+  `ensureGoTypesAliasEnabled()`, but live deadcode runs on the supported Go
+  `1.24.x` toolchain succeed with or without the override, so the path now
+  appears to be redundant legacy handling rather than an active requirement.
+- Queued three replacement ignored idea files so the operating backlog matches
+  the standing ask to keep at least three non-overlapping tasks running:
+  `audit-repository-against-2026-website-and-backend-checklists.md`,
+  `localize-and-accessibility-harden-import-preview-dialog.md`, and
+  `retire-deadcodecheck-gotypesalias-compat-shim.md`.
+
+## 2026-05-07T03:02:15.3916934-07:00 - meta state refresh
+
+- Ran `git pull` while local `main` was already one commit ahead of
+  `origin/main`; Git merged in upstream `08acc2f` so local `HEAD` advanced to
+  `41ae281` and now includes merged PR `#140`
+  (`retire-deadcodecheck-gotypesalias-compat-shim`) without disturbing the
+  user-owned tracked edit in `factory/logs/meta/asks.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, current PR
+  state, the tracked-versus-ignored `factory/inputs/**` surface, and the live
+  repo-owned `cmd/` candidate seams.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse -Force factory/inputs`, confirming the checked-in
+  inboxes remain sentinel-only while the visible idea files are ignored local
+  operating residue.
+- Confirmed the previously queued ignored idea
+  `factory/inputs/idea/default/retire-deadcodecheck-gotypesalias-compat-shim.md`
+  is stale because merged PR `#140` already landed that exact cleanup on
+  `main`, so it should be pruned rather than left in the live queue.
+- Re-checked open PR ownership with `gh pr view 141` and `gh pr view 142`,
+  confirming those branches already own the repository-wide checklist audit and
+  the import-preview localization/accessibility lane; they should count toward
+  the standing three-task ask and block overlapping follow-up queue work.
+- Verified with direct reads of `cmd/releasesmoke/main.go` and
+  `cmd/releasesmoke/main_test.go`, `gh pr list --search "releasesmoke"`,
+  and fresh `go test -cover ./cmd/...` plus `go tool cover -func` output that
+  the next narrow non-overlapping backend testing seam is `cmd/releasesmoke`:
+  PR `#128` already closed the thin entrypoint routing, but the package still
+  leaves uncovered parse-error and `writeJSON` encode-failure branches and
+  reports `83.3%` statement coverage in the repo-owned command lane.
+- Replaced the stale deadcode slot with one fresh ignored idea under
+  `factory/inputs/idea/default/cover-releasesmoke-command-owner-parse-and-json-error-branches.md`
+  so the operating backlog returns to three narrow active lanes without
+  overlapping PR `#141` or `#142`.
