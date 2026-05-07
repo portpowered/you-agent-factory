@@ -4,13 +4,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/releasesmoke"
 )
+
+type failingWriter struct {
+	err error
+}
+
+func (writer failingWriter) Write(_ []byte) (int, error) {
+	return 0, writer.err
+}
 
 func TestMainRoutesThroughCommandMain(t *testing.T) {
 	originalCommandMain := commandMain
@@ -95,6 +105,33 @@ func TestRunForwardsParsedConfigToHarness(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunInvalidArgsWritesFlagParseErrorToStderrAndReturnsNonZero(t *testing.T) {
+	originalRunReleaseSmoke := runReleaseSmoke
+	t.Cleanup(func() {
+		runReleaseSmoke = originalRunReleaseSmoke
+	})
+
+	runReleaseSmoke = func(_ context.Context, cfg releasesmoke.Config) (releasesmoke.Result, error) {
+		t.Fatalf("runReleaseSmoke() should not be called for invalid args: %+v", cfg)
+		return releasesmoke.Result{}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := run([]string{"-bogus"}, &stdout, &stderr)
+
+	if exitCode == 0 {
+		t.Fatalf("run() exit code = %d, want non-zero", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := strings.TrimSpace(stderr.String()); !strings.Contains(got, "flag provided but not defined: -bogus") {
+		t.Fatalf("run() stderr = %q, want raw flag parse error", got)
 	}
 }
 
@@ -217,5 +254,21 @@ func TestRunFailureWritesStructuredJSONToStderrAndReturnsNonZero(t *testing.T) {
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte("\n  \"phase\": ")) {
 		t.Fatalf("run() stderr = %q, want indented JSON field", stderr.String())
+	}
+}
+
+func TestWriteJSONReportsEncodeFailuresToStderr(t *testing.T) {
+	originalStderr := stderr
+	t.Cleanup(func() {
+		stderr = originalStderr
+	})
+
+	var errOut bytes.Buffer
+	stderr = &errOut
+
+	writeJSON(failingWriter{err: errors.New("writer failed")}, map[string]string{"status": "ok"})
+
+	if got := strings.TrimSpace(errOut.String()); !strings.Contains(got, "encode JSON output: writer failed") {
+		t.Fatalf("writeJSON() stderr = %q, want encode failure diagnostic", got)
 	}
 }
