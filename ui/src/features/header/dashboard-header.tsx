@@ -2,13 +2,14 @@ import type { DashboardStreamState } from "../../api/dashboard/types";
 import { TickSliderControl } from "../../components/dashboard";
 import { cx } from "../../components/ui";
 import {
+  DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
+import { getExportDialogMessages } from "../export/messages/export-dialog";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
+import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 
@@ -33,7 +34,11 @@ const STREAM_STATUS_CLASS = cx(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 
-export function DashboardHeader() {
+export interface DashboardHeaderProps {
+  locale?: string;
+}
+
+export function DashboardHeader({ locale }: DashboardHeaderProps) {
   const snapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
   );
@@ -44,6 +49,7 @@ export function DashboardHeader() {
   const openExportDialog = useExportDialogStore(
     (state) => state.openExportDialog,
   );
+  const exportMessages = getExportDialogMessages(locale);
 
   if (!snapshot) {
     return null;
@@ -66,7 +72,7 @@ export function DashboardHeader() {
           </div>
         </div>
         <DashboardHeaderActionButton
-          aria-label="Export PNG"
+          aria-label={exportMessages.triggerLabel}
           aria-expanded={isExportDialogOpen}
           aria-haspopup="dialog"
           onClick={openExportDialog}

@@ -1,9 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { downloadBlobAsFile } from "./browser-download";
 import { ExportFactoryDialog } from "./export-factory-dialog";
 import type { WriteFactoryExportPngResult } from "./factory-png-export";
-import { downloadBlobAsFile } from "./browser-download";
 import { writeFactoryExportPng } from "./factory-png-export";
+import { getExportDialogMessages } from "./messages/export-dialog";
 
 vi.mock("./browser-download", () => ({
   downloadBlobAsFile: vi.fn(),
@@ -18,6 +25,20 @@ const factory = {
   workspaces: {},
 } as const;
 
+function renderDialog(
+  overrides: Partial<ComponentProps<typeof ExportFactoryDialog>> = {},
+) {
+  return render(
+    <ExportFactoryDialog
+      factory={factory}
+      initialFactoryName="Factory Aurora"
+      isOpen
+      onClose={() => {}}
+      {...overrides}
+    />,
+  );
+}
+
 describe("ExportFactoryDialog", () => {
   beforeEach(() => {
     vi.mocked(downloadBlobAsFile).mockReset();
@@ -25,45 +46,41 @@ describe("ExportFactoryDialog", () => {
   });
 
   it("shows validation errors when the export name or cover image is missing", async () => {
-    render(
-      <ExportFactoryDialog
-        factory={factory}
-        initialFactoryName=""
-        isOpen
-        onClose={() => {}}
-      />,
+    const messages = getExportDialogMessages("en");
+    renderDialog({ initialFactoryName: "" });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.exportAction }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
-
-    const nameValidation = await screen.findByText("Enter a factory name before exporting.");
-    const imageValidation = screen.getByText("Choose a cover image before exporting.");
-    const nameInput = screen.getByLabelText("Factory name");
-    const imageInput = screen.getByLabelText("Cover image");
+    const nameValidation = await screen.findByText(
+      messages.nameRequiredValidation,
+    );
+    const imageValidation = screen.getByText(messages.imageRequiredValidation);
+    const nameInput = screen.getByLabelText(messages.nameLabel);
+    const imageInput = screen.getByLabelText(messages.imageLabel);
 
     expect(nameValidation.id).not.toBe("");
     expect(imageValidation.id).not.toBe("");
     expect(nameInput.getAttribute("aria-invalid")).toBe("true");
     expect(nameInput.getAttribute("aria-describedby")).toBe(nameValidation.id);
     expect(imageInput.getAttribute("aria-invalid")).toBe("true");
-    expect(imageInput.getAttribute("aria-describedby")).toBe(imageValidation.id);
+    expect(imageInput.getAttribute("aria-describedby")).toBe(
+      imageValidation.id,
+    );
     expect(writeFactoryExportPng).not.toHaveBeenCalled();
   });
 
   it("validates cleared and non-image file selections before export", async () => {
-    render(
-      <ExportFactoryDialog
-        factory={factory}
-        initialFactoryName="Factory Aurora"
-        isOpen
-        onClose={() => {}}
-      />,
-    );
+    const messages = getExportDialogMessages("en");
+    renderDialog();
 
-    const imageInput = screen.getByLabelText("Cover image");
+    const imageInput = screen.getByLabelText(messages.imageLabel);
     fireEvent.change(imageInput, { target: { files: [] } });
 
-    expect(await screen.findByText("Choose a cover image before exporting.")).toBeTruthy();
+    expect(
+      await screen.findByText(messages.imageRequiredValidation),
+    ).toBeTruthy();
     expect(imageInput.getAttribute("aria-invalid")).toBe("true");
 
     fireEvent.change(imageInput, {
@@ -72,51 +89,33 @@ describe("ExportFactoryDialog", () => {
       },
     });
 
-    expect(await screen.findByText("Choose an image file before exporting.")).toBeTruthy();
+    expect(await screen.findByText(messages.imageTypeValidation)).toBeTruthy();
     expect(writeFactoryExportPng).not.toHaveBeenCalled();
   });
 
   it("disables actions while the export is being prepared", () => {
-    render(
-      <ExportFactoryDialog
-        factory={factory}
-        initialFactoryName="Factory Aurora"
-        isOpen
-        isPreparing
-        onClose={() => {}}
-      />,
-    );
+    const messages = getExportDialogMessages("en");
+    renderDialog({ isPreparing: true });
 
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Export PNG" }).disabled).toBe(
-      true,
-    );
-    expect(screen.getByText("Loading the current authored factory definition.")).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: messages.exportAction,
+      }).disabled,
+    ).toBe(true);
+    expect(screen.getByText(messages.loadingStatus)).toBeTruthy();
   });
 
   it("renders Infinite You export copy for metadata and filename guidance", () => {
-    render(
-      <ExportFactoryDialog
-        factory={factory}
-        initialFactoryName="Factory Aurora"
-        isOpen
-        onClose={() => {}}
-      />,
-    );
+    const messages = getExportDialogMessages("en");
+    renderDialog();
 
-    expect(
-      screen.getByText(
-        "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded Infinite You factory metadata.",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "This name is embedded in the exported Infinite You PNG metadata and used for the downloaded filename.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText(messages.hint)).toBeTruthy();
+    expect(screen.getByText(messages.nameDescription)).toBeTruthy();
   });
 
   it("exports the selected image with the trimmed factory name and shows a visible success state", async () => {
-    let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null = null;
+    let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null =
+      null;
     vi.mocked(writeFactoryExportPng).mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -132,18 +131,27 @@ describe("ExportFactoryDialog", () => {
         onClose={onClose}
       />,
     );
+    const messages = getExportDialogMessages("en");
 
-    const fileInput = screen.getByLabelText("Cover image");
-    const exportImage = new File(["binary"], "cover.png", { type: "image/png" });
+    const fileInput = screen.getByLabelText(messages.imageLabel);
+    const exportImage = new File(["binary"], "cover.png", {
+      type: "image/png",
+    });
     fireEvent.change(fileInput, { target: { files: [exportImage] } });
-    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.exportAction }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Exporting..." })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: messages.exportingAction }),
+      ).toBeTruthy();
     });
-    expect(screen.getByRole("button", { name: "Exporting..." }).getAttribute("aria-busy")).toBe(
-      "true",
-    );
+    expect(
+      screen
+        .getByRole("button", { name: messages.exportingAction })
+        .getAttribute("aria-busy"),
+    ).toBe("true");
     expect(writeFactoryExportPng).toHaveBeenCalledWith({
       factory: {
         ...factory,
@@ -172,8 +180,12 @@ describe("ExportFactoryDialog", () => {
         filename: "factory-aurora.png",
       });
     });
-    expect(screen.getByRole("status").textContent).toContain("Downloaded factory-aurora.png.");
-    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain(
+      messages.successMessage("factory-aurora.png"),
+    );
+    expect(
+      screen.getByRole("button", { name: messages.closeAction }),
+    ).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -191,18 +203,23 @@ describe("ExportFactoryDialog", () => {
         onClose={onClose}
       />,
     );
+    const messages = getExportDialogMessages("en");
 
-    fireEvent.change(screen.getByLabelText("Cover image"), {
+    fireEvent.change(screen.getByLabelText(messages.imageLabel), {
       target: {
         files: [new File(["binary"], "cover.png", { type: "image/png" })],
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.exportAction }),
+    );
 
     const errorPanel = await screen.findByRole("alert");
     expect(errorPanel.textContent).toContain("PNG encoding failed");
-    expect(screen.getByRole("dialog", { name: "Export factory" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: messages.title })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: messages.cancelAction }),
+    ).toBeTruthy();
     expect(downloadBlobAsFile).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -217,11 +234,15 @@ describe("ExportFactoryDialog", () => {
       />,
     );
 
-    const nameInput = screen.getByLabelText("Factory name");
+    const nameInput = screen.getByLabelText(
+      getExportDialogMessages("en").nameLabel,
+    );
     fireEvent.change(nameInput, {
       target: { value: "Roundtrip Browser Export" },
     });
-    expect((nameInput as HTMLInputElement).value).toBe("Roundtrip Browser Export");
+    expect((nameInput as HTMLInputElement).value).toBe(
+      "Roundtrip Browser Export",
+    );
 
     rerender(
       <ExportFactoryDialog
@@ -233,40 +254,47 @@ describe("ExportFactoryDialog", () => {
     );
 
     await waitFor(() => {
-      expect((screen.getByLabelText("Factory name") as HTMLInputElement).value).toBe(
-        "Roundtrip Browser Export",
-      );
+      expect(
+        (
+          screen.getByLabelText(
+            getExportDialogMessages("en").nameLabel,
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("Roundtrip Browser Export");
     });
   });
 
   it("surfaces the preparation failure and blocks export when the factory is unavailable", async () => {
-    render(
-      <ExportFactoryDialog
-        factory={null}
-        initialFactoryName="infinite-you"
-        isOpen
-        onClose={() => {}}
-        preparationFailure={{
-          code: "FACTORY_DEFINITION_UNAVAILABLE",
-          message: "The current factory definition could not be loaded from the current-factory API.",
-          ok: false,
-        }}
-      />,
-    );
+    const messages = getExportDialogMessages("en");
+    renderDialog({
+      factory: null,
+      initialFactoryName: "infinite-you",
+      preparationFailure: {
+        code: "FACTORY_DEFINITION_UNAVAILABLE",
+        message:
+          "The current factory definition could not be loaded from the current-factory API.",
+        ok: false,
+      },
+    });
 
     const errorPanel = await screen.findByRole("status");
     expect(errorPanel.textContent).toContain(
       "The current factory definition could not be loaded from the current-factory API.",
     );
     expect(
-      (screen.getByRole("button", { name: "Export PNG" }) as HTMLButtonElement).disabled,
+      (
+        screen.getByRole("button", {
+          name: messages.exportAction,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(writeFactoryExportPng).not.toHaveBeenCalled();
     expect(downloadBlobAsFile).not.toHaveBeenCalled();
   });
 
   it("ignores a completed export after the dialog was closed mid-flight", async () => {
-    let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null = null;
+    let resolveExport: ((value: WriteFactoryExportPngResult) => void) | null =
+      null;
     vi.mocked(writeFactoryExportPng).mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -282,19 +310,26 @@ describe("ExportFactoryDialog", () => {
         onClose={onClose}
       />,
     );
+    const messages = getExportDialogMessages("en");
 
-    fireEvent.change(screen.getByLabelText("Cover image"), {
+    fireEvent.change(screen.getByLabelText(messages.imageLabel), {
       target: {
         files: [new File(["binary"], "cover.png", { type: "image/png" })],
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.exportAction }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Exporting..." })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: messages.exportingAction }),
+      ).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.cancelAction }),
+    );
 
     expect(onClose).toHaveBeenCalledTimes(1);
 
@@ -315,6 +350,29 @@ describe("ExportFactoryDialog", () => {
       expect(writeFactoryExportPng).toHaveBeenCalledTimes(1);
     });
     expect(downloadBlobAsFile).not.toHaveBeenCalled();
-    expect(screen.queryByText("Downloaded factory-aurora.png.")).toBeNull();
+    expect(
+      screen.queryByText(messages.successMessage("factory-aurora.png")),
+    ).toBeNull();
+  });
+
+  it("renders the localized export dialog surface for a non-default locale", async () => {
+    const messages = getExportDialogMessages("ja");
+    renderDialog({ locale: "ja" });
+
+    const dialog = await screen.findByRole("dialog", { name: messages.title });
+
+    expect(screen.getByText(messages.description)).toBeTruthy();
+    expect(screen.getByText(messages.hint)).toBeTruthy();
+    expect(screen.getByLabelText(messages.nameLabel)).toBeTruthy();
+    expect(screen.getByLabelText(messages.imageLabel)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: messages.cancelAction }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: messages.exportAction }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: messages.closeLabel }),
+    ).toBeTruthy();
   });
 });
