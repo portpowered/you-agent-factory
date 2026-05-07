@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
-import { CompletedFailedWorkstationCard } from "./terminal-work-card";
-import type { TerminalWorkItem, TerminalWorkStatus } from "./terminal-work-card";
 import type { DashboardProviderSessionAttempt } from "../../api/dashboard/types";
+import { getTerminalWorkMessages } from "./messages";
+import type {
+  TerminalWorkItem,
+  TerminalWorkStatus,
+} from "./terminal-work-card";
+import { CompletedFailedWorkstationCard } from "./terminal-work-card";
 
 const failedAttempt: DashboardProviderSessionAttempt = {
   dispatch_id: "dispatch-repair-failed",
@@ -32,12 +36,20 @@ const completedAttempt: DashboardProviderSessionAttempt = {
 };
 
 const completedItems: TerminalWorkItem[] = [
-  { attempts: [completedAttempt], label: "Done Story", traceWorkID: "work-done-story" },
+  {
+    attempts: [completedAttempt],
+    label: "Done Story",
+    traceWorkID: "work-done-story",
+  },
   { label: "Release Notes", traceWorkID: "work-release-notes" },
 ];
 
 const failedItems: TerminalWorkItem[] = [
-  { attempts: [failedAttempt], label: "Failed Story", traceWorkID: "work-failed-story" },
+  {
+    attempts: [failedAttempt],
+    label: "Failed Story",
+    traceWorkID: "work-failed-story",
+  },
 ];
 
 function SelectableTerminalWorkStory() {
@@ -50,9 +62,26 @@ function SelectableTerminalWorkStory() {
     <CompletedFailedWorkstationCard
       completedItems={completedItems}
       failedItems={failedItems}
-      onSelectItem={(status, item) => setSelectedItem({ label: item.label, status })}
+      onSelectItem={(status, item) =>
+        setSelectedItem({ label: item.label, status })
+      }
       selectedItem={selectedItem}
       widgetId="terminal-work-story"
+    />
+  );
+}
+
+function LocalizedTerminalWorkStory({ locale }: { locale: string }) {
+  const messages = getTerminalWorkMessages(locale);
+
+  return (
+    <CompletedFailedWorkstationCard
+      completedItems={[{ label: "Done Story", traceWorkID: "work-done-story" }]}
+      failedItems={[]}
+      locale={locale}
+      onSelectItem={() => {}}
+      widgetId={`terminal-work-${locale}-story`}
+      title={messages.cardTitle}
     />
   );
 }
@@ -66,21 +95,73 @@ export const MixedOutcomes = {
   render: () => <SelectableTerminalWorkStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const terminalWork = await canvas.findByLabelText("Completed and failed work");
+    const messages = getTerminalWorkMessages("en");
+    const terminalWork = await canvas.findByLabelText(messages.cardTitle);
     const terminalScope = within(terminalWork);
 
-    await expect(await terminalScope.findByRole("button", { name: "Failed Story" })).toBeVisible();
+    await expect(
+      await terminalScope.findByRole("button", { name: "Failed Story" }),
+    ).toBeVisible();
 
-    const completedToggle = (await terminalScope.findAllByRole("button", { name: "Collapse" }))[0];
+    const completedToggle = (
+      await terminalScope.findAllByRole("button", {
+        name: messages.disclosureLabel(true),
+      })
+    )[0];
     await userEvent.click(completedToggle);
     await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
-    expect(terminalScope.queryByRole("button", { name: "Done Story" })).toBeNull();
+    expect(
+      terminalScope.queryByRole("button", { name: "Done Story" }),
+    ).toBeNull();
 
     await userEvent.click(completedToggle);
-    const doneStory = await terminalScope.findByRole("button", { name: "Done Story" });
+    const doneStory = await terminalScope.findByRole("button", {
+      name: "Done Story",
+    });
     await expect(doneStory).toBeVisible();
     await userEvent.click(doneStory);
     await expect(doneStory).toHaveAttribute("data-selected", "true");
+  },
+};
+
+export const LocalizedJapanese = {
+  render: () => <LocalizedTerminalWorkStory locale="ja" />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const messages = getTerminalWorkMessages("ja");
+    const terminalWork = await canvas.findByLabelText(messages.cardTitle);
+    const terminalScope = within(terminalWork);
+    const completedRow = (
+      await terminalScope.findByRole("heading", {
+        name: messages.rowTitle("completed"),
+      })
+    ).closest("section");
+
+    await expect(canvas.getByText(messages.cardTitle)).toBeVisible();
+    await expect(
+      terminalScope.getByRole("img", { name: messages.iconLabel("completed") }),
+    ).toBeVisible();
+    await expect(
+      terminalScope.getByText(messages.sessionSummaryFallback("completed")),
+    ).toBeVisible();
+    await expect(
+      terminalScope.getByText(messages.emptyState("failed")),
+    ).toBeVisible();
+
+    if (!completedRow) {
+      throw new Error("expected completed row");
+    }
+
+    await userEvent.click(
+      within(completedRow).getByRole("button", {
+        name: messages.disclosureLabel(true),
+      }),
+    );
+    await expect(
+      within(completedRow).getByRole("button", {
+        name: messages.disclosureLabel(false),
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
   },
 };
 

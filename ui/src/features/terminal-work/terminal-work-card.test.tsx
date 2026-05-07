@@ -212,4 +212,107 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(screen.getByText(messages.emptyState("completed"))).toBeTruthy();
     expect(screen.getByText(messages.emptyState("failed"))).toBeTruthy();
   });
+
+  it("falls back to default English copy when given an unsupported locale", () => {
+    const messages = getTerminalWorkMessages("en");
+
+    render(
+      <CompletedFailedWorkstationCard
+        completedItems={[
+          { label: "Done Story", traceWorkID: "work-done-story" },
+        ]}
+        failedItems={[]}
+        locale="fr"
+        onSelectItem={vi.fn()}
+      />,
+    );
+
+    const terminalWork = screen.getByLabelText(messages.cardTitle);
+    const completedRow = screen
+      .getByRole("heading", { name: messages.rowTitle("completed") })
+      .closest("section");
+    if (!completedRow) {
+      throw new Error("expected completed row");
+    }
+    expect(screen.getByText(messages.cardTitle)).toBeTruthy();
+    expect(
+      within(terminalWork).getByRole("heading", {
+        name: messages.rowTitle("completed"),
+      }),
+    ).toBeTruthy();
+    expect(
+      within(terminalWork).getByRole("img", {
+        name: messages.iconLabel("completed"),
+      }),
+    ).toBeTruthy();
+    expect(
+      within(completedRow).getByRole("button", {
+        name: messages.disclosureLabel(true),
+      }),
+    ).toBeTruthy();
+    expect(
+      within(terminalWork).getByText(
+        messages.sessionSummaryFallback("completed"),
+      ),
+    ).toBeTruthy();
+    expect(
+      within(terminalWork).getByText(messages.emptyState("failed")),
+    ).toBeTruthy();
+  });
+
+  it("renders translated terminal-work copy for non-default locales", () => {
+    const messages = getTerminalWorkMessages("ja");
+
+    render(
+      <CompletedFailedWorkstationCard
+        completedItems={[
+          { label: "Done Story", traceWorkID: "work-done-story" },
+        ]}
+        failedItems={[]}
+        locale="ja"
+        onSelectItem={vi.fn()}
+      />,
+    );
+
+    const terminalWork = screen.getByLabelText(messages.cardTitle);
+    expect(screen.getByText(messages.cardTitle)).toBeTruthy();
+    expect(
+      within(terminalWork).getByRole("heading", {
+        name: messages.rowTitle("completed"),
+      }),
+    ).toBeTruthy();
+    const completedRow = screen
+      .getByRole("heading", { name: messages.rowTitle("completed") })
+      .closest("section");
+    if (!completedRow) {
+      throw new Error("expected completed row");
+    }
+    expect(
+      within(terminalWork).getByRole("img", {
+        name: messages.iconLabel("completed"),
+      }),
+    ).toBeTruthy();
+    expect(
+      within(terminalWork).getByText(
+        messages.sessionSummaryFallback("completed"),
+      ),
+    ).toBeTruthy();
+    expect(
+      within(terminalWork).getByText(messages.emptyState("failed")),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(completedRow).getByRole("button", {
+        name: messages.disclosureLabel(true),
+      }),
+    );
+
+    expect(
+      within(completedRow)
+        .getByRole("button", {
+          name: messages.disclosureLabel(false),
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
 });
