@@ -2,19 +2,14 @@
 
 ## world state
 
-- as of `2026-05-06T20:04:20.2572074-07:00`, local `HEAD` on `main` points to
-  `22e20d8` (`Merge pull request #136 from portpowered/windows-release`) and is
+- as of `2026-05-07T02:06:20.9186342-07:00`, local `HEAD` on `main` points to
+  `bf2ea7e` (`Merge pull request #138 from portpowered/branchling`) and is
   current with `origin/main`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
-- the tracked worktree is not clean, but the visible tracked edits are outside
-  the canonical meta surfaces and should be treated as user-owned local state:
-  - `examples/idea-plan-code-review/scripts/setup-workspace.py`
-  - `examples/thought-idea--plan-work-review/scripts/setup-workspace.py`
-  - `factory/scripts/setup-workspace.py`
-  - `tests/adhoc/factory/scripts/setup-workspace.py`
-  - `tests/functional_test/testdata/idea_plan_execute_review_with_limits/scripts/setup-workspace.py`
-- canonical `factory/inputs/**` remains tracked-sentinel-only and there is no
-  checked-in cleanup request currently queued under `factory/inputs/**`
+- before this refresh, the only visible tracked local edit was the
+  user-maintained canonical ask file `factory/logs/meta/asks.md`
+- canonical `factory/inputs/**` remains tracked-sentinel-only in git, while
+  live maintainer submissions remain ignored operating state
 
 ## workflow truth
 
@@ -40,9 +35,16 @@
   - `factory/inputs/thoughts/default/.gitkeep`
 - `.gitignore` still keeps live workflow submissions under `factory/inputs/**`
   out of normal commits except for those sentinel paths
-- the visible canonical idea inbox is empty on this checkout aside from
-  `.gitkeep`, so the next dispatch must create fresh ignored operating state
-  rather than reconcile stale local residue
+- the previously queued ignored idea
+  `factory/inputs/idea/default/cover-gocoveragecheck-helper-runtime-and-parser-branches.md`
+  is stale on live `main` because merged PR `#137` landed that exact lane on
+  `2026-05-07T03:23:26Z`
+- after pruning that stale residue, the maintainer-owned ignored queue should
+  carry three fresh non-overlapping idea files so the autonomous lane matches
+  the standing ask to keep at least three tasks running:
+  - `audit-repository-against-2026-website-and-backend-checklists.md`
+  - `localize-and-accessibility-harden-import-preview-dialog.md`
+  - `retire-deadcodecheck-gotypesalias-compat-shim.md`
 
 ## customer-ask truth
 
@@ -54,15 +56,21 @@
   - keep backend and website testing moving toward declared high-coverage goals
   - keep simplifying backend and website ownership where duplicate or stale
     logic remains
+  - keep at least three non-overlapping tasks running at a time
 - the external checklist links in `factory/logs/meta/asks.md` still point at
-  the live `portpowered/checklists` repository, and both documents are current
-  `2026` checklist revisions:
+  the live `portpowered/checklists` repository, and the explicit linked docs
+  remain the current `2026` checklist revisions:
   - `website-development-checklist.md`
   - `backend-development-checklist.md`
+  - `asks.md`
 - there is still no checked-in repo-wide review record mapping this repository
   against those external checklist documents; the only checked-in alignment
   checklist found this turn is the narrower import/export lane record at
   `docs/internal/development/import-export-standards-alignment-checklist.md`
+- the UI still lacks shared localization infrastructure:
+  - `ui/src/i18n` does not exist on live `main`
+  - `ui/package.json` does not currently carry an automated accessibility test
+    dependency such as `axe-core` or a wrapper matcher
 
 ## replay truth
 
@@ -77,56 +85,52 @@
 ## recent repo movement
 
 - recent merged PRs on `main` now include:
-  - `#136` `Windows release`, merged on `2026-05-07T01:38:06Z`
+  - `#138` `Branchling`, merged on `2026-05-07T08:23:18Z`
+  - `#137` `cover-gocoveragecheck-helper-runtime-and-parser-branches`, merged
+    on `2026-05-07T03:23:26Z`
+  - `#136` `Windows release`, merged on `2026-05-07T00:19:46Z`
   - `#135` `cover-functionallane-command-owner-error-and-entrypoint-branches`,
-    merged on `2026-05-06T23:28:08Z`
+    merged on `2026-05-06T23:18:17Z`
   - `#134` `cover-gocoveragecheck-command-owner-threshold-and-entrypoint-branches`,
     merged on `2026-05-06T22:18:52Z`
-  - `#133` `cover-releasetagcheck-git-tag-wrapper-branches`, merged on
-    `2026-05-06T21:11:35Z`
-  - `#132` `cover-deadcodecheck-command-owner-branches`, merged on
-    `2026-05-06T20:17:42Z`
 - `gh pr list --state open` still reports only the two older meta-refresh PRs:
   - `#123` `docs: refresh meta world state`
   - `#120` `docs: refresh meta world state`
-- those open PRs do not own the next code cleanup lane
+- those open PRs do not own the next code cleanup or checklist-alignment lane
 
-## next cleanup candidate
+## next cleanup candidates
 
-- merged PR `#135` closes the previously recorded `cmd/functionallane`
-  command-owner seam on live `main`; `go test -cover ./cmd/functionallane` now
-  reports `100.0%` statement coverage
-- the next non-overlapping maintainer-owned quality seam is back in
-  `cmd/gocoveragecheck`:
-  - `make test-coverage-go` still routes through the repo-owned
-    `cmd/gocoveragecheck` entrypoint
-  - package coverage is still only `78.5%` on live `main`, materially below
-    adjacent maintainer-gate commands
-  - merged PR `#134` already covered the threshold and direct entrypoint
-    branches, but `run()`, `resolveCoverageLane()`, `listGoPackages()`,
-    `parseTotalCoverage()`, `evaluateCoverage()`, `parseCoverageProfile()`, and
-    `coverageImportPath()` still have uncovered helper and failure branches
-  - the remaining useful work is still narrow and package-local: add direct
-    tests for temp-profile lifecycle behavior, coverage-tool failure detail
-    selection, package-discovery and repo-root failure wrappers, and malformed
-    profile or path parsing cases without changing coverage policy, thresholds,
-    package selection, or CI wiring
+- repo-wide standards evidence remains the highest-priority open ask because
+  there is still no checked-in audit mapping this repository to the current
+  external backend and website checklists
+- the narrowest current UI standards lane is the import preview dialog:
+  - `ui/src/features/import/dashboard-import-preview-dialog.tsx` still owns a
+    concentrated set of hardcoded user-visible strings
+  - `ui/src/features/import/dashboard-import-preview-dialog.test.tsx` and
+    `.stories.tsx` already provide focused verification seams
+  - the repo still lacks `ui/src/i18n` and automated accessibility assertions
+    for that feature surface
+- the narrowest current backend simplification lane is in `cmd/deadcodecheck`:
+  - `runDeadcode()` still injects a `GODEBUG=gotypesalias=1` compatibility shim
+    through `deadcodeEnv()` and `ensureGoTypesAliasEnabled()`
+  - live manual command checks on the supported Go `1.24.x` toolchain succeed
+    both with and without that override, so the shim now appears to be
+    redundant legacy handling rather than a live policy requirement
 
 ## theory of mind
 
 - the authoritative world model comes from live `main`, the checked-in workflow
-  contract, the canonical ask file, and current PR state together
+  contract, the canonical ask file, current PR state, and current external
+  checklist docs together
 - `factory/inputs/**` must still be reasoned about in two layers:
   checked-in contract versus ignored operating residue
-- when a previously queued narrow coverage seam lands on `main`, refresh the
-  next seam from live coverage output before reusing the old theory; the
-  `functionallane` lane went from `82.0%` to `100.0%` within one refresh cycle
-- when the customer ask references external checklist repositories, re-check
-  the live linked documents before claiming conformance status; broad checklist
-  intent is not evidence
-- when no checked-in repo-wide checklist audit exists yet, treat checklist
-  conformance as still open and queue either a narrow audit task or a smaller
-  maintainer-owned enforcement seam instead of declaring the ask satisfied
-- when broad quality asks remain open, prefer the next narrow repo-owned gate
-  that improves reviewable evidence without overlapping unrelated user-owned
-  tracked edits
+- when a previously queued idea lands on `main`, prune the ignored residue and
+  refresh the next seam from live code and PR state before queuing anything
+  else; merged PR `#137` invalidated the previously recorded next seam within
+  hours
+- when the customer ask requires at least three tasks in flight, satisfy that
+  ask with three narrow non-overlapping idea files rather than one broad batch
+  unless dependency ordering is actually required
+- when checklist conformance is still undocumented, queue one audit lane plus
+  smaller implementation-ready follow-ups instead of claiming alignment from
+  standards intent alone
