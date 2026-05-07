@@ -7,8 +7,8 @@ import { AgentBentoCard } from "../../components/ui";
 import type { DashboardSelection } from "../current-selection";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import {
-  ReactFlowCurrentActivityCard,
   type CurrentActivitySelection,
+  ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
 
 interface WorkflowActivityBentoCardProps {

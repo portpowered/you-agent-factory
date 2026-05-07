@@ -60,8 +60,12 @@ export const Interactive = {
 
     await expect(legend).toBeVisible();
     await expect(collapseButton).toHaveAttribute("aria-expanded", "true");
-    await expect(legendScope.getByText(messages.edgeLabels.activeFlow)).toBeVisible();
-    await expect(legendScope.getByText(messages.edgeLabels.failurePath)).toBeVisible();
+    await expect(
+      legendScope.getByText(messages.edgeLabels.activeFlow),
+    ).toBeVisible();
+    await expect(
+      legendScope.getByText(messages.edgeLabels.failurePath),
+    ).toBeVisible();
     for (const [label, kind] of [
       [messages.iconLabels.queue, "queue"],
       [messages.iconLabels.processing, "processing"],
@@ -76,10 +80,9 @@ export const Interactive = {
       [messages.iconLabels["active-work"], "active-work"],
       [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {
-      await expect(legendScope.getByRole("img", { name: messages.iconLabel(label) })).toHaveAttribute(
-        "data-graph-semantic-icon",
-        kind,
-      );
+      await expect(
+        legendScope.getByRole("img", { name: messages.iconLabel(label) }),
+      ).toHaveAttribute("data-graph-semantic-icon", kind);
       await expect(legendScope.getByText(label)).toBeVisible();
     }
 
@@ -87,7 +90,9 @@ export const Interactive = {
 
     await expect(canvas.queryByLabelText(messages.title)).toBeNull();
     await expect(
-      canvas.getByRole("button", { name: messages.expandToggleLabel("graph legend") }),
+      canvas.getByRole("button", {
+        name: messages.expandToggleLabel("graph legend"),
+      }),
     ).toBeVisible();
   },
 };
@@ -141,9 +146,15 @@ export const Narrow = {
     await expect(legend).toBeVisible();
     expect(storyFrame).toBeTruthy();
     expect(legend.className).toContain("dashboard-body-sm");
-    expect(legendRect.left).toBeGreaterThanOrEqual((storyFrameRect?.left ?? 0) - 1);
-    expect(legendRect.right).toBeLessThanOrEqual((storyFrameRect?.right ?? 0) + 1);
-    await expect(canvas.getByText(messages.iconLabels.exhaustion)).toBeVisible();
+    expect(legendRect.left).toBeGreaterThanOrEqual(
+      (storyFrameRect?.left ?? 0) - 1,
+    );
+    expect(legendRect.right).toBeLessThanOrEqual(
+      (storyFrameRect?.right ?? 0) + 1,
+    );
+    await expect(
+      canvas.getByText(messages.iconLabels.exhaustion),
+    ).toBeVisible();
   },
 };
 

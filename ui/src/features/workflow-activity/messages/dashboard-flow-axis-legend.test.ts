@@ -17,7 +17,9 @@ describe("getDashboardFlowAxisLegendMessages", () => {
     ["ko", "그래프 범례"],
     ["ja", "グラフの凡例"],
   ] as const)("resolves %s legend copy", (locale, expectedTitle) => {
-    expect(getDashboardFlowAxisLegendMessages(locale).title).toBe(expectedTitle);
+    expect(getDashboardFlowAxisLegendMessages(locale).title).toBe(
+      expectedTitle,
+    );
   });
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
@@ -26,7 +28,9 @@ describe("getDashboardFlowAxisLegendMessages", () => {
     expect(getDashboardFlowAxisLegendMessages(undefined).title).toBe(
       defaultMessages.title,
     );
-    expect(getDashboardFlowAxisLegendMessages("fr").title).toBe(defaultMessages.title);
+    expect(getDashboardFlowAxisLegendMessages("fr").title).toBe(
+      defaultMessages.title,
+    );
   });
 
   it("keeps accessible label helpers and icon labels available through the resolved locale catalog", () => {

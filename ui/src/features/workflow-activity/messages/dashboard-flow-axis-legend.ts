@@ -1,8 +1,8 @@
-import type { GraphSemanticIconKind } from "../../flowchart/graph-semantic-icon";
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../i18n";
+import type { GraphSemanticIconKind } from "../../flowchart/graph-semantic-icon";
 
 export interface DashboardFlowAxisLegendMessages {
   collapseLabel: string;
@@ -128,7 +128,10 @@ const dashboardFlowAxisLegendMessagesByLocale = {
 export function getDashboardFlowAxisLegendMessages(
   locale?: string | null,
 ): DashboardFlowAxisLegendMessages {
-  return resolveLocalizedMessages(dashboardFlowAxisLegendMessagesByLocale, locale);
+  return resolveLocalizedMessages(
+    dashboardFlowAxisLegendMessagesByLocale,
+    locale,
+  );
 }
 
 export { dashboardFlowAxisLegendMessagesByLocale };
