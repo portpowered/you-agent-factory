@@ -63,7 +63,6 @@ func run(_ []string, stdout io.Writer, stderr io.Writer) int {
 
 func runDeadcode() (string, error) {
 	cmd := execCommand("go", "run", deadcodeTool, "-test", "./...")
-	cmd.Env = deadcodeEnv()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -75,40 +74,6 @@ func runDeadcode() (string, error) {
 		_, _ = os.Stderr.Write(stderr.Bytes())
 	}
 	return stdout.String(), nil
-}
-
-func deadcodeEnv() []string {
-	env := os.Environ()
-	for i, entry := range env {
-		name, value, ok := strings.Cut(entry, "=")
-		if ok && name == "GODEBUG" {
-			env[i] = "GODEBUG=" + ensureGoTypesAliasEnabled(value)
-			return env
-		}
-	}
-	return append(env, "GODEBUG=gotypesalias=1")
-}
-
-func ensureGoTypesAliasEnabled(value string) string {
-	parts := strings.Split(value, ",")
-	out := make([]string, 0, len(parts)+1)
-	found := false
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		name, _, ok := strings.Cut(part, "=")
-		if ok && name == "gotypesalias" {
-			out = append(out, "gotypesalias=1")
-			found = true
-			continue
-		}
-		out = append(out, part)
-	}
-	if !found {
-		out = append(out, "gotypesalias=1")
-	}
-	return strings.Join(out, ",")
 }
 
 func normalizeReport(report string) string {

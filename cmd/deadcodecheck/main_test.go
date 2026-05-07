@@ -60,25 +60,32 @@ func TestMainRoutesThroughCommandMain(t *testing.T) {
 	}
 }
 
-func TestEnsureGoTypesAliasEnabled(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "empty", in: "", want: "gotypesalias=1"},
-		{name: "preserves other flags", in: "gocachehash=1", want: "gocachehash=1,gotypesalias=1"},
-		{name: "replaces disabled flag", in: "gotypesalias=0", want: "gotypesalias=1"},
-		{name: "preserves flag order", in: "gocachehash=1,gotypesalias=0,inittrace=1", want: "gocachehash=1,gotypesalias=1,inittrace=1"},
-		{name: "leaves enabled flag", in: "gotypesalias=1", want: "gotypesalias=1"},
+func TestRunDeadcodeUsesExpectedCommandAndAmbientEnvironment(t *testing.T) {
+	restoreExecCommand(t)
+	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
+	t.Setenv("DEADCODECHECK_HELPER_STDOUT", "pkg/foo.go: Example\n")
+
+	var captured *exec.Cmd
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		captured = fakeDeadcodecheckCommand(name, args...)
+		return captured
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := ensureGoTypesAliasEnabled(tt.in); got != tt.want {
-				t.Fatalf("ensureGoTypesAliasEnabled(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
+	report, err := runDeadcode()
+	if err != nil {
+		t.Fatalf("runDeadcode() error = %v, want nil", err)
+	}
+	if report != "pkg/foo.go: Example\n" {
+		t.Fatalf("runDeadcode() report = %q, want helper stdout", report)
+	}
+	if captured == nil {
+		t.Fatal("runDeadcode() did not create a subprocess command")
+	}
+	if got := captured.Args; len(got) < 7 || got[len(got)-5] != "go" || got[len(got)-4] != "run" || got[len(got)-3] != deadcodeTool || got[len(got)-2] != "-test" || got[len(got)-1] != "./..." {
+		t.Fatalf("runDeadcode() args = %v, want go run %s -test ./...", captured.Args, deadcodeTool)
+	}
+	if captured.Env != nil {
+		t.Fatalf("runDeadcode() env override = %v, want ambient environment inheritance", captured.Env)
 	}
 }
 
