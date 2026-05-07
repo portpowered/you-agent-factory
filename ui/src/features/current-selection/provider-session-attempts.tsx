@@ -20,7 +20,6 @@ import {
   HISTORY_TOGGLE_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
-  RUNTIME_DETAIL_CODE_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
 } from "./detail-card-shared";
 import type {
@@ -29,10 +28,32 @@ import type {
   ProviderSessionLogAccessProps,
 } from "./detail-card-types";
 
+const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = {
+  currentDispatchLabel: "Current dispatch",
+  openNamedWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
+  openRequestDetailsAction: "Open request details",
+  providerSessionLogAction: "Codex session log",
+  providerSessionLogUnavailable: "Session log unavailable",
+  requestDetailsUnavailable: (dispatchId: string) =>
+    `Request details unavailable for dispatch ${dispatchId}.`,
+  requestSelectedAction: "Request selected",
+  selectWorkItemLabel: (workItemLabel: string) =>
+    `Select work item ${workItemLabel}`,
+  selectWorkstationRequestLabel: (dispatchId: string) =>
+    `Select workstation request ${dispatchId}`,
+  workDetailsUnavailable: (dispatchId: string) =>
+    `Work details unavailable for dispatch ${dispatchId}.`,
+  workSelectedAction: "Work selected",
+} satisfies NonNullable<ProviderSessionAttemptsProps["messages"]>;
+
 export function CollapsibleProviderSessionAttempts({
   attempts,
+  collapseActionLabel = "Collapse",
   currentDispatchID,
   emptyMessage,
+  expandActionLabel = "Expand",
+  historyItemCountLabel,
+  messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
   onSelectWorkID,
   onSelectWorkstationRequest,
   renderHeading,
@@ -45,7 +66,9 @@ export function CollapsibleProviderSessionAttempts({
 }: CollapsibleProviderSessionAttemptsProps) {
   const [expanded, setExpanded] = useState(false);
   const historyID = `workstation-run-history-${resetKey}`;
-  const itemCountLabel = `${attempts.length} ${attempts.length === 1 ? "run" : "runs"}`;
+  const itemCountLabel = historyItemCountLabel
+    ? historyItemCountLabel(attempts.length)
+    : `${attempts.length} ${attempts.length === 1 ? "run" : "runs"}`;
 
   useEffect(() => {
     setExpanded(false);
@@ -69,7 +92,7 @@ export function CollapsibleProviderSessionAttempts({
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
-          {expanded ? "Collapse" : "Expand"}
+          {expanded ? collapseActionLabel : expandActionLabel}
         </button>
       </div>
       {expanded ? (
@@ -78,6 +101,7 @@ export function CollapsibleProviderSessionAttempts({
             attempts={attempts}
             currentDispatchID={currentDispatchID}
             emptyMessage={emptyMessage}
+            messages={messages}
             onSelectWorkID={onSelectWorkID}
             onSelectWorkstationRequest={onSelectWorkstationRequest}
             renderHeading={renderHeading}
@@ -96,6 +120,7 @@ export function ProviderSessionAttempts({
   attempts,
   currentDispatchID,
   emptyMessage,
+  messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
   onSelectWorkID,
   onSelectWorkstationRequest,
   renderHeading,
@@ -112,6 +137,7 @@ export function ProviderSessionAttempts({
         attempts={attempts}
         currentDispatchID={currentDispatchID}
         emptyMessage={emptyMessage}
+        messages={messages}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
         renderHeading={renderHeading}
@@ -128,6 +154,7 @@ function ProviderSessionAttemptList({
   attempts,
   currentDispatchID,
   emptyMessage,
+  messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
   onSelectWorkID,
   onSelectWorkstationRequest,
   renderHeading,
@@ -172,7 +199,7 @@ function ProviderSessionAttemptList({
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
-                    Current dispatch
+                    {messages.currentDispatchLabel}
                   </span>
                 ) : null}
               </div>
@@ -183,6 +210,7 @@ function ProviderSessionAttemptList({
               ) : null}
             </div>
             <ProviderSessionLogAccess
+              messages={messages}
               session={attempt.provider_session}
               startedAt={attempt.diagnostics?.provider?.request_metadata?.request_time}
             />
@@ -194,39 +222,47 @@ function ProviderSessionAttemptList({
 
                     return (
                       <button
-                        aria-label={`Select work item ${workItem.display_name || workItem.work_id}`}
+                        aria-label={messages.selectWorkItemLabel(
+                          workItem.display_name || workItem.work_id,
+                        )}
                         aria-pressed={selected}
                         className={WORK_SELECTION_BUTTON_CLASS}
                         key={`${attempt.dispatch_id}-${workItem.work_id}`}
                         onClick={() => onSelectWorkID(workItem.work_id)}
                         type="button"
                       >
-                        {selected ? "Work selected" : `Open ${workItem.display_name || workItem.work_id}`}
+                        {selected
+                          ? messages.workSelectedAction
+                          : messages.openNamedWorkItemAction(
+                              workItem.display_name || workItem.work_id,
+                            )}
                       </button>
                     );
                   })
                 ) : null
               ) : (
                 <p className={REQUEST_SELECTION_STATUS_CLASS}>
-                  Work details unavailable for dispatch{" "}
-                  <code className={RUNTIME_DETAIL_CODE_CLASS}>{attempt.dispatch_id}</code>.
+                  {messages.workDetailsUnavailable(attempt.dispatch_id)}
                 </p>
               )}
               {onSelectWorkstationRequest ? (
                 request ? (
                   <button
-                    aria-label={`Select workstation request ${request.dispatch_id}`}
+                    aria-label={messages.selectWorkstationRequestLabel(
+                      request.dispatch_id,
+                    )}
                     aria-pressed={requestSelected}
                     className={WORK_SELECTION_BUTTON_CLASS}
                     onClick={() => onSelectWorkstationRequest(request)}
                     type="button"
                   >
-                    {requestSelected ? "Request selected" : "Open request details"}
+                    {requestSelected
+                      ? messages.requestSelectedAction
+                      : messages.openRequestDetailsAction}
                   </button>
                 ) : (
                   <p className={REQUEST_SELECTION_STATUS_CLASS}>
-                    Request details unavailable for dispatch{" "}
-                    <code className={RUNTIME_DETAIL_CODE_CLASS}>{attempt.dispatch_id}</code>.
+                    {messages.requestDetailsUnavailable(attempt.dispatch_id)}
                   </p>
                 )
               ) : null}
@@ -238,7 +274,11 @@ function ProviderSessionAttemptList({
   );
 }
 
-function ProviderSessionLogAccess({ session, startedAt }: ProviderSessionLogAccessProps) {
+function ProviderSessionLogAccess({
+  messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
+  session,
+  startedAt,
+}: ProviderSessionLogAccessProps) {
   const logTarget = getProviderSessionLogTarget(session, startedAt);
   const metadata = formatProviderSession(session);
 
@@ -253,11 +293,11 @@ function ProviderSessionLogAccess({ session, startedAt }: ProviderSessionLogAcce
           href={logTarget.href}
           title={logTarget.display}
         >
-          Codex session log
+          {messages.providerSessionLogAction}
         </a>
       ) : (
         <span className={cx("font-bold text-af-ink/78", DASHBOARD_BODY_TEXT_CLASS)}>
-          Session log unavailable
+          {messages.providerSessionLogUnavailable}
         </span>
       )}
       <code
