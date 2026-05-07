@@ -384,6 +384,135 @@ func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 	}
 }
 
+func TestParseTotalCoverageFailsWhenTotalLineMissing(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := parseTotalCoverage(modulePath + "/pkg/config/config.go:1.1,2.1\t75.0%\n")
+	if err == nil {
+		t.Fatal("parseTotalCoverage() unexpectedly succeeded")
+	}
+	if err.Error() != "parse go coverage total: missing total statements line" {
+		t.Fatalf("parseTotalCoverage() error = %q, want missing total line error", err.Error())
+	}
+}
+
+func TestParseTotalCoverageSynthesizesNormalizedTotalLine(t *testing.T) {
+	t.Parallel()
+
+	report := modulePath + "/pkg/config/config.go:1.1,2.1\t75.0%\nsummary total: (statements) 82.5%\n"
+	actual, totalLine, err := parseTotalCoverage(report)
+	if err != nil {
+		t.Fatalf("parseTotalCoverage() error = %v", err)
+	}
+
+	if actual != 82.5 {
+		t.Fatalf("actual coverage = %v, want 82.5", actual)
+	}
+	if totalLine != "total: (statements) 82.5%" {
+		t.Fatalf("total line = %q, want normalized fallback line", totalLine)
+	}
+}
+
+func TestParseCoverageProfileRejectsMalformedInputs(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	cases := []struct {
+		name        string
+		profileData string
+		wantErr     string
+	}{
+		{
+			name:        "missing mode header",
+			profileData: "pkg/config/config.go:1.1,2.1 2 1\n",
+			wantErr:     "parse go coverage profile: missing mode header",
+		},
+		{
+			name:        "malformed line shape",
+			profileData: "mode: count\npkg/config/config.go:1.1,2.1 2\n",
+			wantErr:     "parse go coverage profile: malformed line 2",
+		},
+		{
+			name:        "malformed file range",
+			profileData: "mode: count\npkg/config/config.go 2 1\n",
+			wantErr:     "parse go coverage profile: malformed file range on line 2",
+		},
+		{
+			name:        "invalid statement count",
+			profileData: "mode: count\npkg/config/config.go:1.1,2.1 nope 1\n",
+			wantErr:     "parse go coverage profile statements on line 2: strconv.Atoi: parsing \"nope\": invalid syntax",
+		},
+		{
+			name:        "invalid execution count",
+			profileData: "mode: count\npkg/config/config.go:1.1,2.1 2 nope\n",
+			wantErr:     "parse go coverage profile execution count on line 2: strconv.Atoi: parsing \"nope\": invalid syntax",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := parseCoverageProfile([]byte(tc.profileData), repoRoot)
+			if err == nil {
+				t.Fatal("parseCoverageProfile() unexpectedly succeeded")
+			}
+			if err.Error() != tc.wantErr {
+				t.Fatalf("parseCoverageProfile() error = %q, want %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestCoverageImportPathRejectsMalformedPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	outsidePath := filepath.Join(repoRoot, "..", "outside", "pkg", "config.go")
+	cases := []struct {
+		name     string
+		filePath string
+		wantErr  string
+	}{
+		{
+			name:     "empty path",
+			filePath: " \t ",
+			wantErr:  "empty file path",
+		},
+		{
+			name:     "repository escape",
+			filePath: outsidePath,
+			wantErr:  fmt.Sprintf("profile path %q escapes repository root", outsidePath),
+		},
+		{
+			name:     "module qualified without package directory",
+			filePath: modulePath,
+			wantErr:  fmt.Sprintf("profile path %q does not include a package directory", modulePath),
+		},
+		{
+			name:     "relative path without package directory",
+			filePath: "config.go",
+			wantErr:  "profile path \"config.go\" does not include a package directory",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := coverageImportPath(tc.filePath, repoRoot)
+			if err == nil {
+				t.Fatal("coverageImportPath() unexpectedly succeeded")
+			}
+			if err.Error() != tc.wantErr {
+				t.Fatalf("coverageImportPath() error = %q, want %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestFormatZeroCoverageFailure(t *testing.T) {
 	t.Parallel()
 
@@ -480,6 +609,176 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	execCommand = fakeGoCoverageCommandWithTempProfileReport
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	result, err := run(config{
+		min: 80,
+		coverpkg: strings.Join([]string{
+			modulePath + "/pkg/config",
+			modulePath + "/pkg/service",
+		}, ","),
+		packages: "./pkg/config",
+	})
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	if result.actual != 82.5 {
+		t.Fatalf("actual coverage = %v, want 82.5", result.actual)
+	}
+	if len(result.zeroCoveragePackages) != 0 {
+		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("run() stderr = %q, want empty stderr", stderr.String())
+	}
+
+	profilePath := parseTempProfilePath(t, stdout.String())
+	if _, err := os.Stat(profilePath); !os.IsNotExist(err) {
+		t.Fatalf("temp profile %q still exists after run(), stat err = %v", profilePath, err)
+	}
+	if !strings.Contains(stdout.String(), "total: (statements) 82.5%") {
+		t.Fatalf("run() stdout = %q, want total coverage line", stdout.String())
+	}
+}
+
+func TestRunWrapsCoverSummaryFailureUsingStderrDetail(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoCoverageCommandCoverFailsWithStderr
+
+	_, err := run(config{
+		coverpkg: modulePath + "/pkg/config",
+		packages: "./pkg/config",
+		profile:  filepath.Join(t.TempDir(), "coverage.out"),
+	})
+	if err == nil {
+		t.Fatal("run() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "summarize go coverage: exit status 3") {
+		t.Fatalf("run() error = %q, want summarize wrapper", err.Error())
+	}
+	if !strings.Contains(err.Error(), "stderr detail from cover tool") {
+		t.Fatalf("run() error = %q, want stderr detail", err.Error())
+	}
+	if strings.Contains(err.Error(), "stdout detail from cover tool") {
+		t.Fatalf("run() error = %q, did not expect stdout fallback detail", err.Error())
+	}
+}
+
+func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoCoverageCommandCoverFailsWithStdout
+
+	_, err := run(config{
+		coverpkg: modulePath + "/pkg/config",
+		packages: "./pkg/config",
+		profile:  filepath.Join(t.TempDir(), "coverage.out"),
+	})
+	if err == nil {
+		t.Fatal("run() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "summarize go coverage: exit status 4") {
+		t.Fatalf("run() error = %q, want summarize wrapper", err.Error())
+	}
+	if !strings.Contains(err.Error(), "stdout detail from cover tool") {
+		t.Fatalf("run() error = %q, want stdout fallback detail", err.Error())
+	}
+	if strings.Contains(err.Error(), "stderr detail from cover tool") {
+		t.Fatalf("run() error = %q, did not expect stderr detail", err.Error())
+	}
+}
+
+func TestListGoPackagesWrapsListFailureUsingStderrDetail(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoListCommandFailsWithStderr
+
+	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	if err == nil {
+		t.Fatal("listGoPackages() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "list go packages: exit status 5") {
+		t.Fatalf("listGoPackages() error = %q, want wrapper", err.Error())
+	}
+	if !strings.Contains(err.Error(), "stderr detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, want stderr detail", err.Error())
+	}
+	if strings.Contains(err.Error(), "stdout detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, did not expect stdout fallback detail", err.Error())
+	}
+}
+
+func TestListGoPackagesWrapsListFailureUsingStdoutFallback(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoListCommandFailsWithStdout
+
+	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	if err == nil {
+		t.Fatal("listGoPackages() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "list go packages: exit status 6") {
+		t.Fatalf("listGoPackages() error = %q, want wrapper", err.Error())
+	}
+	if !strings.Contains(err.Error(), "stdout detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, want stdout fallback detail", err.Error())
+	}
+	if strings.Contains(err.Error(), "stderr detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, did not expect stderr detail", err.Error())
+	}
+}
+
+func TestResolveCoverageLaneFailsWhenDefaultCoverageDiscoveryMatchesNoBackendPackages(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoListCommandWithExcludedPackagesOnly
+
+	_, _, err := resolveCoverageLane(config{})
+	if err == nil {
+		t.Fatal("resolveCoverageLane() unexpectedly succeeded")
+	}
+
+	want := "resolve go coverage lane: no packages matched"
+	if err.Error() != want {
+		t.Fatalf("resolveCoverageLane() error = %q, want %q", err.Error(), want)
 	}
 }
 
@@ -928,6 +1227,160 @@ func TestGoCoverageCheckFakeGoProcessWithCoverpkgOKSummary(t *testing.T) {
 	}
 }
 
+func TestGoCoverageCheckFakeGoProcessWithTempProfileReport(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) == 0 || args[0] != "go" {
+		return
+	}
+
+	switch {
+	case len(args) >= 2 && args[1] == "test":
+		profilePath := ""
+		for _, arg := range args[2:] {
+			if strings.HasPrefix(arg, "-coverprofile=") {
+				profilePath = strings.TrimPrefix(arg, "-coverprofile=")
+				break
+			}
+		}
+		if profilePath == "" {
+			fmt.Fprint(os.Stderr, "missing coverprofile argument")
+			os.Exit(2)
+		}
+		profile := strings.Join([]string{
+			"mode: count",
+			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+			"",
+		}, "\n")
+		if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "write fake profile: %v", err)
+			os.Exit(2)
+		}
+		fmt.Fprintf(os.Stdout, "TEMP_PROFILE=%s\n", profilePath)
+		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		os.Exit(0)
+	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/config/config.go:1.1,2.1\t75.0%\n"+
+				modulePath+"/pkg/service/factory.go:1.1,2.1\t100.0%\n"+
+				"total: (statements) 82.5%\n",
+		)
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
+		os.Exit(2)
+	}
+}
+
+func TestGoCoverageCheckFakeGoProcessCoverFailsWithStderr(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) == 0 || args[0] != "go" {
+		return
+	}
+
+	switch {
+	case len(args) >= 2 && args[1] == "test":
+		profilePath := ""
+		for _, arg := range args[2:] {
+			if strings.HasPrefix(arg, "-coverprofile=") {
+				profilePath = strings.TrimPrefix(arg, "-coverprofile=")
+				break
+			}
+		}
+		if profilePath == "" {
+			fmt.Fprint(os.Stderr, "missing coverprofile argument")
+			os.Exit(2)
+		}
+		profile := strings.Join([]string{
+			"mode: count",
+			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+			"",
+		}, "\n")
+		if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "write fake profile: %v", err)
+			os.Exit(2)
+		}
+		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		os.Exit(0)
+	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
+		fmt.Fprint(os.Stderr, "stderr detail from cover tool")
+		os.Exit(3)
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
+		os.Exit(2)
+	}
+}
+
+func TestGoCoverageCheckFakeGoProcessCoverFailsWithStdout(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) == 0 || args[0] != "go" {
+		return
+	}
+
+	switch {
+	case len(args) >= 2 && args[1] == "test":
+		profilePath := ""
+		for _, arg := range args[2:] {
+			if strings.HasPrefix(arg, "-coverprofile=") {
+				profilePath = strings.TrimPrefix(arg, "-coverprofile=")
+				break
+			}
+		}
+		if profilePath == "" {
+			fmt.Fprint(os.Stderr, "missing coverprofile argument")
+			os.Exit(2)
+		}
+		profile := strings.Join([]string{
+			"mode: count",
+			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+			"",
+		}, "\n")
+		if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "write fake profile: %v", err)
+			os.Exit(2)
+		}
+		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		os.Exit(0)
+	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
+		fmt.Fprint(os.Stdout, "stdout detail from cover tool")
+		os.Exit(4)
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected fake go args: %v", args)
+		os.Exit(2)
+	}
+}
+
+func TestGoListCommandFailsWithStderr(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	fmt.Fprint(os.Stderr, "stderr detail from go list")
+	os.Exit(5)
+}
+
+func TestGoListCommandFailsWithStdout(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	fmt.Fprint(os.Stdout, "stdout detail from go list")
+	os.Exit(6)
+}
+
+func TestGoListCommandWithExcludedPackagesOnly(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/generatedclient")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures")
+	os.Exit(0)
+}
+
 func helperCommandArgs(argv []string) ([]string, bool) {
 	for index, arg := range argv {
 		if arg == "--" {
@@ -935,4 +1388,76 @@ func helperCommandArgs(argv []string) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+func parseTempProfilePath(t *testing.T, output string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, "TEMP_PROFILE=") {
+			return strings.TrimPrefix(line, "TEMP_PROFILE=")
+		}
+	}
+	t.Fatalf("TEMP_PROFILE marker missing from output %q", output)
+	return ""
+}
+
+func fakeGoCoverageCommandWithTempProfileReport(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcessWithTempProfileReport", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoCoverageCommandCoverFailsWithStderr(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcessCoverFailsWithStderr", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoCoverageCommandCoverFailsWithStdout(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcessCoverFailsWithStdout", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandFailsWithStderr(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandFailsWithStderr", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandFailsWithStdout(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandFailsWithStdout", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandWithExcludedPackagesOnly(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandWithExcludedPackagesOnly", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
 }

@@ -456,6 +456,9 @@ func coverageImportPath(filePath string, repoRoot string) (string, error) {
 	if normalizedPath == "" {
 		return "", errors.New("empty file path")
 	}
+	if normalizedPath == modulePath {
+		return "", fmt.Errorf("profile path %q does not include a package directory", filePath)
+	}
 
 	switch {
 	case strings.HasPrefix(normalizedPath, modulePath+"/"):
