@@ -186,6 +186,57 @@ func TestRunDeadcodeFailurePreservesContextAndToolStderr(t *testing.T) {
 	}
 }
 
+func TestRunSuccessfulDeadcodePassesThroughToolStderr(t *testing.T) {
+	restoreExecCommand(t)
+	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
+	t.Setenv("DEADCODECHECK_HELPER_STDOUT", "pkg/foo.go: Example\n")
+	t.Setenv("DEADCODECHECK_HELPER_STDERR", "fake deadcode stderr\n")
+	execCommand = fakeDeadcodecheckCommand
+
+	tempDir := t.TempDir()
+	writeDeadcodeBaseline(t, tempDir, "pkg/foo.go: Example\n")
+	chdirForTest(t, tempDir)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	readStderr, writeStderr, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	originalStderr := os.Stderr
+	os.Stderr = writeStderr
+	defer func() {
+		os.Stderr = originalStderr
+	}()
+
+	exitCode := run(nil, stdout, stderr)
+
+	if err := writeStderr.Close(); err != nil {
+		t.Fatalf("close stderr writer: %v", err)
+	}
+	passthroughStderr, err := io.ReadAll(readStderr)
+	if err != nil {
+		t.Fatalf("read passthrough stderr: %v", err)
+	}
+	if err := readStderr.Close(); err != nil {
+		t.Fatalf("close stderr reader: %v", err)
+	}
+
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+	if got := stdout.String(); got != "[agent-factory:deadcode] baseline matches\n" {
+		t.Fatalf("run() stdout = %q, want baseline match message", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty command stderr on successful passthrough", got)
+	}
+	if got := string(passthroughStderr); got != "fake deadcode stderr\n" {
+		t.Fatalf("passthrough stderr = %q, want helper stderr", got)
+	}
+}
+
 func TestRunFailsWhenCurrentOutputDirectorySetupFails(t *testing.T) {
 	restore := stubDeadcodecheckCommand(t, "pkg/foo.go: Example\n", nil)
 	defer restore()
@@ -211,6 +262,77 @@ func TestRunFailsWhenCurrentOutputDirectorySetupFails(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "create deadcode output directory:") {
 		t.Fatalf("run() stderr = %q, want output directory failure", got)
+	}
+}
+
+func TestRunFailsWhenCurrentReportWriteFails(t *testing.T) {
+	restore := stubDeadcodecheckCommand(t, "pkg\\foo.go: Example", nil)
+	defer restore()
+
+	tempDir := t.TempDir()
+	writeDeadcodeBaseline(t, tempDir, "pkg/foo.go: Example\n")
+	blockingPath := filepath.Join(tempDir, currentPath)
+	if err := os.MkdirAll(blockingPath, 0o755); err != nil {
+		t.Fatalf("create blocking current report directory: %v", err)
+	}
+	chdirForTest(t, tempDir)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := run(nil, stdout, stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("run() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); !strings.Contains(got, "write current deadcode report:") {
+		t.Fatalf("run() stderr = %q, want current report write failure", got)
+	}
+
+	currentReportInfo, err := os.Stat(blockingPath)
+	if err != nil {
+		t.Fatalf("stat blocking current report path: %v", err)
+	}
+	if !currentReportInfo.IsDir() {
+		t.Fatalf("current report path mode = %v, want directory to preserve write failure", currentReportInfo.Mode())
+	}
+}
+
+func TestRunFailsWhenBaselineReadFails(t *testing.T) {
+	restore := stubDeadcodecheckCommand(t, "pkg\\foo.go: Example", nil)
+	defer restore()
+
+	tempDir := t.TempDir()
+	baselineDir := filepath.Join(tempDir, baselinePath)
+	if err := os.MkdirAll(baselineDir, 0o755); err != nil {
+		t.Fatalf("create blocking baseline directory: %v", err)
+	}
+	chdirForTest(t, tempDir)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := run(nil, stdout, stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("run() exit code = %d, want 1", exitCode)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); !strings.Contains(got, "read deadcode baseline:") {
+		t.Fatalf("run() stderr = %q, want baseline read failure", got)
+	}
+
+	currentReport, err := os.ReadFile(filepath.Join(tempDir, currentPath))
+	if err != nil {
+		t.Fatalf("read current deadcode report: %v", err)
+	}
+	if got := string(currentReport); got != "pkg/foo.go: Example\n" {
+		t.Fatalf("current deadcode report = %q, want normalized report before baseline read failure", got)
 	}
 }
 
