@@ -1,11 +1,14 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import type { FactoryValue } from "../../api/named-factory";
+import { getExportDialogMessages } from "../export/messages/export-dialog";
 import { DashboardExportDialog } from "./dashboard-export-dialog";
 
 const closeExportDialog = vi.fn();
 let isExportDialogOpen = false;
-let currentFactoryExportState: ReturnType<typeof import("../export").useCurrentFactoryExport>;
+let currentFactoryExportState: ReturnType<
+  typeof import("../export").useCurrentFactoryExport
+>;
 
 vi.mock("../export/state/exportDialogStore", () => ({
   useExportDialogStore: (
@@ -52,19 +55,30 @@ describe("DashboardExportDialog", () => {
   it("does not render the export dialog host while the dashboard store is closed", () => {
     render(<DashboardExportDialog />);
 
-    expect(screen.queryByRole("dialog", { name: "Export factory" })).toBeNull();
+    expect(
+      screen.queryByRole("dialog", {
+        name: getExportDialogMessages("en").title,
+      }),
+    ).toBeNull();
   });
 
   it("renders the dashboard-owned export dialog and closes it through shared dialog controls", async () => {
     isExportDialogOpen = true;
+    const messages = getExportDialogMessages("en");
 
     render(<DashboardExportDialog />);
 
-    const dialog = await screen.findByRole("dialog", { name: "Export factory" });
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: "Export PNG" })).toBeTruthy();
+    const dialog = await screen.findByRole("dialog", { name: messages.title });
+    expect(
+      within(dialog).getByRole("button", { name: messages.cancelAction }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: messages.exportAction }),
+    ).toBeTruthy();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: messages.closeLabel }),
+    );
 
     expect(closeExportDialog).toHaveBeenCalledTimes(1);
   });
@@ -79,13 +93,18 @@ describe("DashboardExportDialog", () => {
       },
       isPreparing: true,
     };
+    const messages = getExportDialogMessages("en");
 
     render(<DashboardExportDialog />);
 
-    const dialog = await screen.findByRole("dialog", { name: "Export factory" });
-    expect(within(dialog).getByText("Loading the current authored factory definition.")).toBeTruthy();
+    const dialog = await screen.findByRole("dialog", { name: messages.title });
+    expect(within(dialog).getByText(messages.loadingStatus)).toBeTruthy();
     expect(
-      (within(dialog).getByRole("button", { name: "Export PNG" }) as HTMLButtonElement).disabled,
+      (
+        within(dialog).getByRole("button", {
+          name: messages.exportAction,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
   });
 
@@ -94,21 +113,25 @@ describe("DashboardExportDialog", () => {
     currentFactoryExportState = {
       currentFactoryExport: {
         code: "FACTORY_DEFINITION_UNAVAILABLE",
-        message: "The current factory definition could not be loaded from the current-factory API.",
+        message:
+          "The current factory definition could not be loaded from the current-factory API.",
         ok: false,
       },
       isPreparing: false,
     };
+    const messages = getExportDialogMessages("en");
 
     render(<DashboardExportDialog />);
 
-    const dialog = await screen.findByRole("dialog", { name: "Export factory" });
+    const dialog = await screen.findByRole("dialog", { name: messages.title });
     expect(
       within(dialog).getByText(
         "The current factory definition could not be loaded from the current-factory API.",
       ),
     ).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: messages.cancelAction }),
+    ).toBeTruthy();
   });
 
   it("falls back to the Infinite You filename slug when the current factory is unavailable", async () => {
@@ -116,17 +139,42 @@ describe("DashboardExportDialog", () => {
     currentFactoryExportState = {
       currentFactoryExport: {
         code: "FACTORY_DEFINITION_UNAVAILABLE",
-        message: "The current factory definition could not be loaded from the current-factory API.",
+        message:
+          "The current factory definition could not be loaded from the current-factory API.",
         ok: false,
       },
       isPreparing: false,
     };
+    const messages = getExportDialogMessages("en");
 
     render(<DashboardExportDialog />);
 
-    const dialog = await screen.findByRole("dialog", { name: "Export factory" });
+    const dialog = await screen.findByRole("dialog", { name: messages.title });
     expect(
-      (within(dialog).getByRole("textbox", { name: "Factory name" }) as HTMLInputElement).value,
+      (
+        within(dialog).getByRole("textbox", {
+          name: messages.nameLabel,
+        }) as HTMLInputElement
+      ).value,
     ).toBe("infinite-you");
+  });
+
+  it("renders the localized export dialog surface when a locale is provided", async () => {
+    isExportDialogOpen = true;
+    const messages = getExportDialogMessages("ja");
+
+    render(<DashboardExportDialog locale="ja" />);
+
+    const dialog = await screen.findByRole("dialog", { name: messages.title });
+    expect(within(dialog).getByText(messages.description)).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: messages.cancelAction }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: messages.exportAction }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: messages.closeLabel }),
+    ).toBeTruthy();
   });
 });

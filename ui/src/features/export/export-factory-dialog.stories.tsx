@@ -1,6 +1,7 @@
 import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { ExportFactoryDialog } from "./export-factory-dialog";
+import { getExportDialogMessages } from "./messages/export-dialog";
 
 const factory = {
   name: "Factory Aurora",
@@ -21,20 +22,21 @@ export const Ready = {
     onClose: () => {},
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const messages = getExportDialogMessages("en");
     const canvas = within(canvasElement.ownerDocument.body);
-    const dialog = await canvas.findByRole("dialog", { name: "Export factory" });
+    const dialog = await canvas.findByRole("dialog", { name: messages.title });
     const scope = within(dialog);
-    const nameInput = scope.getByRole("textbox", { name: "Factory name" });
-    const imageInput = scope.getByLabelText("Cover image");
-    const cancelButton = scope.getByRole("button", { name: "Cancel" });
-    const exportButton = scope.getByRole("button", { name: "Export PNG" });
+    const nameInput = scope.getByRole("textbox", { name: messages.nameLabel });
+    const imageInput = scope.getByLabelText(messages.imageLabel);
+    const cancelButton = scope.getByRole("button", {
+      name: messages.cancelAction,
+    });
+    const exportButton = scope.getByRole("button", {
+      name: messages.exportAction,
+    });
 
     await expect(nameInput).toHaveValue("Factory Aurora");
-    await expect(
-      scope.getByText(
-        "Confirming export keeps the current dashboard state unchanged and downloads a PNG artifact with embedded Infinite You factory metadata.",
-      ),
-    ).toBeVisible();
+    await expect(scope.getByText(messages.hint)).toBeVisible();
     await expect(exportButton).toBeEnabled();
 
     nameInput.focus();
@@ -56,13 +58,18 @@ export const Validation = {
     onClose: () => {},
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const messages = getExportDialogMessages("en");
     const canvas = within(canvasElement.ownerDocument.body);
-    const dialog = await canvas.findByRole("dialog", { name: "Export factory" });
+    const dialog = await canvas.findByRole("dialog", { name: messages.title });
     const scope = within(dialog);
 
-    fireEvent.click(scope.getByRole("button", { name: "Export PNG" }));
-    await expect(scope.getByText("Enter a factory name before exporting.")).toBeVisible();
-    await expect(scope.getByText("Choose a cover image before exporting.")).toBeVisible();
+    fireEvent.click(scope.getByRole("button", { name: messages.exportAction }));
+    await expect(
+      scope.getByText(messages.nameRequiredValidation),
+    ).toBeVisible();
+    await expect(
+      scope.getByText(messages.imageRequiredValidation),
+    ).toBeVisible();
   },
 };
 
@@ -75,11 +82,43 @@ export const Preparing = {
     onClose: () => {},
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const messages = getExportDialogMessages("en");
     const canvas = within(canvasElement.ownerDocument.body);
-    const dialog = await canvas.findByRole("dialog", { name: "Export factory" });
+    const dialog = await canvas.findByRole("dialog", { name: messages.title });
     const scope = within(dialog);
 
-    await expect(scope.getByRole("button", { name: "Export PNG" })).toBeDisabled();
-    await expect(scope.getByText("Loading the current authored factory definition.")).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: messages.exportAction }),
+    ).toBeDisabled();
+    await expect(scope.getByText(messages.loadingStatus)).toBeVisible();
+  },
+};
+
+export const LocalizedJa = {
+  args: {
+    factory,
+    initialFactoryName: "Factory Aurora",
+    isOpen: true,
+    locale: "ja",
+    onClose: () => {},
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const messages = getExportDialogMessages("ja");
+    const canvas = within(canvasElement.ownerDocument.body);
+    const dialog = await canvas.findByRole("dialog", { name: messages.title });
+    const scope = within(dialog);
+
+    await expect(scope.getByText(messages.description)).toBeVisible();
+    await expect(scope.getByText(messages.hint)).toBeVisible();
+    await expect(
+      scope.getByRole("textbox", { name: messages.nameLabel }),
+    ).toHaveValue("Factory Aurora");
+    await expect(scope.getByLabelText(messages.imageLabel)).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: messages.cancelAction }),
+    ).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: messages.exportAction }),
+    ).toBeVisible();
   },
 };

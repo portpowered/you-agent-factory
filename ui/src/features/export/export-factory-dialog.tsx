@@ -51,6 +51,7 @@ export interface ExportFactoryDialogProps {
   initialFactoryName: string;
   isPreparing?: boolean;
   isOpen: boolean;
+  locale?: string;
   onClose: () => void;
   preparationFailure?: CurrentFactoryExportFailure | null;
 }
@@ -88,10 +89,11 @@ export function ExportFactoryDialog({
   initialFactoryName,
   isPreparing = false,
   isOpen,
+  locale,
   onClose,
   preparationFailure = null,
 }: ExportFactoryDialogProps) {
-  const messages = getExportDialogMessages();
+  const messages = getExportDialogMessages(locale);
   const validationIdBase = useId();
   const formState = useExportFactoryDialogState({
     factory,
@@ -477,11 +479,7 @@ function createHandleImageSelection({
 }
 
 function createHandleOpenChange(handleClose: () => void) {
-  return (open: boolean) => {
-    if (!open) {
-      handleClose();
-    }
-  };
+  return (open: boolean) => !open && handleClose();
 }
 
 function useResetExportFactoryDialogState({
