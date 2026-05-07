@@ -297,6 +297,48 @@ func TestResolveTemplateFields_Worktree(t *testing.T) {
 	}
 }
 
+func TestResolveTemplateFields_ResolvesExplicitRuntimeFieldsTogether(t *testing.T) {
+	tokens := []interfaces.Token{
+		{
+			ID: "tok-1",
+			Color: interfaces.TokenColor{
+				WorkID: "work-1",
+				Tags: map[string]string{
+					"branch":  "feature-xyz",
+					"project": "inventory-service",
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveTemplateFields(
+		`/workspace/{{ index (index .Inputs 0).Tags "branch" }}`,
+		map[string]string{
+			"PROJECT": `{{ index (index .Inputs 0).Tags "project" }}`,
+			"BRANCH":  `{{ index (index .Inputs 0).Tags "branch" }}`,
+		},
+		tokens,
+		nil,
+		`worktrees/{{ index (index .Inputs 0).Tags "branch" }}`,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolved.WorkingDirectory != "/workspace/feature-xyz" {
+		t.Fatalf("expected /workspace/feature-xyz, got %s", resolved.WorkingDirectory)
+	}
+	if resolved.Env["PROJECT"] != "inventory-service" {
+		t.Fatalf("expected PROJECT=inventory-service, got %s", resolved.Env["PROJECT"])
+	}
+	if resolved.Env["BRANCH"] != "feature-xyz" {
+		t.Fatalf("expected BRANCH=feature-xyz, got %s", resolved.Env["BRANCH"])
+	}
+	if resolved.Worktree != "worktrees/feature-xyz" {
+		t.Fatalf("expected worktrees/feature-xyz, got %s", resolved.Worktree)
+	}
+}
+
 func TestApplyResolvedFields_OverridesWorkingDirectory(t *testing.T) {
 	base := &factory_context.FactoryContext{
 		WorkDirectory: "/original/path",

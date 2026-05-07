@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 type wsMockExecutor struct {
@@ -157,6 +158,38 @@ func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFiel
 	remaining := mock.deadline.Sub(start)
 	if remaining < 30*time.Millisecond || remaining > 250*time.Millisecond {
 		t.Fatalf("deadline offset = %v, want workstation timeout range", remaining)
+	}
+}
+
+func TestWorkstationExecutor_ResolveWorkstationExecutionContext_AppliesResolvedRuntimeFields(t *testing.T) {
+	projectRoot := t.TempDir()
+	we := newTestWorkstationExecutor(canonicalWorkstationRuntimeConfig(projectRoot), &wsMockExecutor{})
+	workstationDef, ok := we.RuntimeConfig.Workstation("review")
+	if !ok {
+		t.Fatal("expected review workstation")
+	}
+
+	resolved, failed := we.resolveWorkstationExecutionContext(
+		canonicalWorkstationDispatch(),
+		workstationDef,
+		time.Now(),
+		logging.NoopLogger{},
+	)
+	if failed != nil {
+		t.Fatalf("unexpected failed result: %#v", failed)
+	}
+
+	if resolved.ProjectID != "agent-factory" {
+		t.Fatalf("project ID = %q", resolved.ProjectID)
+	}
+	if resolved.WorkingDirectory != filepath.Join(projectRoot, "repo", "feature-runtime") {
+		t.Fatalf("working directory = %q", resolved.WorkingDirectory)
+	}
+	if resolved.Worktree != "worktrees/feature-runtime" {
+		t.Fatalf("worktree = %q", resolved.Worktree)
+	}
+	if resolved.EnvVars["PROJECT"] != "agent-factory" || resolved.EnvVars["BRANCH"] != "feature-runtime" {
+		t.Fatalf("env vars = %#v", resolved.EnvVars)
 	}
 }
 
