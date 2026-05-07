@@ -1783,7 +1783,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 }
 
 func TestNewLoadedFactoryConfig_MergesRuntimeDefinitionsOntoCanonicalConfig(t *testing.T) {
-	runtimeDefs := newRuntimeDefinitionConfig(1, 1)
+	runtimeDefs := newRuntimeDefinitionLookupMaps(1, 1)
 	runtimeDefs.workers["executor"] = &interfaces.WorkerConfig{
 		Type:        interfaces.WorkerTypeScript,
 		Command:     "go",
@@ -1813,7 +1813,7 @@ func TestNewLoadedFactoryConfig_MergesRuntimeDefinitionsOntoCanonicalConfig(t *t
 }
 
 func TestNewLoadedFactoryConfig_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAreMissing(t *testing.T) {
-	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), newRuntimeDefinitionConfig(0, 0))
+	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), newRuntimeDefinitionLookupMaps(0, 0))
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
