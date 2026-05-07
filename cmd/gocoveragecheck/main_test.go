@@ -586,6 +586,73 @@ func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
 	}
 }
 
+func TestListGoPackagesWrapsListFailureUsingStderrDetail(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoListCommandFailsWithStderr
+
+	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	if err == nil {
+		t.Fatal("listGoPackages() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "list go packages: exit status 5") {
+		t.Fatalf("listGoPackages() error = %q, want wrapper", err.Error())
+	}
+	if !strings.Contains(err.Error(), "stderr detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, want stderr detail", err.Error())
+	}
+	if strings.Contains(err.Error(), "stdout detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, did not expect stdout fallback detail", err.Error())
+	}
+}
+
+func TestListGoPackagesWrapsListFailureUsingStdoutFallback(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoListCommandFailsWithStdout
+
+	_, err := listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage)
+	if err == nil {
+		t.Fatal("listGoPackages() unexpectedly succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "list go packages: exit status 6") {
+		t.Fatalf("listGoPackages() error = %q, want wrapper", err.Error())
+	}
+	if !strings.Contains(err.Error(), "stdout detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, want stdout fallback detail", err.Error())
+	}
+	if strings.Contains(err.Error(), "stderr detail from go list") {
+		t.Fatalf("listGoPackages() error = %q, did not expect stderr detail", err.Error())
+	}
+}
+
+func TestResolveCoverageLaneFailsWhenDefaultCoverageDiscoveryMatchesNoBackendPackages(t *testing.T) {
+	originalExecCommand := execCommand
+	defer func() {
+		execCommand = originalExecCommand
+	}()
+
+	execCommand = fakeGoListCommandWithExcludedPackagesOnly
+
+	_, _, err := resolveCoverageLane(config{})
+	if err == nil {
+		t.Fatal("resolveCoverageLane() unexpectedly succeeded")
+	}
+
+	want := "resolve go coverage lane: no packages matched"
+	if err.Error() != want {
+		t.Fatalf("resolveCoverageLane() error = %q, want %q", err.Error(), want)
+	}
+}
+
 func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
@@ -1154,6 +1221,37 @@ func TestGoCoverageCheckFakeGoProcessCoverFailsWithStdout(t *testing.T) {
 	}
 }
 
+func TestGoListCommandFailsWithStderr(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	fmt.Fprint(os.Stderr, "stderr detail from go list")
+	os.Exit(5)
+}
+
+func TestGoListCommandFailsWithStdout(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	fmt.Fprint(os.Stdout, "stdout detail from go list")
+	os.Exit(6)
+}
+
+func TestGoListCommandWithExcludedPackagesOnly(t *testing.T) {
+	args, ok := helperCommandArgs(os.Args)
+	if !ok || len(args) < 2 || args[0] != "go" || args[1] != "list" {
+		return
+	}
+
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/generatedclient")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures")
+	os.Exit(0)
+}
+
 func helperCommandArgs(argv []string) ([]string, bool) {
 	for index, arg := range argv {
 		if arg == "--" {
@@ -1202,5 +1300,35 @@ func fakeGoCoverageCommandCoverFailsWithStdout(name string, args ...string) *exe
 	}
 
 	cmdArgs := append([]string{"-test.run=TestGoCoverageCheckFakeGoProcessCoverFailsWithStdout", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandFailsWithStderr(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandFailsWithStderr", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandFailsWithStdout(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandFailsWithStdout", "--", name}, args...)
+	return exec.Command(testBinary, cmdArgs...)
+}
+
+func fakeGoListCommandWithExcludedPackagesOnly(name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(fmt.Sprintf("resolve test binary: %v", err))
+	}
+
+	cmdArgs := append([]string{"-test.run=TestGoListCommandWithExcludedPackagesOnly", "--", name}, args...)
 	return exec.Command(testBinary, cmdArgs...)
 }
