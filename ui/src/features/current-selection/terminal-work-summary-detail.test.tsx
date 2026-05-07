@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { DETAIL_CARD_NOW } from "./detail-card-test-helpers";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { TerminalWorkSummaryCard } from "./terminal-work-summary-detail";
@@ -67,6 +68,25 @@ describe("TerminalWorkSummaryCard", () => {
       screen.getByText(
         "Completed terminal work is retained in the session summary.",
       ),
+    ).toBeTruthy();
+  });
+
+  it("renders terminal summary copy through the current-selection locale provider for a supported non-default locale", () => {
+    render(
+      <CurrentSelectionLocaleProvider locale="ja">
+        <TerminalWorkSummaryCard label="失敗したストーリー" status="failed" />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "現在の選択" })).toBeTruthy();
+    expect(screen.getByText("失敗したストーリー")).toBeTruthy();
+    expect(screen.getByText("ステータス")).toBeTruthy();
+    expect(screen.getByText("失敗")).toBeTruthy();
+    expect(screen.getByText("失敗理由")).toBeTruthy();
+    expect(screen.getByText("失敗理由を利用できません")).toBeTruthy();
+    expect(screen.getByText("失敗メッセージ")).toBeTruthy();
+    expect(
+      screen.getByText("この失敗した作業項目では失敗の詳細を利用できません。"),
     ).toBeTruthy();
   });
 

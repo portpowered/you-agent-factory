@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { DETAIL_CARD_NOW, inferenceAttempt } from "./detail-card-test-helpers";
 import {
   ExecutionDetailsSection,
@@ -141,6 +142,53 @@ describe("ExecutionDetailsSection", () => {
     expect(
       within(section).queryByRole("region", { name: "Inference attempts" }),
     ).toBeNull();
+  });
+
+  it("renders execution-details copy through the current-selection locale provider for a supported non-default locale", () => {
+    const details: SelectedWorkItemExecutionDetails = {
+      dispatchID: undefined,
+      elapsedStartTimestamp: undefined,
+      inferenceAttempts: [],
+      traceIDs: ["trace-alpha"],
+      workstationName: undefined,
+      workID: "work-2",
+    };
+
+    render(
+      <CurrentSelectionLocaleProvider locale="ja">
+        <ExecutionDetailsSection
+          activeTraceID="trace-alpha"
+          details={details}
+          now={DETAIL_CARD_NOW}
+          traceTargetId="trace"
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const section = screen.getByRole("region", { name: "実行の詳細" });
+    expect(within(section).getByText("ディスパッチ ID")).toBeTruthy();
+    expect(within(section).getByText("ワークステーション")).toBeTruthy();
+    expect(
+      within(section).getByText(
+        "この選択中の実行ではワークステーションの詳細を利用できません。",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(section).getByText(
+        "この作業項目のディスパッチ、再試行、ワークステーション出力を確認するにはトレースを開いてください。",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(section).getByRole("link", { name: "trace-alpha（選択中）" }),
+    ).toBeTruthy();
+    expect(
+      within(section).getByRole("link", { name: "トレースを開く" }),
+    ).toBeTruthy();
+    expect(
+      within(section).getByText(
+        "この選択中の作業項目では推論イベントを利用できません。",
+      ),
+    ).toBeTruthy();
   });
 });
 
