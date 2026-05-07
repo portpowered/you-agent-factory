@@ -148,12 +148,16 @@
 - When a standards audit PR or a checklist follow-up PR is already open, treat
   its branch and changed-file surface as owned; replace only merged or stale
   backlog slots instead of queueing a second idea over the same files.
+- When the customer-linked external checklist repository omits one of the
+  requested documents, record that missing source as an evidence gap and avoid
+  inferring checklist content that is not actually retrievable on that date.
 
 ## Current Summary
 
-- As of `2026-05-07T03:02:15.3916934-07:00`, `HEAD` points to `41ae281` on
-  branch `main` and already contains merged PR `#140`
-  (`retire-deadcodecheck-gotypesalias-compat-shim`) from `origin/main`.
+- As of `2026-05-07T04:04:43.0744927-07:00`, `HEAD` points to `b145e56` on
+  branch `main` and already contains merged PR `#144`
+  (`cover-releasesmoke-command-owner-parse-and-json-error-branches`) from
+  `origin/main`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -165,9 +169,8 @@
   user-owned tracked edit and the maintainer meta refresh updates the tracked
   view/progress docs; ignored workflow files under `factory/inputs/**` remain
   operating state rather than canonical queue truth.
-- Recent merged PRs now include `#135`, `#136`, `#137`, `#138`, and `#140`;
-  open PRs `#141` and `#142` now own the active checklist-audit and
-  import-preview standards lanes, while `#139`, `#123`, and `#120` remain
+- Recent merged PRs now include `#142` and `#144`; open PR `#141` owns the
+  active checklist-audit lane, while `#143`, `#139`, `#123`, and `#120` remain
   older meta refresh branches.
 - The canonical ask surface remains the quality-oriented rewrite in
   `factory/logs/meta/asks.md`; the active asks are external checklist
@@ -176,14 +179,60 @@
 - The replay fixtures remain historical samples rather than current workflow
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
-- The previously queued ignored idea
-  `retire-deadcodecheck-gotypesalias-compat-shim` is stale because merged PR
-  `#140` landed that exact lane on `main`.
+- The external website and backend checklist URLs remain readable on
+  `2026-05-07`, but the linked external `asks.md` URL still does not produce a
+  readable checklist document and must be treated as a source-evidence gap.
+- The previously queued ignored ideas
+  `localize-and-accessibility-harden-import-preview-dialog` and
+  `cover-releasesmoke-command-owner-parse-and-json-error-branches` are stale
+  because merged PRs `#142` and `#144` landed those exact lanes on `main`.
 - The next maintainer-owned operating queue should hold three non-overlapping
-  ideas together:
-  repo-wide checklist audit evidence, import-preview localization plus
-  accessibility hardening, and releasesmoke command-owner parse/json branch
-  coverage.
+  ideas together: repo-wide checklist audit evidence, export-surface
+  localization, and cron runtime-lookup narrowing.
+
+## 2026-05-07T04:04:43.0744927-07:00 - meta state refresh
+
+- Ran `git pull --ff-only`, saw a divergent local branch because the checkout
+  was ahead by prior meta commits and behind by merged upstream work, then
+  stashed the user-owned tracked edit in `factory/logs/meta/asks.md`, merged
+  `origin/main` with `git pull --no-edit`, and restored the ask-file edit.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the backend and
+  website standards, current PR state, the tracked-versus-ignored
+  `factory/inputs/**` surface, the live external checklist sources, and the
+  live backend and UI candidate seams.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `Get-ChildItem -Recurse -Force factory/inputs`, confirming the checked-in
+  inboxes remain sentinel-only while the visible idea files are ignored local
+  operating residue.
+- Confirmed the previously queued ignored ideas
+  `factory/inputs/idea/default/localize-and-accessibility-harden-import-preview-dialog.md`
+  and
+  `factory/inputs/idea/default/cover-releasesmoke-command-owner-parse-and-json-error-branches.md`
+  are stale because merged PR `#142` and merged PR `#144` already landed those
+  exact cleanup lanes on `main`, so they should be pruned rather than left in
+  the active queue.
+- Re-checked repo movement with `gh pr list --state open --limit 20` and
+  `gh pr list --state merged --limit 10`, confirming `#142` and `#144` are now
+  merged while `#141` remains the only live checklist-audit implementation
+  lane.
+- Checked the linked external checklist sources again on `2026-05-07` and
+  confirmed the website and backend checklist documents remain readable, while
+  the linked `portpowered/checklists` `asks.md` source still does not resolve
+  to a readable document and must stay recorded as an evidence gap instead of a
+  silently assumed requirement source.
+- Used delegated explorer passes plus direct file reads to identify two fresh
+  non-overlapping replacements for the stale queue slots:
+  `ui/src/features/export/export-factory-dialog.tsx` plus
+  `ui/src/features/header/dashboard-header.tsx` for the next feature-local
+  localization seam, and `pkg/service/cron_watcher.go` plus
+  `pkg/interfaces/runtime_lookup.go` for the next narrow runtime-interface
+  simplification seam.
+- Recorded one backup backend testing seam from delegated inspection as well:
+  `cmd/releaseprep/main.go` still leaves the explicit `flag.ErrHelp` branch
+  without direct package-local coverage, but it is now a smaller next-up
+  candidate rather than one of the three active backlog slots.
 
 ## 2026-05-06T16:03:38.4962364-07:00 - meta state refresh
 
