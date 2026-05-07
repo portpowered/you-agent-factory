@@ -1224,6 +1224,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
+    expect(within(dispatchCard).getByText("遷移 ID")).toBeTruthy();
+    expect(within(dispatchCard).getByText("ディスパッチ数")).toBeTruthy();
+    expect(within(dispatchCard).getByText("応答数")).toBeTruthy();
+    expect(within(dispatchCard).getByText("エラー数")).toBeTruthy();
+    expect(within(dispatchCard).getByText("保留中")).toBeTruthy();
   });
 
   it("falls back to default dispatch-history copy for an unsupported locale", () => {
