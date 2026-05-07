@@ -119,6 +119,42 @@ func TestRunReturnsZeroOnFlagHelpWithoutExecutingReleasePrep(t *testing.T) {
 	}
 }
 
+func TestRunReturnsTwoOnFlagParseFailureWithoutExecutingReleasePrep(t *testing.T) {
+	originalRunReleasePrep := runReleasePrep
+	t.Cleanup(func() {
+		runReleasePrep = originalRunReleasePrep
+	})
+
+	runReleasePrep = func(_ context.Context, options releaseprep.Options) error {
+		t.Fatal("runReleasePrep should not be called when flag parsing fails")
+		return nil
+	}
+
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	exitCode := run([]string{"-bogus"}, out, errOut)
+
+	if exitCode != 2 {
+		t.Fatalf("run() exit code = %d, want 2", exitCode)
+	}
+	if got := out.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+	gotErr := errOut.String()
+	if gotErr == "" {
+		t.Fatal("run() stderr was empty, want parse error and usage")
+	}
+	if !bytes.Contains(errOut.Bytes(), []byte("flag provided but not defined: -bogus")) {
+		t.Fatalf("run() stderr = %q, want unknown flag error", gotErr)
+	}
+	if !bytes.Contains(errOut.Bytes(), []byte("Usage of releaseprep:\n")) {
+		t.Fatalf("run() stderr = %q, want usage header", gotErr)
+	}
+	if !bytes.Contains(errOut.Bytes(), []byte("-version string")) {
+		t.Fatalf("run() stderr = %q, want version flag usage", gotErr)
+	}
+}
+
 func TestMainSuccessWritesProgressToStdoutAndExitsZero(t *testing.T) {
 	originalRunReleasePrep := runReleasePrep
 	originalExitFunc := exitFunc
