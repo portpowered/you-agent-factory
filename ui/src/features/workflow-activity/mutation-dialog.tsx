@@ -8,6 +8,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS } from "../../components/dashboard/widget-board";
+import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 
 const DIALOG_OVERLAY_CLASS =
   "z-50 flex items-center justify-center bg-af-canvas/78 p-4 backdrop-blur-sm";
@@ -39,6 +40,8 @@ export interface DashboardMutationDialogProps {
   closeLabel?: string;
   description?: ReactNode;
   footer?: ReactNode;
+  flowLabel?: string;
+  locale?: string;
   media?: ReactNode;
   onClose?: () => void;
   overlayClassName?: string;
@@ -60,15 +63,20 @@ export interface DashboardMessagePanelProps {
 export function DashboardMutationDialog({
   children,
   closeDisabled = false,
-  closeLabel = "Close dialog",
+  closeLabel,
   description,
   footer,
+  flowLabel,
+  locale,
   media,
   onClose,
   overlayClassName = "fixed inset-0 px-5 py-6",
   showCloseButton = true,
   title,
 }: DashboardMutationDialogProps) {
+  const messages = getWorkflowActivityGraphImportMessages(locale);
+  const resolvedCloseLabel = closeLabel ?? messages.dialogCloseLabel;
+  const resolvedFlowLabel = flowLabel ?? messages.dialogFlowLabel;
   const canClose = onClose !== undefined && !closeDisabled;
   const titleId = useId();
   const descriptionId = useId();
@@ -77,7 +85,7 @@ export function DashboardMutationDialog({
     <div className={cx(DIALOG_OVERLAY_CLASS, "pointer-events-none relative", overlayClassName)}>
       {canClose ? (
         <button
-          aria-label={closeLabel}
+          aria-label={resolvedCloseLabel}
           className="pointer-events-auto absolute inset-0"
           onClick={onClose}
           type="button"
@@ -98,7 +106,7 @@ export function DashboardMutationDialog({
           <div className={DIALOG_MAIN_CLASS}>
             <header className={DIALOG_HEADER_CLASS}>
               <div className="grid gap-2">
-                <p className={DIALOG_EYEBROW_CLASS}>Mutation flow</p>
+                <p className={DIALOG_EYEBROW_CLASS}>{resolvedFlowLabel}</p>
                 <h2 className={DIALOG_TITLE_CLASS} id={titleId}>
                   {title}
                 </h2>
@@ -111,7 +119,7 @@ export function DashboardMutationDialog({
 
               {showCloseButton && onClose ? (
                 <button
-                  aria-label={closeLabel}
+                  aria-label={resolvedCloseLabel}
                   className={DIALOG_CLOSE_BUTTON_CLASS}
                   disabled={closeDisabled}
                   onClick={onClose}

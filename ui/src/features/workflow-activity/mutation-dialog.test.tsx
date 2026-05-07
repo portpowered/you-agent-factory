@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 
+import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 import { DashboardMutationDialog } from "./mutation-dialog";
 
 describe("DashboardMutationDialog", () => {
@@ -42,5 +43,40 @@ describe("DashboardMutationDialog", () => {
       within(importDialog).getByText("Review the dropped factory.").getAttribute("id"),
     ).toBe(importDescriptionId);
   });
-});
 
+  it("renders locale-backed shell labels for supported and unsupported locales", () => {
+    const japaneseMessages = getWorkflowActivityGraphImportMessages("ja");
+    const englishMessages = getWorkflowActivityGraphImportMessages("en");
+    const { rerender } = render(
+      <DashboardMutationDialog
+        description="Review the dropped factory."
+        locale="ja"
+        onClose={vi.fn()}
+        title="Review factory import"
+      >
+        <p>Import body</p>
+      </DashboardMutationDialog>,
+    );
+
+    expect(screen.getByText(japaneseMessages.dialogFlowLabel)).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: japaneseMessages.dialogCloseLabel }),
+    ).toHaveLength(2);
+
+    rerender(
+      <DashboardMutationDialog
+        description="Review the dropped factory."
+        locale="fr-CA"
+        onClose={vi.fn()}
+        title="Review factory import"
+      >
+        <p>Import body</p>
+      </DashboardMutationDialog>,
+    );
+
+    expect(screen.getByText(englishMessages.dialogFlowLabel)).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: englishMessages.dialogCloseLabel }),
+    ).toHaveLength(2);
+  });
+});
