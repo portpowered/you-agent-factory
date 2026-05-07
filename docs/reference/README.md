@@ -23,8 +23,8 @@ topic.
 ## Related
 
 - [Package docs index](../README.md)
-- [Factory JSON and work configuration](../work.md)
-- [Workstations and workers](../workstations.md)
-- [Author AGENTS.md](../authoring-agents-md.md)
-- [Batch inputs](../guides/batch-inputs.md)
-- [Prompt variables](../prompt-variables.md)
+- [Factory JSON and work configuration](work.md)
+- [Workstations and workers](workstations-and-workers.md)
+- [Author AGENTS.md](authoring-agents-md.md)
+- [Batch inputs](batch-inputs.md)
+- [Prompt variables](prompt-variables.md)

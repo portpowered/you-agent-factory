@@ -4,16 +4,16 @@ This index is the entry point to the standards used by this repository. Read it 
 
 ## Quick Start
 
-- Treat files under `docs/standards/` as the normative source of truth.
+- Treat files under `docs/internal/standards/` as the normative source of truth.
 - Read the target standard's summary or quick-rules section before making changes.
 - Use supporting guides for examples and rationale, not to override the standard.
 
 ## Coding Standards
 
-- `docs/standards/code/code-review-standards.md` — required review behavior and PR quality gates
-- `docs/standards/code/planning-standards.md` — required PRD, work-story, and acceptance-criteria planning behavior
-- `docs/standards/code/general-backend-standards.md` — required backend architecture, state management, linting, testing, CI, and complexity expectations
-- `docs/standards/code/general-website-standards.md` — required website architecture, accessibility, responsive design, styling, performance, and testing expectations
+- `docs/internal/standards/code/code-review-standards.md` — required review behavior and PR quality gates
+- `docs/internal/standards/code/planning-standards.md` — required PRD, work-story, and acceptance-criteria planning behavior
+- `docs/internal/standards/code/general-backend-standards.md` — required backend architecture, state management, linting, testing, CI, and complexity expectations
+- `docs/internal/standards/code/general-website-standards.md` — required website architecture, accessibility, responsive design, styling, performance, and testing expectations
 
 ## Selection Guidance
 

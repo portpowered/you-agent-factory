@@ -388,7 +388,7 @@ then match children whose parent ID is the parent story's work ID.
 
 ## Related
 
-- [Workstations And Workers](../workstations.md)
-- [Factory JSON And Work Configuration](../work.md)
+- [Workstations And Workers](../reference/workstations-and-workers.md)
+- [Factory JSON And Work Configuration](../reference/work.md)
 - [Workstation Guards And Guarded Loop Breakers](workstation-guards-and-guarded-loop-breakers.md)
 - [Batch Inputs](batch-inputs.md)

@@ -71,7 +71,7 @@ terminal path.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Workstations and workers](../workstations.md)
-- [Factory JSON and work configuration](../work.md)
-- [Workstation guards and guarded loop breakers](../guides/workstation-guards-and-guarded-loop-breakers.md)
-- [Parent-aware fan-in](../guides/parent-aware-fan-in.md)
+- [Workstations and workers](workstations-and-workers.md)
+- [Factory JSON and work configuration](work.md)
+- [Workstation guards and guarded loop breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
+- [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)

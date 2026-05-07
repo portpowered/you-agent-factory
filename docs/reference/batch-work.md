@@ -107,6 +107,6 @@ child and `target_work_name` is the parent.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Batch inputs](../guides/batch-inputs.md)
-- [Factory JSON and work configuration](../work.md)
-- [Parent-aware fan-in](../guides/parent-aware-fan-in.md)
+- [Batch inputs](batch-inputs.md)
+- [Factory JSON and work configuration](work.md)
+- [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)

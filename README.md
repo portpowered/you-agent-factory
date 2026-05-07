@@ -19,18 +19,17 @@ For example:
 - tell the agents a series of plans, and run them in dependency order
 - have a cron setup to autonomously look at git tasks or whatever and submit tasks that go through a write/review cycle loop
 
-
-
 ## Install
 
 
 1. install [codex](https://developers.openai.com/codex/cli) `npm i -g @openai/codex`
-2. install :`curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh`
-3. go `cd your-project-directory`
-3. run `infinite-you`
-4. submit a work task on the website interface, like "go write a report on my codebase at TEST.md", 
-5. wait till complete
-6. finished
+2. install on macOS/Linux: `curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh`
+3. install on Windows PowerShell: `irm https://github.com/portpowered/infinite-you/releases/latest/download/install.ps1 | iex`
+4. go `cd your-project-directory`
+5. run `infinite-you`
+6. submit a work task on the website interface, like "go write a report on my codebase at TEST.md", 
+7. wait till complete
+8. finished
 
 
 ### claude variant
@@ -43,7 +42,7 @@ infinite-you docs workstation
 ## Example
 Here's an example of the factory for infinite-you dispatching roughly 5-10 agents. 
 
-![](docs/resources/dashboard.gif)
+![](docs/internal/resources/dashboard.gif)
 
 
 ## How It Works
@@ -69,7 +68,7 @@ flowchart LR
 
 ## Customization 
 
-See [authoring-workflows](./docs/authoring-workflows.md) for the full configuration guide.
+See [authoring-workflows](./docs/reference/authoring-workflows.md) for the full configuration guide.
 Infinite you lets you customize your flow however you want. 
 
 The overall system of how __infinite you__ works is relatively simple. 

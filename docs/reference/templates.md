@@ -37,7 +37,7 @@ JSON.
 | `.Context` | Execution context such as working dir, artifact dir, project, and env | `{{ .Context.WorkDir }}` |
 
 Use `index` for map lookups such as tags and environment values. See
-[`prompt-variables.md`](../prompt-variables.md) for the full variable
+[`prompt-variables.md`](prompt-variables.md) for the full variable
 inventory.
 
 ## Quoting Rules
@@ -72,6 +72,6 @@ prompt bodies and prompt files, the template expression can use normal quotes.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Prompt variables](../prompt-variables.md)
-- [Workstations and workers](../workstations.md)
-- [Author AGENTS.md](../authoring-agents-md.md)
+- [Prompt variables](prompt-variables.md)
+- [Workstations and workers](workstations-and-workers.md)
+- [Author AGENTS.md](authoring-agents-md.md)

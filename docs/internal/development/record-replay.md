@@ -6,7 +6,7 @@ doc-id: AGF-DOC-002
 
 # Agent Factory Record And Replay
 
-This document is the canonical maintainer guide for recording an Agent Factory run, replaying the artifact, interpreting replay outcomes, and promoting a recording into a regression test. For customer-facing usage and event examples, see [Record and replay a run](../record-replay.md) and [Understand a run timeline](../run-timeline.md).
+This document is the canonical maintainer guide for recording an Agent Factory run, replaying the artifact, interpreting replay outcomes, and promoting a recording into a regression test. For event ordering and timeline examples, see [Understand a run timeline](run-timeline.md).
 
 ## What It Covers
 

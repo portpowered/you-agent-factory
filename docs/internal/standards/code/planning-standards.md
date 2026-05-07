@@ -89,9 +89,9 @@ Planning **MUST** encode the expectations that downstream implementation and rev
 
 Rules:
 
-- Plans **MUST** align with `docs/standards/code/code-review-standards.md`.
-- Backend-affecting plans **MUST** account for architecture, state, contract, and test expectations from `docs/standards/code/general-backend-standards.md`.
-- Frontend-affecting plans **MUST** account for state, accessibility, responsive behavior, and testing expectations from `docs/standards/code/general-website-standards.md`.
+- Plans **MUST** align with `docs/internal/standards/code/code-review-standards.md`.
+- Backend-affecting plans **MUST** account for architecture, state, contract, and test expectations from `docs/internal/standards/code/general-backend-standards.md`.
+- Frontend-affecting plans **MUST** account for state, accessibility, responsive behavior, and testing expectations from `docs/internal/standards/code/general-website-standards.md`.
 - When a change touches generated artifacts or public contracts, the plan **MUST** call out contract alignment and generated-output expectations explicitly.
 - AI-authored plans **MUST** be written with the expectation of extra implementation and review scrutiny.
 

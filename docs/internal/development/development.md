@@ -53,7 +53,7 @@ make ui-test-storybook
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
 
-The maintainer-owned CLI release policy lives in [CLI release policy](../guides/cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
+The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
 The workflow currently executes these repository-owned commands in order:
 
@@ -73,7 +73,7 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make typecheck` is the root-level dashboard typecheck command and should stay aligned with the CI `bun run tsc` step.
 
-`make lint` runs `go vet ./...` and the pinned deadcode analyzer. The deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/development/deadcode-baseline.txt`. Review any drift before updating the baseline.
+`make lint` runs `go vet ./...` and the pinned deadcode analyzer. The deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating the baseline.
 
 `make release VERSION=v1.2.3` is the maintainer-owned release-preparation path. It must run from a clean `main` checkout, reruns the repository readiness targets, creates the semver tag locally, and pushes only the tag so GitHub Actions owns publication.
 
@@ -155,7 +155,7 @@ projections, or export-only field aliases.
 
 ### Cron Workstation Changes
 
-Cron behavior crosses service tick production, Petri-net guards, dispatcher identity, event history, API read models, and dashboard projections. Keep [Workstation Kinds and Parameterized Fields](../workstations.md#cron-kind) as the canonical authoring and migration guide instead of duplicating the full cron model in local notes.
+Cron behavior crosses service tick production, Petri-net guards, dispatcher identity, event history, API read models, and dashboard projections. Keep [Workstation Kinds and Parameterized Fields](../reference/workstations-and-workers.md#cron-kind) as the canonical authoring and migration guide instead of duplicating the full cron model in local notes.
 
 `TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews` is the end-to-end integration smoke for the token-backed cron flow. It starts service mode, observes missing-input time work, verifies stale tick expiry and retry, submits the required input, proves normal worker dispatch/output, checks canonical cron metadata, and confirms normal API/dashboard projections hide internal time work.
 
@@ -189,7 +189,7 @@ see what behavior would be lost by migrating it.
 
 Use [Functional Test Execution Mode Inventory](functional-test-execution-mode-inventory.md)
 when migrating shortcut tests or reviewing exceptions. Keep
-`docs/processes/AGENTS.md` linked to this section instead of duplicating the
+`docs/internal/processes/AGENTS.md` linked to this section instead of duplicating the
 full rule set for autonomous-agent instructions.
 
 The functional-test package includes
@@ -223,7 +223,7 @@ behavior explicit inside the test that needs it.
 - Browser-side export canonicalization must also preserve the full generated same-name input-guard contract: normalize `same_name` to `SAME_NAME` and `match_input` to `matchInput` instead of rejecting valid current-factory payloads during PNG export.
 - Browser-side export canonicalization must stay aligned with `pkg/interfaces/public_factory_enums.go` and the strict generated-factory boundary in `pkg/config`: shared worker and workstation aliases canonicalize through the interfaces-owned helpers, while the generated `Factory` decode still rejects unsupported values after normalization.
 - Browser-side export dialogs must invalidate any in-flight PNG export attempt when the dialog closes so a late async rasterization or metadata-write completion cannot trigger a download after the user cancels or dismisses the flow.
-- For Agent Factory boundary-cleanup work that narrows a customer-visible DTO or formatter seam, check in a field inventory under `docs/development/*-data-model.md` before removing the broad contract so later stories can distinguish render-owned fields from canonical passthrough and dead aggregate-only ballast.
+- For Agent Factory boundary-cleanup work that narrows a customer-visible DTO or formatter seam, check in a field inventory under `docs/internal/development/*-data-model.md` before removing the broad contract so later stories can distinguish render-owned fields from canonical passthrough and dead aggregate-only ballast.
 - For browser-backed dashboard download stories, serve `ui/storybook-static` and scope the Vitest Storybook run with `--testNamePattern` when only one changed story needs proof. If the story or App-level test both decodes an uploaded image and downloads a blob, stub `createImageBitmap` or `OffscreenCanvas` on `globalThis` instead of `URL.createObjectURL` so the upload decode path does not consume the download stub.
 - For package-local browser-visible narrow-width verification, wrap the dashboard story in a bounded container such as `width: 360px`, keep the same production component tree, and assert `document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1` in the story `play` function instead of relying on website-only viewport helpers.
 - Dashboard typography roles live in `ui/src/components/ui/dashboard-typography.ts` and `ui/src/styles.css`. Reuse those semantic page, section, body, and supporting text classes before adding new `text-[...]` literals to cards, drill-downs, or chart labels.
@@ -253,7 +253,7 @@ behavior explicit inside the test that needs it.
 - When retiring a public `Factory` config field from `api/openapi.yaml`, remove it from the generated/public `Factory` model, drop any orphaned OpenAPI component schemas that existed only for that field, reject the raw input at `FactoryConfigMapper.Expand` with migration guidance once the validation story lands, and migrate checked-in fixtures/examples to the supported replacement contract in the same change.
 - Guarded loop breakers authored as `type: LOGICAL_MOVE` plus `visit_count` guards stay normal scheduler-dispatched workstations when docs or tests need dispatcher-visible execution history; reserve `TransitionExhaustion` for legacy or system circuit-breaker paths such as retired `exhaustion_rules` and time-expiry consumption.
 - File watcher input handling should parse `FACTORY_REQUEST_BATCH` JSON as the only structured submit format, map public batch item `workTypeName` values into runtime work type IDs, fill missing batch item work types from the watched folder, wrap Markdown and non-batch JSON files as one-item `WorkRequest` batches with raw file content payloads, reject item work-type conflicts before submitting, and parse plus validate all preseed files before calling the factory so startup failures do not create partial work.
-- Deadcode findings are baseline-managed through `docs/development/deadcode-baseline.txt`. Remove confirmed stale symbols first, then update the baseline only for accepted remaining library or test-helper debt.
+- Deadcode findings are baseline-managed through `docs/internal/development/deadcode-baseline.txt`. Remove confirmed stale symbols first, then update the baseline only for accepted remaining library or test-helper debt.
 
 ## Extending the Type System
 
@@ -289,7 +289,7 @@ The config validator checks workstation scheduling values against a known set of
 
 ## Related Docs
 
-- [CLI release policy](../guides/cli-release-policy.md)
+- [CLI release policy](cli-release-policy.md)
 - [Agent Factory README](../../README.md)
 - [Internal Architecture](architecture.md)
 - [API Inventory](api-inventory.md)

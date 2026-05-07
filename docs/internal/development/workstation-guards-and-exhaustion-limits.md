@@ -25,4 +25,4 @@ for the current public guidance and the canonical migration example.
 
 - [Workstation Guards And Guarded Loop Breakers](workstation-guards-and-guarded-loop-breakers.md)
 - [Parent-Aware Fan-In](parent-aware-fan-in.md)
-- [Work inputs](../work.md)
+- [Work inputs](../reference/work.md)

@@ -26,7 +26,7 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
 Run: make test
 Report any failures. Failing checks are a BLOCKING issue.
 
-If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/processes/manual-qa.md.
+If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md.
 
 ### Step 3 — Verify project acceptance criteria
 
