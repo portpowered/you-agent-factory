@@ -6,6 +6,7 @@ import {
   DashboardImportPreviewDialog,
   type DashboardImportPreviewDialogProps,
 } from "./dashboard-import-preview-dialog";
+import { getImportPreviewDialogMessages } from "./messages/import-preview-dialog";
 
 function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["importPreviewState"] {
   return {
@@ -61,17 +62,18 @@ export const Ready = {
   render: () => <ImportPreviewStory />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const page = within(canvasElement.ownerDocument.body);
-    const dialog = await page.findByRole("dialog", { name: "Review factory import" });
+    const messages = getImportPreviewDialogMessages("en");
+    const dialog = await page.findByRole("dialog", { name: messages.title });
     const scope = within(dialog);
-    const cancelButton = scope.getByRole("button", { name: "Cancel import" });
-    const activateButton = scope.getByRole("button", { name: "Activate factory" });
-    const closeButton = scope.getByRole("button", { name: "Close import preview" });
+    const cancelButton = scope.getByRole("button", { name: messages.cancelAction });
+    const activateButton = scope.getByRole("button", { name: messages.activateAction });
+    const closeButton = scope.getByRole("button", { name: messages.closeLabel });
 
-    await expect(scope.getByRole("img", { name: "Dropped Factory preview" })).toBeVisible();
-    await expect(scope.getByText("factory-import.png")).toBeVisible();
     await expect(
-      scope.getByText("Activating the import switches the current dashboard factory to the embedded authored definition from this PNG."),
+      scope.getByRole("img", { name: messages.previewImageAlt("Dropped Factory") }),
     ).toBeVisible();
+    await expect(scope.getByText("factory-import.png")).toBeVisible();
+    await expect(scope.getByText(messages.hint)).toBeVisible();
 
     cancelButton.focus();
     await expect(cancelButton).toHaveFocus();

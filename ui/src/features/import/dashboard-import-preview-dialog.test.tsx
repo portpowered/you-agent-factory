@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { axe } from "jest-axe";
 
 import { NamedFactoryAPIError } from "../../api/named-factory";
 import {
   DashboardImportPreviewDialog,
   type DashboardImportPreviewDialogProps,
 } from "./dashboard-import-preview-dialog";
+import { getImportPreviewDialogMessages } from "./messages/import-preview-dialog";
 
 function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["importPreviewState"] {
   return {
@@ -47,35 +49,79 @@ function renderDialog(
 describe("DashboardImportPreviewDialog", () => {
   it("renders the extracted dashboard-owned import preview", async () => {
     const { onCancel } = renderDialog();
+    const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: "Review factory import" });
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
 
     expect(previewDialog.textContent).toContain("Dropped Factory");
     expect(previewDialog.textContent).toContain("factory-import.png");
-    expect(previewDialog.textContent).toContain(
-      "Activating the import switches the current dashboard factory to the embedded authored definition from this PNG.",
-    );
+    expect(previewDialog.textContent).toContain(messages.hint);
     expect(
-      within(previewDialog).getByRole("img", { name: "Dropped Factory preview" }).getAttribute("src"),
+      within(previewDialog)
+        .getByRole("img", { name: messages.previewImageAlt("Dropped Factory") })
+        .getAttribute("src"),
     ).toBe("blob:factory-preview");
 
-    fireEvent.click(within(previewDialog).getByRole("button", { name: "Cancel import" }));
+    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.cancelAction }));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no accessibility violations in the ready preview state", async () => {
+    const { baseElement } = render(
+      <DashboardImportPreviewDialog
+        activationState={{ status: "idle" }}
+        importPreviewState={createReadyImportPreviewState()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    await screen.findByRole("dialog", {
+      name: getImportPreviewDialogMessages("en").title,
+    });
+
+    const results = await axe(baseElement);
+
+    expect(results.violations).toEqual([]);
+  });
+
+  it("has no accessibility violations when activation fails", async () => {
+    const { baseElement } = render(
+      <DashboardImportPreviewDialog
+        activationState={{
+          error: new NamedFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
+          status: "error",
+        }}
+        importPreviewState={createReadyImportPreviewState()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const messages = getImportPreviewDialogMessages("en");
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+
+    expect(within(previewDialog).getByRole("alert")).toBeTruthy();
+
+    const results = await axe(baseElement);
+
+    expect(results.violations).toEqual([]);
   });
 
   it("blocks close interactions while activation is submitting", async () => {
     const { onCancel } = renderDialog({
       activationState: { status: "submitting" },
     });
+    const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: "Review factory import" });
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
     const closeButton = within(previewDialog).getByRole("button", {
-      name: "Close import preview",
+      name: messages.closeLabel,
     });
-    const cancelButton = within(previewDialog).getByRole("button", { name: "Cancel import" });
+    const cancelButton = within(previewDialog).getByRole("button", {
+      name: messages.cancelAction,
+    });
     const activateButton = within(previewDialog).getByRole("button", {
-      name: "Activating factory...",
+      name: messages.activatingAction,
     });
 
     fireEvent.click(closeButton);
@@ -114,14 +160,15 @@ describe("DashboardImportPreviewDialog", () => {
     }
 
     render(<ImportPreviewCancelHarness />);
+    const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: "Review factory import" });
-    expect(previewDialog.textContent).toContain("Activation failed");
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    expect(previewDialog.textContent).toContain(messages.activationErrorTitle);
 
-    fireEvent.click(within(previewDialog).getByRole("button", { name: "Cancel import" }));
+    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.cancelAction }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Review factory import" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: messages.title })).toBeNull();
     });
   });
 
@@ -132,15 +179,14 @@ describe("DashboardImportPreviewDialog", () => {
         status: "error",
       },
     });
+    const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: "Review factory import" });
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
 
-    expect(previewDialog.textContent).toContain("Activation failed");
-    expect(previewDialog.textContent).toContain(
-      "The dashboard could not reach the activation API. Try again once the connection is available.",
-    );
+    expect(previewDialog.textContent).toContain(messages.activationErrorTitle);
+    expect(previewDialog.textContent).toContain(messages.errorByCode.NETWORK_ERROR);
 
-    fireEvent.click(within(previewDialog).getByRole("button", { name: "Activate factory" }));
+    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
 
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledWith(
@@ -186,11 +232,12 @@ describe("DashboardImportPreviewDialog", () => {
           status: "error",
         },
       });
+      const messages = getImportPreviewDialogMessages("en");
 
-      const previewDialog = await screen.findByRole("dialog", { name: "Review factory import" });
+      const previewDialog = await screen.findByRole("dialog", { name: messages.title });
       const alert = within(previewDialog).getByRole("alert");
 
-      expect(alert.textContent).toContain("Activation failed");
+      expect(alert.textContent).toContain(messages.activationErrorTitle);
       expect(alert.textContent).toContain(expectedCopy);
     },
   );
@@ -220,9 +267,10 @@ describe("DashboardImportPreviewDialog", () => {
     }
 
     render(<ImportPreviewSuccessHarness />);
+    const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: "Review factory import" });
-    fireEvent.click(within(previewDialog).getByRole("button", { name: "Activate factory" }));
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
 
     await waitFor(() => {
       expect(activateImport).toHaveBeenCalledWith(
@@ -232,8 +280,27 @@ describe("DashboardImportPreviewDialog", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Review factory import" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: messages.title })).toBeNull();
     });
+  });
+
+  it("renders the localized dialog copy and controls for a non-default locale", async () => {
+    const { onCancel } = renderDialog({ locale: "ja" });
+    const messages = getImportPreviewDialogMessages("ja");
+
+    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const scope = within(previewDialog);
+
+    expect(scope.getByRole("img", { name: messages.previewImageAlt("Dropped Factory") })).toBeTruthy();
+    expect(scope.getByText("factory-import.png")).toBeTruthy();
+    expect(scope.getByText(messages.hint)).toBeTruthy();
+    expect(scope.getByRole("button", { name: messages.cancelAction })).toBeTruthy();
+    expect(scope.getByRole("button", { name: messages.activateAction })).toBeTruthy();
+    expect(scope.getByRole("button", { name: messages.closeLabel })).toBeTruthy();
+
+    fireEvent.click(scope.getByRole("button", { name: messages.cancelAction }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it("does not render when no preview is ready", () => {
@@ -245,7 +312,8 @@ describe("DashboardImportPreviewDialog", () => {
         onConfirm={vi.fn()}
       />,
     );
+    const messages = getImportPreviewDialogMessages("en");
 
-    expect(screen.queryByRole("dialog", { name: "Review factory import" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: messages.title })).toBeNull();
   });
 });

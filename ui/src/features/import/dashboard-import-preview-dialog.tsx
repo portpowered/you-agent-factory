@@ -18,10 +18,13 @@ import {
 } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import type { FactoryPngImportValue } from "./factory-png-import";
+import {
+  getImportPreviewDialogMessages,
+  IMPORT_PREVIEW_FACTORY_NAME_TOKEN,
+} from "./messages/import-preview-dialog";
 import type { FactoryImportActivationState } from "./use-factory-import-activation";
 import type { FactoryImportPreviewState } from "./use-factory-import-preview";
 
-const GRAPH_IMPORT_PREVIEW_TITLE = "Review factory import";
 const IMPORT_DIALOG_CONTENT_CLASS =
   "w-[min(92vw,60rem)] gap-6 p-5 max-[900px]:p-4 min-[901px]:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
 const IMPORT_DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
@@ -38,6 +41,7 @@ type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { statu
 
 export interface FactoryImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
+  locale?: string;
   onCancel: () => void;
   onConfirm: () => void;
   previewState: ReadyFactoryImportPreviewState;
@@ -46,22 +50,46 @@ export interface FactoryImportPreviewDialogProps {
 export interface DashboardImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
   importPreviewState: FactoryImportPreviewState;
+  locale?: string;
   onCancel: () => void;
   onConfirm: (value: FactoryPngImportValue) => void;
 }
 
-function factoryImportActivationErrorCopy(error: Extract<FactoryImportActivationState, { status: "error" }>["error"]): string {
+function renderImportPreviewDescription(template: string, factoryName: string) {
+  const [beforeFactoryName, afterFactoryName] = template.split(
+    IMPORT_PREVIEW_FACTORY_NAME_TOKEN,
+  );
+
+  if (afterFactoryName === undefined) {
+    return template;
+  }
+
+  return (
+    <>
+      {beforeFactoryName}
+      <span className="font-semibold text-af-ink">{factoryName}</span>
+      {afterFactoryName}
+    </>
+  );
+}
+
+function factoryImportActivationErrorCopy(
+  error: Extract<FactoryImportActivationState, { status: "error" }>["error"],
+  locale?: string,
+): string {
+  const messages = getImportPreviewDialogMessages(locale);
+
   switch (error.code) {
     case "FACTORY_ALREADY_EXISTS":
-      return "A factory with this name already exists. Rename or remove the existing factory before importing this PNG.";
+      return messages.errorByCode.FACTORY_ALREADY_EXISTS;
     case "FACTORY_NOT_IDLE":
-      return "The current factory runtime is still active. Wait until it becomes idle before switching factories.";
+      return messages.errorByCode.FACTORY_NOT_IDLE;
     case "INVALID_FACTORY":
-      return "The dropped factory payload was rejected by the activation API.";
+      return messages.errorByCode.INVALID_FACTORY;
     case "INVALID_FACTORY_NAME":
-      return "The embedded factory name is not valid for activation.";
+      return messages.errorByCode.INVALID_FACTORY_NAME;
     case "NETWORK_ERROR":
-      return "The dashboard could not reach the activation API. Try again once the connection is available.";
+      return messages.errorByCode.NETWORK_ERROR;
     default:
       return error.message;
   }
@@ -69,9 +97,13 @@ function factoryImportActivationErrorCopy(error: Extract<FactoryImportActivation
 
 function FactoryImportActivationErrorPanel({
   error,
+  locale,
 }: {
   error: Extract<FactoryImportActivationState, { status: "error" }>["error"];
+  locale?: string;
 }) {
+  const messages = getImportPreviewDialogMessages(locale);
+
   return (
     <div
       aria-live="assertive"
@@ -79,9 +111,9 @@ function FactoryImportActivationErrorPanel({
       role="alert"
     >
       <div className="grid gap-1">
-        <h3>Activation failed</h3>
+        <h3>{messages.activationErrorTitle}</h3>
         <p className={cx("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-          {factoryImportActivationErrorCopy(error)}
+          {factoryImportActivationErrorCopy(error, locale)}
         </p>
       </div>
     </div>
@@ -90,11 +122,13 @@ function FactoryImportActivationErrorPanel({
 
 export function FactoryImportPreviewDialog({
   activationState,
+  locale,
   onCancel,
   onConfirm,
   previewState,
 }: FactoryImportPreviewDialogProps) {
   const isSubmitting = activationState.status === "submitting";
+  const messages = getImportPreviewDialogMessages(locale);
   const handleOpenChange = (open: boolean) => {
     if (!open && !isSubmitting) {
       onCancel();
@@ -106,7 +140,7 @@ export function FactoryImportPreviewDialog({
       <DialogContent
         className={IMPORT_DIALOG_CONTENT_CLASS}
         closeDisabled={isSubmitting}
-        closeLabel="Close import preview"
+        closeLabel={messages.closeLabel}
         onEscapeKeyDown={(event) => {
           if (isSubmitting) {
             event.preventDefault();
@@ -120,25 +154,23 @@ export function FactoryImportPreviewDialog({
       >
         <div className="overflow-hidden rounded-[1.25rem] border border-af-overlay/10 bg-af-overlay/4 p-3">
           <img
-            alt={`${previewState.value.factory.name} preview`}
+            alt={messages.previewImageAlt(previewState.value.factory.name)}
             className="block h-full max-h-[24rem] w-full rounded-[1rem] object-contain"
             src={previewState.value.previewImageSrc}
           />
         </div>
         <div className="grid content-start gap-5">
           <DialogHeader className="grid gap-3">
-            <p className={IMPORT_DIALOG_LABEL_CLASS}>Mutation flow</p>
+            <p className={IMPORT_DIALOG_LABEL_CLASS}>{messages.flowLabel}</p>
             <div className="grid gap-2">
               <DialogTitle className={IMPORT_DIALOG_TITLE_CLASS}>
-                {GRAPH_IMPORT_PREVIEW_TITLE}
+                {messages.title}
               </DialogTitle>
               <DialogDescription className={IMPORT_DIALOG_DESCRIPTION_CLASS}>
-                Review the dropped factory before activation. Confirming this import in the
-                next step will switch the current factory to{" "}
-                <span className="font-semibold text-af-ink">
-                  {previewState.value.factory.name}
-                </span>
-                .
+                {renderImportPreviewDescription(
+                  messages.descriptionTemplate,
+                  previewState.value.factory.name,
+                )}
               </DialogDescription>
             </div>
           </DialogHeader>
@@ -149,29 +181,26 @@ export function FactoryImportPreviewDialog({
 
           <dl className="grid gap-3 rounded-[1.1rem] border border-af-overlay/10 bg-af-overlay/4 p-4 text-sm text-af-ink/80">
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>Dropped file</dt>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.droppedFileLabel}</dt>
               <dd className="m-0 font-semibold text-af-ink">{previewState.file.name}</dd>
             </div>
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>Embedded factory</dt>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.embeddedFactoryLabel}</dt>
               <dd className="m-0 font-semibold text-af-ink">
                 {previewState.value.factory.name}
               </dd>
             </div>
           </dl>
 
-          <p className={IMPORT_DIALOG_HINT_CLASS}>
-            Activating the import switches the current dashboard factory to the embedded
-            authored definition from this PNG.
-          </p>
+          <p className={IMPORT_DIALOG_HINT_CLASS}>{messages.hint}</p>
 
           {activationState.status === "error" ? (
-            <FactoryImportActivationErrorPanel error={activationState.error} />
+            <FactoryImportActivationErrorPanel error={activationState.error} locale={locale} />
           ) : null}
 
           <DialogFooter>
             <Button disabled={isSubmitting} onClick={onCancel} tone="outline" type="button">
-              Cancel import
+              {messages.cancelAction}
             </Button>
             <Button
               aria-busy={isSubmitting ? "true" : undefined}
@@ -179,7 +208,7 @@ export function FactoryImportPreviewDialog({
               onClick={onConfirm}
               type="button"
             >
-              {isSubmitting ? "Activating factory..." : "Activate factory"}
+              {isSubmitting ? messages.activatingAction : messages.activateAction}
             </Button>
           </DialogFooter>
         </div>
@@ -191,6 +220,7 @@ export function FactoryImportPreviewDialog({
 export function DashboardImportPreviewDialog({
   activationState,
   importPreviewState,
+  locale,
   onCancel,
   onConfirm,
 }: DashboardImportPreviewDialogProps) {
@@ -204,6 +234,7 @@ export function DashboardImportPreviewDialog({
   return (
     <FactoryImportPreviewDialog
       activationState={activationState}
+      locale={locale}
       onCancel={onCancel}
       onConfirm={() => {
         onConfirm(readyImportPreviewState.value);

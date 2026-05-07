@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { getImportPreviewDialogMessages } from "./messages/import-preview-dialog";
 
 const dialogEventState = {
   escapePrevented: false,
@@ -97,6 +98,7 @@ describe("FactoryImportPreviewDialog close guards", () => {
 
   it("allows dialog close requests and passive escape or outside events while idle", () => {
     const onCancel = vi.fn();
+    const messages = getImportPreviewDialogMessages("en");
 
     render(
       <FactoryImportPreviewDialog
@@ -114,10 +116,12 @@ describe("FactoryImportPreviewDialog close guards", () => {
     expect(dialogEventState.escapePrevented).toBe(false);
     expect(dialogEventState.outsidePrevented).toBe(false);
     expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog", { name: messages.title })).toBeTruthy();
   });
 
   it("prevents escape, outside, and close requests while activation is submitting", () => {
     const onCancel = vi.fn();
+    const messages = getImportPreviewDialogMessages("en");
 
     render(
       <FactoryImportPreviewDialog
@@ -135,5 +139,6 @@ describe("FactoryImportPreviewDialog close guards", () => {
     expect(dialogEventState.escapePrevented).toBe(true);
     expect(dialogEventState.outsidePrevented).toBe(true);
     expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: messages.title })).toBeTruthy();
   });
 });
