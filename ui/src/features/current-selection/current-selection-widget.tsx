@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
@@ -9,6 +11,7 @@ import {
   WorkstationDetailCard,
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { CurrentSelectionState } from "./useCurrentSelection";
 
@@ -16,6 +19,7 @@ export interface CurrentSelectionWidgetProps {
   activeTraceID?: string | null;
   currentSelection: CurrentSelectionState;
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
+  locale?: string | null;
   now: number;
   onSelectTraceID?: (traceID: string) => void;
   selectedTrace?: DashboardTrace;
@@ -27,6 +31,7 @@ export function CurrentSelectionWidget({
   activeTraceID,
   currentSelection,
   failedWorkDetailsByWorkID,
+  locale,
   now,
   onSelectTraceID,
   selectedTrace,
@@ -51,8 +56,10 @@ export function CurrentSelectionWidget({
     selectWorkstationRequest,
   } = currentSelection;
 
+  let detailCard: ReactNode;
+
   if (selection?.kind === "work-item" && selectedWorkExecutionDetails) {
-    return (
+    detailCard = (
       <WorkItemDetailCard
         activeTraceID={activeTraceID}
         executionDetails={selectedWorkExecutionDetails}
@@ -66,19 +73,15 @@ export function CurrentSelectionWidget({
         widgetId={widgetId}
       />
     );
-  }
-
-  if (selectedWorkstationRequest) {
-    return (
+  } else if (selectedWorkstationRequest) {
+    detailCard = (
       <WorkstationRequestDetailCard
         request={selectedWorkstationRequest}
         widgetId={widgetId}
       />
     );
-  }
-
-  if (selectedStatePlace) {
-    return (
+  } else if (selectedStatePlace) {
+    detailCard = (
       <StateNodeDetailCard
         currentWorkItems={selectedStateCurrentWorkItems}
         failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
@@ -91,10 +94,8 @@ export function CurrentSelectionWidget({
         widgetId={widgetId}
       />
     );
-  }
-
-  if (selectedNode) {
-    return (
+  } else if (selectedNode) {
+    detailCard = (
       <WorkstationDetailCard
         activeExecutions={selectedNodeActiveExecutions}
         now={now}
@@ -108,7 +109,13 @@ export function CurrentSelectionWidget({
         widgetId={widgetId}
       />
     );
+  } else {
+    detailCard = <NoSelectionDetailCard widgetId={widgetId} />;
   }
 
-  return <NoSelectionDetailCard widgetId={widgetId} />;
+  return (
+    <CurrentSelectionLocaleProvider locale={locale}>
+      {detailCard}
+    </CurrentSelectionLocaleProvider>
+  );
 }

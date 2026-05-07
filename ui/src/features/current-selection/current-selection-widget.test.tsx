@@ -433,6 +433,34 @@ describe("CurrentSelectionWidget", () => {
     ).toBeTruthy();
   });
 
+  it("renders localized current-selection shell copy for a supported non-default locale", () => {
+    render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        locale="ja"
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(
+      screen.getByRole("article", {
+        name: "現在の選択",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "選択を元に戻す" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "選択をやり直す" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "ライブの詳細を確認するには、ワークステーション、作業項目、または状態ノードを選択してください。",
+      ),
+    ).toBeTruthy();
+  });
+
   it("renders disabled undo and redo controls in the shared current-selection header by default", () => {
     render(
       <CurrentSelectionWidget
