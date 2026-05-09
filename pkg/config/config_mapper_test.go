@@ -2078,6 +2078,85 @@ func TestConfigMapping_PerInputGuard_SameNameBuildsConsumeGuardAgainstPeerInput(
 	}
 }
 
+func TestConfigMapping_PerInputGuard_SameTraceIDBuildsConsumeGuardAgainstPeerInput(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "plan",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				},
+			},
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "match-items",
+				Inputs: []interfaces.IOConfig{
+					{StateName: "ready", WorkTypeName: "plan"},
+					{
+						StateName:    "ready",
+						WorkTypeName: "task",
+						Guard: &interfaces.InputGuardConfig{
+							Type:       interfaces.GuardTypeSameTraceID,
+							MatchInput: "plan",
+						},
+					},
+				},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "matched", WorkTypeName: "task"},
+				},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Map: %v", err)
+	}
+
+	transition := net.Transitions["match-items"]
+	if transition == nil {
+		t.Fatal("expected match-items transition")
+	}
+
+	var planArc *petri.Arc
+	var taskArc *petri.Arc
+	for i := range transition.InputArcs {
+		arc := &transition.InputArcs[i]
+		switch arc.PlaceID {
+		case "plan:ready":
+			planArc = arc
+		case "task:ready":
+			taskArc = arc
+		}
+	}
+
+	if planArc == nil || taskArc == nil {
+		t.Fatalf("expected plan/task input arcs, got %#v", transition.InputArcs)
+	}
+	if taskArc.Mode != interfaces.ArcModeConsume {
+		t.Fatalf("same-trace guarded arc mode = %v, want consume", taskArc.Mode)
+	}
+	if taskArc.Cardinality.Mode != petri.CardinalityOne {
+		t.Fatalf("same-trace guarded arc cardinality = %v, want one", taskArc.Cardinality.Mode)
+	}
+	guard, ok := taskArc.Guard.(*petri.SameTraceIDGuard)
+	if !ok {
+		t.Fatalf("same-trace guarded arc guard = %T, want *petri.SameTraceIDGuard", taskArc.Guard)
+	}
+	if guard.MatchBinding != planArc.Name {
+		t.Fatalf("same-trace guard binding = %q, want %q", guard.MatchBinding, planArc.Name)
+	}
+}
+
 func TestConfigMapping_WorkstationTypeDefaultsToStandard(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{

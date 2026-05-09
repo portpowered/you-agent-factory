@@ -92,6 +92,41 @@ func (g *SameNameGuard) Evaluate(candidates []interfaces.Token, bindings map[str
 	return matched, len(matched) > 0
 }
 
+// SameTraceIDGuard matches candidate tokens whose canonical trace identity
+// equals the canonical trace identity of another bound input token. Canonical
+// trace identity prefers CurrentChainingTraceID and falls back to legacy
+// TraceID. Missing bindings or missing trace identity fail closed.
+type SameTraceIDGuard struct {
+	MatchBinding string // name of the bound arc to compare against (e.g., "planItem:ready:to:match-items")
+}
+
+var _ Guard = (*SameTraceIDGuard)(nil)
+
+// Evaluate returns all candidates whose canonical trace identity equals the
+// bound token's canonical trace identity. The guard fails when the binding is
+// missing or either side has no usable trace identity.
+func (g *SameTraceIDGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+	bound, exists := bindings[g.MatchBinding]
+	if !exists || bound == nil {
+		return nil, false
+	}
+
+	boundTraceID := canonicalTraceIdentity(bound.Color)
+	if boundTraceID == "" {
+		return nil, false
+	}
+
+	var matched []interfaces.Token
+	for _, candidate := range candidates {
+		if canonicalTraceIdentity(candidate.Color) != boundTraceID {
+			continue
+		}
+		matched = append(matched, candidate)
+	}
+
+	return matched, len(matched) > 0
+}
+
 // AllGuard applies multiple guard predicates to the same candidate set.
 // Each guard filters the candidates produced by the previous guard; all guards
 // must succeed for the overall result to pass.
@@ -440,4 +475,11 @@ func parseTagSelector(selector string) (string, bool) {
 		return "", false
 	}
 	return key, true
+}
+
+func canonicalTraceIdentity(color interfaces.TokenColor) string {
+	if color.CurrentChainingTraceID != "" {
+		return color.CurrentChainingTraceID
+	}
+	return color.TraceID
 }

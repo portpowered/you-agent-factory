@@ -397,10 +397,10 @@ func (cm *ConfigMapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig,
 		}
 	}
 
-	// Same-name guards stay on the original consume arc and bind against the
+	// Peer-input guards stay on the original consume arc and bind against the
 	// referenced peer input's final arc name.
 	for idx, input := range ws.Inputs {
-		if input.Guard == nil || input.Guard.Type != interfaces.GuardTypeSameName {
+		if input.Guard == nil || !isPeerInputGuardType(input.Guard.Type) {
 			continue
 		}
 
@@ -408,7 +408,12 @@ func (cm *ConfigMapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig,
 		if !ok {
 			continue
 		}
-		t.InputArcs[idx].Guard = &petri.SameNameGuard{MatchBinding: peerBinding}
+		switch input.Guard.Type {
+		case interfaces.GuardTypeSameName:
+			t.InputArcs[idx].Guard = &petri.SameNameGuard{MatchBinding: peerBinding}
+		case interfaces.GuardTypeSameTraceID:
+			t.InputArcs[idx].Guard = &petri.SameTraceIDGuard{MatchBinding: peerBinding}
+		}
 	}
 }
 
