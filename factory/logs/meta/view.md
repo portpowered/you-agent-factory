@@ -2,11 +2,12 @@
 
 ## world state
 
-- as of `2026-05-09T16:03:49+09:00`, live `origin/main` points at merged
+- as of `2026-05-09T17:04:00+09:00`, live `origin/main` points at merged
   `PR #177` commit `ca69cbc`, which closed the replay-contract tagged-helper
   cleanup after merged `PR #176` and merged `PR #174`
-- local `main` has been rebased onto `origin/main` during this cycle and is
-  now ahead only by the local meta-refresh commit stack
+- local `main`, `meta-refresh-world-state-20260509-160349`, and
+  `fix-gocoveragecheck-zero-coverage-report-gap` currently point at the same
+  local meta-refresh stack, while `origin/main` remains at `ca69cbc`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the canonical ask file on live `main` is active again; it currently asks for
   external-checklist conformance work, stronger backend and website coverage,
@@ -45,8 +46,8 @@
 - the visible local ignored idea surface still contains one unrelated PRD-style
   residue:
   `factory/inputs/idea/default/website-edit-running-factory-workstations.md`
-- this cycle replaces the stale replay-helper residue with one fresh
-  maintainer-owned standalone cleanup idea:
+- the visible local ignored idea surface also includes one active
+  maintainer-owned cleanup request already advanced into an open worker lane:
   `factory/inputs/idea/default/fix-gocoveragecheck-zero-coverage-report-gap.md`
 
 ## customer-ask truth
@@ -69,7 +70,9 @@
   - `#170` `weird-work-names`
   - `#169` `collapse-replay-safe-diagnostics-rehydration`
   - `#166` `simplify-loaded-runtime-definition-lookups`
-- `gh pr list --state open` on `2026-05-09` still reports:
+- `gh pr list --state open` on `2026-05-09` now reports:
+  - `#179` `fix-gocoveragecheck-zero-coverage-report-gap`
+  - `#178` `docs: refresh meta world state`
   - `#175` `docs: refresh meta world state`
   - `#173` `docs: refresh meta world state`
   - `#172` `same-trace`
@@ -83,11 +86,12 @@
 
 - `PR #141` owns the repository-wide external checklist audit lane and also
   touches the meta-doc pair, so it is not isolated from worldview updates
+- `PR #179` owns the live `cmd/gocoveragecheck` zero-coverage-gap lane
 - `PR #167` owns the current `ui/src/features/work-outcome/*` localization lane
 - `PR #171` owns the dashboard-shell and workflow-graph padding lane
 - `PR #172` owns the same-trace guard lane across config, petri, API, and
   functional coverage
-- `PR #175` is still the freshest open meta-refresh branch; the older open
+- `PR #178` is now the freshest open meta-refresh branch; the older open
   meta-refresh PRs are stale duplicates on the same file pair
 - the replay-helper lane is closed on live `main` through merged `PR #177`
 - the bootstrap-portability helper split lane is closed on live `main` through
@@ -107,8 +111,7 @@
 
 ## current maintainer decision
 
-- this cycle queues one new cleanup request:
-  `fix-gocoveragecheck-zero-coverage-report-gap`
+- this cycle does not queue a new cleanup request
 - reason:
   - the active customer asks explicitly prioritize stronger backend coverage
     evidence and code quality simplification
@@ -119,11 +122,11 @@
   - that means the repo-owned backend coverage gate is currently overstating
     quality and can let zero-coverage backend packages pass the customer-facing
     lane
-  - the exact seam is narrow and local to `cmd/gocoveragecheck` plus its tests,
-    with no overlap with open PR ownership in `#141`, `#167`, `#171`, or
-    `#172`
-  - fixing the gate is higher leverage than a small test-helper dedupe because
-    it improves the truthfulness of the repository's existing quality signal
+  - the exact seam is narrow and local to `cmd/gocoveragecheck` plus its tests
+  - that seam is already owned by open `PR #179`, which changes only
+    `cmd/gocoveragecheck/main.go` and `cmd/gocoveragecheck/main_test.go`
+  - creating another idea over the same lane would duplicate in-flight work
+    instead of improving the queue
 
 ## theory of mind
 
@@ -143,3 +146,6 @@
 - when the repo-owned coverage command prints backend packages at `0.0%` while
   still exiting successfully, prefer tightening that gate before queueing a
   broader package-by-package test-authoring campaign
+- when `go test -coverpkg` summary output says a backend-owned package is at
+  `0.0%`, treat that as package-local zero coverage even if the aggregate
+  profile shows transitive hits from other packages' tests

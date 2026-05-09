@@ -135,6 +135,9 @@
 - When `go test -coverpkg` appends `in <package list>` after
   `coverage: ... of statements`, verify the parser against the full live line
   shape; simplified test fixtures can falsely suggest the gate is complete.
+- When `go test -coverpkg` reports a backend-owned package at `0.0%` in the
+  package summary, treat that as package-local zero coverage even if the
+  aggregate coverage profile shows transitive hits from other packages' tests.
 - When a repo-owned functional-lane command already has the thin entrypoint
   seam covered, inspect the same package next for untested `main` error paths,
   `failf` exit behavior, and wrapped discovery or execution failures before
@@ -194,9 +197,10 @@
   residue rather than checked-in queue truth.
 - Open PR ownership now includes `#141` for checklist audit, `#167` for
   work-outcome localization, `#171` for workflow-graph spacing, and `#172` for
-  the same-trace guard, while `#175` is the freshest open meta-refresh lane.
+  the same-trace guard, while `#178` is the freshest open meta-refresh lane
+  and `#179` owns the live `gocoveragecheck` zero-coverage fix.
 - `#141` also touches the meta-doc pair, so meta-refresh work is not isolated
-  to the `#175` stack.
+  to the open meta-refresh stack.
 - The canonical ask surface on live `main` is active again and currently asks
   for external-checklist conformance, stronger backend and website coverage,
   and ongoing simplification.
@@ -2430,4 +2434,46 @@
   - Re-check old coverage-driven backlog notes against live commands before
     dispatching them; the repo-owned gate may already have been raised by a
     later merge.
+---
+
+## 2026-05-09T17:04:00+09:00 - meta state refresh
+
+- Re-ran `git pull --ff-only` and confirmed the repo was already current with
+  `origin/main` at merged `PR #177` commit `ca69cbc`.
+- Re-read the canonical maintainer state files, `factory/README.md`,
+  `factory/factory.json`, the backend standard, current `factory/inputs/**`
+  state, and live `cmd/gocoveragecheck` code and tests.
+- Verified the external checklist repo still exposes the same checked-in
+  top-level checklist files referenced by the ask:
+  `backend-development-checklist.md` and
+  `website-development-checklist.md`.
+- Used delegated repo inspection to verify the highest-value narrow seam
+  remains the backend coverage gate in `cmd/gocoveragecheck`, but also to
+  confirm that seam is already staged locally in the ignored idea inbox and is
+  already owned by open `PR #179`.
+- Ran `go run ./cmd/gocoveragecheck -min 80 -timeout 300s` and confirmed the
+  live false-pass still exists: the command exits successfully at `86.6%`
+  total coverage while printing `0.0%` package-summary lines for
+  `pkg/apisurface`, `pkg/buffers`, and `pkg/cli/default`.
+- Read the open `ralph/fix-gocoveragecheck-zero-coverage-report-gap` branch
+  diff against `origin/main` and confirmed `PR #179` is the exact non-
+  overlapping worker lane needed here; it stays local to
+  `cmd/gocoveragecheck/main.go` and `cmd/gocoveragecheck/main_test.go`.
+- Chose not to dispatch a second cleanup idea this cycle because doing so
+  would duplicate the already-open `PR #179` lane instead of increasing
+  throughput.
+- Updated the world model so `PR #178` is the freshest open meta-refresh lane
+  and `PR #179` is the active backend coverage-fix owner.
+- Files changed:
+  - `factory/logs/meta/view.md`
+  - `factory/logs/meta/progress.txt`
+- **Learnings for future iterations:**
+  - Before queueing a cleanup from ignored `factory/inputs/**` residue, check
+    whether the exact idea has already advanced into an open worker PR.
+  - In this repo's backend coverage lane, package-summary `0.0%` under
+    `go test -coverpkg` is stronger evidence of package-local ownership gaps
+    than aggregate profile hits from other packages' tests.
+  - When the external checklist ask is already owned by an audit PR, re-verify
+    only enough of the source repository to keep the world model current and
+    avoid spawning an overlapping second audit lane.
 ---
