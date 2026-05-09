@@ -1,7 +1,9 @@
 package support
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,6 +40,28 @@ func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
 	}
 
 	return dir
+}
+
+func ScaffoldFactoryFromExamplePNG(t *testing.T, relPath string) string {
+	t.Helper()
+
+	pngBytes, err := os.ReadFile(AgentFactoryPath(t, relPath))
+	if err != nil {
+		t.Fatalf("read example PNG %s: %v", relPath, err)
+	}
+
+	metadataText, err := factoryMetadataTextFromPNG(pngBytes)
+	if err != nil {
+		t.Fatalf("read factory metadata from %s: %v", relPath, err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(metadataText), &cfg); err != nil {
+		t.Fatalf("unmarshal factory metadata from %s: %v", relPath, err)
+	}
+	delete(cfg, "schemaVersion")
+
+	return ScaffoldFactory(t, cfg)
 }
 
 func AgentFactoryPath(t *testing.T, rel string) string {
@@ -156,4 +180,99 @@ func UpdateFactoryConfig(t *testing.T, dir string, mutate func(map[string]any)) 
 	if err := os.WriteFile(path, updated, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)
 	}
+}
+
+var pngSignature = []byte{137, 80, 78, 71, 13, 10, 26, 10}
+
+func factoryMetadataTextFromPNG(pngBytes []byte) (string, error) {
+	if len(pngBytes) < len(pngSignature) || !bytes.Equal(pngBytes[:len(pngSignature)], pngSignature) {
+		return "", fmt.Errorf("invalid PNG signature")
+	}
+
+	for offset := len(pngSignature); offset < len(pngBytes); {
+		chunkType, chunkData, nextOffset, err := readPNGChunkAtOffset(pngBytes, offset)
+		if err != nil {
+			return "", err
+		}
+		offset = nextOffset
+
+		switch chunkType {
+		case "tEXt":
+			keyword, text, err := readPNGTextChunk(chunkData)
+			if err != nil {
+				return "", err
+			}
+			if keyword == "portos.agent-factory" {
+				return text, nil
+			}
+		case "iTXt":
+			keyword, text, err := readPNGInternationalTextChunk(chunkData)
+			if err != nil {
+				return "", err
+			}
+			if keyword == "portos.agent-factory" {
+				return text, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("portos.agent-factory metadata missing")
+}
+
+func readPNGChunkAtOffset(pngBytes []byte, offset int) (string, []byte, int, error) {
+	if offset+8 > len(pngBytes) {
+		return "", nil, 0, fmt.Errorf("truncated PNG chunk header at %d", offset)
+	}
+
+	length := int(uint32(pngBytes[offset])<<24 |
+		uint32(pngBytes[offset+1])<<16 |
+		uint32(pngBytes[offset+2])<<8 |
+		uint32(pngBytes[offset+3]))
+	dataOffset := offset + 8
+	dataEnd := dataOffset + length
+	chunkEnd := dataEnd + 4
+	if length < 0 || chunkEnd > len(pngBytes) {
+		return "", nil, 0, fmt.Errorf("truncated PNG chunk %q at %d", string(pngBytes[offset+4:offset+8]), offset)
+	}
+
+	return string(pngBytes[offset+4 : offset+8]), pngBytes[dataOffset:dataEnd], chunkEnd, nil
+}
+
+func readPNGTextChunk(data []byte) (string, string, error) {
+	separator := bytes.IndexByte(data, 0)
+	if separator <= 0 {
+		return "", "", fmt.Errorf("invalid PNG tEXt chunk")
+	}
+	return string(data[:separator]), string(data[separator+1:]), nil
+}
+
+func readPNGInternationalTextChunk(data []byte) (string, string, error) {
+	separator := bytes.IndexByte(data, 0)
+	if separator <= 0 {
+		return "", "", fmt.Errorf("invalid PNG iTXt keyword")
+	}
+
+	keyword := string(data[:separator])
+	cursor := separator + 1
+	if cursor+2 > len(data) {
+		return "", "", fmt.Errorf("truncated PNG iTXt metadata")
+	}
+	if data[cursor] != 0 || data[cursor+1] != 0 {
+		return "", "", fmt.Errorf("compressed PNG iTXt metadata unsupported")
+	}
+	cursor += 2
+
+	languageEnd := bytes.IndexByte(data[cursor:], 0)
+	if languageEnd < 0 {
+		return "", "", fmt.Errorf("invalid PNG iTXt language tag")
+	}
+	cursor += languageEnd + 1
+
+	translatedEnd := bytes.IndexByte(data[cursor:], 0)
+	if translatedEnd < 0 {
+		return "", "", fmt.Errorf("invalid PNG iTXt translated keyword")
+	}
+	cursor += translatedEnd + 1
+
+	return keyword, string(data[cursor:]), nil
 }

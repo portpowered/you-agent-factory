@@ -304,12 +304,7 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 	requestID := ""
 	parentID := ""
 	if first != nil {
-		unmatchedBefore := countUnmatchedBefore(arcIdx, arcs, inputColors, t.places)
-		if unmatchedBefore > 0 {
-			name = fmt.Sprintf("%s/%s/%d", first.Name, targetTypeID, unmatchedBefore)
-		} else {
-			name = first.Name
-		}
+		name = first.Name
 		requestID = first.RequestID
 		traceID = first.TraceID
 		parentID = first.WorkID
@@ -368,20 +363,6 @@ func matchingConsumedResourceToken(consumedTokens []interfaces.Token, resourceTy
 		}
 	}
 	return nil
-}
-
-func countUnmatchedBefore(arcIdx int, arcs []petri.Arc, inputs []interfaces.TokenColor, places map[string]*petri.Place) int {
-	count := 0
-	for i := 0; i < arcIdx; i++ {
-		targetTypeID := ""
-		if place, ok := places[arcs[i].PlaceID]; ok && place != nil {
-			targetTypeID = place.TypeID
-		}
-		if findMatchingInput(inputs, targetTypeID) == nil {
-			count++
-		}
-	}
-	return count
 }
 
 func createdAtForOutputToken(consumedTokens []interfaces.Token, outputColor interfaces.TokenColor, now time.Time) time.Time {

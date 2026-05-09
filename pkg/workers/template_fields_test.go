@@ -447,8 +447,13 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 	}
 
 	// Verify the working directory was resolved and applied.
-	if mock.dispatch.WorkingDirectory != filepath.Join(projectRoot, "worktrees", "feature-abc") {
-		t.Fatalf("expected working directory /worktrees/feature-abc, got %q", mock.dispatch.WorkingDirectory)
+	wantWorkingDirectory := filepath.Join(
+		normalizedCommandTestPath(t, projectRoot),
+		"worktrees",
+		"feature-abc",
+	)
+	if normalizedCommandTestPath(t, mock.dispatch.WorkingDirectory) != wantWorkingDirectory {
+		t.Fatalf("expected working directory %q, got %q", wantWorkingDirectory, mock.dispatch.WorkingDirectory)
 	}
 }
 
