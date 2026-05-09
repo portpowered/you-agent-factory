@@ -274,6 +274,51 @@ func TestEvaluateCoverageFlagsBackendPackagesPresentWithZeroCoverage(t *testing.
 	}
 }
 
+func TestEvaluateCoverageFlagsBackendPackagesReportedAtZeroDespiteCoveredProfileBlocks(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/apisurface/named_factory.go:13.74,14.77 1 0",
+		modulePath + "/pkg/apisurface/named_factory.go:17.2,17.39 1 5",
+		modulePath + "/pkg/buffers/typed_buffer.go:12.58,13.19 1 0",
+		modulePath + "/pkg/buffers/typed_buffer.go:53.41,55.2 1 386",
+		"",
+	}, "\n"))
+
+	result, totalLine, err := evaluateCoverage(
+		"total: (statements) 86.6%\n",
+		modulePath+"/pkg/apisurface\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/buffers\t\tcoverage: 0.0% of statements\n",
+		profilePath,
+		repoRoot,
+		[]string{
+			modulePath + "/pkg/apisurface",
+			modulePath + "/pkg/buffers",
+			modulePath + "/pkg/service",
+		},
+	)
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+
+	if result.actual != 86.6 {
+		t.Fatalf("actual coverage = %v, want 86.6", result.actual)
+	}
+	if totalLine != "total: (statements) 86.6%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 86.6%")
+	}
+
+	wantZeroCoverage := []string{
+		modulePath + "/pkg/apisurface",
+		modulePath + "/pkg/buffers",
+	}
+	if !slices.Equal(result.zeroCoveragePackages, wantZeroCoverage) {
+		t.Fatalf("zero coverage packages = %v, want %v", result.zeroCoveragePackages, wantZeroCoverage)
+	}
+}
+
 func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 	t.Parallel()
 

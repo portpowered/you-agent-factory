@@ -365,11 +365,12 @@ func findZeroCoveragePackages(report string, profilePath string, repoRoot string
 		seen[coverPackage] = struct{}{}
 
 		totals, ok := packageTotals[coverPackage]
-		if ok && totals.totalStatements > 0 && totals.coveredStatements == 0 {
+		if reportZeroCoveragePackages[coverPackage] && (!ok || totals.totalStatements > 0) {
 			zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
 			continue
 		}
-		if !ok && reportZeroCoveragePackages[coverPackage] {
+
+		if ok && totals.totalStatements > 0 && totals.coveredStatements == 0 {
 			zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
 		}
 	}
