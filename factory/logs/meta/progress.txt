@@ -167,9 +167,9 @@
 
 ## Current Summary
 
-- As of `2026-05-09T12:03:55+09:00`, live upstream `origin/main` points to
-  `bc1e149` after merged PRs `#169` and `#170`, while the local branch is being
-  reconciled with that upstream head plus existing local tracked edits.
+- As of `2026-05-09T12:06:06+09:00`, local `HEAD` and live upstream
+  `origin/main` both point to `e3162f4` after this cycle's merge-and-refresh
+  push to `main`.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -2164,6 +2164,23 @@
   - Open PR ownership can remain useful context even after the canonical ask
     surface goes empty, but those PRs should no longer be described as
     customer-required lanes unless the ask file says so.
+---
+
+## 2026-05-09T12:06:06+09:00 - meta push closeout
+
+- Pushed `main` successfully after the merge resolution, moving live upstream
+  from `bc1e149` to `e3162f4`.
+- Rechecked `git rev-parse HEAD origin/main` and confirmed the local branch and
+  remote `main` now match exactly.
+- Left the pre-existing local edits in `factory/logs/meta/asks.md` and
+  `factory/workers/workspace-setup/AGENTS.md` untouched after the push.
+- Files changed:
+  - `factory/logs/meta/view.md`
+  - `factory/logs/meta/progress.txt`
+- **Learnings for future iterations:**
+  - If the meta refresh itself lands on `main`, do one final post-push
+    worldview adjustment so the checked-in state describes the new upstream
+    head rather than the pre-push merge base.
 ---
 
 ## 2026-05-09T12:03:55+09:00 - meta state refresh
