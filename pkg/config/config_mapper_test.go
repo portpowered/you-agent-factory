@@ -1840,6 +1840,165 @@ func TestConfigMapping_PerInputGuard_ValidationRejectsSameNameUnknownMatchInput(
 	}
 }
 
+func TestConfigMapping_PerInputGuard_ValidationRejectsSameTraceIDMissingMatchInput(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "plan",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				},
+			},
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "match-items",
+				Inputs: []interfaces.IOConfig{
+					{StateName: "ready", WorkTypeName: "plan"},
+					{
+						StateName:    "ready",
+						WorkTypeName: "task",
+						Guard: &interfaces.InputGuardConfig{
+							Type: interfaces.GuardTypeSameTraceID,
+						},
+					},
+				},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "matched", WorkTypeName: "task"},
+				},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	_, err := mapper.Map(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected validation error for same-trace guard missing match_input")
+	}
+	if !strings.Contains(err.Error(), "[per-input-guard-same-trace-match-input]") {
+		t.Fatalf("expected same-trace-specific validation rule in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `workstations[0](match-items).inputs[1].guard`) {
+		t.Fatalf("expected input guard path in error, got %v", err)
+	}
+}
+
+func TestConfigMapping_PerInputGuard_ValidationRejectsSameTraceIDSelfReference(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "plan",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				},
+			},
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "match-items",
+				Inputs: []interfaces.IOConfig{
+					{
+						StateName:    "ready",
+						WorkTypeName: "plan",
+					},
+					{
+						StateName:    "ready",
+						WorkTypeName: "task",
+					},
+					{
+						StateName:    "ready",
+						WorkTypeName: "task",
+						Guard: &interfaces.InputGuardConfig{
+							Type:       interfaces.GuardTypeSameTraceID,
+							MatchInput: "task",
+						},
+					},
+				},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "matched", WorkTypeName: "task"},
+				},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	_, err := mapper.Map(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected validation error for same-trace guard referencing its own input")
+	}
+	if !strings.Contains(err.Error(), "[per-input-guard-same-trace-self-ref]") {
+		t.Fatalf("expected same-trace self-reference validation rule in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `workstations[0](match-items).inputs[2].guard`) {
+		t.Fatalf("expected input guard path in error, got %v", err)
+	}
+}
+
+func TestConfigMapping_PerInputGuard_ValidationRejectsSameTraceIDUnknownMatchInput(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "plan",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				},
+			},
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "ready", Type: interfaces.StateTypeProcessing},
+					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "match-items",
+				Inputs: []interfaces.IOConfig{
+					{StateName: "ready", WorkTypeName: "plan"},
+					{
+						StateName:    "ready",
+						WorkTypeName: "task",
+						Guard: &interfaces.InputGuardConfig{
+							Type:       interfaces.GuardTypeSameTraceID,
+							MatchInput: "other",
+						},
+					},
+				},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "matched", WorkTypeName: "task"},
+				},
+			},
+		},
+	}
+
+	mapper := ConfigMapper{}
+	_, err := mapper.Map(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected validation error for same-trace guard referencing non-existent input")
+	}
+	if !strings.Contains(err.Error(), "[per-input-guard-same-trace-match-input]") {
+		t.Fatalf("expected same-trace-specific validation rule in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), `workstations[0](match-items).inputs[1].guard`) {
+		t.Fatalf("expected input guard path in error, got %v", err)
+	}
+}
+
 func TestConfigMapping_PerInputGuard_SameNameBuildsConsumeGuardAgainstPeerInput(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{

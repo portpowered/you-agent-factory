@@ -525,6 +525,45 @@ Join plan and task items by authored name.
 	}
 }
 
+func TestLoadWorkstationConfig_NormalizesSameTraceIDInputGuard(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: LOGICAL_MOVE
+inputs:
+  - workType: planItem
+    state: ready
+  - workType: taskItem
+    state: ready
+    guard:
+      type: SAME_TRACE_ID
+      matchInput: planItem
+outputs:
+  - workType: taskItem
+    state: matched
+---
+
+Join plan and task items by authored trace identity.
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWorkstationConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Inputs) != 2 || cfg.Inputs[1].Guard == nil {
+		t.Fatalf("expected same-trace guard to load, got %#v", cfg.Inputs)
+	}
+	if cfg.Inputs[1].Guard.Type != interfaces.GuardTypeSameTraceID || cfg.Inputs[1].Guard.MatchInput != "planItem" {
+		t.Fatalf("expected same-trace guard to normalize, got %#v", cfg.Inputs[1].Guard)
+	}
+	if cfg.Inputs[1].Guard.ParentInput != "" || cfg.Inputs[1].Guard.SpawnedBy != "" {
+		t.Fatalf("expected same-trace guard to keep parent-aware fields empty, got %#v", cfg.Inputs[1].Guard)
+	}
+}
+
 func TestLoadWorkstationConfig_NormalizesMatchesFieldsWorkstationGuard(t *testing.T) {
 	dir := t.TempDir()
 	agentsMD := `---

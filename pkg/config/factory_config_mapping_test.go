@@ -810,6 +810,62 @@ func TestFactoryConfigMapper_ExpandAndFlattenPreservesSameNamePerInputGuard(t *t
 	assertMissingKey(t, guardPayload, "spawnedBy")
 }
 
+func TestFactoryConfigMapper_ExpandAndFlattenPreservesSameTraceIDPerInputGuard(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	raw := []byte(`{
+		"name":"same-trace-guard-test",
+		"workTypes": [
+			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
+			{"name":"taskItem","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-items",
+			"worker":"matcher",
+			"inputs":[
+				{"workType":"planItem","state":"ready"},
+				{"workType":"taskItem","state":"ready","guards":[{"type":"SAME_TRACE_ID","matchInput":"planItem"}]}
+			],
+			"outputs":[{"workType":"taskItem","state":"matched"}]
+		}]
+	}`)
+
+	cfg, err := mapper.Expand(raw)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+
+	guard := cfg.Workstations[0].Inputs[1].Guard
+	if guard == nil {
+		t.Fatal("expected same-trace guard to be preserved")
+	}
+	if guard.Type != interfaces.GuardTypeSameTraceID || guard.MatchInput != "planItem" {
+		t.Fatalf("unexpected same-trace guard: %#v", guard)
+	}
+	if guard.ParentInput != "" || guard.SpawnedBy != "" {
+		t.Fatalf("expected same-trace guard to keep parent-aware fields empty, got %#v", guard)
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	payload := mustDecodeFactoryPayload(t, flattened)
+	workstations := payload["workstations"].([]any)
+	inputs := workstations[0].(map[string]any)["inputs"].([]any)
+	guardPayload := inputs[1].(map[string]any)["guards"].([]any)[0].(map[string]any)
+	if got := guardPayload["type"]; got != "SAME_TRACE_ID" {
+		t.Fatalf("expected same-trace guard type, got %#v", got)
+	}
+	if got := guardPayload["matchInput"]; got != "planItem" {
+		t.Fatalf("expected same-trace guard matchInput=planItem, got %#v", got)
+	}
+	assertMissingKey(t, guardPayload, "parentInput")
+	assertMissingKey(t, guardPayload, "spawnedBy")
+}
+
 func TestFactoryConfigMapper_ExpandAndFlattenPreservesMatchesFieldsWorkstationGuard(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

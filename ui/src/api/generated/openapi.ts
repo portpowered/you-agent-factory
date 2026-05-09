@@ -1045,7 +1045,7 @@ export interface components {
          * @description Guard condition attached to a workstation or one of its specific inputs.
          * @enum {string}
          */
-        GuardType: "VISIT_COUNT" | "MATCHES_FIELDS" | "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME" | "INFERENCE_THROTTLE_GUARD";
+        GuardType: "VISIT_COUNT" | "MATCHES_FIELDS" | "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME" | "SAME_TRACE_ID" | "INFERENCE_THROTTLE_GUARD";
         /** @description Shared guard attached either to a workstation as a whole or to one specific workstation input. */
         Guard: {
             /** @description Guard condition to evaluate for this workstation-level or input-level attachment. */
@@ -1058,7 +1058,7 @@ export interface components {
             matchConfig?: components["schemas"]["GuardMatchConfig"];
             /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
             parentInput?: string;
-            /** @description For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation. */
+            /** @description For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation. */
             matchInput?: string;
             /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
             spawnedBy?: string;

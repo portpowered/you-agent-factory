@@ -6,6 +6,7 @@ x-enum-varnames:
   - GuardTypeAllChildrenComplete
   - GuardTypeAnyChildFailed
   - GuardTypeSameName
+  - GuardTypeSameTraceID
   - GuardTypeInferenceThrottle
 enum:
   - VISIT_COUNT
@@ -13,6 +14,7 @@ enum:
   - ALL_CHILDREN_COMPLETE
   - ANY_CHILD_FAILED
   - SAME_NAME
+  - SAME_TRACE_ID
   - INFERENCE_THROTTLE_GUARD
 x-enum-descriptions:
   - Allows or blocks work based on how many times a workstation has already handled it.
@@ -20,4 +22,5 @@ x-enum-descriptions:
   - This input is available only after all matching child work completes.
   - This input is available when any matching child work fails.
   - This input is available only when its token name exactly matches the bound token name from another input.
+  - This input is available only when its token trace identity exactly matches the bound token trace identity from another input.
   - Blocks factory dispatch when provider or model throttle history still falls inside the authored refresh window.

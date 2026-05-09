@@ -282,6 +282,63 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameTraceIDInputGuard(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"same-trace-input-guard-factory",
+		"workTypes": [
+			{"name":"planItem","states":[{"name":"ready","type":"PROCESSING"}]},
+			{"name":"taskItem","states":[{"name":"ready","type":"PROCESSING"},{"name":"matched","type":"TERMINAL"}]}
+		],
+		"workers": [{"name":"matcher"}],
+		"workstations": [{
+			"name":"match-items",
+			"worker":"matcher",
+			"inputs":[
+				{"workType":"planItem","state":"ready"},
+				{"workType":"taskItem","state":"ready","guards":[{"type":"SAME_TRACE_ID","matchInput":"planItem"}]}
+			],
+			"outputs":[{"workType":"taskItem","state":"matched"}]
+		}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
+		t.Fatalf("expected one generated workstation, got %#v", generated.Workstations)
+	}
+	workstation := (*generated.Workstations)[0]
+	if len(workstation.Inputs) != 2 || workstation.Inputs[1].Guards == nil || len(*workstation.Inputs[1].Guards) != 1 {
+		t.Fatalf("expected generated same-trace guard to survive boundary decode, got %#v", workstation.Inputs)
+	}
+	guard := (*workstation.Inputs[1].Guards)[0]
+	if guard.Type != factoryapi.GuardTypeSameTraceID {
+		t.Fatalf("expected generated guard type SAME_TRACE_ID, got %#v", guard.Type)
+	}
+	if guard.MatchInput == nil || *guard.MatchInput != "planItem" {
+		t.Fatalf("expected generated guard matchInput planItem, got %#v", guard.MatchInput)
+	}
+	if guard.ParentInput != nil || guard.SpawnedBy != nil {
+		t.Fatalf("expected same-trace guard to keep parent-aware fields unset, got %#v", guard)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	runtimeGuard := cfg.Workstations[0].Inputs[1].Guard
+	if runtimeGuard == nil {
+		t.Fatal("expected runtime same-trace guard to survive generated mapping")
+	}
+	if runtimeGuard.Type != interfaces.GuardTypeSameTraceID || runtimeGuard.MatchInput != "planItem" {
+		t.Fatalf("expected runtime same-trace guard fields to match generated boundary, got %#v", runtimeGuard)
+	}
+	if runtimeGuard.ParentInput != "" || runtimeGuard.SpawnedBy != "" {
+		t.Fatalf("expected runtime same-trace guard to keep parent-aware fields empty, got %#v", runtimeGuard)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"matches-fields-guard-factory",

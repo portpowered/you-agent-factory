@@ -24,7 +24,7 @@ properties:
     description: For parent-aware input guards, the parent workType name from another input in the same workstation.
   matchInput:
     type: string
-    description: For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation.
+    description: For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
   spawnedBy:
     type: string
     description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.

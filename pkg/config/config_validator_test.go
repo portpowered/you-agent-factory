@@ -755,6 +755,85 @@ func TestRulePerInputGuards_ValidSameNameGuard(t *testing.T) {
 	}
 }
 
+func TestRulePerInputGuards_SameTraceIDMissingMatchInput(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeSameTraceID},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-same-trace-match-input")
+}
+
+func TestRulePerInputGuards_SameTraceIDMatchInputNotMatching(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameTraceID,
+					MatchInput: "other",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-same-trace-match-input")
+}
+
+func TestRulePerInputGuards_SameTraceIDSelfReference(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameTraceID,
+					MatchInput: "task",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	assertFindingExists(t, findings, "per-input-guard-same-trace-self-ref")
+}
+
+func TestRulePerInputGuards_ValidSameTraceIDGuard(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "ws",
+		Inputs: []interfaces.IOConfig{
+			{WorkTypeName: "plan", StateName: "init"},
+			{
+				WorkTypeName: "task",
+				StateName:    "init",
+				Guard: &interfaces.InputGuardConfig{
+					Type:       interfaces.GuardTypeSameTraceID,
+					MatchInput: "plan",
+				},
+			},
+		},
+	}}
+	findings := rulePerInputGuards(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
 func TestRulePerInputGuards_ValidGuard(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{

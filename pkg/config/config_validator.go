@@ -590,11 +590,13 @@ func validatePerInputGuard(input interfaces.IOConfig, path string, inputWorkType
 		return validateParentAwareInputGuard(input, path, inputWorkTypes, validWorkstations)
 	case interfaces.GuardTypeSameName:
 		return validateSameNameInputGuard(input, path, inputWorkTypes)
+	case interfaces.GuardTypeSameTraceID:
+		return validateSameTraceIDInputGuard(input, path, inputWorkTypes)
 	default:
 		return []Finding{{
 			Severity: SeverityError,
 			Path:     path,
-			Message:  fmt.Sprintf("unsupported guard type %q (per-input guards support: all_children_complete, any_child_failed, same_name)", input.Guard.Type),
+			Message:  fmt.Sprintf("unsupported guard type %q (per-input guards support: all_children_complete, any_child_failed, same_name, same_trace_id)", input.Guard.Type),
 			Rule:     "per-input-guard-type",
 		}}
 	}
@@ -609,6 +611,7 @@ func validateParentAwareInputGuard(input interfaces.IOConfig, path string, input
 		input.WorkTypeName,
 		inputWorkTypes,
 		"per-input-guard-parent-input",
+		"per-input-guard-self-ref",
 	)
 	if input.Guard.SpawnedBy != "" && !validWorkstations[input.Guard.SpawnedBy] {
 		findings = append(findings, Finding{
@@ -630,10 +633,24 @@ func validateSameNameInputGuard(input interfaces.IOConfig, path string, inputWor
 		input.WorkTypeName,
 		inputWorkTypes,
 		"per-input-guard-match-input",
+		"per-input-guard-self-ref",
 	)
 }
 
-func validatePeerInputReference(path, fieldName string, guardType interfaces.GuardType, reference, workTypeName string, inputWorkTypes map[string]bool, fieldRule string) []Finding {
+func validateSameTraceIDInputGuard(input interfaces.IOConfig, path string, inputWorkTypes map[string]bool) []Finding {
+	return validatePeerInputReference(
+		path,
+		"match_input",
+		input.Guard.Type,
+		input.Guard.MatchInput,
+		input.WorkTypeName,
+		inputWorkTypes,
+		"per-input-guard-same-trace-match-input",
+		"per-input-guard-same-trace-self-ref",
+	)
+}
+
+func validatePeerInputReference(path, fieldName string, guardType interfaces.GuardType, reference, workTypeName string, inputWorkTypes map[string]bool, fieldRule, selfRule string) []Finding {
 	if reference == "" {
 		return []Finding{{
 			Severity: SeverityError,
@@ -657,7 +674,7 @@ func validatePeerInputReference(path, fieldName string, guardType interfaces.Gua
 			Severity: SeverityError,
 			Path:     path,
 			Message:  fmt.Sprintf("%s %q cannot reference its own input", fieldName, reference),
-			Rule:     "per-input-guard-self-ref",
+			Rule:     selfRule,
 		})
 	}
 	return findings
