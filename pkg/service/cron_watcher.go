@@ -33,7 +33,7 @@ func (fs *FactoryService) startCronWatchersForRuntime(
 	sidecars *sync.WaitGroup,
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
-	runtimeCfg interfaces.RuntimeConfigLookup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	submitter workRequestSubmitter,
 ) {
 	if runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || submitter == nil {
