@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-09T12:03:55+09:00`, live upstream `origin/main` points to
-  `bc1e149` after merged PR `#170` (`weird-work-names`) and merged PR `#169`
-  (`collapse-replay-safe-diagnostics-rehydration`)
+- as of `2026-05-09T12:06:06+09:00`, local `HEAD` on `main` and live upstream
+  `origin/main` both point to `e3162f4` after the meta merge-and-refresh push
+  for this cycle
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the current canonical local ask file says there are no active customer asks:
   `for now no asks exists.`
@@ -84,8 +84,8 @@
 - `PR #171` owns the dashboard-shell and workflow-graph padding lane
 - `PR #172` owns the same-trace guard lane across config, petri, API, and
   functional coverage
-- `PR #168` still owns the previously opened meta-refresh branch for the older
-  worldview
+- the previously opened meta-refresh branches such as `PR #168` now reflect an
+  older worldview than live `main`
 - the replay diagnostics dedupe lane is closed on live `main` through merged
   `PR #169`, so it should not remain in the ignored inbox
 
