@@ -3,65 +3,84 @@ package guards_batch
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func sameTraceIDGuardFactoryDir(t *testing.T) string {
-	t.Helper()
+func TestSameTraceIDGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
+	factoryJSON, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("read factory.json: %v", err)
+	}
 
-	dir := support.ScaffoldFactory(t, map[string]any{
-		"name": "same_trace_id_guard",
-		"workTypes": []map[string]any{
-			{
-				"name": "plan",
-				"states": []map[string]any{
-					{"name": "ready", "type": "INITIAL"},
-				},
-			},
-			{
-				"name": "task",
-				"states": []map[string]any{
-					{"name": "ready", "type": "INITIAL"},
-					{"name": "matched", "type": "TERMINAL"},
-				},
-			},
-		},
-		"workers": []map[string]any{
-			{"name": "matcher"},
-		},
-		"workstations": []map[string]any{
-			{
-				"name":   "match-items",
-				"worker": "matcher",
-				"inputs": []map[string]any{
-					{"workType": "plan", "state": "ready"},
-					{
-						"workType": "task",
-						"state":    "ready",
-						"guards": []map[string]any{
-							{"type": "SAME_TRACE_ID", "matchInput": "plan"},
-						},
-					},
-				},
-				"outputs": []map[string]any{
-					{"workType": "task", "state": "matched"},
-				},
-			},
-		},
-	})
+	generated, err := config.GeneratedFactoryFromOpenAPIJSON(factoryJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
+		t.Fatalf("generated workstations = %#v, want one guarded workstation", generated.Workstations)
+	}
 
-	support.WriteAgentConfig(t, dir, "matcher", support.BuildModelWorkerConfig(workers.ModelProviderCodex, "gpt-5.4"))
-	return dir
+	workstation := (*generated.Workstations)[0]
+	if workstation.Name != "match-items" {
+		t.Fatalf("generated workstation name = %q, want match-items", workstation.Name)
+	}
+	if len(workstation.Inputs) != 2 {
+		t.Fatalf("generated inputs = %#v, want plan/task inputs", workstation.Inputs)
+	}
+	if workstation.Inputs[1].Guards == nil || len(*workstation.Inputs[1].Guards) != 1 {
+		t.Fatalf("generated guarded task input = %#v, want one same-trace guard", workstation.Inputs[1])
+	}
+
+	guard := (*workstation.Inputs[1].Guards)[0]
+	if guard.Type != factoryapi.GuardTypeSameTraceID {
+		t.Fatalf("generated guard type = %q, want SAME_TRACE_ID", guard.Type)
+	}
+	if guard.MatchInput == nil || *guard.MatchInput != "plan" {
+		t.Fatalf("generated guard matchInput = %#v, want plan", guard.MatchInput)
+	}
+
+	loaded, err := config.LoadRuntimeConfig(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	matcher, ok := loaded.Worker("matcher")
+	if !ok {
+		t.Fatal("expected matcher worker definition")
+	}
+	if matcher.Type != interfaces.WorkerTypeModel || matcher.StopToken != "COMPLETE" {
+		t.Fatalf("matcher worker runtime config = %#v", matcher)
+	}
+
+	runtimeWorkstation, ok := loaded.Workstation("match-items")
+	if !ok {
+		t.Fatal("expected match-items workstation definition")
+	}
+	if runtimeWorkstation.Type != interfaces.WorkstationTypeModel || runtimeWorkstation.WorkerTypeName != "matcher" {
+		t.Fatalf("match-items runtime config = %#v", runtimeWorkstation)
+	}
+	if len(runtimeWorkstation.Inputs) != 2 || runtimeWorkstation.Inputs[1].Guard == nil {
+		t.Fatalf("runtime workstation inputs = %#v, want guarded task input", runtimeWorkstation.Inputs)
+	}
+
+	runtimeGuard := runtimeWorkstation.Inputs[1].Guard
+	if runtimeGuard.Type != interfaces.GuardTypeSameTraceID || runtimeGuard.MatchInput != "plan" {
+		t.Fatalf("runtime same-trace guard = %#v, want type same_trace_id and match_input plan", runtimeGuard)
+	}
 }
 
 func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T) {
-	dir := sameTraceIDGuardFactoryDir(t)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -105,7 +124,7 @@ func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T
 }
 
 func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMissing(t *testing.T) {
-	dir := sameTraceIDGuardFactoryDir(t)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -140,7 +159,7 @@ func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMiss
 }
 
 func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
-	dir := sameTraceIDGuardFactoryDir(t)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -189,7 +208,7 @@ func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
 }
 
 func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
-	dir := sameTraceIDGuardFactoryDir(t)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := testutil.NewServiceTestHarness(t, dir,
