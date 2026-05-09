@@ -84,6 +84,22 @@ func GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostic
 	return GeneratedSafeWorkDiagnostics(SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics))
 }
 
+// WorkDiagnosticsFromSafeWorkDiagnostics rehydrates worker-facing diagnostics
+// from the canonical safe diagnostics boundary.
+func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *WorkDiagnostics {
+	if diagnostics == nil {
+		return nil
+	}
+	out := &WorkDiagnostics{
+		RenderedPrompt: renderedPromptDiagnosticFromSafeWorkDiagnostics(diagnostics.RenderedPrompt),
+		Provider:       providerDiagnosticFromSafeWorkDiagnostics(diagnostics.Provider),
+	}
+	if out.RenderedPrompt == nil && out.Provider == nil {
+		return nil
+	}
+	return out
+}
+
 // GeneratedProviderFailureMetadata converts canonical provider-failure metadata
 // into the generated event contract.
 func GeneratedProviderFailureMetadata(failure *ProviderFailureMetadata) *factoryapi.ProviderFailureMetadata {
@@ -167,6 +183,17 @@ func generatedSafeRenderedPromptDiagnostic(diagnostic *SafeRenderedPromptDiagnos
 	}
 }
 
+func renderedPromptDiagnosticFromSafeWorkDiagnostics(diagnostic *SafeRenderedPromptDiagnostic) *RenderedPromptDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	return &RenderedPromptDiagnostic{
+		SystemPromptHash: diagnostic.SystemPromptHash,
+		UserMessageHash:  diagnostic.UserMessageHash,
+		Variables:        cloneStringMap(diagnostic.Variables),
+	}
+}
+
 func safeProviderDiagnosticFromWorkDiagnostics(diagnostic *ProviderDiagnostic) *SafeProviderDiagnostic {
 	if diagnostic == nil {
 		return nil
@@ -200,6 +227,18 @@ func generatedSafeProviderDiagnostic(diagnostic *SafeProviderDiagnostic) *factor
 		Model:            safeDiagnosticsStringPtrIfNotEmpty(diagnostic.Model),
 		RequestMetadata:  safeDiagnosticsStringMapPtr(diagnostic.RequestMetadata),
 		ResponseMetadata: safeDiagnosticsStringMapPtr(diagnostic.ResponseMetadata),
+	}
+}
+
+func providerDiagnosticFromSafeWorkDiagnostics(diagnostic *SafeProviderDiagnostic) *ProviderDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	return &ProviderDiagnostic{
+		Provider:         diagnostic.Provider,
+		Model:            diagnostic.Model,
+		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
+		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
 	}
 }
 
