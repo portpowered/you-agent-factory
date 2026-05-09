@@ -2,9 +2,9 @@
 
 ## world state
 
-- as of `2026-05-09T13:05:17+09:00`, local `main` has been rebased onto live
-  `origin/main` at `74b874a` and then carries one local meta-refresh commit
-  `57076b3`
+- as of `2026-05-09T14:02:51+09:00`, live `origin/main` still points at
+  merged `PR #174` commit `74b874a`, while local `main` also carries stacked
+  meta-only refresh commits, including `c1b5823` on open `PR #175`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the current canonical local ask file still says there are no active customer
   asks: `for now no asks exists.`
@@ -44,6 +44,8 @@
   was stale because merged PR `#174` landed that exact lane on `main`
 - that stale ignored idea residue has now been pruned locally so the operating
   queue no longer points at already-merged work
+- the local ignored operating queue now contains one fresh standalone idea:
+  `factory/inputs/idea/default/split-bootstrap-portability-functionallong-helpers.md`
 
 ## customer-ask truth
 
@@ -63,6 +65,7 @@
   - `#166` `simplify-loaded-runtime-definition-lookups`
   - `#165` `localize-workflow-activity-graph-import-copy`
 - `gh pr list --state open` on `2026-05-09` reports:
+  - `#175` `docs: refresh meta world state`
   - `#173` `docs: refresh meta world state`
   - `#172` `same-trace`
   - `#171` `workflow-graph-padding`
@@ -83,8 +86,8 @@
 - `PR #171` owns the dashboard-shell and workflow-graph padding lane
 - `PR #172` owns the same-trace guard lane across config, petri, API, and
   functional coverage
-- `PR #173` is the current open meta-refresh branch and is now older than the
-  live rebased local worldview again
+- `PR #175` is the freshest open meta-refresh branch and supersedes `PR #173`
+  plus the older still-open meta-refresh PR stack on the same file pair
 - the smoke helper dedupe lane is closed on live `main` through merged
   `PR #174`, so it must not be re-queued
 
@@ -100,18 +103,23 @@
 
 ## current maintainer decision
 
-- this cycle does not queue a new cleanup request
+- this cycle queues one new cleanup request:
+  `split-bootstrap-portability-functionallong-helpers`
 - reason:
-  - the previously selected next cleanup seam already merged through `PR #174`
-  - the delegated explorer's replacement suggestions did not survive direct
-    code validation on live `main`
-  - `pkg/listeners/filewatcher.go` already rejects direct two-segment
-    `inputs/<work-type>/<file>` drops and tests cover the canonical
-    `default/`-channel-only contract
-  - `pkg/api/server.go` no longer carries a handwritten `/work` pagination shim
-    and the generated binding path already owns invalid `maxResults` rejection
-  - `pkg/replay/event_stream_artifact.go` still has in-repo test and
-    functional callers for the file-wrapper helpers, so that seam is not dead
+  - the canonical ask surface is still empty, so cleanup choice must be
+    justified only by live repo state and non-overlap with active PR ownership
+  - direct reads plus `docs/internal/development/deadcode-baseline.txt` show
+    bootstrap-portability helper functions reported as unreachable solely
+    because they live in always-built `_test.go` files while their only callers
+    sit behind `//go:build functionallong`
+  - the affected helpers are narrow and isolated to
+    `tests/functional/bootstrap_portability/*`, so the cleanup does not overlap
+    active ownership in `PR #141`, `PR #167`, `PR #171`, or `PR #172`
+  - moving those helpers behind matching build tags removes deadcode-baseline
+    noise without changing backend, API, CLI, or UI behavior
+  - the alternative duplicated projection seams found by a delegated explorer
+    remain real but broader, so they are lower priority than this tighter
+    deadcode cleanup
 
 ## theory of mind
 
@@ -127,3 +135,10 @@
 - treat delegated explorer suggestions as hypotheses; re-verify them against
   live `main` before dispatching new cleanup work because recent merges can
   invalidate an otherwise plausible seam within the same cycle
+- when an untagged test helper is only called from `functionallong` suites,
+  treat the build-tag mismatch as the real deadcode seam and move the helper
+  behind matching tags instead of normalizing the noise into the baseline
+- when multiple open meta-refresh PRs touch only
+  `factory/logs/meta/view.md` and `factory/logs/meta/progress.txt`, the newest
+  live worldview supersedes the older stack rather than creating parallel lane
+  ownership
