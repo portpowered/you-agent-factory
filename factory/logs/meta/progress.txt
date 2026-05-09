@@ -164,6 +164,9 @@
 - When a helper still carries an explicitly backwards-compatible variadic
   parameter but the live production caller already passes one concrete explicit
   value, prefer deleting the shim over preserving two call shapes.
+- When deadcode flags an untagged test helper as unreachable, check whether its
+  only callers live behind `//go:build functionallong`; if so, move the helper
+  behind the same build tag instead of accepting permanent baseline noise.
 
 ## Current Summary
 
@@ -2286,4 +2289,65 @@
   - When short and `functionallong` test lanes define the same factory-config
     builder, prefer one shared helper owner so fixture drift cannot hide behind
     build tags.
+---
+
+## 2026-05-09T14:02:51+09:00 - meta state refresh
+
+- Re-ran `git pull --ff-only` and confirmed the repository was already current
+  with live `origin/main`, while local `main` still sat ahead with stacked
+  meta-only refresh commits and an open replacement meta PR `#175`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, the code-review standard, the backend and website
+  standards, the tracked-versus-ignored `factory/inputs/**` surface, open PR
+  ownership, recent git history, and live code under `tests/functional/` and
+  `pkg/`.
+- Confirmed the canonical ask surface still says `for now no asks exists.`, so
+  no customer lane displaced the cleanup decision this cycle.
+- Revalidated queue truth with `git ls-files factory/inputs` and
+  `find factory/inputs -maxdepth 3 -type f`, confirming the checked-in inboxes
+  remain sentinel-only and that the new cleanup request belongs only in the
+  ignored operating queue.
+- Used one delegated explorer to reconcile PR ownership and confirmed `PR #175`
+  supersedes `PR #173` plus the older still-open meta-refresh stack on the same
+  two tracked files, while active non-meta ownership remains isolated to
+  `PR #141`, `PR #167`, `PR #171`, and `PR #172`.
+- Validated one broader delegated duplication seam in
+  `pkg/factory/projections/world_view_work_item_refs.go` versus
+  `pkg/api/workstation_request_projection.go`, but left it unqueued because it
+  is materially wider than the best deadcode cleanup available right now.
+- Chose one narrower cleanup lane from direct code reads plus the deadcode
+  baseline: bootstrap-portability helper functions are reported unreachable
+  only because long-only callers live behind `//go:build functionallong` while
+  the helpers themselves still compile in the default lane.
+- Queued one ignored standalone idea at
+  `factory/inputs/idea/default/split-bootstrap-portability-functionallong-helpers.md`
+  to move those helpers behind matching build tags and prune the resulting
+  deadcode-baseline noise.
+- Ran `go test ./cmd/deadcodecheck` and confirmed the command-owner coverage
+  seam recorded earlier is now obsolete on live `main` (`97.7%` statements),
+  so it should not be treated as an active next cleanup lane anymore.
+- Ran `go test ./tests/functional/bootstrap_portability/...` successfully.
+- Ran `go test -tags functionallong ./tests/functional/bootstrap_portability/...`
+  and confirmed the full tagged suite already fails on unrelated existing
+  fixture/config drift (`promptTemplate` rejection in current-factory
+  portability fixtures and missing AGENTS frontmatter in the expand/flatten
+  portability sweep), so the queued cleanup keeps full long-lane repair out of
+  scope.
+- Files changed:
+  - `factory/logs/meta/view.md`
+  - `factory/logs/meta/progress.txt`
+  - added ignored idea
+    `factory/inputs/idea/default/split-bootstrap-portability-functionallong-helpers.md`
+- **Learnings for future iterations:**
+  - When the same two meta-doc files are already owned by multiple open
+    meta-refresh PRs, treat only the freshest worldview branch as current lane
+    ownership and treat the older stack as superseded residue.
+  - If long-only functional helpers live in untagged `_test.go` files, the
+    right cleanup is to align helper build tags with their callers rather than
+    preserving deadcode-baseline entries forever.
+  - Re-check old coverage-driven backlog notes against live commands before
+    dispatching them; the repo-owned gate may already have been raised by a
+    later merge.
 ---
