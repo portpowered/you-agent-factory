@@ -290,11 +290,14 @@ func TestExpandFactoryConfig_ReportsReplacedPortableBundledFiles(t *testing.T) {
 
 func TestExpandFactoryConfig_PreservesPortableResourceManifestAndMaterializesBundledFiles(t *testing.T) {
 	dir := t.TempDir()
+	toolsDir := t.TempDir()
+	presentCommand := writeCLIRequiredToolExecutable(t, toolsDir, "portable-helper")
+	t.Setenv("PATH", toolsDir)
 	factoryPath := filepath.Join(dir, "factory.json")
-	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolWithPurposeJSON("python"))
+	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolWithPurposeJSON(presentCommand))
 
 	targetDir, _, canonical := expandPortableResourceManifestFactory(t, factoryPath)
-	assertPortableResourceManifestPayload(t, canonical, "python")
+	assertPortableResourceManifestPayload(t, canonical, presentCommand)
 	assertFlattenedPortableResourceManifestPreserved(t, targetDir)
 	assertPortableBundledFilesMaterialized(t, targetDir)
 	assertLoadedPortableResourceManifest(t, targetDir)

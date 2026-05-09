@@ -16,6 +16,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func normalizedCommandTestPath(t *testing.T, value string) string {
+	t.Helper()
+
+	normalized, err := filepath.EvalSymlinks(value)
+	if err == nil {
+		return normalized
+	}
+	return filepath.Clean(value)
+}
+
 type recordingCommandLogger struct {
 	infos    []recordedCommandLog
 	verboses []recordedCommandLog
@@ -69,7 +79,7 @@ func TestExecCommandRunner_SuccessfulProcessCapturesOutputAndInputs(t *testing.T
 			"success",
 		},
 		Stdin:   []byte("stdin-value"),
-		Env:     append(os.Environ(), "GO_WANT_COMMAND_HELPER=1", "COMMAND_HELPER_WANT_STDIN=stdin-value", "COMMAND_HELPER_WANT_CWD="+workDir),
+		Env:     append(os.Environ(), "GO_WANT_COMMAND_HELPER=1", "COMMAND_HELPER_WANT_STDIN=stdin-value", "COMMAND_HELPER_WANT_CWD="+normalizedCommandTestPath(t, workDir)),
 		WorkDir: workDir,
 	})
 	if err != nil {
