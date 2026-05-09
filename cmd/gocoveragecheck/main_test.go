@@ -14,6 +14,16 @@ import (
 	"testing"
 )
 
+func normalizedCoverageTestPath(t *testing.T, value string) string {
+	t.Helper()
+
+	normalized, err := filepath.EvalSymlinks(value)
+	if err == nil {
+		return normalized
+	}
+	return filepath.Clean(value)
+}
+
 func TestIsBackendCoveragePackage(t *testing.T) {
 	t.Parallel()
 
@@ -1252,8 +1262,8 @@ func TestRepoRootDirFindsNearestAncestorWithGoMod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repoRootDir() error = %v", err)
 	}
-	if got != repoRoot {
-		t.Fatalf("repoRootDir() = %q, want %q", got, repoRoot)
+	if normalizedCoverageTestPath(t, got) != normalizedCoverageTestPath(t, repoRoot) {
+		t.Fatalf("repoRootDir() = %q, want path equivalent to %q", got, repoRoot)
 	}
 }
 

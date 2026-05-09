@@ -167,10 +167,9 @@
 
 ## Current Summary
 
-- As of `2026-05-07T05:03:44.1967849-07:00`, `HEAD` points to `3d0c461` on
-  branch `main`, is ahead of `origin/main` by three local meta commits, and
-  already contains merged PR `#147` (`localize-export-dialog-and-trigger`) from
-  `origin/main`.
+- As of `2026-05-09T12:03:55+09:00`, live upstream `origin/main` points to
+  `bc1e149` after merged PRs `#169` and `#170`, while the local branch is being
+  reconciled with that upstream head plus existing local tracked edits.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -178,30 +177,25 @@
   hourly cleaner, and loop breakers.
 - The tracked input surface remains sentinel-only; there is no checked-in
   cleanup request currently queued under `factory/inputs/**`.
-- The local worktree is not clean because `factory/logs/meta/asks.md` carries a
-  user-owned tracked edit and the maintainer meta refresh updates the tracked
-  view/progress docs; ignored workflow files under `factory/inputs/**` remain
-  operating state rather than canonical queue truth.
-- Recent merged PRs now include `#146` and `#147`; open PR `#141` owns the
-  active checklist-audit lane, while `#145`, `#143`, `#139`, `#123`, and
-  `#120` remain meta refresh branches.
-- The canonical ask surface remains the quality-oriented rewrite in
-  `factory/logs/meta/asks.md`; the active asks are external checklist
-  alignment, stronger backend and website testing, ongoing simplification, and
-  maintaining at least three non-overlapping tasks in flight.
+- The local worktree is not clean because `factory/logs/meta/asks.md` and
+  `factory/workers/workspace-setup/AGENTS.md` already carry tracked local edits
+  and this refresh updates the tracked meta docs; ignored workflow files under
+  `factory/inputs/**` remain operating state rather than canonical queue truth.
+- Open PR ownership now includes `#141` for checklist audit, `#167` for
+  work-outcome localization, `#171` for workflow-graph spacing, and `#172` for
+  the same-trace guard, while `#168` remains the older open meta-refresh lane.
+- The canonical ask surface currently says `for now no asks exists.`, so the
+  earlier checklist, coverage, simplification, and queue-count backlog is
+  withdrawn for this cycle.
 - The replay fixtures remain historical samples rather than current workflow
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
-- The external website and backend checklist URLs remain readable on
-  `2026-05-07`, but the linked external `asks.md` URL still does not produce a
-  readable checklist document and must be treated as a source-evidence gap.
-- The previously queued ignored ideas `localize-export-dialog-and-trigger` and
-  `narrow-cron-watcher-runtime-lookup-contract` are stale because merged PRs
-  `#147` and `#146` landed those exact lanes on `main`.
-- The next maintainer-owned operating queue should hold three non-overlapping
-  ideas together: repo-wide checklist audit evidence,
-  `retire-template-fields-variadic-worktree-shim`, and
-  `localize-dashboard-header-timeline-and-stream-status`.
+- The previously queued ignored replay idea
+  `collapse-replay-safe-diagnostics-rehydration` is stale because merged PR
+  `#169` landed that exact lane on `main`.
+- The next maintainer-owned ignored queue slot should be the narrow smoke-suite
+  helper dedupe between `tests/functional/smoke/short_helpers_test.go` and
+  `tests/functional/smoke/service_lifecycle_smoke_long_test.go`.
 
 ## 2026-05-07T05:03:44.1967849-07:00 - meta state refresh
 
@@ -2080,7 +2074,6 @@
   `factory/inputs/idea/default/cover-releasesmoke-command-owner-parse-and-json-error-branches.md`
   so the operating backlog returns to three narrow active lanes without
   overlapping PR `#141` or `#142`.
-
 ## 2026-05-09T10:03:07+09:00 - meta state refresh
 
 - Ran `git pull --ff-only`; local `main` fast-forwarded from `0616500` to
@@ -2171,4 +2164,60 @@
   - Open PR ownership can remain useful context even after the canonical ask
     surface goes empty, but those PRs should no longer be described as
     customer-required lanes unless the ask file says so.
+---
+
+## 2026-05-09T12:03:55+09:00 - meta state refresh
+
+- Attempted `git pull --ff-only` first and hit a divergent-branch failure
+  because local `main` was ahead by one older meta commit, behind
+  `origin/main` by twelve commits, and already had tracked local edits in the
+  worktree.
+- Fetched `origin/main`, re-read `factory/logs/meta/view.md`,
+  `factory/logs/meta/progress.txt`, `factory/logs/meta/asks.md`,
+  `factory/logs/agent-fails.json`, `factory/logs/agent-fails.replay.json`,
+  `factory/README.md`, `factory/factory.json`, the code-review standard, open
+  PR state, and the tracked-versus-ignored `factory/inputs/**` surface before
+  resolving the merge.
+- Confirmed the local canonical ask file still says `for now no asks exists.`,
+  so the earlier customer backlog for checklist work, high coverage, ongoing
+  simplification, and minimum simultaneous lanes is withdrawn for this cycle.
+- Checked live upstream movement and verified that merged PR `#169`
+  (`collapse-replay-safe-diagnostics-rehydration`) and merged PR `#170`
+  (`weird-work-names`) are already part of `origin/main`, while current open
+  non-meta ownership sits with PRs `#141`, `#167`, `#171`, and `#172`.
+- Revalidated queue truth with `git ls-files factory/inputs` and
+  `find factory/inputs -maxdepth 3 -type f`, confirming the checked-in inboxes
+  remain sentinel-only and the only live ignored maintainer request was the
+  stale replay-diagnostics idea that already merged upstream.
+- Re-read the merged replay diagnostics files on upstream and confirmed the old
+  queued idea is no longer actionable; the remaining replay-local helper seam
+  identified by an explorer was a stale local-branch observation and not valid
+  on live `origin/main`.
+- Used direct reads of `tests/functional/smoke/short_helpers_test.go`,
+  `tests/functional/smoke/service_lifecycle_smoke_long_test.go`, and
+  `tests/functional/smoke/service_config_override_alignment_test.go` to choose
+  one fresh cleanup lane: dedupe the duplicated
+  `simpleServicePipelineConfig` and `twoStageServicePipelineConfig` builders so
+  the short and `functionallong` smoke suites share one canonical fixture
+  owner.
+- Replaced the stale replay idea with one new ignored standalone idea under
+  `factory/inputs/idea/default/dedupe-service-smoke-pipeline-config-builders.md`
+  so the local operating backlog reflects live code rather than a merged PR.
+- Files changed:
+  - `factory/logs/meta/view.md`
+  - `factory/logs/meta/progress.txt`
+  - deleted ignored residue
+    `factory/inputs/idea/default/collapse-replay-safe-diagnostics-rehydration.md`
+  - added ignored idea
+    `factory/inputs/idea/default/dedupe-service-smoke-pipeline-config-builders.md`
+- **Learnings for future iterations:**
+  - When `git pull --ff-only` fails on the meta branch, treat any queued seam
+    discovered on the stale local tip as provisional until it is rechecked
+    against fetched `origin/main`.
+  - If an ignored idea filename matches a branch that has already merged
+    upstream, prune it before dispatching anything else; otherwise the local
+    queue stops reflecting the real world.
+  - When short and `functionallong` test lanes define the same factory-config
+    builder, prefer one shared helper owner so fixture drift cannot hide behind
+    build tags.
 ---

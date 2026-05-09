@@ -321,8 +321,8 @@ func writeFakeGit(t *testing.T, dir string, cfg fakeGitConfig) {
 	}
 
 	contents := "#!/bin/sh\n" +
-		"printf '%s' \"" + shellQuoteForDoubleQuotes(cfg.stdout) + "\"\n" +
-		"printf '%s' \"" + shellQuoteForDoubleQuotes(cfg.stderr) + "\" >&2\n" +
+		"printf '%b' \"" + shellQuoteForDoubleQuotes(cfg.stdout) + "\"\n" +
+		"printf '%b' \"" + shellQuoteForDoubleQuotes(cfg.stderr) + "\" >&2\n" +
 		"exit " + strconv.Itoa(cfg.exitCode) + "\n"
 	if err := os.WriteFile(path, []byte(contents), 0o755); err != nil {
 		t.Fatalf("write fake git: %v", err)

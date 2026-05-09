@@ -7,7 +7,7 @@ tests/functional/bootstrap_portability/portability_helpers_test.go:33:6: unreach
 tests/functional/guards_batch/helpers_test.go:14:6: unreachable func: providerErrorCorpusEntryForTest
 tests/functional/guards_batch/helpers_test.go:99:29: unreachable func: panickingExecutor.Execute
 tests/functional/internal/support/events.go:23:6: unreachable func: FactoryRelationsValue
-tests/functional/internal/support/fixtures.go:136:6: unreachable func: UpdateFactoryConfig
+tests/functional/internal/support/fixtures.go:160:6: unreachable func: UpdateFactoryConfig
 tests/functional/providers/helpers_test.go:127:6: unreachable func: buildModelWorkerConfig
 tests/functional/providers/helpers_test.go:179:6: unreachable func: writeNamedWorkerAgents
 tests/functional/providers/helpers_test.go:205:6: unreachable func: writeExecutionTemplateWorkstationAgents
@@ -64,7 +64,6 @@ tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:55:6: u
 tests/functional/runtime_api/api_batch_submission_boundary_smoke_test.go:98:6: unreachable func: loadBatchBoundarySummary
 tests/functional/smoke/short_helpers_test.go:5:6: unreachable func: simpleServicePipelineConfig
 tests/functional/workflow/helpers_test.go:11:6: unreachable func: newAdhocProcessReviewHarness
-tests/functional/workflow/helpers_test.go:38:6: unreachable func: dispatchesForWorkstation
 tests/functional/workflow/helpers_test.go:51:6: unreachable func: assertProviderCallWorkstations
 tests/functional/workflow/helpers_test.go:68:6: unreachable func: assertDispatchHasOutputToPlace
 tests/functional/workflow/helpers_test.go:84:6: unreachable func: assertDispatchOutputTagAbsent
