@@ -2166,6 +2166,55 @@
     customer-required lanes unless the ask file says so.
 ---
 
+## 2026-05-09T13:05:17+09:00 - meta state refresh
+
+- Ran `git pull --rebase --autostash origin main`; Git rebased local `main`
+  onto live `origin/main`, pulling in merged PR `#174`
+  (`dedupe-service-smoke-pipeline-config-builders`) while preserving the
+  tracked local edits in `factory/logs/meta/asks.md` and
+  `factory/workers/workspace-setup/AGENTS.md`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, the code-review,
+  backend, and website standards, current PR state, the tracked-versus-ignored
+  `factory/inputs/**` surface, and the live candidate seams in `pkg/api`,
+  `pkg/listeners`, `pkg/replay`, and `tests/functional/smoke`.
+- Revalidated queue truth with `git ls-files factory/inputs` and
+  `find factory/inputs -maxdepth 3 -type f`, confirming the checked-in inboxes
+  remain sentinel-only and that the visible ignored smoke-dedupe idea was
+  stale local operating residue rather than a pending checked-in request.
+- Confirmed the previously queued ignored idea
+  `factory/inputs/idea/default/dedupe-service-smoke-pipeline-config-builders.md`
+  is stale because merged PR `#174` already landed that exact cleanup lane on
+  `main`, then pruned that ignored residue locally.
+- Used one delegated explorer pass to propose replacement seams, then
+  invalidated the first two suggestions with direct code reads:
+  `pkg/listeners/filewatcher.go` already rejects direct
+  `inputs/<work-type>/<file>` drops and
+  `pkg/api/server.go` already relies on generated query binding for `/work`
+  pagination parameters.
+- Rechecked `pkg/replay/event_stream_artifact.go` and its callers, confirming
+  the file-wrapper helpers are still covered by in-repo package and functional
+  tests, so that seam is not dead code.
+- Chose not to queue a fresh cleanup request this cycle because the validated
+  world state no longer supports the stale candidate and the replacement seams
+  were not real on live `main`.
+- Files changed:
+  - `factory/logs/meta/view.md`
+  - `factory/logs/meta/progress.txt`
+  - deleted ignored residue
+    `factory/inputs/idea/default/dedupe-service-smoke-pipeline-config-builders.md`
+- **Learnings for future iterations:**
+  - Treat delegated explorer suggestions as hypotheses; re-read the cited files
+    on live `main` before dispatching a new cleanup request.
+  - A merged cleanup PR can leave an ignored idea file behind locally even when
+    the checked-in inboxes are clean, so queue truth must be reconciled at both
+    the git-tracked and ignored-operating-state layers.
+  - When the canonical ask surface is empty, it is better to leave no queued
+    cleanup than to dispatch a request supported only by stale branch-local
+    evidence.
+---
+
 ## 2026-05-09T12:06:06+09:00 - meta push closeout
 
 - Pushed `main` successfully after the merge resolution, moving live upstream
