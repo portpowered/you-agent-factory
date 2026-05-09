@@ -167,12 +167,17 @@
 - When deadcode flags an untagged test helper as unreachable, check whether its
   only callers live behind `//go:build functionallong`; if so, move the helper
   behind the same build tag instead of accepting permanent baseline noise.
+- When the same replay-contract helper logic is defined once in a default-tag
+  helper file and again in a `functionallong` test file, prefer one shared
+  helper owner that both build modes compile instead of carrying duplicate
+  assertion helpers plus build-mode deadcode noise.
 
 ## Current Summary
 
-- As of `2026-05-09T12:06:06+09:00`, local `HEAD` and live upstream
-  `origin/main` both point to `e3162f4` after this cycle's merge-and-refresh
-  push to `main`.
+- As of `2026-05-09T15:05:05+09:00`, live upstream `origin/main` points to
+  merged `PR #176` commit `37c7c61`, and local `main` has been rebased onto
+  that head while still carrying stacked local meta-refresh commits awaiting
+  push.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -186,19 +191,57 @@
   `factory/inputs/**` remain operating state rather than canonical queue truth.
 - Open PR ownership now includes `#141` for checklist audit, `#167` for
   work-outcome localization, `#171` for workflow-graph spacing, and `#172` for
-  the same-trace guard, while `#168` remains the older open meta-refresh lane.
+  the same-trace guard, while `#175` is the freshest open meta-refresh lane.
 - The canonical ask surface currently says `for now no asks exists.`, so the
   earlier checklist, coverage, simplification, and queue-count backlog is
   withdrawn for this cycle.
 - The replay fixtures remain historical samples rather than current workflow
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
-- The previously queued ignored replay idea
-  `collapse-replay-safe-diagnostics-rehydration` is stale because merged PR
-  `#169` landed that exact lane on `main`.
-- The next maintainer-owned ignored queue slot should be the narrow smoke-suite
-  helper dedupe between `tests/functional/smoke/short_helpers_test.go` and
-  `tests/functional/smoke/service_lifecycle_smoke_long_test.go`.
+- The previously queued ignored bootstrap-portability idea was stale because
+  merged PR `#176` already landed that exact lane on `main`, and the stale
+  ignored residue has been pruned locally.
+- The older smoke-suite helper-dedupe seam previously recorded here is also
+  closed on live `main`; the shared owner now lives in
+  `tests/functional/smoke/service_pipeline_config_helpers_test.go`.
+- The fresh maintainer-owned ignored cleanup slot for this cycle is
+  `factory/inputs/idea/default/dedupe-replay-contract-tagged-helpers.md`.
+
+## 2026-05-09T15:05:05+09:00 - meta state refresh
+
+- `git pull --ff-only` failed immediately because local `main` was ahead `3`
+  and behind `3`; deferred branch reconciliation until after the repository
+  state and queue truth were re-validated.
+- Finished the branch reconciliation later in the same cycle with
+  `git pull --rebase --autostash origin main`, which replayed the local
+  meta-refresh stack cleanly onto `37c7c61` while preserving existing tracked
+  local edits.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, the backend and website standards, the tracked versus
+  ignored `factory/inputs/**` surface, and recent merged/open PR movement.
+- Confirmed the canonical ask surface still says `for now no asks exists.`, so
+  this cycle stays focused on worldview accuracy plus one narrow cleanup lane.
+- Re-validated that the tracked factory inboxes remain sentinel-only while the
+  visible local queue state is ignored operating residue rather than checked-in
+  contract.
+- Confirmed live upstream already merged `PR #176`
+  (`split-bootstrap-portability-functionallong-helpers`), so the local ignored
+  idea file for that lane had become stale and was pruned.
+- Re-checked the older smoke-helper seam recorded in the prior summary and
+  found it was also stale on live code: the shared helper owner already exists
+  in `tests/functional/smoke/service_pipeline_config_helpers_test.go`, so that
+  lane must not be re-queued.
+- Used a delegated explorer plus direct code reads to choose the next narrow
+  non-overlapping cleanup seam in `tests/functional/replay_contracts/`:
+  `short_helpers_test.go` and
+  `replay_record_end_to_end_long_test.go` duplicate the same helper logic
+  across default and `functionallong` build-tag lanes.
+- Wrote one fresh standalone cleanup idea to
+  `factory/inputs/idea/default/dedupe-replay-contract-tagged-helpers.md`
+  asking for one shared replay-contract helper owner plus deadcode-baseline
+  cleanup.
 
 ## 2026-05-07T05:03:44.1967849-07:00 - meta state refresh
 
