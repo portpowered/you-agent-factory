@@ -1,3 +1,5 @@
+//go:build functionallong
+
 package bootstrap_portability
 
 import (
