@@ -94,7 +94,7 @@ const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
 const CURRENT_ACTIVITY_EYEBROW_CLASS =
   "mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
 const CURRENT_ACTIVITY_LEGEND_CLASS =
-  "absolute right-0 top-0 z-10 max-[720px]:left-0";
+  "absolute left-7 top-7 z-10 max-[720px]:left-4 max-[720px]:right-4 max-[720px]:top-4";
 const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =

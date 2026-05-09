@@ -715,6 +715,11 @@ describe("ReactFlowCurrentActivityCard", () => {
     expect(card?.className).toContain("max-[720px]:p-4");
     expect(header?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(legend?.className).toContain("absolute");
+    expect(legend?.className).toContain("left-7");
+    expect(legend?.className).toContain("top-7");
+    expect(legend?.className).toContain("max-[720px]:left-4");
+    expect(legend?.className).toContain("max-[720px]:right-4");
+    expect(legend?.className).not.toContain("right-0");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.getAttribute("aria-describedby")).toBe(
