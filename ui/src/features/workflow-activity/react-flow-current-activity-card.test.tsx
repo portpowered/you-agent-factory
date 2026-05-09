@@ -692,6 +692,8 @@ describe("ReactFlowCurrentActivityCard", () => {
   });
 
   it("keeps only the outer card padding while preserving the current activity heading semantics", () => {
+    const legendMessages = getDashboardFlowAxisLegendMessages("en");
+
     renderCurrentActivity({
       snapshot: semanticWorkflowDashboardSnapshot,
     });
@@ -699,6 +701,12 @@ describe("ReactFlowCurrentActivityCard", () => {
     const heading = screen.getByRole("heading", { name: "Current activity" });
     const card = heading.closest("section");
     const header = heading.parentElement?.parentElement as HTMLElement | null;
+    const legendToggle = screen.getByRole("button", {
+      name: legendMessages.expandToggleLabel("graph legend"),
+    });
+    const legend = legendToggle.closest(
+      "[data-dashboard-flow-axis-legend]",
+    ) as HTMLElement | null;
     const viewport = screen.getByRole("region", {
       name: "Work graph viewport",
     });
@@ -706,6 +714,8 @@ describe("ReactFlowCurrentActivityCard", () => {
     expect(card?.className).toContain("p-[1.2rem]");
     expect(card?.className).toContain("max-[720px]:p-4");
     expect(header?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(legend?.className).toContain("absolute");
+    expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.getAttribute("aria-describedby")).toBe(
       "workflow-graph-heading",
