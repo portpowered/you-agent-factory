@@ -1,5 +1,11 @@
 ## Codebase Patterns
 
+- Treat live `origin/main` plus the canonical ask file as the source of truth
+  over older local worldview notes; if upstream reintroduces asks, invalidate
+  stale “no asks” summaries immediately.
+- Do not trust a passing `cmd/gocoveragecheck` result on aggregate percentage
+  alone; compare the same live run for printed `0.0%` backend package lines
+  because the zero-coverage gate can still miss packages and overstate quality.
 - When the canonical local ask file is reduced to `for now no asks exists.`,
   treat earlier broad backlog notes as withdrawn for the current cycle instead
   of continuing to satisfy them by inertia.
@@ -174,10 +180,9 @@
 
 ## Current Summary
 
-- As of `2026-05-09T15:05:05+09:00`, live upstream `origin/main` points to
-  merged `PR #176` commit `37c7c61`, and local `main` has been rebased onto
-  that head while still carrying stacked local meta-refresh commits awaiting
-  push.
+- As of `2026-05-09T16:03:49+09:00`, live upstream `origin/main` points to
+  merged `PR #177` commit `ca69cbc`, and local `main` has been rebased onto
+  that head while carrying only the local meta-refresh commit stack.
 - The canonical ask surface remains `factory/logs/meta/asks.md`.
 - The checked-in maintainer workflow is `thoughts -> idea -> plan -> task`
   with `idea/task:to-complete`, same-name `consume`, `.claude/worktrees`
@@ -185,27 +190,59 @@
   hourly cleaner, and loop breakers.
 - The tracked input surface remains sentinel-only; there is no checked-in
   cleanup request currently queued under `factory/inputs/**`.
-- The local worktree is not clean because `factory/logs/meta/asks.md` and
-  `factory/workers/workspace-setup/AGENTS.md` already carry tracked local edits
-  and this refresh updates the tracked meta docs; ignored workflow files under
-  `factory/inputs/**` remain operating state rather than canonical queue truth.
+- The visible local queue state under `factory/inputs/**` is ignored operating
+  residue rather than checked-in queue truth.
 - Open PR ownership now includes `#141` for checklist audit, `#167` for
   work-outcome localization, `#171` for workflow-graph spacing, and `#172` for
   the same-trace guard, while `#175` is the freshest open meta-refresh lane.
-- The canonical ask surface currently says `for now no asks exists.`, so the
-  earlier checklist, coverage, simplification, and queue-count backlog is
-  withdrawn for this cycle.
+- `#141` also touches the meta-doc pair, so meta-refresh work is not isolated
+  to the `#175` stack.
+- The canonical ask surface on live `main` is active again and currently asks
+  for external-checklist conformance, stronger backend and website coverage,
+  and ongoing simplification.
 - The replay fixtures remain historical samples rather than current workflow
   truth, and one rejection payload is still quoted anomalously in the replay
   sample.
-- The previously queued ignored bootstrap-portability idea was stale because
-  merged PR `#176` already landed that exact lane on `main`, and the stale
-  ignored residue has been pruned locally.
-- The older smoke-suite helper-dedupe seam previously recorded here is also
-  closed on live `main`; the shared owner now lives in
-  `tests/functional/smoke/service_pipeline_config_helpers_test.go`.
+- The replay-helper dedupe lane previously recorded here is now closed on live
+  `main` through merged `PR #177`, so its ignored idea residue is stale.
 - The fresh maintainer-owned ignored cleanup slot for this cycle is
-  `factory/inputs/idea/default/dedupe-replay-contract-tagged-helpers.md`.
+  `factory/inputs/idea/default/fix-gocoveragecheck-zero-coverage-report-gap.md`.
+
+## 2026-05-09T16:03:49+09:00 - meta state refresh
+
+- Reconciled the branch onto current upstream with
+  `git pull --rebase origin main` after stashing local tracked edits out of the
+  way; live `origin/main` now resolves to merged `PR #177` commit `ca69cbc`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, the backend standard, the tracked-versus-ignored
+  `factory/inputs/**` surface, recent merged/open PR movement, and direct code
+  in the candidate cleanup areas.
+- Corrected the stale worldview assumptions from the previous cycle:
+  the canonical ask file on live `main` is active again,
+  `PR #177` is merged, and the older replay-helper cleanup request is already
+  closed on upstream.
+- Re-validated that the tracked factory inboxes remain sentinel-only while the
+  visible local idea files are ignored operating residue.
+- Verified with `gh pr list --state open` that active product-code ownership is
+  still concentrated in `#141`, `#167`, `#171`, and `#172`, leaving
+  `cmd/gocoveragecheck` outside current open-lane overlap.
+- Ran the live backend coverage lane with
+  `go run ./cmd/gocoveragecheck -min 80 -timeout 300s` and confirmed the
+  command still exits successfully at `86.6%` total coverage while the same
+  output prints `0.0%` backend package lines for
+  `pkg/apisurface`, `pkg/buffers`, and `pkg/cli/default`.
+- Re-read `cmd/gocoveragecheck/main.go` and its tests, confirming the next
+  high-value narrow seam is the zero-coverage detection path in
+  `findZeroCoveragePackages` and its regression coverage, not a broader
+  package-by-package test-authoring campaign.
+- Used delegated explorer passes to reject already-owned or already-merged
+  seams and to keep one smaller fallback helper-dedupe seam on hand, but chose
+  the coverage-gate bug as the stronger customer-facing cleanup lane.
+- Pruned the stale ignored replay-helper idea and replaced it with one fresh
+  standalone cleanup idea:
+  `factory/inputs/idea/default/fix-gocoveragecheck-zero-coverage-report-gap.md`.
 
 ## 2026-05-09T15:05:05+09:00 - meta state refresh
 
