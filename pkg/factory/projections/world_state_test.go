@@ -341,6 +341,47 @@ func TestReconstructFactoryWorldState_PreservesSafeResponseDiagnostics(t *testin
 	assertSafeResponseDiagnosticsState(t, state)
 }
 
+func TestReconstructFactoryWorldState_PreservesSafeInferenceAttemptDiagnostics(t *testing.T) {
+	t0 := time.Date(2026, 4, 18, 10, 0, 0, 0, time.UTC)
+	state, err := ReconstructFactoryWorldState(safeResponseDiagnosticsProjectionEvents(t0), 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	attempts := state.InferenceAttemptsByDispatchID["dispatch-1"]
+	if len(attempts) != 1 {
+		t.Fatalf("inference attempts = %#v, want one attempt for dispatch-1", attempts)
+	}
+	attempt := attempts["dispatch-1/inference-request/1"]
+	if attempt.ProviderSession == nil || attempt.ProviderSession.ID != "resp-1" {
+		t.Fatalf("attempt provider session = %#v, want resp-1", attempt.ProviderSession)
+	}
+	if attempt.Diagnostics == nil || attempt.Diagnostics.Provider == nil || attempt.Diagnostics.RenderedPrompt == nil {
+		t.Fatalf("attempt diagnostics = %#v, want provider and rendered prompt", attempt.Diagnostics)
+	}
+	if attempt.Diagnostics.Provider.Provider != "codex" || attempt.Diagnostics.Provider.Model != "gpt-5.4" {
+		t.Fatalf("attempt provider diagnostics = %#v, want codex/gpt-5.4", attempt.Diagnostics.Provider)
+	}
+	if got := attempt.Diagnostics.Provider.RequestMetadata["worker_type"]; got != "builder" {
+		t.Fatalf("attempt request metadata worker_type = %q, want builder", got)
+	}
+	if got := attempt.Diagnostics.Provider.ResponseMetadata["provider_session_id"]; got != "resp-1" {
+		t.Fatalf("attempt response metadata provider_session_id = %q, want resp-1", got)
+	}
+	if got := attempt.Diagnostics.RenderedPrompt.Variables["work_type_name"]; got != "task" {
+		t.Fatalf("attempt rendered prompt work_type_name = %q, want task", got)
+	}
+	if len(attempt.Diagnostics.RenderedPrompt.Variables) != 2 {
+		t.Fatalf("attempt rendered prompt variables = %#v, want only safe allowlisted keys", attempt.Diagnostics.RenderedPrompt.Variables)
+	}
+	if len(attempt.Diagnostics.Provider.RequestMetadata) != 1 {
+		t.Fatalf("attempt request metadata = %#v, want only allowlisted keys", attempt.Diagnostics.Provider.RequestMetadata)
+	}
+	if len(attempt.Diagnostics.Provider.ResponseMetadata) != 2 {
+		t.Fatalf("attempt response metadata = %#v, want only allowlisted keys", attempt.Diagnostics.Provider.ResponseMetadata)
+	}
+}
+
 func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent {
 	return []factoryapi.FactoryEvent{
 		factoryStateEvent(4, t0.Add(4*time.Second), "RUNNING", "COMPLETED"),
@@ -467,12 +508,20 @@ func projectionSafeResponseDiagnostics() *interfaces.SafeWorkDiagnostics {
 		RenderedPrompt: &interfaces.SafeRenderedPromptDiagnostic{
 			SystemPromptHash: "system-hash",
 			UserMessageHash:  "user-hash",
+			Variables: map[string]string{
+				"prompt_source":  "factory-renderer",
+				"work_type_name": "task",
+			},
 		},
 		Provider: &interfaces.SafeProviderDiagnostic{
 			Provider: "codex",
 			Model:    "gpt-5.4",
+			RequestMetadata: map[string]string{
+				"worker_type": "builder",
+			},
 			ResponseMetadata: map[string]string{
-				"retry_count": "1",
+				"provider_session_id": "resp-1",
+				"retry_count":         "1",
 			},
 		},
 	}

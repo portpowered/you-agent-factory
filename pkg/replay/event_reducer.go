@@ -267,7 +267,7 @@ func replayInferenceAttemptFromEvent(event factoryapi.FactoryEvent) (string, rep
 	return stringValue(event.Context.DispatchId), replayInferenceAttempt{
 		attempt:         payload.Attempt,
 		providerSession: interfaces.ProviderSessionMetadataFromGenerated(payload.ProviderSession),
-		diagnostics:     workDiagnosticsFromSafe(interfaces.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics)),
+		diagnostics:     interfaces.WorkDiagnosticsFromSafeWorkDiagnostics(interfaces.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics)),
 	}, nil
 }
 
@@ -305,39 +305,6 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 		},
 		diagnostics: diagnostics,
 	}, nil
-}
-
-func workDiagnosticsFromSafe(diagnostics *interfaces.SafeWorkDiagnostics) *interfaces.WorkDiagnostics {
-	if diagnostics == nil {
-		return nil
-	}
-	return &interfaces.WorkDiagnostics{
-		RenderedPrompt: renderedPromptDiagnosticFromSafe(diagnostics.RenderedPrompt),
-		Provider:       providerDiagnosticFromSafe(diagnostics.Provider),
-	}
-}
-
-func renderedPromptDiagnosticFromSafe(diagnostic *interfaces.SafeRenderedPromptDiagnostic) *interfaces.RenderedPromptDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &interfaces.RenderedPromptDiagnostic{
-		SystemPromptHash: diagnostic.SystemPromptHash,
-		UserMessageHash:  diagnostic.UserMessageHash,
-		Variables:        cloneStringMap(diagnostic.Variables),
-	}
-}
-
-func providerDiagnosticFromSafe(diagnostic *interfaces.SafeProviderDiagnostic) *interfaces.ProviderDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &interfaces.ProviderDiagnostic{
-		Provider:         diagnostic.Provider,
-		Model:            diagnostic.Model,
-		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
-		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
-	}
 }
 
 func replayInputTokensFromDispatchPayload(

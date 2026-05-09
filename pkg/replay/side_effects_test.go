@@ -44,6 +44,9 @@ func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
 	if resp.Diagnostics.Provider.ResponseMetadata["request_id"] != "req-1" {
 		t.Fatalf("response metadata = %#v", resp.Diagnostics.Provider.ResponseMetadata)
 	}
+	if resp.Diagnostics.Command != nil || resp.Diagnostics.Panic != nil || resp.Diagnostics.Metadata != nil {
+		t.Fatalf("response diagnostics leaked unsafe fields: %#v", resp.Diagnostics)
+	}
 }
 
 func TestSideEffects_RunReturnsRecordedCommandResult(t *testing.T) {
@@ -98,6 +101,78 @@ func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "replay provider request did not match") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *testing.T) {
+	artifact := testReplayArtifact(
+		t,
+		replayDispatchCreatedEvent(t, interfaces.WorkDispatch{
+			DispatchID:      "dispatch-no-diagnostics",
+			TransitionID:    "process",
+			WorkerType:      "worker-a",
+			WorkstationName: "process",
+			Execution: interfaces.ExecutionMetadata{
+				ReplayKey: "process/trace-3/work-3",
+				TraceID:   "trace-3",
+				WorkIDs:   []string{"work-3"},
+			},
+		}, 2),
+		replayInferenceResponseEvent(
+			t,
+			interfaces.WorkDispatch{
+				DispatchID: "dispatch-no-diagnostics",
+				Execution: interfaces.ExecutionMetadata{
+					ReplayKey: "process/trace-3/work-3",
+					TraceID:   "trace-3",
+					WorkIDs:   []string{"work-3"},
+				},
+			},
+			"dispatch-no-diagnostics/inference-request/1",
+			1,
+			3,
+			"recorded provider output",
+			&interfaces.ProviderSessionMetadata{
+				Provider: "claude",
+				Kind:     "response_id",
+				ID:       "resp-no-diagnostics",
+			},
+			nil,
+			"",
+		),
+		replayDispatchCompletedEvent(t, "completion-no-diagnostics", interfaces.WorkResult{
+			DispatchID:   "dispatch-no-diagnostics",
+			TransitionID: "process",
+			Outcome:      interfaces.OutcomeAccepted,
+			Output:       "recorded provider output",
+		}, 4),
+	)
+	sideEffects, err := NewSideEffects(artifact)
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+
+	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch: interfaces.WorkDispatch{
+			WorkerType: "worker-a",
+			Execution: interfaces.ExecutionMetadata{
+				ReplayKey: "process/trace-3/work-3",
+				TraceID:   "trace-3",
+				WorkIDs:   []string{"work-3"},
+			},
+		},
+		WorkstationType: "process",
+		SystemPrompt:    "system prompt",
+		UserMessage:     "user prompt",
+	})
+	if err != nil {
+		t.Fatalf("Infer: %v", err)
+	}
+	if resp.Diagnostics != nil {
+		t.Fatalf("diagnostics = %#v, want nil", resp.Diagnostics)
+	}
+	if resp.ProviderSession == nil || resp.ProviderSession.ID != "resp-no-diagnostics" {
+		t.Fatalf("provider session = %#v, want resp-no-diagnostics", resp.ProviderSession)
 	}
 }
 
