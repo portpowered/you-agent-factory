@@ -304,6 +304,91 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 	}
 }
 
+func TestCalculateMutations_MultiOutputFanoutPreservesAuthoredNameAcrossAllLanes(t *testing.T) {
+	now := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
+	places := map[string]*petri.Place{
+		"wt-code:init":     {ID: "wt-code:init", TypeID: "wt-code", State: "init"},
+		"wt-review-a:init": {ID: "wt-review-a:init", TypeID: "wt-review-a", State: "init"},
+		"wt-review-b:init": {ID: "wt-review-b:init", TypeID: "wt-review-b", State: "init"},
+		"wt-review-c:init": {ID: "wt-review-c:init", TypeID: "wt-review-c", State: "init"},
+	}
+	workTypes := map[string]*state.WorkType{
+		"wt-code":     {ID: "wt-code"},
+		"wt-review-a": {ID: "wt-review-a"},
+		"wt-review-b": {ID: "wt-review-b"},
+		"wt-review-c": {ID: "wt-review-c"},
+	}
+	consumed := []interfaces.Token{{
+		ID:      "tok-1",
+		PlaceID: "wt-code:init",
+		Color: interfaces.TokenColor{
+			WorkID:     "work-code-1",
+			WorkTypeID: "wt-code",
+			Name:       "prd-shared-name",
+			RequestID:  "request-1",
+			TraceID:    "trace-1",
+		},
+		CreatedAt: now.Add(-time.Hour),
+		EnteredAt: now.Add(-time.Hour),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	}}
+
+	mutations, err := calculateMutations(mutationCalculationInput{
+		transition: &petri.Transition{ID: "t1"},
+		arcs: []petri.Arc{
+			{ID: "review-a", PlaceID: "wt-review-a:init"},
+			{ID: "review-b", PlaceID: "wt-review-b:init"},
+			{ID: "review-c", PlaceID: "wt-review-c:init"},
+		},
+		consumed: consumed,
+		result: resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeAccepted,
+		},
+		now:         now,
+		history:     interfaces.TokenHistory{},
+		inputColors: tokenColorsFromTokens(consumed),
+		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
+	})
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 3 {
+		t.Fatalf("mutation count = %d, want 3", len(mutations))
+	}
+
+	wantPlaces := []string{"wt-review-a:init", "wt-review-b:init", "wt-review-c:init"}
+	wantTypes := []string{"wt-review-a", "wt-review-b", "wt-review-c"}
+	for i := range mutations {
+		token := mutations[i].NewToken
+		if mutations[i].ToPlace != wantPlaces[i] {
+			t.Fatalf("mutation %d ToPlace = %q, want %q", i, mutations[i].ToPlace, wantPlaces[i])
+		}
+		if token == nil {
+			t.Fatalf("mutation %d token is nil", i)
+		}
+		if token.Color.Name != "prd-shared-name" {
+			t.Fatalf("mutation %d name = %q, want prd-shared-name", i, token.Color.Name)
+		}
+		if token.Color.WorkTypeID != wantTypes[i] {
+			t.Fatalf("mutation %d work type = %q, want %q", i, token.Color.WorkTypeID, wantTypes[i])
+		}
+		if token.Color.WorkID == "" || token.Color.WorkID == "work-code-1" {
+			t.Fatalf("mutation %d work ID = %q, want fresh generated work ID", i, token.Color.WorkID)
+		}
+		if token.Color.ParentID != "work-code-1" {
+			t.Fatalf("mutation %d parent ID = %q, want work-code-1", i, token.Color.ParentID)
+		}
+		if token.Color.TraceID != "trace-1" || token.Color.CurrentChainingTraceID != "trace-1" {
+			t.Fatalf("mutation %d trace fields = %#v, want trace-1", i, token.Color)
+		}
+	}
+}
+
 func TestResolveWorkResult_RuntimeConfigStopWordsAcceptConfiguredMarker(t *testing.T) {
 	transition := &petri.Transition{
 		ID:   "transition-id",
