@@ -1,5 +1,12 @@
 ## Codebase Patterns
 
+- When the canonical local ask file is reduced to `for now no asks exists.`,
+  treat earlier broad backlog notes as withdrawn for the current cycle instead
+  of continuing to satisfy them by inertia.
+- Standalone markdown cleanup requests belong in
+  `factory/inputs/idea/default/`; the same markdown request under
+  `factory/inputs/plan/default/` is operating-state drift that should be
+  reconciled before counting queue truth.
 - When a customer ask points at an external checklist repository and this repo
   has no checked-in review record for it yet, treat conformance as unproven and
   queue either a narrow audit lane or a smaller repo-owned enforcement seam
@@ -2115,3 +2122,53 @@
   so the operating backlog returns to three non-overlapping active lanes
   without touching the open checklist audit branch or the open work-outcome
   localization branch.
+
+## 2026-05-09T11:02:43+09:00 - meta state refresh
+- Ran `git pull --ff-only`; Git reported `Already up to date.` while local
+  `main` remained ahead of `origin/main` by one previously opened meta-refresh
+  commit at `f0a6150`, which also matches open PR `#168`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, the backend and website standards, current PR state,
+  the tracked-versus-ignored `factory/inputs/**` surface, and the replay
+  diagnostics seam in `pkg/interfaces/safe_diagnostics.go` plus
+  `pkg/replay/event_reducer.go`.
+- Confirmed the canonical local ask file was changed to `for now no asks
+  exists.`, so the previously recorded checklist, coverage, simplification, and
+  minimum-concurrency backlog is no longer the active customer-routing truth for
+  this cycle.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and live
+  operating residue with `find factory/inputs -maxdepth 3 -type f`, confirming
+  the checked-in inboxes remain sentinel-only while the only live ignored
+  maintainer request was a markdown cleanup item misplaced under
+  `factory/inputs/plan/default/`.
+- Reconciled that operating-state drift by moving
+  `collapse-replay-safe-diagnostics-rehydration.md` into the canonical
+  standalone idea inbox at `factory/inputs/idea/default/` so the queued replay
+  cleanup request matches the documented workflow contract.
+- Reconfirmed that the replay diagnostics dedupe seam is still narrow,
+  non-overlapping, and not yet implemented on live `main`: replay still rebuilds
+  `interfaces.WorkDiagnostics` locally after
+  `interfaces.SafeWorkDiagnosticsFromGenerated(...)`, even though the safe
+  diagnostics boundary is already centralized in `pkg/interfaces`.
+- Used an explorer to look for an alternate fallback seam and recorded one
+  future candidate that is not currently in flight: dedupe the duplicate smoke
+  test config builders `simpleServicePipelineConfig` and
+  `twoStageServicePipelineConfig` across `tests/functional/smoke/*`.
+- Files changed:
+  - `factory/logs/meta/view.md`
+  - `factory/logs/meta/progress.txt`
+  - `factory/inputs/idea/default/collapse-replay-safe-diagnostics-rehydration.md`
+  - deleted ignored residue `factory/inputs/plan/default/collapse-replay-safe-diagnostics-rehydration.md`
+- **Learnings for future iterations:**
+  - The local canonical ask file can withdraw a previously active backlog in one
+    edit, and the meta loop should stop enforcing the old queue-count target as
+    soon as that happens.
+  - The watched inbox contract for standalone markdown cleanup requests is
+    `factory/inputs/idea/default/`; a markdown file under `plan/default` is
+    stale operating residue rather than a valid queue shape.
+  - Open PR ownership can remain useful context even after the canonical ask
+    surface goes empty, but those PRs should no longer be described as
+    customer-required lanes unless the ask file says so.
+---
