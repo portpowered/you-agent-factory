@@ -96,7 +96,7 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
 const CURRENT_ACTIVITY_CARD_CLASS =
-  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px]";
+  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
 const CURRENT_ACTIVITY_HEADER_CLASS =
   "mb-4 flex items-end justify-between gap-4 max-[720px]:flex-col max-[720px]:items-start";
 const CURRENT_ACTIVITY_EYEBROW_CLASS =

@@ -703,7 +703,8 @@ describe("ReactFlowCurrentActivityCard", () => {
       name: "Work graph viewport",
     });
 
-    expect(card?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(card?.className).toContain("p-[1.2rem]");
+    expect(card?.className).toContain("max-[720px]:p-4");
     expect(header?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.getAttribute("aria-describedby")).toBe(
