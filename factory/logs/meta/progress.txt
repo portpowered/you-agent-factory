@@ -164,6 +164,9 @@
 - When a standards audit PR or a checklist follow-up PR is already open, treat
   its branch and changed-file surface as owned; replace only merged or stale
   backlog slots instead of queueing a second idea over the same files.
+- When many open PRs all stack on `factory/logs/meta/*`, treat those files as
+  a conflict-prone reporting surface and prefer dispatching cleanup work in
+  non-meta code paths so queue throughput does not collapse into doc overlap.
 - When the customer-linked external checklist repository omits one of the
   requested documents, record that missing source as an evidence gap and avoid
   inferring checklist content that is not actually retrievable on that date.
@@ -2476,4 +2479,59 @@
   - When the external checklist ask is already owned by an audit PR, re-verify
     only enough of the source repository to keep the world model current and
     avoid spawning an overlapping second audit lane.
+---
+
+## 2026-05-09T18:03:23+09:00 - meta state refresh
+
+- Re-ran `git pull --ff-only` and confirmed the repository was still current
+  with live `origin/main` at merged `PR #177` commit `ca69cbc`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, and the backend plus website standards before making
+  a new dispatch decision.
+- Revalidated the canonical queue surface with `git ls-files 'factory/inputs/**'`
+  and `find factory/inputs -maxdepth 3 -type f`, confirming the tracked inboxes
+  remain sentinel-only while live idea files stay ignored operating state.
+- Used delegated explorers plus direct `gh pr view` reads to confirm the main
+  overlap risk is self-stacked branch ownership on `factory/logs/meta/*`,
+  while `factory/inputs/*` and the service cron-watcher seam are not currently
+  claimed by any open PR.
+- Verified that the current visible ignored idea files are
+  `fix-gocoveragecheck-zero-coverage-report-gap.md`,
+  `website-edit-running-factory-workstations.md`, and the new
+  `simplify-cron-watcher-runtime-lookup-width.md`; only the first is already
+  advanced into an open worker lane (`PR #179`).
+- Read `pkg/service/cron_watcher.go`, `pkg/service/factory.go`,
+  `pkg/service/factory_test.go`, and
+  `docs/internal/processes/factory-workstation-relevant-files.md` and
+  confirmed a narrow simplification seam: `startCronWatchersForRuntime`
+  still accepts `interfaces.RuntimeConfigLookup` even though watcher-start
+  already derives workflow identity from `factoryDir` and passes only
+  workstation lookup needs downstream.
+- Queued one ignored standalone idea at
+  `factory/inputs/idea/default/simplify-cron-watcher-runtime-lookup-width.md`
+  so a worker can narrow that service-layer dependency without touching the
+  open `cmd/gocoveragecheck`, workflow-graph, work-outcome, same-trace, or
+  audit lanes.
+- Ran `go test ./pkg/service -run TestFactoryService_StartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingValidCronJobs -count=1`
+  and confirmed the existing service watcher coverage that already exercises
+  the seam passes on live `main`.
+- Files changed:
+  - `factory/logs/meta/view.md`
+  - `factory/logs/meta/progress.txt`
+  - added ignored idea
+    `factory/inputs/idea/default/simplify-cron-watcher-runtime-lookup-width.md`
+- **Learnings for future iterations:**
+  - When open PR ownership is concentrated on `factory/logs/meta/*`, treat the
+    meta-doc pair as a reporting hotspot and avoid inventing new cleanup work
+    there unless the world model itself actually changed.
+  - If watcher-start already derives workflow identity from `factoryDir`, keep
+    the remaining cron helper dependency narrowed to
+    `interfaces.RuntimeWorkstationLookup` instead of preserving a wider
+    path-aware runtime interface.
+  - `factory/inputs/*` can be safely used for new ignored operating-state
+    requests even when the tracked meta docs are conflict-heavy, because the
+    active PR overlap right now is in the docs and command/test lanes, not the
+    inbox paths.
 ---

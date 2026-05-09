@@ -2,12 +2,12 @@
 
 ## world state
 
-- as of `2026-05-09T17:04:00+09:00`, live `origin/main` points at merged
+- as of `2026-05-09T18:03:23+09:00`, live `origin/main` points at merged
   `PR #177` commit `ca69cbc`, which closed the replay-contract tagged-helper
   cleanup after merged `PR #176` and merged `PR #174`
-- local `main`, `meta-refresh-world-state-20260509-160349`, and
-  `fix-gocoveragecheck-zero-coverage-report-gap` currently point at the same
-  local meta-refresh stack, while `origin/main` remains at `ca69cbc`
+- local `main` remains on the older local meta-refresh stack at `71796ff`
+  while the current branch `meta-refresh-world-state-20260509-160349` is at
+  `ef7f189`; both are still ahead of `origin/main`
 - the canonical maintainer ask surface remains `factory/logs/meta/asks.md`
 - the canonical ask file on live `main` is active again; it currently asks for
   external-checklist conformance work, stronger backend and website coverage,
@@ -40,15 +40,15 @@
   - `factory/inputs/thoughts/default/.gitkeep`
 - `.gitignore` still keeps live workflow submissions under `factory/inputs/**`
   out of normal commits except for those sentinel paths
-- the ignored replay-helper idea
-  `factory/inputs/idea/default/dedupe-replay-contract-tagged-helpers.md` is
-  stale because merged `PR #177` landed that exact lane on `main`
 - the visible local ignored idea surface still contains one unrelated PRD-style
   residue:
   `factory/inputs/idea/default/website-edit-running-factory-workstations.md`
 - the visible local ignored idea surface also includes one active
   maintainer-owned cleanup request already advanced into an open worker lane:
   `factory/inputs/idea/default/fix-gocoveragecheck-zero-coverage-report-gap.md`
+- the visible local ignored idea surface now also includes one new
+  maintainer-owned simplification request not claimed by an open PR:
+  `factory/inputs/idea/default/simplify-cron-watcher-runtime-lookup-width.md`
 
 ## customer-ask truth
 
@@ -93,6 +93,8 @@
   functional coverage
 - `PR #178` is now the freshest open meta-refresh branch; the older open
   meta-refresh PRs are stale duplicates on the same file pair
+- no open PR currently owns `pkg/service/cron_watcher.go` or the adjacent
+  cron-watcher simplification seam
 - the replay-helper lane is closed on live `main` through merged `PR #177`
 - the bootstrap-portability helper split lane is closed on live `main` through
   merged `PR #176`
@@ -111,22 +113,23 @@
 
 ## current maintainer decision
 
-- this cycle does not queue a new cleanup request
+- this cycle queues one new cleanup request
 - reason:
-  - the active customer asks explicitly prioritize stronger backend coverage
-    evidence and code quality simplification
-  - a live `go run ./cmd/gocoveragecheck -min 80 -timeout 300s` run on
-    `2026-05-09` printed `0.0%` coverage for
-    `pkg/apisurface`, `pkg/buffers`, and `pkg/cli/default`
-    but still exited successfully with `Go coverage 86.6% meets minimum 80.0%`
-  - that means the repo-owned backend coverage gate is currently overstating
-    quality and can let zero-coverage backend packages pass the customer-facing
-    lane
-  - the exact seam is narrow and local to `cmd/gocoveragecheck` plus its tests
-  - that seam is already owned by open `PR #179`, which changes only
-    `cmd/gocoveragecheck/main.go` and `cmd/gocoveragecheck/main_test.go`
-  - creating another idea over the same lane would duplicate in-flight work
-    instead of improving the queue
+  - the active customer asks still prioritize simplification and reduction of
+    redundant structures alongside coverage work
+  - the backend coverage-gate seam in `cmd/gocoveragecheck` remains important
+    but is already owned by open `PR #179`, so re-queueing it would duplicate
+    in-flight work
+  - direct code reads in `pkg/service/cron_watcher.go` and
+    `pkg/service/factory.go` show that `startCronWatchersForRuntime` still
+    depends on the wider `interfaces.RuntimeConfigLookup` even though
+    watcher-start already derives workflow identity from `factoryDir` and the
+    downstream helpers only need workstation lookup behavior
+  - the seam is narrow, implementation-ready, aligned with the checked-in
+    workstation guidance, and already covered by service-layer watcher tests
+  - the queued request is
+    `factory/inputs/idea/default/simplify-cron-watcher-runtime-lookup-width.md`
+    and it does not overlap any currently open PR file ownership
 
 ## theory of mind
 
@@ -143,6 +146,9 @@
 - treat delegated explorer suggestions as hypotheses; re-verify them against
   live `main` before dispatching new cleanup work because recent merges can
   invalidate an otherwise plausible seam within the same cycle
+- when many open PRs all touch `factory/logs/meta/*`, treat meta-doc edits as
+  a self-overlap hotspot and keep new cleanup dispatches off those tracked
+  files whenever possible
 - when the repo-owned coverage command prints backend packages at `0.0%` while
   still exiting successfully, prefer tightening that gate before queueing a
   broader package-by-package test-authoring campaign
