@@ -689,6 +689,26 @@ describe("ReactFlowCurrentActivityCard", () => {
     ).toBeTruthy();
   });
 
+  it("keeps only the outer card padding while preserving the current activity heading semantics", () => {
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    const heading = screen.getByRole("heading", { name: "Current activity" });
+    const card = heading.closest("section");
+    const header = heading.parentElement?.parentElement as HTMLElement | null;
+    const viewport = screen.getByRole("region", {
+      name: "Work graph viewport",
+    });
+
+    expect(card?.className).not.toContain("p-[1.2rem]");
+    expect(header?.className).not.toMatch(/(^|\s)p[trblxy]?-[^\s]+/);
+    expect(viewport.className).not.toMatch(/(^|\s)p[trblxy]?-[^\s]+/);
+    expect(viewport.getAttribute("aria-describedby")).toBe(
+      "workflow-graph-heading",
+    );
+  });
+
   it("renders a clear local alert when dropped PNG validation fails", async () => {
     const file = new File(["png"], "invalid-factory.png", {
       type: "image/png",

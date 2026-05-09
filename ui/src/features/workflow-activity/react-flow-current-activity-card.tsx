@@ -17,6 +17,7 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
+import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
 import {
   CURRENT_ACTIVITY_NODE_TYPES,
@@ -94,11 +95,29 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
+const CURRENT_ACTIVITY_CARD_CLASS =
+  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px]";
+const CURRENT_ACTIVITY_HEADER_CLASS =
+  "mb-4 flex items-end justify-between gap-4 max-[720px]:flex-col max-[720px]:items-start";
+const CURRENT_ACTIVITY_EYEBROW_CLASS =
+  "mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
+const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
   | { kind: "state-node"; placeId: string }
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
+
+function CurrentActivityCardHeading() {
+  return (
+    <div>
+      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>Operator View</p>
+      <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
+        Current activity
+      </h2>
+    </div>
+  );
+}
 
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
@@ -350,15 +369,10 @@ function EmptyCurrentActivityCard() {
   return (
     <section
       aria-labelledby="workflow-graph-heading"
-      className="relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4"
+      className={CURRENT_ACTIVITY_CARD_CLASS}
     >
-      <div className="mb-4 flex items-end justify-between gap-4 max-[720px]:flex-col max-[720px]:items-start [&_h2]:m-0">
-        <div>
-          <p className="mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent">
-            Operator View
-          </p>
-          <h2 id="workflow-graph-heading">Current activity</h2>
-        </div>
+      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
+        <CurrentActivityCardHeading />
       </div>
       <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
         <h3>No workflow topology loaded</h3>
@@ -393,96 +407,98 @@ export function ReactFlowCurrentActivityCard(
   return (
     <section
       aria-labelledby="workflow-graph-heading"
-      className="relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4"
+      className={CURRENT_ACTIVITY_CARD_CLASS}
     >
-      <DashboardFlowAxisLegend
-        className="absolute left-7 top-7 max-[720px]:left-4 max-[720px]:right-4"
-        defaultExpanded={false}
-        edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(props.locale)}
-        iconItems={getDefaultDashboardFlowAxisLegendIconItems(props.locale)}
-        locale={props.locale}
-      />
-
-      <div className="relative min-h-0 flex-1">
-        <section
-          aria-label="Work graph viewport"
-          className={cx(
-            "relative h-full min-h-0 overflow-hidden rounded-[1.4rem] border transition-colors",
-            (imports.dropState.status === "drag-active" ||
-              imports.dropState.status === "reading") &&
-              "border-af-accent/35 bg-af-accent/6",
-            imports.dropState.status === "error" && "border-af-danger/18",
-            imports.dropState.status === "idle" && "border-transparent",
-          )}
-          data-current-activity-drop-state={graphDropStateAttribute(
-            imports.dropState,
-          )}
-          data-current-activity-flow
-          onDragEnter={imports.onDragEnter}
-          onDragLeave={imports.onDragLeave}
-          onDragOver={imports.onDragOver}
-          onDrop={imports.onDrop}
-        >
-          <ReactFlow
-            edges={graph.edges}
-            fitView
-            fitViewOptions={graph.initialFitViewOptions}
-            key={graph.initialFitViewKey}
-            maxZoom={2}
-            minZoom={0.25}
-            nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
-            nodes={graph.nodes}
-            nodesDraggable={true}
-            onNodeDragStop={(_, node) => {
-              if (graph.graphKey) {
-                graph.setStoredNodePosition(
-                  graph.graphKey,
-                  node.id,
-                  node.position,
-                );
-              }
-            }}
-            onNodesChange={graph.handleNodesChange}
-            panOnDrag
-            proOptions={{ hideAttribution: true }}
-            zoomOnScroll
-          >
-            <Background
-              color={GRAPH_BACKGROUND_COLOR}
-              gap={GRAPH_BACKGROUND_GAP}
-              size={GRAPH_BACKGROUND_SIZE}
-            />
-            <Controls
-              fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
-              showInteractive={false}
-              style={GRAPH_CONTROLS_STYLE}
-            />
-          </ReactFlow>
-          <GraphDropOverlay dropState={imports.dropState} locale={props.locale} />
-        </section>
-        {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
-          <FactoryImportPreviewDialog
-            activationState={imports.activationState}
-            locale={props.locale}
-            onCancel={() => {
-              imports.clearActivationError();
-              imports.closeImportPreview();
-            }}
-            onConfirm={() => {
-              void imports.activateImport(readyImportPreviewState.value);
-            }}
-            previewState={readyImportPreviewState}
-          />
-        ) : null}
-        {imports.dropState.status === "error" ? (
-          <GraphImportErrorPanel
-            error={imports.dropState.error}
-            fileName={imports.dropState.fileName}
-            locale={props.locale}
-            onDismiss={imports.clearError}
-          />
-        ) : null}
+      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
+        <CurrentActivityCardHeading />
+        <DashboardFlowAxisLegend
+          className="shrink-0 max-[720px]:w-full"
+          defaultExpanded={false}
+          edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(props.locale)}
+          iconItems={getDefaultDashboardFlowAxisLegendIconItems(props.locale)}
+          locale={props.locale}
+        />
       </div>
+
+      <section
+        aria-describedby="workflow-graph-heading"
+        aria-label="Work graph viewport"
+        className={cx(
+          "relative min-h-0 flex-1 overflow-hidden rounded-[1.4rem] border transition-colors",
+          (imports.dropState.status === "drag-active" ||
+            imports.dropState.status === "reading") &&
+            "border-af-accent/35 bg-af-accent/6",
+          imports.dropState.status === "error" && "border-af-danger/18",
+          imports.dropState.status === "idle" && "border-transparent",
+        )}
+        data-current-activity-drop-state={graphDropStateAttribute(
+          imports.dropState,
+        )}
+        data-current-activity-flow
+        onDragEnter={imports.onDragEnter}
+        onDragLeave={imports.onDragLeave}
+        onDragOver={imports.onDragOver}
+        onDrop={imports.onDrop}
+      >
+        <ReactFlow
+          edges={graph.edges}
+          fitView
+          fitViewOptions={graph.initialFitViewOptions}
+          key={graph.initialFitViewKey}
+          maxZoom={2}
+          minZoom={0.25}
+          nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
+          nodes={graph.nodes}
+          nodesDraggable={true}
+          onNodeDragStop={(_, node) => {
+            if (graph.graphKey) {
+              graph.setStoredNodePosition(
+                graph.graphKey,
+                node.id,
+                node.position,
+              );
+            }
+          }}
+          onNodesChange={graph.handleNodesChange}
+          panOnDrag
+          proOptions={{ hideAttribution: true }}
+          zoomOnScroll
+        >
+          <Background
+            color={GRAPH_BACKGROUND_COLOR}
+            gap={GRAPH_BACKGROUND_GAP}
+            size={GRAPH_BACKGROUND_SIZE}
+          />
+          <Controls
+            fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
+            showInteractive={false}
+            style={GRAPH_CONTROLS_STYLE}
+          />
+        </ReactFlow>
+        <GraphDropOverlay dropState={imports.dropState} locale={props.locale} />
+      </section>
+      {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
+        <FactoryImportPreviewDialog
+          activationState={imports.activationState}
+          locale={props.locale}
+          onCancel={() => {
+            imports.clearActivationError();
+            imports.closeImportPreview();
+          }}
+          onConfirm={() => {
+            void imports.activateImport(readyImportPreviewState.value);
+          }}
+          previewState={readyImportPreviewState}
+        />
+      ) : null}
+      {imports.dropState.status === "error" ? (
+        <GraphImportErrorPanel
+          error={imports.dropState.error}
+          fileName={imports.dropState.fileName}
+          locale={props.locale}
+          onDismiss={imports.clearError}
+        />
+      ) : null}
     </section>
   );
 }
