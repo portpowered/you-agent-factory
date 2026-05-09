@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 
 import { DashboardScreen } from "./dashboard-screen";
 
+const EXPECTED_DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
+
 let dashboardSnapshotState: ReturnType<
   typeof import("./useDashboardSnapshot").useDashboardSnapshot
 >;
@@ -32,6 +34,12 @@ vi.mock("./useDashboardSnapshot", () => ({
 }));
 
 describe("DashboardScreen", () => {
+  function expectDashboardShellContract() {
+    expect(screen.getByRole("main").className).toBe(
+      EXPECTED_DASHBOARD_SHELL_CLASS,
+    );
+  }
+
   beforeEach(() => {
     dashboardSnapshotState = {
       error: null,
@@ -43,8 +51,7 @@ describe("DashboardScreen", () => {
   it("uses the tighter dashboard shell spacing while loading", () => {
     render(<DashboardScreen />);
 
-    expect(screen.getByRole("main").className).toContain("p-2");
-    expect(screen.getByRole("main").className).not.toContain("p-5");
+    expectDashboardShellContract();
     expect(
       screen.getByRole("heading", { name: "Loading dashboard" }),
     ).toBeTruthy();
@@ -59,7 +66,7 @@ describe("DashboardScreen", () => {
 
     render(<DashboardScreen />);
 
-    expect(screen.getByRole("main").className).toContain("p-2");
+    expectDashboardShellContract();
     expect(
       screen.getByRole("heading", { name: "Dashboard unavailable" }),
     ).toBeTruthy();
@@ -75,7 +82,7 @@ describe("DashboardScreen", () => {
 
     render(<DashboardScreen />);
 
-    expect(screen.getByRole("main").className).toContain("p-2");
+    expectDashboardShellContract();
     expect(screen.getByText("Dashboard header")).toBeTruthy();
     expect(screen.getByText("Dashboard bento")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog")).toBeTruthy();

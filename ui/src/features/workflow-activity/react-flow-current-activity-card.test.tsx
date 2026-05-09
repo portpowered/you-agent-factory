@@ -46,6 +46,8 @@ import {
 import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
+const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
+
 interface RenderCurrentActivityOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
@@ -701,9 +703,9 @@ describe("ReactFlowCurrentActivityCard", () => {
       name: "Work graph viewport",
     });
 
-    expect(card?.className).not.toContain("p-[1.2rem]");
-    expect(header?.className).not.toMatch(/(^|\s)p[trblxy]?-[^\s]+/);
-    expect(viewport.className).not.toMatch(/(^|\s)p[trblxy]?-[^\s]+/);
+    expect(card?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(header?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.getAttribute("aria-describedby")).toBe(
       "workflow-graph-heading",
     );
