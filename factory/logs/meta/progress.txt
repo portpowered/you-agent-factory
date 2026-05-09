@@ -2073,3 +2073,45 @@
   `factory/inputs/idea/default/cover-releasesmoke-command-owner-parse-and-json-error-branches.md`
   so the operating backlog returns to three narrow active lanes without
   overlapping PR `#141` or `#142`.
+
+## 2026-05-09T10:03:07+09:00 - meta state refresh
+
+- Ran `git pull --ff-only`; local `main` fast-forwarded from `0616500` to
+  `3327a97`, bringing in merged PR `#162`, merged PR `#164`, merged PR `#165`,
+  and merged PR `#166` while leaving unrelated local worktree edits intact.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`,
+  `factory/factory.json`, `.gitignore`, the backend and website standards,
+  current PR state, and the tracked-versus-ignored `factory/inputs/**`
+  surface.
+- Re-validated tracked queue truth with `git ls-files factory/inputs` and
+  `find factory/inputs -maxdepth 3 -type f`, confirming the checked-in inboxes
+  remain sentinel-only and the canonical input surface had no live queued work
+  before this refresh.
+- Re-checked the external customer checklist repo on `2026-05-09` and
+  confirmed the top-level `portpowered/checklists` repository still exposes
+  `backend-development-checklist.md` and
+  `website-development-checklist.md`, while the linked `asks.md` page still
+  does not resolve to a readable checklist document and therefore remains an
+  evidence gap rather than usable input.
+- Reconciled earlier worldview notes against live `main` and current PR state:
+  the previously recorded `localize-dashboard-header-timeline-and-stream-status`
+  seam is already closed through merged `PR #151`, and the previously recorded
+  `retire-template-fields-variadic-worktree-shim` seam is already closed
+  through merged `PR #150`.
+- Verified the currently open non-meta work ownership is now split between
+  `PR #141` (`audit-repository-against-2026-website-and-backend-checklists`)
+  and `PR #167` (`localize-work-outcome-trend-cards-copy`), which together
+  cover the standing audit lane plus one active UI localization follow-up.
+- Used direct reads of `pkg/interfaces/safe_diagnostics.go` and
+  `pkg/replay/event_reducer.go`, plus explorer confirmation, to identify the
+  next narrow non-overlapping backend simplification seam: replay still
+  reconstructs `interfaces.WorkDiagnostics` through replay-local helper clones
+  even though the canonical safe-diagnostics boundary already lives in
+  `pkg/interfaces`.
+- Queued one fresh ignored idea under
+  `factory/inputs/idea/default/collapse-replay-safe-diagnostics-rehydration.md`
+  so the operating backlog returns to three non-overlapping active lanes
+  without touching the open checklist audit branch or the open work-outcome
+  localization branch.
