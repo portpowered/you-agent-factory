@@ -1936,20 +1936,17 @@ func TestFactoryService_StartCronWatchersForRuntime_DisablesInvalidSchedulesWith
 	})
 
 	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
-	assertCronWorkRequestNominalAt(t, startupRequest, start)
-	if got := startupRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
-		t.Fatalf("startup cron workstation tag = %q, want valid-cron", got)
-	}
+	assertCronWorkRequestForWorkstation(t, startupRequest, start, "valid-cron")
 
 	waitForFakeClockWaiters(t, fakeClock, 1)
 	assertNoCronWorkRequestQueued(t, observedRequests)
 	fakeClock.Advance(time.Minute)
 	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
-	assertCronWorkRequestNominalAt(t, scheduledRequest, start.Add(time.Minute))
-	if got := scheduledRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
-		t.Fatalf("scheduled cron workstation tag = %q, want valid-cron", got)
-	}
+	assertCronWorkRequestForWorkstation(t, scheduledRequest, start.Add(time.Minute), "valid-cron")
 	assertNoCronWorkRequestQueued(t, observedRequests)
+
+	cancelRun()
+	sidecars.Wait()
 
 	registered := observedLogs.FilterMessage("cron watcher registered").All()
 	if len(registered) != 1 {
@@ -1973,6 +1970,16 @@ func TestFactoryService_StartCronWatchersForRuntime_DisablesInvalidSchedulesWith
 	}
 	if got := started[0].ContextMap()["jobs"]; got != int64(1) {
 		t.Fatalf("cron scheduler started jobs = %#v, want 1", got)
+	}
+	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != 0 {
+		t.Fatalf("retry log count = %d, want 0", observedLogs.FilterMessage("cron watcher trigger retrying").Len())
+	}
+	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 0 {
+		t.Fatalf("exhausted log count = %d, want 0", observedLogs.FilterMessage("cron watcher trigger exhausted").Len())
+	}
+	stopped := observedLogs.FilterMessage("cron scheduler stopped").All()
+	if len(stopped) != 1 {
+		t.Fatalf("cron scheduler stopped log count = %d, want 1", len(stopped))
 	}
 }
 
@@ -2305,6 +2312,20 @@ func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest
 	t.Helper()
 	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]; got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
+	}
+}
+
+func assertCronWorkRequestForWorkstation(t *testing.T, request interfaces.WorkRequest, want time.Time, workstation string) {
+	t.Helper()
+	if request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("cron work request type = %q, want %q", request.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	}
+	assertCronWorkRequestNominalAt(t, request, want)
+	if got := request.Works[0].Tags[cronWorkstationTag]; got != workstation {
+		t.Fatalf("cron workstation tag = %q, want %q", got, workstation)
+	}
+	if got := request.Works[0].Tags[cronSourceTag]; got != "cron" {
+		t.Fatalf("cron source tag = %q, want cron", got)
 	}
 }
 
