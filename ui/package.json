@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build-storybook": "storybook build --loglevel warn",
-    "build": "tsc -b && vite build && bun scripts/normalize-dist-output.mjs",
+    "build": "tsc -b && vite build && node scripts/normalize-dist-output.mjs",
     "capture:heap-snapshot": "node scripts/capture-heap-snapshot.mjs",
     "check:work-outcome-memory": "bun scripts/check-work-outcome-memory.ts",
     "check": "biome check .",
@@ -16,8 +16,8 @@
     "lint": "biome lint .",
     "loadtest:agent-fails-memory": "bun scripts/loadtest-agent-fails-memory.ts",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
-    "replay:coverage": "bun scripts/write-replay-coverage-report.ts",
-    "replay:coverage:check": "bun scripts/write-replay-coverage-report.ts --check",
+    "replay:coverage": "node --experimental-strip-types scripts/write-replay-coverage-report.ts",
+    "replay:coverage:check": "node --experimental-strip-types scripts/write-replay-coverage-report.ts --check",
     "storybook": "storybook dev -p 6007",
     "storybook:responsive-check": "node scripts/verify-import-export-storybook-responsive.mjs",
     "storybook:serve-static": "http-server storybook-static -p 6008 -a 127.0.0.1 -s",
@@ -26,7 +26,7 @@
     "test:coverage": "vitest run --coverage --exclude integration/event-stream-replay.integration.test.mjs",
     "test:integration": "vitest run integration/event-stream-replay.integration.test.mjs",
     "test:unit": "vitest run --exclude integration/event-stream-replay.integration.test.mjs",
-    "test": "bun run test:unit && bun run test:integration",
+    "test": "vitest run --exclude integration/event-stream-replay.integration.test.mjs && vitest run integration/event-stream-replay.integration.test.mjs",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
     "tsc": "tsc -b --noEmit --pretty false"
   },

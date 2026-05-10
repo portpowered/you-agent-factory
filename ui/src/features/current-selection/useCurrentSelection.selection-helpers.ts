@@ -19,7 +19,12 @@ import type {
 } from "../terminal-work/terminal-work-card";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import {
+  isScriptBackedWorkstationRequest,
   requestDispatchID,
+  requestOutcome,
+  requestTransitionID,
+  requestWorkstationNodeID,
+  requestWorkstationName,
   requestWorkItems,
   sortWorkstationRequests,
   toDashboardWorkstationRequest,
@@ -83,16 +88,11 @@ function terminalRequestContext(
   if (!request) {
     return undefined;
   }
-
-  const outcome = "outcome" in request ? request.outcome : request.response?.outcome;
-  const workstation =
-    "workstation_name" in request
-      ? request.workstation_name || request.transition_id
-      : request.workstationName || request.transitionId;
+  const outcome = requestOutcome(request);
+  const workstation = requestWorkstationName(request) ?? requestTransitionID(request);
   if (!outcome || !workstation) {
     return undefined;
   }
-
   return `${formatTerminalOutcome(outcome)} at ${workstation}`;
 }
 
@@ -193,62 +193,16 @@ export function resolveTrackedWorkSelection({
     dispatchID ??
     terminalWorkDetail?.dispatchID ??
     failedDetail?.dispatch_id;
-  if (preferredFailureDispatchID) {
-    const preferredRequest = (
-      workstationRequestsByDispatchID ?? snapshot.runtime.workstation_requests_by_dispatch_id ?? {}
-    )[preferredFailureDispatchID];
-    if (preferredRequest) {
-      return {
-        dispatchId: requestDispatchID(preferredRequest),
-        kind: isScriptBackedWorkstationRequest(preferredRequest)
-          ? "workstation-request"
-          : "work-item",
-        nodeId: requestWorkstationNodeID(preferredRequest),
-        ...(isScriptBackedWorkstationRequest(preferredRequest)
-          ? {
-              request: toDashboardWorkstationRequest(preferredRequest),
-            }
-          : {
-              workItem:
-                requestWorkItems(preferredRequest).find(
-                  (candidate) => candidate.work_id === workID,
-                ) ??
-                failedDetail?.work_item ??
-                terminalWorkDetail?.workItem,
-            }),
-      };
-    }
-
-    const preferredExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.[preferredFailureDispatchID];
-    if (preferredExecution) {
-      const matchedWorkItem = preferredExecution.work_items?.find(
-        (candidate) => candidate.work_id === workID,
-      );
-      return {
-        dispatchId: preferredExecution.dispatch_id,
-        execution: preferredExecution,
-        kind: "work-item",
-        nodeId: preferredExecution.workstation_node_id,
-        workItem: matchedWorkItem ?? failedDetail?.work_item ?? terminalWorkDetail?.workItem,
-      };
-    }
-
-    if (failedDetail?.dispatch_id === preferredFailureDispatchID) {
-      const failedNodeID =
-        snapshot.topology.workstation_nodes_by_id[failedDetail.transition_id]?.node_id ??
-        Object.values(snapshot.topology.workstation_nodes_by_id).find(
-          (node) => node.workstation_name === failedDetail.workstation_name,
-        )?.node_id;
-      if (failedNodeID) {
-        return {
-          dispatchId: failedDetail.dispatch_id,
-          kind: "work-item",
-          nodeId: failedNodeID,
-          workItem: failedDetail.work_item,
-        };
-      }
-    }
+  const preferredSelection = resolvePreferredDispatchSelection({
+    failedDetail,
+    preferredFailureDispatchID,
+    snapshot,
+    terminalWorkDetail,
+    workID,
+    workstationRequestsByDispatchID,
+  });
+  if (preferredSelection) {
+    return preferredSelection;
   }
 
   const workstationRequest = Object.values(
@@ -348,6 +302,113 @@ export function resolveTrackedWorkSelection({
   return null;
 }
 
+function resolvePreferredDispatchSelection({
+  failedDetail,
+  preferredFailureDispatchID,
+  snapshot,
+  terminalWorkDetail,
+  workID,
+  workstationRequestsByDispatchID,
+}: {
+  failedDetail: DashboardFailedWorkDetail | undefined;
+  preferredFailureDispatchID: string | undefined;
+  snapshot: DashboardSnapshot;
+  terminalWorkDetail: TerminalWorkDetail | null | undefined;
+  workID: string;
+  workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
+}): DashboardSelection | null {
+  if (!preferredFailureDispatchID) {
+    return null;
+  }
+
+  const preferredRequest = (
+    workstationRequestsByDispatchID ??
+    snapshot.runtime.workstation_requests_by_dispatch_id
+  )?.[preferredFailureDispatchID];
+  if (preferredRequest) {
+    return selectionFromWorkstationRequest(
+      preferredRequest,
+      workID,
+      failedDetail?.work_item ?? terminalWorkDetail?.workItem,
+    );
+  }
+
+  const preferredExecution =
+    snapshot.runtime.active_executions_by_dispatch_id?.[preferredFailureDispatchID];
+  if (preferredExecution) {
+    const matchedWorkItem = preferredExecution.work_items?.find(
+      (candidate) => candidate.work_id === workID,
+    );
+    const resolvedWorkItem =
+      matchedWorkItem ?? failedDetail?.work_item ?? terminalWorkDetail?.workItem;
+    if (!resolvedWorkItem) {
+      return null;
+    }
+    return {
+      dispatchId: preferredExecution.dispatch_id,
+      execution: preferredExecution,
+      kind: "work-item",
+      nodeId: preferredExecution.workstation_node_id,
+      workItem: resolvedWorkItem,
+    };
+  }
+
+  if (failedDetail?.dispatch_id === preferredFailureDispatchID) {
+    return selectionFromFailedDetail(snapshot, failedDetail);
+  }
+
+  return null;
+}
+
+function selectionFromWorkstationRequest(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+  workID: string,
+  fallbackWorkItem: DashboardWorkItemRef | undefined,
+): DashboardSelection | null {
+  if (isScriptBackedWorkstationRequest(request)) {
+    return {
+      dispatchId: requestDispatchID(request),
+      kind: "workstation-request",
+      nodeId: requestWorkstationNodeID(request),
+      request: toDashboardWorkstationRequest(request),
+    };
+  }
+
+  const resolvedWorkItem =
+    requestWorkItems(request).find((candidate) => candidate.work_id === workID) ??
+    fallbackWorkItem;
+  if (!resolvedWorkItem) {
+    return null;
+  }
+  return {
+    dispatchId: requestDispatchID(request),
+    kind: "work-item",
+    nodeId: requestWorkstationNodeID(request),
+    workItem: resolvedWorkItem,
+  };
+}
+
+function selectionFromFailedDetail(
+  snapshot: DashboardSnapshot,
+  failedDetail: DashboardFailedWorkDetail,
+): DashboardSelection | null {
+  const failedNodeID =
+    snapshot.topology.workstation_nodes_by_id[failedDetail.transition_id]?.node_id ??
+    Object.values(snapshot.topology.workstation_nodes_by_id).find(
+      (node) => node.workstation_name === failedDetail.workstation_name,
+    )?.node_id;
+  if (!failedNodeID) {
+    return null;
+  }
+
+  return {
+    dispatchId: failedDetail.dispatch_id,
+    kind: "work-item",
+    nodeId: failedNodeID,
+    workItem: failedDetail.work_item,
+  };
+}
+
 export function placeNodeID(
   snapshot: DashboardSnapshot | null | undefined,
   place: DashboardPlaceRef,
@@ -390,7 +451,6 @@ export function findTerminalWorkItem(
   workItem: DashboardWorkItemRef,
 ): TerminalWorkItem | undefined {
   const workLabel = workItem.display_name?.trim() || workItem.work_id;
-
   return items.find((item) => (
     item.traceWorkID === workItem.work_id ||
     item.workItem?.work_id === workItem.work_id ||
@@ -412,27 +472,4 @@ function findTrackedWorkNodeID(snapshot: DashboardSnapshot, workID: string): str
   }
 
   return undefined;
-}
-
-function requestWorkstationNodeID(
-  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
-): string {
-  return "workstation_node_id" in request
-    ? request.workstation_node_id
-    : request.transitionId ?? request.transition_id ?? "";
-}
-
-function isScriptBackedWorkstationRequest(
-  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
-): boolean {
-  if ("workstation_node_id" in request) {
-    return request.script_request !== undefined || request.script_response !== undefined;
-  }
-
-  return (
-    request.request.scriptRequest !== undefined ||
-    request.request.script_request !== undefined ||
-    request.response?.scriptResponse !== undefined ||
-    request.response?.script_response !== undefined
-  );
 }

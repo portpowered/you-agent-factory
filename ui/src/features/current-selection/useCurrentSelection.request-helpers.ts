@@ -173,6 +173,29 @@ export function requestDispatchID(
     : request.dispatchId ?? request.dispatch_id ?? "";
 }
 
+export function requestWorkstationNodeID(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string {
+  return isProjectedWorkstationRequest(request)
+    ? request.workstation_node_id
+    : request.transitionId ?? request.transition_id ?? "";
+}
+
+export function isScriptBackedWorkstationRequest(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): boolean {
+  if (isProjectedWorkstationRequest(request)) {
+    return request.script_request !== undefined || request.script_response !== undefined;
+  }
+
+  return (
+    request.request.scriptRequest !== undefined ||
+    request.request.script_request !== undefined ||
+    request.response?.scriptResponse !== undefined ||
+    request.response?.script_response !== undefined
+  );
+}
+
 export function toDashboardWorkstationRequest(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
   inferenceAttemptsByRequestID?: Record<string, DashboardInferenceAttempt>,
@@ -266,13 +289,15 @@ function requestStartedAt(request: DashboardRuntimeWorkstationRequest | Dashboar
     : request.request.startedAt ?? request.request.started_at ?? "";
 }
 
-function requestTransitionID(request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest): string {
+export function requestTransitionID(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string {
   return isProjectedWorkstationRequest(request)
     ? request.transition_id
     : request.transitionId ?? request.transition_id ?? "";
 }
 
-function requestWorkstationName(
+export function requestWorkstationName(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
 ): string | undefined {
   return isProjectedWorkstationRequest(request)
@@ -325,7 +350,7 @@ function requestProviderSession(request: DispatchWorkstationRequest) {
   return "request" in request ? undefined : request.provider_session;
 }
 
-function requestOutcome(request: DispatchWorkstationRequest): string {
+export function requestOutcome(request: DispatchWorkstationRequest): string {
   return "request" in request ? request.response?.outcome ?? "PENDING" : request.outcome ?? "PENDING";
 }
 

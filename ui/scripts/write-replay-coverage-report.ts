@@ -2,7 +2,7 @@ import {
   buildReplayCoverageReport,
   formatReplayCoverageReportMarkdown,
   validateReplayCoverageReport,
-} from "../src/testing/replay-fixture-catalog";
+} from "../src/testing/replay-fixture-catalog.ts";
 
 const report = buildReplayCoverageReport();
 const validationIssues = validateReplayCoverageReport(report);

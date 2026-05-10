@@ -1,9 +1,13 @@
 BINARY_NAME := infinite-you
 CMD_PATH    := ./cmd/factory/
 BIN_DIR     := bin
-BUN         ?= bun
 GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
+NPM         ?= npm
+BUN_BIN     := $(shell command -v bun 2>/dev/null)
+UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
+UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
+UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install --frozen-lockfile,$(NPM) install --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
 FUNCTIONAL_DEFAULT_JOBS ?= 2
 FUNCTIONAL_LONG_TAGS ?= functionallong
@@ -42,7 +46,7 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_MIN ?= 80.0
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -131,16 +135,36 @@ dashboard-verify:
 	$(MAKE) test
 
 typecheck:
-	cd ui && $(BUN) run tsc
+	cd ui && $(UI_SCRIPT) tsc
+
+ci: ci-typecheck ci-verify-build-contracts ci-verify-tests
+
+ci-typecheck:
+	$(MAKE) ui-deps
+	$(MAKE) typecheck
+
+ci-verify-build-contracts: ci-typecheck
+	$(MAKE) ui-build
+	$(MAKE) build
+	$(MAKE) lint
+	$(MAKE) api-smoke
+
+ci-verify-tests: ci-verify-build-contracts
+	$(MAKE) ui-install-playwright
+	$(MAKE) ui-test
+	$(MAKE) ui-test-coverage
+	$(MAKE) ui-replay-coverage-check
+	$(MAKE) test-coverage-go
+	$(MAKE) test-functional
 
 release:
 	$(GO) run ./cmd/releaseprep -version $(VERSION)
 
 ui-deps:
-	cd ui && $(BUN) install --frozen-lockfile
+	cd ui && $(UI_INSTALL)
 
 ui-lint:
-	cd ui && $(BUN) run lint
+	cd ui && $(UI_SCRIPT) lint
 
 test-race:
 	$(GO) test ./... -race -timeout 30s -v
@@ -158,25 +182,41 @@ deps-tidy:
 	$(GO) mod tidy
 
 ui-build:
-	cd ui && $(BUN) run build
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) exec tsc -b && $(NPM) exec vite build && node scripts/normalize-dist-output.mjs
+else
+	cd ui && $(UI_SCRIPT) build
+endif
 
 ui-test:
-	cd ui && $(BUN) run test
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) exec vitest run --exclude integration/event-stream-replay.integration.test.mjs && $(NPM) exec vitest run integration/event-stream-replay.integration.test.mjs
+else
+	cd ui && $(UI_SCRIPT) test
+endif
 
 ui-test-coverage:
-	cd ui && $(BUN) run test:coverage
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) exec vitest run --coverage --exclude integration/event-stream-replay.integration.test.mjs
+else
+	cd ui && $(UI_SCRIPT) test:coverage
+endif
 
 ui-replay-coverage-check:
-	cd ui && $(BUN) run replay:coverage:check
+ifeq ($(BUN_BIN),)
+	cd ui && $(NPM) exec tsx scripts/write-replay-coverage-report.ts --check
+else
+	cd ui && $(UI_SCRIPT) replay:coverage:check
+endif
 
 ui-install-playwright:
-	cd ui && $(BUN) x playwright install chromium
+	cd ui && $(UI_EXEC) playwright install chromium
 
 ui-storybook:
-	cd ui && $(BUN) run build-storybook
+	cd ui && $(UI_SCRIPT) build-storybook
 
 ui-test-storybook:
-	cd ui && $(BUN) run test-storybook
+	cd ui && $(UI_SCRIPT) test-storybook
 
 clean:
 	$(GO) clean ./...
