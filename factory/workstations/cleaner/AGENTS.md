@@ -8,18 +8,12 @@ Your job is to periodically inspect the repository and:
 2. constructing your own theory of mind on how the system works and updating that theory of mind as you explore how things change over time.
 3. handling customer asks at `factory/logs/meta/asks.md`
 
-The canonical checked-in customer-ask surface for this workflow is
-`factory/logs/meta/asks.md`. Treat any other ask file path as non-canonical
-unless a checked-in maintainer document explicitly redirects ownership there.
-If you encounter `factory/meta/asks.md`, treat it as a redirect-only legacy
-stub and do not read or edit it as a second backlog surface.
-
 # Steps
 ## step 0 - update the repo
 run git pull and make the workspace be up to date to remote
 
 ## Step 1 - read
-0. read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`, `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`, and `factory/logs/agent-fails.replay.json` to understand the current repository-maintainer workflow state before proposing cleanup work
+0. read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`, `factory/logs/meta/asks.md`. 
 1. read `factory/README.md` so your cleanup ideas stay aligned with the repository's public workflow contract. While doing so, preserve these principles directly:
    - keep cleanup ideas narrow, concrete, and implementation-ready
    - prefer simplification over additional guard layers or extra abstractions
@@ -28,18 +22,6 @@ run git pull and make the workspace be up to date to remote
    - when cleanup touches tests, prefer behavioral runtime, API, CLI, UI, or emitted-event assertions instead of meta tests about file layout, docs topology, bundle internals, or command/route inventories
    - default to one standalone cleanup idea file
    - use a batch only when one submission must create multiple work items together because the follow-up needs dependency ordering, parent-child membership, or mixed work types
-   - batch files must be written to `factory/inputs/BATCH/default/{request_id}.json`
-   - batch filenames must end in `.json`
-   - batch request bodies must set `type` to exactly `FACTORY_REQUEST_BATCH`
-   - batch request bodies must include a stable `request_id`
-   - every work item in a `BATCH` file must set a unique `name` and explicit `work_type_name`
-   - use `DEPENDS_ON` when one sibling work item must wait for another sibling work item
-   - use `PARENT_CHILD` when one work item should belong to a parent's child set
-   - in `DEPENDS_ON`, `source_work_name` is the blocked work item and `target_work_name` is the prerequisite work item
-   - in `PARENT_CHILD`, `source_work_name` is the child work item and `target_work_name` is the parent work item
-   - use a parent `state` only when you intentionally need the parent to start in a waiting state consumed by parent-aware fan-in
-   - relation names must match declared work item names exactly
-   - do not create dependency cycles
 2. read the code under `./`, read recent PRs associated with your previous requests, and inspect the current checked-in workflow inputs under `factory/inputs/` to see any previous cleanup attempts that have already been made
 
 ## Step 2 - based on the above results decide on one of the following:
@@ -56,11 +38,9 @@ Final is keeping the world clean. This means such things as ensuring that we hav
 For example, ensuring that the systems are structured so that we don't have duplicate structures in place, we don't have duplicate code and we have shrunk the the shape of the constructs to be as simple as possible, while maintaining the general interfaces that we provide to our customesr.
 
 You may have more than one item working at a time, so long as they are not overlapping. 
-## step 3 - merge your changes
 
-after you've updated the view of the world and progress.txt, please merge your view and commit it and push to main/pull from main.
 
-## Step 4 - completion
+## Step 3 - completion
 
 after you are done, you MUST respond with <COMPLETE>.
 

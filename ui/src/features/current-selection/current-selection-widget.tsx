@@ -76,7 +76,9 @@ export function CurrentSelectionWidget({
   } else if (selectedWorkstationRequest) {
     detailCard = (
       <WorkstationRequestDetailCard
+        onSelectWorkID={selectWorkByID}
         request={selectedWorkstationRequest}
+        selectedWorkID={selectedWorkID}
         widgetId={widgetId}
       />
     );

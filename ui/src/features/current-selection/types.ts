@@ -11,6 +11,7 @@ export type {
 
 export interface TerminalWorkDetail {
   attempts?: DashboardProviderSessionAttempt[];
+  dispatchID?: string;
   failureMessage?: string;
   failureReason?: string;
   label: string;
@@ -18,4 +19,3 @@ export interface TerminalWorkDetail {
   traceWorkID: string;
   workItem?: DashboardWorkItemRef;
 }
-

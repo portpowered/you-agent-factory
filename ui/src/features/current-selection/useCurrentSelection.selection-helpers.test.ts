@@ -135,6 +135,8 @@ describe("useCurrentSelection.selection-helpers", () => {
     ).toEqual([
       {
         attempts: [attempt],
+        contextText: undefined,
+        dispatchID: "dispatch-review",
         failureMessage: "Failed after dispatch",
         failureReason: "dispatch_failed",
         label: "Alpha Story",
@@ -307,8 +309,19 @@ describe("useCurrentSelection.selection-helpers", () => {
         workstation_name: "Review",
       },
     };
+    snapshot.runtime.workstation_requests_by_dispatch_id = {
+      "dispatch-continued": {
+        ...scriptRequest,
+        dispatch_id: "dispatch-continued",
+        request_view: {
+          ...scriptRequest.request_view,
+          started_at: "2026-04-08T12:02:00Z",
+        },
+      },
+    };
     expect(
       resolveTrackedWorkSelection({
+        dispatchID: "dispatch-failed",
         snapshot,
         workID: workAlpha.work_id,
       }),
@@ -319,7 +332,60 @@ describe("useCurrentSelection.selection-helpers", () => {
       workItem: workAlpha,
     });
 
+    expect(
+      resolveTrackedWorkSelection({
+        snapshot,
+        terminalWorkDetail: {
+          dispatchID: "dispatch-failed",
+          label: "Alpha Story",
+          status: "failed",
+          traceWorkID: workAlpha.work_id,
+          workItem: workAlpha,
+        },
+        workID: workAlpha.work_id,
+      }),
+    ).toEqual({
+      dispatchId: "dispatch-failed",
+      kind: "work-item",
+      nodeId: "review",
+      workItem: workAlpha,
+    });
+
+    snapshot.runtime.workstation_requests_by_dispatch_id = {
+      "dispatch-logical-move": {
+        counts: {
+          dispatched_count: 0,
+          errored_count: 0,
+          responded_count: 1,
+        },
+        dispatch_id: "dispatch-logical-move",
+        dispatched_request_count: 0,
+        errored_request_count: 0,
+        inference_attempts: [],
+        outcome: "ACCEPTED",
+        responded_request_count: 1,
+        started_at: "2026-04-08T12:03:00Z",
+        transition_id: "executor-loop-breaker",
+        work_items: [workAlpha],
+        workstation_name: "Executor loop breaker",
+        workstation_node_id: "repair",
+      },
+    };
     snapshot.runtime.session.failed_work_details_by_work_id = {};
+    expect(
+      resolveTrackedWorkSelection({
+        dispatchID: "dispatch-logical-move",
+        snapshot,
+        workID: workAlpha.work_id,
+      }),
+    ).toEqual({
+      dispatchId: "dispatch-logical-move",
+      kind: "work-item",
+      nodeId: "repair",
+      workItem: workAlpha,
+    });
+
+    snapshot.runtime.workstation_requests_by_dispatch_id = {};
     snapshot.runtime.current_work_items_by_place_id = {
       [reviewInputPlace.place_id]: [workAlpha],
     };
@@ -374,5 +440,60 @@ describe("useCurrentSelection.selection-helpers", () => {
         workAlpha,
       ),
     ).toEqual({ ...terminalItem, traceWorkID: "other-work", workItem: undefined });
+  });
+
+  it("prefers request-history terminal context over latest provider attempt context", () => {
+    const attempt: DashboardProviderSessionAttempt = {
+      dispatch_id: "dispatch-process",
+      outcome: "CONTINUE",
+      transition_id: "process",
+      workstation_name: "process",
+      work_items: [workAlpha],
+    };
+    const requests: Record<string, DashboardWorkstationRequest> = {
+      "dispatch-failed": {
+        counts: {
+          dispatched_count: 1,
+          errored_count: 1,
+          responded_count: 1,
+        },
+        dispatch_id: "dispatch-failed",
+        dispatched_request_count: 1,
+        errored_request_count: 1,
+        failure_message: "Provider failed",
+        failure_reason: "worker_error",
+        inference_attempts: [],
+        outcome: "FAILED",
+        responded_request_count: 1,
+        started_at: "2026-04-08T12:01:00Z",
+        transition_id: "setup-workspace",
+        work_items: [workAlpha],
+        workstation_name: "setup-workspace",
+        workstation_node_id: "setup-workspace",
+      },
+    };
+
+    expect(
+      buildTerminalWorkItems(
+        ["Alpha Story"],
+        [attempt],
+        {
+          [workAlpha.work_id]: {
+            dispatch_id: "dispatch-failed",
+            failure_message: "Provider failed",
+            failure_reason: "worker_error",
+            transition_id: "setup-workspace",
+            work_item: workAlpha,
+            workstation_name: "setup-workspace",
+          },
+        },
+        requests,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        contextText: "Failed at setup-workspace",
+        dispatchID: "dispatch-failed",
+      }),
+    ]);
   });
 });

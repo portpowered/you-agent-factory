@@ -189,7 +189,9 @@ export interface SelectedWorkDispatchHistorySectionProps {
 }
 
 export interface WorkstationRequestDetailCardProps {
+  onSelectWorkID?: (workID: string) => void;
   request: DashboardWorkstationRequest;
+  selectedWorkID?: string | null;
   widgetId?: string;
 }
 

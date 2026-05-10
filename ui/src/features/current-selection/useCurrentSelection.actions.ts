@@ -87,6 +87,7 @@ export function useCurrentSelectionActions({
   const openTerminalWorkDetail = (status: TerminalWorkStatus, item: TerminalWorkItem) => {
     const detail = {
       attempts: item.attempts,
+      dispatchID: item.dispatchID,
       failureMessage: item.failureMessage,
       failureReason: item.failureReason,
       label: item.label,
@@ -95,6 +96,7 @@ export function useCurrentSelectionActions({
       workItem: item.workItem,
     };
     const resolvedSelection = resolveTrackedWorkSelection({
+      dispatchID: item.dispatchID,
       snapshot,
       terminalWorkDetail: detail,
       workID: item.traceWorkID,
@@ -173,4 +175,3 @@ export function useCurrentSelectionActions({
     selectWorkstationRequest,
   };
 }
-
