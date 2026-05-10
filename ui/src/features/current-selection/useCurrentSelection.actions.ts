@@ -211,6 +211,7 @@ function buildTerminalWorkDetail(
     failureMessage: item.failureMessage,
     failureReason: item.failureReason,
     label: item.label,
+    preferWorkstationRequest: true,
     status,
     traceWorkID: item.traceWorkID,
     workItem: item.workItem,

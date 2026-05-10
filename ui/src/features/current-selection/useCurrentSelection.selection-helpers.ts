@@ -9,6 +9,7 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
+import { formatProviderSession } from "../../components/ui/formatters";
 import {
   findWorkItemReference,
   findWorkstationNodeIDForPlace,
@@ -68,7 +69,7 @@ export function buildTerminalWorkItems(
 
     return {
       attempts: matchingAttempts,
-      contextText: terminalRequestContext(latestRequest),
+      contextText: terminalRequestContext(latestAttempt, latestRequest),
       dispatchID:
         matchedFailureDetail?.dispatch_id ??
         (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
@@ -83,16 +84,26 @@ export function buildTerminalWorkItems(
 }
 
 function terminalRequestContext(
+  attempt: DashboardProviderSessionAttempt | undefined,
   request: DispatchWorkstationRequest | undefined,
 ): string | undefined {
-  if (!request) {
+  if (!request && !attempt) {
     return undefined;
   }
-  const outcome = requestOutcome(request);
-  const workstation = requestWorkstationName(request) ?? requestTransitionID(request);
+
+  const outcome = request ? requestOutcome(request) : attempt?.outcome;
+  const workstation = request
+    ? requestWorkstationName(request) ?? requestTransitionID(request)
+    : attempt?.workstation_name ?? attempt?.transition_id;
   if (!outcome || !workstation) {
     return undefined;
   }
+
+  const providerSession = formatProviderSession(attempt?.provider_session);
+  if (providerSession !== "Unavailable") {
+    return `${formatTerminalOutcome(outcome)} at ${workstation}; ${providerSession}`;
+  }
+
   return `${formatTerminalOutcome(outcome)} at ${workstation}`;
 }
 
@@ -196,6 +207,7 @@ export function resolveTrackedWorkSelection({
   const preferredSelection = resolvePreferredDispatchSelection({
     failedDetail,
     preferredFailureDispatchID,
+    preferWorkstationRequest: terminalWorkDetail?.preferWorkstationRequest ?? false,
     snapshot,
     terminalWorkDetail,
     workID,
@@ -209,7 +221,11 @@ export function resolveTrackedWorkSelection({
     workstationRequestsByDispatchID ?? snapshot.runtime.workstation_requests_by_dispatch_id ?? {},
   ).find((request) => requestWorkItems(request).some((item) => item.work_id === workID));
 
-  if (workstationRequest && isScriptBackedWorkstationRequest(workstationRequest)) {
+  if (
+    workstationRequest &&
+    (terminalWorkDetail?.preferWorkstationRequest ||
+      isScriptBackedWorkstationRequest(workstationRequest))
+  ) {
     return {
       dispatchId: requestDispatchID(workstationRequest),
       kind: "workstation-request",
@@ -305,6 +321,7 @@ export function resolveTrackedWorkSelection({
 function resolvePreferredDispatchSelection({
   failedDetail,
   preferredFailureDispatchID,
+  preferWorkstationRequest,
   snapshot,
   terminalWorkDetail,
   workID,
@@ -312,6 +329,7 @@ function resolvePreferredDispatchSelection({
 }: {
   failedDetail: DashboardFailedWorkDetail | undefined;
   preferredFailureDispatchID: string | undefined;
+  preferWorkstationRequest: boolean;
   snapshot: DashboardSnapshot;
   terminalWorkDetail: TerminalWorkDetail | null | undefined;
   workID: string;
@@ -327,6 +345,7 @@ function resolvePreferredDispatchSelection({
   )?.[preferredFailureDispatchID];
   if (preferredRequest) {
     return selectionFromWorkstationRequest(
+      preferWorkstationRequest,
       preferredRequest,
       workID,
       failedDetail?.work_item ?? terminalWorkDetail?.workItem,
@@ -361,11 +380,12 @@ function resolvePreferredDispatchSelection({
 }
 
 function selectionFromWorkstationRequest(
+  preferWorkstationRequest: boolean,
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
   workID: string,
   fallbackWorkItem: DashboardWorkItemRef | undefined,
 ): DashboardSelection | null {
-  if (isScriptBackedWorkstationRequest(request)) {
+  if (preferWorkstationRequest || isScriptBackedWorkstationRequest(request)) {
     return {
       dispatchId: requestDispatchID(request),
       kind: "workstation-request",

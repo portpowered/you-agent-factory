@@ -135,7 +135,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     ).toEqual([
       {
         attempts: [attempt],
-        contextText: undefined,
+        contextText: "Failed at Review",
         dispatchID: "dispatch-review",
         failureMessage: "Failed after dispatch",
         failureReason: "dispatch_failed",
