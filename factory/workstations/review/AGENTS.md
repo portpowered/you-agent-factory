@@ -13,6 +13,8 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
    - Read existing feedback from `gh pr view --comments` or the PR issue-comments API.
    - Post review feedback with `gh pr comment`.
    - Do not rely on review threads, pull-review comments, `gh pr review`, or comment-thread resolution state as the source of truth for whether feedback exists.
+   - Make blocking status explicit in the comment text, using markers like `BLOCKING`, `REJECTED`, or `FAIL` when fixes are still required.
+   - When earlier blocking feedback is later satisfied, post a newer PR conversation comment that clearly supersedes or clears it instead of assuming timestamp drift or green CI is enough.
 3. Apply these review rules in order:
    - review correctness before style or preference
    - verify the change solves the stated problem without obvious regressions
@@ -61,6 +63,7 @@ whether it is BLOCKING or non-blocking.
 - Post a PR comment with your review summary, including the acceptance criteria checklist results.
 - Include any blocking issues, correctness concerns, missing tests, CI failures, or prompt-rule violations in that comment.
 - If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.
+- If earlier blocking feedback is no longer applicable, say so explicitly in a newer PR conversation comment so the processor has clear resolution evidence.
 
 Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.
 
