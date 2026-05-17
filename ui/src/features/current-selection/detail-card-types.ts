@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-
+import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import type {
   DashboardActiveExecution,
   DashboardFailedWorkDetail,
@@ -107,11 +107,32 @@ export interface WorkstationDetailCardProps {
   widgetId?: string;
 }
 
+export interface EditableWorkstationValidationErrors {
+  model?: string;
+  prompt?: string;
+  promptFile?: string;
+}
+
 export type EditableWorkstationConfigurationState =
   | { status: "loading" }
   | { errorMessage: string; status: "error" }
   | { message: string; status: "empty" }
-  | { values: EditableWorkstationValues; status: "ready" };
+  | {
+      draft: {
+        model: string;
+        prompt: string;
+        promptFile: string;
+      };
+      hasValidationErrors: boolean;
+      initialValues: EditableWorkstationValues;
+      isDirty: boolean;
+      onModelChange: (value: string) => void;
+      onPromptChange: (value: string) => void;
+      onPromptFileChange: (value: string) => void;
+      pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      status: "ready";
+      validationErrors: EditableWorkstationValidationErrors;
+    };
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];

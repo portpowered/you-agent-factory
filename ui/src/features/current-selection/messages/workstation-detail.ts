@@ -12,7 +12,10 @@ export interface WorkstationDetailMessages {
   editableConfigurationErrorPrefix: string;
   editableConfigurationHeading: string;
   editableConfigurationLoading: string;
+  editableConfigurationDirtyStatus: string;
+  editableConfigurationDraftNote: string;
   editableConfigurationSummary: string;
+  editableConfigurationValidationStatus: string;
   modelFieldLabel: string;
   notConfiguredValue: string;
   promptFieldLabel: string;
@@ -76,9 +79,16 @@ const workstationDetailMessagesByLocale = {
       "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
     editableConfigurationErrorPrefix: "Editable configuration unavailable.",
     editableConfigurationHeading: "Editable configuration",
-    editableConfigurationLoading: "Loading the current factory definition for this workstation.",
+    editableConfigurationDirtyStatus:
+      "You have unsaved changes for this workstation.",
+    editableConfigurationDraftNote:
+      "Changes stay local to this edit session until you save the running factory.",
+    editableConfigurationLoading:
+      "Loading the current factory definition for this workstation.",
     editableConfigurationSummary:
       "Prompt, model, and template values are loaded from the latest editable current-factory definition.",
+    editableConfigurationValidationStatus:
+      "Resolve the highlighted fields before saving this workstation.",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
     promptFieldLabel: "Prompt",
@@ -146,10 +156,16 @@ const workstationDetailMessagesByLocale = {
       "この選択中ワークステーションでは、実行中ファクトリー定義から編集可能な prompt、model、template の値を取得できません。",
     editableConfigurationErrorPrefix: "編集可能な構成は利用できません。",
     editableConfigurationHeading: "編集可能な構成",
+    editableConfigurationDirtyStatus:
+      "このワークステーションには未保存の変更があります。",
+    editableConfigurationDraftNote:
+      "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
     editableConfigurationLoading:
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationSummary:
       "Prompt、model、template の値は最新の編集可能な current-factory 定義から読み込まれます。",
+    editableConfigurationValidationStatus:
+      "このワークステーションを保存する前に、強調表示された項目を修正してください。",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
     promptFieldLabel: "プロンプト",
@@ -217,10 +233,16 @@ const workstationDetailMessagesByLocale = {
       "선택한 워크스테이션에 대해 실행 중인 팩토리 정의에서 편집 가능한 prompt, model, template 값을 찾을 수 없습니다.",
     editableConfigurationErrorPrefix: "편집 가능한 구성을 사용할 수 없습니다.",
     editableConfigurationHeading: "편집 가능한 구성",
+    editableConfigurationDirtyStatus:
+      "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
+    editableConfigurationDraftNote:
+      "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
     editableConfigurationLoading:
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationSummary:
       "Prompt, model, template 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
+    editableConfigurationValidationStatus:
+      "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
     promptFieldLabel: "프롬프트",
@@ -286,9 +308,13 @@ const workstationDetailMessagesByLocale = {
       "运行中的工厂定义没有为所选工作站公开可编辑的 prompt、model 和 template 值。",
     editableConfigurationErrorPrefix: "无法提供可编辑配置。",
     editableConfigurationHeading: "可编辑配置",
+    editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
+    editableConfigurationDraftNote:
+      "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationSummary:
       "Prompt、model 和 template 值来自最新可编辑的 current-factory 定义。",
+    editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",
     promptFieldLabel: "提示词",

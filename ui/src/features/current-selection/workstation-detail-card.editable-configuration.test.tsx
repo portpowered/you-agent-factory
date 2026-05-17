@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
 import { WorkstationDetailCard } from "./workstation-detail-card";
@@ -14,14 +14,26 @@ describe("WorkstationDetailCard editable configuration", () => {
       <WorkstationDetailCard
         activeExecutions={[]}
         editableConfigurationState={{
-          status: "ready",
-          values: {
+          draft: {
+            model: "gpt-5.5",
+            prompt: "Review the latest story changes before approval.",
+            promptFile: "prompts/review.md",
+          },
+          hasValidationErrors: false,
+          initialValues: {
             model: "gpt-5.5",
             prompt: "Review the latest story changes before approval.",
             promptFile: "prompts/review.md",
             workerName: "reviewer",
             workstationName: "Review",
           },
+          isDirty: false,
+          onModelChange: vi.fn(),
+          onPromptChange: vi.fn(),
+          onPromptFileChange: vi.fn(),
+          pendingFactoryDefinition: null,
+          status: "ready",
+          validationErrors: {},
         }}
         now={DETAIL_CARD_NOW}
         providerSessions={[]}
@@ -37,17 +49,84 @@ describe("WorkstationDetailCard editable configuration", () => {
     }
 
     expect(within(editableSection).getByText("Model")).toBeTruthy();
-    expect(within(editableSection).getByText("gpt-5.5")).toBeTruthy();
+    expect(within(editableSection).getByDisplayValue("gpt-5.5")).toBeTruthy();
     expect(within(editableSection).getByText("Template")).toBeTruthy();
-    expect(within(editableSection).getByText("prompts/review.md")).toBeTruthy();
+    expect(
+      within(editableSection).getByDisplayValue("prompts/review.md"),
+    ).toBeTruthy();
     expect(within(editableSection).getByText("Worker")).toBeTruthy();
     expect(within(editableSection).getByText("reviewer")).toBeTruthy();
     expect(within(editableSection).getByText("Prompt")).toBeTruthy();
     expect(
-      within(editableSection).getByText(
+      within(editableSection).getByDisplayValue(
         "Review the latest story changes before approval.",
       ),
     ).toBeTruthy();
+  });
+
+  it("renders editable controls with local-draft and validation states", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onModelChange = vi.fn();
+    const onPromptChange = vi.fn();
+    const onPromptFileChange = vi.fn();
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          draft: {
+            model: "",
+            prompt: "",
+            promptFile: "   ",
+          },
+          hasValidationErrors: true,
+          initialValues: {
+            model: "gpt-5.5",
+            prompt: "Review the latest story changes before approval.",
+            promptFile: "prompts/review.md",
+            workerName: "reviewer",
+            workstationName: "Review",
+          },
+          isDirty: true,
+          onModelChange,
+          onPromptChange,
+          onPromptFileChange,
+          pendingFactoryDefinition: null,
+          status: "ready",
+          validationErrors: {
+            model: "Enter a model before saving this workstation.",
+            prompt: "Enter a prompt before saving this workstation.",
+            promptFile:
+              "Template paths cannot be only whitespace. Clear the field to remove the template.",
+          },
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Resolve the highlighted fields before saving this workstation.",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Model"), {
+      target: { value: "gpt-5.6" },
+    });
+    fireEvent.change(screen.getByLabelText("Template"), {
+      target: { value: "prompts/review-v2.md" },
+    });
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Updated prompt" },
+    });
+
+    expect(onModelChange).toHaveBeenCalledWith("gpt-5.6");
+    expect(onPromptFileChange).toHaveBeenCalledWith("prompts/review-v2.md");
+    expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
   });
 
   it("renders explicit loading, error, and empty editable-configuration states", () => {
@@ -64,7 +143,9 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText("Loading the current factory definition for this workstation."),
+      screen.getByText(
+        "Loading the current factory definition for this workstation.",
+      ),
     ).toBeTruthy();
 
     rerender(

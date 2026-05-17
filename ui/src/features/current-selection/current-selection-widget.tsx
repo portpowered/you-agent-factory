@@ -1,16 +1,9 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import type { ReactNode } from "react";
 
 import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../api/dashboard/types";
-import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
-import { resolveEditableWorkstationValues } from "../current-factory-definition/workstation-editable-values";
 import {
   NoSelectionDetailCard,
   StateNodeDetailCard,
@@ -19,9 +12,8 @@ import {
   WorkstationRequestDetailCard,
 } from "./current-selection-cards";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
-import type { WorkstationDetailCardProps } from "./detail-card-types";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
-import type { DashboardSelection } from "./types";
+import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
 import type { CurrentSelectionState } from "./useCurrentSelection";
 
 export interface CurrentSelectionWidgetProps {
@@ -135,77 +127,4 @@ export function CurrentSelectionWidget({
       {detailCard}
     </CurrentSelectionLocaleProvider>
   );
-}
-
-function useEditableWorkstationConfigurationState(
-  selection: DashboardSelection | null,
-  selectedNode: CurrentSelectionState["selectedNode"],
-): WorkstationDetailCardProps["editableConfigurationState"] {
-  const [editableDefinitionEnabled, setEditableDefinitionEnabled] =
-    useState(false);
-  const previousSelectedNodeID = useRef<string | null>(null);
-  const hasMounted = useRef(false);
-
-  useEffect(() => {
-    const selectedNodeID =
-      selection?.kind === "node" && selectedNode ? selectedNode.node_id : null;
-
-    if (!hasMounted.current) {
-      hasMounted.current = true;
-      previousSelectedNodeID.current = selectedNodeID;
-      return;
-    }
-
-    if (selectedNodeID && selectedNodeID !== previousSelectedNodeID.current) {
-      setEditableDefinitionEnabled(true);
-    }
-
-    if (!selectedNodeID) {
-      setEditableDefinitionEnabled(false);
-    }
-
-    previousSelectedNodeID.current = selectedNodeID;
-  }, [selectedNode, selection]);
-
-  const editableDefinition = useCurrentEditableFactoryDefinition(
-    editableDefinitionEnabled &&
-      selection?.kind === "node" &&
-      selectedNode != null,
-  );
-
-  if (selection?.kind !== "node" || !selectedNode) {
-    return undefined;
-  }
-
-  if (editableDefinition.isPending) {
-    return { status: "loading" };
-  }
-
-  if (editableDefinition.isError) {
-    return {
-      errorMessage: editableDefinition.error.message,
-      status: "error",
-    };
-  }
-
-  if (!editableDefinition.data) {
-    return {
-      message:
-        "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
-      status: "empty",
-    };
-  }
-
-  const values = resolveEditableWorkstationValues(
-    editableDefinition.data,
-    selectedNode,
-  );
-
-  return values
-    ? { status: "ready", values }
-    : {
-        message:
-          "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
-        status: "empty",
-      };
 }
