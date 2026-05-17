@@ -16,14 +16,30 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func normalizedCommandTestPath(t *testing.T, value string) string {
-	t.Helper()
-
-	normalized, err := filepath.EvalSymlinks(value)
-	if err == nil {
-		return normalized
+func canonicalWorkerTestPath(value string) string {
+	if value == "" {
+		return ""
 	}
-	return filepath.Clean(value)
+
+	cleaned := filepath.Clean(value)
+	current := cleaned
+	var suffix []string
+	for {
+		if _, err := os.Stat(current); err == nil {
+			if resolved, err := filepath.EvalSymlinks(current); err == nil && resolved != "" {
+				parts := append([]string{resolved}, suffix...)
+				return filepath.Join(parts...)
+			}
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+		current = parent
+	}
+	return cleaned
 }
 
 type recordingCommandLogger struct {
@@ -78,8 +94,12 @@ func TestExecCommandRunner_SuccessfulProcessCapturesOutputAndInputs(t *testing.T
 			"--",
 			"success",
 		},
-		Stdin:   []byte("stdin-value"),
-		Env:     append(os.Environ(), "GO_WANT_COMMAND_HELPER=1", "COMMAND_HELPER_WANT_STDIN=stdin-value", "COMMAND_HELPER_WANT_CWD="+normalizedCommandTestPath(t, workDir)),
+		Stdin: []byte("stdin-value"),
+		Env: append(os.Environ(),
+			"GO_WANT_COMMAND_HELPER=1",
+			"COMMAND_HELPER_WANT_STDIN=stdin-value",
+			"COMMAND_HELPER_WANT_CWD="+canonicalWorkerTestPath(workDir),
+		),
 		WorkDir: workDir,
 	})
 	if err != nil {
@@ -406,18 +426,10 @@ func assertCommandHelperInputs() {
 		os.Exit(2)
 	}
 	wantCWD := os.Getenv("COMMAND_HELPER_WANT_CWD")
-	if got, want := canonicalCommandTestPath(cwd), canonicalCommandTestPath(wantCWD); got != want {
+	if got, want := canonicalWorkerTestPath(cwd), canonicalWorkerTestPath(wantCWD); got != want {
 		fmt.Fprintf(os.Stderr, "cwd = %q, want %q\n", got, want)
 		os.Exit(2)
 	}
-}
-
-func canonicalCommandTestPath(value string) string {
-	canonical, err := filepath.EvalSymlinks(value)
-	if err == nil && canonical != "" {
-		return canonical
-	}
-	return filepath.Clean(value)
 }
 
 func spawnCommandHelperChild() {

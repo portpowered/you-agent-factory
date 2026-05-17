@@ -448,11 +448,11 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 
 	// Verify the working directory was resolved and applied.
 	wantWorkingDirectory := filepath.Join(
-		normalizedCommandTestPath(t, projectRoot),
+		canonicalWorkerTestPath(projectRoot),
 		"worktrees",
 		"feature-abc",
 	)
-	if normalizedCommandTestPath(t, mock.dispatch.WorkingDirectory) != wantWorkingDirectory {
+	if canonicalWorkerTestPath(mock.dispatch.WorkingDirectory) != wantWorkingDirectory {
 		t.Fatalf("expected working directory %q, got %q", wantWorkingDirectory, mock.dispatch.WorkingDirectory)
 	}
 }

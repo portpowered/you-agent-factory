@@ -46,6 +46,8 @@ import {
 import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
+const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
+
 interface RenderCurrentActivityOptions {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;
@@ -687,6 +689,42 @@ describe("ReactFlowCurrentActivityCard", () => {
     expect(
       screen.getByRole("region", { name: "Work graph viewport" }),
     ).toBeTruthy();
+  });
+
+  it("keeps only the outer card padding while preserving the current activity heading semantics", () => {
+    const legendMessages = getDashboardFlowAxisLegendMessages("en");
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    const heading = screen.getByRole("heading", { name: "Current activity" });
+    const card = heading.closest("section");
+    const header = heading.parentElement?.parentElement as HTMLElement | null;
+    const legendToggle = screen.getByRole("button", {
+      name: legendMessages.expandToggleLabel("graph legend"),
+    });
+    const legend = legendToggle.closest(
+      "[data-dashboard-flow-axis-legend]",
+    ) as HTMLElement | null;
+    const viewport = screen.getByRole("region", {
+      name: "Work graph viewport",
+    });
+
+    expect(card?.className).toContain("p-[1.2rem]");
+    expect(card?.className).toContain("max-[720px]:p-4");
+    expect(header?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(legend?.className).toContain("absolute");
+    expect(legend?.className).toContain("left-7");
+    expect(legend?.className).toContain("top-7");
+    expect(legend?.className).toContain("max-[720px]:left-4");
+    expect(legend?.className).toContain("max-[720px]:right-4");
+    expect(legend?.className).not.toContain("right-0");
+    expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(viewport.getAttribute("aria-describedby")).toBe(
+      "workflow-graph-heading",
+    );
   });
 
   it("renders a clear local alert when dropped PNG validation fails", async () => {

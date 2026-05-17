@@ -17,6 +17,7 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
+import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
 import {
   CURRENT_ACTIVITY_NODE_TYPES,
@@ -57,23 +58,16 @@ import {
   GraphImportErrorPanel,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
-import {
-  currentActivityGraphKey,
-  currentActivityTopologyKey,
-} from "./react-flow-current-activity-card-keys";
+import { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
-export {
-  currentActivityGraphKey,
-  currentActivityTopologyKey,
-} from "./react-flow-current-activity-card-keys";
+export { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
 
 const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
 const GRAPH_BACKGROUND_GAP = 24;
 const GRAPH_BACKGROUND_SIZE = 1;
 
-type CSSPropertiesWithVariables = CSSProperties &
-  Record<`--${string}`, string | number>;
+type CSSPropertiesWithVariables = CSSProperties & Record<`--${string}`, string | number>;
 
 const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   "--xy-controls-box-shadow": "none",
@@ -94,11 +88,30 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
+const CURRENT_ACTIVITY_CARD_CLASS =
+  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
+const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
+const CURRENT_ACTIVITY_EYEBROW_CLASS =
+  "mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
+const CURRENT_ACTIVITY_LEGEND_CLASS =
+  "absolute left-7 top-7 z-10 max-[720px]:left-4 max-[720px]:right-4 max-[720px]:top-4";
+const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
   | { kind: "state-node"; placeId: string }
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
+
+function CurrentActivityCardHeading() {
+  return (
+    <div>
+      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>Operator View</p>
+      <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
+        Current activity
+      </h2>
+    </div>
+  );
+}
 
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
@@ -350,15 +363,10 @@ function EmptyCurrentActivityCard() {
   return (
     <section
       aria-labelledby="workflow-graph-heading"
-      className="relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4"
+      className={CURRENT_ACTIVITY_CARD_CLASS}
     >
-      <div className="mb-4 flex items-end justify-between gap-4 max-[720px]:flex-col max-[720px]:items-start [&_h2]:m-0">
-        <div>
-          <p className="mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent">
-            Operator View
-          </p>
-          <h2 id="workflow-graph-heading">Current activity</h2>
-        </div>
+      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
+        <CurrentActivityCardHeading />
       </div>
       <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
         <h3>No workflow topology loaded</h3>
@@ -393,18 +401,22 @@ export function ReactFlowCurrentActivityCard(
   return (
     <section
       aria-labelledby="workflow-graph-heading"
-      className="relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4"
+      className={CURRENT_ACTIVITY_CARD_CLASS}
     >
-      <DashboardFlowAxisLegend
-        className="absolute left-7 top-7 max-[720px]:left-4 max-[720px]:right-4"
-        defaultExpanded={false}
-        edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(props.locale)}
-        iconItems={getDefaultDashboardFlowAxisLegendIconItems(props.locale)}
-        locale={props.locale}
-      />
+      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
+        <CurrentActivityCardHeading />
+      </div>
 
       <div className="relative min-h-0 flex-1">
+        <DashboardFlowAxisLegend
+          className={CURRENT_ACTIVITY_LEGEND_CLASS}
+          defaultExpanded={false}
+          edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems(props.locale)}
+          iconItems={getDefaultDashboardFlowAxisLegendIconItems(props.locale)}
+          locale={props.locale}
+        />
         <section
+          aria-describedby="workflow-graph-heading"
           aria-label="Work graph viewport"
           className={cx(
             "relative h-full min-h-0 overflow-hidden rounded-[1.4rem] border transition-colors",
@@ -458,31 +470,34 @@ export function ReactFlowCurrentActivityCard(
               style={GRAPH_CONTROLS_STYLE}
             />
           </ReactFlow>
-          <GraphDropOverlay dropState={imports.dropState} locale={props.locale} />
+          <GraphDropOverlay
+            dropState={imports.dropState}
+            locale={props.locale}
+          />
         </section>
-        {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
-          <FactoryImportPreviewDialog
-            activationState={imports.activationState}
-            locale={props.locale}
-            onCancel={() => {
-              imports.clearActivationError();
-              imports.closeImportPreview();
-            }}
-            onConfirm={() => {
-              void imports.activateImport(readyImportPreviewState.value);
-            }}
-            previewState={readyImportPreviewState}
-          />
-        ) : null}
-        {imports.dropState.status === "error" ? (
-          <GraphImportErrorPanel
-            error={imports.dropState.error}
-            fileName={imports.dropState.fileName}
-            locale={props.locale}
-            onDismiss={imports.clearError}
-          />
-        ) : null}
       </div>
+      {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
+        <FactoryImportPreviewDialog
+          activationState={imports.activationState}
+          locale={props.locale}
+          onCancel={() => {
+            imports.clearActivationError();
+            imports.closeImportPreview();
+          }}
+          onConfirm={() => {
+            void imports.activateImport(readyImportPreviewState.value);
+          }}
+          previewState={readyImportPreviewState}
+        />
+      ) : null}
+      {imports.dropState.status === "error" ? (
+        <GraphImportErrorPanel
+          error={imports.dropState.error}
+          fileName={imports.dropState.fileName}
+          locale={props.locale}
+          onDismiss={imports.clearError}
+        />
+      ) : null}
     </section>
   );
 }

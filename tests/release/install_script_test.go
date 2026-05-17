@@ -19,6 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
+const repoInstallScriptPath = "scripts/install.sh"
+
 func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *testing.T) {
 	t.Parallel()
 
@@ -202,7 +204,7 @@ func TestSmokeInstallScript_InstallsHostedScriptAndSmokesBinary(t *testing.T) {
 func runInstallScript(t *testing.T, env []string) (string, error) {
 	t.Helper()
 
-	cmd := exec.Command("sh", "install.sh")
+	cmd := exec.Command("sh", repoInstallScriptPath)
 	cmd.Dir = testutil.MustRepoRoot(t)
 	cmd.Env = append(os.Environ(), env...)
 	output, err := cmd.CombinedOutput()
@@ -241,7 +243,7 @@ func skipIfInstallScriptUnsupported(t *testing.T) {
 func readInstallScript(t *testing.T) []byte {
 	t.Helper()
 
-	contents, err := os.ReadFile(filepath.Join(testutil.MustRepoRoot(t), "install.sh"))
+	contents, err := os.ReadFile(filepath.Join(testutil.MustRepoRoot(t), repoInstallScriptPath))
 	if err != nil {
 		t.Fatalf("read install.sh: %v", err)
 	}

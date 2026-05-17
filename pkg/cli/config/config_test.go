@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -290,14 +291,12 @@ func TestExpandFactoryConfig_ReportsReplacedPortableBundledFiles(t *testing.T) {
 
 func TestExpandFactoryConfig_PreservesPortableResourceManifestAndMaterializesBundledFiles(t *testing.T) {
 	dir := t.TempDir()
-	toolsDir := t.TempDir()
-	presentCommand := writeCLIRequiredToolExecutable(t, toolsDir, "portable-helper")
-	t.Setenv("PATH", toolsDir)
 	factoryPath := filepath.Join(dir, "factory.json")
-	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolWithPurposeJSON(presentCommand))
+	pythonCommand := portablePythonCommand(t)
+	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolWithPurposeJSON(pythonCommand))
 
 	targetDir, _, canonical := expandPortableResourceManifestFactory(t, factoryPath)
-	assertPortableResourceManifestPayload(t, canonical, presentCommand)
+	assertPortableResourceManifestPayload(t, canonical, pythonCommand)
 	assertFlattenedPortableResourceManifestPreserved(t, targetDir)
 	assertPortableBundledFilesMaterialized(t, targetDir)
 	assertLoadedPortableResourceManifest(t, targetDir)
@@ -923,6 +922,19 @@ func readCLITestFile(t *testing.T, path string) []byte {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return data
+}
+
+func portablePythonCommand(t *testing.T) string {
+	t.Helper()
+
+	for _, candidate := range []string{"python", "python3"} {
+		if _, err := exec.LookPath(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	t.Skip("portable resource manifest test requires python or python3 on PATH")
+	return ""
 }
 
 func writeCLIRequiredToolExecutable(t *testing.T, dir, baseName string) string {

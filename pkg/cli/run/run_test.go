@@ -22,18 +22,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
-
-func normalizedExistingPath(t *testing.T, value string) string {
-	t.Helper()
-
-	normalized, err := filepath.EvalSymlinks(value)
-	if err == nil {
-		return normalized
-	}
-	return filepath.Clean(value)
-}
 
 type stubFactoryService struct {
 	run func(context.Context) error
@@ -752,8 +743,8 @@ func TestRun_DefaultsExecutionBaseDirToCurrentWorkingDirectory(t *testing.T) {
 	if err := Run(context.Background(), RunConfig{Dir: "factory"}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if normalizedExistingPath(t, capturedBaseDir) != normalizedExistingPath(t, workingDirectory) {
-		t.Fatalf("execution base dir = %q, want path equivalent to %q", capturedBaseDir, workingDirectory)
+	if testutil.CanonicalPath(capturedBaseDir) != testutil.CanonicalPath(workingDirectory) {
+		t.Fatalf("execution base dir = %q, want %q", capturedBaseDir, workingDirectory)
 	}
 }
 
