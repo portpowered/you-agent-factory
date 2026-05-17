@@ -18,6 +18,14 @@ func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.Provider
 	return support.ProviderErrorCorpusEntry(t, name)
 }
 
+type panickingExecutor struct{}
+
+func (e *panickingExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	panic("intentional executor panic for testing")
+}
+
+var _ workers.WorkerExecutor = (*panickingExecutor)(nil)
+
 type failOnNthPageExecutor struct {
 	mu     sync.Mutex
 	calls  int
