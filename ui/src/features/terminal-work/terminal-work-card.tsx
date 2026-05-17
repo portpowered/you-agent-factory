@@ -33,6 +33,8 @@ export type TerminalWorkStatus = "completed" | "failed";
 
 export interface TerminalWorkItem {
   attempts?: DashboardProviderSessionAttempt[];
+  contextText?: string;
+  dispatchID?: string;
   failureMessage?: string;
   failureReason?: string;
   label: string;
@@ -264,6 +266,12 @@ function renderTerminalWorkContext(
   item: TerminalWorkItem,
   fallbackMessage: string,
 ) {
+  if (item.contextText) {
+    return (
+      <span className={TERMINAL_BUTTON_META_CLASS}>{item.contextText}</span>
+    );
+  }
+
   const latestAttempt = item.attempts?.[item.attempts.length - 1];
   if (!latestAttempt) {
     return (

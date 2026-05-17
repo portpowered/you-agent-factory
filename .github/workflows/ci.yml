@@ -100,6 +100,11 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Set up Node for dashboard runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
       - name: Install dashboard dependencies
         run: make ui-deps
 

@@ -11,11 +11,12 @@ export type {
 
 export interface TerminalWorkDetail {
   attempts?: DashboardProviderSessionAttempt[];
+  dispatchID?: string;
   failureMessage?: string;
   failureReason?: string;
   label: string;
+  preferWorkstationRequest?: boolean;
   status: "completed" | "failed";
   traceWorkID: string;
   workItem?: DashboardWorkItemRef;
 }
-

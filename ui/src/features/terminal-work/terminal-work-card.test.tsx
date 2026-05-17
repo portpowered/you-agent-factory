@@ -34,6 +34,7 @@ describe("CompletedFailedWorkstationCard", () => {
         failedItems={[
           {
             attempts: [failedAttempt],
+            contextText: "Failed at setup-workspace",
             label: "Failed Story",
             traceWorkID: "work-failed-story",
           },
@@ -76,9 +77,7 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(doneStoryButton.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
     expect(doneStoryButton).toBeTruthy();
     expect(screen.getByRole("button", { name: /Failed Story/ })).toBeTruthy();
-    const failedMeta = screen.getByText(
-      /Failed at Repair; codex \/ session_id \/ sess-failed-story/,
-    );
+    const failedMeta = screen.getByText("Failed at setup-workspace");
     expect(failedMeta.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
     expect(failedMeta).toBeTruthy();
     expect(

@@ -56,7 +56,7 @@ the batch mixes work types.
 
 | Field | Required | What to put there |
 |-------|----------|-------------------|
-| `request_id` | yes | Stable request identifier for the whole submission |
+| `requestId` | yes | Stable request identifier for the whole submission |
 | `type` | yes | `FACTORY_REQUEST_BATCH` |
 | `works` | yes | One or more submitted work items |
 | `relations` | no | Named links between work items in the same batch |
@@ -66,7 +66,7 @@ the batch mixes work types.
 | Field | Required | What to put there |
 |-------|----------|-------------------|
 | `name` | yes | Unique name within the batch |
-| `work_type_name` | usually | Configured work type from `factory.json`; required for `inputs/BATCH` |
+| `workTypeName` | usually | Configured work type from `factory.json`; required for `inputs/BATCH` |
 | `state` | no | Explicit starting state; omit it to use the work type's initial state |
 | `payload` | no | Raw work payload |
 | `tags` | no | String metadata available to templates and parameterized fields |
@@ -100,8 +100,8 @@ parent lineage:
 }
 ```
 
-Read those directions literally: for `PARENT_CHILD`, `source_work_name` is the
-child and `target_work_name` is the parent.
+Read those directions literally: for `PARENT_CHILD`, `sourceWorkName` is the
+child and `targetWorkName` is the parent.
 
 ## Related
 

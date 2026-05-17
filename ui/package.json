@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build-storybook": "storybook build --loglevel warn",
-    "build": "tsc -b && vite build && bun scripts/normalize-dist-output.mjs",
+    "build": "tsc -b && vite build && node scripts/normalize-dist-output.mjs",
     "capture:heap-snapshot": "node scripts/capture-heap-snapshot.mjs",
     "check:work-outcome-memory": "bun scripts/check-work-outcome-memory.ts",
     "check": "biome check .",
@@ -26,7 +26,7 @@
     "test:coverage": "vitest run --coverage --exclude integration/event-stream-replay.integration.test.mjs",
     "test:integration": "vitest run integration/event-stream-replay.integration.test.mjs",
     "test:unit": "vitest run --exclude integration/event-stream-replay.integration.test.mjs",
-    "test": "bun run test:unit && bun run test:integration",
+    "test": "vitest run --exclude integration/event-stream-replay.integration.test.mjs && vitest run integration/event-stream-replay.integration.test.mjs",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
     "tsc": "tsc -b --noEmit --pretty false"
   },

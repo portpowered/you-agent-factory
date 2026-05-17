@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -127,8 +127,46 @@ function bunCommand() {
   return process.platform === "win32" ? "bun.exe" : "bun";
 }
 
+function npmCommand() {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
+function hasBun() {
+  const result = spawnSync(bunCommand(), ["--version"], {
+    shell: false,
+    stdio: "ignore",
+  });
+  return result.status === 0;
+}
+
+function resolveRuntimeCommand(args) {
+  if (hasBun()) {
+    return {
+      args,
+      command: bunCommand(),
+    };
+  }
+
+  if (args[0] === "run") {
+    return {
+      args: ["run", ...args.slice(1)],
+      command: npmCommand(),
+    };
+  }
+
+  if (args[0] === "x") {
+    return {
+      args: ["exec", "--", ...args.slice(1)],
+      command: npmCommand(),
+    };
+  }
+
+  throw new Error(`Unsupported local runtime command fallback: ${args.join(" ")}`);
+}
+
 function spawnBun(args, extraEnv = {}, options = {}) {
-  return spawn(bunCommand(), args, {
+  const runtime = resolveRuntimeCommand(args);
+  return spawn(runtime.command, runtime.args, {
     cwd: packageRoot,
     env: createBunEnv(extraEnv, options),
     shell: false,
@@ -187,9 +225,10 @@ async function runBun(
   try {
     const [code, signal] = await once(child, "exit");
     if (code !== 0) {
+      const runtime = resolveRuntimeCommand(args);
       throw new Error(
         [
-          `bun ${args.join(" ")} exited with ${code ?? "null"} / ${signal ?? "null"}.`,
+          `${runtime.command} ${runtime.args.join(" ")} exited with ${code ?? "null"} / ${signal ?? "null"}.`,
           stdout.trim(),
           stderr.trim(),
         ]

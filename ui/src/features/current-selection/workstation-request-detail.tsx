@@ -1,3 +1,4 @@
+import { formatWorkItemLabel } from "../../components/ui/formatters";
 import { formatDurationMillis } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
@@ -9,6 +10,7 @@ import {
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
+  WORK_SELECTION_BUTTON_CLASS,
 } from "./detail-card-shared";
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { InferenceAttemptsSection } from "./execution-details";
@@ -16,7 +18,9 @@ const SCRIPT_OUTPUT_TEXT_CLASS =
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]";
 
 export function WorkstationRequestDetailCard({
+  onSelectWorkID,
   request,
+  selectedWorkID,
   widgetId = "current-selection",
 }: WorkstationRequestDetailCardProps) {
   const view = buildWorkstationRequestDetailView(request);
@@ -26,7 +30,12 @@ export function WorkstationRequestDetailCard({
     <SelectionDetailLayout widgetId={widgetId}>
       <WorkstationRequestSummary request={request} view={view} />
       <RequestCountSection request={request} />
-      <RequestDetailsSection request={request} view={view} />
+      <RequestDetailsSection
+        onSelectWorkID={onSelectWorkID}
+        request={request}
+        selectedWorkID={selectedWorkID}
+        view={view}
+      />
       {view.isScriptBackedRequest ? (
         <MetadataSection
           emptyMessage="Request metadata is not available for this workstation request."
@@ -160,16 +169,27 @@ function WorkstationRequestSummary({
 }
 
 function RequestDetailsSection({
+  onSelectWorkID,
   request,
+  selectedWorkID,
   view,
 }: {
+  onSelectWorkID?: WorkstationRequestDetailCardProps["onSelectWorkID"];
   request: WorkstationRequestDetailCardProps["request"];
+  selectedWorkID?: WorkstationRequestDetailCardProps["selectedWorkID"];
   view: WorkstationRequestDetailView;
 }) {
+  const consumedWorkItems = request.request_view?.input_work_items ?? [];
+
   if (!view.isScriptBackedRequest) {
     return (
       <section aria-label="Request details" className={RUNTIME_DETAILS_SECTION_CLASS}>
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request details</h4>
+        <ConsumedWorkItemsSection
+          onSelectWorkID={onSelectWorkID}
+          selectedWorkID={selectedWorkID}
+          workItems={consumedWorkItems}
+        />
         <p className={DETAIL_COPY_CLASS}>{view.inferenceRequestDetailsCopy}</p>
       </section>
     );
@@ -181,7 +201,53 @@ function RequestDetailsSection({
       <dl>
         <ScriptRequestFields request={request} />
       </dl>
+      <ConsumedWorkItemsSection
+        onSelectWorkID={onSelectWorkID}
+        selectedWorkID={selectedWorkID}
+        workItems={consumedWorkItems}
+      />
     </section>
+  );
+}
+
+function ConsumedWorkItemsSection({
+  onSelectWorkID,
+  selectedWorkID,
+  workItems,
+}: {
+  onSelectWorkID?: WorkstationRequestDetailCardProps["onSelectWorkID"];
+  selectedWorkID?: WorkstationRequestDetailCardProps["selectedWorkID"];
+  workItems: NonNullable<
+    NonNullable<WorkstationRequestDetailCardProps["request"]["request_view"]>["input_work_items"]
+  >;
+}) {
+  if (workItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-[0.3rem]">
+      <span>Consumed work items</span>
+      <div className="flex flex-wrap gap-[0.45rem]">
+        {workItems.map((workItem) => {
+          const workLabel = formatWorkItemLabel(workItem);
+          const isSelected = selectedWorkID === workItem.work_id;
+
+          return (
+            <button
+              aria-label={`Select work item ${workLabel}`}
+              aria-pressed={isSelected}
+              className={WORK_SELECTION_BUTTON_CLASS}
+              key={workItem.work_id}
+              onClick={() => onSelectWorkID?.(workItem.work_id)}
+              type="button"
+            >
+              {isSelected ? "Work item selected" : `Open ${workLabel}`}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

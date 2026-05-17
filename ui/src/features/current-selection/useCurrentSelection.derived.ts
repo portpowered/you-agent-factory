@@ -201,8 +201,14 @@ export function useCurrentSelectionDerivedState({
   const completedWorkLabels = snapshot?.runtime.session.completed_work_labels ?? [];
   const failedWorkLabels = snapshot?.runtime.session.failed_work_labels ?? [];
   const completedWorkItems = useMemo(
-    () => buildTerminalWorkItems(completedWorkLabels, snapshot?.runtime.session.provider_sessions),
-    [completedWorkLabels, snapshot],
+    () =>
+      buildTerminalWorkItems(
+        completedWorkLabels,
+        snapshot?.runtime.session.provider_sessions,
+        undefined,
+        projectedWorkstationRequestsByDispatchID,
+      ),
+    [completedWorkLabels, projectedWorkstationRequestsByDispatchID, snapshot],
   );
   const failedWorkItems = useMemo(
     () =>
@@ -210,8 +216,9 @@ export function useCurrentSelectionDerivedState({
         failedWorkLabels,
         snapshot?.runtime.session.provider_sessions,
         snapshot?.runtime.session.failed_work_details_by_work_id,
+        projectedWorkstationRequestsByDispatchID,
       ),
-    [failedWorkLabels, snapshot],
+    [failedWorkLabels, projectedWorkstationRequestsByDispatchID, snapshot],
   );
 
   return {
@@ -268,4 +275,3 @@ export function useTerminalWorkDetailCleanup({
     terminalWorkDetail,
   ]);
 }
-
