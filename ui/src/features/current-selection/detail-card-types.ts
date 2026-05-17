@@ -95,11 +95,13 @@ export interface WorkItemDetailCardProps {
 export interface WorkstationDetailCardProps {
   activeExecutions: DashboardActiveExecution[];
   editableConfigurationState?: EditableWorkstationConfigurationState;
+  headerAction?: ReactNode;
   locale?: string;
   now: number;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
   providerSessions: DashboardProviderSessionAttempt[];
+  saveState?: EditableWorkstationSaveState;
   selectedWorkID?: string | null;
   selectedRequest?: DashboardWorkstationRequest | null;
   selectedNode: DashboardWorkstationNode;
@@ -126,6 +128,7 @@ export type EditableWorkstationConfigurationState =
       hasValidationErrors: boolean;
       initialValues: EditableWorkstationValues;
       isDirty: boolean;
+      markChangesSaved: () => void;
       onModelChange: (value: string) => void;
       onPromptChange: (value: string) => void;
       onPromptFileChange: (value: string) => void;
@@ -133,6 +136,13 @@ export type EditableWorkstationConfigurationState =
       status: "ready";
       validationErrors: EditableWorkstationValidationErrors;
     };
+
+export type EditableWorkstationSaveState =
+  | { status: "idle" }
+  | { status: "confirming" }
+  | { status: "submitting" }
+  | { status: "success" }
+  | { errorMessage: string; status: "error" };
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];

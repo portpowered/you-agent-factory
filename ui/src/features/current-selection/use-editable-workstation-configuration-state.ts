@@ -85,6 +85,16 @@ export function useEditableWorkstationConfigurationState(
       sessionState.draft,
       sessionState.sessionStartDraft,
     ),
+    markChangesSaved: () => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              sessionStartDraft: currentState.draft,
+            }
+          : currentState,
+      );
+    },
     onModelChange: (value) => {
       setSessionState((currentState) =>
         currentState

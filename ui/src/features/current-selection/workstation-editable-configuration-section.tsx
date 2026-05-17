@@ -11,6 +11,7 @@ import { formatList } from "../../components/ui/formatters";
 import { cx } from "../../lib/cx";
 import { WORKSTATION_SUMMARY_ITEM_CLASS } from "./detail-card-shared";
 import type {
+  EditableWorkstationSaveState,
   WorkstationDetailCardProps,
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
@@ -19,9 +20,11 @@ import type { getWorkstationDetailMessages } from "./messages";
 
 export function EditableConfigurationSection({
   messages,
+  saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
+  saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
   return (
@@ -55,119 +58,172 @@ export function EditableConfigurationSection({
         </p>
       ) : null}
       {state?.status === "ready" ? (
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => event.preventDefault()}
-        >
-          <div className="grid gap-2 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3">
-            <p
-              className={cx(
-                "m-0",
-                state.hasValidationErrors
-                  ? "text-af-danger-ink"
-                  : "text-af-ink/72",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-              role={state.hasValidationErrors ? "alert" : "status"}
-            >
-              {state.hasValidationErrors
-                ? messages.editableConfigurationValidationStatus
-                : state.isDirty
-                  ? messages.editableConfigurationDirtyStatus
-                  : messages.editableConfigurationDraftNote}
-            </p>
-            <p
-              className={cx(
-                "m-0 text-af-ink/58",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
-            >
-              {messages.editableConfigurationDraftNote}
-            </p>
-          </div>
-
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
-            <EditableConfigurationField
-              errorMessage={state.validationErrors.model}
-              fieldId="editable-workstation-model"
-              input={
-                <Input
-                  aria-describedby={
-                    state.validationErrors.model
-                      ? "editable-workstation-model-error"
-                      : undefined
-                  }
-                  aria-invalid={
-                    state.validationErrors.model ? "true" : undefined
-                  }
-                  className={DASHBOARD_BODY_TEXT_CLASS}
-                  id="editable-workstation-model"
-                  onChange={(event) => state.onModelChange(event.target.value)}
-                  value={state.draft.model}
-                />
-              }
-              label={messages.modelFieldLabel}
-            />
-            <EditableConfigurationField
-              errorMessage={state.validationErrors.promptFile}
-              fieldId="editable-workstation-template"
-              input={
-                <Input
-                  aria-describedby={
-                    state.validationErrors.promptFile
-                      ? "editable-workstation-template-error"
-                      : undefined
-                  }
-                  aria-invalid={
-                    state.validationErrors.promptFile ? "true" : undefined
-                  }
-                  className={DASHBOARD_BODY_TEXT_CLASS}
-                  id="editable-workstation-template"
-                  onChange={(event) =>
-                    state.onPromptFileChange(event.target.value)
-                  }
-                  placeholder={messages.notConfiguredValue}
-                  value={state.draft.promptFile}
-                />
-              }
-              label={messages.templateFieldLabel}
-            />
-          </div>
-
-          <dl className="m-0 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
-            <EditableConfigurationItem
-              label={messages.workerFieldLabel}
-              value={valueOrFallback(
-                state.initialValues.workerName,
-                messages.notConfiguredValue,
-              )}
-            />
-          </dl>
-
-          <EditableConfigurationField
-            errorMessage={state.validationErrors.prompt}
-            fieldId="editable-workstation-prompt"
-            input={
-              <Textarea
-                aria-describedby={
-                  state.validationErrors.prompt
-                    ? "editable-workstation-prompt-error"
-                    : undefined
-                }
-                aria-invalid={
-                  state.validationErrors.prompt ? "true" : undefined
-                }
-                className={DASHBOARD_BODY_TEXT_CLASS}
-                id="editable-workstation-prompt"
-                onChange={(event) => state.onPromptChange(event.target.value)}
-                value={state.draft.prompt}
-              />
-            }
-            label={messages.promptFieldLabel}
-          />
-        </form>
+        <EditableConfigurationReadyForm
+          messages={messages}
+          saveState={saveState}
+          state={state}
+        />
       ) : null}
     </section>
+  );
+}
+
+function EditableConfigurationReadyForm({
+  messages,
+  saveState,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  saveState?: EditableWorkstationSaveState;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  return (
+    <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
+      <EditableConfigurationSaveFeedback
+        messages={messages}
+        saveState={saveState}
+      />
+      <EditableConfigurationDraftStatus messages={messages} state={state} />
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+        <EditableConfigurationField
+          errorMessage={state.validationErrors.model}
+          fieldId="editable-workstation-model"
+          input={
+            <Input
+              aria-describedby={
+                state.validationErrors.model
+                  ? "editable-workstation-model-error"
+                  : undefined
+              }
+              aria-invalid={state.validationErrors.model ? "true" : undefined}
+              className={DASHBOARD_BODY_TEXT_CLASS}
+              id="editable-workstation-model"
+              onChange={(event) => state.onModelChange(event.target.value)}
+              value={state.draft.model}
+            />
+          }
+          label={messages.modelFieldLabel}
+        />
+        <EditableConfigurationField
+          errorMessage={state.validationErrors.promptFile}
+          fieldId="editable-workstation-template"
+          input={
+            <Input
+              aria-describedby={
+                state.validationErrors.promptFile
+                  ? "editable-workstation-template-error"
+                  : undefined
+              }
+              aria-invalid={
+                state.validationErrors.promptFile ? "true" : undefined
+              }
+              className={DASHBOARD_BODY_TEXT_CLASS}
+              id="editable-workstation-template"
+              onChange={(event) => state.onPromptFileChange(event.target.value)}
+              placeholder={messages.notConfiguredValue}
+              value={state.draft.promptFile}
+            />
+          }
+          label={messages.templateFieldLabel}
+        />
+      </div>
+      <dl className="m-0 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
+        <EditableConfigurationItem
+          label={messages.workerFieldLabel}
+          value={valueOrFallback(
+            state.initialValues.workerName,
+            messages.notConfiguredValue,
+          )}
+        />
+      </dl>
+      <EditableConfigurationField
+        errorMessage={state.validationErrors.prompt}
+        fieldId="editable-workstation-prompt"
+        input={
+          <Textarea
+            aria-describedby={
+              state.validationErrors.prompt
+                ? "editable-workstation-prompt-error"
+                : undefined
+            }
+            aria-invalid={state.validationErrors.prompt ? "true" : undefined}
+            className={DASHBOARD_BODY_TEXT_CLASS}
+            id="editable-workstation-prompt"
+            onChange={(event) => state.onPromptChange(event.target.value)}
+            value={state.draft.prompt}
+          />
+        }
+        label={messages.promptFieldLabel}
+      />
+    </form>
+  );
+}
+
+function EditableConfigurationSaveFeedback({
+  messages,
+  saveState,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  saveState?: EditableWorkstationSaveState;
+}) {
+  if (saveState?.status === "success") {
+    return (
+      <p
+        className={cx("m-0 text-af-success-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        role="status"
+      >
+        {messages.editableConfigurationSaveSuccess}
+      </p>
+    );
+  }
+
+  if (saveState?.status === "error") {
+    return (
+      <p
+        className={cx("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationSaveErrorPrefix} {saveState.errorMessage}
+      </p>
+    );
+  }
+
+  return null;
+}
+
+function EditableConfigurationDraftStatus({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  return (
+    <div className="grid gap-2 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3">
+      <p
+        className={cx(
+          "m-0",
+          state.hasValidationErrors ? "text-af-danger-ink" : "text-af-ink/72",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
+        role={state.hasValidationErrors ? "alert" : "status"}
+      >
+        {state.hasValidationErrors
+          ? messages.editableConfigurationValidationStatus
+          : state.isDirty
+            ? messages.editableConfigurationDirtyStatus
+            : messages.editableConfigurationDraftNote}
+      </p>
+      <p className={cx("m-0 text-af-ink/58", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationDraftNote}
+      </p>
+    </div>
   );
 }
 

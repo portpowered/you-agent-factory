@@ -10,6 +10,7 @@ import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
 import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
+import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "./useCurrentSelection";
 
 vi.mock("../current-factory-definition", async () => {
@@ -20,6 +21,10 @@ vi.mock("../current-factory-definition", async () => {
     useCurrentEditableFactoryDefinition: vi.fn(),
   };
 });
+
+vi.mock("./use-save-editable-workstation-configuration", () => ({
+  useSaveEditableWorkstationConfiguration: vi.fn(),
+}));
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -140,6 +145,13 @@ describe("CurrentSelectionWidget", () => {
       refetch: vi.fn(),
       status: "pending",
     } as never);
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({
+      beginSaveConfirmation: vi.fn(),
+      canSave: false,
+      cancelSaveConfirmation: vi.fn(),
+      confirmSave: vi.fn(),
+      saveState: { status: "idle" },
+    });
   });
 
   afterEach(() => {

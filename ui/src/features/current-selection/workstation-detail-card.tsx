@@ -36,11 +36,13 @@ import {
 export function WorkstationDetailCard({
   activeExecutions,
   editableConfigurationState,
+  headerAction,
   locale,
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
   providerSessions,
+  saveState,
   selectedRequest,
   selectedWorkID,
   selectedNode,
@@ -54,10 +56,11 @@ export function WorkstationDetailCard({
   );
 
   return (
-    <SelectionDetailLayout widgetId={widgetId}>
+    <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
       <EditableConfigurationSection
         messages={messages}
+        saveState={saveState}
         state={editableConfigurationState}
       />
       <WorkstationActiveWorkList

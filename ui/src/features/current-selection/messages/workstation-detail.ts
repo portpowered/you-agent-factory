@@ -14,6 +14,14 @@ export interface WorkstationDetailMessages {
   editableConfigurationLoading: string;
   editableConfigurationDirtyStatus: string;
   editableConfigurationDraftNote: string;
+  editableConfigurationSaveAction: string;
+  editableConfigurationSaveBusyAction: string;
+  editableConfigurationSaveConfirmationCancelAction: string;
+  editableConfigurationSaveConfirmationConfirmAction: string;
+  editableConfigurationSaveConfirmationDescription: string;
+  editableConfigurationSaveConfirmationTitle: string;
+  editableConfigurationSaveErrorPrefix: string;
+  editableConfigurationSaveSuccess: string;
   editableConfigurationSummary: string;
   editableConfigurationValidationStatus: string;
   modelFieldLabel: string;
@@ -83,6 +91,17 @@ const workstationDetailMessagesByLocale = {
       "You have unsaved changes for this workstation.",
     editableConfigurationDraftNote:
       "Changes stay local to this edit session until you save the running factory.",
+    editableConfigurationSaveAction: "Save changes",
+    editableConfigurationSaveBusyAction: "Saving...",
+    editableConfigurationSaveConfirmationCancelAction: "Cancel",
+    editableConfigurationSaveConfirmationConfirmAction: "Overwrite factory",
+    editableConfigurationSaveConfirmationDescription:
+      "Saving will overwrite the running factory definition with the prompt, model, and template values in this workstation draft.",
+    editableConfigurationSaveConfirmationTitle:
+      "Overwrite the running factory definition?",
+    editableConfigurationSaveErrorPrefix: "Saving failed.",
+    editableConfigurationSaveSuccess:
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
     editableConfigurationLoading:
       "Loading the current factory definition for this workstation.",
     editableConfigurationSummary:
@@ -160,6 +179,17 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションには未保存の変更があります。",
     editableConfigurationDraftNote:
       "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
+    editableConfigurationSaveAction: "変更を保存",
+    editableConfigurationSaveBusyAction: "保存中...",
+    editableConfigurationSaveConfirmationCancelAction: "キャンセル",
+    editableConfigurationSaveConfirmationConfirmAction: "ファクトリーを上書き",
+    editableConfigurationSaveConfirmationDescription:
+      "保存すると、このワークステーション下書きの prompt、model、template の値で実行中ファクトリー定義を上書きします。",
+    editableConfigurationSaveConfirmationTitle:
+      "実行中ファクトリー定義を上書きしますか？",
+    editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
+    editableConfigurationSaveSuccess:
+      "実行中ファクトリーを保存しました。編集可能なワークステーション値は保存済み定義へ更新されました。",
     editableConfigurationLoading:
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationSummary:
@@ -237,6 +267,17 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
     editableConfigurationDraftNote:
       "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
+    editableConfigurationSaveAction: "변경 사항 저장",
+    editableConfigurationSaveBusyAction: "저장 중...",
+    editableConfigurationSaveConfirmationCancelAction: "취소",
+    editableConfigurationSaveConfirmationConfirmAction: "팩토리 덮어쓰기",
+    editableConfigurationSaveConfirmationDescription:
+      "저장하면 이 워크스테이션 초안의 prompt, model, template 값으로 실행 중인 팩토리 정의를 덮어씁니다.",
+    editableConfigurationSaveConfirmationTitle:
+      "실행 중인 팩토리 정의를 덮어쓸까요?",
+    editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
+    editableConfigurationSaveSuccess:
+      "실행 중인 팩토리를 저장했습니다. 편집 가능한 워크스테이션 값이 저장된 정의로 새로 고쳐졌습니다.",
     editableConfigurationLoading:
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationSummary:
@@ -311,6 +352,16 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
     editableConfigurationDraftNote:
       "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
+    editableConfigurationSaveAction: "保存更改",
+    editableConfigurationSaveBusyAction: "保存中...",
+    editableConfigurationSaveConfirmationCancelAction: "取消",
+    editableConfigurationSaveConfirmationConfirmAction: "覆盖工厂",
+    editableConfigurationSaveConfirmationDescription:
+      "保存将使用此工作站草稿中的 prompt、model 和 template 值覆盖运行中的工厂定义。",
+    editableConfigurationSaveConfirmationTitle: "要覆盖运行中的工厂定义吗？",
+    editableConfigurationSaveErrorPrefix: "保存失败。",
+    editableConfigurationSaveSuccess:
+      "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationSummary:
       "Prompt、model 和 template 值来自最新可编辑的 current-factory 定义。",
