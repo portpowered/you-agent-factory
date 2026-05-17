@@ -2,77 +2,7 @@ import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../i18n";
-
-export interface WorkstationDetailMessages {
-  activeRunsLabel: string;
-  activeWorkEmpty: string;
-  activeWorkHeading: string;
-  collapseAction: string;
-  editableConfigurationEmpty: string;
-  editableConfigurationErrorPrefix: string;
-  editableConfigurationHeading: string;
-  editableConfigurationLoading: string;
-  editableConfigurationDirtyStatus: string;
-  editableConfigurationDraftNote: string;
-  editableConfigurationSaveAction: string;
-  editableConfigurationSaveBusyAction: string;
-  editableConfigurationSaveConfirmationCancelAction: string;
-  editableConfigurationSaveConfirmationConfirmAction: string;
-  editableConfigurationSaveConfirmationDescription: string;
-  editableConfigurationSaveConfirmationTitle: string;
-  editableConfigurationSaveErrorPrefix: string;
-  editableConfigurationSaveSuccess: string;
-  editableConfigurationSummary: string;
-  editableConfigurationValidationStatus: string;
-  modelFieldLabel: string;
-  notConfiguredValue: string;
-  promptFieldLabel: string;
-  templateFieldLabel: string;
-  workerFieldLabel: string;
-  currentDispatchLabel: string;
-  dispatchLabel: string;
-  elapsedLabel: string;
-  expandAction: string;
-  historyRequestCountLabel: (count: number) => string;
-  historyRunCountLabel: (count: number) => string;
-  historicalRequestsLabel: string;
-  historicalRunsLabel: string;
-  inputWorkTypesLabel: string;
-  kindDefaultValue: string;
-  kindLabel: string;
-  noWorkstationRequests: string;
-  noWorkstationRuns: string;
-  openRequestAction: string;
-  openRequestDetailsAction: string;
-  openNamedWorkItemAction: (workItemLabel: string) => string;
-  openWorkItemAction: string;
-  outputWorkTypesLabel: string;
-  projectedWorkstationRequestSummary: string;
-  providerSummary: (provider: string, model?: string | null) => string;
-  requestDetailsUnavailable: (dispatchId: string) => string;
-  requestHistoryHeading: string;
-  requestSelectedAction: string;
-  requestStatusStartedAgo: (elapsed: string) => string;
-  runHistoryHeading: string;
-  providerSessionLogAction: string;
-  providerSessionLogUnavailable: string;
-  scriptCommandSummary: (command: string) => string;
-  selectRequestLabel: (requestLabel: string, dispatchId: string) => string;
-  selectWorkItemLabel: (workItemLabel: string) => string;
-  selectWorkstationRequestLabel: (dispatchId: string) => string;
-  selectedRequestLabel: (dispatchId: string) => string;
-  stationLabel: string;
-  summaryHeading: string;
-  traceIdLabel: string;
-  unknownActiveWorkLabel: string;
-  unavailableValue: string;
-  unknownWorkerTypeValue: string;
-  unknownWorkLabel: string;
-  workDetailsUnavailable: (dispatchId: string) => string;
-  workIdLabel: string;
-  workSelectedAction: string;
-  workerTypeLabel: string;
-}
+import type { WorkstationDetailMessages } from "./workstation-detail-types";
 
 const singularPlural = (count: number, singular: string, plural: string) =>
   `${count} ${count === 1 ? singular : plural}`;
@@ -91,12 +21,18 @@ const workstationDetailMessagesByLocale = {
       "You have unsaved changes for this workstation.",
     editableConfigurationDraftNote:
       "Changes stay local to this edit session until you save the running factory.",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
+    editableConfigurationOverwriteWarningDetail:
+      "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
     editableConfigurationSaveAction: "Save changes",
     editableConfigurationSaveBusyAction: "Saving...",
     editableConfigurationSaveConfirmationCancelAction: "Cancel",
     editableConfigurationSaveConfirmationConfirmAction: "Overwrite factory",
     editableConfigurationSaveConfirmationDescription:
       "Saving will overwrite the running factory definition with the prompt, model, and template values in this workstation draft.",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `Saving will overwrite newer server values for ${fields} with the draft currently shown in the editor.`,
     editableConfigurationSaveConfirmationTitle:
       "Overwrite the running factory definition?",
     editableConfigurationSaveErrorPrefix: "Saving failed.",
@@ -179,12 +115,18 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションには未保存の変更があります。",
     editableConfigurationDraftNote:
       "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `編集開始後に実行中ファクトリーが変更されました。今保存すると、${fields} の新しいサーバー値を上書きします。`,
+    editableConfigurationOverwriteWarningDetail:
+      "保存前に最新の実行時の値を確認するか、この下書きで置き換える場合はそのまま編集を続けてください。",
     editableConfigurationSaveAction: "変更を保存",
     editableConfigurationSaveBusyAction: "保存中...",
     editableConfigurationSaveConfirmationCancelAction: "キャンセル",
     editableConfigurationSaveConfirmationConfirmAction: "ファクトリーを上書き",
     editableConfigurationSaveConfirmationDescription:
       "保存すると、このワークステーション下書きの prompt、model、template の値で実行中ファクトリー定義を上書きします。",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `保存すると、エディターに表示中の下書きで ${fields} の新しいサーバー値を上書きします。`,
     editableConfigurationSaveConfirmationTitle:
       "実行中ファクトリー定義を上書きしますか？",
     editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
@@ -267,12 +209,18 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
     editableConfigurationDraftNote:
       "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 지금 저장하면 ${fields}의 최신 서버 값을 덮어쓰게 됩니다.`,
+    editableConfigurationOverwriteWarningDetail:
+      "저장하기 전에 최신 런타임 값을 검토하거나, 이 초안으로 대체하려면 계속 편집하세요.",
     editableConfigurationSaveAction: "변경 사항 저장",
     editableConfigurationSaveBusyAction: "저장 중...",
     editableConfigurationSaveConfirmationCancelAction: "취소",
     editableConfigurationSaveConfirmationConfirmAction: "팩토리 덮어쓰기",
     editableConfigurationSaveConfirmationDescription:
       "저장하면 이 워크스테이션 초안의 prompt, model, template 값으로 실행 중인 팩토리 정의를 덮어씁니다.",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `저장하면 편집기에 표시된 초안으로 ${fields}의 최신 서버 값을 덮어씁니다.`,
     editableConfigurationSaveConfirmationTitle:
       "실행 중인 팩토리 정의를 덮어쓸까요?",
     editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
@@ -352,12 +300,18 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
     editableConfigurationDraftNote:
       "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `你开始编辑后，运行中的工厂已发生变化。现在保存将覆盖 ${fields} 的较新服务器值。`,
+    editableConfigurationOverwriteWarningDetail:
+      "保存前请先检查最新运行时值；如果此草稿就应该替换它们，也可以继续编辑。",
     editableConfigurationSaveAction: "保存更改",
     editableConfigurationSaveBusyAction: "保存中...",
     editableConfigurationSaveConfirmationCancelAction: "取消",
     editableConfigurationSaveConfirmationConfirmAction: "覆盖工厂",
     editableConfigurationSaveConfirmationDescription:
       "保存将使用此工作站草稿中的 prompt、model 和 template 值覆盖运行中的工厂定义。",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `保存将使用编辑器中当前草稿覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationSaveConfirmationTitle: "要覆盖运行中的工厂定义吗？",
     editableConfigurationSaveErrorPrefix: "保存失败。",
     editableConfigurationSaveSuccess:
@@ -428,4 +382,5 @@ export function getWorkstationDetailMessages(
   return resolveLocalizedMessages(workstationDetailMessagesByLocale, locale);
 }
 
+export type { WorkstationDetailMessages } from "./workstation-detail-types";
 export { workstationDetailMessagesByLocale };

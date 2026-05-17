@@ -12,6 +12,7 @@ import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationValidationErrors,
 } from "./detail-card-types";
+import { resolveEditableWorkstationOverwriteFields } from "./editable-workstation-overwrite-fields";
 import type { DashboardSelection } from "./types";
 
 const EMPTY_EDITABLE_CONFIGURATION_MESSAGE =
@@ -19,6 +20,7 @@ const EMPTY_EDITABLE_CONFIGURATION_MESSAGE =
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
+  latestDefinitionDraft: EditableWorkstationDraft;
   selectionKey: string;
   sessionStartDraft: EditableWorkstationDraft;
 }
@@ -134,6 +136,10 @@ export function useEditableWorkstationConfigurationState(
           : currentState,
       );
     },
+    overwriteFieldNames: resolveEditableWorkstationOverwriteFields(
+      sessionState.draft,
+      sessionState.latestDefinitionDraft,
+    ),
     pendingFactoryDefinition,
     status: "ready",
     validationErrors,
@@ -235,21 +241,32 @@ function syncEditableWorkstationSession(
   if (!currentState || currentState.selectionKey !== selectionKey) {
     return {
       draft: initialDraft,
+      latestDefinitionDraft: initialDraft,
+      selectionKey,
+      sessionStartDraft: initialDraft,
+    };
+  }
+
+  if (
+    areEditableDraftsEqual(currentState.draft, currentState.sessionStartDraft)
+  ) {
+    return {
+      draft: initialDraft,
+      latestDefinitionDraft: initialDraft,
       selectionKey,
       sessionStartDraft: initialDraft,
     };
   }
 
   return areEditableDraftsEqual(
-    currentState.draft,
-    currentState.sessionStartDraft,
+    currentState.latestDefinitionDraft,
+    initialDraft,
   )
-    ? {
-        draft: initialDraft,
-        selectionKey,
-        sessionStartDraft: initialDraft,
-      }
-    : currentState;
+    ? currentState
+    : {
+        ...currentState,
+        latestDefinitionDraft: initialDraft,
+      };
 }
 
 function useEditableDefinitionGate(

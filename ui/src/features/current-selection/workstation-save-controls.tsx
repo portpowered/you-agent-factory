@@ -1,6 +1,10 @@
 import { DashboardMutationDialog } from "../../components/dashboard";
 import { Button } from "../../components/ui";
-import type { EditableWorkstationSaveState } from "./detail-card-types";
+import type {
+  EditableWorkstationOverwriteField,
+  EditableWorkstationSaveState,
+} from "./detail-card-types";
+import { formatEditableOverwriteFieldLabels } from "./editable-workstation-overwrite-fields";
 import { getWorkstationDetailMessages } from "./messages";
 
 export function EditableWorkstationSaveHeaderAction({
@@ -38,11 +42,13 @@ export function EditableWorkstationSaveDialog({
   locale,
   onCancel,
   onConfirm,
+  overwriteFieldNames,
   saveState,
 }: {
   locale?: string;
   onCancel: () => void;
   onConfirm: () => void;
+  overwriteFieldNames: EditableWorkstationOverwriteField[];
   saveState: EditableWorkstationSaveState;
 }) {
   const messages = getWorkstationDetailMessages(locale);
@@ -51,10 +57,17 @@ export function EditableWorkstationSaveDialog({
     return null;
   }
 
+  const description =
+    overwriteFieldNames.length > 0
+      ? messages.editableConfigurationSaveConflictConfirmationDescription(
+          formatEditableOverwriteFieldLabels(overwriteFieldNames, messages),
+        )
+      : messages.editableConfigurationSaveConfirmationDescription;
+
   return (
     <DashboardMutationDialog
       closeDisabled={saveState.status === "submitting"}
-      description={messages.editableConfigurationSaveConfirmationDescription}
+      description={description}
       onClose={onCancel}
       title={messages.editableConfigurationSaveConfirmationTitle}
       footer={

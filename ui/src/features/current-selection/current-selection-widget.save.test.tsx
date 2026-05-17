@@ -152,6 +152,63 @@ describe("CurrentSelectionWidget workstation save flow", () => {
         .getAttribute("disabled"),
     ).toBeNull();
   });
+
+  it("warns in the save confirmation when newer server values would be overwritten", () => {
+    const refreshedFactory = buildEditableFactoryDefinition({
+      model: "gpt-5.6",
+      prompt: "Server changed prompt",
+      promptFile: "prompts/server.md",
+    });
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    });
+    const { rerender } = renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Keep my local prompt change." },
+    });
+
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(refreshedFactory),
+    );
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CurrentSelectionWidget
+          currentSelection={buildCurrentSelection({
+            selectedNode,
+            selection: { kind: "node", nodeId: selectedNode.node_id },
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedWorkExecutionDetails={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      screen.getByText(
+        "Saving will overwrite newer server values for prompt, model, template with the draft currently shown in the editor.",
+      ),
+    ).toBeTruthy();
+  });
 });
 
 function renderWorkstationSelection() {
@@ -275,6 +332,13 @@ function renderWithQueryClient(view: ReactNode) {
     },
   });
 
+  return renderWithExistingQueryClient(queryClient, view);
+}
+
+function renderWithExistingQueryClient(
+  queryClient: QueryClient,
+  view: ReactNode,
+) {
   return render(
     <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
   );

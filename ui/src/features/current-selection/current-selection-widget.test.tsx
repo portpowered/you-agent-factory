@@ -549,6 +549,16 @@ describe("CurrentSelectionWidget", () => {
     expect((screen.getByLabelText("Template") as HTMLInputElement).value).toBe(
       "prompts/review.md",
     );
+    expect(
+      screen.getByText(
+        "The running factory changed after you started editing. Saving now will overwrite newer server values for prompt, model, template.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders workstation request details when a workstation request is selected", () => {

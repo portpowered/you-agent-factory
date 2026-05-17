@@ -11,11 +11,13 @@ import { formatList } from "../../components/ui/formatters";
 import { cx } from "../../lib/cx";
 import { WORKSTATION_SUMMARY_ITEM_CLASS } from "./detail-card-shared";
 import type {
+  EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
   WorkstationDetailCardProps,
   WorkstationSummaryItemProps,
   WorkstationSummaryProps,
 } from "./detail-card-types";
+import { formatEditableOverwriteFieldLabels } from "./editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "./messages";
 
 export function EditableConfigurationSection({
@@ -85,6 +87,10 @@ function EditableConfigurationReadyForm({
       <EditableConfigurationSaveFeedback
         messages={messages}
         saveState={saveState}
+      />
+      <EditableConfigurationOverwriteWarning
+        messages={messages}
+        overwriteFieldNames={state.overwriteFieldNames ?? []}
       />
       <EditableConfigurationDraftStatus messages={messages} state={state} />
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
@@ -222,6 +228,37 @@ function EditableConfigurationDraftStatus({
       </p>
       <p className={cx("m-0 text-af-ink/58", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {messages.editableConfigurationDraftNote}
+      </p>
+    </div>
+  );
+}
+
+function EditableConfigurationOverwriteWarning({
+  messages,
+  overwriteFieldNames,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  overwriteFieldNames?: EditableWorkstationOverwriteField[];
+}) {
+  if (!overwriteFieldNames || overwriteFieldNames.length === 0) {
+    return null;
+  }
+
+  const formattedFields = formatEditableOverwriteFieldLabels(
+    overwriteFieldNames,
+    messages,
+  );
+
+  return (
+    <div className="grid gap-2 rounded-2xl border border-af-warning/35 bg-af-warning/8 p-3">
+      <p
+        className={cx("m-0 text-af-warning-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationOverwriteWarning(formattedFields)}
+      </p>
+      <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        {messages.editableConfigurationOverwriteWarningDetail}
       </p>
     </div>
   );

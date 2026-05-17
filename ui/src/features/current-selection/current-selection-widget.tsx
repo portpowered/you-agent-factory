@@ -151,6 +151,11 @@ export function CurrentSelectionWidget({
         locale={locale ?? undefined}
         onCancel={workstationSave.cancelSaveConfirmation}
         onConfirm={() => void workstationSave.confirmSave()}
+        overwriteFieldNames={
+          editableConfigurationState?.status === "ready"
+            ? editableConfigurationState.overwriteFieldNames
+            : []
+        }
         saveState={workstationSave.saveState}
       />
     </CurrentSelectionLocaleProvider>

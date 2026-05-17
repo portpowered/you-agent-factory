@@ -115,6 +115,8 @@ export interface EditableWorkstationValidationErrors {
   promptFile?: string;
 }
 
+export type EditableWorkstationOverwriteField = "model" | "prompt" | "template";
+
 export type EditableWorkstationConfigurationState =
   | { status: "loading" }
   | { errorMessage: string; status: "error" }
@@ -132,6 +134,7 @@ export type EditableWorkstationConfigurationState =
       onModelChange: (value: string) => void;
       onPromptChange: (value: string) => void;
       onPromptFileChange: (value: string) => void;
+      overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
       status: "ready";
       validationErrors: EditableWorkstationValidationErrors;
