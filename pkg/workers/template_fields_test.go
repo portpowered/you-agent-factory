@@ -8,7 +8,6 @@ import (
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
@@ -449,11 +448,11 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 
 	// Verify the working directory was resolved and applied.
 	wantWorkingDirectory := filepath.Join(
-		testutil.CanonicalPath(projectRoot),
+		canonicalWorkerTestPath(projectRoot),
 		"worktrees",
 		"feature-abc",
 	)
-	if testutil.CanonicalPath(mock.dispatch.WorkingDirectory) != wantWorkingDirectory {
+	if canonicalWorkerTestPath(mock.dispatch.WorkingDirectory) != wantWorkingDirectory {
 		t.Fatalf("expected working directory %q, got %q", wantWorkingDirectory, mock.dispatch.WorkingDirectory)
 	}
 }
