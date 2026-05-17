@@ -406,10 +406,18 @@ func assertCommandHelperInputs() {
 		os.Exit(2)
 	}
 	wantCWD := os.Getenv("COMMAND_HELPER_WANT_CWD")
-	if got, want := filepath.Clean(cwd), filepath.Clean(wantCWD); got != want {
+	if got, want := canonicalCommandTestPath(cwd), canonicalCommandTestPath(wantCWD); got != want {
 		fmt.Fprintf(os.Stderr, "cwd = %q, want %q\n", got, want)
 		os.Exit(2)
 	}
+}
+
+func canonicalCommandTestPath(value string) string {
+	canonical, err := filepath.EvalSymlinks(value)
+	if err == nil && canonical != "" {
+		return canonical
+	}
+	return filepath.Clean(value)
 }
 
 func spawnCommandHelperChild() {
