@@ -50,7 +50,9 @@ erDiagram
 
 ## Customer data model 
 
-This denotes the data model that we express to customers. Customers deal with work that goes into a factory. The factory has workstations that take in work. The factory/workstations have guards that protect the individual work. 
+This denotes the data model that we express to customers. Customers deal with work that goes into a factory. The factory has workstations that take in work. The factory/workstations have guards that protect the individual work.
+
+Work is categorized by a work type. A work type defines the supported work states that work of that type can move through. Workstations and workers operate over those work types and states: a workstation declares the kind of work it can handle, and workers can be assigned to workstations to perform specific categories of work.
 
 ```mermaid
 ---
@@ -91,6 +93,10 @@ erDiagram
     wt["WorkType"] {
         string name
     }
+    wst["WorkState"] {
+        string name
+        int sequence
+    }
     ws["Workstation"] {
         string name
     }
@@ -101,13 +107,17 @@ erDiagram
         string name
     }
     f ||--o{ wt : "runs"
+    wt ||--o{ wst : "supports"
     f ||--o{ ws : "contains"
     f ||--o{ wr : "operates"
     f ||--o{ r : "owns"
 
     wt }o--|| w: "defines"
+    w }o--|| wst: "is in"
+    ws }o--o{ wt: "supports"
     w }o--o{ ws : "scheduled on"
     wr }o--o| ws : "assigned to"
+    wr }o--o{ wt : "works on"
     wr }o--o{ r: "uses"
     ws }o--o{ r: "provisions"
 
@@ -149,8 +159,7 @@ erDiagram
     resp }o--|| wh: "recorded in"
     chg }o--|| wh: "recorded in"
     class cust customer
-    class f,wt,ws,wr,r,g factory
+    class f,wt,wst,ws,wr,r,g factory
     class w,rel,chg,req,resp workload
     class wh history
 ```
-

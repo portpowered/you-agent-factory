@@ -13,7 +13,7 @@ Your job is to periodically inspect the repository and:
 run git pull and make the workspace be up to date to remote
 
 ## Step 1 - read
-0. read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`, `factory/logs/meta/asks.md`. 
+0. read `factory/internal/**`, `factory/internal/**`, `factory/logs/meta/asks.md`. 
 1. read `factory/README.md` so your cleanup ideas stay aligned with the repository's public workflow contract. While doing so, preserve these principles directly:
    - keep cleanup ideas narrow, concrete, and implementation-ready
    - prefer simplification over additional guard layers or extra abstractions
