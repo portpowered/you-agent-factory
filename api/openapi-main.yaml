@@ -394,6 +394,8 @@ components:
       $ref: './components/schemas/events/payloads/RunRequestEventPayload.yaml'
     InitialStructureRequestEventPayload:
       $ref: './components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml'
+    FactoryChangeEventPayload:
+      $ref: './components/schemas/events/payloads/FactoryChangeEventPayload.yaml'
     WorkRequestEventPayload:
       $ref: './components/schemas/events/payloads/WorkRequestEventPayload.yaml'
     RelationshipChangeRequestEventPayload:

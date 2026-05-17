@@ -68,11 +68,12 @@ var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 var ErrCurrentNamedFactoryNotFound = apisurface.ErrCurrentNamedFactoryNotFound
 
 type replacementFactoryRuntime struct {
-	dir        string
-	factory    factory.Factory
-	listener   *listeners.FileWatcher
-	net        *state.Net
-	runtimeCfg *factoryconfig.LoadedFactoryConfig
+	dir          string
+	eventHistory *factory.FactoryEventHistory
+	factory      factory.Factory
+	listener     *listeners.FileWatcher
+	net          *state.Net
+	runtimeCfg   *factoryconfig.LoadedFactoryConfig
 }
 
 type liveRuntimeHandle struct {
@@ -105,6 +106,7 @@ type FactoryService struct {
 	net            *state.Net
 	cfg            *FactoryServiceConfig
 	runtimeCfg     *factoryconfig.LoadedFactoryConfig
+	eventHistory   *factory.FactoryEventHistory
 	logger         *zap.Logger
 	startTime      time.Time
 	clock          factory.Clock
@@ -366,6 +368,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	serviceBuilt = true
 	return &FactoryService{
 		factoryRootDir: factoryRootDir,
+		eventHistory:   eventHistory,
 		factory:        f,
 		listener:       listener,
 		net:            net,
@@ -480,11 +483,12 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 	)
 
 	return &replacementFactoryRuntime{
-		dir:        factoryDir,
-		factory:    replacementFactory,
-		listener:   replacementListener,
-		net:        net,
-		runtimeCfg: loadedFactoryCfg,
+		dir:          factoryDir,
+		eventHistory: eventHistory,
+		factory:      replacementFactory,
+		listener:     replacementListener,
+		net:          net,
+		runtimeCfg:   loadedFactoryCfg,
 	}, nil
 }
 
@@ -710,6 +714,7 @@ func (fs *FactoryService) activateReplacementRuntime(
 		return err
 	}
 
+	fs.publishFactoryChangeEvent(ctx, runState.runtime, replacement)
 	restoreCurrentSidecars = false
 	fs.swapActiveRuntime(replacement)
 	fs.setRunState(runState.ctx, replacementHandle)
@@ -740,12 +745,60 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 		return nil
 	}
 	return &replacementFactoryRuntime{
-		dir:        fs.cfg.Dir,
-		factory:    fs.factory,
-		listener:   fs.listener,
-		net:        fs.net,
-		runtimeCfg: fs.runtimeCfg,
+		dir:          fs.cfg.Dir,
+		eventHistory: fs.eventHistory,
+		factory:      fs.factory,
+		listener:     fs.listener,
+		net:          fs.net,
+		runtimeCfg:   fs.runtimeCfg,
 	}
+}
+
+func (fs *FactoryService) publishFactoryChangeEvent(
+	ctx context.Context,
+	currentRuntime *liveRuntimeHandle,
+	replacement *replacementFactoryRuntime,
+) {
+	if replacement == nil || replacement.eventHistory == nil {
+		return
+	}
+
+	payload, ok := replacementFactoryChangePayload(replacement.eventHistory.Events())
+	if !ok {
+		return
+	}
+
+	eventTime := factory.EnsureClock(fs.clock).Now()
+	replacement.eventHistory.RecordFactoryChange(1, payload, eventTime)
+
+	if currentRuntime == nil || currentRuntime.runtime == nil || currentRuntime.runtime.eventHistory == nil {
+		return
+	}
+
+	snapshot, err := currentRuntime.runtime.factory.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		fs.logger.Warn("read current runtime tick for factory-change event failed", zap.Error(err))
+		return
+	}
+	currentRuntime.runtime.eventHistory.RecordFactoryChange(snapshot.TickCount+1, payload, eventTime)
+}
+
+func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factoryapi.FactoryChangeEventPayload, bool) {
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
+			continue
+		}
+		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+		if err != nil {
+			return factoryapi.FactoryChangeEventPayload{}, false
+		}
+		return factoryapi.FactoryChangeEventPayload{
+			Factory:         payload.Factory,
+			Metadata:        payload.Metadata,
+			SourceDirectory: payload.SourceDirectory,
+		}, true
+	}
+	return factoryapi.FactoryChangeEventPayload{}, false
 }
 
 func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *replacementFactoryRuntime) *liveRuntimeHandle {
@@ -922,6 +975,7 @@ func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
 func (fs *FactoryService) swapActiveRuntime(runtimeBundle *replacementFactoryRuntime) {
 	fs.runtimeMu.Lock()
 	defer fs.runtimeMu.Unlock()
+	fs.eventHistory = runtimeBundle.eventHistory
 	fs.factory = runtimeBundle.factory
 	fs.listener = runtimeBundle.listener
 	fs.net = runtimeBundle.net

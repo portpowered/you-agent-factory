@@ -53,6 +53,7 @@ const (
 const (
 	FactoryEventTypeDispatchRequest           FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse          FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeFactoryChange             FactoryEventType = "FACTORY_CHANGE"
 	FactoryEventTypeFactoryStateResponse      FactoryEventType = "FACTORY_STATE_RESPONSE"
 	FactoryEventTypeInferenceRequest          FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse         FactoryEventType = "INFERENCE_RESPONSE"
@@ -323,6 +324,14 @@ type Factory struct {
 
 	// Workstations Processing steps that consume work, invoke workers, and emit the next work states.
 	Workstations *[]Workstation `json:"workstations,omitempty"`
+}
+
+// FactoryChangeEventPayload Runtime topology snapshot after a live factory definition change replaces the running factory.
+type FactoryChangeEventPayload struct {
+	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+	Factory         Factory    `json:"factory"`
+	Metadata        *StringMap `json:"metadata,omitempty"`
+	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
 }
 
 // FactoryEvent Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.
@@ -1285,6 +1294,32 @@ func (t *FactoryEvent_Payload) FromInitialStructureRequestEventPayload(v Initial
 
 // MergeInitialStructureRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided InitialStructureRequestEventPayload
 func (t *FactoryEvent_Payload) MergeInitialStructureRequestEventPayload(v InitialStructureRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryChangeEventPayload returns the union data inside the FactoryEvent_Payload as a FactoryChangeEventPayload
+func (t FactoryEvent_Payload) AsFactoryChangeEventPayload() (FactoryChangeEventPayload, error) {
+	var body FactoryChangeEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryChangeEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided FactoryChangeEventPayload
+func (t *FactoryEvent_Payload) FromFactoryChangeEventPayload(v FactoryChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryChangeEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeEventPayload
+func (t *FactoryEvent_Payload) MergeFactoryChangeEventPayload(v FactoryChangeEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

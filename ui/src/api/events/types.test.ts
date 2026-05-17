@@ -63,6 +63,28 @@ describe("factory event types", () => {
     expect(response.payload.state).toBe("COMPLETED");
   });
 
+  it("includes the canonical factory-change payload in the maintained event union", () => {
+    const event: FactoryEvent = {
+      context: {
+        eventTime,
+        sequence: 3,
+        tick: 3,
+      },
+      id: "event-factory-change",
+      payload: {
+        factory: {
+          name: "factory",
+          workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        },
+      },
+      schemaVersion: "agent-factory.event.v1",
+      type: FACTORY_EVENT_TYPES.factoryChange,
+    };
+
+    expect(event.type).toBe("FACTORY_CHANGE");
+    expect((event.payload as { factory: { name: string } }).factory.name).toBe("factory");
+  });
+
   it("exposes typed script request and response payloads", () => {
     const request = scriptEvent("event-script-request", FACTORY_EVENT_TYPES.scriptRequest, {
       args: ["--work", "work-1", "--project", "docs"],
@@ -150,4 +172,3 @@ function scriptEvent(
     type,
   };
 }
-

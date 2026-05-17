@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -76,6 +77,47 @@ func TestNamedFactoryAPI_RoundTripsPortableBundledFilesThroughCanonicalFactoryCo
 	assertFunctionalPortableFile(t, filepath.Join(importedDir, "docs", "README.md"), "# Portable factory\n")
 	assertFunctionalPortableFile(t, filepath.Join(importedDir, "scripts", "execute-story.ps1"), "Write-Output 'portable script'\n")
 	assertFunctionalPersistedFactoryJSONStripsInlineBundledContent(t, filepath.Join(importedDir, interfaces.FactoryConfigFile))
+}
+
+func TestNamedFactoryAPI_CreateFactoryEmitsCanonicalFactoryChangeEvent(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.Logger = zap.NewNop()
+	})
+
+	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	_, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
+
+	createNamedFactoryFromBody(t, server.URL(), "beta", "beta-task", functionalNamedFactoryBody("beta", "beta-task"))
+
+	change := factoryapi.FactoryEvent{}
+	for range 6 {
+		candidate := stream.next(5 * time.Second)
+		if candidate.Type == factoryapi.FactoryEventTypeFactoryChange {
+			change = candidate
+			break
+		}
+	}
+	if change.Type != factoryapi.FactoryEventTypeFactoryChange {
+		t.Fatalf("post-save stream did not emit factory-change within bounded follow-up window")
+	}
+	if change.Context.Tick <= initialStructure.Context.Tick {
+		t.Fatalf("factory-change tick = %d, want > %d", change.Context.Tick, initialStructure.Context.Tick)
+	}
+
+	payload, err := change.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode factory-change payload: %v", err)
+	}
+	if payload.Factory.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("factory-change payload name = %q, want beta", payload.Factory.Name)
+	}
+	if payload.Factory.WorkTypes == nil || len(*payload.Factory.WorkTypes) != 1 || (*payload.Factory.WorkTypes)[0].Name != "beta-task" {
+		t.Fatalf("factory-change payload work types = %#v, want beta-task", payload.Factory.WorkTypes)
+	}
 }
 
 func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {

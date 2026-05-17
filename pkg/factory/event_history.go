@@ -23,6 +23,7 @@ const (
 	eventIDRunRequest              = "factory-event/run-started"
 	eventIDRunResponse             = "factory-event/run-finished"
 	eventIDInitialStructure        = "factory-event/initial-structure/0"
+	eventIDFactoryChangePrefix     = "factory-event/factory-change"
 	eventIDWorkRequestPrefix       = "factory-event/work-request"
 	eventIDRelationshipPrefix      = "factory-event/relationship-change"
 	eventIDDispatchCreatedPrefix   = "factory-event/dispatch-created"
@@ -160,6 +161,20 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 		eventIDInitialStructure,
 		factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime},
 		factoryapi.InitialStructureRequestEventPayload{Factory: generatedFactory(payload)},
+	))
+}
+
+// RecordFactoryChange records a canonical topology replacement event after a
+// live running factory definition change becomes active.
+func (h *FactoryEventHistory) RecordFactoryChange(tick int, payload factoryapi.FactoryChangeEventPayload, eventTime time.Time) {
+	if h == nil {
+		return
+	}
+	h.appendGenerated(factoryEvent(
+		factoryapi.FactoryEventTypeFactoryChange,
+		fmt.Sprintf("%s/%d", eventIDFactoryChangePrefix, tick),
+		factoryapi.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		payload,
 	))
 }
 
@@ -344,6 +359,15 @@ func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
 	h.appendGenerated(event)
 }
 
+// AppendRecordedEvent appends one already-shaped canonical event into the
+// history so callers can bridge runtime-owned events into a wider stream.
+func (h *FactoryEventHistory) AppendRecordedEvent(event factoryapi.FactoryEvent) {
+	if h == nil {
+		return
+	}
+	h.appendGenerated(event)
+}
+
 // RecordRunResponse records the canonical run completion event after the
 // runtime has reached a terminal state.
 func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.FactoryState, reason string, eventTime time.Time) {
@@ -441,6 +465,8 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromRunRequestEventPayload(typed)
 	case factoryapi.InitialStructureRequestEventPayload:
 		err = out.FromInitialStructureRequestEventPayload(typed)
+	case factoryapi.FactoryChangeEventPayload:
+		err = out.FromFactoryChangeEventPayload(typed)
 	case factoryapi.WorkRequestEventPayload:
 		err = out.FromWorkRequestEventPayload(typed)
 	case factoryapi.RelationshipChangeRequestEventPayload:

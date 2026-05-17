@@ -6,6 +6,7 @@ description: >-
 x-enum-varnames:
   - FactoryEventTypeRunRequest
   - FactoryEventTypeInitialStructureRequest
+  - FactoryEventTypeFactoryChange
   - FactoryEventTypeWorkRequest
   - FactoryEventTypeRelationshipChangeRequest
   - FactoryEventTypeDispatchRequest
@@ -19,6 +20,7 @@ x-enum-varnames:
 enum:
   - RUN_REQUEST
   - INITIAL_STRUCTURE_REQUEST
+  - FACTORY_CHANGE
   - WORK_REQUEST
   - RELATIONSHIP_CHANGE_REQUEST
   - DISPATCH_REQUEST
@@ -32,6 +34,7 @@ enum:
 x-enum-descriptions:
   - A factory run request was recorded and its effective runtime configuration is known.
   - The static factory topology and configured resources are available before work moves.
+  - The running factory definition changed and a canonical replacement topology is now active.
   - Work entered the factory as a normalized request.
   - A relationship-change request between work items was recorded.
   - A workstation request began processing a set of input work.

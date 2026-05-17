@@ -30,6 +30,7 @@ properties:
     oneOf:
       - $ref: ./payloads/RunRequestEventPayload.yaml
       - $ref: ./payloads/InitialStructureRequestEventPayload.yaml
+      - $ref: ./payloads/FactoryChangeEventPayload.yaml
       - $ref: ./payloads/WorkRequestEventPayload.yaml
       - $ref: ./payloads/RelationshipChangeRequestEventPayload.yaml
       - $ref: ./payloads/DispatchRequestEventPayload.yaml
