@@ -34,6 +34,7 @@ const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
+    vi.mocked(createFactory).mockReset();
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
@@ -151,6 +152,81 @@ describe("CurrentSelectionWidget workstation save flow", () => {
         .getByRole("button", { name: "Save changes" })
         .getAttribute("disabled"),
     ).toBeNull();
+  });
+
+  it("shows generic save failures without discarding the dirty draft", async () => {
+    vi.mocked(createFactory).mockRejectedValue(new Error("Network dropped"));
+
+    renderWorkstationSelection();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Keep this draft through a generic failure." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Saving failed. Network dropped")).toBeTruthy();
+    });
+
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Keep this draft through a generic failure.",
+    );
+  });
+
+  it("allows the overwrite confirmation to be cancelled before saving", () => {
+    renderWorkstationSelection();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Changed prompt before cancelling save." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Overwrite the running factory definition?",
+      }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(createFactory).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Overwrite the running factory definition?",
+      }),
+    ).toBeNull();
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Changed prompt before cancelling save.",
+    );
+  });
+
+  it("saves a unique-worker model edit as part of the workstation draft", async () => {
+    const savedFactory = buildEditableFactoryDefinition({
+      model: "gpt-5.6",
+    });
+    vi.mocked(createFactory).mockResolvedValue(savedFactory);
+
+    renderWorkstationSelection();
+
+    fireEvent.change(screen.getByLabelText("Model"), {
+      target: { value: "gpt-5.6" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
+
+    await waitFor(() => {
+      expect(createFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workers: [
+            expect.objectContaining({
+              model: "gpt-5.6",
+              name: "reviewer",
+            }),
+          ],
+        }),
+      );
+    });
   });
 
   it("warns in the save confirmation when newer server values would be overwritten", () => {

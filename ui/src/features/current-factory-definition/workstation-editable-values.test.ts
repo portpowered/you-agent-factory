@@ -199,6 +199,53 @@ describe("resolveEditableWorkstationValues", () => {
     });
   });
 
+  it("lists every sibling workstation when a worker is shared by more than two workstations", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "processor",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+        {
+          body: "Plan work",
+          id: "plan",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Plan",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+        {
+          body: "Code work",
+          id: "code",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Code",
+          outputs: [{ state: "implemented", workType: "story" }],
+          worker: "processor",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, selectedNode)
+        ?.modelEditBlockedReason,
+    ).toBe(
+      'Model edits are disabled here because worker "processor" is shared with "Review", "Plan", and "Code".',
+    );
+  });
+
   it("rejects shared-worker model rewrites while still allowing workstation-only edits", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
