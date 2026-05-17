@@ -208,6 +208,7 @@ const (
 	GuardTypeAllChildrenComplete GuardType = "all_children_complete"
 	GuardTypeAnyChildFailed      GuardType = "any_child_failed"
 	GuardTypeSameName            GuardType = "same_name"
+	GuardTypeSameTraceID         GuardType = "same_trace_id"
 	GuardTypeInferenceThrottle   GuardType = "inference_throttle_guard"
 )
 

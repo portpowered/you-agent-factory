@@ -294,7 +294,7 @@ func (cm *ConfigMapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig,
 	// Find and name the parent input arc. The parent is identified by matching
 	// the parent_input work type from any parent-aware guarded input.
 	for _, input := range ws.Inputs {
-		if input.Guard == nil || input.Guard.Type == interfaces.GuardTypeSameName {
+		if input.Guard == nil || isPeerInputGuardType(input.Guard.Type) {
 			continue
 		}
 		// Find the arc index for the parent input.
@@ -313,7 +313,7 @@ func (cm *ConfigMapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig,
 	// count arc MUST appear before the observation arc so that the
 	// "fanout-count" binding is available when the FanoutCountGuard evaluates.
 	for idx, input := range ws.Inputs {
-		if input.Guard == nil || input.Guard.Type == interfaces.GuardTypeSameName {
+		if input.Guard == nil || isPeerInputGuardType(input.Guard.Type) {
 			continue
 		}
 		g := input.Guard
@@ -397,10 +397,10 @@ func (cm *ConfigMapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig,
 		}
 	}
 
-	// Same-name guards stay on the original consume arc and bind against the
+	// Peer-input guards stay on the original consume arc and bind against the
 	// referenced peer input's final arc name.
 	for idx, input := range ws.Inputs {
-		if input.Guard == nil || input.Guard.Type != interfaces.GuardTypeSameName {
+		if input.Guard == nil || !isPeerInputGuardType(input.Guard.Type) {
 			continue
 		}
 
@@ -408,8 +408,17 @@ func (cm *ConfigMapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig,
 		if !ok {
 			continue
 		}
-		t.InputArcs[idx].Guard = &petri.SameNameGuard{MatchBinding: peerBinding}
+		switch input.Guard.Type {
+		case interfaces.GuardTypeSameName:
+			t.InputArcs[idx].Guard = &petri.SameNameGuard{MatchBinding: peerBinding}
+		case interfaces.GuardTypeSameTraceID:
+			t.InputArcs[idx].Guard = &petri.SameTraceIDGuard{MatchBinding: peerBinding}
+		}
 	}
+}
+
+func isPeerInputGuardType(guardType interfaces.GuardType) bool {
+	return guardType == interfaces.GuardTypeSameName || guardType == interfaces.GuardTypeSameTraceID
 }
 
 func inputGuardBindingName(inputs []interfaces.IOConfig, arcs []petri.Arc, workTypeName string) (string, bool) {

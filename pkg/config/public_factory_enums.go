@@ -25,6 +25,7 @@ const (
 	publicFactoryGuardTypeAllChildrenComplete = "ALL_CHILDREN_COMPLETE"
 	publicFactoryGuardTypeAnyChildFailed      = "ANY_CHILD_FAILED"
 	publicFactoryGuardTypeSameName            = "SAME_NAME"
+	publicFactoryGuardTypeSameTraceID         = "SAME_TRACE_ID"
 	publicFactoryGuardTypeInferenceThrottle   = "INFERENCE_THROTTLE_GUARD"
 )
 
@@ -38,6 +39,7 @@ var publicFactoryGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
 	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
 	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
+	publicFactoryGuardTypeSameTraceID:         publicFactoryGuardTypeSameTraceID,
 	publicFactoryGuardTypeInferenceThrottle:   publicFactoryGuardTypeInferenceThrottle,
 }
 
@@ -55,6 +57,7 @@ var publicFactoryInputGuardTypeAliases = map[string]string{
 	publicFactoryGuardTypeAllChildrenComplete: publicFactoryGuardTypeAllChildrenComplete,
 	publicFactoryGuardTypeAnyChildFailed:      publicFactoryGuardTypeAnyChildFailed,
 	publicFactoryGuardTypeSameName:            publicFactoryGuardTypeSameName,
+	publicFactoryGuardTypeSameTraceID:         publicFactoryGuardTypeSameTraceID,
 }
 
 func canonicalPublicFactoryEnumValue(value string, aliases map[string]string) string {
@@ -214,6 +217,8 @@ func publicFactoryGuardTypeStringFromInternal(value interfaces.GuardType) string
 		return publicFactoryGuardTypeAnyChildFailed
 	case string(interfaces.GuardTypeSameName), publicFactoryGuardTypeSameName:
 		return publicFactoryGuardTypeSameName
+	case string(interfaces.GuardTypeSameTraceID), publicFactoryGuardTypeSameTraceID:
+		return publicFactoryGuardTypeSameTraceID
 	case string(interfaces.GuardTypeInferenceThrottle), publicFactoryGuardTypeInferenceThrottle:
 		return publicFactoryGuardTypeInferenceThrottle
 	}
@@ -232,6 +237,8 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 		return interfaces.GuardTypeAnyChildFailed
 	case publicFactoryGuardTypeSameName:
 		return interfaces.GuardTypeSameName
+	case publicFactoryGuardTypeSameTraceID:
+		return interfaces.GuardTypeSameTraceID
 	case publicFactoryGuardTypeInferenceThrottle:
 		return interfaces.GuardTypeInferenceThrottle
 	default:

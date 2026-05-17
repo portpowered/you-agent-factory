@@ -177,6 +177,110 @@ func TestSameNameGuard_MissingNameFailsClosed(t *testing.T) {
 	}
 }
 
+func TestSameTraceIDGuard_PositiveMatchUsesCurrentChainingTraceID(t *testing.T) {
+	bindings := map[string]*interfaces.Token{
+		"plan": {ID: "plan-1", Color: interfaces.TokenColor{
+			CurrentChainingTraceID: "chain-shared",
+			TraceID:                "trace-legacy-plan",
+		}},
+	}
+	candidates := []interfaces.Token{
+		{ID: "task-1", Color: interfaces.TokenColor{
+			CurrentChainingTraceID: "chain-shared",
+			TraceID:                "trace-legacy-task",
+		}},
+		{ID: "task-2", Color: interfaces.TokenColor{
+			CurrentChainingTraceID: "chain-other",
+			TraceID:                "trace-legacy-task",
+		}},
+	}
+
+	guard := &SameTraceIDGuard{MatchBinding: "plan"}
+	matched, ok := guard.Evaluate(candidates, bindings, nil)
+	if !ok {
+		t.Fatal("expected guard to pass")
+	}
+	if len(matched) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matched))
+	}
+	if matched[0].ID != "task-1" {
+		t.Fatalf("expected task-1, got %s", matched[0].ID)
+	}
+}
+
+func TestSameTraceIDGuard_FallsBackToLegacyTraceID(t *testing.T) {
+	bindings := map[string]*interfaces.Token{
+		"plan": {ID: "plan-1", Color: interfaces.TokenColor{TraceID: "trace-shared"}},
+	}
+	candidates := []interfaces.Token{
+		{ID: "task-1", Color: interfaces.TokenColor{TraceID: "trace-shared"}},
+		{ID: "task-2", Color: interfaces.TokenColor{TraceID: "trace-other"}},
+	}
+
+	guard := &SameTraceIDGuard{MatchBinding: "plan"}
+	matched, ok := guard.Evaluate(candidates, bindings, nil)
+	if !ok {
+		t.Fatal("expected guard to pass")
+	}
+	if len(matched) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matched))
+	}
+	if matched[0].ID != "task-1" {
+		t.Fatalf("expected task-1, got %s", matched[0].ID)
+	}
+}
+
+func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
+	tests := []struct {
+		name       string
+		binding    *interfaces.Token
+		candidates []interfaces.Token
+	}{
+		{
+			name:    "missing bound trace identity",
+			binding: &interfaces.Token{ID: "plan-1", Color: interfaces.TokenColor{}},
+			candidates: []interfaces.Token{
+				{ID: "task-1", Color: interfaces.TokenColor{CurrentChainingTraceID: "chain-shared"}},
+			},
+		},
+		{
+			name:    "missing candidate trace identity",
+			binding: &interfaces.Token{ID: "plan-1", Color: interfaces.TokenColor{CurrentChainingTraceID: "chain-shared"}},
+			candidates: []interfaces.Token{
+				{ID: "task-1", Color: interfaces.TokenColor{}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			guard := &SameTraceIDGuard{MatchBinding: "plan"}
+			matched, ok := guard.Evaluate(tt.candidates, map[string]*interfaces.Token{"plan": tt.binding}, nil)
+			if ok {
+				t.Fatal("expected guard to fail")
+			}
+			if len(matched) != 0 {
+				t.Fatalf("expected 0 matches, got %d", len(matched))
+			}
+		})
+	}
+}
+
+func TestSameTraceIDGuard_MissingBinding(t *testing.T) {
+	candidates := []interfaces.Token{
+		{ID: "task-1", Color: interfaces.TokenColor{CurrentChainingTraceID: "chain-shared"}},
+	}
+
+	guard := &SameTraceIDGuard{MatchBinding: "plan"}
+	matched, ok := guard.Evaluate(candidates, map[string]*interfaces.Token{}, nil)
+	if ok {
+		t.Fatal("expected guard to fail when binding is missing")
+	}
+	if matched != nil {
+		t.Fatalf("expected nil matches, got %v", matched)
+	}
+}
+
 func TestMatchesFieldsGuard_DirectFieldSelector(t *testing.T) {
 	guard := &MatchesFieldsGuard{
 		InputKey:     ".Name",

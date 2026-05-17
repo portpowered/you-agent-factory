@@ -52,6 +52,7 @@ const (
 	GuardTypeInferenceThrottle   GuardType = "INFERENCE_THROTTLE_GUARD"
 	GuardTypeMatchesFields       GuardType = "MATCHES_FIELDS"
 	GuardTypeSameName            GuardType = "SAME_NAME"
+	GuardTypeSameTraceID         GuardType = "SAME_TRACE_ID"
 	GuardTypeVisitCount          GuardType = "VISIT_COUNT"
 )
 
@@ -201,7 +202,7 @@ type Guard struct {
 	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
 	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
 
-	// MatchInput For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation.
+	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
 	MatchInput *string `json:"matchInput,omitempty"`
 
 	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.

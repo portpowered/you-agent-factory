@@ -2052,6 +2052,7 @@ components:
         - GuardTypeAllChildrenComplete
         - GuardTypeAnyChildFailed
         - GuardTypeSameName
+        - GuardTypeSameTraceID
         - GuardTypeInferenceThrottle
       enum:
         - VISIT_COUNT
@@ -2059,6 +2060,7 @@ components:
         - ALL_CHILDREN_COMPLETE
         - ANY_CHILD_FAILED
         - SAME_NAME
+        - SAME_TRACE_ID
         - INFERENCE_THROTTLE_GUARD
       x-enum-descriptions:
         - Allows or blocks work based on how many times a workstation has already handled it.
@@ -2066,6 +2068,7 @@ components:
         - This input is available only after all matching child work completes.
         - This input is available when any matching child work fails.
         - This input is available only when its token name exactly matches the bound token name from another input.
+        - This input is available only when its token trace identity exactly matches the bound token trace identity from another input.
         - Blocks factory dispatch when provider or model throttle history still falls inside the authored refresh window.
     Guard:
       type: object
@@ -2094,7 +2097,7 @@ components:
           description: For parent-aware input guards, the parent workType name from another input in the same workstation.
         matchInput:
           type: string
-          description: For `SAME_NAME` input guards, the peer input workType name from another input in the same workstation.
+          description: For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
         spawnedBy:
           type: string
           description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
