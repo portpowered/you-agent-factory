@@ -13,6 +13,7 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
+import type { EditableWorkstationValues } from "../current-factory-definition/workstation-editable-values";
 import type { WorkstationDetailMessages } from "./messages";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { DashboardWorkItemSelection } from "./types";
@@ -93,6 +94,7 @@ export interface WorkItemDetailCardProps {
 
 export interface WorkstationDetailCardProps {
   activeExecutions: DashboardActiveExecution[];
+  editableConfigurationState?: EditableWorkstationConfigurationState;
   locale?: string;
   now: number;
   onSelectWorkID?: (workID: string) => void;
@@ -104,6 +106,12 @@ export interface WorkstationDetailCardProps {
   workstationRequests?: DashboardWorkstationRequest[];
   widgetId?: string;
 }
+
+export type EditableWorkstationConfigurationState =
+  | { status: "loading" }
+  | { errorMessage: string; status: "error" }
+  | { message: string; status: "empty" }
+  | { values: EditableWorkstationValues; status: "ready" };
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];

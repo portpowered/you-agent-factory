@@ -35,6 +35,7 @@ import {
 
 export function WorkstationDetailCard({
   activeExecutions,
+  editableConfigurationState,
   locale,
   now,
   onSelectWorkID,
@@ -55,6 +56,10 @@ export function WorkstationDetailCard({
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
+      <EditableConfigurationSection
+        messages={messages}
+        state={editableConfigurationState}
+      />
       <WorkstationActiveWorkList
         executions={activeExecutions}
         messages={messages}
@@ -112,6 +117,98 @@ export function WorkstationDetailCard({
         />
       )}
     </SelectionDetailLayout>
+  );
+}
+
+function EditableConfigurationSection({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state?: WorkstationDetailCardProps["editableConfigurationState"];
+}) {
+  const valueOrFallback = (value: string | null) =>
+    value && value.trim().length > 0 ? value : messages.notConfiguredValue;
+
+  return (
+    <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
+      <div className="grid gap-[0.18rem]">
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+          {messages.editableConfigurationHeading}
+        </h4>
+        <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          {messages.editableConfigurationSummary}
+        </p>
+      </div>
+      {state?.status === "loading" ? (
+        <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+          {messages.editableConfigurationLoading}
+        </p>
+      ) : null}
+      {state?.status === "error" ? (
+        <p className={cx("m-0 text-af-danger", DASHBOARD_BODY_TEXT_CLASS)} role="alert">
+          {messages.editableConfigurationErrorPrefix} {state.errorMessage}
+        </p>
+      ) : null}
+      {state?.status === "empty" ? (
+        <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+          {state.message || messages.editableConfigurationEmpty}
+        </p>
+      ) : null}
+      {state?.status === "ready" ? (
+        <dl className="m-0 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
+          <EditableConfigurationItem
+            label={messages.modelFieldLabel}
+            value={valueOrFallback(state.values.model)}
+          />
+          <EditableConfigurationItem
+            label={messages.templateFieldLabel}
+            value={valueOrFallback(state.values.promptFile)}
+          />
+          <EditableConfigurationItem
+            label={messages.workerFieldLabel}
+            value={valueOrFallback(state.values.workerName)}
+          />
+          <EditableConfigurationItem
+            className="md:[grid-column:1/-1]"
+            label={messages.promptFieldLabel}
+            preserveWhitespace
+            value={valueOrFallback(state.values.prompt)}
+          />
+        </dl>
+      ) : null}
+    </section>
+  );
+}
+
+function EditableConfigurationItem({
+  className,
+  label,
+  preserveWhitespace = false,
+  value,
+}: {
+  className?: string;
+  label: string;
+  preserveWhitespace?: boolean;
+  value: string;
+}) {
+  return (
+    <div
+      className={cx(
+        "grid gap-[0.3rem] rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3",
+        className,
+      )}
+    >
+      <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</dt>
+      <dd
+        className={cx(
+          "m-0 text-sm text-af-ink [overflow-wrap:anywhere]",
+          preserveWhitespace && "whitespace-pre-wrap",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }
 

@@ -8,6 +8,16 @@ export interface WorkstationDetailMessages {
   activeWorkEmpty: string;
   activeWorkHeading: string;
   collapseAction: string;
+  editableConfigurationEmpty: string;
+  editableConfigurationErrorPrefix: string;
+  editableConfigurationHeading: string;
+  editableConfigurationLoading: string;
+  editableConfigurationSummary: string;
+  modelFieldLabel: string;
+  notConfiguredValue: string;
+  promptFieldLabel: string;
+  templateFieldLabel: string;
+  workerFieldLabel: string;
   currentDispatchLabel: string;
   dispatchLabel: string;
   elapsedLabel: string;
@@ -62,6 +72,18 @@ const workstationDetailMessagesByLocale = {
     activeWorkEmpty: "No active work is running on this workstation.",
     activeWorkHeading: "Active work",
     collapseAction: "Collapse",
+    editableConfigurationEmpty:
+      "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
+    editableConfigurationErrorPrefix: "Editable configuration unavailable.",
+    editableConfigurationHeading: "Editable configuration",
+    editableConfigurationLoading: "Loading the current factory definition for this workstation.",
+    editableConfigurationSummary:
+      "Prompt, model, and template values are loaded from the latest editable current-factory definition.",
+    modelFieldLabel: "Model",
+    notConfiguredValue: "Not configured",
+    promptFieldLabel: "Prompt",
+    templateFieldLabel: "Template",
+    workerFieldLabel: "Worker",
     currentDispatchLabel: "Current dispatch",
     dispatchLabel: "Dispatch",
     elapsedLabel: "Elapsed",
@@ -120,6 +142,19 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションでは現在アクティブな作業は実行されていません。",
     activeWorkHeading: "アクティブな作業",
     collapseAction: "折りたたむ",
+    editableConfigurationEmpty:
+      "この選択中ワークステーションでは、実行中ファクトリー定義から編集可能な prompt、model、template の値を取得できません。",
+    editableConfigurationErrorPrefix: "編集可能な構成は利用できません。",
+    editableConfigurationHeading: "編集可能な構成",
+    editableConfigurationLoading:
+      "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
+    editableConfigurationSummary:
+      "Prompt、model、template の値は最新の編集可能な current-factory 定義から読み込まれます。",
+    modelFieldLabel: "モデル",
+    notConfiguredValue: "未設定",
+    promptFieldLabel: "プロンプト",
+    templateFieldLabel: "テンプレート",
+    workerFieldLabel: "ワーカー",
     currentDispatchLabel: "現在のディスパッチ",
     dispatchLabel: "ディスパッチ",
     elapsedLabel: "経過時間",
@@ -178,6 +213,19 @@ const workstationDetailMessagesByLocale = {
     activeWorkEmpty: "이 워크스테이션에서 현재 실행 중인 활성 작업이 없습니다.",
     activeWorkHeading: "활성 작업",
     collapseAction: "접기",
+    editableConfigurationEmpty:
+      "선택한 워크스테이션에 대해 실행 중인 팩토리 정의에서 편집 가능한 prompt, model, template 값을 찾을 수 없습니다.",
+    editableConfigurationErrorPrefix: "편집 가능한 구성을 사용할 수 없습니다.",
+    editableConfigurationHeading: "편집 가능한 구성",
+    editableConfigurationLoading:
+      "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
+    editableConfigurationSummary:
+      "Prompt, model, template 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
+    modelFieldLabel: "모델",
+    notConfiguredValue: "구성되지 않음",
+    promptFieldLabel: "프롬프트",
+    templateFieldLabel: "템플릿",
+    workerFieldLabel: "워커",
     currentDispatchLabel: "현재 디스패치",
     dispatchLabel: "디스패치",
     elapsedLabel: "경과 시간",
@@ -234,6 +282,18 @@ const workstationDetailMessagesByLocale = {
     activeWorkEmpty: "此工作站当前没有正在运行的活动工作。",
     activeWorkHeading: "活动工作",
     collapseAction: "收起",
+    editableConfigurationEmpty:
+      "运行中的工厂定义没有为所选工作站公开可编辑的 prompt、model 和 template 值。",
+    editableConfigurationErrorPrefix: "无法提供可编辑配置。",
+    editableConfigurationHeading: "可编辑配置",
+    editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
+    editableConfigurationSummary:
+      "Prompt、model 和 template 值来自最新可编辑的 current-factory 定义。",
+    modelFieldLabel: "模型",
+    notConfiguredValue: "未配置",
+    promptFieldLabel: "提示词",
+    templateFieldLabel: "模板",
+    workerFieldLabel: "工作器",
     currentDispatchLabel: "当前分派",
     dispatchLabel: "分派",
     elapsedLabel: "已用时间",

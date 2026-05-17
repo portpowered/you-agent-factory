@@ -5,11 +5,21 @@ import {
   buildDashboardWorkstationRequestFixture,
 } from "../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
+import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
 import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import type { CurrentSelectionState } from "./useCurrentSelection";
+
+vi.mock("../current-factory-definition", async () => {
+  const actual = await vi.importActual("../current-factory-definition");
+
+  return {
+    ...actual,
+    useCurrentEditableFactoryDefinition: vi.fn(),
+  };
+});
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -106,6 +116,30 @@ function buildSelectedWorkItemFixture() {
 describe("CurrentSelectionWidget", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: false,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: true,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: false,
+      promise: Promise.resolve(undefined),
+      refetch: vi.fn(),
+      status: "pending",
+    } as never);
   });
 
   afterEach(() => {
@@ -341,12 +375,50 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
+    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(false);
     expect(
       within(currentSelection).getByRole("heading", { name: "Active work" }),
     ).toBeTruthy();
     expect(
       within(currentSelection).getByRole("heading", { name: "Run history" }),
     ).toBeTruthy();
+  });
+
+  it("does not load the editable factory definition when no workstation is selected", () => {
+    render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(false);
+  });
+
+  it("enables editable workstation loading after a workstation becomes selected", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenLastCalledWith(true);
   });
 
   it("renders workstation request details when a workstation request is selected", () => {
