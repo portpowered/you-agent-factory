@@ -4,7 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const uiDir = path.resolve(scriptDir, "..");
+const uiDir = process.env.AGENT_FACTORY_UI_DIR
+  ? path.resolve(process.env.AGENT_FACTORY_UI_DIR)
+  : path.resolve(scriptDir, "..");
 const distDir = path.join(uiDir, "dist");
 const assetsDir = path.join(distDir, "assets");
 const distEmbedPath = path.join(uiDir, "dist_embed_generated.go");
@@ -54,6 +56,27 @@ async function rewriteIndexHtml() {
   }
 }
 
+async function pruneEmptyDirectories(rootDir, currentDir = rootDir) {
+  const entries = await readdir(currentDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    await pruneEmptyDirectories(rootDir, path.join(currentDir, entry.name));
+  }
+
+  if (currentDir === rootDir) {
+    return;
+  }
+
+  const remainingEntries = await readdir(currentDir);
+  if (remainingEntries.length === 0) {
+    await rm(currentDir, { recursive: true, force: true });
+  }
+}
+
 async function writeDistEmbedRegistration() {
   const hash = createHash("sha256");
   for (const relativePath of await listFiles(distDir)) {
@@ -99,4 +122,5 @@ await normalizeSingleAsset(".js", "index.js");
 await normalizeSingleAsset(".css", "index.css");
 await rewriteIndexHtml();
 await rm(legacyDistStampPath, { force: true });
+await pruneEmptyDirectories(distDir);
 await writeDistEmbedRegistration();
