@@ -452,8 +452,7 @@ func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packa
 }
 
 func coverageImportPath(filePath string, repoRoot string) (string, error) {
-	normalizedPath := strings.ReplaceAll(strings.TrimSpace(filePath), "\\", "/")
-	normalizedPath = filepath.ToSlash(normalizedPath)
+	normalizedPath := filepath.ToSlash(strings.ReplaceAll(strings.TrimSpace(filePath), "\\", "/"))
 	if normalizedPath == "" {
 		return "", errors.New("empty file path")
 	}

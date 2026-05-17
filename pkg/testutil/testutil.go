@@ -20,6 +20,44 @@ import (
 // seedFileCounter provides unique filenames across concurrent test invocations.
 var seedFileCounter atomic.Int64
 
+// CanonicalPath normalizes a path for comparisons in tests that may observe
+// platform-specific symlinked temp roots such as /var versus /private/var on macOS.
+func CanonicalPath(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	cleaned := filepath.Clean(value)
+	if resolved, ok := canonicalizeExistingPath(cleaned); ok {
+		return resolved
+	}
+	return cleaned
+}
+
+func canonicalizeExistingPath(value string) (string, bool) {
+	cleaned := filepath.Clean(value)
+	current := cleaned
+	var suffix []string
+
+	for {
+		if _, err := os.Stat(current); err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil || resolved == "" {
+				return "", false
+			}
+			parts := append([]string{resolved}, suffix...)
+			return filepath.Join(parts...), true
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", false
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+		current = parent
+	}
+}
+
 // CopyFixtureDir copies the entire directory tree at srcDir into a new
 // temporary directory and returns the path to the copy. The temporary
 // directory is automatically removed when t finishes (via t.Cleanup).
