@@ -21,16 +21,20 @@ describe("WorkstationDetailCard editable configuration", () => {
           },
           hasValidationErrors: false,
           initialValues: {
+            isModelEditable: true,
             model: "gpt-5.5",
+            modelEditBlockedReason: null,
             prompt: "Review the latest story changes before approval.",
             promptFile: "prompts/review.md",
             workerName: "reviewer",
             workstationName: "Review",
           },
           isDirty: false,
+          isModelEditable: true,
           onModelChange: vi.fn(),
           onPromptChange: vi.fn(),
           onPromptFileChange: vi.fn(),
+          overwriteFieldNames: [],
           pendingFactoryDefinition: null,
           status: "ready",
           validationErrors: {},
@@ -82,16 +86,20 @@ describe("WorkstationDetailCard editable configuration", () => {
           },
           hasValidationErrors: true,
           initialValues: {
+            isModelEditable: true,
             model: "gpt-5.5",
+            modelEditBlockedReason: null,
             prompt: "Review the latest story changes before approval.",
             promptFile: "prompts/review.md",
             workerName: "reviewer",
             workstationName: "Review",
           },
           isDirty: true,
+          isModelEditable: true,
           onModelChange,
           onPromptChange,
           onPromptFileChange,
+          overwriteFieldNames: [],
           pendingFactoryDefinition: null,
           status: "ready",
           validationErrors: {
@@ -127,6 +135,54 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(onModelChange).toHaveBeenCalledWith("gpt-5.6");
     expect(onPromptFileChange).toHaveBeenCalledWith("prompts/review-v2.md");
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
+  });
+
+  it("disables the model field when the selected workstation shares its worker", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          draft: {
+            model: "gpt-5.5",
+            prompt: "Review the latest story changes before approval.",
+            promptFile: "prompts/review.md",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            isModelEditable: false,
+            model: "gpt-5.5",
+            modelEditBlockedReason:
+              'Model edits are disabled here because worker "processor" is shared with "Review" and "Plan".',
+            prompt: "Review the latest story changes before approval.",
+            promptFile: "prompts/review.md",
+            workerName: "processor",
+            workstationName: "Review",
+          },
+          isDirty: false,
+          isModelEditable: false,
+          onModelChange: vi.fn(),
+          onPromptChange: vi.fn(),
+          onPromptFileChange: vi.fn(),
+          overwriteFieldNames: [],
+          pendingFactoryDefinition: null,
+          status: "ready",
+          validationErrors: {},
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(screen.getByLabelText("Model").getAttribute("disabled")).not.toBeNull();
+    expect(
+      screen.getByText(
+        'Model edits are disabled here because worker "processor" is shared with "Review" and "Plan".',
+      ),
+    ).toBeTruthy();
   });
 
   it("renders explicit loading, error, and empty editable-configuration states", () => {

@@ -67,9 +67,12 @@ export function useEditableWorkstationConfigurationState(
     };
   }
 
-  const validationErrors = validateEditableWorkstationDraft(sessionState.draft);
+  const resolvedValidationErrors = validateEditableWorkstationDraft(
+    sessionState.draft,
+    selectedEditableValues,
+  );
   const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
-    validationErrors,
+    resolvedValidationErrors,
   )
     ? null
     : applyEditableWorkstationDraft(
@@ -81,12 +84,13 @@ export function useEditableWorkstationConfigurationState(
   return {
     draft: sessionState.draft,
     hasValidationErrors:
-      hasEditableWorkstationValidationErrors(validationErrors),
+      hasEditableWorkstationValidationErrors(resolvedValidationErrors),
     initialValues: selectedEditableValues,
     isDirty: !areEditableDraftsEqual(
       sessionState.draft,
       sessionState.sessionStartDraft,
     ),
+    isModelEditable: selectedEditableValues.isModelEditable,
     markChangesSaved: () => {
       setSessionState((currentState) =>
         currentState
@@ -142,7 +146,7 @@ export function useEditableWorkstationConfigurationState(
     ),
     pendingFactoryDefinition,
     status: "ready",
-    validationErrors,
+    validationErrors: resolvedValidationErrors,
   };
 }
 
@@ -186,11 +190,20 @@ function useEditableWorkstationSession(
 
 export function validateEditableWorkstationDraft(
   draft: EditableWorkstationDraft,
+  selectedEditableValues?: ReturnType<typeof resolveEditableWorkstationValues>,
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
 
   if (draft.model.trim().length === 0) {
     validationErrors.model = "Enter a model before saving this workstation.";
+  } else if (
+    selectedEditableValues &&
+    !selectedEditableValues.isModelEditable &&
+    draft.model.trim() !== (selectedEditableValues.model ?? "").trim()
+  ) {
+    validationErrors.model =
+      selectedEditableValues.modelEditBlockedReason ??
+      "Model edits are disabled for this workstation.";
   }
 
   if (draft.prompt.trim().length === 0) {

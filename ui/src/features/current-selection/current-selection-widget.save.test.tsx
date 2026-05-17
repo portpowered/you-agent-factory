@@ -209,6 +209,48 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("keeps shared-worker model edits disabled while saving workstation-only changes", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(buildSharedWorkerFactoryDefinition()),
+    );
+    vi.mocked(createFactory).mockResolvedValue(buildSharedWorkerFactoryDefinition({
+      prompt: "Updated only the review workstation prompt.",
+    }));
+
+    renderWorkstationSelection();
+
+    expect(screen.getByLabelText("Model").getAttribute("disabled")).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Updated only the review workstation prompt." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
+
+    await waitFor(() => {
+      expect(createFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workers: [
+            expect.objectContaining({
+              model: "gpt-5.5",
+              name: "processor",
+            }),
+          ],
+          workstations: [
+            expect.objectContaining({
+              body: "Updated only the review workstation prompt.",
+              name: "Review",
+            }),
+            expect.objectContaining({
+              body: "Plan the implementation.",
+              name: "Plan",
+            }),
+          ],
+        }),
+      );
+    });
+  });
 });
 
 function renderWorkstationSelection() {
@@ -318,6 +360,42 @@ function buildEditableFactoryDefinition(overrides?: {
         outputs: [{ state: "approved", workType: "story" }],
         promptFile: overrides?.promptFile ?? "prompts/review.md",
         worker: "reviewer",
+      },
+    ],
+    workTypes: [],
+  };
+}
+
+function buildSharedWorkerFactoryDefinition(overrides?: { prompt?: string }): FactoryValue {
+  return {
+    name: "Current Factory",
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "processor",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body:
+          overrides?.prompt ??
+          "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: "processor",
+      },
+      {
+        body: "Plan the implementation.",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/plan.md",
+        worker: "processor",
       },
     ],
     workTypes: [],

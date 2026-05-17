@@ -9,6 +9,7 @@ export interface WorkstationDetailMessages {
   editableConfigurationLoading: string;
   editableConfigurationDirtyStatus: string;
   editableConfigurationDraftNote: string;
+  editableConfigurationModelSharedWorkerHint: string;
   editableConfigurationOverwriteWarning: (fields: string) => string;
   editableConfigurationOverwriteWarningDetail: string;
   editableConfigurationSaveAction: string;

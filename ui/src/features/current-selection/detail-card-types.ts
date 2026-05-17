@@ -130,6 +130,7 @@ export type EditableWorkstationConfigurationState =
       hasValidationErrors: boolean;
       initialValues: EditableWorkstationValues;
       isDirty: boolean;
+      isModelEditable: boolean;
       markChangesSaved: () => void;
       onModelChange: (value: string) => void;
       onPromptChange: (value: string) => void;

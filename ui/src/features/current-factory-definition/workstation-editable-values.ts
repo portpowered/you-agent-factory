@@ -15,7 +15,9 @@ type EditableWorkstationResolution = {
 };
 
 export interface EditableWorkstationValues {
+  isModelEditable: boolean;
   model: string | null;
+  modelEditBlockedReason: string | null;
   prompt: string | null;
   promptFile: string | null;
   workerName: string;
@@ -38,9 +40,18 @@ export function resolveEditableWorkstationValues(
   }
 
   const { worker, workstation } = resolution;
+  const sharedWorkerWorkstationNames = resolveSharedWorkerWorkstationNames(
+    factory,
+    worker.name,
+  );
+  const isModelEditable = sharedWorkerWorkstationNames.length === 1;
 
   return {
+    isModelEditable,
     model: worker.model ?? null,
+    modelEditBlockedReason: isModelEditable
+      ? null
+      : `Model edits are disabled here because worker "${worker.name}" is shared with ${formatSharedWorkstationList(sharedWorkerWorkstationNames)}.`,
     prompt: workstation.body ?? null,
     promptFile: workstation.promptFile ?? null,
     workerName: worker.name,
@@ -77,16 +88,52 @@ export function applyEditableWorkstationDraft(
     body: draft.prompt,
     promptFile: normalizePromptFileDraft(draft.promptFile),
   };
+  const nextWorkers = buildUpdatedWorkers(
+    factory,
+    resolution.worker.name,
+    resolution.workerIndex,
+    nextWorker,
+    draft,
+  );
+  if (!nextWorkers) {
+    return null;
+  }
 
   return {
     ...factory,
-    workers: factory.workers.map((worker, index) =>
-      index === resolution.workerIndex ? nextWorker : worker,
-    ),
+    workers: nextWorkers,
     workstations: factory.workstations.map((workstation, index) =>
       index === resolution.workstationIndex ? nextWorkstation : workstation,
     ),
   };
+}
+
+function buildUpdatedWorkers(
+  factory: CanonicalFactoryDefinition,
+  workerName: string,
+  workerIndex: number,
+  nextWorker: CanonicalWorker,
+  draft: EditableWorkstationDraft,
+) {
+  const sharedWorkerWorkstationNames = resolveSharedWorkerWorkstationNames(
+    factory,
+    workerName,
+  );
+  const currentModel =
+    factory.workers?.[workerIndex]?.model?.trim() ?? "";
+  const nextModel = draft.model.trim();
+
+  if (sharedWorkerWorkstationNames.length > 1) {
+    if (currentModel !== nextModel) {
+      return null;
+    }
+
+    return factory.workers ?? null;
+  }
+
+  return factory.workers?.map((worker, index) =>
+    index === workerIndex ? nextWorker : worker,
+  );
 }
 
 function normalizePromptFileDraft(promptFile: string): string | undefined {
@@ -166,4 +213,32 @@ function resolveCanonicalWorker(
     worker: factory.workers[workerIndex],
     workerIndex,
   };
+}
+
+function resolveSharedWorkerWorkstationNames(
+  factory: CanonicalFactoryDefinition,
+  workerName: string,
+): string[] {
+  return (factory.workstations ?? [])
+    .filter((workstation) => workstation.worker === workerName)
+    .map((workstation) => workstation.name);
+}
+
+function formatSharedWorkstationList(workstationNames: string[]): string {
+  if (workstationNames.length === 0) {
+    return "no workstations";
+  }
+
+  if (workstationNames.length === 1) {
+    return `"${workstationNames[0]}"`;
+  }
+
+  if (workstationNames.length === 2) {
+    return `"${workstationNames[0]}" and "${workstationNames[1]}"`;
+  }
+
+  return `${workstationNames
+    .slice(0, -1)
+    .map((name) => `"${name}"`)
+    .join(", ")}, and "${workstationNames.at(-1)}"`;
 }

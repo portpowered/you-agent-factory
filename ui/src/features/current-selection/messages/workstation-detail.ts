@@ -21,6 +21,8 @@ const workstationDetailMessagesByLocale = {
       "You have unsaved changes for this workstation.",
     editableConfigurationDraftNote:
       "Changes stay local to this edit session until you save the running factory.",
+    editableConfigurationModelSharedWorkerHint:
+      "Model edits are disabled here because this workstation shares its worker with other workstations.",
     editableConfigurationOverwriteWarning: (fields) =>
       `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
     editableConfigurationOverwriteWarningDetail:
@@ -115,6 +117,8 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションには未保存の変更があります。",
     editableConfigurationDraftNote:
       "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
+    editableConfigurationModelSharedWorkerHint:
+      "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
     editableConfigurationOverwriteWarning: (fields) =>
       `編集開始後に実行中ファクトリーが変更されました。今保存すると、${fields} の新しいサーバー値を上書きします。`,
     editableConfigurationOverwriteWarningDetail:
@@ -209,6 +213,8 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
     editableConfigurationDraftNote:
       "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
+    editableConfigurationModelSharedWorkerHint:
+      "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
     editableConfigurationOverwriteWarning: (fields) =>
       `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 지금 저장하면 ${fields}의 최신 서버 값을 덮어쓰게 됩니다.`,
     editableConfigurationOverwriteWarningDetail:
@@ -300,6 +306,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
     editableConfigurationDraftNote:
       "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
+    editableConfigurationModelSharedWorkerHint:
+      "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
     editableConfigurationOverwriteWarning: (fields) =>
       `你开始编辑后，运行中的工厂已发生变化。现在保存将覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationOverwriteWarningDetail:

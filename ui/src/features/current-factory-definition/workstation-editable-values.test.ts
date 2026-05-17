@@ -39,7 +39,9 @@ describe("resolveEditableWorkstationValues", () => {
     };
 
     expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      isModelEditable: true,
       model: "gpt-5.5",
+      modelEditBlockedReason: null,
       prompt: "Review the latest story changes before approval.",
       promptFile: "prompts/review.md",
       workerName: "reviewer",
@@ -150,6 +152,103 @@ describe("resolveEditableWorkstationValues", () => {
           stopWords: ["STOP"],
           workingDirectory: "/repo/review",
         },
+      ],
+    });
+  });
+
+  it("marks model edits as non-workstation-scoped when the worker is shared", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "processor",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+        {
+          body: "Plan work",
+          id: "plan",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Plan",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(resolveEditableWorkstationValues(factory, selectedNode)).toEqual({
+      isModelEditable: false,
+      model: "gpt-5.4",
+      modelEditBlockedReason:
+        'Model edits are disabled here because worker "processor" is shared with "Review" and "Plan".',
+      prompt: "Review work",
+      promptFile: null,
+      workerName: "processor",
+      workstationName: "Review",
+    });
+  });
+
+  it("rejects shared-worker model rewrites while still allowing workstation-only edits", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "processor",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+        {
+          body: "Plan work",
+          id: "plan",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Plan",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "processor",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      applyEditableWorkstationDraft(factory, selectedNode, {
+        model: "gpt-5.5",
+        prompt: "Updated review work",
+        promptFile: "",
+      }),
+    ).toBeNull();
+
+    expect(
+      applyEditableWorkstationDraft(factory, selectedNode, {
+        model: "gpt-5.4",
+        prompt: "Updated review work",
+        promptFile: "",
+      }),
+    ).toMatchObject({
+      workers: [{ model: "gpt-5.4", name: "processor" }],
+      workstations: [
+        { body: "Updated review work", name: "Review" },
+        { body: "Plan work", name: "Plan" },
       ],
     });
   });

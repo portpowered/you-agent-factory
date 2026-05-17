@@ -99,19 +99,30 @@ function EditableConfigurationReadyForm({
           fieldId="editable-workstation-model"
           input={
             <Input
-              aria-describedby={
-                state.validationErrors.model
-                  ? "editable-workstation-model-error"
-                  : undefined
-              }
+              aria-describedby={resolveModelFieldDescription(state)}
               aria-invalid={state.validationErrors.model ? "true" : undefined}
               className={DASHBOARD_BODY_TEXT_CLASS}
+              disabled={!state.isModelEditable}
               id="editable-workstation-model"
               onChange={(event) => state.onModelChange(event.target.value)}
               value={state.draft.model}
             />
           }
           label={messages.modelFieldLabel}
+          supportingContent={
+            !state.isModelEditable ? (
+              <p
+                className={cx(
+                  "m-0 text-af-ink/58",
+                  DASHBOARD_SUPPORTING_TEXT_CLASS,
+                )}
+                id="editable-workstation-model-description"
+              >
+                {state.initialValues.modelEditBlockedReason ??
+                  messages.editableConfigurationModelSharedWorkerHint}
+              </p>
+            ) : null
+          }
         />
         <EditableConfigurationField
           errorMessage={state.validationErrors.promptFile}
@@ -166,6 +177,23 @@ function EditableConfigurationReadyForm({
       />
     </form>
   );
+}
+
+function resolveModelFieldDescription(
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >,
+) {
+  const descriptions = [];
+  if (state.validationErrors.model) {
+    descriptions.push("editable-workstation-model-error");
+  }
+  if (!state.isModelEditable) {
+    descriptions.push("editable-workstation-model-description");
+  }
+
+  return descriptions.length > 0 ? descriptions.join(" ") : undefined;
 }
 
 function EditableConfigurationSaveFeedback({
@@ -308,11 +336,13 @@ function EditableConfigurationField({
   fieldId,
   input,
   label,
+  supportingContent,
 }: {
   errorMessage?: string;
   fieldId: string;
   input: ReactNode;
   label: string;
+  supportingContent?: ReactNode;
 }) {
   return (
     <div className="grid gap-2 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3">
@@ -320,6 +350,7 @@ function EditableConfigurationField({
         {label}
       </label>
       {input}
+      {supportingContent}
       {errorMessage ? (
         <p
           className={cx(
