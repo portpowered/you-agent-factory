@@ -1,3 +1,366 @@
+## 2026-05-17T20:03:25+07:00 - mainline refresh and guards-batch helper dispatch
+
+- Ran `git pull --ff-only` and confirmed `main` is current at
+  `origin/main` `0300994`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`, `factory/README.md`, and the code
+  review, backend, and website standards before deciding whether to update the
+  worldview, handle an ask, or dispatch cleanup work.
+- Verified the checked-in inbox contract is still sentinel-only in git:
+  `find factory/inputs -maxdepth 3 -type f` showed only the tracked
+  `.gitkeep` files before this refresh, so the older worldview references to
+  active local request files were stale for this checkout.
+- Sent two delegated explorer agents:
+  one to decide whether this cycle should update worldview only or widen the
+  queue, and one to locate one narrow non-overlapping cleanup seam in live
+  code.
+- Reconciled the stale worldview with live repo state:
+  `main` has advanced from `41bfb0a` to `0300994`, PR `#181`
+  (`refactor-selection-pages`) is now merged, and several older
+  `origin/ralph/*` cleanup branches are merged residue rather than live demand.
+- Reconfirmed the ask-critical lanes are still actively owned elsewhere:
+  `origin/ralph/fix-gocoveragecheck-zero-coverage-report-gap` and
+  `origin/ralph/audit-repository-against-2026-website-and-backend-checklists`
+  remain the right remote owners for the coverage-gap and checklist work.
+- Reconfirmed the repository-owned `workspace-setup` portability issue is
+  still live in the worker, mirrored fixture copies, and replay assets that
+  still emit `command":"python"` script-request events.
+- Dispatched one new local cleanup idea at
+  `factory/inputs/idea/default/split-functionallong-guards-batch-helpers-from-default-support.md`
+  after direct reads plus delegated verification showed the seam is still
+  narrow and non-overlapping:
+  `providerErrorCorpusEntryForTest` and `panickingExecutor` remain in
+  `tests/functional/guards_batch/helpers_test.go`, while their live callers
+  remain only in the functionallong files
+  `partial_batch_long_test.go` and `concurrency_limit_long_test.go`.
+- Chose not to dispatch an ask-driven file this cycle because the highest-value
+  ask lanes already have remote ownership, and the more urgent correction was
+  restoring a truthful view of the local queue and repo tip.
+
+## 2026-05-10T03:01:41+09:00 - queue truth refresh and hold
+
+- Ran `git pull --ff-only` and confirmed `main` is still current at
+  `origin/main` `41bfb0a`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/README.md`, the code review,
+  backend, and website standards, the visible `factory/inputs/**` operating
+  state, and the exact live code behind the active and future helper seams.
+- Sent two delegated explorer agents:
+  one to verify live versus stale queue ownership under `factory/inputs`, and
+  one to check recent request-related history against live code and branches.
+- Reconfirmed with delegated verification plus direct reads that the checked-in
+  `factory/inputs/**` contract is still clean:
+  `git ls-files factory/inputs` resolves only to tracked `.gitkeep` sentinels,
+  so the four markdown request files are local operating queue state rather
+  than checked-in starter content.
+- Reconfirmed the live local queue shape is still three active lanes plus one
+  stale residue item:
+  the provider helper split idea is active, the workspace-setup Python 3
+  unblocker idea is active, the `gocoveragecheck` task is active with remote
+  ownership at `origin/ralph/fix-gocoveragecheck-zero-coverage-report-gap`,
+  and the cron watcher task is stale local residue.
+- Revalidated the solved cron seam directly in code and history:
+  `pkg/service/cron_watcher.go` now takes
+  `interfaces.RuntimeWorkstationLookup`, and
+  `git log --all -- pkg/service/cron_watcher.go` shows
+  `38addb3` on the merged path for
+  `simplify-cron-watcher-runtime-lookup-width`.
+- Revalidated the `workspace-setup` portability blocker and widened the world
+  model of where that contract still lives:
+  the checked-in worker and both fixture mirrors still use `command: python`,
+  and replay/event-history assets in
+  `ui/integration/fixtures/event-stream-replay-2.jsonl`,
+  `ui/integration/fixtures/terminal-summary-regression-replay.jsonl`, and
+  `factory/logs/agent-fails.json` still emit the same `python` script-request
+  shape.
+- Reconfirmed the active provider-helper cleanup lane is still correct and
+  narrow:
+  the long-only template helpers remain in
+  `tests/functional/providers/helpers_test.go`, with live callers only in
+  `tests/functional/providers/cli_template_resolution_long_test.go`.
+- Reconfirmed the next future non-overlapping seams remain unchanged:
+  `tests/functional/guards_batch/helpers_test.go` still strands
+  `providerErrorCorpusEntryForTest` and `panickingExecutor` in default-build
+  ownership, and `tests/functional/workflow/helpers_test.go` still strands the
+  process-review helper cluster in default-build ownership.
+- Chose to update the meta worldview instead of dispatching another request
+  file, because the default one-idea contract is already exceeded for
+  justified reasons, the ask-critical coverage lane still has active remote
+  ownership, and no newly discovered cleanup seam justified widening the queue.
+
+## 2026-05-10T02:04:20+09:00 - stale residue correction and queue hold
+
+- Ran `git pull --ff-only` and confirmed `main` is still current at
+  `origin/main` `41bfb0a`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/README.md`, the visible
+  `factory/inputs/**` operating state, recent merged history, remote
+  `origin/ralph/*` ownership branches, and the exact code behind the active
+  queue plus two known future helper seams.
+- Sent two delegated explorer agents:
+  one to verify which current request files are still live versus stale, and
+  one to look for a single narrow non-overlapping cleanup seam.
+- Reconfirmed with delegated verification plus direct reads that
+  `factory/inputs/task/default/simplify-cron-watcher-runtime-lookup-width.md`
+  is solved local residue:
+  PR `#180` is already merged on `main`, and
+  `pkg/service/cron_watcher.go` now narrows
+  `startCronWatchersForRuntime` to
+  `interfaces.RuntimeWorkstationLookup`.
+- Reconfirmed the other active lanes remain live:
+  the repository-owned `workspace-setup` worker and both fixture mirrors still
+  use `command: python`, the provider long-only helper cluster is still in
+  `tests/functional/providers/helpers_test.go`, and the
+  `gocoveragecheck` zero-coverage false-pass fix is still not merged.
+- The cleanup explorer found only a dedupe opportunity inside the same active
+  provider helper lane:
+  `tests/functional/providers/helpers_test.go` duplicates
+  `support.UpdateFactoryConfig` with `updateScriptFixtureFactory` and wraps
+  `support.WriteAgentConfig` with `writeNamedWorkerAgents`, so that reduction
+  should be folded into the existing provider-helper cleanup rather than
+  queued separately.
+- Revalidated the next future non-overlapping seams without widening the queue:
+  the long-only helper ownership mismatch still exists in
+  `tests/functional/guards_batch/helpers_test.go`, and the
+  process-review helper ownership mismatch still exists in
+  `tests/functional/workflow/helpers_test.go`.
+- Chose to update the meta worldview instead of dispatching another request
+  file, because the default one-idea contract is already exceeded for justified
+  reasons, the only newly surfaced simplification seam overlaps an active idea,
+  and the highest-value correction this cycle was queue truth around stale
+  solved residue.
+
+## 2026-05-10T01:03:15+09:00 - workflow seam validation and queue hold
+
+- Ran `git pull --ff-only` and confirmed `main` is still current at
+  `origin/main` `41bfb0a`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/README.md`, the current idea/task
+  request files, recent merged PRs, remote ownership branches, and the exact
+  live code behind the provider, guards-batch, workflow, workspace-setup, and
+  coverage-gate lanes.
+- Sent two delegated explorer agents:
+  one to decide whether the ask surface justified another request right now,
+  and one to validate the best next non-overlapping cleanup seam from the live
+  codebase.
+- Reconfirmed with direct reads plus delegated validation that the queue should
+  stay held:
+  `origin/ralph/fix-gocoveragecheck-zero-coverage-report-gap` still owns the
+  backend coverage-gate fix, `origin/ralph/audit-repository-against-2026-
+  website-and-backend-checklists` still owns the checklist audit lane, and
+  `ui/vite.config.ts` still enforces UI coverage thresholds above the
+  customer's `90%` target.
+- Reconfirmed the current provider-helper idea and the previously validated
+  guards-batch helper split still match live code.
+- Validated one additional future cleanup seam without queueing it:
+  `tests/functional/workflow/helpers_test.go` still keeps
+  `newAdhocProcessReviewHarness`, `assertProviderCallWorkstations`,
+  `assertDispatchHasOutputToPlace`, and `assertDispatchOutputTagAbsent` in the
+  default helper owner even though their callers remain only in
+  `//go:build functionallong`
+  `tests/functional/workflow/process_review_contract_long_test.go`.
+- Ran `go run ./cmd/deadcodecheck` and confirmed it still exits cleanly with
+  `[agent-factory:deadcode] baseline matches`, which means the workflow helper
+  split is a future deadcode-baseline cleanup seam rather than a new
+  ask-blocking failure.
+- Chose to update the meta worldview instead of dispatching another request
+  file because the queue is already wider than the default for justified
+  reasons, the ask-critical lanes remain actively owned, and the newly
+  validated workflow seam can wait behind the existing provider and
+  workspace-setup lanes.
+
+## 2026-05-10T00:00:00+09:00 - ask gate and queue hold refresh
+
+- Ran `git pull --rebase --autostash` and confirmed `main` is still current at
+  `origin/main` `41bfb0a`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/README.md`, the backend and website
+  standards, visible `factory/inputs/**` operating state, recent merged PRs,
+  and the exact code behind the current cleanup and ask lanes.
+- Sent two delegated explorer agents:
+  one to validate the best next narrow cleanup seam after the active ideas, and
+  one to check whether the customer-ask surface justified another immediate
+  coverage or checklist request.
+- Reconfirmed with direct code reads plus delegated verification that the next
+  non-overlapping cleanup seam is still
+  `tests/functional/guards_batch/helpers_test.go`:
+  `providerErrorCorpusEntryForTest` is only called from
+  `partial_batch_long_test.go`, `panickingExecutor` is only called from
+  `concurrency_limit_long_test.go`, and the existing tagged owner file
+  `helpers_long_test.go` keeps that future split narrow.
+- Verified the current ask-driven blocker directly with a live
+  `go run ./cmd/gocoveragecheck -min 80 -timeout 300s` run:
+  the command still reports `pkg/apisurface`, `pkg/buffers`, and
+  `pkg/cli/default` at `0.0%` coverage while exiting successfully with
+  `Go coverage 86.6% meets minimum 80.0%`.
+- Confirmed the current local ask lane already matches that failure:
+  `factory/inputs/task/default/fix-gocoveragecheck-zero-coverage-report-gap.md`
+  remains the right active task, and remote refs still include
+  `origin/ralph/fix-gocoveragecheck-zero-coverage-report-gap`.
+- Confirmed another broad checklist or website-coverage task would likely
+  duplicate existing ownership rather than narrow it:
+  `ui/vite.config.ts` already enforces UI coverage thresholds, remote refs
+  still include
+  `origin/ralph/audit-repository-against-2026-website-and-backend-checklists`,
+  and direct GitHub reads of `portpowered/checklists` still show the 2026
+  backend and website checklist documents tied to the active ask.
+- Chose to update the meta worldview instead of dispatching another request
+  file, because the repo already has two justified idea lanes plus the active
+  coverage-gate task, and the highest-value correction this cycle was queue
+  truth: fix the false-positive backend coverage gate before widening the ask
+  backlog.
+
+## 2026-05-09T21:31:00+09:00 - workspace-setup unblocker dispatch
+
+- Ran `git pull --ff-only` again and confirmed `main` is still current at
+  `origin/main` `41bfb0a`.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/README.md`, the backend and website
+  standards, visible `factory/inputs/**` operating state, recent merged
+  cleanup PRs, and the current checked-in workflow definitions under
+  `factory/`.
+- Re-validated that the active provider-helper cleanup idea is still correct:
+  the long-only helper cluster remains in
+  `tests/functional/providers/helpers_test.go`, every live caller still sits in
+  `tests/functional/providers/cli_template_resolution_long_test.go`, and there
+  is still no local dirtiness overlapping the provider or guards-batch helper
+  files.
+- Used a delegated explorer plus direct reads to confirm the best next helper
+  seam is still `tests/functional/guards_batch/helpers_test.go`, where
+  `providerErrorCorpusEntryForTest` and `panickingExecutor` remain long-only.
+- Found a higher-priority workflow blocker while tracing the active idea lane:
+  the checked-in `workspace-setup` worker still uses `command: python` in
+  `factory/workers/workspace-setup/AGENTS.md`, this machine has `python3` but
+  no `python`, the fresh local run in `test.jsonl` shows the active idea's
+  `setup-workspace` dispatch failing with
+  `exec: "python": executable file not found in $PATH`, and the checked-in
+  replay fixture in
+  `ui/integration/fixtures/terminal-summary-regression-replay.jsonl` preserves
+  the same failure shape.
+- Confirmed the same repository-owned `python` contract still appears in the
+  checked-in workflow mirrors under `tests/adhoc/factory/**` and
+  `tests/functional_test/testdata/idea_plan_execute_review_with_limits/**`,
+  so the failure is a live workflow seam rather than a one-off local mistake.
+- Dispatched one new non-overlapping standalone idea at
+  `factory/inputs/idea/default/canonicalize-workspace-setup-on-python3.md` to
+  canonicalize the repository-owned `setup-workspace` interpreter contract and
+  preserve behavioral verification at the workflow, CLI/config, and replay
+  boundaries.
+
+## 2026-05-09T21:03:32+09:00 - queue hold and seam validation
+
+- Ran `git pull` and confirmed the workspace is still current at `origin/main`
+  `41bfb0a`; no newer merge landed before this refresh.
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/README.md`, the backend and website
+  standards, visible `factory/inputs/**` operating state, recent git history,
+  and the exact code behind the active provider-helper cleanup lane.
+- Confirmed the active cleanup request remains valid and unowned:
+  every helper listed in
+  `factory/inputs/idea/default/split-functionallong-provider-template-helpers-from-default-support.md`
+  is still defined in `tests/functional/providers/helpers_test.go` and every
+  live caller remains in
+  `tests/functional/providers/cli_template_resolution_long_test.go`.
+- Used two delegated explorer agents plus direct reads to verify the next
+  non-overlapping seams after the current idea clears:
+  - `tests/functional/guards_batch/helpers_test.go` still owns
+    `providerErrorCorpusEntryForTest` and `panickingExecutor` even though only
+    `functionallong` callers remain in `partial_batch_long_test.go` and
+    `concurrency_limit_long_test.go`
+  - `ui/src/components/ui/classnames.ts` is still a duplicate of
+    `ui/src/lib/cx.ts`; the safe future cleanup is to delete the duplicate
+    `classnames.ts` path and repoint its clean consumers, not to delete
+    `ui/src/lib/cx.ts` while `terminal-work` is locally dirty
+- Chose not to dispatch another idea file because the canonical idea inbox is
+  already occupied by one valid standalone request and the workflow contract
+  still prefers one standalone idea by default.
+
+## 2026-05-09T21:03:32+09:00 - delegated seam verification
+
+- Ran another live refresh against `origin/main` and confirmed the workspace is
+  still current at `41bfb0a`; no newer merge landed between the prior refresh
+  and this pass.
+- Re-read the canonical ask surface, checked-in maintainer workflow contract,
+  visible `factory/inputs/**` operating state, open and merged PR ownership,
+  and the exact code in the current provider-helper seam.
+- Sent two delegated explorer agents to find narrow non-overlapping follow-up
+  cleanup seams while I continued validating queue truth locally.
+- Verified the queued idea remains the right active cleanup lane:
+  `tests/functional/providers/helpers_test.go` still owns a long-only helper
+  cluster called only from
+  `tests/functional/providers/cli_template_resolution_long_test.go`, and the
+  same ownership mismatch still appears in
+  `docs/internal/development/deadcode-baseline.txt`.
+- Directly verified one backend follow-up seam after the current idea clears:
+  `tests/functional/guards_batch/helpers_test.go` still keeps
+  `providerErrorCorpusEntryForTest` and `panickingExecutor` in the default
+  helper file even though only `functionallong` callers remain in
+  `partial_batch_long_test.go` and `concurrency_limit_long_test.go`.
+- Directly verified one UI follow-up seam after the current idea clears:
+  `ui/src/components/ui/classnames.ts` is byte-for-byte duplicate helper logic
+  of `ui/src/lib/cx.ts`, and the duplicate currently serves only
+  `ui/src/components/ui/widget-frame.tsx` plus the shared UI barrel export.
+- Chose not to dispatch another cleanup request because the canonical idea
+  inbox already contains one valid active standalone idea, and the checked-in
+  workflow contract prefers one standalone idea file by default over queueing
+  parallel idea residue.
+
+## 2026-05-09T20:03:02+09:00 - meta queue correction
+
+- Re-ran the live queue checks after the prior refresh and confirmed the
+  provider-helper cleanup was not merely a candidate seam; the ignored idea
+  file already exists at
+  `factory/inputs/idea/default/split-functionallong-provider-template-helpers-from-default-support.md`.
+- Verified by direct code reads and delegated explorer checks that this queued
+  idea still matches live `main`: the long-only helper cluster remains defined
+  in `tests/functional/providers/helpers_test.go`, its callers remain in
+  `tests/functional/providers/cli_template_resolution_long_test.go`, and the
+  same helper set is still present in
+  `docs/internal/development/deadcode-baseline.txt`.
+- Confirmed with live PR state that the provider-helper idea is not already
+  owned by an open or merged branch, while
+  `fix-gocoveragecheck-zero-coverage-report-gap` is still owned by open PR
+  `#179` and `simplify-cron-watcher-runtime-lookup-width` is stale merged
+  residue mapped to PR `#180`.
+- Chose to update the meta worldview instead of creating another request file,
+  because the highest-priority correction was queue truth: the canonical idea
+  inbox is currently occupied by one valid cleanup request, not empty.
+
+## 2026-05-09T19:02:55+09:00 - meta state refresh
+
+- Ran `git pull --ff-only` and confirmed the workspace is already current at
+  `origin/main` `41bfb0a`, which includes merged PR `#180`
+  (`simplify-cron-watcher-runtime-lookup-width`).
+- Re-read `factory/logs/meta/view.md`, `factory/logs/meta/progress.txt`,
+  `factory/logs/meta/asks.md`, `factory/README.md`, the backend and website
+  standards, the visible `factory/inputs/**` operating state, recent git
+  history, open PR state, and direct code in the candidate cleanup surfaces.
+- Corrected the stale worldview that said there were no active asks; the
+  canonical ask file is active again and restores the checklist, coverage,
+  simplification, and autonomous-maintainer backlog through `2026-05-25`.
+- Re-validated queue truth with both `git ls-files factory/inputs` and
+  `find factory/inputs -maxdepth 3 -type f`, confirming that git still tracks
+  only sentinels while ignored local operating state currently contains:
+  one active task file for `fix-gocoveragecheck-zero-coverage-report-gap` and
+  one stale merged residue file for `simplify-cron-watcher-runtime-lookup-width`.
+- Cross-checked backlog ownership against live PRs:
+  - open PR `#179` owns the `cmd/gocoveragecheck` zero-coverage gate lane
+  - open PR `#141` owns the checklist audit lane
+  - open PRs `#167`, `#171`, and `#172` still own their prior UI and
+    same-trace surfaces
+  - the many `docs: refresh meta world state` PRs remain duplicate meta-refresh
+    residue rather than code-cleanup ownership signals
+- Replaced the now-merged smoke-helper worldview with a fresh direct-code seam:
+  `tests/functional/providers/helpers_test.go` currently mixes default-build
+  helpers with helpers used only by
+  `tests/functional/providers/cli_template_resolution_long_test.go`, which
+  keeps live long-lane helper symbols in the deadcode baseline even though the
+  long suite still calls them.
+- Queued one new standalone ignored idea file for that provider-helper
+  ownership seam under `factory/inputs/idea/default/`, keeping the request
+  narrow, implementation-ready, and non-overlapping with open PRs.
+
 ## Codebase Patterns
 
 - When the canonical local ask file is reduced to `for now no asks exists.`,
