@@ -10,8 +10,13 @@ You are an autonomous coding agent working on a software project.
 2. Read the progress log at `progress.txt` 
 3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
 4. Do the following: 
-4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. 
+4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. Use PR conversation comments as the single feedback channel for this workflow.
 4.2. Pick the **highest priority** user story where `passes: false`, 
+4.3. Feedback operations are unified across `process` and `review`:
+   - Read feedback from PR conversation comments only.
+   - Use `gh pr view --comments` or the PR issue-comments API to inspect existing feedback.
+   - Reply in PR conversation comments when reporting what you changed.
+   - Do not rely on review threads, pull-review comments, `gh pr review`, or comment-thread resolution state when deciding whether feedback exists or has been addressed.
 5. Follow these implementation rules:
 5.1. Solve correctness first before style or preference.
 5.2. Keep changes tightly aligned with the selected story and do not widen into unrelated cleanup unless the PRD explicitly calls for it.
@@ -35,10 +40,10 @@ You are an autonomous coding agent working on a software project.
 15. Push the branch after each successful code/doc commit that is intended for review.
 16. After pushing, reconcile the PR state:
 16.1. If there is no existing PR and all tasks in the current PRD are complete, create the PR for the branch, named {{ (index .Inputs 0).Name }}. Set the description as the prd.json file that we used.
-16.2. If a PR already exists, update it by pushing the new commit(s) and, if relevant, reply to or resolve the addressed review comments.
+16.2. If a PR already exists, update it by pushing the new commit(s) and, if relevant, reply in PR conversation comments describing which feedback items were addressed.
 16.3. Verify that the reviewed code changes are actually present in the PR diff after the push. 
 17. Respond finally as follows: 
-17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all PR comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.
+17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all relevant PR conversation comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.
 17.2. Respond `<CONTINUE>` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.
 17.3. Do not use rejection to mean "more executor work remains". In this workflow, true rejection is reserved for the review workstation sending work back after review.
 

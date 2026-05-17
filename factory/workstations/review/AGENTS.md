@@ -9,7 +9,11 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
 
 ### Step 1 — Gather context
 1. Read prd.json to understand what was implemented
-2. Apply these review rules in order:
+2. Use PR conversation comments as the single feedback channel for this workflow:
+   - Read existing feedback from `gh pr view --comments` or the PR issue-comments API.
+   - Post review feedback with `gh pr comment`.
+   - Do not rely on review threads, pull-review comments, `gh pr review`, or comment-thread resolution state as the source of truth for whether feedback exists.
+3. Apply these review rules in order:
    - review correctness before style or preference
    - verify the change solves the stated problem without obvious regressions
    - check architecture and dependency fit
@@ -18,9 +22,9 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
    - treat hallucinated APIs, stale patterns, hidden side effects, and subtle edge cases in AI-authored code as high-risk review targets
    - request changes for correctness issues, security issues, missing required tests, prompt-rule violations, hidden side effects, dead code, or oversized unclear helpers
    - approve only when the change is correct, adequately tested, and within the defined expectations
-3. Run: gh pr diff $prNumber  — to see the full diff
-4. Read the changed files to understand the implementation in full
-5. Read surrounding codebase code (the code the PR touches) to check for pattern conformance
+4. Run: gh pr diff $prNumber  — to see the full diff
+5. Read the changed files to understand the implementation in full
+6. Read surrounding codebase code (the code the PR touches) to check for pattern conformance
 
 ### Step 2 — Run quality checks
 Run: make test
