@@ -5,10 +5,18 @@ package guards_batch
 import (
 	"context"
 	"sync"
+	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.ProviderErrorCorpusEntry {
+	t.Helper()
+	return support.ProviderErrorCorpusEntry(t, name)
+}
 
 type failOnNthPageExecutor struct {
 	mu     sync.Mutex
