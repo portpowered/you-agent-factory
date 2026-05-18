@@ -39,10 +39,12 @@ export function WorkstationDetailCard({
   headerAction,
   locale,
   now,
+  onSelectProviderSession,
   onSelectWorkID,
   onSelectWorkstationRequest,
   providerSessions,
   saveState,
+  selectedProviderSessionKey,
   selectedRequest,
   selectedWorkID,
   selectedNode,
@@ -107,6 +109,7 @@ export function WorkstationDetailCard({
           expandActionLabel={messages.expandAction}
           historyItemCountLabel={messages.historyRunCountLabel}
           messages={messages}
+          onSelectProviderSession={onSelectProviderSession}
           onSelectWorkID={onSelectWorkID}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
           renderHeading={(attempt) =>
@@ -114,6 +117,7 @@ export function WorkstationDetailCard({
             messages.unknownWorkLabel
           }
           resetKey={selectedNode.node_id}
+          selectedProviderSessionKey={selectedProviderSessionKey}
           selectedRequestDispatchID={selectedRequest?.dispatch_id}
           selectedWorkID={selectedWorkID}
           title={messages.runHistoryHeading}

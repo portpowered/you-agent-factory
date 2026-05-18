@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import {
   buildDashboardInferenceAttemptFixture,
@@ -265,6 +266,93 @@ describe("CurrentSelectionWidget", () => {
     expect(
       within(currentSelection).queryByRole("heading", {
         name: "Work session runs list",
+      }),
+    ).toBeNull();
+  });
+
+  it("selects a provider-session card without changing the selected work item detail", async () => {
+    const user = userEvent.setup();
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const dispatchId = "dispatch-review-active";
+    const execution =
+      snapshot.runtime.active_executions_by_dispatch_id?.[dispatchId];
+    const workItem = execution?.work_items?.[0];
+
+    if (!execution || !workItem || !selectedNode) {
+      throw new Error(
+        "expected current-selection fixture for provider-session selection",
+      );
+    }
+
+    const selection: DashboardSelection = {
+      dispatchId,
+      execution,
+      kind: "work-item",
+      nodeId: selectedNode.node_id,
+      workItem,
+    };
+    const providerSessions = [
+      {
+        dispatch_id: dispatchId,
+        outcome: "ACCEPTED",
+        provider_session: {
+          id: "sess_active",
+          kind: "session_id",
+          provider: "codex",
+        },
+        transition_id: selectedNode.transition_id,
+        work_items: [workItem],
+        workstation_name: selectedNode.workstation_name,
+      },
+    ];
+    const executionDetails = selectWorkItemExecutionDetails({
+      activeExecution: execution,
+      dispatchID: dispatchId,
+      inferenceAttemptsByDispatchID:
+        snapshot.runtime.inference_attempts_by_dispatch_id,
+      providerSessions,
+      selectedNode,
+      workItem,
+      workstationRequestsByDispatchID:
+        snapshot.runtime.workstation_requests_by_dispatch_id,
+    });
+
+    render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selectedWorkDispatchAttempts: providerSessions,
+          selectedWorkProviderSessions: providerSessions,
+          selection,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={executionDetails}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const selectSessionButton = within(currentSelection).getByRole("button", {
+      name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+    });
+
+    expect(selectSessionButton.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(selectSessionButton);
+
+    expect(within(currentSelection).getByText(workItem.work_id)).toBeTruthy();
+    expect(
+      within(currentSelection)
+        .getByRole("button", {
+          name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+        })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(currentSelection).queryByRole("heading", {
+        name: "Request details",
       }),
     ).toBeNull();
   });

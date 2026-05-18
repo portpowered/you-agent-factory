@@ -15,6 +15,7 @@ import type {
 } from "../../api/dashboard/types";
 import type { EditableWorkstationValues } from "../current-factory-definition/workstation-editable-values";
 import type { WorkstationDetailMessages } from "./messages";
+import type { LoadableProviderSessionRef } from "./provider-session-details";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { DashboardWorkItemSelection } from "./types";
 
@@ -82,9 +83,11 @@ export interface WorkItemDetailCardProps {
   activeTraceID?: string | null;
   dispatchAttempts: DashboardProviderSessionAttempt[];
   executionDetails: SelectedWorkItemExecutionDetails;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedNode?: DashboardWorkstationNode | null;
+  selectedProviderSessionKey?: string | null;
   selection: DashboardWorkItemSelection;
   selectedTrace?: DashboardTrace;
   workstationRequests: SelectedWorkRequestHistoryItem[];
@@ -98,11 +101,13 @@ export interface WorkstationDetailCardProps {
   headerAction?: ReactNode;
   locale?: string;
   now: number;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
   providerSessions: DashboardProviderSessionAttempt[];
   saveState?: EditableWorkstationSaveState;
   selectedWorkID?: string | null;
+  selectedProviderSessionKey?: string | null;
   selectedRequest?: DashboardWorkstationRequest | null;
   selectedNode: DashboardWorkstationNode;
   workstationRequests?: DashboardWorkstationRequest[];
@@ -187,16 +192,22 @@ export interface ProviderSessionAttemptsProps {
     | "openRequestDetailsAction"
     | "providerSessionLogAction"
     | "providerSessionLogUnavailable"
+    | "providerSessionSelectedAction"
+    | "providerSessionSelectAction"
+    | "providerSessionSelectionUnavailable"
     | "requestDetailsUnavailable"
     | "requestSelectedAction"
+    | "selectProviderSessionLabel"
     | "selectWorkItemLabel"
     | "selectWorkstationRequestLabel"
     | "workDetailsUnavailable"
     | "workSelectedAction"
   >;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
   renderHeading: (attempt: DashboardProviderSessionAttempt) => string;
+  selectedProviderSessionKey?: string | null;
   selectedRequestDispatchID?: string | null;
   selectedWorkID?: string | null;
   workstationKind?: string;
@@ -223,9 +234,11 @@ export interface SelectedWorkDispatchHistorySectionProps {
   activeTraceID?: string | null;
   currentDispatchID?: string | null;
   fallbackProviderSessions: DashboardProviderSessionAttempt[];
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   requests: SelectedWorkRequestHistoryItem[];
+  selectedProviderSessionKey?: string | null;
   selectedWorkID: string;
   traceTargetId: string;
   workstationKind?: string;

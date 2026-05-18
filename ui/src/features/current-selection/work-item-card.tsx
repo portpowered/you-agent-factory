@@ -20,9 +20,11 @@ export function WorkItemDetailCard({
   activeTraceID,
   dispatchAttempts,
   executionDetails,
+  onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
   selectedNode,
+  selectedProviderSessionKey,
   selection,
   selectedTrace,
   workstationRequests,
@@ -80,9 +82,11 @@ export function WorkItemDetailCard({
         activeTraceID={activeTraceID}
         currentDispatchID={selection.dispatchId}
         fallbackProviderSessions={dispatchAttempts}
+        onSelectProviderSession={onSelectProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
         requests={workstationRequests}
+        selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selection.workItem.work_id}
         traceTargetId={traceTargetId}
         workstationKind={selectedNode?.workstation_kind}
