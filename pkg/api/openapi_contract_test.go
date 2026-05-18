@@ -546,6 +546,16 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 	assertResponseSchemaRef(t, currentFactory, "200", "#/components/schemas/Factory")
 	assertResponseRef(t, currentFactory, "404", "#/components/responses/CurrentFactoryNotFound")
 
+	getEditableFactory := pathOperation(t, paths, "/factory/~current/editable-definition", "get")
+	assertResponseSchemaRef(t, getEditableFactory, "200", "#/components/schemas/EditableFactoryDefinition")
+	assertResponseRef(t, getEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+
+	saveEditableFactory := pathOperation(t, paths, "/factory/~current/editable-definition", "put")
+	assertResponseSchemaRef(t, saveEditableFactory, "200", "#/components/schemas/EditableFactoryDefinition")
+	assertResponseRef(t, saveEditableFactory, "400", "#/components/responses/SaveEditableFactoryDefinitionBadRequest")
+	assertResponseRef(t, saveEditableFactory, "409", "#/components/responses/SaveEditableFactoryDefinitionConflict")
+	assertResponseRef(t, saveEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+
 	components, ok := doc["components"].(map[string]any)
 	if !ok {
 		t.Fatalf("components object is missing")
@@ -565,6 +575,12 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 	})
 	assertResponseExampleCodeFamilies(t, responses, "CurrentFactoryNotFound", map[string]string{
 		"NOT_FOUND": "NOT_FOUND",
+	})
+	assertResponseExampleCodeFamilies(t, responses, "SaveEditableFactoryDefinitionBadRequest", map[string]string{
+		"INVALID_FACTORY": "BAD_REQUEST",
+	})
+	assertResponseExampleCodeFamilies(t, responses, "SaveEditableFactoryDefinitionConflict", map[string]string{
+		"FACTORY_NOT_IDLE": "CONFLICT",
 	})
 }
 

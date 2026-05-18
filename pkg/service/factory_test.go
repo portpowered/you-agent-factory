@@ -816,6 +816,80 @@ func TestFactoryService_GetCurrentNamedFactory_ReadsDurablePointerAndCanonicalPa
 	}
 }
 
+func TestFactoryService_GetEditableFactoryDefinition_IncludesVersionMetadata(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	editable, err := svc.GetEditableFactoryDefinition(context.Background())
+	if err != nil {
+		t.Fatalf("GetEditableFactoryDefinition: %v", err)
+	}
+	if editable.FactoryDefinition.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("editable factory name = %q, want alpha", editable.FactoryDefinition.Name)
+	}
+	if editable.Version.Logical <= 0 || editable.Version.Physical.IsZero() {
+		t.Fatalf("editable version = %#v, want logical and physical components", editable.Version)
+	}
+}
+
+func TestFactoryService_SaveEditableFactoryDefinition_ReplacesCurrentDefinition(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "alpha", "story")
+	saved, err := svc.SaveEditableFactoryDefinition(context.Background(), factoryapi.SaveEditableFactoryDefinitionRequest{
+		FactoryDefinition: replacement,
+	})
+	if err != nil {
+		t.Fatalf("SaveEditableFactoryDefinition: %v", err)
+	}
+	if saved.FactoryDefinition.WorkTypes == nil || len(*saved.FactoryDefinition.WorkTypes) != 1 || (*saved.FactoryDefinition.WorkTypes)[0].Name != "story" {
+		t.Fatalf("saved work types = %#v, want story", saved.FactoryDefinition.WorkTypes)
+	}
+	if saved.Version.Logical <= 0 || saved.Version.Physical.IsZero() {
+		t.Fatalf("saved version = %#v, want logical and physical components", saved.Version)
+	}
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory after save: %v", err)
+	}
+	if current.WorkTypes == nil || (*current.WorkTypes)[0].Name != "story" {
+		t.Fatalf("current work types after save = %#v, want story", current.WorkTypes)
+	}
+	assertCurrentFactoryPointer(t, rootDir, "alpha", "after editable save")
+}
+
 func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledFilesFromDisk(t *testing.T) {
 	rootDir := t.TempDir()
 

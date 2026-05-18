@@ -739,6 +739,110 @@ func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 	}
 }
 
+func TestGetEditableCurrentFactoryDefinition_ReturnsDefinitionAndVersion(t *testing.T) {
+	versionTime := time.Date(2026, 5, 18, 10, 30, 0, 0, time.UTC)
+	mf := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{
+			Name: factoryapi.FactoryName("beta"),
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "beta-task",
+				States: []factoryapi.WorkState{
+					{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+					{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+				},
+			}},
+		},
+		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{
+			Logical:  42,
+			Physical: versionTime,
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/factory/~current/editable-definition", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var editable factoryapi.EditableFactoryDefinition
+	if err := json.NewDecoder(rec.Body).Decode(&editable); err != nil {
+		t.Fatalf("decode editable factory response: %v", err)
+	}
+	if editable.FactoryDefinition.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("editable factory name = %q, want beta", editable.FactoryDefinition.Name)
+	}
+	if editable.Version.Logical != 42 || !editable.Version.Physical.Equal(versionTime) {
+		t.Fatalf("editable version = %#v, want logical 42 physical %s", editable.Version, versionTime)
+	}
+}
+
+func TestSaveEditableCurrentFactoryDefinition_SubmitsCompleteDefinitionAndReturnsVersion(t *testing.T) {
+	versionTime := time.Date(2026, 5, 18, 10, 45, 0, 0, time.UTC)
+	mf := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{Name: factoryapi.FactoryName("beta")},
+		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{
+			Logical:  44,
+			Physical: versionTime,
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"factoryDefinition":{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.SavedEditableFactories) != 1 {
+		t.Fatalf("saved editable factories = %d, want 1", len(mf.SavedEditableFactories))
+	}
+	saved := mf.SavedEditableFactories[0].FactoryDefinition
+	if saved.Metadata == nil || (*saved.Metadata)["owner"] != "graph-editor" {
+		t.Fatalf("saved metadata = %#v, want owner graph-editor", saved.Metadata)
+	}
+
+	var editable factoryapi.EditableFactoryDefinition
+	if err := json.NewDecoder(rec.Body).Decode(&editable); err != nil {
+		t.Fatalf("decode save editable factory response: %v", err)
+	}
+	if editable.Version.Logical != 44 || !editable.Version.Physical.Equal(versionTime) {
+		t.Fatalf("save editable version = %#v, want logical 44 physical %s", editable.Version, versionTime)
+	}
+}
+
+func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrInvalidNamedFactory})
+
+	body := `{"factoryDefinition":{"name":"beta"}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("INVALID_FACTORY") {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", response.Code)
+	}
+	if response.Message != "Factory payload is not a valid Agent Factory definition." {
+		t.Fatalf("error message = %q", response.Message)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "form" || response.Targets == nil || (*response.Targets)[0].Field == nil || *(*response.Targets)[0].Field != "factoryDefinition" {
+		t.Fatalf("error targets = %#v, want form factoryDefinition target", response.Targets)
+	}
+}
+
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CreateNamedFactoryErr: factoryconfig.ErrNamedFactoryAlreadyExists,

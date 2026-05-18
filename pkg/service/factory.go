@@ -1251,6 +1251,95 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 	return fs.serializeNamedFactory(namedFactory.Name, created, false)
 }
 
+// GetEditableFactoryDefinition returns the complete current factory definition
+// with persisted version metadata for graph-editor draft saves.
+func (fs *FactoryService) GetEditableFactoryDefinition(ctx context.Context) (factoryapi.EditableFactoryDefinition, error) {
+	current, err := fs.GetCurrentNamedFactory(ctx)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	version, err := fs.currentFactoryDefinitionVersion(current.Name)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	return factoryapi.EditableFactoryDefinition{
+		FactoryDefinition: current,
+		Version:           version,
+	}, nil
+}
+
+// SaveEditableFactoryDefinition replaces the current named-factory definition
+// with a complete submitted Factory payload and activates the resulting runtime.
+func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error) {
+	if fs == nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("factory service is required")
+	}
+
+	current, err := fs.GetCurrentNamedFactory(ctx)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if current.Name == apisurface.DefaultCurrentFactoryName {
+		return factoryapi.EditableFactoryDefinition{}, ErrCurrentNamedFactoryNotFound
+	}
+	if request.FactoryDefinition.Name != current.Name {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
+	}
+	if err := apisurface.ValidateWritableNamedFactoryName(request.FactoryDefinition.Name); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	payload, err := json.Marshal(request.FactoryDefinition)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("marshal editable factory payload: %w", err)
+	}
+
+	fs.activationMu.Lock()
+	defer fs.activationMu.Unlock()
+
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	factoryDir, err := factoryconfig.ReplaceNamedFactory(rootDir, string(request.FactoryDefinition.Name), payload)
+	if err != nil {
+		switch {
+		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
+			return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+		default:
+			return factoryapi.EditableFactoryDefinition{}, err
+		}
+	}
+
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %v", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
+	}
+	if err := fs.requireIdleRuntime(ctx); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if err := fs.activateReplacementRuntime(ctx, rootDir, string(request.FactoryDefinition.Name), replacement); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	saved, err := fs.GetCurrentNamedFactory(ctx)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	version, err := fs.currentFactoryDefinitionVersion(saved.Name)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	return factoryapi.EditableFactoryDefinition{
+		FactoryDefinition: saved,
+		Version:           version,
+	}, nil
+}
+
 // WaitToComplete returns a channel that is closed when all tokens reach
 // terminal or failed places and no dispatches are in flight. Delegates to
 // the underlying factory's termination signal.
@@ -1314,6 +1403,36 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	}
 
 	return fs.serializeNamedFactory(factoryapi.FactoryName(name), current, true)
+}
+
+func (fs *FactoryService) currentFactoryDefinitionVersion(name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+
+	factoryDir := rootDir
+	if name != apisurface.DefaultCurrentFactoryName {
+		resolved, err := factoryconfig.ResolveNamedFactoryDir(rootDir, string(name))
+		if err != nil {
+			return factoryapi.HybridLogicalTimestamp{}, err
+		}
+		factoryDir = resolved
+	}
+
+	info, err := os.Stat(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("stat current factory definition: %w", err)
+	}
+	modified := info.ModTime().UTC()
+	logical := modified.UnixNano()
+	if logical < 0 {
+		logical = 0
+	}
+	return factoryapi.HybridLogicalTimestamp{
+		Logical:  logical,
+		Physical: modified,
+	}, nil
 }
 
 func (fs *FactoryService) serializeNamedFactory(

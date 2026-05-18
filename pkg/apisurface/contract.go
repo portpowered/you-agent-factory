@@ -16,6 +16,8 @@ type APISurface interface {
 	factory.APIFactory
 	CreateNamedFactory(ctx context.Context, namedFactory factoryapi.Factory) (factoryapi.Factory, error)
 	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
+	GetEditableFactoryDefinition(ctx context.Context) (factoryapi.EditableFactoryDefinition, error)
+	SaveEditableFactoryDefinition(ctx context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error)
 }
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was

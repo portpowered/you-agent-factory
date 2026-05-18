@@ -179,6 +179,58 @@ func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, namedFactory)
 }
 
+func (s *Server) GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
+	editable, err := s.runtime.GetEditableFactoryDefinition(r.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
+			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
+			return
+		default:
+			s.logger.Error("get editable current factory definition failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to load editable current factory definition", "INTERNAL_ERROR")
+			return
+		}
+	}
+	s.writeJSON(w, http.StatusOK, editable)
+}
+
+func (s *Server) SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeSaveEditableFactoryDefinitionBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")})
+			return
+		}
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")})
+		return
+	}
+
+	saved, err := s.runtime.SaveEditableFactoryDefinition(r.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
+			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
+			return
+		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.ErrorTarget{errorTarget("field", "", "factoryDefinition.name")})
+			return
+		case errors.Is(err, apisurface.ErrInvalidNamedFactory):
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")})
+			return
+		case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
+			s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.ErrorTarget{errorTarget("save", "active-work", "")})
+			return
+		default:
+			s.logger.Error("save editable current factory definition failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to save editable current factory definition", "INTERNAL_ERROR")
+			return
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, saved)
+}
+
 func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factoryapi.ListWorkParams) {
 	if params.StateType != nil && !validWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
 		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
@@ -675,11 +727,31 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (s *Server) writeError(w http.ResponseWriter, status int, message, code string) {
+	s.writeErrorWithTargets(w, status, message, code, nil)
+}
+
+func (s *Server) writeErrorWithTargets(w http.ResponseWriter, status int, message, code string, targets []factoryapi.ErrorTarget) {
+	var targetPtr *[]factoryapi.ErrorTarget
+	if len(targets) > 0 {
+		targetPtr = &targets
+	}
 	s.writeJSON(w, status, factoryapi.ErrorResponse{
 		Message: message,
 		Family:  errorFamilyForStatus(status),
 		Code:    factoryapi.ErrorResponseCode(code),
+		Targets: targetPtr,
 	})
+}
+
+func errorTarget(kind, id, field string) factoryapi.ErrorTarget {
+	target := factoryapi.ErrorTarget{Kind: kind}
+	if id != "" {
+		target.Id = &id
+	}
+	if field != "" {
+		target.Field = &field
+	}
+	return target
 }
 
 func (s *Server) writeSSEDataJSON(w http.ResponseWriter, v any) error {
@@ -946,6 +1018,28 @@ func decodeNamedFactoryBody(body io.Reader) (factoryapi.CreateFactoryJSONRequest
 			return factoryapi.CreateFactoryJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
 		}
 		return factoryapi.CreateFactoryJSONRequestBody{}, err
+	}
+	return req, nil
+}
+
+func decodeSaveEditableFactoryDefinitionBody(body io.Reader) (factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
+	var req factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody
+	if err := decoder.Decode(&req); err != nil {
+		return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, requestFieldValidationError{message: "request payload must contain one JSON object"}
+		}
+		return factoryapi.SaveEditableCurrentFactoryDefinitionJSONRequestBody{}, err
 	}
 	return req, nil
 }

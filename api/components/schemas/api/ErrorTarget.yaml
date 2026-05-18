@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+properties:
+  kind:
+    type: string
+    description: Client-visible target category such as form, node, edge, field, or save.
+  id:
+    type: string
+    description: Optional graph entity, relationship, or save condition identifier.
+  field:
+    type: string
+    description: Optional request or form field path associated with the error.

@@ -266,6 +266,51 @@ paths:
           $ref: '#/components/responses/CurrentFactoryNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory/~current/editable-definition:
+    get:
+      tags:
+        - Factory
+      operationId: getEditableCurrentFactoryDefinition
+      summary: Get editable current factory definition
+      description: Returns the complete current factory definition for graph editing together with hybrid logical timestamp metadata clients must carry into saves for stale-edit detection.
+      responses:
+        '200':
+          description: Editable current factory definition and version metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditableFactoryDefinition'
+        '404':
+          $ref: '#/components/responses/CurrentFactoryNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+        - Factory
+      operationId: saveEditableCurrentFactoryDefinition
+      summary: Save editable current factory definition
+      description: Submits one complete replacement for the current factory definition. The payload preserves all untouched fields because the full Factory contract is saved through the same canonical factory persistence path used by named-factory activation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveEditableFactoryDefinitionRequest'
+      responses:
+        '200':
+          description: Saved editable factory definition and new version metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditableFactoryDefinition'
+        '400':
+          $ref: '#/components/responses/SaveEditableFactoryDefinitionBadRequest'
+        '404':
+          $ref: '#/components/responses/CurrentFactoryNotFound'
+        '409':
+          $ref: '#/components/responses/SaveEditableFactoryDefinitionConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   parameters:
     MaxResults:
@@ -378,6 +423,38 @@ components:
                 message: Current named factory not found.
                 family: NOT_FOUND
                 code: NOT_FOUND
+    SaveEditableFactoryDefinitionBadRequest:
+      description: Editable factory definition save request failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidFactory:
+              summary: Factory payload failed validation.
+              value:
+                message: Factory payload is not a valid Agent Factory definition.
+                family: BAD_REQUEST
+                code: INVALID_FACTORY
+                targets:
+                  - kind: form
+                    field: factoryDefinition
+    SaveEditableFactoryDefinitionConflict:
+      description: Editable factory definition could not be saved because the runtime or submitted version is not safe to replace.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            factoryNotIdle:
+              summary: Runtime is not idle.
+              value:
+                message: Current factory runtime must be idle before activation.
+                family: CONFLICT
+                code: FACTORY_NOT_IDLE
+                targets:
+                  - kind: save
+                    id: active-work
     InternalError:
       description: Server failed while reading or building runtime state.
       content:
@@ -635,6 +712,63 @@ components:
             - Current factory runtime is not idle and cannot activate a new named factory.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
+        targets:
+          type: array
+          description: Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages.
+          items:
+            $ref: '#/components/schemas/ErrorTarget'
+    ErrorTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          description: Client-visible target category such as form, node, edge, field, or save.
+        id:
+          type: string
+          description: Optional graph entity, relationship, or save condition identifier.
+        field:
+          type: string
+          description: Optional request or form field path associated with the error.
+    HybridLogicalTimestamp:
+      type: object
+      additionalProperties: false
+      required:
+        - logical
+        - physical
+      properties:
+        logical:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monotonic Lamport-style logical component derived from the persisted factory definition version.
+        physical:
+          type: string
+          format: date-time
+          description: UTC physical timestamp component for the persisted factory definition version.
+    EditableFactoryDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - factoryDefinition
+        - version
+      properties:
+        factoryDefinition:
+          $ref: '#/components/schemas/Factory'
+        version:
+          $ref: '#/components/schemas/HybridLogicalTimestamp'
+    SaveEditableFactoryDefinitionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - factoryDefinition
+      properties:
+        factoryDefinition:
+          $ref: '#/components/schemas/Factory'
+        baseVersion:
+          $ref: '#/components/schemas/HybridLogicalTimestamp'
     ProviderSessionDetailResponse:
       type: object
       additionalProperties: false
