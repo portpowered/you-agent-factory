@@ -226,9 +226,9 @@ function ConsumedWorkItemsSection({
   }
 
   return (
-    <div className="grid gap-[0.3rem]">
+    <div className="grid gap-1">
       <span>Consumed work items</span>
-      <div className="flex flex-wrap gap-[0.45rem]">
+      <div className="flex flex-wrap gap-2">
         {workItems.map((workItem) => {
           const workLabel = formatWorkItemLabel(workItem);
           const isSelected = selectedWorkID === workItem.work_id;
@@ -291,7 +291,7 @@ function ScriptRequestFields({
       </div>
       <div>
         <dt>Resolved args</dt>
-        <dd className="grid gap-[0.25rem]">
+        <dd className="grid gap-1">
           {scriptRequest.args && scriptRequest.args.length > 0 ? (
             scriptRequest.args.map((arg: string) => (
               <code className={RUNTIME_DETAIL_CODE_CLASS} key={arg}>
@@ -433,7 +433,7 @@ function TraceIDField({
   return (
     <div>
       <dt>Trace IDs</dt>
-      <dd className="grid gap-[0.25rem]">
+      <dd className="grid gap-1">
         {traceIDs && traceIDs.length > 0 ? (
           traceIDs.map((traceId: string) => (
             <code className={RUNTIME_DETAIL_CODE_CLASS} key={traceId}>

@@ -50,28 +50,28 @@ interface TimingTrendCardProps {
 }
 
 const TREND_TOOLBAR_CLASS =
-  "mb-4 flex items-start justify-between gap-3 max-[720px]:flex-col";
+  "mb-4 flex flex-col items-start justify-between gap-3 md:flex-row";
 const TREND_RANGE_LABEL_CLASS =
-  "grid shrink-0 basis-[8.5rem] gap-1 max-[720px]:w-full max-[720px]:basis-auto";
+  "grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36";
 const TREND_RANGE_TEXT_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const TREND_RANGE_SELECT_CLASS = cx(
-  "rounded-lg border border-af-accent/35 bg-af-canvas/82 px-[0.55rem] py-[0.45rem] text-af-ink",
+  "rounded-lg border border-af-accent/35 bg-af-canvas/82 px-2 py-2 text-af-ink",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const TREND_SUMMARY_CLASS =
   cx(
-    "mb-4 grid grid-cols-3 gap-3 max-[720px]:grid-cols-1 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-af-overlay/8 [&_div]:bg-af-overlay/4 [&_div]:p-[0.7rem] [&_dt]:mb-1",
+    "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-af-overlay/8 [&_div]:bg-af-overlay/4 [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
     DASHBOARD_SUPPORTING_LABELS_CLASS,
   );
 const TREND_CHART_CLASS = cx(DASHBOARD_CHART_SURFACE_CLASS, "min-h-44 border border-af-overlay/8");
-const TREND_CAUSE_LIST_CLASS = "mt-4 grid list-none gap-[0.55rem] p-0";
+const TREND_CAUSE_LIST_CLASS = "mt-4 grid list-none gap-2 p-0";
 const TREND_CAUSE_ITEM_CLASS =
-  "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/7 bg-af-overlay/4 px-[0.7rem] py-[0.6rem]";
+  "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/7 bg-af-overlay/4 px-3 py-2.5";
 const TREND_CAUSE_LABEL_CLASS = cx(
   "min-w-0 text-af-ink/78 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
-const TIMING_RANGE_SUMMARY_CLASS = cx(TREND_SUMMARY_CLASS, "mt-[0.85rem] grid-cols-2");
+const TIMING_RANGE_SUMMARY_CLASS = cx(TREND_SUMMARY_CLASS, "mt-3 md:grid-cols-2");
 const TREND_SUMMARY_TERM_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const TREND_SUMMARY_VALUE_CLASS = WIDGET_SUBTITLE_CLASS;
 const FAILURE_TREND_CHART_STYLE = getDashboardChartSemanticStyle("failureTrend");

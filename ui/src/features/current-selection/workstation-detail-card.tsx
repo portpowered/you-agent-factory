@@ -149,10 +149,10 @@ function CollapsibleWorkstationRequests({
   return (
     <section
       aria-labelledby={`${historyID}-heading`}
-      className="mt-4 grid gap-[0.65rem]"
+      className="mt-4 grid gap-2.5"
     >
       <div className={HISTORY_HEADER_CLASS}>
-        <div className="grid min-w-0 gap-[0.18rem]">
+        <div className="grid min-w-0 gap-1">
           <h4
             className={DASHBOARD_SECTION_HEADING_CLASS}
             id={`${historyID}-heading`}
@@ -179,7 +179,7 @@ function CollapsibleWorkstationRequests({
         </button>
       </div>
       {expanded ? (
-        <div className="grid gap-[0.8rem]" id={historyID}>
+        <div className="grid gap-3" id={historyID}>
           {requests.length > 0 ? (
             requests.map((request) => {
               const requestLabel =
@@ -207,13 +207,13 @@ function CollapsibleWorkstationRequests({
                   className={PROVIDER_SESSION_CARD_CLASS}
                   key={request.dispatch_id}
                 >
-                  <div className="flex items-start justify-between gap-[0.8rem]">
+                  <div className="flex items-start justify-between gap-3">
                     <strong>{requestLabel}</strong>
                     <span className={EXECUTION_PILL_CLASS}>
                       {request.dispatch_id}
                     </span>
                   </div>
-                  <div className="mt-[0.45rem] grid gap-[0.18rem]">
+                  <div className="mt-2 grid gap-1">
                     <p
                       className={cx(
                         "m-0 text-af-ink/70",
@@ -282,12 +282,12 @@ function WorkstationActiveWorkList({
   workstationRequestsByDispatchID,
 }: WorkstationActiveWorkListProps) {
   return (
-    <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
+    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.activeWorkHeading}
       </h4>
       {executions.length > 0 ? (
-        <ul className="m-0 grid list-none gap-[0.65rem] p-0">
+        <ul className="m-0 grid list-none gap-2.5 p-0">
           {executions.flatMap((execution) => {
             const workItems =
               execution.work_items && execution.work_items.length > 0
@@ -309,7 +309,7 @@ function WorkstationActiveWorkList({
               return (
                 <li
                   className={cx(
-                    "grid min-w-0 gap-[0.45rem] rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2",
+                    "grid min-w-0 gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
                   key={`${execution.dispatch_id}-${workIdentifier}`}
@@ -319,7 +319,7 @@ function WorkstationActiveWorkList({
                   </strong>
                   <dl
                     className={cx(
-                      "m-0 grid gap-[0.35rem] [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5.5rem_minmax(0,1fr)] [&_div]:gap-2",
+                      "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5.5rem_minmax(0,1fr)] [&_div]:gap-2",
                       DASHBOARD_BODY_TEXT_CLASS,
                     )}
                   >
