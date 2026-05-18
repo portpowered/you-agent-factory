@@ -187,6 +187,7 @@ describe("WorkChart", () => {
     expect(within(chart).getByText("Queued")).toBeTruthy();
     expect(within(chart).getByText("In-flight")).toBeTruthy();
     expect(within(chart).getByText("Completed")).toBeTruthy();
+    expect(within(chart).queryByText("Failed")).toBeNull();
     expect(within(chart).getByText("Ticks")).toBeTruthy();
     expect(within(chart).getByText("Work count")).toBeTruthy();
   });
