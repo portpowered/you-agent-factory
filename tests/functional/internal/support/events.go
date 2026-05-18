@@ -159,6 +159,16 @@ func LastFactoryEventTick(events []factoryapi.FactoryEvent) int {
 	return tick
 }
 
+func CountFactoryEvents(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
+}
+
 func eventStringSlice(values *[]string) []string {
 	if values == nil {
 		return nil

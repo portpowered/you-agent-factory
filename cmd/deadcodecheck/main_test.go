@@ -60,10 +60,11 @@ func TestMainRoutesThroughCommandMain(t *testing.T) {
 	}
 }
 
-func TestRunDeadcodeUsesExpectedCommandAndAmbientEnvironment(t *testing.T) {
+func TestRunDeadcodeUsesExpectedCommandAndGoTypesAliasEnvironment(t *testing.T) {
 	restoreExecCommand(t)
 	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
 	t.Setenv("DEADCODECHECK_HELPER_STDOUT", "pkg/foo.go: Example\n")
+	t.Setenv("GODEBUG", "gocachehash=1,gotypesalias=0")
 
 	var captured *exec.Cmd
 	execCommand = func(name string, args ...string) *exec.Cmd {
@@ -84,8 +85,8 @@ func TestRunDeadcodeUsesExpectedCommandAndAmbientEnvironment(t *testing.T) {
 	if got := captured.Args; len(got) < 7 || got[len(got)-5] != "go" || got[len(got)-4] != "run" || got[len(got)-3] != deadcodeTool || got[len(got)-2] != "-test" || got[len(got)-1] != "./..." {
 		t.Fatalf("runDeadcode() args = %v, want go run %s -test ./...", captured.Args, deadcodeTool)
 	}
-	if captured.Env != nil {
-		t.Fatalf("runDeadcode() env override = %v, want ambient environment inheritance", captured.Env)
+	if !envContains(captured.Env, "GODEBUG=gocachehash=1,gotypesalias=1") {
+		t.Fatalf("runDeadcode() env = %v, want gotypesalias enabled", captured.Env)
 	}
 }
 
@@ -336,82 +337,65 @@ func TestRunFailsWhenBaselineReadFails(t *testing.T) {
 	}
 }
 
-func TestDeadcodecheckFakeGoProcess(t *testing.T) {
-	args, ok := helperCommandArgs(os.Args)
-	if !ok || len(args) == 0 || args[0] != "go" || os.Getenv("GO_WANT_DEADCODECHECK_HELPER") != "1" {
-		return
+func TestEnsureGoTypesAliasEnabled(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty", in: "", want: "gotypesalias=1"},
+		{name: "preserves other flags", in: "gocachehash=1", want: "gocachehash=1,gotypesalias=1"},
+		{name: "replaces disabled flag", in: "gotypesalias=0", want: "gotypesalias=1"},
+		{name: "preserves flag order", in: "gocachehash=1,gotypesalias=0,inittrace=1", want: "gocachehash=1,gotypesalias=1,inittrace=1"},
+		{name: "leaves enabled flag", in: "gotypesalias=1", want: "gotypesalias=1"},
 	}
 
-	if os.Getenv("DEADCODECHECK_HELPER_STDOUT") != "" {
-		fmt.Fprint(os.Stdout, os.Getenv("DEADCODECHECK_HELPER_STDOUT"))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ensureGoTypesAliasEnabled(tt.in); got != tt.want {
+				t.Fatalf("ensureGoTypesAliasEnabled(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
-	if os.Getenv("DEADCODECHECK_HELPER_STDERR") != "" {
-		fmt.Fprint(os.Stderr, os.Getenv("DEADCODECHECK_HELPER_STDERR"))
+}
+
+func TestNormalizeReport(t *testing.T) {
+	if got := normalizeReport("pkg\\foo.go: Example\r\npkg\\bar.go: Other"); got != "pkg/foo.go: Example\npkg/bar.go: Other\n" {
+		t.Fatalf("normalizeReport() = %q", got)
 	}
+}
+
+func TestCountFindings(t *testing.T) {
+	if got := countFindings(""); got != 0 {
+		t.Fatalf("countFindings(empty) = %d, want 0", got)
+	}
+	if got := countFindings("one\n\ntwo\n"); got != 3 {
+		t.Fatalf("countFindings() = %d, want 3", got)
+	}
+}
+
+func TestDeadcodecheckHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_DEADCODECHECK_HELPER") != "1" {
+		return
+	}
+	fmt.Fprint(os.Stdout, os.Getenv("DEADCODECHECK_HELPER_STDOUT"))
+	fmt.Fprint(os.Stderr, os.Getenv("DEADCODECHECK_HELPER_STDERR"))
 	if os.Getenv("DEADCODECHECK_HELPER_FAIL") == "1" {
-		os.Exit(2)
+		os.Exit(1)
 	}
 	os.Exit(0)
 }
 
-func stubDeadcodecheckCommand(t *testing.T, output string, err error) func() {
+func stubDeadcodecheckCommand(t *testing.T, report string, err error) func() {
 	t.Helper()
 
 	original := runDeadcodeCommand
 	runDeadcodeCommand = func() (string, error) {
-		return output, err
+		return report, err
 	}
 	return func() {
 		runDeadcodeCommand = original
 	}
-}
-
-func writeDeadcodeBaseline(t *testing.T, root string, contents string) {
-	t.Helper()
-
-	baselineFile := filepath.Join(root, baselinePath)
-	if err := os.MkdirAll(filepath.Dir(baselineFile), 0o755); err != nil {
-		t.Fatalf("create baseline directory: %v", err)
-	}
-	if err := os.WriteFile(baselineFile, []byte(contents), 0o644); err != nil {
-		t.Fatalf("write baseline file: %v", err)
-	}
-}
-
-func chdirForTest(t *testing.T, dir string) {
-	t.Helper()
-
-	originalWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get working directory: %v", err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("change working directory: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(originalWD); err != nil {
-			t.Fatalf("restore working directory: %v", err)
-		}
-	})
-}
-
-func fakeDeadcodecheckCommand(name string, args ...string) *exec.Cmd {
-	testBinary, err := os.Executable()
-	if err != nil {
-		panic(fmt.Sprintf("resolve test binary: %v", err))
-	}
-
-	cmdArgs := append([]string{"-test.run=TestDeadcodecheckFakeGoProcess", "--", name}, args...)
-	return exec.Command(testBinary, cmdArgs...)
-}
-
-func helperCommandArgs(argv []string) ([]string, bool) {
-	for index, arg := range argv {
-		if arg == "--" {
-			return argv[index+1:], true
-		}
-	}
-	return nil, false
 }
 
 func restoreExecCommand(t *testing.T) {
@@ -421,4 +405,49 @@ func restoreExecCommand(t *testing.T) {
 	t.Cleanup(func() {
 		execCommand = original
 	})
+}
+
+func fakeDeadcodecheckCommand(name string, args ...string) *exec.Cmd {
+	helperArgs := append([]string{"-test.run=TestDeadcodecheckHelperProcess", "--", name}, args...)
+	cmd := exec.Command(os.Args[0], helperArgs...)
+	cmd.Env = deadcodeEnv()
+	return cmd
+}
+
+func writeDeadcodeBaseline(t *testing.T, root string, content string) {
+	t.Helper()
+
+	path := filepath.Join(root, baselinePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create baseline directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write baseline: %v", err)
+	}
+}
+
+func chdirForTest(t *testing.T, dir string) {
+	t.Helper()
+
+	original, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir to %s: %v", dir, err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(original); err != nil {
+			t.Fatalf("restore working directory: %v", err)
+		}
+	})
+}
+
+func envContains(env []string, want string) bool {
+	for _, entry := range env {
+		if entry == want {
+			return true
+		}
+	}
+	return false
 }
