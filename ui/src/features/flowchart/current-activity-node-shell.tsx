@@ -23,7 +23,7 @@ export function ActivityGraphNodeShell({
   return (
     <article
       className={cx(
-        "flex h-full min-w-0 w-full flex-col gap-[0.35rem] overflow-hidden rounded-lg border border-af-overlay/9 bg-af-canvas p-[0.75rem] text-af-ink",
+        "flex h-full min-w-0 w-full flex-col gap-1 overflow-hidden rounded-lg border border-af-overlay/9 bg-af-canvas p-3 text-af-ink",
         className,
       )}
       data-current-activity-node-type={nodeType}
@@ -64,4 +64,3 @@ export function ActivityGraphNodeShell({
 function handlePosition(index: number, count: number): string {
   return `${((index + 1) * 100) / (count + 1)}%`;
 }
-
