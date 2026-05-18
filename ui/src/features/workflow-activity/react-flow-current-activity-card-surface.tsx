@@ -1,11 +1,11 @@
 import type { DashboardSnapshot } from "../../api/dashboard/types";
 import { FactoryGraphEditorNotice } from "../factory-graph-editor/factory-graph-editor-controls";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../flowchart/current-activity-nodes";
-import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
+import type { CurrentActivityImportController } from "./current-activity-import-controller";
+import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import type { useFactoryGraphEditorViewModel } from "./react-flow-current-activity-card-editor-graph";
-import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
-import type { CurrentActivityImportController } from "./current-activity-import-controller";
+import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 export function CurrentActivityGraphSurface({
   editor,
@@ -22,7 +22,10 @@ export function CurrentActivityGraphSurface({
   locale?: string;
   snapshot: DashboardSnapshot;
 }) {
-  if (snapshot.topology.workstation_node_ids.length === 0 && !editor.editorMode) {
+  if (
+    snapshot.topology.workstation_node_ids.length === 0 &&
+    !editor.editorMode
+  ) {
     return <EmptyCurrentActivityState />;
   }
 
@@ -30,11 +33,13 @@ export function CurrentActivityGraphSurface({
 
   return (
     <div className="grid min-h-0 flex-1 gap-3">
+      {editor.blockedRemovalReason ? (
+        <FactoryGraphEditorNotice title="Removal blocked" tone="warning">
+          {editor.blockedRemovalReason}
+        </FactoryGraphEditorNotice>
+      ) : null}
       {editor.saveEditableDefinition.error ? (
-        <FactoryGraphEditorNotice
-          title="Topology save failed"
-          tone="danger"
-        >
+        <FactoryGraphEditorNotice title="Topology save failed" tone="danger">
           {editor.saveEditableDefinition.error.message}
         </FactoryGraphEditorNotice>
       ) : null}
@@ -51,7 +56,11 @@ export function CurrentActivityGraphSurface({
         initialFitViewKey={activeGraph.initialFitViewKey}
         initialFitViewOptions={activeGraph.initialFitViewOptions}
         locale={locale}
-        nodeTypes={editor.editorMode ? editorGraph.nodeTypes : CURRENT_ACTIVITY_NODE_TYPES}
+        nodeTypes={
+          editor.editorMode
+            ? editorGraph.nodeTypes
+            : CURRENT_ACTIVITY_NODE_TYPES
+        }
         nodes={activeGraph.nodes}
         onAddAction={editor.handleAddEntityAction}
         onAddMenuOpenChange={editor.setAddMenuOpen}

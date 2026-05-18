@@ -9,15 +9,15 @@ import {
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type {
+  CanonicalFactoryDefinition,
+  EditableFactoryDefinitionDocument,
+} from "../../api/current-factory-definition";
+import type {
   DashboardActiveExecution,
   DashboardPlaceRef,
   DashboardSnapshot,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
-import type {
-  CanonicalFactoryDefinition,
-  EditableFactoryDefinitionDocument,
-} from "../../api/current-factory-definition";
 import {
   type FactoryValue,
   NamedFactoryAPIError,
@@ -31,6 +31,11 @@ import {
   workstationKindParityDashboardSnapshot,
   workstationKindParityExpectations,
 } from "../../components/dashboard/test-fixtures";
+import {
+  useCurrentEditableFactoryDefinitionDocument,
+  useSaveCurrentEditableFactoryDefinition,
+} from "../current-factory-definition";
+import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
@@ -50,12 +55,6 @@ import {
 import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
-import {
-  useCurrentEditableFactoryDefinitionDocument,
-  useSaveCurrentEditableFactoryDefinition,
-} from "../current-factory-definition";
-import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
-
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
 
@@ -67,7 +66,9 @@ vi.mock("../current-factory-definition", async () => {
 });
 
 vi.mock("../factory-graph-editor/factory-graph-draft", async () => {
-  const actual = await vi.importActual("../factory-graph-editor/factory-graph-draft");
+  const actual = await vi.importActual(
+    "../factory-graph-editor/factory-graph-draft",
+  );
 
   return {
     ...actual,
@@ -664,7 +665,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
       reset: vi.fn(),
       status: "idle",
     } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue(defaultDraftState as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue(
+      defaultDraftState as never,
+    );
   });
 
   afterEach(() => {
@@ -739,9 +742,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
       await screen.findByRole("button", { name: "Open add entity menu" }),
     );
 
-    expect(
-      screen.getByRole("button", { name: "Workstation" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Workstation" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Worker" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Work type" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Work state" })).toBeTruthy();
@@ -791,7 +792,8 @@ function registerCurrentActivityCardTestLifecycle(): void {
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
     expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock.calls[0]?.[0] as typeof defaultDraftState.updateDraft;
+    const updater = updateDraft.mock
+      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
     const nextDraft = updater(defaultDraftState.draft);
     expect(nextDraft.additions.workTypes).toEqual([
       {
@@ -923,9 +925,68 @@ function registerCurrentActivityCardTestLifecycle(): void {
     );
 
     expect(updateDraft).toHaveBeenCalledTimes(1);
-    const updater = updateDraft.mock.calls[0]?.[0] as typeof defaultDraftState.updateDraft;
+    const updater = updateDraft.mock
+      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
     const nextDraft = updater(defaultDraftState.draft);
     expect(nextDraft.removals.workstations).toEqual(["review"]);
+  });
+
+  it("shows an explicit blocked-removal notice for ineligible entity deletion", async () => {
+    const updateDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      graph: {
+        edges: [
+          {
+            id: "worker-assignment:worker:writer->workstation:review",
+            kind: "worker-assignment",
+            source: { kind: "worker", name: "writer" },
+            sourceId: "worker:writer",
+            target: { kind: "workstation", name: "review" },
+            targetId: "workstation:review",
+          },
+        ],
+        nodes: [
+          {
+            id: "worker:writer",
+            key: { kind: "worker", name: "writer" },
+            kind: "worker",
+            label: "writer",
+          },
+          {
+            id: "workstation:review",
+            key: { kind: "workstation", name: "review" },
+            kind: "workstation",
+            label: "review",
+          },
+        ],
+      },
+      updateDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByText("writer"));
+
+    const blockedNoticeTitle = await screen.findByText("Removal blocked");
+    expect(blockedNoticeTitle.closest("section")?.textContent).toContain(
+      "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
+    );
+    expect(updateDraft).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("dialog", { name: "Remove writer worker?" }),
+    ).toBeNull();
   });
 
   it("keeps removed server-backed nodes visible with a pending-removal badge", async () => {
@@ -1043,7 +1104,9 @@ function registerCurrentActivityCardTestLifecycle(): void {
   });
 
   it("saves the pending editable definition before leaving editor mode", async () => {
-    const mutateAsync = vi.fn().mockResolvedValue(editableFactoryDefinitionDocument);
+    const mutateAsync = vi
+      .fn()
+      .mockResolvedValue(editableFactoryDefinitionDocument);
     const replaceDraft = vi.fn();
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,

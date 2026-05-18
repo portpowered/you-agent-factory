@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 
 import type { DashboardTopology } from "../../api/dashboard/types";
 import {
@@ -30,7 +30,9 @@ import {
 const CURRENT_ACTIVITY_HEADER_ROW_CLASS =
   "flex items-start justify-between gap-3";
 
-export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopology) {
+export function useCurrentActivityGraphEditor(
+  projectedTopology: DashboardTopology,
+) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
   const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
@@ -64,9 +66,11 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
     setActiveTool,
   });
   const {
+    blockedRemovalReason,
     handleConfirmRemoval,
     handleEditorNodeDelete,
     pendingRemovalIntent,
+    setBlockedRemovalReason,
     setPendingRemovalNodeId,
   } = useFactoryGraphRemovalController({
     activeTool,
@@ -126,6 +130,7 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
     addEntityErrors: addEntityController.addEntityErrors,
     addMenuActions,
     addMenuOpen: addEntityController.addMenuOpen,
+    blockedRemovalReason,
     canInteractWithEditor,
     canSaveDraft,
     currentFactoryDefinition,
@@ -147,6 +152,7 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
     setAddMenuOpen: addEntityController.setAddMenuOpen,
     setActiveTool,
     setIsConfirmingLeaveEditor,
+    setBlockedRemovalReason,
     setPendingRemovalNodeId,
     pendingRemovalIntent,
   };
@@ -231,11 +237,16 @@ function useFactoryGraphRemovalController({
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  saveEditableDefinition: ReturnType<typeof useSaveCurrentEditableFactoryDefinition>;
+  saveEditableDefinition: ReturnType<
+    typeof useSaveCurrentEditableFactoryDefinition
+  >;
 }) {
-  const [pendingRemovalNodeId, setPendingRemovalNodeId] = useState<string | null>(
-    null,
-  );
+  const [pendingRemovalNodeId, setPendingRemovalNodeId] = useState<
+    string | null
+  >(null);
+  const [blockedRemovalReason, setBlockedRemovalReason] = useState<
+    string | null
+  >(null);
   const pendingRemovalIntent =
     draftState.latestDocument && pendingRemovalNodeId
       ? buildFactoryGraphRemovalIntent({
@@ -260,10 +271,16 @@ function useFactoryGraphRemovalController({
         draft: draftState.draft,
         nodeId,
       });
-      if (!intent || intent.ineligibleReason) {
+      if (!intent) {
+        return;
+      }
+      if (intent.ineligibleReason) {
+        setBlockedRemovalReason(intent.ineligibleReason);
+        saveEditableDefinition.reset();
         return;
       }
 
+      setBlockedRemovalReason(null);
       setPendingRemovalNodeId(nodeId);
       saveEditableDefinition.reset();
     },
@@ -289,13 +306,16 @@ function useFactoryGraphRemovalController({
         pendingRemovalIntent.key,
       ),
     );
+    setBlockedRemovalReason(null);
     setPendingRemovalNodeId(null);
   }, [draftState, pendingRemovalIntent]);
 
   return {
+    blockedRemovalReason,
     handleConfirmRemoval,
     handleEditorNodeDelete,
     pendingRemovalIntent,
+    setBlockedRemovalReason,
     setPendingRemovalNodeId,
   };
 }
@@ -328,7 +348,10 @@ export function CurrentActivityGraphEditorHeader({
           />
         </div>
       </div>
-      <FactoryGraphEditorModeToggle editorMode={editorMode} onClick={onToggle} />
+      <FactoryGraphEditorModeToggle
+        editorMode={editorMode}
+        onClick={onToggle}
+      />
     </div>
   );
 }
