@@ -124,7 +124,6 @@ export function requestProviderSession(request: SelectedWorkRequestHistoryItem) 
 
   return undefined;
 }
-
 export function requestResponseText(request: SelectedWorkRequestHistoryItem) {
   if (isProjectedWorkstationRequest(request)) {
     return request.response;
@@ -203,19 +202,6 @@ export function scriptResponseExitCode(response: DashboardScriptResponse | undef
 
 export function scriptResponseFailureType(response: DashboardScriptResponse | undefined) {
   return response?.failure_type ?? response?.failureType;
-}
-
-export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
-  return Boolean(
-    requestOutcome(request) ||
-      requestScriptResponse(request) ||
-      requestProviderSession(request)?.id ||
-      requestResponseText(request) ||
-      requestFailureReason(request) ||
-      requestFailureMessage(request) ||
-      requestErrorClass(request) ||
-      requestOutputWorkItems(request).length > 0,
-  );
 }
 
 export function dedupeWorkItems<TWorkItem extends { work_id: string }>(workItems: TWorkItem[]) {
