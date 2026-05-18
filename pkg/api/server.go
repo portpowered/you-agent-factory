@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -18,23 +19,43 @@ import (
 
 // Server is the REST API server for the agent-factory.
 type Server struct {
-	runtime apisurface.APISurface
-	logger  *zap.Logger
-	router  *mux.Router
-	port    int
+	runtime           apisurface.APISurface
+	logger            *zap.Logger
+	router            *mux.Router
+	port              int
+	codexSessionsRoot string
 }
 
 var noModTime = time.Time{}
 
 // NewServer creates a new API server.
 func NewServer(runtime apisurface.APISurface, port int, logger *zap.Logger) *Server {
+	return NewServerWithOptions(runtime, port, logger, ServerOptions{})
+}
+
+// ServerOptions configures optional API server boundaries.
+type ServerOptions struct {
+	CodexSessionsRoot string
+}
+
+// NewServerWithOptions creates a new API server with explicit runtime
+// boundaries for tests and embedding processes.
+func NewServerWithOptions(runtime apisurface.APISurface, port int, logger *zap.Logger, opts ServerOptions) *Server {
 	srv := &Server{
-		runtime: runtime,
-		logger:  logger,
-		port:    port,
+		runtime:           runtime,
+		logger:            logger,
+		port:              port,
+		codexSessionsRoot: normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
 	}
 	srv.router = srv.buildRouter()
 	return srv
+}
+
+func normalizeCodexSessionsRoot(root string) string {
+	if root != "" {
+		return filepath.Clean(root)
+	}
+	return defaultCodexSessionsRoot()
 }
 
 // Handler returns the http.Handler for testing and composition.

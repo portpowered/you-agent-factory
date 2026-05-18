@@ -27,6 +27,7 @@ import type {
   WorkstationDetailCardProps,
 } from "./detail-card-types";
 import { getWorkstationDetailMessages } from "./messages";
+import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
 import {
   EditableConfigurationSection,
@@ -39,10 +40,13 @@ export function WorkstationDetailCard({
   headerAction,
   locale,
   now,
+  onSelectProviderSession,
   onSelectWorkID,
   onSelectWorkstationRequest,
   providerSessions,
   saveState,
+  selectedProviderSession,
+  selectedProviderSessionKey,
   selectedRequest,
   selectedWorkID,
   selectedNode,
@@ -107,6 +111,7 @@ export function WorkstationDetailCard({
           expandActionLabel={messages.expandAction}
           historyItemCountLabel={messages.historyRunCountLabel}
           messages={messages}
+          onSelectProviderSession={onSelectProviderSession}
           onSelectWorkID={onSelectWorkID}
           onSelectWorkstationRequest={onSelectWorkstationRequest}
           renderHeading={(attempt) =>
@@ -114,6 +119,7 @@ export function WorkstationDetailCard({
             messages.unknownWorkLabel
           }
           resetKey={selectedNode.node_id}
+          selectedProviderSessionKey={selectedProviderSessionKey}
           selectedRequestDispatchID={selectedRequest?.dispatch_id}
           selectedWorkID={selectedWorkID}
           title={messages.runHistoryHeading}
@@ -121,6 +127,10 @@ export function WorkstationDetailCard({
           workstationRequestsByDispatchID={workstationRequestsByDispatchID}
         />
       )}
+      <ProviderSessionDetailPanel
+        locale={locale}
+        selectedProviderSession={selectedProviderSession ?? null}
+      />
     </SelectionDetailLayout>
   );
 }

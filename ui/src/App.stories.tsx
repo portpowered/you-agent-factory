@@ -930,6 +930,170 @@ export const DashboardImprovementsSmokeNarrow = {
   },
 };
 
+export const CurrentSelectionProviderSessionDetailsNarrow = {
+  parameters: {
+    dashboardApi: {
+      snapshot: semanticWorkflowDashboardSnapshot,
+      tracesByWorkID: {
+        "work-active-story": activeStoryTrace,
+      },
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "360px" }}>
+      <App />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input, init) => {
+      const requestURL =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      const requestMethod =
+        typeof input === "object" &&
+        input !== null &&
+        "method" in input &&
+        typeof input.method === "string"
+          ? input.method
+          : init?.method ?? "GET";
+      const requestPath = requestURL.startsWith("http")
+        ? new URL(requestURL).pathname
+        : new URL(requestURL, window.location.origin).pathname;
+
+      if (
+        requestMethod.toUpperCase() === "GET" &&
+        requestPath === "/provider-sessions/detail"
+      ) {
+        return new Response(
+          JSON.stringify({
+            parse: {
+              eventCount: 6,
+              functionCalls: [
+                {
+                  arguments: "{\"path\":\"pkg/api\"}",
+                  callId: "call_1",
+                  name: "list_dir",
+                  order: 1,
+                  output: "{\"entries\":3}",
+                  status: "completed",
+                  turnIndex: 1,
+                  type: "function_call",
+                },
+              ],
+              lineCount: 7,
+              malformedLineCount: 1,
+              parseErrors: [
+                {
+                  lineNumber: 7,
+                  message: "unexpected end of JSON input",
+                },
+              ],
+              reasoning: [
+                {
+                  order: 1,
+                  sourceType: "reasoning",
+                  summary: "Inspect the provider-session diff before retrying.",
+                  text: "Investigate the failed response stream.",
+                  turnIndex: 1,
+                },
+              ],
+              tokenUsage: {
+                cachedInputTokens: 5,
+                inputTokens: 120,
+                outputTokens: 45,
+                reasoningOutputTokens: 17,
+                totalTokens: 182,
+              },
+              turns: [
+                {
+                  eventCount: 4,
+                  functionCallCount: 1,
+                  index: 1,
+                  reasoningCount: 1,
+                  responseItemCount: 3,
+                  startedAt: "2026-05-18T14:10:00Z",
+                },
+              ],
+              unknownEventCount: 1,
+              unknownEvents: [
+                {
+                  lineNumber: 6,
+                  payloadType: "mystery_payload",
+                  type: "mystery_event",
+                },
+              ],
+            },
+            providerSession: {
+              id: "sess-active-story",
+              kind: "session_id",
+              provider: "codex",
+            },
+            source: {
+              modifiedAt: "2026-05-18T14:11:00Z",
+              relativePath: "2026/05/18/rollout-sess-active-story.jsonl",
+              sizeBytes: 2048,
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        );
+      }
+
+      return originalFetch(input, init);
+    };
+
+    try {
+      await userEvent.click(
+        (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+      );
+
+      const currentSelection = within(currentSelectionCard(canvasElement));
+      const providerSessionButton = await currentSelection.findByRole("button", {
+        name: "Select provider session codex / session_id / sess-active-story for dispatch dispatch-review-active",
+      });
+
+      await userEvent.click(providerSessionButton);
+
+      await expect(
+        currentSelection.getByRole("heading", {
+          name: "Selected session details",
+        }),
+      ).toBeVisible();
+      await expect(
+        await currentSelection.findByText(
+          "2026/05/18/rollout-sess-active-story.jsonl",
+        ),
+      ).toBeVisible();
+      await expect(await currentSelection.findByText("Turn 1")).toBeVisible();
+      await expect(await currentSelection.findByText("list_dir")).toBeVisible();
+      await expect(
+        await currentSelection.findByText(
+          "Inspect the provider-session diff before retrying.",
+        ),
+      ).toBeVisible();
+      await expect(await currentSelection.findByText("182")).toBeVisible();
+      await expect(
+        await currentSelection.findByText("unexpected end of JSON input"),
+      ).toBeVisible();
+      expectNoPageHorizontalOverflow(canvasElement);
+    } finally {
+      window.fetch = originalFetch;
+    }
+  },
+};
+
 export const DashboardSubmitWorkIntegrationSmoke = {
   parameters: {
     dashboardApi: {

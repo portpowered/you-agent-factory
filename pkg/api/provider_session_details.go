@@ -1,0 +1,541 @@
+package api
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"go.uber.org/zap"
+)
+
+const (
+	loadableProviderSessionProvider = "codex"
+	loadableProviderSessionKind     = "session_id"
+)
+
+var safeProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+var (
+	errInvalidProviderSessionIdentifier = errors.New("invalid provider session identifier")
+	errProviderSessionNotFound          = errors.New("provider session not found")
+)
+
+func (s *Server) GetProviderSessionDetails(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.GetProviderSessionDetailsParams,
+) {
+	details, err := loadProviderSessionDetails(
+		s.codexSessionsRoot,
+		string(params.Provider),
+		string(params.Kind),
+		string(params.Id),
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, errInvalidProviderSessionIdentifier):
+			s.writeError(w, http.StatusBadRequest, "provider session must be a codex session_id identifier without path separators", "BAD_REQUEST")
+			return
+		case errors.Is(err, errProviderSessionNotFound):
+			s.writeError(w, http.StatusNotFound, "provider session not found", "NOT_FOUND")
+			return
+		default:
+			s.logger.Error("load provider session details failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to load provider session details", "INTERNAL_ERROR")
+			return
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, details)
+}
+
+func loadProviderSessionDetails(root, provider, kind, id string) (factoryapi.ProviderSessionDetailResponse, error) {
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	normalizedKind := strings.TrimSpace(kind)
+	normalizedID := strings.TrimSpace(id)
+	if normalizedProvider != loadableProviderSessionProvider ||
+		normalizedKind != loadableProviderSessionKind ||
+		!safeProviderSessionIDPattern.MatchString(normalizedID) {
+		return factoryapi.ProviderSessionDetailResponse{}, errInvalidProviderSessionIdentifier
+	}
+
+	resolved, err := resolveCodexSessionFile(root, normalizedID)
+	if err != nil {
+		return factoryapi.ProviderSessionDetailResponse{}, err
+	}
+
+	file, err := os.Open(resolved.absolutePath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return factoryapi.ProviderSessionDetailResponse{}, errProviderSessionNotFound
+		}
+		return factoryapi.ProviderSessionDetailResponse{}, fmt.Errorf("open provider session file: %w", err)
+	}
+	defer file.Close()
+
+	parse, err := parseCodexSessionSummary(file)
+	if err != nil {
+		return factoryapi.ProviderSessionDetailResponse{}, err
+	}
+
+	return factoryapi.ProviderSessionDetailResponse{
+		ProviderSession: factoryapi.ProviderSessionMetadata{
+			Provider: &normalizedProvider,
+			Kind:     &normalizedKind,
+			Id:       &normalizedID,
+		},
+		Source: factoryapi.ProviderSessionSourceMetadata{
+			RelativePath: resolved.relativePath,
+			SizeBytes:    resolved.sizeBytes,
+			ModifiedAt:   resolved.modifiedAt,
+		},
+		Parse: parse,
+	}, nil
+}
+
+type resolvedCodexSessionFile struct {
+	absolutePath string
+	relativePath string
+	sizeBytes    int64
+	modifiedAt   *time.Time
+}
+
+func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) {
+	cleanRoot, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return resolvedCodexSessionFile{}, fmt.Errorf("resolve codex sessions root: %w", err)
+	}
+
+	rootInfo, err := os.Stat(cleanRoot)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return resolvedCodexSessionFile{}, errProviderSessionNotFound
+		}
+		return resolvedCodexSessionFile{}, fmt.Errorf("stat codex sessions root: %w", err)
+	}
+	if !rootInfo.IsDir() {
+		return resolvedCodexSessionFile{}, fmt.Errorf("codex sessions root is not a directory: %s", cleanRoot)
+	}
+
+	targetName := "rollout-" + id + ".jsonl"
+	matches := make([]string, 0, 1)
+	err = filepath.WalkDir(cleanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if entry.Type()&fs.ModeType != 0 && entry.Type()&fs.ModeSymlink == 0 {
+			return nil
+		}
+		if filepath.Base(path) == targetName {
+			matches = append(matches, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return resolvedCodexSessionFile{}, fmt.Errorf("walk codex sessions root: %w", err)
+	}
+	if len(matches) == 0 {
+		return resolvedCodexSessionFile{}, errProviderSessionNotFound
+	}
+	sort.Strings(matches)
+
+	resolvedRoot, err := filepath.EvalSymlinks(cleanRoot)
+	if err != nil {
+		return resolvedCodexSessionFile{}, fmt.Errorf("resolve codex sessions root symlinks: %w", err)
+	}
+	for _, match := range matches {
+		resolvedMatch, err := filepath.EvalSymlinks(match)
+		if err != nil {
+			return resolvedCodexSessionFile{}, fmt.Errorf("resolve provider session symlink: %w", err)
+		}
+		if !pathInsideRoot(resolvedRoot, resolvedMatch) {
+			return resolvedCodexSessionFile{}, errInvalidProviderSessionIdentifier
+		}
+		info, err := os.Stat(resolvedMatch)
+		if err != nil {
+			return resolvedCodexSessionFile{}, fmt.Errorf("stat provider session file: %w", err)
+		}
+		rel, err := filepath.Rel(cleanRoot, match)
+		if err != nil {
+			return resolvedCodexSessionFile{}, fmt.Errorf("rel provider session file: %w", err)
+		}
+		modifiedAt := info.ModTime().UTC()
+		return resolvedCodexSessionFile{
+			absolutePath: resolvedMatch,
+			relativePath: filepath.ToSlash(rel),
+			sizeBytes:    info.Size(),
+			modifiedAt:   &modifiedAt,
+		}, nil
+	}
+
+	return resolvedCodexSessionFile{}, errProviderSessionNotFound
+}
+
+func pathInsideRoot(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func parseCodexSessionSummary(reader io.Reader) (factoryapi.CodexSessionParseSummary, error) {
+	parser := codexSessionParser{
+		summary: factoryapi.CodexSessionParseSummary{
+			Turns:         []factoryapi.CodexSessionTurnSummary{},
+			FunctionCalls: []factoryapi.CodexSessionFunctionCallSummary{},
+			Reasoning:     []factoryapi.CodexSessionReasoningSummary{},
+			ParseErrors:   []factoryapi.CodexSessionLineError{},
+			UnknownEvents: []factoryapi.CodexSessionUnknownEvent{},
+		},
+	}
+	scanner := bufio.NewScanner(reader)
+	lineNumber := 0
+	for scanner.Scan() {
+		lineNumber++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		parser.summary.LineCount++
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			parser.summary.MalformedLineCount++
+			parser.summary.ParseErrors = append(parser.summary.ParseErrors, factoryapi.CodexSessionLineError{
+				LineNumber: lineNumber,
+				Message:    "invalid JSON event record",
+			})
+			continue
+		}
+		parser.summary.EventCount++
+		parser.recordEvent(lineNumber, event)
+	}
+	if err := scanner.Err(); err != nil {
+		return factoryapi.CodexSessionParseSummary{}, fmt.Errorf("read provider session stream: %w", err)
+	}
+	return parser.summary, nil
+}
+
+type codexSessionParser struct {
+	summary          factoryapi.CodexSessionParseSummary
+	currentTurnIndex int
+}
+
+func (p *codexSessionParser) recordEvent(lineNumber int, event map[string]any) {
+	eventType := stringField(event, "type")
+	timestamp := timeField(event, "timestamp")
+	switch eventType {
+	case "session_meta":
+		return
+	case "turn_context":
+		p.startTurn(timestamp).EventCount++
+	case "event_msg":
+		p.recordEventMessage(lineNumber, event, timestamp)
+	case "response_item":
+		p.recordResponseItem(lineNumber, event, timestamp)
+	default:
+		p.recordUnknownEvent(lineNumber, eventType, nestedPayloadType(event))
+	}
+}
+
+func (p *codexSessionParser) recordEventMessage(lineNumber int, event map[string]any, timestamp *time.Time) {
+	payload, _ := event["payload"].(map[string]any)
+	payloadType := stringField(payload, "type")
+	switch payloadType {
+	case "token_count":
+		p.recordTokenUsage(payload)
+	case "agent_message", "user_message", "task_started", "task_complete", "patch_apply_end":
+		p.ensureTurn(timestamp).EventCount++
+	case "agent_reasoning":
+		turn := p.ensureTurn(timestamp)
+		turn.EventCount++
+		p.appendReasoning("agent_reasoning", payload, turn)
+	default:
+		p.recordUnknownEvent(lineNumber, "event_msg", payloadType)
+	}
+}
+
+func (p *codexSessionParser) recordResponseItem(lineNumber int, event map[string]any, timestamp *time.Time) {
+	payload, _ := event["payload"].(map[string]any)
+	if payload == nil {
+		if item, ok := event["item"].(map[string]any); ok {
+			payload = item
+		} else {
+			payload = event
+		}
+	}
+	itemType := stringField(payload, "type")
+	if itemType == "" {
+		itemType = stringField(payload, "item.type")
+	}
+
+	turn := p.ensureTurn(timestamp)
+	turn.EventCount++
+	turn.ResponseItemCount++
+
+	switch itemType {
+	case "message":
+		return
+	case "reasoning":
+		p.appendReasoning(itemType, payload, turn)
+	case "function_call", "custom_tool_call":
+		p.appendFunctionCall(itemType, payload, turn)
+	case "function_call_output", "custom_tool_call_output":
+		p.attachFunctionOutput(itemType, payload, turn)
+	default:
+		p.recordUnknownEvent(lineNumber, "response_item", itemType)
+	}
+}
+
+func (p *codexSessionParser) startTurn(startedAt *time.Time) *factoryapi.CodexSessionTurnSummary {
+	p.summary.Turns = append(p.summary.Turns, factoryapi.CodexSessionTurnSummary{
+		Index:             len(p.summary.Turns) + 1,
+		StartedAt:         startedAt,
+		EventCount:        0,
+		ResponseItemCount: 0,
+		FunctionCallCount: 0,
+		ReasoningCount:    0,
+	})
+	p.currentTurnIndex = len(p.summary.Turns)
+	return &p.summary.Turns[p.currentTurnIndex-1]
+}
+
+func (p *codexSessionParser) ensureTurn(startedAt *time.Time) *factoryapi.CodexSessionTurnSummary {
+	if p.currentTurnIndex == 0 {
+		return p.startTurn(startedAt)
+	}
+	turn := &p.summary.Turns[p.currentTurnIndex-1]
+	if turn.StartedAt == nil && startedAt != nil {
+		turn.StartedAt = startedAt
+	}
+	return turn
+}
+
+func (p *codexSessionParser) appendFunctionCall(itemType string, payload map[string]any, turn *factoryapi.CodexSessionTurnSummary) {
+	turn.FunctionCallCount++
+	order := len(p.summary.FunctionCalls) + 1
+	p.summary.FunctionCalls = append(p.summary.FunctionCalls, factoryapi.CodexSessionFunctionCallSummary{
+		Order:     order,
+		TurnIndex: intPtr(turn.Index),
+		CallId:    stringPtrIfNotEmpty(firstStringField(payload, "call_id", "callId", "id")),
+		Type:      itemType,
+		Name:      stringPtrIfNotEmpty(firstStringField(payload, "name", "tool_name", "toolName")),
+		Arguments: stringPtrIfNotEmpty(firstCompactField(payload, "arguments", "arguments_json", "input")),
+		Status:    stringPtrIfNotEmpty(firstStringField(payload, "status")),
+	})
+}
+
+func (p *codexSessionParser) attachFunctionOutput(itemType string, payload map[string]any, turn *factoryapi.CodexSessionTurnSummary) {
+	callID := firstStringField(payload, "call_id", "callId", "id")
+	output := firstCompactField(payload, "output", "content", "result")
+	status := firstStringField(payload, "status")
+	if status == "" && output != "" {
+		status = "completed"
+	}
+	for i := range p.summary.FunctionCalls {
+		if stringValue(p.summary.FunctionCalls[i].CallId) == callID && callID != "" {
+			p.summary.FunctionCalls[i].Output = stringPtrIfNotEmpty(output)
+			p.summary.FunctionCalls[i].Status = stringPtrIfNotEmpty(status)
+			return
+		}
+	}
+
+	order := len(p.summary.FunctionCalls) + 1
+	p.summary.FunctionCalls = append(p.summary.FunctionCalls, factoryapi.CodexSessionFunctionCallSummary{
+		Order:     order,
+		TurnIndex: intPtr(turn.Index),
+		CallId:    stringPtrIfNotEmpty(callID),
+		Type:      itemType,
+		Output:    stringPtrIfNotEmpty(output),
+		Status:    stringPtrIfNotEmpty(status),
+	})
+}
+
+func (p *codexSessionParser) appendReasoning(sourceType string, payload map[string]any, turn *factoryapi.CodexSessionTurnSummary) {
+	turn.ReasoningCount++
+	order := len(p.summary.Reasoning) + 1
+	encrypted := firstStringField(payload, "encrypted_content", "encryptedContent") != ""
+	p.summary.Reasoning = append(p.summary.Reasoning, factoryapi.CodexSessionReasoningSummary{
+		Order:      order,
+		TurnIndex:  intPtr(turn.Index),
+		SourceType: sourceType,
+		Text:       stringPtrIfNotEmpty(firstReasoningText(payload)),
+		Summary:    stringPtrIfNotEmpty(firstCompactField(payload, "summary")),
+		Encrypted:  &encrypted,
+	})
+}
+
+func (p *codexSessionParser) recordTokenUsage(payload map[string]any) {
+	usage, ok := nestedMap(payload, "info.total_token_usage")
+	if !ok {
+		return
+	}
+	p.summary.TokenUsage = &factoryapi.CodexSessionTokenUsage{
+		InputTokens:           intPtrIfPresent(intField(usage, "input_tokens")),
+		CachedInputTokens:     intPtrIfPresent(intField(usage, "cached_input_tokens")),
+		OutputTokens:          intPtrIfPresent(intField(usage, "output_tokens")),
+		ReasoningOutputTokens: intPtrIfPresent(intField(usage, "reasoning_output_tokens")),
+		TotalTokens:           intPtrIfPresent(intField(usage, "total_tokens")),
+	}
+}
+
+func (p *codexSessionParser) recordUnknownEvent(lineNumber int, eventType string, payloadType string) {
+	p.summary.UnknownEventCount++
+	p.summary.UnknownEvents = append(p.summary.UnknownEvents, factoryapi.CodexSessionUnknownEvent{
+		LineNumber:  lineNumber,
+		Type:        stringPtrIfNotEmpty(eventType),
+		PayloadType: stringPtrIfNotEmpty(payloadType),
+	})
+}
+
+func nestedPayloadType(event map[string]any) string {
+	payload, _ := event["payload"].(map[string]any)
+	return stringField(payload, "type")
+}
+
+func firstReasoningText(payload map[string]any) string {
+	if value := firstCompactField(payload, "text", "content"); value != "" {
+		return value
+	}
+	if summary := firstCompactField(payload, "summary"); summary != "" {
+		return summary
+	}
+	return ""
+}
+
+func firstStringField(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value := stringField(values, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstCompactField(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if raw, ok := nestedValue(values, key); ok {
+			if compact := compactSessionValue(raw); compact != "" {
+				return compact
+			}
+		}
+	}
+	return ""
+}
+
+func stringField(values map[string]any, key string) string {
+	raw, ok := nestedValue(values, key)
+	if !ok {
+		return ""
+	}
+	value, _ := raw.(string)
+	return strings.TrimSpace(value)
+}
+
+func intField(values map[string]any, key string) (int, bool) {
+	raw, ok := values[key]
+	if !ok {
+		return 0, false
+	}
+	switch value := raw.(type) {
+	case float64:
+		return int(value), true
+	case int:
+		return value, true
+	case json.Number:
+		parsed, err := value.Int64()
+		return int(parsed), err == nil
+	default:
+		return 0, false
+	}
+}
+
+func timeField(values map[string]any, key string) *time.Time {
+	value := stringField(values, key)
+	if value == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return nil
+	}
+	utc := parsed.UTC()
+	return &utc
+}
+
+func nestedMap(values map[string]any, key string) (map[string]any, bool) {
+	raw, ok := nestedValue(values, key)
+	if !ok {
+		return nil, false
+	}
+	mapped, ok := raw.(map[string]any)
+	return mapped, ok
+}
+
+func nestedValue(values map[string]any, key string) (any, bool) {
+	current := any(values)
+	for _, segment := range strings.Split(key, ".") {
+		mapped, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		value, ok := mapped[segment]
+		if !ok {
+			return nil, false
+		}
+		current = value
+	}
+	return current, true
+}
+
+func compactSessionValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return truncateSessionText(strings.TrimSpace(typed))
+	default:
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return ""
+		}
+		return truncateSessionText(string(encoded))
+	}
+}
+
+func truncateSessionText(value string) string {
+	const maxSessionSummaryTextLength = 1000
+	if len(value) <= maxSessionSummaryTextLength {
+		return value
+	}
+	return value[:maxSessionSummaryTextLength] + "..."
+}
+
+func intPtrIfPresent(value int, ok bool) *int {
+	if !ok {
+		return nil
+	}
+	return &value
+}
+
+func defaultCodexSessionsRoot() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return filepath.Clean(".codex/sessions")
+	}
+	return filepath.Join(home, ".codex", "sessions")
+}

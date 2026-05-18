@@ -83,7 +83,12 @@ const workstationDetailMessagesByLocale = {
     runHistoryHeading: "Run history",
     providerSessionLogAction: "Codex session log",
     providerSessionLogUnavailable: "Session log unavailable",
+    providerSessionSelectedAction: "Session selected",
+    providerSessionSelectAction: "Inspect session details",
+    providerSessionSelectionUnavailable: "Session details unavailable",
     scriptCommandSummary: (command) => `Script command ${command}`,
+    selectProviderSessionLabel: (sessionLabel, dispatchId) =>
+      `Select provider session ${sessionLabel} for dispatch ${dispatchId}`,
     selectRequestLabel: (requestLabel, dispatchId) =>
       `Select request ${requestLabel} (${dispatchId})`,
     selectWorkItemLabel: (workItemLabel) => `Select work item ${workItemLabel}`,
@@ -179,7 +184,12 @@ const workstationDetailMessagesByLocale = {
     runHistoryHeading: "ラン履歴",
     providerSessionLogAction: "Codex セッションログ",
     providerSessionLogUnavailable: "セッションログは利用できません",
+    providerSessionSelectedAction: "セッションを選択済み",
+    providerSessionSelectAction: "セッション詳細を表示",
+    providerSessionSelectionUnavailable: "セッション詳細は利用できません",
     scriptCommandSummary: (command) => `スクリプトコマンド ${command}`,
+    selectProviderSessionLabel: (sessionLabel, dispatchId) =>
+      `ディスパッチ ${dispatchId} の provider session ${sessionLabel} を選択`,
     selectRequestLabel: (requestLabel, dispatchId) =>
       `リクエスト ${requestLabel} (${dispatchId}) を選択`,
     selectWorkItemLabel: (workItemLabel) =>
@@ -274,7 +284,12 @@ const workstationDetailMessagesByLocale = {
     runHistoryHeading: "실행 기록",
     providerSessionLogAction: "Codex 세션 로그",
     providerSessionLogUnavailable: "세션 로그를 사용할 수 없음",
+    providerSessionSelectedAction: "세션 선택됨",
+    providerSessionSelectAction: "세션 세부정보 보기",
+    providerSessionSelectionUnavailable: "세션 세부정보를 사용할 수 없음",
     scriptCommandSummary: (command) => `스크립트 명령 ${command}`,
+    selectProviderSessionLabel: (sessionLabel, dispatchId) =>
+      `디스패치 ${dispatchId}의 provider session ${sessionLabel} 선택`,
     selectRequestLabel: (requestLabel, dispatchId) =>
       `요청 ${requestLabel} (${dispatchId}) 선택`,
     selectWorkItemLabel: (workItemLabel) => `작업 항목 ${workItemLabel} 선택`,
@@ -362,7 +377,12 @@ const workstationDetailMessagesByLocale = {
     runHistoryHeading: "运行历史",
     providerSessionLogAction: "Codex 会话日志",
     providerSessionLogUnavailable: "会话日志不可用",
+    providerSessionSelectedAction: "会话已选中",
+    providerSessionSelectAction: "查看会话详情",
+    providerSessionSelectionUnavailable: "会话详情不可用",
     scriptCommandSummary: (command) => `脚本命令 ${command}`,
+    selectProviderSessionLabel: (sessionLabel, dispatchId) =>
+      `选择调度 ${dispatchId} 的 provider session ${sessionLabel}`,
     selectRequestLabel: (requestLabel, dispatchId) =>
       `选择请求 ${requestLabel} (${dispatchId})`,
     selectWorkItemLabel: (workItemLabel) => `选择工作项 ${workItemLabel}`,
