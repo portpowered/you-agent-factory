@@ -39,7 +39,7 @@ const FORM_CLASS = "grid h-full min-h-0 gap-4";
 const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const ACTION_ROW_CLASS =
-  "mt-auto flex flex-wrap items-start justify-between gap-3 max-[720px]:grid";
+  "mt-auto grid gap-3 md:flex md:flex-wrap md:items-start md:justify-between";
 const HELP_TEXT_CLASS = cx("max-w-[32rem] leading-relaxed text-af-ink/66", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const VALIDATION_TEXT_CLASS = cx("text-af-danger-ink", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
