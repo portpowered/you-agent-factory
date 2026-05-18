@@ -30,6 +30,11 @@ const storyChecks = [
     id: "infinite-you-workflow-dashboard--header-timeline-alignment-verification",
     label: "dashboard header",
   },
+  {
+    assertions: verifyLocalizedDashboardHeader,
+    id: "infinite-you-workflow-dashboard--header-localization-verification",
+    label: "localized dashboard header",
+  },
 ];
 
 function storyUrl(storyId) {
@@ -88,12 +93,23 @@ async function expectVisible(locator, label) {
 }
 
 async function verifyExportDialog(page, dialog, viewport) {
-  await expectVisible(dialog.getByRole("textbox", { name: "Factory name" }), "Factory name input");
-  await expectVisible(dialog.getByLabel("Cover image"), "Cover image input");
-  await expectVisible(dialog.getByRole("button", { name: "Cancel" }), "Export cancel button");
-  await expectVisible(dialog.getByRole("button", { name: "Export PNG" }), "Export action button");
   await expectVisible(
-    dialog.getByText("Confirming export keeps the current dashboard state unchanged"),
+    dialog.getByRole("textbox", { name: "Factory name" }),
+    "Factory name input",
+  );
+  await expectVisible(dialog.getByLabel("Cover image"), "Cover image input");
+  await expectVisible(
+    dialog.getByRole("button", { name: "Cancel" }),
+    "Export cancel button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "Export PNG" }),
+    "Export action button",
+  );
+  await expectVisible(
+    dialog.getByText(
+      "Confirming export keeps the current dashboard state unchanged",
+    ),
     "Export helper copy",
   );
   await expectDialogWithinViewport(dialog, viewport, "Export");
@@ -105,7 +121,10 @@ async function verifyImportDialog(page, dialog, viewport) {
     dialog.getByRole("img", { name: "Dropped Factory preview" }),
     "Import preview image",
   );
-  await expectVisible(dialog.getByText("factory-import.png"), "Dropped file name");
+  await expectVisible(
+    dialog.getByText("factory-import.png"),
+    "Dropped file name",
+  );
   await expectVisible(
     dialog.getByRole("button", { name: "Cancel import" }),
     "Import cancel button",
@@ -119,7 +138,10 @@ async function verifyImportDialog(page, dialog, viewport) {
     "Import close button",
   );
   await expectDialogWithinViewport(dialog, viewport, "Import preview");
-  await expectNoHorizontalOverflow(page, `Import preview dialog at ${viewport.label}`);
+  await expectNoHorizontalOverflow(
+    page,
+    `Import preview dialog at ${viewport.label}`,
+  );
 }
 
 async function expectOrderedLeftEdges(locators, label) {
@@ -131,7 +153,10 @@ async function expectOrderedLeftEdges(locators, label) {
       throw new Error(`Could not measure ${label}.`);
     }
 
-    if (previousRight !== null && box.x < previousRight - OVERFLOW_TOLERANCE_PX) {
+    if (
+      previousRight !== null &&
+      box.x < previousRight - OVERFLOW_TOLERANCE_PX
+    ) {
       throw new Error(`${label} was not ordered left-to-right.`);
     }
 
@@ -163,12 +188,17 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
 
   const hiddenWordmarkClass = await hiddenWordmark.getAttribute("class");
   if (!hiddenWordmarkClass?.includes("sr-only")) {
-    throw new Error("Dashboard heading wordmark was not hidden with sr-only styling.");
+    throw new Error(
+      "Dashboard heading wordmark was not hidden with sr-only styling.",
+    );
   }
 
   await slider.focus();
   await page.keyboard.press("ArrowLeft");
-  await expectVisible(page.getByText("Tick 4 of 5"), "Keyboard-updated timeline tick text");
+  await expectVisible(
+    page.getByText("Tick 4 of 5"),
+    "Keyboard-updated timeline tick text",
+  );
 
   await currentButton.focus();
   await page.keyboard.press("Enter");
@@ -181,11 +211,76 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
     );
   }
 
-  await expectNoHorizontalOverflow(page, `Dashboard header at ${viewport.label}`);
+  await expectNoHorizontalOverflow(
+    page,
+    `Dashboard header at ${viewport.label}`,
+  );
+}
+
+async function verifyLocalizedDashboardHeader(page, _dialog, viewport) {
+  const toolbar = await waitForStoryRegion(page, "仪表板概览");
+  const heading = toolbar.getByRole("heading", { name: "Infinite You" });
+  const hiddenWordmark = heading.getByText("Infinite You");
+  const slider = toolbar.getByRole("slider", { name: "时间线刻度" });
+  const streamStatus = toolbar.getByRole("status", {
+    name: /Infinite You 事件流(正在连接|在线)/,
+  });
+  const currentTick = page.getByText("第 5 个刻度，共 5 个");
+  const currentButton = toolbar.getByRole("button", {
+    name: "返回当前刻度",
+  });
+  const exportButton = toolbar.getByRole("button", { name: "导出 PNG" });
+
+  await expectVisible(heading, "Localized dashboard heading");
+  await expectVisible(
+    hiddenWordmark,
+    "Localized accessible Infinite You wordmark",
+  );
+  await expectVisible(slider, "Localized timeline slider");
+  await expectVisible(streamStatus, "Localized dashboard stream status");
+  await expectVisible(currentTick, "Localized current timeline tick text");
+  await expectVisible(currentButton, "Localized return-to-current button");
+  await expectVisible(exportButton, "Localized export PNG button");
+
+  const hiddenWordmarkClass = await hiddenWordmark.getAttribute("class");
+  if (!hiddenWordmarkClass?.includes("sr-only")) {
+    throw new Error(
+      "Localized dashboard heading wordmark was not hidden with sr-only styling.",
+    );
+  }
+
+  await slider.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expectVisible(
+    page.getByText("第 4 个刻度，共 5 个"),
+    "Localized keyboard-updated timeline tick text",
+  );
+
+  await currentButton.focus();
+  await page.keyboard.press("Enter");
+  await expectVisible(
+    currentTick,
+    "Localized restored current timeline tick text",
+  );
+
+  if (viewport.label === "desktop") {
+    await expectOrderedLeftEdges(
+      [heading, slider, streamStatus, exportButton],
+      "Localized dashboard header desktop controls",
+    );
+  }
+
+  await expectNoHorizontalOverflow(
+    page,
+    `Localized dashboard header at ${viewport.label}`,
+  );
 }
 
 async function verifyStory(page, storyCheck, viewport) {
-  await page.setViewportSize({ height: viewport.height, width: viewport.width });
+  await page.setViewportSize({
+    height: viewport.height,
+    width: viewport.width,
+  });
   await page.goto(storyUrl(storyCheck.id), { waitUntil: "networkidle" });
   const dialog = storyCheck.dialogName
     ? await waitForDialog(page, storyCheck.dialogName)

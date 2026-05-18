@@ -178,7 +178,7 @@ describe("DashboardHeader", () => {
     ).toBeTruthy();
   });
 
-  it("resolves the header summary, slider, and stream-status labels from the requested locale catalog", () => {
+  it("resolves the header summary, brand, slider, and stream-status labels from the requested locale catalog", () => {
     act(() => {
       useFactoryTimelineStore.setState({
         events: [
@@ -233,13 +233,17 @@ describe("DashboardHeader", () => {
       });
     });
 
-    const messages = getHeaderControlsMessages("ja");
+    const messages = getHeaderControlsMessages("zh-CN");
 
-    render(<DashboardHeader locale="ja" />);
+    render(<DashboardHeader locale="zh-CN" />);
 
     expect(
       screen.getByRole("region", { name: messages.dashboardSummaryLabel }),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: messages.brandWordmark }),
+    ).toBeTruthy();
+    expect(screen.getByText(messages.sliderLabel)).toBeTruthy();
     expect(
       screen.getByRole("slider", { name: messages.sliderAriaLabel }),
     ).toBeTruthy();

@@ -63,7 +63,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       aria-label={headerMessages.dashboardSummaryLabel}
     >
       <h1 className={DASHBOARD_TITLE_CLASS}>
-        <DashboardBrandLockup wordmarkClassName="truncate" />
+        <DashboardBrandLockup locale={locale} wordmarkClassName="truncate" />
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
         <TickSliderControl locale={locale} />
