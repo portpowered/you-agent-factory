@@ -204,6 +204,19 @@ export function scriptResponseFailureType(response: DashboardScriptResponse | un
   return response?.failure_type ?? response?.failureType;
 }
 
+export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
+  return Boolean(
+    requestOutcome(request) ||
+      requestScriptResponse(request) ||
+      requestProviderSession(request)?.id ||
+      requestResponseText(request) ||
+      requestFailureReason(request) ||
+      requestFailureMessage(request) ||
+      requestErrorClass(request) ||
+      requestOutputWorkItems(request).length > 0,
+  );
+}
+
 export function dedupeWorkItems<TWorkItem extends { work_id: string }>(workItems: TWorkItem[]) {
   return [...new Map(workItems.map((workItem) => [workItem.work_id, workItem])).values()];
 }

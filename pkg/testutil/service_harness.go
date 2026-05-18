@@ -116,6 +116,14 @@ func WithRecordPath(path string) ServiceTestHarnessOption {
 	}
 }
 
+// WithExecutionBaseDir overrides the runtime base directory used to resolve
+// relative workstation execution paths.
+func WithExecutionBaseDir(dir string) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		cfg.serviceConfig.ExecutionBaseDir = dir
+	}
+}
+
 // WithReplayPath enables service replay mode for harness runs.
 func WithReplayPath(path string) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {
