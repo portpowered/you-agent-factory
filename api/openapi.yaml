@@ -19,6 +19,8 @@ tags:
     description: Named factory activation and current-factory inspection.
   - name: Runtime
     description: Runtime state, event stream, and trace inspection.
+  - name: Provider Sessions
+    description: Provider-owned session diagnostics for dashboard inspection.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
@@ -150,6 +152,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /provider-sessions/detail:
+    get:
+      tags:
+        - Provider Sessions
+      operationId: getProviderSessionDetails
+      summary: Get provider session details
+      description: Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          description: Provider that emitted the session identifier. Only codex sessions are currently loadable.
+          schema:
+            type: string
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind. Only session_id is currently loadable.
+          schema:
+            type: string
+        - name: id
+          in: query
+          required: true
+          description: Provider-session identifier to resolve. This is an identifier, not a filesystem path.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Parsed provider-session details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderSessionDetailResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory:
@@ -594,6 +635,64 @@ components:
             - Current factory runtime is not idle and cannot activate a new named factory.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
+    ProviderSessionDetailResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - providerSession
+        - source
+        - parse
+      properties:
+        providerSession:
+          $ref: '#/components/schemas/ProviderSessionMetadata'
+        source:
+          $ref: '#/components/schemas/ProviderSessionSourceMetadata'
+        parse:
+          $ref: '#/components/schemas/CodexSessionParseSummary'
+    ProviderSessionSourceMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - relativePath
+        - sizeBytes
+      properties:
+        relativePath:
+          type: string
+          description: Path to the loaded session file relative to the configured Codex sessions root.
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Size of the loaded session file in bytes.
+        modifiedAt:
+          type: string
+          format: date-time
+          description: Filesystem modification time when available.
+    CodexSessionParseSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - eventCount
+        - lineCount
+        - malformedLineCount
+        - unknownEventCount
+      properties:
+        eventCount:
+          type: integer
+          minimum: 0
+          description: Number of JSON event records parsed from the session stream.
+        lineCount:
+          type: integer
+          minimum: 0
+          description: Number of non-empty event-stream lines inspected.
+        malformedLineCount:
+          type: integer
+          minimum: 0
+          description: Number of non-empty lines that could not be parsed as JSON objects.
+        unknownEventCount:
+          type: integer
+          minimum: 0
+          description: Number of parsed JSON events without a recognized type field.
     StringMap:
       type: object
       additionalProperties:

@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+required:
+  - eventCount
+  - lineCount
+  - malformedLineCount
+  - unknownEventCount
+properties:
+  eventCount:
+    type: integer
+    minimum: 0
+    description: Number of JSON event records parsed from the session stream.
+  lineCount:
+    type: integer
+    minimum: 0
+    description: Number of non-empty event-stream lines inspected.
+  malformedLineCount:
+    type: integer
+    minimum: 0
+    description: Number of non-empty lines that could not be parsed as JSON objects.
+  unknownEventCount:
+    type: integer
+    minimum: 0
+    description: Number of parsed JSON events without a recognized type field.

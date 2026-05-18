@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -31,6 +33,28 @@ import (
 func newTestServer(f *testutil.MockFactory) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServer(f, 8080, logger)
+}
+
+func newTestServerWithCodexRoot(root string) *Server {
+	logger, _ := zap.NewDevelopment()
+	return NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
+}
+
+func writeProviderSessionFixture(t *testing.T, root, id, contents string) {
+	t.Helper()
+
+	dir := filepath.Join(root, "2026", "05", "18")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create provider session fixture directory: %v", err)
+	}
+	path := filepath.Join(dir, "rollout-"+id+".jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write provider session fixture: %v", err)
+	}
 }
 
 func readSSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {
@@ -302,6 +326,98 @@ func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	if streamed.Id != "factory-event/work-request/api-surface-history" {
 		t.Fatalf("streamed event id = %q, want factory-event/work-request/api-surface-history", streamed.Id)
 	}
+}
+
+func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testing.T) {
+	root := t.TempDir()
+	writeProviderSessionFixture(t, root, "sess_123", strings.Join([]string{
+		`{"type":"session_meta","id":"sess_123"}`,
+		`{"type":"response_item","item":{"type":"reasoning"}}`,
+		`{"unexpected":true}`,
+		`not-json`,
+		``,
+	}, "\n"))
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp factoryapi.ProviderSessionDetailResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode provider session response: %v", err)
+	}
+	if stringValue(resp.ProviderSession.Provider) != "codex" ||
+		stringValue(resp.ProviderSession.Kind) != "session_id" ||
+		stringValue(resp.ProviderSession.Id) != "sess_123" {
+		t.Fatalf("provider session = %#v, want codex session_id sess_123", resp.ProviderSession)
+	}
+	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
+		t.Fatalf("relative path = %q, want rooted rollout path", resp.Source.RelativePath)
+	}
+	if resp.Source.SizeBytes == 0 {
+		t.Fatal("sizeBytes = 0, want populated source metadata")
+	}
+	if resp.Parse.LineCount != 4 || resp.Parse.EventCount != 3 ||
+		resp.Parse.MalformedLineCount != 1 || resp.Parse.UnknownEventCount != 1 {
+		t.Fatalf("parse summary = %#v, want line/event/malformed/unknown counts", resp.Parse)
+	}
+}
+
+func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
+	srv := newTestServerWithCodexRoot(t.TempDir())
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
+	tests := []string{
+		"/provider-sessions/detail?provider=codex&kind=session_id&id=../secret",
+		"/provider-sessions/detail?provider=codex&kind=session_id&id=/tmp/rollout-session.jsonl",
+		"/provider-sessions/detail?provider=codex&kind=session_id&id=session.with.dot",
+		"/provider-sessions/detail?provider=openai&kind=session_id&id=sess-123",
+		"/provider-sessions/detail?provider=codex&kind=path&id=sess-123",
+	}
+
+	for _, target := range tests {
+		t.Run(target, func(t *testing.T) {
+			srv := newTestServerWithCodexRoot(t.TempDir())
+			req := httptest.NewRequest("GET", target, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+		})
+	}
+}
+
+func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	outsideSessionPath := filepath.Join(outside, "rollout-sess-outside.jsonl")
+	if err := os.WriteFile(outsideSessionPath, []byte(`{"type":"session_meta"}`), 0o600); err != nil {
+		t.Fatalf("write outside session fixture: %v", err)
+	}
+	sessionDir := filepath.Join(root, "2026", "05", "18")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("create session dir: %v", err)
+	}
+	if err := os.Symlink(outsideSessionPath, filepath.Join(sessionDir, "rollout-sess-outside.jsonl")); err != nil {
+		t.Fatalf("create provider session symlink: %v", err)
+	}
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess-outside", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
 }
 
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {

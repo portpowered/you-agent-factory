@@ -206,6 +206,21 @@ type BundledFileContent struct {
 // BundledFileContentEncoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
 type BundledFileContentEncoding string
 
+// CodexSessionParseSummary defines model for CodexSessionParseSummary.
+type CodexSessionParseSummary struct {
+	// EventCount Number of JSON event records parsed from the session stream.
+	EventCount int `json:"eventCount"`
+
+	// LineCount Number of non-empty event-stream lines inspected.
+	LineCount int `json:"lineCount"`
+
+	// MalformedLineCount Number of non-empty lines that could not be parsed as JSON objects.
+	MalformedLineCount int `json:"malformedLineCount"`
+
+	// UnknownEventCount Number of parsed JSON events without a recognized type field.
+	UnknownEventCount int `json:"unknownEventCount"`
+}
+
 // CommandDiagnostic defines model for CommandDiagnostic.
 type CommandDiagnostic struct {
 	Args          *[]string  `json:"args,omitempty"`
@@ -694,11 +709,30 @@ type ProviderFailureMetadata struct {
 	Type   *string `json:"type,omitempty"`
 }
 
+// ProviderSessionDetailResponse defines model for ProviderSessionDetailResponse.
+type ProviderSessionDetailResponse struct {
+	Parse           CodexSessionParseSummary      `json:"parse"`
+	ProviderSession ProviderSessionMetadata       `json:"providerSession"`
+	Source          ProviderSessionSourceMetadata `json:"source"`
+}
+
 // ProviderSessionMetadata defines model for ProviderSessionMetadata.
 type ProviderSessionMetadata struct {
 	Id       *string `json:"id,omitempty"`
 	Kind     *string `json:"kind,omitempty"`
 	Provider *string `json:"provider,omitempty"`
+}
+
+// ProviderSessionSourceMetadata defines model for ProviderSessionSourceMetadata.
+type ProviderSessionSourceMetadata struct {
+	// ModifiedAt Filesystem modification time when available.
+	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
+
+	// RelativePath Path to the loaded session file relative to the configured Codex sessions root.
+	RelativePath string `json:"relativePath"`
+
+	// SizeBytes Size of the loaded session file in bytes.
+	SizeBytes int64 `json:"sizeBytes"`
 }
 
 // Relation defines model for Relation.
@@ -1253,6 +1287,18 @@ type InternalError = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
+// GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
+type GetProviderSessionDetailsParams struct {
+	// Provider Provider that emitted the session identifier. Only codex sessions are currently loadable.
+	Provider string `form:"provider" json:"provider"`
+
+	// Kind Provider-session identifier kind. Only session_id is currently loadable.
+	Kind string `form:"kind" json:"kind"`
+
+	// Id Provider-session identifier to resolve. This is an identifier, not a filesystem path.
+	Id string `form:"id" json:"id"`
+}
+
 // ListWorkParams defines parameters for ListWork.
 type ListWorkParams struct {
 	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
@@ -1642,6 +1688,9 @@ type ServerInterface interface {
 	// Get current factory
 	// (GET /factory/~current)
 	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
+	// Get provider session details
+	// (GET /provider-sessions/detail)
+	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
@@ -1701,6 +1750,70 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactory(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentFactory(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProviderSessionDetails operation middleware
+func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetProviderSessionDetailsParams
+
+	// ------------- Required query parameter "provider" -------------
+
+	if paramValue := r.URL.Query().Get("provider"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "provider"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "provider", r.URL.Query(), &params.Provider)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "kind", r.URL.Query(), &params.Kind)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "id" -------------
+
+	if paramValue := r.URL.Query().Get("id"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "id"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "id", r.URL.Query(), &params.Id)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProviderSessionDetails(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1965,6 +2078,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory", wrapper.CreateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.GetCurrentFactory).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
 

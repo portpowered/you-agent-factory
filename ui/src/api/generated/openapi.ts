@@ -108,6 +108,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider-sessions/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get provider session details
+         * @description Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+         */
+        get: operations["getProviderSessionDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory": {
         parameters: {
             query?: never;
@@ -246,6 +266,35 @@ export interface components {
              * @enum {string}
              */
             code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "NOT_FOUND" | "INTERNAL_ERROR";
+        };
+        ProviderSessionDetailResponse: {
+            providerSession: components["schemas"]["ProviderSessionMetadata"];
+            source: components["schemas"]["ProviderSessionSourceMetadata"];
+            parse: components["schemas"]["CodexSessionParseSummary"];
+        };
+        ProviderSessionSourceMetadata: {
+            /** @description Path to the loaded session file relative to the configured Codex sessions root. */
+            relativePath: string;
+            /**
+             * Format: int64
+             * @description Size of the loaded session file in bytes.
+             */
+            sizeBytes: number;
+            /**
+             * Format: date-time
+             * @description Filesystem modification time when available.
+             */
+            modifiedAt?: string;
+        };
+        CodexSessionParseSummary: {
+            /** @description Number of JSON event records parsed from the session stream. */
+            eventCount: number;
+            /** @description Number of non-empty event-stream lines inspected. */
+            lineCount: number;
+            /** @description Number of non-empty lines that could not be parsed as JSON objects. */
+            malformedLineCount: number;
+            /** @description Number of parsed JSON events without a recognized type field. */
+            unknownEventCount: number;
         };
         StringMap: {
             [key: string]: string;
@@ -1369,6 +1418,36 @@ export interface operations {
                     "application/json": components["schemas"]["StatusResponse"];
                 };
             };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getProviderSessionDetails: {
+        parameters: {
+            query: {
+                /** @description Provider that emitted the session identifier. Only codex sessions are currently loadable. */
+                provider: string;
+                /** @description Provider-session identifier kind. Only session_id is currently loadable. */
+                kind: string;
+                /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Parsed provider-session details. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderSessionDetailResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };
