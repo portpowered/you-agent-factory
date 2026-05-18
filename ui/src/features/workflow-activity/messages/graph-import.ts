@@ -80,8 +80,7 @@ const workflowActivityGraphImportMessagesByLocale = {
     dialogCloseLabel: "대화상자 닫기",
     dialogFlowLabel: "변경 흐름",
     dismissAction: "닫기",
-    graphDropHint:
-      "이 그래프에 Infinite You PNG를 놓아 가져오기를 시작하세요.",
+    graphDropHint: "이 그래프에 Infinite You PNG를 놓아 가져오기를 시작하세요.",
     graphDropReadingMessage: (fileName) =>
       `${fileName} 파일을 로컬에서 파싱하고 검증하는 중이며, 완료되면 가져오기가 계속됩니다.`,
     graphDropTitle: "팩토리 PNG 가져오기",
@@ -93,8 +92,7 @@ const workflowActivityGraphImportMessagesByLocale = {
       "브라우저가 드롭한 파일을 읽지 못했습니다. PNG를 다시 드롭해 보세요.",
     importErrorMetadataMissing:
       "이 PNG에는 가져오기에 필요한 Infinite You 팩토리 메타데이터가 없습니다.",
-    importErrorNotPngFile:
-      "Infinite You에서 내보낸 PNG 이미지를 드롭하세요.",
+    importErrorNotPngFile: "Infinite You에서 내보낸 PNG 이미지를 드롭하세요.",
     importErrorPngInvalid:
       "이 PNG는 잘렸거나 손상된 것 같아서 활성화 요청 전에 가져오기가 중단되었습니다.",
     importErrorPreviewUnavailable:
@@ -104,7 +102,7 @@ const workflowActivityGraphImportMessagesByLocale = {
         ? `이 PNG는 지원되지 않는 Infinite You 팩토리 메타데이터 버전 ${schemaVersion}을 사용합니다.`
         : "이 PNG는 지원되지 않는 Infinite You 팩토리 메타데이터 버전을 사용합니다.",
   },
-  zh: {
+  "zh-CN": {
     dialogCloseLabel: "关闭对话框",
     dialogFlowLabel: "变更流程",
     dismissAction: "关闭",
@@ -116,8 +114,7 @@ const workflowActivityGraphImportMessagesByLocale = {
     graphImportLoadingTitle: "正在校验工厂 PNG",
     importErrorEmbeddedMetadataInvalid:
       "嵌入的 Infinite You 工厂元数据无效，因此当前工厂未被更改。",
-    importErrorFileReadFailed:
-      "浏览器无法读取拖入的文件。请再次拖入该 PNG。",
+    importErrorFileReadFailed: "浏览器无法读取拖入的文件。请再次拖入该 PNG。",
     importErrorMetadataMissing:
       "此 PNG 不包含导入所需的 Infinite You 工厂元数据。",
     importErrorNotPngFile: "请拖入从 Infinite You 导出的 PNG 图片。",
