@@ -28,7 +28,7 @@ const storyChecks = [
   },
   {
     assertions: verifyDashboardHeader,
-    id: "infinite-you-workflow-dashboard--header-timeline-alignment-verification",
+    id: "infinite-you-dashboard-dashboard-header--responsive-verification",
     label: "dashboard header",
   },
 ];

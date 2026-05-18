@@ -9,8 +9,11 @@ Run these commands from the repository root unless the step says otherwise.
 1. `cd ui && bun install`
 2. `cd ui && bun run build-storybook`
 3. `cd ui && bun run test-storybook`
-4. `cd ui && bun run build`
-5. `cd ui && bun run preview`
+4. `cd ui && bun run storybook:responsive-check`
+5. `cd ui && bun run build`
+6. `cd ui && bun run preview`
+
+`storybook:responsive-check` is self-contained against `storybook-static`: it reuses an already-running Storybook server on `127.0.0.1:6008` when present, or starts and stops a temporary static server automatically after `build-storybook`.
 
 After the preview server starts, open `http://127.0.0.1:4173` in a browser and spot-check the changed dashboard flows at these viewport widths:
 
@@ -47,5 +50,5 @@ Date: `2026-05-19`
 - `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/factory-graph-editor/factory-graph-editor-flow.stories.tsx` passed in a browser-backed runner, covering labeled Success/Continue/Failure/Reject workstation anchors and keyboard-reachable connection-source selection in the focused graph-editor flow story.
 - `cd ui && bun x vitest run --config vitest.storybook.config.ts --project=storybook src/features/factory-graph-editor/factory-graph-editor-add-dialog.stories.tsx` passed in a browser-backed runner, covering the differentiated work-type and work-state add dialogs plus field-level work-state validation copy.
 - `cd ui && bun run build` passed.
-- `cd ui && bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for `ExportFactoryDialog`, `DashboardImportPreviewDialog`, and the dashboard header verification story, confirming mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) dialog/header bounds, visible controls, keyboard timeline interactions, desktop toolbar ordering, and no horizontal overflow in headless Chromium.
+- `cd ui && bun run storybook:responsive-check` passed against built Storybook `iframe.html` stories for `ExportFactoryDialog`, `DashboardImportPreviewDialog`, and the focused `DashboardHeader` verification story, confirming mobile (`390x844`), tablet (`768x1024`), and desktop (`1440x900`) dialog/header bounds, visible controls, keyboard timeline interactions, desktop toolbar ordering, and no horizontal overflow in headless Chromium.
 - `make test` passed from the repository root while the refreshed Storybook wrapper waited for the built index to restabilize before launching the responsive browser check.

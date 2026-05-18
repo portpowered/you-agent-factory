@@ -20,7 +20,7 @@ function formatExit(code, signal) {
   return `signal ${signal ?? "unknown"}`;
 }
 
-function spawnBun(args, options = {}) {
+export function spawnBun(args, options = {}) {
   return spawn("bun", args, {
     cwd: process.cwd(),
     env: {
@@ -34,7 +34,7 @@ function spawnBun(args, options = {}) {
   });
 }
 
-function runBun(args) {
+export function runBun(args) {
   return new Promise((resolve, reject) => {
     const child = spawnBun(args);
 
@@ -135,7 +135,7 @@ export async function waitForStableStorybookIndex({
   }
 }
 
-async function stopServer(child) {
+export async function stopServer(child) {
   if (!child.pid || child.exitCode !== null) {
     return;
   }
