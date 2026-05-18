@@ -169,6 +169,16 @@ const (
 	WorkstationTypeModelWorkstation WorkstationType = "MODEL_WORKSTATION"
 )
 
+// Defines values for SortBy.
+const (
+	SortByStateType SortBy = "state.type"
+)
+
+// Defines values for ListWorkParamsSortBy.
+const (
+	ListWorkParamsSortByStateType ListWorkParamsSortBy = "state.type"
+)
+
 // BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile.
 type BundledFile struct {
 	// Content Inline content payload for a portable bundled file.
@@ -655,7 +665,7 @@ type IntegerMap map[string]int
 // ListWorkResponse defines model for ListWorkResponse.
 type ListWorkResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
-	Results           []TokenResponse    `json:"results"`
+	Results           []Work             `json:"results"`
 }
 
 // PaginationContext defines model for PaginationContext.
@@ -964,8 +974,8 @@ type Work struct {
 	// RequestId Identifier for the original request that created this work, if applicable
 	RequestId *string `json:"requestId,omitempty"`
 
-	// State Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
-	State *string    `json:"state,omitempty"`
+	// State A lifecycle state that a work item can occupy inside one work type.
+	State *WorkState `json:"state,omitempty"`
 	Tags  *StringMap `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
@@ -1213,6 +1223,15 @@ type MaxResults = int
 // NextToken defines model for NextToken.
 type NextToken = string
 
+// SortBy defines model for SortBy.
+type SortBy string
+
+// StateName defines model for StateName.
+type StateName = string
+
+// StateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
+type StateType = WorkStateType
+
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
@@ -1241,7 +1260,19 @@ type ListWorkParams struct {
 
 	// NextToken Optional base64-encoded token ID cursor.
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+
+	// StateName Optional current work state name filter.
+	StateName *StateName `form:"state.name,omitempty" json:"state.name,omitempty"`
+
+	// StateType Optional current work state type filter.
+	StateType *StateType `form:"state.type,omitempty" json:"state.type,omitempty"`
+
+	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
+	SortBy *ListWorkParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
 }
+
+// ListWorkParamsSortBy defines parameters for ListWork.
+type ListWorkParamsSortBy string
 
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = Factory
@@ -1714,6 +1745,30 @@ func (siw *ServerInterfaceWrapper) ListWork(w http.ResponseWriter, r *http.Reque
 	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state.name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state.name", r.URL.Query(), &params.StateName)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state.type" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state.type", r.URL.Query(), &params.StateType)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.type", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sortBy" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sortBy", r.URL.Query(), &params.SortBy)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sortBy", Err: err})
 		return
 	}
 

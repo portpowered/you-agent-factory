@@ -577,6 +577,37 @@ func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) 
 	assertWorkstationRequestScriptBoundarySchemas(t, schemas)
 }
 
+func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	doc := loadBundledOpenAPIDocument(t)
+
+	listWorkResponse := schemaObject(t, schemas, "ListWorkResponse")
+	listWorkProperties := schemaProperties(t, listWorkResponse, "ListWorkResponse")
+	assertArrayItemRef(t, listWorkProperties, "results", "#/components/schemas/Work")
+	if _, ok := listWorkProperties["paginationContext"].(map[string]any); !ok {
+		t.Fatal("ListWorkResponse.properties.paginationContext is missing")
+	}
+
+	work := schemaObject(t, schemas, "Work")
+	workProperties := schemaProperties(t, work, "Work")
+	state, ok := workProperties["state"].(map[string]any)
+	if !ok {
+		t.Fatal("Work.properties.state is missing")
+	}
+	if got := state["$ref"]; got != "#/components/schemas/WorkState" {
+		t.Fatalf("Work.properties.state.$ref = %v, want #/components/schemas/WorkState", got)
+	}
+
+	listWork := doc["paths"].(map[string]any)["/work"].(map[string]any)["get"].(map[string]any)
+	parameters, ok := listWork["parameters"].([]any)
+	if !ok {
+		t.Fatal("paths./work.get.parameters is missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/StateName")
+	assertParameterRef(t, parameters, "#/components/parameters/StateType")
+	assertParameterRef(t, parameters, "#/components/parameters/SortBy")
+}
+
 func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 
@@ -614,6 +645,20 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 func loadBundledOpenAPIComponentSchemas(t *testing.T) map[string]any {
 	t.Helper()
 
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+	assertProjectionSchemasPresent(t, schemas)
+	assertWorkstationRequestProjectionSliceSchema(t, schemas)
+	assertWorkstationRequestViewSchema(t, schemas)
+	assertWorkstationRequestRequestSchema(t, schemas)
+	assertWorkstationRequestWorkRefSchemas(t, schemas)
+	assertWorkstationRequestResponseSchema(t, schemas)
+	return schemas
+}
+
+func loadBundledOpenAPIDocument(t *testing.T) map[string]any {
+	t.Helper()
+
 	data, err := os.ReadFile("../../api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read openapi contract: %v", err)
@@ -623,15 +668,7 @@ func loadBundledOpenAPIComponentSchemas(t *testing.T) map[string]any {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("parse openapi contract: %v", err)
 	}
-
-	schemas := componentSchemas(t, doc)
-	assertProjectionSchemasPresent(t, schemas)
-	assertWorkstationRequestProjectionSliceSchema(t, schemas)
-	assertWorkstationRequestViewSchema(t, schemas)
-	assertWorkstationRequestRequestSchema(t, schemas)
-	assertWorkstationRequestWorkRefSchemas(t, schemas)
-	assertWorkstationRequestResponseSchema(t, schemas)
-	return schemas
+	return doc
 }
 
 func collectSnakeCaseComponentFields(t *testing.T, schemas map[string]any, rootSchemas []string) []string {
@@ -2065,6 +2102,18 @@ func assertArrayItemRef(t *testing.T, properties map[string]any, propertyName st
 	if got, ok := items["$ref"].(string); !ok || got != wantRef {
 		t.Fatalf("properties.%s.items.$ref = %v, want %s", propertyName, items["$ref"], wantRef)
 	}
+}
+
+func assertParameterRef(t *testing.T, parameters []any, wantRef string) {
+	t.Helper()
+
+	for _, parameter := range parameters {
+		ref, ok := parameter.(map[string]any)["$ref"].(string)
+		if ok && ref == wantRef {
+			return
+		}
+	}
+	t.Fatalf("operation parameters missing %s: %#v", wantRef, parameters)
 }
 
 func assertStringArrayProperty(t *testing.T, properties map[string]any, propertyName string) {

@@ -18,6 +18,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -40,6 +41,7 @@ func TestNewRootCommand_HasSubcommands(t *testing.T) {
 		"init":   false,
 		"run":    false,
 		"submit": false,
+		"work":   false,
 	}
 
 	for _, sub := range root.Commands() {
@@ -905,6 +907,63 @@ func TestRunCommand_QuietFlag(t *testing.T) {
 	}
 	if !strings.Contains(runCmd.Long, "--quiet") {
 		t.Fatal("expected run command long help text to mention --quiet")
+	}
+}
+
+func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
+	originalListWork := listWork
+	defer func() {
+		listWork = originalListWork
+	}()
+
+	var got workcli.ListConfig
+	listWork = func(cfg workcli.ListConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"work",
+		"list",
+		"--state-name", "review",
+		"--state-type", "PROCESSING",
+		"--sort-by", "state.type",
+		"--max-results", "25",
+		"--next-token", "cursor-1",
+		"--json",
+		"--port", "9090",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list: %v", err)
+	}
+
+	if got.StateName != "review" {
+		t.Fatalf("state name = %q, want review", got.StateName)
+	}
+	if got.StateType != "PROCESSING" {
+		t.Fatalf("state type = %q, want PROCESSING", got.StateType)
+	}
+	if got.SortBy != "state.type" {
+		t.Fatalf("sort by = %q, want state.type", got.SortBy)
+	}
+	if got.Port != 9090 {
+		t.Fatalf("port = %d, want 9090", got.Port)
+	}
+	if got.MaxResults != 25 {
+		t.Fatalf("max results = %d, want 25", got.MaxResults)
+	}
+	if got.NextToken != "cursor-1" {
+		t.Fatalf("next token = %q, want cursor-1", got.NextToken)
+	}
+	if !got.JSON {
+		t.Fatal("expected json output flag")
+	}
+	if got.Output == nil {
+		t.Fatal("expected output writer")
 	}
 }
 

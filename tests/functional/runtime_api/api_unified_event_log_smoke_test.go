@@ -119,9 +119,9 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 	if len(completedWork) != 2 {
 		t.Fatalf("completed work count = %d, want 2", len(completedWork))
 	}
-	for _, token := range completedWork {
-		if token.TraceId != traceID || token.PlaceId != "task:complete" {
-			t.Fatalf("completed work token = %#v, want completed task token for trace %q", token, traceID)
+	for _, item := range completedWork {
+		if stringPointerValue(item.TraceId) != traceID || generatedWorkStateName(item.State) != "complete" {
+			t.Fatalf("completed work item = %#v, want completed task work for trace %q", item, traceID)
 		}
 	}
 

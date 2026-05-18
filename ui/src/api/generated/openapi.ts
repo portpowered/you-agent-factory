@@ -181,7 +181,7 @@ export interface components {
             traceId: string;
         };
         ListWorkResponse: {
-            results: components["schemas"]["TokenResponse"][];
+            results: components["schemas"]["Work"][];
             paginationContext?: components["schemas"]["PaginationContext"];
         };
         PaginationContext: {
@@ -1114,8 +1114,8 @@ export interface components {
             requestId?: string;
             /** @description Configured work type name from factory.json for this submitted work item. */
             workTypeName?: string;
-            /** @description Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type. */
-            state?: string;
+            /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
+            state?: components["schemas"]["WorkState"];
             /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
             chainingTraceDepth?: number;
             /** @description Explicit chaining-trace identifier for this submitted work item. */
@@ -1203,6 +1203,12 @@ export interface components {
         MaxResults: number;
         /** @description Optional base64-encoded token ID cursor. */
         NextToken: string;
+        /** @description Optional current work state name filter. */
+        StateName: string;
+        /** @description Optional current work state type filter. */
+        StateType: components["schemas"]["WorkStateType"];
+        /** @description Optional list-work sort field. Use state.type to order by current work state type. */
+        SortBy: "state.type";
         /** @description Work or token identifier, depending on route. */
         WorkOrTokenID: string;
     };
@@ -1219,6 +1225,12 @@ export interface operations {
                 maxResults?: components["parameters"]["MaxResults"];
                 /** @description Optional base64-encoded token ID cursor. */
                 nextToken?: components["parameters"]["NextToken"];
+                /** @description Optional current work state name filter. */
+                "state.name"?: components["parameters"]["StateName"];
+                /** @description Optional current work state type filter. */
+                "state.type"?: components["parameters"]["StateType"];
+                /** @description Optional list-work sort field. Use state.type to order by current work state type. */
+                sortBy?: components["parameters"]["SortBy"];
             };
             header?: never;
             path?: never;

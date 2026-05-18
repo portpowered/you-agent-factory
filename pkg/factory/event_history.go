@@ -559,6 +559,26 @@ func generatedWorkStateType(category string) factoryapi.WorkStateType {
 	}
 }
 
+func generatedWorkStatePtr(name string) *factoryapi.WorkState {
+	if name == "" {
+		return nil
+	}
+	return &factoryapi.WorkState{Name: name, Type: inferredGeneratedWorkStateType(name)}
+}
+
+func inferredGeneratedWorkStateType(name string) factoryapi.WorkStateType {
+	switch name {
+	case "init":
+		return factoryapi.WorkStateTypeINITIAL
+	case "complete", "done":
+		return factoryapi.WorkStateTypeTERMINAL
+	case "failed":
+		return factoryapi.WorkStateTypeFAILED
+	default:
+		return factoryapi.WorkStateTypePROCESSING
+	}
+}
+
 func generatedWorkers(workers []interfaces.FactoryWorker) []factoryapi.Worker {
 	out := make([]factoryapi.Worker, 0, len(workers))
 	for _, worker := range workers {
@@ -662,7 +682,7 @@ func generatedWork(item interfaces.FactoryWorkItem) factoryapi.Work {
 		Name:                     name,
 		WorkId:                   stringPtrIfNotEmpty(item.ID),
 		WorkTypeName:             stringPtrIfNotEmpty(item.WorkTypeID),
-		State:                    stringPtrIfNotEmpty(item.State),
+		State:                    generatedWorkStatePtr(item.State),
 		ChainingTraceDepth:       intPtrIfPositive(item.ChainingTraceDepth),
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
 		PreviousChainingTraceIds: stringSlicePtr(item.PreviousChainingTraceIDs),

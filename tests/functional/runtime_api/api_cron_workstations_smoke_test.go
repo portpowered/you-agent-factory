@@ -527,9 +527,9 @@ func assertCronTimeWorkHiddenFromNormalViews(t *testing.T, fs *functionalAPIServ
 	assertStatusHidesCronTimeWork(t, fs, timeWorkID)
 
 	work := fs.ListWork(t)
-	for _, token := range work.Results {
-		if token.WorkId == timeWorkID || token.WorkType == interfaces.SystemTimeWorkTypeID {
-			t.Fatalf("GET /work exposed internal cron time work %q: %#v", timeWorkID, token)
+	for _, item := range work.Results {
+		if stringPointerValue(item.WorkId) == timeWorkID || stringPointerValue(item.WorkTypeName) == interfaces.SystemTimeWorkTypeID {
+			t.Fatalf("GET /work exposed internal cron time work %q: %#v", timeWorkID, item)
 		}
 	}
 

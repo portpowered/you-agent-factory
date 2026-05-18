@@ -19,6 +19,7 @@ import {
 } from "./cloneTimelineSnapshot";
 import {
   eventWorkTypeID,
+  factoryWorkStateName,
   factoryWorkToItem,
   outputPlaceForWorkstation,
   resolveWorkstationName,
@@ -130,7 +131,7 @@ export function responseCompletion(
         event.payload.transitionId,
         event.payload.outcome,
         eventWorkTypeID(work) ?? "",
-        work.state,
+        factoryWorkStateName(work),
       ),
     ),
   );

@@ -557,7 +557,7 @@ func restoreReplayResourceUsage(source factoryapi.Factory, target *interfaces.Fa
 
 func workFromGeneratedWork(work factoryapi.Work, requestID string) interfaces.Work {
 	workTypeID := stringValue(work.WorkTypeName)
-	workState := stringValue(work.State)
+	workState := generatedWorkStateName(work.State)
 	currentChainingTraceID := stringValue(work.CurrentChainingTraceId)
 	traceID := stringValue(work.TraceId)
 	if currentChainingTraceID == "" {
@@ -752,6 +752,13 @@ func stringValue[T ~string](value *T) string {
 		return ""
 	}
 	return string(*value)
+}
+
+func generatedWorkStateName(value *factoryapi.WorkState) string {
+	if value == nil {
+		return ""
+	}
+	return value.Name
 }
 
 func stringSliceValue(values *[]string) []string {

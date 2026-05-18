@@ -55,6 +55,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/MaxResults'
         - $ref: '#/components/parameters/NextToken'
+        - $ref: '#/components/parameters/StateName'
+        - $ref: '#/components/parameters/StateType'
+        - $ref: '#/components/parameters/SortBy'
       responses:
         '200':
           description: Current work tokens.
@@ -240,6 +243,29 @@ components:
       description: Optional base64-encoded token ID cursor.
       schema:
         type: string
+    StateName:
+      name: state.name
+      in: query
+      required: false
+      description: Optional current work state name filter.
+      schema:
+        type: string
+    StateType:
+      name: state.type
+      in: query
+      required: false
+      description: Optional current work state type filter.
+      schema:
+        $ref: '#/components/schemas/WorkStateType'
+    SortBy:
+      name: sortBy
+      in: query
+      required: false
+      description: Optional list-work sort field. Use state.type to order by current work state type.
+      schema:
+        type: string
+        enum:
+          - state.type
     WorkOrTokenID:
       name: id
       in: path
@@ -387,7 +413,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/TokenResponse'
+            $ref: '#/components/schemas/Work'
         paginationContext:
           $ref: '#/components/schemas/PaginationContext'
     PaginationContext:
@@ -2214,8 +2240,8 @@ components:
           type: string
           description: Configured work type name from factory.json for this submitted work item.
         state:
-          type: string
-          description: Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
+          $ref: '#/components/schemas/WorkState'
+          description: Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided.
         chainingTraceDepth:
           type: integer
           minimum: 1

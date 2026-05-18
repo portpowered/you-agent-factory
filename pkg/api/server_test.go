@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,23 +93,49 @@ func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*int
 	for i := 1; i <= count; i++ {
 		suffix := string(rune('0' + i))
 		id := "tok-" + prefix + "-" + suffix
-		tokens[id] = &interfaces.Token{
-			ID:      id,
-			PlaceID: prefix + ":init",
-			Color: interfaces.TokenColor{
-				WorkID:     "work-" + prefix + "-" + suffix,
-				WorkTypeID: prefix,
-			},
-			CreatedAt: now,
-			EnteredAt: now,
-			History: interfaces.TokenHistory{
-				TotalVisits:         make(map[string]int),
-				ConsecutiveFailures: make(map[string]int),
-				PlaceVisits:         make(map[string]int),
-			},
-		}
+		tokens[id] = listWorkToken(id, "work-"+prefix+"-"+suffix, prefix+":init", prefix, now)
 	}
 	return tokens
+}
+
+func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *interfaces.Token {
+	return &interfaces.Token{
+		ID:      id,
+		PlaceID: placeID,
+		Color: interfaces.TokenColor{
+			WorkID:     workID,
+			WorkTypeID: workTypeID,
+		},
+		CreatedAt: now,
+		EnteredAt: now,
+		History: interfaces.TokenHistory{
+			TotalVisits:         make(map[string]int),
+			ConsecutiveFailures: make(map[string]int),
+			PlaceVisits:         make(map[string]int),
+		},
+	}
+}
+
+func listWorkFilterTopology() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init":     {ID: "task:init", TypeID: "task", State: "init"},
+			"task:review":   {ID: "task:review", TypeID: "task", State: "review"},
+			"task:failed":   {ID: "task:failed", TypeID: "task", State: "failed"},
+			"task:complete": {ID: "task:complete", TypeID: "task", State: "complete"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "review", Category: state.StateCategoryProcessing},
+					{Value: "failed", Category: state.StateCategoryFailed},
+					{Value: "complete", Category: state.StateCategoryTerminal},
+				},
+			},
+		},
+	}
 }
 
 func TestSubmitWork(t *testing.T) {
@@ -233,8 +260,8 @@ func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	if err := json.NewDecoder(listResp.Body).Decode(&listBody); err != nil {
 		t.Fatalf("decode list work response: %v", err)
 	}
-	if len(listBody.Results) != 1 || listBody.Results[0].Id != "tok-api-surface-1" {
-		t.Fatalf("GET /work results = %#v, want tok-api-surface-1", listBody.Results)
+	if len(listBody.Results) != 1 || stringValue(listBody.Results[0].WorkId) != "work-api-surface-1" {
+		t.Fatalf("GET /work results = %#v, want work-api-surface-1", listBody.Results)
 	}
 	if mf.EngineStateSnapshotCalls == 0 {
 		t.Fatal("expected GET /work to read engine state snapshot through the embedded API factory contract")
@@ -1206,6 +1233,19 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 		CreatedAt: now,
 		EnteredAt: now,
 	}
+	mf.Net = &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+				},
+			},
+		},
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/work", nil)
 	rec = httptest.NewRecorder()
@@ -1223,36 +1263,24 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 		t.Fatalf("work result count = %d, want 1", len(listResp.Results))
 	}
 
-	token := listResp.Results[0]
-	if token.Id != "tok-inventory-1" {
-		t.Fatalf("token id = %q, want tok-inventory-1", token.Id)
+	work := listResp.Results[0]
+	if work.Name != "Inventory story" {
+		t.Fatalf("name = %q, want Inventory story", work.Name)
 	}
-	if token.PlaceId != "task:init" {
-		t.Fatalf("place_id = %q, want task:init", token.PlaceId)
+	if stringValue(work.WorkId) != "work-inventory-1" {
+		t.Fatalf("work_id = %q, want work-inventory-1", stringValue(work.WorkId))
 	}
-	if stringValue(token.Name) != "Inventory story" {
-		t.Fatalf("name = %q, want Inventory story", stringValue(token.Name))
+	if stringValue(work.WorkTypeName) != "task" {
+		t.Fatalf("work_type = %q, want task", stringValue(work.WorkTypeName))
 	}
-	if token.WorkId != "work-inventory-1" {
-		t.Fatalf("work_id = %q, want work-inventory-1", token.WorkId)
+	if stringValue(work.TraceId) != "trace-inventory-1" {
+		t.Fatalf("trace_id = %q, want trace-inventory-1", stringValue(work.TraceId))
 	}
-	if token.WorkType != "task" {
-		t.Fatalf("work_type = %q, want task", token.WorkType)
+	if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypeINITIAL {
+		t.Fatalf("state = %#v, want init/INITIAL", work.State)
 	}
-	if token.TraceId != "trace-inventory-1" {
-		t.Fatalf("trace_id = %q, want trace-inventory-1", token.TraceId)
-	}
-	if token.Tags == nil || (*token.Tags)["branch"] != "api-standardization" {
-		t.Fatalf("tags = %#v, want branch api-standardization", token.Tags)
-	}
-	if token.CreatedAt.Format(time.RFC3339) != "2026-04-12T16:30:00Z" {
-		t.Fatalf("created_at = %q, want RFC3339 timestamp", token.CreatedAt)
-	}
-	if token.EnteredAt.Format(time.RFC3339) != "2026-04-12T16:30:00Z" {
-		t.Fatalf("entered_at = %q, want RFC3339 timestamp", token.EnteredAt)
-	}
-	if token.History != nil {
-		t.Fatalf("list token history = %#v, want omitted history", token.History)
+	if work.Tags == nil || (*work.Tags)["branch"] != "api-standardization" {
+		t.Fatalf("tags = %#v, want branch api-standardization", work.Tags)
 	}
 }
 
@@ -1472,11 +1500,11 @@ func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	if len(resp.Results) != 1 || resp.Results[0].Id != "tok-story" {
-		t.Fatalf("listed tokens = %#v, want only customer token", resp.Results)
+	if len(resp.Results) != 1 || stringValue(resp.Results[0].WorkId) != "work-story" {
+		t.Fatalf("listed work = %#v, want only customer work", resp.Results)
 	}
-	if resp.PaginationContext != nil {
-		t.Fatalf("pagination context = %#v, want none after internal token filtering", resp.PaginationContext)
+	if resp.PaginationContext == nil || stringValue(resp.PaginationContext.NextToken) != "" {
+		t.Fatalf("pagination context = %#v, want metadata without next token after internal token filtering", resp.PaginationContext)
 	}
 }
 
@@ -1546,8 +1574,8 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 	if len(firstResp.Results) != 2 {
 		t.Fatalf("first page results = %d, want 2", len(firstResp.Results))
 	}
-	if firstResp.Results[0].Id != "tok-filter-1" || firstResp.Results[1].Id != "tok-filter-3" {
-		t.Fatalf("first page listed tokens = %#v, want public tokens before pagination", firstResp.Results)
+	if stringValue(firstResp.Results[0].WorkId) != "work-filter-1" || stringValue(firstResp.Results[1].WorkId) != "work-filter-3" {
+		t.Fatalf("first page listed work = %#v, want public work before pagination", firstResp.Results)
 	}
 	if firstResp.PaginationContext == nil {
 		t.Fatal("expected first page pagination context")
@@ -1570,11 +1598,11 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 	if err := json.NewDecoder(secondRec.Body).Decode(&secondResp); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
-	if len(secondResp.Results) != 1 || secondResp.Results[0].Id != "tok-filter-4" {
-		t.Fatalf("second page listed tokens = %#v, want remaining public token", secondResp.Results)
+	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-filter-4" {
+		t.Fatalf("second page listed work = %#v, want remaining public work", secondResp.Results)
 	}
-	if secondResp.PaginationContext != nil {
-		t.Fatalf("second page pagination context = %#v, want none on final page", secondResp.PaginationContext)
+	if secondResp.PaginationContext == nil || stringValue(secondResp.PaginationContext.NextToken) != "" {
+		t.Fatalf("second page pagination context = %#v, want metadata without next token on final page", secondResp.PaginationContext)
 	}
 }
 
@@ -1907,6 +1935,151 @@ func TestListWork(t *testing.T) {
 	}
 }
 
+func TestListWork_FiltersByStateNameAndType(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkToken("tok-1", "work-init", "task:init", "task", now),
+		"tok-2": listWorkToken("tok-2", "work-review", "task:review", "task", now),
+		"tok-3": listWorkToken("tok-3", "work-failed", "task:failed", "task", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	for _, tc := range []struct {
+		name        string
+		query       string
+		wantWorkIDs []string
+	}{
+		{name: "state name", query: "state.name=review", wantWorkIDs: []string{"work-review"}},
+		{name: "state type", query: "state.type=PROCESSING", wantWorkIDs: []string{"work-review"}},
+		{name: "combined", query: "state.name=review&state.type=PROCESSING", wantWorkIDs: []string{"work-review"}},
+		{name: "combined mismatch", query: "state.name=review&state.type=FAILED", wantWorkIDs: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/work?"+tc.query, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+
+			var resp factoryapi.ListWorkResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(resp.Results) != len(tc.wantWorkIDs) {
+				t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(tc.wantWorkIDs), resp.Results)
+			}
+			for i, wantWorkID := range tc.wantWorkIDs {
+				got := resp.Results[i]
+				if stringValue(got.WorkId) != wantWorkID {
+					t.Fatalf("result[%d].workId = %q, want %q", i, stringValue(got.WorkId), wantWorkID)
+				}
+				if got.State == nil {
+					t.Fatalf("result[%d].state is nil", i)
+				}
+			}
+		})
+	}
+}
+
+func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkToken("tok-1", "work-complete", "task:complete", "task", now),
+		"tok-2": listWorkToken("tok-2", "work-failed", "task:failed", "task", now),
+		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", now),
+		"tok-4": listWorkToken("tok-4", "work-init", "task:init", "task", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	wantWorkIDs := []string{"work-init", "work-review", "work-failed", "work-complete"}
+	if len(resp.Results) != len(wantWorkIDs) {
+		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
+	}
+	for i, wantWorkID := range wantWorkIDs {
+		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
+		}
+	}
+}
+
+func TestListWork_SortsByStateType(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkToken("tok-1", "work-complete", "task:complete", "task", now),
+		"tok-2": listWorkToken("tok-2", "work-failed", "task:failed", "task", now),
+		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", now),
+		"tok-4": listWorkToken("tok-4", "work-init", "task:init", "task", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work?sortBy=state.type", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	wantWorkIDs := []string{"work-failed", "work-init", "work-review", "work-complete"}
+	if len(resp.Results) != len(wantWorkIDs) {
+		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
+	}
+	for i, wantWorkID := range wantWorkIDs {
+		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
+		}
+	}
+}
+
+func TestListWork_InvalidStateTypeReturnsBadRequest(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	req := httptest.NewRequest(http.MethodGet, "/work?state.type=UNKNOWN", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
+}
+
+func TestListWork_InvalidSortByReturnsBadRequest(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	req := httptest.NewRequest(http.MethodGet, "/work?sortBy=name", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "sortBy must be state.type")
+}
+
 func TestListWork_InvalidMaxResultsUsesGeneratedBadRequest(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
@@ -1958,8 +2131,8 @@ func TestListWork_NonPositiveMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 			if len(resp.Results) != len(tokens) {
 				t.Fatalf("expected defaulted response with %d results, got %d", len(tokens), len(resp.Results))
 			}
-			if resp.PaginationContext != nil {
-				t.Fatalf("expected no pagination context when maxResults defaults to %d, got %#v", defaultMaxResults, resp.PaginationContext)
+			if resp.PaginationContext == nil || resp.PaginationContext.MaxResults != defaultMaxResults || stringValue(resp.PaginationContext.NextToken) != "" {
+				t.Fatalf("expected pagination context with maxResults %d and no next token, got %#v", defaultMaxResults, resp.PaginationContext)
 			}
 		})
 	}
@@ -2009,15 +2182,35 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	if len(secondResp.Results) != 1 {
 		t.Fatalf("second page results = %d, want 1", len(secondResp.Results))
 	}
-	if secondResp.PaginationContext != nil {
-		t.Fatalf("expected final page to omit pagination context, got %#v", secondResp.PaginationContext)
+	if secondResp.PaginationContext == nil || secondResp.PaginationContext.MaxResults != 2 || stringValue(secondResp.PaginationContext.NextToken) != "" {
+		t.Fatalf("expected final page pagination context with maxResults 2 and no next token, got %#v", secondResp.PaginationContext)
 	}
-	if firstResp.Results[0].WorkId != "work-cursor-1" ||
-		firstResp.Results[1].WorkId != "work-cursor-2" {
+	if stringValue(firstResp.Results[0].WorkId) != "work-cursor-1" ||
+		stringValue(firstResp.Results[1].WorkId) != "work-cursor-2" {
 		t.Fatalf("unexpected first page work ids: %#v", firstResp.Results)
 	}
-	if secondResp.Results[0].WorkId != "work-cursor-3" {
-		t.Fatalf("unexpected continued work id %q", secondResp.Results[0].WorkId)
+	if stringValue(secondResp.Results[0].WorkId) != "work-cursor-3" {
+		t.Fatalf("unexpected continued work id %q", stringValue(secondResp.Results[0].WorkId))
+	}
+
+	trailingToken := base64.StdEncoding.EncodeToString([]byte("tok-cursor-3"))
+	trailingReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2&nextToken="+trailingToken, nil)
+	trailingRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(trailingRec, trailingReq)
+
+	if trailingRec.Code != http.StatusOK {
+		t.Fatalf("trailing page status = %d, want %d", trailingRec.Code, http.StatusOK)
+	}
+
+	var trailingResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(trailingRec.Body).Decode(&trailingResp); err != nil {
+		t.Fatalf("decode trailing page: %v", err)
+	}
+	if len(trailingResp.Results) != 0 {
+		t.Fatalf("trailing page results = %d, want 0: %#v", len(trailingResp.Results), trailingResp.Results)
+	}
+	if trailingResp.PaginationContext == nil || trailingResp.PaginationContext.MaxResults != 2 || stringValue(trailingResp.PaginationContext.NextToken) != "" {
+		t.Fatalf("trailing page pagination context = %#v, want maxResults 2 and no next token", trailingResp.PaginationContext)
 	}
 }
 

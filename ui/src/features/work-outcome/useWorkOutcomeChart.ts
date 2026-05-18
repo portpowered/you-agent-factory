@@ -368,8 +368,8 @@ function timelineWorkItemFromOutputWork(
     return undefined;
   }
   const placeIDValue =
-    typeof work.state === "string" && work.state.length > 0
-      ? placeID(workTypeID, work.state)
+    typeof work.state === "object" && work.state?.name
+      ? placeID(workTypeID, work.state.name)
       : undefined;
 
   return {
@@ -415,5 +415,4 @@ function firstMatchingInitialPlaceID(
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.length > 0))].sort();
 }
-
 

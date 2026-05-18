@@ -118,7 +118,7 @@ func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, request
 				Name:         work.Name,
 				WorkID:       support.StringPointerValue(work.WorkId),
 				WorkTypeName: support.StringPointerValue(work.WorkTypeName),
-				State:        support.StringPointerValue(work.State),
+				State:        generatedWorkStateName(work.State),
 				TraceID:      support.StringPointerValue(work.TraceId),
 			})
 		}

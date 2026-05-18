@@ -180,6 +180,15 @@ func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factoryapi.ListWorkParams) {
+	if params.StateType != nil && !validWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
+		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
+		return
+	}
+	if params.SortBy != nil && *params.SortBy != factoryapi.ListWorkParamsSortByStateType {
+		s.writeError(w, http.StatusBadRequest, "sortBy must be state.type", "BAD_REQUEST")
+		return
+	}
+
 	snapshot, err := s.runtime.GetEngineStateSnapshot(r.Context())
 	if err != nil {
 		s.logger.Error("get engine state snapshot failed", zap.Error(err))
@@ -187,15 +196,19 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		return
 	}
 
-	// Collect and sort tokens by ID for deterministic pagination.
-	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
+	// Collect, filter, and sort public work for deterministic pagination.
+	items := make([]listWorkItem, 0, len(snapshot.Marking.Tokens))
 	for _, t := range snapshot.Marking.Tokens {
 		if !publicWorkToken(t) {
 			continue
 		}
-		tokens = append(tokens, t)
+		work := tokenToWork(t, snapshot.Topology)
+		if !workMatchesListFilters(work, params) {
+			continue
+		}
+		items = append(items, listWorkItem{cursorID: t.ID, work: work})
 	}
-	sort.Slice(tokens, func(i, j int) bool { return tokens[i].ID < tokens[j].ID })
+	sortListWorkItems(items, listWorkSortMode(params.SortBy))
 
 	// Consume the generated route params directly. Non-positive values still fall back
 	// to the default page size after successful integer binding.
@@ -208,36 +221,147 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	if cursor := stringValue(params.NextToken); cursor != "" {
 		decoded, err := base64.StdEncoding.DecodeString(cursor)
 		if err == nil {
-			cursorID := string(decoded)
-			for i, t := range tokens {
-				if t.ID > cursorID {
-					startIdx = i
-					break
-				}
-			}
+			startIdx = nextListWorkIndex(items, string(decoded))
 		}
 	}
 
 	// Slice the results.
-	end := min(startIdx+maxResults, len(tokens))
-	page := tokens[startIdx:end]
+	end := min(startIdx+maxResults, len(items))
+	page := items[startIdx:end]
 
-	results := make([]factoryapi.TokenResponse, len(page))
-	for i, t := range page {
-		results[i] = tokenToResponse(t, false)
-	}
-
-	resp := factoryapi.ListWorkResponse{Results: results}
-	if end < len(tokens) {
-		lastID := page[len(page)-1].ID
-		nextToken := base64.StdEncoding.EncodeToString([]byte(lastID))
-		resp.PaginationContext = &factoryapi.PaginationContext{
+	resp := factoryapi.ListWorkResponse{
+		Results: listWorkResults(page),
+		PaginationContext: &factoryapi.PaginationContext{
 			MaxResults: maxResults,
-			NextToken:  &nextToken,
-		}
+		},
+	}
+	if end < len(items) {
+		lastID := page[len(page)-1].cursorID
+		nextToken := base64.StdEncoding.EncodeToString([]byte(lastID))
+		resp.PaginationContext.NextToken = &nextToken
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
+}
+
+func validWorkStateType(stateType factoryapi.WorkStateType) bool {
+	switch stateType {
+	case factoryapi.WorkStateTypeINITIAL,
+		factoryapi.WorkStateTypePROCESSING,
+		factoryapi.WorkStateTypeTERMINAL,
+		factoryapi.WorkStateTypeFAILED:
+		return true
+	default:
+		return false
+	}
+}
+
+type listWorkItem struct {
+	cursorID string
+	work     factoryapi.Work
+}
+
+type listWorkSortModeValue int
+
+const (
+	listWorkSortDefault listWorkSortModeValue = iota
+	listWorkSortStateType
+)
+
+func listWorkSortMode(sortBy *factoryapi.ListWorkParamsSortBy) listWorkSortModeValue {
+	if sortBy != nil && *sortBy == factoryapi.ListWorkParamsSortByStateType {
+		return listWorkSortStateType
+	}
+	return listWorkSortDefault
+}
+
+func sortListWorkItems(items []listWorkItem, mode listWorkSortModeValue) {
+	sort.Slice(items, func(i, j int) bool {
+		left := items[i]
+		right := items[j]
+		if mode == listWorkSortStateType {
+			return lessListWorkByStateType(left, right)
+		}
+
+		leftOrder := listWorkStateOrder(left.work.State)
+		rightOrder := listWorkStateOrder(right.work.State)
+		if leftOrder != rightOrder {
+			return leftOrder < rightOrder
+		}
+
+		leftStateType := listWorkStateType(left.work.State)
+		rightStateType := listWorkStateType(right.work.State)
+		if leftStateType != rightStateType {
+			return leftStateType < rightStateType
+		}
+
+		return left.cursorID < right.cursorID
+	})
+}
+
+func lessListWorkByStateType(left, right listWorkItem) bool {
+	leftStateType := listWorkStateType(left.work.State)
+	rightStateType := listWorkStateType(right.work.State)
+	if leftStateType != rightStateType {
+		return leftStateType < rightStateType
+	}
+	return left.cursorID < right.cursorID
+}
+
+func listWorkStateOrder(workState *factoryapi.WorkState) int {
+	if workState == nil {
+		return 4
+	}
+	switch workState.Type {
+	case factoryapi.WorkStateTypeINITIAL:
+		return 0
+	case factoryapi.WorkStateTypePROCESSING:
+		return 1
+	case factoryapi.WorkStateTypeFAILED:
+		return 2
+	case factoryapi.WorkStateTypeTERMINAL:
+		return 3
+	default:
+		return 4
+	}
+}
+
+func listWorkStateType(workState *factoryapi.WorkState) string {
+	if workState == nil {
+		return ""
+	}
+	return string(workState.Type)
+}
+
+func nextListWorkIndex(items []listWorkItem, cursorID string) int {
+	for i, item := range items {
+		if item.cursorID == cursorID {
+			return i + 1
+		}
+	}
+	return len(items)
+}
+
+func listWorkResults(items []listWorkItem) []factoryapi.Work {
+	results := make([]factoryapi.Work, len(items))
+	for i, item := range items {
+		results[i] = item.work
+	}
+	return results
+}
+
+func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.StateName != nil {
+		if work.State == nil || work.State.Name != *params.StateName {
+			return false
+		}
+	}
+	if params.StateType != nil {
+		if work.State == nil || work.State.Type != *params.StateType {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) GetWork(w http.ResponseWriter, r *http.Request, id factoryapi.WorkOrTokenID) {
@@ -345,6 +469,51 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 		}
 	}
 	return resp
+}
+
+func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
+	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
+	return factoryapi.Work{
+		Name:                     name,
+		WorkId:                   stringPtrIfNotEmpty(t.Color.WorkID),
+		WorkTypeName:             stringPtrIfNotEmpty(t.Color.WorkTypeID),
+		State:                    workStateForToken(t, net),
+		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
+		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
+		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
+		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
+		Tags:                     stringMapPtr(t.Color.Tags),
+	}
+}
+
+func workStateForToken(t *interfaces.Token, net *state.Net) *factoryapi.WorkState {
+	if t == nil {
+		return nil
+	}
+	workTypeID, stateName := state.SplitPlaceID(t.PlaceID)
+	if t.Color.WorkTypeID != "" {
+		workTypeID = t.Color.WorkTypeID
+	}
+	if net != nil {
+		if place, ok := net.Places[t.PlaceID]; ok {
+			workTypeID = place.TypeID
+			stateName = place.State
+		}
+	}
+	if stateName == "" {
+		return nil
+	}
+	return &factoryapi.WorkState{
+		Name: stateName,
+		Type: factoryapi.WorkStateType(state.CategoryForState(workTypesFromNet(net), workTypeID, stateName)),
+	}
+}
+
+func workTypesFromNet(net *state.Net) map[string]*state.WorkType {
+	if net == nil {
+		return nil
+	}
+	return net.WorkTypes
 }
 
 func publicWorkToken(token *interfaces.Token) bool {
@@ -510,6 +679,13 @@ func stringValue(value *string) string {
 	return *value
 }
 
+func generatedWorkStateName(value *factoryapi.WorkState) string {
+	if value == nil {
+		return ""
+	}
+	return value.Name
+}
+
 func intValue(value *int) int {
 	if value == nil {
 		return 0
@@ -609,7 +785,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkReq
 				WorkID:                   stringValue(work.WorkId),
 				RequestID:                stringValue(work.RequestId),
 				WorkTypeID:               stringValue(work.WorkTypeName),
-				State:                    stringValue(work.State),
+				State:                    generatedWorkStateName(work.State),
 				ChainingTraceDepth:       intValue(work.ChainingTraceDepth),
 				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
 				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
