@@ -1128,6 +1128,8 @@ export interface components {
             payload?: unknown;
             /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
             tags?: components["schemas"]["StringMap"];
+            /** @description Current relationships attached to this work item when returned by read APIs. */
+            relations?: components["schemas"]["Relation"][];
         };
         Relation: {
             type: components["schemas"]["RelationType"];
