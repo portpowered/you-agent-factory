@@ -77,6 +77,23 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for handwritten frontend code, not as a prompt to add new suppressions. Generated API artifacts under `ui/src/api/generated/` may keep generated-code-specific exceptions, but handwritten app code, tests, stories, and fixtures should stay under the standard limits by decomposing the surface into smaller feature components, story modules, shared fixtures, or named test helpers. Review-ready proof for that decomposition is the normal `make typecheck`, `make lint`, and behavior-specific test or Storybook evidence for the touched surface, not a separate source-inventory audit.
 
+To reproduce the backend dead-code gate directly, run:
+
+```bash
+make deadcode
+```
+
+To prove the gate fails on newly introduced unreachable Go code without keeping the seed in the worktree, run:
+
+```bash
+seed_file=pkg/deadcode_seed_for_review.go
+trap 'rm -f "$seed_file"' EXIT
+printf 'package pkg\n\nfunc seededUnusedBackendDeadCodeForReview() {}\n' > "$seed_file"
+make deadcode
+```
+
+The seeded command should exit non-zero and point reviewers at `bin/deadcode-current.txt`; remove the seed file before continuing normal verification.
+
 `make release VERSION=v1.2.3` is the maintainer-owned release-preparation path. It must run from a clean `main` checkout, reruns the repository readiness targets, creates the semver tag locally, and pushes only the tag so GitHub Actions owns publication.
 
 
