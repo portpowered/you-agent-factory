@@ -5,6 +5,7 @@ const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
 const OVERFLOW_TOLERANCE_PX = 1;
+const STORY_RENDER_TIMEOUT_MS = 30000;
 
 const viewportChecks = [
   { height: 844, label: "mobile", width: 390 },
@@ -36,19 +37,56 @@ function storyUrl(storyId) {
   return `${STORYBOOK_URL}/iframe.html?id=${storyId}&viewMode=story`;
 }
 
-async function waitForDialog(page, dialogName) {
+export async function waitForStoryRender(page) {
+  await page.waitForSelector("#storybook-root", {
+    state: "attached",
+    timeout: STORY_RENDER_TIMEOUT_MS,
+  });
+  await page.waitForFunction(
+    () => {
+      const root = document.querySelector("#storybook-root");
+      if (!(root instanceof HTMLElement)) {
+        return false;
+      }
+
+      if (root.childElementCount > 0) {
+        return true;
+      }
+
+      return Array.from(document.body.children).some((child) => {
+        if (!(child instanceof HTMLElement)) {
+          return false;
+        }
+
+        if (
+          child.id === "storybook-root" ||
+          child.id === "storybook-docs" ||
+          child.tagName === "SCRIPT" ||
+          child.tagName === "STYLE"
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+    },
+    { timeout: STORY_RENDER_TIMEOUT_MS },
+  );
+}
+
+export async function waitForDialog(page, dialogName) {
   const dialog = page.getByRole("dialog", { name: dialogName });
   await dialog.waitFor({ state: "visible" });
   return dialog;
 }
 
-async function waitForStoryRegion(page, regionName) {
+export async function waitForStoryRegion(page, regionName) {
   const region = page.getByRole("region", { name: regionName });
   await region.waitFor({ state: "visible" });
   return region;
 }
 
-async function expectNoHorizontalOverflow(page, label) {
+export async function expectNoHorizontalOverflow(page, label) {
   const metrics = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
@@ -61,7 +99,7 @@ async function expectNoHorizontalOverflow(page, label) {
   }
 }
 
-async function expectDialogWithinViewport(dialog, viewport, label) {
+export async function expectDialogWithinViewport(dialog, viewport, label) {
   const box = await dialog.boundingBox();
 
   if (!box) {
@@ -81,31 +119,45 @@ async function expectDialogWithinViewport(dialog, viewport, label) {
   }
 }
 
-async function expectVisible(locator, label) {
+export async function expectVisible(locator, label) {
   if (!(await locator.isVisible())) {
     throw new Error(`${label} was not visible.`);
   }
 }
 
-async function verifyExportDialog(page, dialog, viewport) {
-  await expectVisible(dialog.getByRole("textbox", { name: "Factory name" }), "Factory name input");
-  await expectVisible(dialog.getByLabel("Cover image"), "Cover image input");
-  await expectVisible(dialog.getByRole("button", { name: "Cancel" }), "Export cancel button");
-  await expectVisible(dialog.getByRole("button", { name: "Export PNG" }), "Export action button");
+export async function verifyExportDialog(page, dialog, viewport) {
   await expectVisible(
-    dialog.getByText("Confirming export keeps the current dashboard state unchanged"),
+    dialog.getByRole("textbox", { name: "Factory name" }),
+    "Factory name input",
+  );
+  await expectVisible(dialog.getByLabel("Cover image"), "Cover image input");
+  await expectVisible(
+    dialog.getByRole("button", { name: "Cancel" }),
+    "Export cancel button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "Export PNG" }),
+    "Export action button",
+  );
+  await expectVisible(
+    dialog.getByText(
+      "Confirming export keeps the current dashboard state unchanged",
+    ),
     "Export helper copy",
   );
   await expectDialogWithinViewport(dialog, viewport, "Export");
   await expectNoHorizontalOverflow(page, `Export dialog at ${viewport.label}`);
 }
 
-async function verifyImportDialog(page, dialog, viewport) {
+export async function verifyImportDialog(page, dialog, viewport) {
   await expectVisible(
     dialog.getByRole("img", { name: "Dropped Factory preview" }),
     "Import preview image",
   );
-  await expectVisible(dialog.getByText("factory-import.png"), "Dropped file name");
+  await expectVisible(
+    dialog.getByText("factory-import.png"),
+    "Dropped file name",
+  );
   await expectVisible(
     dialog.getByRole("button", { name: "Cancel import" }),
     "Import cancel button",
@@ -119,10 +171,13 @@ async function verifyImportDialog(page, dialog, viewport) {
     "Import close button",
   );
   await expectDialogWithinViewport(dialog, viewport, "Import preview");
-  await expectNoHorizontalOverflow(page, `Import preview dialog at ${viewport.label}`);
+  await expectNoHorizontalOverflow(
+    page,
+    `Import preview dialog at ${viewport.label}`,
+  );
 }
 
-async function expectOrderedLeftEdges(locators, label) {
+export async function expectOrderedLeftEdges(locators, label) {
   let previousRight = null;
 
   for (const locator of locators) {
@@ -131,7 +186,10 @@ async function expectOrderedLeftEdges(locators, label) {
       throw new Error(`Could not measure ${label}.`);
     }
 
-    if (previousRight !== null && box.x < previousRight - OVERFLOW_TOLERANCE_PX) {
+    if (
+      previousRight !== null &&
+      box.x < previousRight - OVERFLOW_TOLERANCE_PX
+    ) {
       throw new Error(`${label} was not ordered left-to-right.`);
     }
 
@@ -139,7 +197,7 @@ async function expectOrderedLeftEdges(locators, label) {
   }
 }
 
-async function verifyDashboardHeader(page, _dialog, viewport) {
+export async function verifyDashboardHeader(page, _dialog, viewport) {
   const toolbar = await waitForStoryRegion(page, "dashboard summary");
   const heading = toolbar.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
@@ -163,12 +221,17 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
 
   const hiddenWordmarkClass = await hiddenWordmark.getAttribute("class");
   if (!hiddenWordmarkClass?.includes("sr-only")) {
-    throw new Error("Dashboard heading wordmark was not hidden with sr-only styling.");
+    throw new Error(
+      "Dashboard heading wordmark was not hidden with sr-only styling.",
+    );
   }
 
   await slider.focus();
   await page.keyboard.press("ArrowLeft");
-  await expectVisible(page.getByText("Tick 4 of 5"), "Keyboard-updated timeline tick text");
+  await expectVisible(
+    page.getByText("Tick 4 of 5"),
+    "Keyboard-updated timeline tick text",
+  );
 
   await currentButton.focus();
   await page.keyboard.press("Enter");
@@ -181,28 +244,39 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
     );
   }
 
-  await expectNoHorizontalOverflow(page, `Dashboard header at ${viewport.label}`);
+  await expectNoHorizontalOverflow(
+    page,
+    `Dashboard header at ${viewport.label}`,
+  );
 }
 
-async function verifyStory(page, storyCheck, viewport) {
-  await page.setViewportSize({ height: viewport.height, width: viewport.width });
-  await page.goto(storyUrl(storyCheck.id), { waitUntil: "networkidle" });
-  const dialog = storyCheck.dialogName
-    ? await waitForDialog(page, storyCheck.dialogName)
-    : null;
+export async function verifyStory(browser, storyCheck, viewport) {
+  const page = await browser.newPage();
 
-  await storyCheck.assertions(page, dialog, viewport);
+  try {
+    await page.setViewportSize({
+      height: viewport.height,
+      width: viewport.width,
+    });
+    await page.goto(storyUrl(storyCheck.id), { waitUntil: "domcontentloaded" });
+    await waitForStoryRender(page);
+    const dialog = storyCheck.dialogName
+      ? await waitForDialog(page, storyCheck.dialogName)
+      : null;
+
+    await storyCheck.assertions(page, dialog, viewport);
+  } finally {
+    await page.close();
+  }
 }
 
-async function main() {
+export async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {
-    const page = await browser.newPage();
-
     for (const viewport of viewportChecks) {
       for (const storyCheck of storyChecks) {
-        await verifyStory(page, storyCheck, viewport);
+        await verifyStory(browser, storyCheck, viewport);
       }
     }
   } finally {
@@ -210,4 +284,6 @@ async function main() {
   }
 }
 
-await main();
+if (import.meta.main) {
+  await main();
+}
