@@ -629,8 +629,8 @@ func assertThinEventWorkstationRequestProjection(t *testing.T, smoke dualDispatc
 		t.Fatalf("model inference attempts = %#v, want one attempt", modelAttempts)
 	}
 	for _, attempt := range modelAttempts {
-		if attempt.RequestTime.IsZero() || attempt.Prompt == "" || attempt.WorkingDirectory == "" || attempt.Worktree == "" || attempt.Response == "" {
-			t.Fatalf("model inference attempt = %#v, want attempt-owned request and response detail", attempt)
+		if attempt.InferenceRequestID == "" || attempt.RequestTime.IsZero() || attempt.Prompt == "" || attempt.Response == "" {
+			t.Fatalf("model inference attempt = %#v, want request ID plus prompt and response detail", attempt)
 		}
 	}
 
@@ -677,16 +677,6 @@ func thinEventDispatchIDForWork(t *testing.T, events []factoryapi.FactoryEvent, 
 	return thinEventDispatchIDFromEvent(t, events[index], workID)
 }
 
-func thinEventDispatchIDFromEvent(t *testing.T, event factoryapi.FactoryEvent, workID string) string {
-	t.Helper()
-
-	dispatchID := stringPointerValue(event.Context.DispatchId)
-	if dispatchID == "" {
-		t.Fatalf("DISPATCH_REQUEST context.dispatchId is empty for work %q", workID)
-	}
-	return dispatchID
-}
-
 func thinEventCompletedDispatchForID(
 	t *testing.T,
 	completions []interfaces.FactoryWorldDispatchCompletion,
@@ -701,6 +691,16 @@ func thinEventCompletedDispatchForID(
 	}
 	t.Fatalf("completed dispatches = %#v, want dispatch %q", completions, dispatchID)
 	return interfaces.FactoryWorldDispatchCompletion{}
+}
+
+func thinEventDispatchIDFromEvent(t *testing.T, event factoryapi.FactoryEvent, workID string) string {
+	t.Helper()
+
+	dispatchID := stringPointerValue(event.Context.DispatchId)
+	if dispatchID == "" {
+		t.Fatalf("DISPATCH_REQUEST context.dispatchId is empty for work %q", workID)
+	}
+	return dispatchID
 }
 
 func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, artifact *interfaces.ReplayArtifact) {

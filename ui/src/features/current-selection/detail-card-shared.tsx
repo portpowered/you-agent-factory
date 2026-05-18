@@ -46,9 +46,6 @@ export const REQUEST_AUTHORED_TEXT_CLASS = cx(
   "grid gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere] [&_code]:rounded-[0.3rem] [&_code]:bg-af-overlay/12 [&_code]:px-[0.3rem] [&_code]:py-[0.15rem] [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-af-overlay/8 [&_pre]:bg-af-overlay/12 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5",
   DASHBOARD_BODY_TEXT_CLASS,
 );
-export const INFERENCE_REQUEST_PROMPT_LABEL = "Request prompt";
-export const INFERENCE_RESPONSE_LABEL = "Response";
-export const WORKSTATION_RESPONSE_TEXT_LABEL = "Response text";
 export const RUNTIME_DETAILS_SECTION_CLASS =
   "mt-4 grid gap-[0.75rem] border-t border-af-overlay/8 pt-4 [&_h4]:m-0";
 export const RUNTIME_DETAIL_VALUE_CLASS = "min-w-0 [overflow-wrap:anywhere]";

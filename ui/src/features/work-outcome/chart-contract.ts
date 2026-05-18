@@ -43,7 +43,6 @@ export const DASHBOARD_CHART_AXIS_LABEL_CLASS = cx(
   "fill-af-ink/58 [letter-spacing:0.16em]",
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 );
-export const DASHBOARD_CHART_GRID_CLASS = "stroke-af-ink/8 [stroke-width:1]";
 export const DASHBOARD_CHART_LINE_CLASS = cx(
   "fill-none [stroke-linecap:round] [stroke-linejoin:round]",
   DASHBOARD_CHART_LINE_WEIGHT_CLASS,

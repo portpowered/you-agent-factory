@@ -56,27 +56,6 @@ export interface WorkChartModel {
   series: WorkChartSeries[];
 }
 
-export interface ThroughputTrendPoint {
-  completedCount: number;
-  dispatchedCount: number;
-  failedCount: number;
-  label: string;
-  x: number;
-  y: number;
-}
-
-export interface ThroughputTrendModel {
-  completedDelta: number;
-  currentCompleted: number;
-  currentDispatched: number;
-  currentFailed: number;
-  failedDelta: number;
-  failureGroups: FailureCauseGroup[];
-  path: string;
-  points: ThroughputTrendPoint[];
-  rangeLabel: string;
-}
-
 export interface FailureCauseGroup {
   count: number;
   label: string;
@@ -394,4 +373,3 @@ function areStringRecordsEqual(
 function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => right[index] === value);
 }
-
