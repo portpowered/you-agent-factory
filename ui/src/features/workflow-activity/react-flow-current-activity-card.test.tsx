@@ -808,6 +808,107 @@ function registerCurrentActivityCardTestLifecycle(): void {
     ]);
   });
 
+  it("distinguishes work-state creation from work-type creation and blocks missing work-type association", async () => {
+    const updateDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      updateDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open add entity menu" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Work state" }));
+
+    expect(screen.getByText("Add work state")).toBeTruthy();
+    expect(
+      screen.getByText("Append a new ordered state to an existing work type."),
+    ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Work type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("story");
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "State type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("PROCESSING");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Work type" }), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    expect(
+      screen.getByText("Choose a work type before adding a work state."),
+    ).toBeTruthy();
+    expect(updateDraft).not.toHaveBeenCalled();
+  });
+
+  it("submits valid work-state add-entity forms into the pending graph draft", async () => {
+    const updateDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      updateDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open add entity menu" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Work state" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
+      target: { value: "approved" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "State type" }), {
+      target: { value: "TERMINAL" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    const updater = updateDraft.mock
+      .calls[0]?.[0] as typeof defaultDraftState.updateDraft;
+    const nextDraft = updater(defaultDraftState.draft);
+
+    expect(nextDraft.additions.workStates).toEqual([
+      {
+        state: {
+          name: "approved",
+          type: "TERMINAL",
+        },
+        workTypeName: "story",
+      },
+    ]);
+  });
+
   it("renders pending draft-only graph nodes while editor mode is active", async () => {
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
       data: editableFactoryDefinitionDocument,
