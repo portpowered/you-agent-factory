@@ -23,6 +23,13 @@ export interface FactoryGraphEditorMenuAction {
   label: string;
 }
 
+export interface FactoryGraphEditorVisibilityOption {
+  count: number;
+  key: "resources" | "workers";
+  label: string;
+  visible: boolean;
+}
+
 const TOOLBAR_SHELL_CLASS =
   "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-[720px]:bottom-3 max-[720px]:w-[calc(100%-1.5rem)] max-[720px]:justify-between";
 const STATUS_PILL_CLASS =
@@ -32,6 +39,8 @@ const MENU_ACTION_CLASS =
   "grid w-full gap-1 rounded-[1rem] border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
 const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-ink";
 const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-ink/68";
+const VISIBILITY_PANEL_CLASS =
+  "pointer-events-auto absolute right-7 top-24 z-20 grid gap-3 rounded-[1.25rem] border border-af-overlay/12 bg-af-surface/94 p-3 shadow-af-panel backdrop-blur-[16px] max-[720px]:left-4 max-[720px]:right-4 max-[720px]:top-20";
 const TOOLTIP_COPY = {
   add: "Add supported graph entities",
   connect: "Create compatible graph connections",
@@ -242,6 +251,62 @@ export function FactoryGraphEditorToolbar({
       >
         {hasPendingChanges ? "Draft changes pending" : "No draft changes"}
       </p>
+    </section>
+  );
+}
+
+export function FactoryGraphEditorVisibilityPanel({
+  onToggle,
+  options,
+  visible,
+}: {
+  onToggle: (key: FactoryGraphEditorVisibilityOption["key"]) => void;
+  options: FactoryGraphEditorVisibilityOption[];
+  visible: boolean;
+}) {
+  if (!visible || options.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Factory graph density controls"
+      className={VISIBILITY_PANEL_CLASS}
+    >
+      <div className="grid gap-1">
+        <p className="m-0 text-sm font-semibold text-af-ink">Dense graph</p>
+        <p className="m-0 text-xs leading-5 text-af-ink/68">
+          Collapse worker or resource lanes to focus on the rest of the
+          topology while editing.
+        </p>
+      </div>
+      <div className="grid gap-2">
+        {options.map((option) => (
+          <button
+            aria-label={`${option.visible ? "Hide" : "Show"} ${option.label.toLowerCase()} lane`}
+            aria-pressed={option.visible}
+            className={cx(
+              "flex items-center justify-between gap-3 rounded-[1rem] border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-af-accent",
+              option.visible
+                ? "border-af-accent/20 bg-af-accent/8 text-af-ink"
+                : "border-af-overlay/12 bg-af-overlay/4 text-af-ink/72",
+            )}
+            key={option.key}
+            onClick={() => onToggle(option.key)}
+            type="button"
+          >
+            <span className="grid gap-0.5">
+              <span className="text-sm font-semibold">{option.label}</span>
+              <span className="text-xs opacity-80">
+                {option.visible ? "Visible" : "Collapsed"}
+              </span>
+            </span>
+            <span className="rounded-full border border-current/15 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]">
+              {option.count}
+            </span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

@@ -337,7 +337,7 @@ export function ReactFlowCurrentActivityCard(
 ) {
   const editor = useCurrentActivityGraphEditor(props.snapshot.topology);
   const graph = useCurrentActivityGraphViewModel(props);
-  const editorGraph = useFactoryGraphEditorViewModel(editor);
+  const editorGraph = useFactoryGraphEditorViewModel(editor, props.snapshot);
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
     onFactoryActivated: props.onFactoryActivated,

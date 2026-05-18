@@ -8,6 +8,7 @@ import {
   FactoryGraphEditorModeToggle,
   type FactoryGraphEditorTool,
   FactoryGraphEditorToolbar,
+  FactoryGraphEditorVisibilityPanel,
 } from "./factory-graph-editor-controls";
 
 function renderToolbar() {
@@ -128,5 +129,36 @@ describe("factory graph editor controls", () => {
     const menu = await screen.findByText("Node actions");
     expect(menu).toBeTruthy();
     expect(screen.getByRole("button", { name: "Rename node" })).toBeTruthy();
+  });
+
+  it("exposes keyboard-reachable worker and resource visibility controls", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+
+    render(
+      <FactoryGraphEditorVisibilityPanel
+        onToggle={onToggle}
+        options={[
+          { count: 3, key: "workers", label: "Workers", visible: true },
+          { count: 2, key: "resources", label: "Resources", visible: false },
+        ]}
+        visible={true}
+      />,
+    );
+
+    await user.tab();
+    await user.keyboard("{Enter}");
+
+    expect(onToggle).toHaveBeenCalledWith("workers");
+    expect(
+      screen
+        .getByRole("button", { name: "Hide workers lane" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Show resources lane" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 });

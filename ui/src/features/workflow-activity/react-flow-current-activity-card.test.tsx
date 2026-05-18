@@ -162,6 +162,97 @@ const editableFactoryDefinitionDocument: EditableFactoryDefinitionDocument = {
   },
 };
 
+const workerDenseFactoryDefinitionDocument: EditableFactoryDefinitionDocument = {
+  factoryDefinition: {
+    ...editableFactoryDefinition,
+    resources: [
+      {
+        capacity: 2,
+        name: "gpu",
+      },
+    ],
+    workers: [
+      {
+        model: "gpt-5",
+        name: "writer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5",
+        name: "stalled",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body: "Draft the story.",
+        inputs: [
+          {
+            state: "queued",
+            workType: "story",
+          },
+        ],
+        name: "draft",
+        outputs: [
+          {
+            state: "review",
+            workType: "story",
+          },
+        ],
+        resources: [{ capacity: 1, name: "gpu" }],
+        type: "MODEL_WORKSTATION",
+        worker: "writer",
+      },
+      {
+        body: "Review the draft.",
+        inputs: [
+          {
+            state: "review",
+            workType: "story",
+          },
+        ],
+        name: "review",
+        outputs: [
+          {
+            state: "done",
+            workType: "story",
+          },
+        ],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+    ],
+    workTypes: [
+      {
+        name: "story",
+        states: [
+          {
+            name: "queued",
+            type: "INITIAL",
+          },
+          {
+            name: "review",
+            type: "PROCESSING",
+          },
+          {
+            name: "done",
+            type: "TERMINAL",
+          },
+        ],
+      },
+    ],
+  },
+  version: {
+    logical: 9,
+    physical: "2026-05-19T01:12:00Z",
+  },
+};
+
 const defaultDraftState = {
   baseDocument: editableFactoryDefinitionDocument,
   draft: {
@@ -205,6 +296,52 @@ function dashboardSnapshotWithStateCounts(
   snapshot.runtime.place_token_counts = {
     ...snapshot.runtime.place_token_counts,
     ...overrides,
+  };
+
+  return snapshot;
+}
+
+function workerDenseSnapshot(): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  snapshot.runtime.active_executions_by_dispatch_id = {
+    "dispatch-draft-active": {
+      dispatch_id: "dispatch-draft-active",
+      started_at: "2026-05-19T01:10:00Z",
+      transition_id: "draft-transition",
+      workstation_name: "draft",
+      workstation_node_id: "draft",
+    },
+  };
+  snapshot.runtime.active_dispatch_ids = ["dispatch-draft-active"];
+  snapshot.runtime.active_workstation_node_ids = ["draft"];
+  snapshot.runtime.active_throttle_pauses = [
+    {
+      affected_worker_types: ["stalled"],
+      lane_id: "provider:codex",
+      model: "gpt-5",
+      paused_until: "2026-05-19T01:15:00Z",
+      provider: "OPENAI",
+      recover_at: "2026-05-19T01:16:00Z",
+    },
+  ];
+  snapshot.runtime.workstation_requests_by_dispatch_id = {
+    "dispatch-review": {
+      counts: {
+        dispatched_count: 1,
+        errored_count: 1,
+        responded_count: 1,
+      },
+      dispatch_id: "dispatch-review",
+      request: {},
+      response: {
+        failure_message: "Provider request failed.",
+        outcome: "FAILED",
+      },
+      transition_id: "review-transition",
+      workstation_name: "review",
+      workstation_node_id: "review",
+      work_items: [],
+    },
   };
 
   return snapshot;
@@ -962,6 +1099,77 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     expect(await screen.findByText("review")).toBeTruthy();
     expect(screen.getByText("Pending")).toBeTruthy();
+  });
+
+  it("shows worker runtime status badges in editor mode when runtime signals exist", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: workerDenseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      latestDocument: workerDenseFactoryDefinitionDocument,
+      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument.factoryDefinition,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: workerDenseSnapshot(),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    const writerLabel = await screen.findByText("writer");
+    const reviewerLabel = await screen.findByText("reviewer");
+    const stalledLabel = await screen.findByText("stalled");
+
+    expect(writerLabel.closest("article")?.textContent).toContain("Active");
+    expect(reviewerLabel.closest("article")?.textContent).toContain("Errored");
+    expect(stalledLabel.closest("article")?.textContent).toContain(
+      "Unavailable",
+    );
+  });
+
+  it("lets operators collapse worker and resource lanes without leaving editor mode", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: workerDenseFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      latestDocument: workerDenseFactoryDefinitionDocument,
+      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument.factoryDefinition,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: workerDenseSnapshot(),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    expect(await screen.findByText("writer")).toBeTruthy();
+    expect(screen.getByText("gpu")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hide workers lane" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hide resources lane" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("writer")).toBeNull();
+      expect(screen.queryByText("reviewer")).toBeNull();
+      expect(screen.queryByText("gpu")).toBeNull();
+    });
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByText("review")).toBeTruthy();
+    expect(screen.getByText("story:queued")).toBeTruthy();
   });
 
   it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {

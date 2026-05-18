@@ -19,6 +19,10 @@ import {
   isValidFactoryGraphConnection,
   type FactoryGraphConnectionEndpoint,
 } from "./factory-graph-editor-connections";
+import {
+  describeFactoryGraphWorkerStatus,
+  type FactoryGraphWorkerRuntimeStatus,
+} from "./factory-graph-editor-runtime";
 
 type FactoryGraphEditorNode = Node<
   {
@@ -27,6 +31,7 @@ type FactoryGraphEditorNode = Node<
     draftStatus: "addition" | "none" | "removal";
     kind: FactoryGraphNodeKind;
     label: string;
+    workerStatus?: FactoryGraphWorkerRuntimeStatus;
   },
   "factoryEntity"
 >;
@@ -51,6 +56,12 @@ const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
   workstation: "border-af-accent/28 bg-af-accent/6",
   "work-type": "border-af-overlay/16 bg-af-overlay/4",
   "work-state": "border-af-overlay/18 bg-af-surface/92",
+};
+const WORKER_STATUS_CLASS: Record<FactoryGraphWorkerRuntimeStatus, string> = {
+  active: "border-af-success/24 bg-af-success/10 text-af-success-ink",
+  errored: "border-af-danger/24 bg-af-danger/10 text-af-danger-ink",
+  idle: "border-af-overlay/14 bg-af-overlay/6 text-af-ink/68",
+  unavailable: "border-af-warning/24 bg-af-warning/10 text-af-warning-ink",
 };
 const EDGE_COLOR_BY_KIND = {
   "worker-assignment": "var(--color-af-info)",
@@ -79,6 +90,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
   topology: FactoryGraphTopology;
+  workerStatusByName?: ReadonlyMap<string, FactoryGraphWorkerRuntimeStatus>;
 }): {
   edges: Edge[];
   nodes: FactoryGraphEditorNode[];
@@ -118,6 +130,10 @@ export function buildFactoryGraphEditorFlowModel(input: {
               : "none",
           kind: node.kind,
           label: node.label,
+          workerStatus:
+            node.kind === "worker"
+              ? input.workerStatusByName?.get(node.label) ?? "idle"
+              : undefined,
         },
         draggable: true,
         id: node.id,
@@ -251,6 +267,16 @@ function FactoryGraphEditorNodeView({
           {data.draftStatus === "removal" ? (
             <span className="rounded-full border border-af-danger/24 bg-af-danger/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-danger-ink">
               Removing
+            </span>
+          ) : null}
+          {data.kind === "worker" && data.workerStatus ? (
+            <span
+              className={cx(
+                "rounded-full border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
+                WORKER_STATUS_CLASS[data.workerStatus],
+              )}
+            >
+              {describeFactoryGraphWorkerStatus(data.workerStatus)}
             </span>
           ) : null}
         </div>

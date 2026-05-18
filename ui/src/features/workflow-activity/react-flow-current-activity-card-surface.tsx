@@ -1,5 +1,8 @@
 import type { DashboardSnapshot } from "../../api/dashboard/types";
-import { FactoryGraphEditorNotice } from "../factory-graph-editor/factory-graph-editor-controls";
+import {
+  FactoryGraphEditorNotice,
+  FactoryGraphEditorVisibilityPanel,
+} from "../factory-graph-editor/factory-graph-editor-controls";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../flowchart/current-activity-nodes";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
@@ -48,6 +51,11 @@ export function CurrentActivityGraphSurface({
           {editor.saveEditableDefinition.error.message}
         </FactoryGraphEditorNotice>
       ) : null}
+      <FactoryGraphEditorVisibilityPanel
+        onToggle={editorGraph.toggleEntityVisibility}
+        options={editorGraph.entityVisibilityOptions}
+        visible={editor.editorMode}
+      />
       <CurrentActivityGraphViewport
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}

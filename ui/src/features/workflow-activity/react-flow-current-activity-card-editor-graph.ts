@@ -6,6 +6,7 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { DashboardSnapshot } from "../../api/dashboard/types";
 import {
   buildFactoryGraphTopologyFromDefinition,
   collectPendingRemovalEdgeIds,
@@ -16,12 +17,15 @@ import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "../factory-graph-editor/factory-graph-editor-flow";
+import { buildFactoryGraphWorkerStatusMap } from "../factory-graph-editor/factory-graph-editor-runtime";
+import type { FactoryGraphTopology } from "../factory-graph-editor/factory-graph-draft-types";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { EMPTY_NODE_POSITIONS } from "./react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
 export function useFactoryGraphEditorViewModel(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+  snapshot: DashboardSnapshot,
 ) {
   const {
     displayTopology,
@@ -29,29 +33,19 @@ export function useFactoryGraphEditorViewModel(
     pendingRemovalEdgeIds,
     pendingRemovalNodeIds,
   } = useFactoryGraphEditorDraftGraphState(editor);
-  const editorGraph = useMemo(
-    () =>
-      buildFactoryGraphEditorFlowModel({
-        canEditConnections: editor.activeTool === "connect",
-        onConnectionAnchorClick: editor.handleConnectionAnchorClick,
-        pendingAdditionEdgeIds,
-        pendingConnectionSource: editor.pendingConnectionSource,
-        pendingAdditionNodeIds: collectPendingNodeIds(editor.draftState.draft),
-        pendingRemovalEdgeIds,
-        pendingRemovalNodeIds,
-        topology: displayTopology,
-      }),
-    [
-      displayTopology,
-      editor.draftState.draft,
-      editor.activeTool,
-      editor.handleConnectionAnchorClick,
-      pendingAdditionEdgeIds,
-      editor.pendingConnectionSource,
-      pendingRemovalEdgeIds,
-      pendingRemovalNodeIds,
-    ],
-  );
+  const {
+    entityVisibilityOptions,
+    filteredTopology,
+    toggleEntityVisibility,
+  } = useFactoryGraphEntityVisibilityState(displayTopology);
+  const editorGraph = useFactoryGraphEditorFlowGraph({
+    editor,
+    filteredTopology,
+    pendingAdditionEdgeIds,
+    pendingRemovalEdgeIds,
+    pendingRemovalNodeIds,
+    snapshot,
+  });
   const graphKey = useMemo(
     () =>
       [
@@ -67,13 +61,132 @@ export function useFactoryGraphEditorViewModel(
   const setStoredNodePosition = useCurrentActivityGraphStore(
     (state) => state.setNodePosition,
   );
+  const { handleNodesChange, nodes } = useFactoryGraphEditorPersistentNodes({
+    editorNodes: editorGraph.nodes,
+    storedNodePositions,
+  });
+
+  return {
+    edges: editorGraph.edges,
+    graphKey,
+    handleNodesChange,
+    initialFitViewKey: graphKey,
+    initialFitViewOptions: {
+      maxZoom: 1.1,
+      padding: 0.18,
+    } satisfies FitViewOptions,
+    entityVisibilityOptions,
+    nodeTypes: FACTORY_GRAPH_EDITOR_NODE_TYPES,
+    nodes,
+    setStoredNodePosition,
+    toggleEntityVisibility,
+  };
+}
+
+function useFactoryGraphEntityVisibilityState(displayTopology: FactoryGraphTopology) {
+  const [visibleEntityKinds, setVisibleEntityKinds] = useState({
+    resources: true,
+    workers: true,
+  });
+  const filteredTopology = useMemo(
+    () => filterFactoryGraphTopology(displayTopology, visibleEntityKinds),
+    [displayTopology, visibleEntityKinds],
+  );
+  const entityVisibilityOptions = useMemo(
+    () => [
+      {
+        count: countNodesByKind(displayTopology, "resource"),
+        key: "resources" as const,
+        label: "Resources",
+        visible: visibleEntityKinds.resources,
+      },
+      {
+        count: countNodesByKind(displayTopology, "worker"),
+        key: "workers" as const,
+        label: "Workers",
+        visible: visibleEntityKinds.workers,
+      },
+    ],
+    [displayTopology, visibleEntityKinds.resources, visibleEntityKinds.workers],
+  );
+  const toggleEntityVisibility = useCallback(
+    (key: "resources" | "workers") =>
+      setVisibleEntityKinds((currentVisibility) => ({
+        ...currentVisibility,
+        [key]: !currentVisibility[key],
+      })),
+    [],
+  );
+
+  return {
+    entityVisibilityOptions,
+    filteredTopology,
+    toggleEntityVisibility,
+  };
+}
+
+function useFactoryGraphEditorFlowGraph(input: {
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  filteredTopology: FactoryGraphTopology;
+  pendingAdditionEdgeIds: ReadonlySet<string>;
+  pendingRemovalEdgeIds: ReadonlySet<string>;
+  pendingRemovalNodeIds: ReadonlySet<string>;
+  snapshot: DashboardSnapshot;
+}) {
+  const workerStatusByName = useMemo(
+    () =>
+      buildFactoryGraphWorkerStatusMap({
+        factoryDefinition:
+          input.editor.draftState.pendingFactoryDefinition ??
+          input.editor.draftState.latestDocument?.factoryDefinition ??
+          null,
+        snapshot: input.snapshot,
+      }),
+    [
+      input.editor.draftState.latestDocument?.factoryDefinition,
+      input.editor.draftState.pendingFactoryDefinition,
+      input.snapshot,
+    ],
+  );
+
+  return useMemo(
+    () =>
+      buildFactoryGraphEditorFlowModel({
+        canEditConnections: input.editor.activeTool === "connect",
+        onConnectionAnchorClick: input.editor.handleConnectionAnchorClick,
+        pendingAdditionEdgeIds: input.pendingAdditionEdgeIds,
+        pendingConnectionSource: input.editor.pendingConnectionSource,
+        pendingAdditionNodeIds: collectPendingNodeIds(input.editor.draftState.draft),
+        pendingRemovalEdgeIds: input.pendingRemovalEdgeIds,
+        pendingRemovalNodeIds: input.pendingRemovalNodeIds,
+        topology: input.filteredTopology,
+        workerStatusByName,
+      }),
+    [
+      input.filteredTopology,
+      input.editor.activeTool,
+      input.editor.draftState.draft,
+      input.editor.handleConnectionAnchorClick,
+      input.editor.pendingConnectionSource,
+      input.pendingAdditionEdgeIds,
+      input.pendingRemovalEdgeIds,
+      input.pendingRemovalNodeIds,
+      workerStatusByName,
+    ],
+  );
+}
+
+function useFactoryGraphEditorPersistentNodes(input: {
+  editorNodes: Node[];
+  storedNodePositions: typeof EMPTY_NODE_POSITIONS;
+}) {
   const baseNodes = useMemo<Node[]>(
     () =>
-      editorGraph.nodes.map((node) => ({
+      input.editorNodes.map((node) => ({
         ...node,
-        position: storedNodePositions[node.id] ?? node.position,
+        position: input.storedNodePositions[node.id] ?? node.position,
       })),
-    [editorGraph.nodes, storedNodePositions],
+    [input.editorNodes, input.storedNodePositions],
   );
   const [nodes, setNodes] = useState<Node[]>([]);
 
@@ -93,19 +206,7 @@ export function useFactoryGraphEditorViewModel(
     setNodes((currentNodes) => applyNodeChanges(changes, currentNodes) as Node[]);
   }, []);
 
-  return {
-    edges: editorGraph.edges,
-    graphKey,
-    handleNodesChange,
-    initialFitViewKey: graphKey,
-    initialFitViewOptions: {
-      maxZoom: 1.1,
-      padding: 0.18,
-    } satisfies FitViewOptions,
-    nodeTypes: FACTORY_GRAPH_EDITOR_NODE_TYPES,
-    nodes,
-    setStoredNodePosition,
-  };
+  return { handleNodesChange, nodes };
 }
 
 function useFactoryGraphEditorDraftGraphState(
@@ -233,4 +334,42 @@ function collectPendingNodeIds(
   }
 
   return pendingNodeIds;
+}
+
+function countNodesByKind(
+  topology: FactoryGraphTopology,
+  kind: FactoryGraphTopology["nodes"][number]["kind"],
+) {
+  return topology.nodes.filter((node) => node.kind === kind).length;
+}
+
+function filterFactoryGraphTopology(
+  topology: FactoryGraphTopology,
+  visibility: {
+    resources: boolean;
+    workers: boolean;
+  },
+) {
+  const hiddenNodeKinds = new Set<FactoryGraphTopology["nodes"][number]["kind"]>();
+  if (!visibility.resources) {
+    hiddenNodeKinds.add("resource");
+  }
+  if (!visibility.workers) {
+    hiddenNodeKinds.add("worker");
+  }
+  if (hiddenNodeKinds.size === 0) {
+    return topology;
+  }
+
+  const visibleNodes = topology.nodes.filter(
+    (node) => !hiddenNodeKinds.has(node.kind),
+  );
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+  return {
+    edges: topology.edges.filter(
+      (edge) =>
+        visibleNodeIds.has(edge.sourceId) && visibleNodeIds.has(edge.targetId),
+    ),
+    nodes: visibleNodes,
+  };
 }
