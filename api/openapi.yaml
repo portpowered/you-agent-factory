@@ -2262,6 +2262,11 @@ components:
         tags:
           $ref: '#/components/schemas/StringMap'
           description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.
+        relations:
+          type: array
+          description: Current outbound relationships attached to this listed source work item when returned by read APIs.
+          items:
+            $ref: '#/components/schemas/Relation'
     Relation:
       type: object
       additionalProperties: false
