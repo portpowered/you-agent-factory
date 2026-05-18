@@ -83,10 +83,12 @@ export interface WorkItemDetailCardProps {
   activeTraceID?: string | null;
   dispatchAttempts: DashboardProviderSessionAttempt[];
   executionDetails: SelectedWorkItemExecutionDetails;
+  locale?: string;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedNode?: DashboardWorkstationNode | null;
+  selectedProviderSession?: LoadableProviderSessionRef | null;
   selectedProviderSessionKey?: string | null;
   selection: DashboardWorkItemSelection;
   selectedTrace?: DashboardTrace;
@@ -107,6 +109,7 @@ export interface WorkstationDetailCardProps {
   providerSessions: DashboardProviderSessionAttempt[];
   saveState?: EditableWorkstationSaveState;
   selectedWorkID?: string | null;
+  selectedProviderSession?: LoadableProviderSessionRef | null;
   selectedProviderSessionKey?: string | null;
   selectedRequest?: DashboardWorkstationRequest | null;
   selectedNode: DashboardWorkstationNode;
