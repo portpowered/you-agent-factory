@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-
+import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import type {
   DashboardActiveExecution,
   DashboardFailedWorkDetail,
@@ -13,6 +13,7 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
+import type { EditableWorkstationValues } from "../current-factory-definition/workstation-editable-values";
 import type { WorkstationDetailMessages } from "./messages";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { DashboardWorkItemSelection } from "./types";
@@ -93,17 +94,59 @@ export interface WorkItemDetailCardProps {
 
 export interface WorkstationDetailCardProps {
   activeExecutions: DashboardActiveExecution[];
+  editableConfigurationState?: EditableWorkstationConfigurationState;
+  headerAction?: ReactNode;
   locale?: string;
   now: number;
   onSelectWorkID?: (workID: string) => void;
   onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
   providerSessions: DashboardProviderSessionAttempt[];
+  saveState?: EditableWorkstationSaveState;
   selectedWorkID?: string | null;
   selectedRequest?: DashboardWorkstationRequest | null;
   selectedNode: DashboardWorkstationNode;
   workstationRequests?: DashboardWorkstationRequest[];
   widgetId?: string;
 }
+
+export interface EditableWorkstationValidationErrors {
+  model?: string;
+  prompt?: string;
+  promptFile?: string;
+}
+
+export type EditableWorkstationOverwriteField = "model" | "prompt" | "template";
+
+export type EditableWorkstationConfigurationState =
+  | { status: "loading" }
+  | { errorMessage: string; status: "error" }
+  | { message: string; status: "empty" }
+  | {
+      draft: {
+        model: string;
+        prompt: string;
+        promptFile: string;
+      };
+      hasValidationErrors: boolean;
+      initialValues: EditableWorkstationValues;
+      isDirty: boolean;
+      isModelEditable: boolean;
+      markChangesSaved: () => void;
+      onModelChange: (value: string) => void;
+      onPromptChange: (value: string) => void;
+      onPromptFileChange: (value: string) => void;
+      overwriteFieldNames: EditableWorkstationOverwriteField[];
+      pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+      status: "ready";
+      validationErrors: EditableWorkstationValidationErrors;
+    };
+
+export type EditableWorkstationSaveState =
+  | { status: "idle" }
+  | { status: "confirming" }
+  | { status: "submitting" }
+  | { status: "success" }
+  | { errorMessage: string; status: "error" };
 
 export interface WorkstationActiveWorkListProps {
   executions: DashboardActiveExecution[];

@@ -47,6 +47,9 @@ const exportCoverImagePath = path.resolve(
   "resources",
   "dashboard.png",
 );
+const replayCurrentFactoryDefinition = {
+  name: "Browser Replay Factory",
+};
 const exportFactoryDefinition = {
   inputTypes: [
     {
@@ -625,6 +628,7 @@ async function assertReplayScenarioRenders({
     workstationName,
   } = browserIntegration;
   await startReplayServer(await loadReplayLines(fileName), {
+    currentFactory: replayCurrentFactoryDefinition,
     pauseBeforeTick: inFlightSelectionTick ?? null,
   });
   const replayCoverageReport = buildReplayCoverageReport();

@@ -103,6 +103,16 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 			return err
 		}
 		r.applyInitialStructure(initialStructureFromGenerated(payload))
+	case factoryapi.FactoryEventTypeFactoryChange:
+		payload, err := event.Payload.AsFactoryChangeEventPayload()
+		if err != nil {
+			return err
+		}
+		r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload{
+			Factory:         payload.Factory,
+			Metadata:        payload.Metadata,
+			SourceDirectory: payload.SourceDirectory,
+		}))
 	case factoryapi.FactoryEventTypeWorkRequest:
 		payload, err := event.Payload.AsWorkRequestEventPayload()
 		if err != nil {

@@ -41,6 +41,7 @@ import {
   syncCompletedDispatchAttempt,
 } from "./replayWorldStateSupport";
 import type {
+  FactoryChangeEvent,
   DispatchRequestEvent,
   DispatchResponseEvent,
   FactoryStateResponseEvent,
@@ -122,6 +123,12 @@ function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
     case FACTORY_EVENT_TYPES.initialStructureRequest:
       state.topology = normalizeFactoryPayload(
         (event as InitialStructureRequestEvent).payload,
+      );
+      seedResourceOccupancy(state);
+      return;
+    case FACTORY_EVENT_TYPES.factoryChange:
+      state.topology = normalizeFactoryPayload(
+        (event as FactoryChangeEvent).payload,
       );
       seedResourceOccupancy(state);
       return;

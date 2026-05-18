@@ -371,13 +371,13 @@ export interface components {
             id: string;
             type: components["schemas"]["FactoryEventType"];
             context: components["schemas"]["FactoryEventContext"];
-            payload: components["schemas"]["RunRequestEventPayload"] | components["schemas"]["InitialStructureRequestEventPayload"] | components["schemas"]["WorkRequestEventPayload"] | components["schemas"]["RelationshipChangeRequestEventPayload"] | components["schemas"]["DispatchRequestEventPayload"] | components["schemas"]["InferenceRequestEventPayload"] | components["schemas"]["InferenceResponseEventPayload"] | components["schemas"]["ScriptRequestEventPayload"] | components["schemas"]["ScriptResponseEventPayload"] | components["schemas"]["DispatchResponseEventPayload"] | components["schemas"]["FactoryStateResponseEventPayload"] | components["schemas"]["RunResponseEventPayload"];
+            payload: components["schemas"]["RunRequestEventPayload"] | components["schemas"]["InitialStructureRequestEventPayload"] | components["schemas"]["FactoryChangeEventPayload"] | components["schemas"]["WorkRequestEventPayload"] | components["schemas"]["RelationshipChangeRequestEventPayload"] | components["schemas"]["DispatchRequestEventPayload"] | components["schemas"]["InferenceRequestEventPayload"] | components["schemas"]["InferenceResponseEventPayload"] | components["schemas"]["ScriptRequestEventPayload"] | components["schemas"]["ScriptResponseEventPayload"] | components["schemas"]["DispatchResponseEventPayload"] | components["schemas"]["FactoryStateResponseEventPayload"] | components["schemas"]["RunResponseEventPayload"];
         };
         /**
          * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
          * @enum {string}
          */
-        FactoryEventType: "RUN_REQUEST" | "INITIAL_STRUCTURE_REQUEST" | "WORK_REQUEST" | "RELATIONSHIP_CHANGE_REQUEST" | "DISPATCH_REQUEST" | "INFERENCE_REQUEST" | "INFERENCE_RESPONSE" | "SCRIPT_REQUEST" | "SCRIPT_RESPONSE" | "DISPATCH_RESPONSE" | "FACTORY_STATE_RESPONSE" | "RUN_RESPONSE";
+        FactoryEventType: "RUN_REQUEST" | "INITIAL_STRUCTURE_REQUEST" | "FACTORY_CHANGE" | "WORK_REQUEST" | "RELATIONSHIP_CHANGE_REQUEST" | "DISPATCH_REQUEST" | "INFERENCE_REQUEST" | "INFERENCE_RESPONSE" | "SCRIPT_REQUEST" | "SCRIPT_RESPONSE" | "DISPATCH_RESPONSE" | "FACTORY_STATE_RESPONSE" | "RUN_RESPONSE";
         FactoryEventContext: {
             /** @description Append-only event-log sequence number. */
             sequence: number;
@@ -422,6 +422,12 @@ export interface components {
         };
         /** @description Runtime topology snapshot before work moves. */
         InitialStructureRequestEventPayload: {
+            factory: components["schemas"]["Factory"];
+            sourceDirectory?: string;
+            metadata?: components["schemas"]["StringMap"];
+        };
+        /** @description Runtime topology snapshot after a live factory definition change replaces the running factory. */
+        FactoryChangeEventPayload: {
             factory: components["schemas"]["Factory"];
             sourceDirectory?: string;
             metadata?: components["schemas"]["StringMap"];

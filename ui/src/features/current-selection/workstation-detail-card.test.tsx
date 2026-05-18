@@ -177,6 +177,7 @@ describe("WorkstationDetailCard", () => {
 
     expect(screen.getByRole("heading", { name: "Active work" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Workstation summary" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Editable configuration" })).toBeTruthy();
     expect(screen.getByText("Worker type")).toBeTruthy();
     expect(screen.getByText("No active work is running on this workstation.")).toBeTruthy();
 
@@ -194,6 +195,7 @@ describe("WorkstationDetailCard", () => {
       ),
     ).toBeTruthy();
   });
+
 
   it("renders workstation-detail copy from the requested locale when provided", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;

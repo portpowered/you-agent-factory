@@ -91,6 +91,14 @@ describe("getWorkstationDetailMessages", () => {
     (locale) => {
       const messages = getWorkstationDetailMessages(locale);
 
+      expect(
+        messages.editableConfigurationOverwriteWarning("prompt, model"),
+      ).toContain("prompt");
+      expect(
+        messages.editableConfigurationSaveConflictConfirmationDescription(
+          "template",
+        ),
+      ).toContain("template");
       expect(messages.historyRequestCountLabel(4)).toContain("4");
       expect(messages.historyRunCountLabel(5)).toContain("5");
       expect(messages.providerSummary("codex", null)).toContain("codex");

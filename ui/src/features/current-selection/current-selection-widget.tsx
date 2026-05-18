@@ -13,7 +13,13 @@ import {
 } from "./current-selection-cards";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
+import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
+import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "./useCurrentSelection";
+import {
+  EditableWorkstationSaveDialog,
+  EditableWorkstationSaveHeaderAction,
+} from "./workstation-save-controls";
 
 export interface CurrentSelectionWidgetProps {
   activeTraceID?: string | null;
@@ -55,6 +61,18 @@ export function CurrentSelectionWidget({
     selectStateWorkItem,
     selectWorkstationRequest,
   } = currentSelection;
+  const editableConfigurationState = useEditableWorkstationConfigurationState(
+    selection,
+    selectedNode,
+  );
+  const workstationSaveScopeKey =
+    selection?.kind === "node" && selectedNode
+      ? `${selectedNode.node_id}:${selectedNode.transition_id}:${selectedNode.workstation_name}`
+      : null;
+  const workstationSave = useSaveEditableWorkstationConfiguration({
+    editableConfigurationState,
+    scopeKey: workstationSaveScopeKey,
+  });
 
   let detailCard: ReactNode;
 
@@ -100,11 +118,21 @@ export function CurrentSelectionWidget({
     detailCard = (
       <WorkstationDetailCard
         activeExecutions={selectedNodeActiveExecutions}
+        editableConfigurationState={editableConfigurationState}
+        headerAction={
+          <EditableWorkstationSaveHeaderAction
+            canSave={workstationSave.canSave}
+            locale={locale ?? undefined}
+            onClick={workstationSave.beginSaveConfirmation}
+            saveState={workstationSave.saveState}
+          />
+        }
         locale={locale ?? undefined}
         now={now}
         onSelectWorkID={selectWorkByID}
         onSelectWorkstationRequest={selectWorkstationRequest}
         providerSessions={selectedNodeProviderSessions}
+        saveState={workstationSave.saveState}
         selectedNode={selectedNode}
         selectedRequest={selectedWorkstationRequest}
         selectedWorkID={selectedWorkID}
@@ -119,6 +147,17 @@ export function CurrentSelectionWidget({
   return (
     <CurrentSelectionLocaleProvider locale={locale ?? undefined}>
       {detailCard}
+      <EditableWorkstationSaveDialog
+        locale={locale ?? undefined}
+        onCancel={workstationSave.cancelSaveConfirmation}
+        onConfirm={() => void workstationSave.confirmSave()}
+        overwriteFieldNames={
+          editableConfigurationState?.status === "ready"
+            ? editableConfigurationState.overwriteFieldNames
+            : []
+        }
+        saveState={workstationSave.saveState}
+      />
     </CurrentSelectionLocaleProvider>
   );
 }

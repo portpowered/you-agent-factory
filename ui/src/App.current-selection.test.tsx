@@ -25,6 +25,8 @@ import { installDashboardBrowserTestShims } from "./components/dashboard/test-br
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
 import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
+import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
@@ -32,6 +34,15 @@ import {
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+
+vi.mock("./features/current-factory-definition", async () => {
+  const actual = await vi.importActual("./features/current-factory-definition");
+
+  return {
+    ...actual,
+    useCurrentEditableFactoryDefinition: vi.fn(),
+  };
+});
 
 class MockEventSource {
   public static instances: MockEventSource[] = [];
@@ -503,6 +514,31 @@ describe("App current selection", () => {
     window.localStorage.clear();
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
+    resetSelectionHistoryStore();
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: false,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: true,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: false,
+      promise: Promise.resolve(undefined),
+      refetch: vi.fn(),
+      status: "pending",
+    } as never);
   });
 
   afterEach(() => {
@@ -521,6 +557,7 @@ describe("App current selection", () => {
       streamState: createDefaultDashboardStreamState(),
     });
     useFactoryTimelineStore.getState().reset();
+    resetSelectionHistoryStore();
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
     vi.restoreAllMocks();

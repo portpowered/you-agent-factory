@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+required:
+  - factory
+description: Runtime topology snapshot after a live factory definition change replaces the running factory.
+properties:
+  factory:
+    $ref: '../../../../openapi-main.yaml#/components/schemas/Factory'
+  sourceDirectory:
+    type: string
+  metadata:
+    $ref: '../../../../openapi-main.yaml#/components/schemas/StringMap'

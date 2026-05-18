@@ -1,8 +1,11 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { PropsWithChildren } from "react";
 
 import type { DashboardSnapshot } from "../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../api/events";
 import { createReplayHarness } from "../../testing/replay-harness";
+import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../current-factory-definition";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../timeline/state/factoryTimelineDebug";
 import {
   type WorldState,
@@ -233,8 +236,16 @@ async function emitCanonicalSelectedTickEvents(
 }
 
 describe("useDashboardSnapshot", () => {
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     replayHarness.install();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    });
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
     });
@@ -264,7 +275,7 @@ describe("useDashboardSnapshot", () => {
   it("keeps the seeded snapshot on first mount and reopens the stream after refresh", async () => {
     const { result, rerender } = renderHook(
       ({ refreshToken }: { refreshToken: number }) => useDashboardSnapshot({ refreshToken }),
-      { initialProps: { refreshToken: 0 } },
+      { initialProps: { refreshToken: 0 }, wrapper: createWrapper(queryClient) },
     );
 
     expect(result.current.snapshot?.tick_count).toBe(SEEDED_SNAPSHOT.tick_count);
@@ -291,7 +302,9 @@ describe("useDashboardSnapshot", () => {
   });
 
   it("reduces raw canonical /events messages into the current timeline projection", async () => {
-    renderHook(() => useDashboardSnapshot());
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
 
     expect(replayHarness.getStreams()).toHaveLength(1);
 
@@ -360,7 +373,9 @@ describe("useDashboardSnapshot", () => {
   });
 
   it("keeps fixed selected-tick request details stable while later streamed responses advance current mode", async () => {
-    renderHook(() => useDashboardSnapshot());
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
 
     const stream = replayHarness.getStreams()[0];
     if (!stream) {
@@ -441,7 +456,9 @@ describe("useDashboardSnapshot", () => {
       "/?afCompactEventText=1&afMemoryDebug=1&afMaxEventTextChars=10",
     );
 
-    renderHook(() => useDashboardSnapshot());
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
 
     const stream = replayHarness.getStreams()[0];
     if (!stream) {
@@ -463,4 +480,80 @@ describe("useDashboardSnapshot", () => {
     );
     expect(window.__agentFactoryTimelineDebug__?.summarize().selectedTick).toBe(4);
   });
+
+  it("hydrates the editable current-factory cache from a streamed factory-change event", async () => {
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const stream = replayHarness.getStreams()[0];
+    if (!stream) {
+      throw new Error("expected dashboard stream to be opened");
+    }
+
+    await act(async () => {
+      stream.emit("message", {
+        context: {
+          eventTime: "2026-05-17T15:00:00Z",
+          sequence: 8,
+          tick: 8,
+        },
+        id: "factory-event/factory-change/8",
+        payload: {
+          factory: {
+            name: "factory",
+            workers: [
+              {
+                model: "gpt-5.6",
+                modelProvider: "CODEX",
+                name: "reviewer",
+                type: "MODEL_WORKER",
+              },
+            ],
+            workTypes: [{
+              name: "story",
+              states: [{ name: "new", type: "INITIAL" }],
+            }],
+            workstations: [
+              {
+                body: "Updated prompt",
+                id: "review",
+                inputs: [{ state: "new", workType: "story" }],
+                name: "Review",
+                outputs: [],
+                promptFile: "prompts/review.md",
+                worker: "reviewer",
+              },
+            ],
+          },
+        },
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 20);
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryClient.getQueryData(CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY)).toMatchObject(
+        {
+          workers: [expect.objectContaining({ model: "gpt-5.6" })],
+          workstations: [
+            expect.objectContaining({
+              body: "Updated prompt",
+              promptFile: "prompts/review.md",
+            }),
+          ],
+        },
+      );
+    });
+  });
 });
+
+function createWrapper(queryClient: QueryClient) {
+  return function Wrapper({ children }: PropsWithChildren) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}

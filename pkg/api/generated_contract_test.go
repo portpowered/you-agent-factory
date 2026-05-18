@@ -14,6 +14,7 @@ import (
 var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeRunRequest,
 	factoryapi.FactoryEventTypeInitialStructureRequest,
+	factoryapi.FactoryEventTypeFactoryChange,
 	factoryapi.FactoryEventTypeWorkRequest,
 	factoryapi.FactoryEventTypeRelationshipChangeRequest,
 	factoryapi.FactoryEventTypeDispatchRequest,
@@ -347,6 +348,15 @@ func TestGeneratedFactoryEventContractsCompile(t *testing.T) {
 			Context:       factoryapi.FactoryEventContext{Sequence: 1, Tick: 0, EventTime: eventTime},
 			Payload: factoryEventPayload(t, factoryapi.InitialStructureRequestEventPayload{
 				Factory: factoryapi.Factory{Name: "factory"},
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-factory-change",
+			Type:          factoryapi.FactoryEventTypeFactoryChange,
+			Context:       factoryapi.FactoryEventContext{Sequence: 2, Tick: 1, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.FactoryChangeEventPayload{
+				Factory: factoryapi.Factory{Name: "factory-next"},
 			}),
 		},
 		{
@@ -863,6 +873,10 @@ func requireGeneratedFactoryEventPayloadRoundTrip(t *testing.T, event factoryapi
 		if _, err := event.Payload.AsInitialStructureRequestEventPayload(); err != nil {
 			t.Fatalf("decode %s initial-structure payload: %v", event.Id, err)
 		}
+	case factoryapi.FactoryEventTypeFactoryChange:
+		if _, err := event.Payload.AsFactoryChangeEventPayload(); err != nil {
+			t.Fatalf("decode %s factory-change payload: %v", event.Id, err)
+		}
 	case factoryapi.FactoryEventTypeWorkRequest:
 		if _, err := event.Payload.AsWorkRequestEventPayload(); err != nil {
 			t.Fatalf("decode %s work-request payload: %v", event.Id, err)
@@ -947,6 +961,8 @@ func factoryEventPayload(t *testing.T, payload any) factoryapi.FactoryEvent_Payl
 		err = eventPayload.FromRunRequestEventPayload(typed)
 	case factoryapi.InitialStructureRequestEventPayload:
 		err = eventPayload.FromInitialStructureRequestEventPayload(typed)
+	case factoryapi.FactoryChangeEventPayload:
+		err = eventPayload.FromFactoryChangeEventPayload(typed)
 	case factoryapi.WorkRequestEventPayload:
 		err = eventPayload.FromWorkRequestEventPayload(typed)
 	case factoryapi.RelationshipChangeRequestEventPayload:

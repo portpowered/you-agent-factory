@@ -2,56 +2,7 @@ import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../i18n";
-
-export interface WorkstationDetailMessages {
-  activeRunsLabel: string;
-  activeWorkEmpty: string;
-  activeWorkHeading: string;
-  collapseAction: string;
-  currentDispatchLabel: string;
-  dispatchLabel: string;
-  elapsedLabel: string;
-  expandAction: string;
-  historyRequestCountLabel: (count: number) => string;
-  historyRunCountLabel: (count: number) => string;
-  historicalRequestsLabel: string;
-  historicalRunsLabel: string;
-  inputWorkTypesLabel: string;
-  kindDefaultValue: string;
-  kindLabel: string;
-  noWorkstationRequests: string;
-  noWorkstationRuns: string;
-  openRequestAction: string;
-  openRequestDetailsAction: string;
-  openNamedWorkItemAction: (workItemLabel: string) => string;
-  openWorkItemAction: string;
-  outputWorkTypesLabel: string;
-  projectedWorkstationRequestSummary: string;
-  providerSummary: (provider: string, model?: string | null) => string;
-  requestDetailsUnavailable: (dispatchId: string) => string;
-  requestHistoryHeading: string;
-  requestSelectedAction: string;
-  requestStatusStartedAgo: (elapsed: string) => string;
-  runHistoryHeading: string;
-  providerSessionLogAction: string;
-  providerSessionLogUnavailable: string;
-  scriptCommandSummary: (command: string) => string;
-  selectRequestLabel: (requestLabel: string, dispatchId: string) => string;
-  selectWorkItemLabel: (workItemLabel: string) => string;
-  selectWorkstationRequestLabel: (dispatchId: string) => string;
-  selectedRequestLabel: (dispatchId: string) => string;
-  stationLabel: string;
-  summaryHeading: string;
-  traceIdLabel: string;
-  unknownActiveWorkLabel: string;
-  unavailableValue: string;
-  unknownWorkerTypeValue: string;
-  unknownWorkLabel: string;
-  workDetailsUnavailable: (dispatchId: string) => string;
-  workIdLabel: string;
-  workSelectedAction: string;
-  workerTypeLabel: string;
-}
+import type { WorkstationDetailMessages } from "./workstation-detail-types";
 
 const singularPlural = (count: number, singular: string, plural: string) =>
   `${count} ${count === 1 ? singular : plural}`;
@@ -62,6 +13,44 @@ const workstationDetailMessagesByLocale = {
     activeWorkEmpty: "No active work is running on this workstation.",
     activeWorkHeading: "Active work",
     collapseAction: "Collapse",
+    editableConfigurationEmpty:
+      "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
+    editableConfigurationErrorPrefix: "Editable configuration unavailable.",
+    editableConfigurationHeading: "Editable configuration",
+    editableConfigurationDirtyStatus:
+      "You have unsaved changes for this workstation.",
+    editableConfigurationDraftNote:
+      "Changes stay local to this edit session until you save the running factory.",
+    editableConfigurationModelSharedWorkerHint:
+      "Model edits are disabled here because this workstation shares its worker with other workstations.",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
+    editableConfigurationOverwriteWarningDetail:
+      "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
+    editableConfigurationSaveAction: "Save changes",
+    editableConfigurationSaveBusyAction: "Saving...",
+    editableConfigurationSaveConfirmationCancelAction: "Cancel",
+    editableConfigurationSaveConfirmationConfirmAction: "Overwrite factory",
+    editableConfigurationSaveConfirmationDescription:
+      "Saving will overwrite the running factory definition with the prompt, model, and template values in this workstation draft.",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `Saving will overwrite newer server values for ${fields} with the draft currently shown in the editor.`,
+    editableConfigurationSaveConfirmationTitle:
+      "Overwrite the running factory definition?",
+    editableConfigurationSaveErrorPrefix: "Saving failed.",
+    editableConfigurationSaveSuccess:
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    editableConfigurationLoading:
+      "Loading the current factory definition for this workstation.",
+    editableConfigurationSummary:
+      "Prompt, model, and template values are loaded from the latest editable current-factory definition.",
+    editableConfigurationValidationStatus:
+      "Resolve the highlighted fields before saving this workstation.",
+    modelFieldLabel: "Model",
+    notConfiguredValue: "Not configured",
+    promptFieldLabel: "Prompt",
+    templateFieldLabel: "Template",
+    workerFieldLabel: "Worker",
     currentDispatchLabel: "Current dispatch",
     dispatchLabel: "Dispatch",
     elapsedLabel: "Elapsed",
@@ -120,6 +109,44 @@ const workstationDetailMessagesByLocale = {
       "このワークステーションでは現在アクティブな作業は実行されていません。",
     activeWorkHeading: "アクティブな作業",
     collapseAction: "折りたたむ",
+    editableConfigurationEmpty:
+      "この選択中ワークステーションでは、実行中ファクトリー定義から編集可能な prompt、model、template の値を取得できません。",
+    editableConfigurationErrorPrefix: "編集可能な構成は利用できません。",
+    editableConfigurationHeading: "編集可能な構成",
+    editableConfigurationDirtyStatus:
+      "このワークステーションには未保存の変更があります。",
+    editableConfigurationDraftNote:
+      "変更は、実行中ファクトリーを保存するまでこの編集セッション内だけに保持されます。",
+    editableConfigurationModelSharedWorkerHint:
+      "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `編集開始後に実行中ファクトリーが変更されました。今保存すると、${fields} の新しいサーバー値を上書きします。`,
+    editableConfigurationOverwriteWarningDetail:
+      "保存前に最新の実行時の値を確認するか、この下書きで置き換える場合はそのまま編集を続けてください。",
+    editableConfigurationSaveAction: "変更を保存",
+    editableConfigurationSaveBusyAction: "保存中...",
+    editableConfigurationSaveConfirmationCancelAction: "キャンセル",
+    editableConfigurationSaveConfirmationConfirmAction: "ファクトリーを上書き",
+    editableConfigurationSaveConfirmationDescription:
+      "保存すると、このワークステーション下書きの prompt、model、template の値で実行中ファクトリー定義を上書きします。",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `保存すると、エディターに表示中の下書きで ${fields} の新しいサーバー値を上書きします。`,
+    editableConfigurationSaveConfirmationTitle:
+      "実行中ファクトリー定義を上書きしますか？",
+    editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
+    editableConfigurationSaveSuccess:
+      "実行中ファクトリーを保存しました。編集可能なワークステーション値は保存済み定義へ更新されました。",
+    editableConfigurationLoading:
+      "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
+    editableConfigurationSummary:
+      "Prompt、model、template の値は最新の編集可能な current-factory 定義から読み込まれます。",
+    editableConfigurationValidationStatus:
+      "このワークステーションを保存する前に、強調表示された項目を修正してください。",
+    modelFieldLabel: "モデル",
+    notConfiguredValue: "未設定",
+    promptFieldLabel: "プロンプト",
+    templateFieldLabel: "テンプレート",
+    workerFieldLabel: "ワーカー",
     currentDispatchLabel: "現在のディスパッチ",
     dispatchLabel: "ディスパッチ",
     elapsedLabel: "経過時間",
@@ -178,6 +205,44 @@ const workstationDetailMessagesByLocale = {
     activeWorkEmpty: "이 워크스테이션에서 현재 실행 중인 활성 작업이 없습니다.",
     activeWorkHeading: "활성 작업",
     collapseAction: "접기",
+    editableConfigurationEmpty:
+      "선택한 워크스테이션에 대해 실행 중인 팩토리 정의에서 편집 가능한 prompt, model, template 값을 찾을 수 없습니다.",
+    editableConfigurationErrorPrefix: "편집 가능한 구성을 사용할 수 없습니다.",
+    editableConfigurationHeading: "편집 가능한 구성",
+    editableConfigurationDirtyStatus:
+      "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
+    editableConfigurationDraftNote:
+      "변경 사항은 실행 중인 팩토리를 저장할 때까지 이 편집 세션에만 로컬로 유지됩니다.",
+    editableConfigurationModelSharedWorkerHint:
+      "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `편집을 시작한 뒤 실행 중인 팩토리가 변경되었습니다. 지금 저장하면 ${fields}의 최신 서버 값을 덮어쓰게 됩니다.`,
+    editableConfigurationOverwriteWarningDetail:
+      "저장하기 전에 최신 런타임 값을 검토하거나, 이 초안으로 대체하려면 계속 편집하세요.",
+    editableConfigurationSaveAction: "변경 사항 저장",
+    editableConfigurationSaveBusyAction: "저장 중...",
+    editableConfigurationSaveConfirmationCancelAction: "취소",
+    editableConfigurationSaveConfirmationConfirmAction: "팩토리 덮어쓰기",
+    editableConfigurationSaveConfirmationDescription:
+      "저장하면 이 워크스테이션 초안의 prompt, model, template 값으로 실행 중인 팩토리 정의를 덮어씁니다.",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `저장하면 편집기에 표시된 초안으로 ${fields}의 최신 서버 값을 덮어씁니다.`,
+    editableConfigurationSaveConfirmationTitle:
+      "실행 중인 팩토리 정의를 덮어쓸까요?",
+    editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
+    editableConfigurationSaveSuccess:
+      "실행 중인 팩토리를 저장했습니다. 편집 가능한 워크스테이션 값이 저장된 정의로 새로 고쳐졌습니다.",
+    editableConfigurationLoading:
+      "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
+    editableConfigurationSummary:
+      "Prompt, model, template 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
+    editableConfigurationValidationStatus:
+      "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
+    modelFieldLabel: "모델",
+    notConfiguredValue: "구성되지 않음",
+    promptFieldLabel: "프롬프트",
+    templateFieldLabel: "템플릿",
+    workerFieldLabel: "워커",
     currentDispatchLabel: "현재 디스패치",
     dispatchLabel: "디스패치",
     elapsedLabel: "경과 시간",
@@ -234,6 +299,40 @@ const workstationDetailMessagesByLocale = {
     activeWorkEmpty: "此工作站当前没有正在运行的活动工作。",
     activeWorkHeading: "活动工作",
     collapseAction: "收起",
+    editableConfigurationEmpty:
+      "运行中的工厂定义没有为所选工作站公开可编辑的 prompt、model 和 template 值。",
+    editableConfigurationErrorPrefix: "无法提供可编辑配置。",
+    editableConfigurationHeading: "可编辑配置",
+    editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
+    editableConfigurationDraftNote:
+      "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
+    editableConfigurationModelSharedWorkerHint:
+      "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
+    editableConfigurationOverwriteWarning: (fields) =>
+      `你开始编辑后，运行中的工厂已发生变化。现在保存将覆盖 ${fields} 的较新服务器值。`,
+    editableConfigurationOverwriteWarningDetail:
+      "保存前请先检查最新运行时值；如果此草稿就应该替换它们，也可以继续编辑。",
+    editableConfigurationSaveAction: "保存更改",
+    editableConfigurationSaveBusyAction: "保存中...",
+    editableConfigurationSaveConfirmationCancelAction: "取消",
+    editableConfigurationSaveConfirmationConfirmAction: "覆盖工厂",
+    editableConfigurationSaveConfirmationDescription:
+      "保存将使用此工作站草稿中的 prompt、model 和 template 值覆盖运行中的工厂定义。",
+    editableConfigurationSaveConflictConfirmationDescription: (fields) =>
+      `保存将使用编辑器中当前草稿覆盖 ${fields} 的较新服务器值。`,
+    editableConfigurationSaveConfirmationTitle: "要覆盖运行中的工厂定义吗？",
+    editableConfigurationSaveErrorPrefix: "保存失败。",
+    editableConfigurationSaveSuccess:
+      "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
+    editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
+    editableConfigurationSummary:
+      "Prompt、model 和 template 值来自最新可编辑的 current-factory 定义。",
+    editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
+    modelFieldLabel: "模型",
+    notConfiguredValue: "未配置",
+    promptFieldLabel: "提示词",
+    templateFieldLabel: "模板",
+    workerFieldLabel: "工作器",
     currentDispatchLabel: "当前分派",
     dispatchLabel: "分派",
     elapsedLabel: "已用时间",
@@ -291,4 +390,5 @@ export function getWorkstationDetailMessages(
   return resolveLocalizedMessages(workstationDetailMessagesByLocale, locale);
 }
 
+export type { WorkstationDetailMessages } from "./workstation-detail-types";
 export { workstationDetailMessagesByLocale };

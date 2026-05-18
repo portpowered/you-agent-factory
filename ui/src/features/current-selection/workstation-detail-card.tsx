@@ -1,17 +1,18 @@
+import { useEffect, useState } from "react";
 import {
-  useEffect,
-  useState,
-} from "react";
-
-import { formatDurationFromISO, formatList, formatWorkItemLabel } from "../../components/ui/formatters";
-import { cx } from "../../lib/cx";
+  DETAIL_COPY_CLASS,
+  WIDGET_SUBTITLE_CLASS,
+} from "../../components/dashboard/widget-board";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
+import {
+  formatDurationFromISO,
+  formatWorkItemLabel,
+} from "../../components/ui/formatters";
+import { cx } from "../../lib/cx";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   EXECUTION_PILL_CLASS,
@@ -20,26 +21,28 @@ import {
   PROVIDER_SESSION_CARD_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
-  WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "./detail-card-shared";
 import type {
   WorkstationActiveWorkListProps,
   WorkstationDetailCardProps,
-  WorkstationSummaryItemProps,
-  WorkstationSummaryProps,
 } from "./detail-card-types";
 import { getWorkstationDetailMessages } from "./messages";
+import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
 import {
-  CollapsibleProviderSessionAttempts,
-} from "./provider-session-attempts";
+  EditableConfigurationSection,
+  WorkstationSummary,
+} from "./workstation-editable-configuration-section";
 
 export function WorkstationDetailCard({
   activeExecutions,
+  editableConfigurationState,
+  headerAction,
   locale,
   now,
   onSelectWorkID,
   onSelectWorkstationRequest,
   providerSessions,
+  saveState,
   selectedRequest,
   selectedWorkID,
   selectedNode,
@@ -53,8 +56,13 @@ export function WorkstationDetailCard({
   );
 
   return (
-    <SelectionDetailLayout widgetId={widgetId}>
+    <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
+      <EditableConfigurationSection
+        messages={messages}
+        saveState={saveState}
+        state={editableConfigurationState}
+      />
       <WorkstationActiveWorkList
         executions={activeExecutions}
         messages={messages}
@@ -69,7 +77,9 @@ export function WorkstationDetailCard({
       <WorkstationSummary
         activeRunCount={activeExecutions.length}
         historyCount={
-          hasProjectedRequestHistory ? workstationRequests.length : providerSessions.length
+          hasProjectedRequestHistory
+            ? workstationRequests.length
+            : providerSessions.length
         }
         historyLabel={
           hasProjectedRequestHistory
@@ -115,49 +125,6 @@ export function WorkstationDetailCard({
   );
 }
 
-function WorkstationSummary({
-  activeRunCount,
-  historyCount,
-  historyLabel,
-  messages,
-  selectedNode,
-}: WorkstationSummaryProps) {
-  return (
-    <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.summaryHeading}</h4>
-      <ul className="m-0 grid list-none gap-2 p-0 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
-        <WorkstationSummaryItem
-          label={messages.workerTypeLabel}
-          value={selectedNode.worker_type || messages.unknownWorkerTypeValue}
-        />
-        <WorkstationSummaryItem
-          label={messages.kindLabel}
-          value={selectedNode.workstation_kind || messages.kindDefaultValue}
-        />
-        <WorkstationSummaryItem
-          label={messages.inputWorkTypesLabel}
-          value={formatList(selectedNode.input_work_type_ids)}
-        />
-        <WorkstationSummaryItem
-          label={messages.outputWorkTypesLabel}
-          value={formatList(selectedNode.output_work_type_ids)}
-        />
-        <WorkstationSummaryItem label={messages.activeRunsLabel} value={activeRunCount} />
-        <WorkstationSummaryItem label={historyLabel} value={historyCount} />
-      </ul>
-    </section>
-  );
-}
-
-function WorkstationSummaryItem({ label, value }: WorkstationSummaryItemProps) {
-  return (
-    <li className={WORKSTATION_SUMMARY_ITEM_CLASS}>
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <strong className="min-w-0 text-sm text-af-ink [overflow-wrap:anywhere]">{value}</strong>
-    </li>
-  );
-}
-
 function CollapsibleWorkstationRequests({
   messages,
   now,
@@ -180,13 +147,24 @@ function CollapsibleWorkstationRequests({
   }, []);
 
   return (
-    <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-[0.65rem]">
+    <section
+      aria-labelledby={`${historyID}-heading`}
+      className="mt-4 grid gap-[0.65rem]"
+    >
       <div className={HISTORY_HEADER_CLASS}>
         <div className="grid min-w-0 gap-[0.18rem]">
-          <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${historyID}-heading`}>
+          <h4
+            className={DASHBOARD_SECTION_HEADING_CLASS}
+            id={`${historyID}-heading`}
+          >
             {messages.requestHistoryHeading}
           </h4>
-          <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          <p
+            className={cx(
+              "m-0 text-af-ink/62",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
             {itemCountLabel}
           </p>
         </div>
@@ -225,21 +203,43 @@ function CollapsibleWorkstationRequests({
                   : messages.projectedWorkstationRequestSummary;
 
               return (
-                <article className={PROVIDER_SESSION_CARD_CLASS} key={request.dispatch_id}>
+                <article
+                  className={PROVIDER_SESSION_CARD_CLASS}
+                  key={request.dispatch_id}
+                >
                   <div className="flex items-start justify-between gap-[0.8rem]">
                     <strong>{requestLabel}</strong>
-                    <span className={EXECUTION_PILL_CLASS}>{request.dispatch_id}</span>
+                    <span className={EXECUTION_PILL_CLASS}>
+                      {request.dispatch_id}
+                    </span>
                   </div>
                   <div className="mt-[0.45rem] grid gap-[0.18rem]">
-                    <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+                    <p
+                      className={cx(
+                        "m-0 text-af-ink/70",
+                        DASHBOARD_BODY_TEXT_CLASS,
+                      )}
+                    >
                       {requestStatus}
                     </p>
-                    <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+                    <p
+                      className={cx(
+                        "m-0 text-af-ink/62",
+                        DASHBOARD_SUPPORTING_TEXT_CLASS,
+                      )}
+                    >
                       {requestSummary}
                     </p>
                     {request.started_at ? (
-                      <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
-                        {messages.requestStatusStartedAgo(formatDurationFromISO(request.started_at, now))}
+                      <p
+                        className={cx(
+                          "m-0 text-af-ink/62",
+                          DASHBOARD_SUPPORTING_TEXT_CLASS,
+                        )}
+                      >
+                        {messages.requestStatusStartedAgo(
+                          formatDurationFromISO(request.started_at, now),
+                        )}
                       </p>
                     ) : null}
                   </div>
@@ -260,7 +260,9 @@ function CollapsibleWorkstationRequests({
               );
             })
           ) : (
-            <p className={DETAIL_COPY_CLASS}>{messages.noWorkstationRequests}</p>
+            <p className={DETAIL_COPY_CLASS}>
+              {messages.noWorkstationRequests}
+            </p>
           )}
         </div>
       ) : null}
@@ -281,7 +283,9 @@ function WorkstationActiveWorkList({
 }: WorkstationActiveWorkListProps) {
   return (
     <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.activeWorkHeading}</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.activeWorkHeading}
+      </h4>
       {executions.length > 0 ? (
         <ul className="m-0 grid list-none gap-[0.65rem] p-0">
           {executions.flatMap((execution) => {
@@ -291,13 +295,16 @@ function WorkstationActiveWorkList({
                 : [undefined];
 
             return workItems.map((workItem) => {
-              const request = workstationRequestsByDispatchID?.[execution.dispatch_id];
+              const request =
+                workstationRequestsByDispatchID?.[execution.dispatch_id];
               const traceID = workItem?.trace_id ?? execution.trace_ids?.[0];
-              const workIdentifier = workItem?.work_id ?? traceID ?? messages.unavailableValue;
+              const workIdentifier =
+                workItem?.work_id ?? traceID ?? messages.unavailableValue;
               const workLabel = workItem
                 ? formatWorkItemLabel(workItem)
                 : messages.unknownActiveWorkLabel;
-              const requestSelected = selectedRequest?.dispatch_id === execution.dispatch_id;
+              const requestSelected =
+                selectedRequest?.dispatch_id === execution.dispatch_id;
 
               return (
                 <li
@@ -307,7 +314,9 @@ function WorkstationActiveWorkList({
                   )}
                   key={`${execution.dispatch_id}-${workIdentifier}`}
                 >
-                  <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
+                  <strong className="min-w-0 [overflow-wrap:anywhere]">
+                    {workLabel}
+                  </strong>
                   <dl
                     className={cx(
                       "m-0 grid gap-[0.35rem] [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5.5rem_minmax(0,1fr)] [&_div]:gap-2",
@@ -316,7 +325,9 @@ function WorkstationActiveWorkList({
                   >
                     <div>
                       <dt>{messages.workIdLabel}</dt>
-                      <dd className="[overflow-wrap:anywhere]">{workIdentifier}</dd>
+                      <dd className="[overflow-wrap:anywhere]">
+                        {workIdentifier}
+                      </dd>
                     </div>
                     {traceID ? (
                       <div>
@@ -326,16 +337,21 @@ function WorkstationActiveWorkList({
                     ) : null}
                     <div>
                       <dt>{messages.elapsedLabel}</dt>
-                      <dd>{formatDurationFromISO(execution.started_at, now)}</dd>
+                      <dd>
+                        {formatDurationFromISO(execution.started_at, now)}
+                      </dd>
                     </div>
                     <div>
                       <dt>{messages.dispatchLabel}</dt>
-                      <dd className="[overflow-wrap:anywhere]">{execution.dispatch_id}</dd>
+                      <dd className="[overflow-wrap:anywhere]">
+                        {execution.dispatch_id}
+                      </dd>
                     </div>
                     <div>
                       <dt>{messages.stationLabel}</dt>
                       <dd className="[overflow-wrap:anywhere]">
-                        {execution.workstation_name ?? selectedNode.workstation_name}
+                        {execution.workstation_name ??
+                          selectedNode.workstation_name}
                       </dd>
                     </div>
                   </dl>
@@ -378,7 +394,9 @@ function WorkstationActiveWorkList({
                       </button>
                     ) : (
                       <p className={REQUEST_SELECTION_STATUS_CLASS}>
-                        {messages.requestDetailsUnavailable(execution.dispatch_id)}
+                        {messages.requestDetailsUnavailable(
+                          execution.dispatch_id,
+                        )}
                       </p>
                     )
                   ) : null}

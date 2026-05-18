@@ -58,12 +58,23 @@ import * as factoryPngExportModule from "./features/export/factory-png-export";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "./features/import";
 import * as factoryPngImportModule from "./features/import/factory-png-import";
+import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   TraceDrilldownWidget,
   useTraceDrilldown,
 } from "./features/trace-drilldown";
+import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
+
+vi.mock("./features/current-factory-definition", async () => {
+  const actual = await vi.importActual("./features/current-factory-definition");
+
+  return {
+    ...actual,
+    useCurrentEditableFactoryDefinition: vi.fn(),
+  };
+});
 
 class MockEventSource {
   public static instances: MockEventSource[] = [];
@@ -1554,6 +1565,31 @@ describe("App", () => {
     window.localStorage.clear();
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
+    resetSelectionHistoryStore();
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: false,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: true,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: false,
+      promise: Promise.resolve(undefined),
+      refetch: vi.fn(),
+      status: "pending",
+    } as never);
   });
 
   afterEach(() => {
@@ -1572,6 +1608,7 @@ describe("App", () => {
       streamState: createDefaultDashboardStreamState(),
     });
     useFactoryTimelineStore.getState().reset();
+    resetSelectionHistoryStore();
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
     vi.restoreAllMocks();

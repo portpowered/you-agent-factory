@@ -17,6 +17,7 @@ import (
 var canonicalFactoryEventTypeValues = []string{
 	"RUN_REQUEST",
 	"INITIAL_STRUCTURE_REQUEST",
+	"FACTORY_CHANGE",
 	"WORK_REQUEST",
 	"RELATIONSHIP_CHANGE_REQUEST",
 	"DISPATCH_REQUEST",
@@ -59,6 +60,7 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"WorkOutcome",
 	"RunRequestEventPayload",
 	"InitialStructureRequestEventPayload",
+	"FactoryChangeEventPayload",
 	"WorkRequestEventPayload",
 	"RelationshipChangeRequestEventPayload",
 	"DispatchRequestEventPayload",
@@ -76,6 +78,7 @@ var bundledFactoryEventContractSchemaNames = []string{
 var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/RunRequestEventPayload",
 	"#/components/schemas/InitialStructureRequestEventPayload",
+	"#/components/schemas/FactoryChangeEventPayload",
 	"#/components/schemas/WorkRequestEventPayload",
 	"#/components/schemas/RelationshipChangeRequestEventPayload",
 	"#/components/schemas/DispatchRequestEventPayload",
@@ -93,6 +96,7 @@ var bundledFactoryEventTypeValues = canonicalFactoryEventTypeValues
 var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"RUN_REQUEST":                 "RunRequestEventPayload",
 	"INITIAL_STRUCTURE_REQUEST":   "InitialStructureRequestEventPayload",
+	"FACTORY_CHANGE":              "FactoryChangeEventPayload",
 	"WORK_REQUEST":                "WorkRequestEventPayload",
 	"RELATIONSHIP_CHANGE_REQUEST": "RelationshipChangeRequestEventPayload",
 	"DISPATCH_REQUEST":            "DispatchRequestEventPayload",
@@ -891,6 +895,7 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"DispatchRequestEventMetadata":          "./components/schemas/events/DispatchRequestEventMetadata.yaml",
 		"RunRequestEventPayload":                "./components/schemas/events/payloads/RunRequestEventPayload.yaml",
 		"InitialStructureRequestEventPayload":   "./components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml",
+		"FactoryChangeEventPayload":             "./components/schemas/events/payloads/FactoryChangeEventPayload.yaml",
 		"WorkRequestEventPayload":               "./components/schemas/events/payloads/WorkRequestEventPayload.yaml",
 		"RelationshipChangeRequestEventPayload": "./components/schemas/events/payloads/RelationshipChangeRequestEventPayload.yaml",
 		"DispatchRequestEventPayload":           "./components/schemas/events/payloads/DispatchRequestEventPayload.yaml",
@@ -1069,6 +1074,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 		"DispatchRequestEventMetadata",
 		"RunRequestEventPayload",
 		"InitialStructureRequestEventPayload",
+		"FactoryChangeEventPayload",
 		"WorkRequestEventPayload",
 		"RelationshipChangeRequestEventPayload",
 		"DispatchRequestEventPayload",
@@ -1110,6 +1116,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertPayloadUnionRefs(t, factoryEventProperties, []string{
 		"#/components/schemas/RunRequestEventPayload",
 		"#/components/schemas/InitialStructureRequestEventPayload",
+		"#/components/schemas/FactoryChangeEventPayload",
 		"#/components/schemas/WorkRequestEventPayload",
 		"#/components/schemas/RelationshipChangeRequestEventPayload",
 		"#/components/schemas/DispatchRequestEventPayload",

@@ -1,7 +1,10 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { FactoryEvent } from "../../api/events";
-import { openFactoryEventStream } from "../../api/events";
+import { FACTORY_EVENT_TYPES, openFactoryEventStream } from "../../api/events";
+import { normalizeFactoryDefinition } from "../../api/factory-definition";
+import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../current-factory-definition";
 import {
   compactFactoryEventForTimeline,
   installFactoryTimelineDebugGlobal,
@@ -21,6 +24,7 @@ export interface UseDashboardSnapshotOptions {
 export function useDashboardSnapshot({
   refreshToken = 0,
 }: UseDashboardSnapshotOptions = {}) {
+  const queryClient = useQueryClient();
   const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
@@ -72,6 +76,7 @@ export function useDashboardSnapshot({
 
     const stream = openFactoryEventStream(
       (event) => {
+        syncCurrentEditableFactoryDefinition(queryClient, event);
         queuedEventsRef.current.push(
           compactFactoryEventForTimeline(event, debugOptions),
         );
@@ -101,6 +106,7 @@ export function useDashboardSnapshot({
     resetTimeline,
     scheduleQueuedFlush,
     setStreamState,
+    queryClient,
   ]);
 
   useEffect(() => {
@@ -140,4 +146,25 @@ export function useDashboardSnapshot({
     }),
     [snapshot, streamState, isInitialLoading],
   );
+}
+
+function syncCurrentEditableFactoryDefinition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  event: FactoryEvent,
+): void {
+  if (event.type !== FACTORY_EVENT_TYPES.factoryChange) {
+    return;
+  }
+  const payloadFactory = (event.payload as { factory?: unknown }).factory;
+  if (payloadFactory == null) {
+    return;
+  }
+  try {
+    queryClient.setQueryData(
+      CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+      normalizeFactoryDefinition(payloadFactory),
+    );
+  } catch {
+    return;
+  }
 }

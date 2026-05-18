@@ -1,15 +1,30 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-
+import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import {
   buildDashboardInferenceAttemptFixture,
   buildDashboardWorkstationRequestFixture,
 } from "../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
+import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
 import { resetSelectionHistoryStore } from "./state/selectionHistoryStore";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
+import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "./useCurrentSelection";
+
+vi.mock("../current-factory-definition", async () => {
+  const actual = await vi.importActual("../current-factory-definition");
+
+  return {
+    ...actual,
+    useCurrentEditableFactoryDefinition: vi.fn(),
+  };
+});
+
+vi.mock("./use-save-editable-workstation-configuration", () => ({
+  useSaveEditableWorkstationConfiguration: vi.fn(),
+}));
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -106,6 +121,37 @@ function buildSelectedWorkItemFixture() {
 describe("CurrentSelectionWidget", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: null,
+      failureCount: 0,
+      failureReason: null,
+      fetchStatus: "idle",
+      isError: false,
+      isFetched: false,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isInitialLoading: false,
+      isLoading: false,
+      isLoadingError: false,
+      isPaused: false,
+      isPending: true,
+      isPlaceholderData: false,
+      isRefetchError: false,
+      isRefetching: false,
+      isStale: true,
+      isSuccess: false,
+      promise: Promise.resolve(undefined),
+      refetch: vi.fn(),
+      status: "pending",
+    } as never);
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({
+      beginSaveConfirmation: vi.fn(),
+      canSave: false,
+      cancelSaveConfirmation: vi.fn(),
+      confirmSave: vi.fn(),
+      saveState: { status: "idle" },
+    });
   });
 
   afterEach(() => {
@@ -341,11 +387,177 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
+    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+      false,
+    );
     expect(
       within(currentSelection).getByRole("heading", { name: "Active work" }),
     ).toBeTruthy();
     expect(
       within(currentSelection).getByRole("heading", { name: "Run history" }),
+    ).toBeTruthy();
+  });
+
+  it("does not load the editable factory definition when no workstation is selected", () => {
+    render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+      false,
+    );
+  });
+
+  it("enables editable workstation loading after a workstation becomes selected", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(
+      vi.mocked(useCurrentEditableFactoryDefinition),
+    ).toHaveBeenLastCalledWith(true);
+  });
+
+  it("initializes editable workstation inputs from the canonical factory definition and validates local edits", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+
+    const { rerender } = render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
+      "gpt-5.5",
+    );
+    expect((screen.getByLabelText("Template") as HTMLInputElement).value).toBe(
+      "prompts/review.md",
+    );
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Review the latest story changes before approval.",
+    );
+
+    fireEvent.change(screen.getByLabelText("Model"), {
+      target: { value: "   " },
+    });
+
+    expect(
+      screen.getByText("Enter a model before saving this workstation."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Resolve the highlighted fields before saving this workstation.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("preserves unsaved editable workstation input when the server definition refreshes", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+
+    const { rerender } = render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection()}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Keep my local edit." },
+    });
+
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          model: "gpt-5.6",
+          prompt: "Server changed prompt",
+          promptFile: "prompts/server.md",
+        }),
+      ),
+    );
+
+    rerender(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Keep my local edit.",
+    );
+    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
+      "gpt-5.5",
+    );
+    expect((screen.getByLabelText("Template") as HTMLInputElement).value).toBe(
+      "prompts/review.md",
+    );
+    expect(
+      screen.getByText(
+        "The running factory changed after you started editing. Saving now will overwrite newer server values for prompt, model, template.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
+      ),
     ).toBeTruthy();
   });
 
@@ -477,3 +689,63 @@ describe("CurrentSelectionWidget", () => {
     ).not.toBeNull();
   });
 });
+
+function buildEditableDefinitionResult(
+  data: CanonicalFactoryDefinition | undefined,
+) {
+  return {
+    data,
+    error: null,
+    failureCount: 0,
+    failureReason: null,
+    fetchStatus: "idle",
+    isError: false,
+    isFetched: true,
+    isFetchedAfterMount: true,
+    isFetching: false,
+    isInitialLoading: false,
+    isLoading: false,
+    isLoadingError: false,
+    isPaused: false,
+    isPending: false,
+    isPlaceholderData: false,
+    isRefetchError: false,
+    isRefetching: false,
+    isStale: true,
+    isSuccess: true,
+    promise: Promise.resolve(data),
+    refetch: vi.fn(),
+    status: "success",
+  } as never;
+}
+
+function buildEditableFactoryDefinition(overrides?: {
+  model?: string;
+  prompt?: string;
+  promptFile?: string;
+}): CanonicalFactoryDefinition {
+  return {
+    name: "Current Factory",
+    workers: [
+      {
+        model: overrides?.model ?? "gpt-5.5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body:
+          overrides?.prompt ??
+          "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: overrides?.promptFile ?? "prompts/review.md",
+        worker: "reviewer",
+      },
+    ],
+    workTypes: [],
+  };
+}
