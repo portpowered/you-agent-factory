@@ -181,7 +181,7 @@ const currentSelectionShellMessagesByLocale = {
     workstationUnavailable:
       "선택한 실행에서는 워크스테이션 세부 정보를 사용할 수 없습니다.",
   },
-  zh: {
+  "zh-CN": {
     completedStatus: "已完成",
     completedTerminalWorkSummary: "已完成的终端工作会保留在会话摘要中。",
     dispatchIdLabel: "分派 ID",

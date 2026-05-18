@@ -68,13 +68,11 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
         ? "세션 요약에서 실패 상태가 기록되었습니다."
         : "세션 요약에서 완료 상태로 기록되었습니다.",
   },
-  zh: {
+  "zh-CN": {
     cardTitle: "已完成和失败的工作",
     disclosureLabel: (expanded) => (expanded ? "折叠" : "展开"),
     emptyState: (status) =>
-      status === "failed"
-        ? "尚未记录失败的工作。"
-        : "尚未记录已完成的工作。",
+      status === "failed" ? "尚未记录失败的工作。" : "尚未记录已完成的工作。",
     iconLabel: (status) =>
       status === "failed" ? "失败的工作" : "已完成的工作",
     itemCountLabel: (count) => `${count} 个项目`,

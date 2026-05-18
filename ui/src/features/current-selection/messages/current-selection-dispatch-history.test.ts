@@ -21,7 +21,7 @@ describe("getCurrentSelectionDispatchHistoryMessages", () => {
       "Select work item Active Story",
     ],
     [
-      "zh",
+      "zh-CN",
       "当前分派",
       "请求详情",
       "未知分派",

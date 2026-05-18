@@ -13,7 +13,7 @@ describe("getExportDialogMessages", () => {
 
   it.each([
     ["en", "Export factory"],
-    ["zh", "导出工厂"],
+    ["zh-CN", "导出工厂"],
     ["ko", "팩토리 내보내기"],
     ["ja", "ファクトリーをエクスポート"],
   ] as const)("resolves %s catalog copy", (locale, expectedTitle) => {
@@ -41,7 +41,7 @@ describe("getExportDialogMessages", () => {
 
   it.each([
     ["ko", "factory-aurora.png", "cover.png"],
-    ["zh", "factory-aurora.png", "cover.png"],
+    ["zh-CN", "factory-aurora.png", "cover.png"],
   ] as const)("keeps %s interpolation helpers available for coverage-sensitive locales", (locale, filename, imageName) => {
     const messages = getExportDialogMessages(locale);
 

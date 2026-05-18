@@ -15,7 +15,7 @@ describe("getHeaderControlsMessages", () => {
 
   it.each([
     ["en", "dashboard summary"],
-    ["zh", "仪表板概览"],
+    ["zh-CN", "仪表板概览"],
     ["ko", "대시보드 요약"],
     ["ja", "ダッシュボードの概要"],
   ] as const)("resolves %s catalog copy", (locale, expectedSummaryLabel) => {
@@ -35,22 +35,22 @@ describe("getHeaderControlsMessages", () => {
     );
   });
 
-  it.each(["en", "ja", "ko", "zh"] as const)(
-    "keeps tick-status templates and stream labels available for %s",
-    (locale) => {
-      const messages = getHeaderControlsMessages(locale);
+  it.each([
+    "en",
+    "ja",
+    "ko",
+    "zh-CN",
+  ] as const)("keeps tick-status templates and stream labels available for %s", (locale) => {
+    const messages = getHeaderControlsMessages(locale);
 
-      expect(messages.currentTickStatusTemplate).toContain(
-        HEADER_CURRENT_TICK_TOKEN,
-      );
-      expect(messages.currentTickStatusTemplate).toContain(
-        HEADER_MAX_TICK_TOKEN,
-      );
-      expect(messages.streamStatusLiveLabel).toBeTruthy();
-      expect(messages.streamStatusConnectingLabel).toBeTruthy();
-      expect(messages.streamStatusOfflineLabel).toBeTruthy();
-      expect(messages.returnToCurrentTickLabel).toBeTruthy();
-      expect(messages.waitingForMoreTicks).toBeTruthy();
-    },
-  );
+    expect(messages.currentTickStatusTemplate).toContain(
+      HEADER_CURRENT_TICK_TOKEN,
+    );
+    expect(messages.currentTickStatusTemplate).toContain(HEADER_MAX_TICK_TOKEN);
+    expect(messages.streamStatusLiveLabel).toBeTruthy();
+    expect(messages.streamStatusConnectingLabel).toBeTruthy();
+    expect(messages.streamStatusOfflineLabel).toBeTruthy();
+    expect(messages.returnToCurrentTickLabel).toBeTruthy();
+    expect(messages.waitingForMoreTicks).toBeTruthy();
+  });
 });
