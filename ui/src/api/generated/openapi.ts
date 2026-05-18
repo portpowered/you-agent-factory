@@ -295,6 +295,87 @@ export interface components {
             malformedLineCount: number;
             /** @description Number of parsed JSON events without a recognized type field. */
             unknownEventCount: number;
+            /** @description Chronological execution turns inferred from turn boundaries and response activity. */
+            turns: components["schemas"]["CodexSessionTurnSummary"][];
+            /** @description Function and tool calls observed in chronological order. */
+            functionCalls: components["schemas"]["CodexSessionFunctionCallSummary"][];
+            /** @description Reasoning entries or summaries observed in chronological order. */
+            reasoning: components["schemas"]["CodexSessionReasoningSummary"][];
+            tokenUsage?: components["schemas"]["CodexSessionTokenUsage"];
+            /** @description Line-level parse errors for malformed event-stream records. */
+            parseErrors: components["schemas"]["CodexSessionLineError"][];
+            /** @description Compact list of events with unknown or unsupported type fields. */
+            unknownEvents: components["schemas"]["CodexSessionUnknownEvent"][];
+        };
+        CodexSessionTurnSummary: {
+            /** @description One-based chronological execution turn index. */
+            index: number;
+            /** @description Number of parsed events associated with the turn. */
+            eventCount: number;
+            /** @description Number of response_item records associated with the turn. */
+            responseItemCount: number;
+            /** @description Number of function or tool calls associated with the turn. */
+            functionCallCount: number;
+            /** @description Number of reasoning entries associated with the turn. */
+            reasoningCount: number;
+            /**
+             * Format: date-time
+             * @description First event timestamp associated with the turn when present.
+             */
+            startedAt?: string;
+        };
+        CodexSessionFunctionCallSummary: {
+            /** @description Chronological order of the function or tool call in the session stream. */
+            order: number;
+            /** @description One-based execution turn index associated with the call when inferable. */
+            turnIndex?: number;
+            /** @description Provider call identifier when present in the session stream. */
+            callId?: string;
+            /** @description Raw response item type for the call, such as function_call or custom_tool_call. */
+            type: string;
+            /** @description Function or tool name when present. */
+            name?: string;
+            /** @description Compact argument payload when present. */
+            arguments?: string;
+            /** @description Compact output payload when present. */
+            output?: string;
+            /** @description Result status inferred from the call output or explicit status fields. */
+            status?: string;
+        };
+        CodexSessionReasoningSummary: {
+            /** @description Chronological order of the reasoning entry in the session stream. */
+            order: number;
+            /** @description One-based execution turn index associated with the reasoning entry when inferable. */
+            turnIndex?: number;
+            /** @description Event or response item type that carried the reasoning entry. */
+            sourceType: string;
+            /** @description Reasoning text when plaintext content is present. */
+            text?: string;
+            /** @description Compact reasoning summary when present. */
+            summary?: string;
+            /** @description Whether the reasoning entry only exposed encrypted content. */
+            encrypted?: boolean;
+        };
+        CodexSessionTokenUsage: {
+            inputTokens?: number;
+            cachedInputTokens?: number;
+            outputTokens?: number;
+            reasoningOutputTokens?: number;
+            totalTokens?: number;
+        };
+        CodexSessionLineError: {
+            /** @description One-based line number of the malformed event-stream record. */
+            lineNumber: number;
+            /** @description Client-safe parse error message for the malformed line. */
+            message: string;
+        };
+        CodexSessionUnknownEvent: {
+            /** @description One-based line number of the unknown event. */
+            lineNumber: number;
+            /** @description Raw top-level event type when present. */
+            type?: string;
+            /** @description Raw nested payload type when present. */
+            payloadType?: string;
         };
         StringMap: {
             [key: string]: string;

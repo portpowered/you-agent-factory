@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - lineNumber
+  - message
+properties:
+  lineNumber:
+    type: integer
+    minimum: 1
+    description: One-based line number of the malformed event-stream record.
+  message:
+    type: string
+    description: Client-safe parse error message for the malformed line.

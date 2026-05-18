@@ -419,6 +419,18 @@ components:
       $ref: './components/schemas/api/ProviderSessionSourceMetadata.yaml'
     CodexSessionParseSummary:
       $ref: './components/schemas/api/CodexSessionParseSummary.yaml'
+    CodexSessionTurnSummary:
+      $ref: './components/schemas/api/CodexSessionTurnSummary.yaml'
+    CodexSessionFunctionCallSummary:
+      $ref: './components/schemas/api/CodexSessionFunctionCallSummary.yaml'
+    CodexSessionReasoningSummary:
+      $ref: './components/schemas/api/CodexSessionReasoningSummary.yaml'
+    CodexSessionTokenUsage:
+      $ref: './components/schemas/api/CodexSessionTokenUsage.yaml'
+    CodexSessionLineError:
+      $ref: './components/schemas/api/CodexSessionLineError.yaml'
+    CodexSessionUnknownEvent:
+      $ref: './components/schemas/api/CodexSessionUnknownEvent.yaml'
     StringMap:
       $ref: './components/schemas/shared/StringMap.yaml'
     IntegerMap:

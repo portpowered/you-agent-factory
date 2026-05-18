@@ -206,10 +206,49 @@ type BundledFileContent struct {
 // BundledFileContentEncoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
 type BundledFileContentEncoding string
 
+// CodexSessionFunctionCallSummary defines model for CodexSessionFunctionCallSummary.
+type CodexSessionFunctionCallSummary struct {
+	// Arguments Compact argument payload when present.
+	Arguments *string `json:"arguments,omitempty"`
+
+	// CallId Provider call identifier when present in the session stream.
+	CallId *string `json:"callId,omitempty"`
+
+	// Name Function or tool name when present.
+	Name *string `json:"name,omitempty"`
+
+	// Order Chronological order of the function or tool call in the session stream.
+	Order int `json:"order"`
+
+	// Output Compact output payload when present.
+	Output *string `json:"output,omitempty"`
+
+	// Status Result status inferred from the call output or explicit status fields.
+	Status *string `json:"status,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the call when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+
+	// Type Raw response item type for the call, such as function_call or custom_tool_call.
+	Type string `json:"type"`
+}
+
+// CodexSessionLineError defines model for CodexSessionLineError.
+type CodexSessionLineError struct {
+	// LineNumber One-based line number of the malformed event-stream record.
+	LineNumber int `json:"lineNumber"`
+
+	// Message Client-safe parse error message for the malformed line.
+	Message string `json:"message"`
+}
+
 // CodexSessionParseSummary defines model for CodexSessionParseSummary.
 type CodexSessionParseSummary struct {
 	// EventCount Number of JSON event records parsed from the session stream.
 	EventCount int `json:"eventCount"`
+
+	// FunctionCalls Function and tool calls observed in chronological order.
+	FunctionCalls []CodexSessionFunctionCallSummary `json:"functionCalls"`
 
 	// LineCount Number of non-empty event-stream lines inspected.
 	LineCount int `json:"lineCount"`
@@ -217,8 +256,84 @@ type CodexSessionParseSummary struct {
 	// MalformedLineCount Number of non-empty lines that could not be parsed as JSON objects.
 	MalformedLineCount int `json:"malformedLineCount"`
 
+	// ParseErrors Line-level parse errors for malformed event-stream records.
+	ParseErrors []CodexSessionLineError `json:"parseErrors"`
+
+	// Reasoning Reasoning entries or summaries observed in chronological order.
+	Reasoning  []CodexSessionReasoningSummary `json:"reasoning"`
+	TokenUsage *CodexSessionTokenUsage        `json:"tokenUsage,omitempty"`
+
+	// Turns Chronological execution turns inferred from turn boundaries and response activity.
+	Turns []CodexSessionTurnSummary `json:"turns"`
+
 	// UnknownEventCount Number of parsed JSON events without a recognized type field.
 	UnknownEventCount int `json:"unknownEventCount"`
+
+	// UnknownEvents Compact list of events with unknown or unsupported type fields.
+	UnknownEvents []CodexSessionUnknownEvent `json:"unknownEvents"`
+}
+
+// CodexSessionReasoningSummary defines model for CodexSessionReasoningSummary.
+type CodexSessionReasoningSummary struct {
+	// Encrypted Whether the reasoning entry only exposed encrypted content.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// Order Chronological order of the reasoning entry in the session stream.
+	Order int `json:"order"`
+
+	// SourceType Event or response item type that carried the reasoning entry.
+	SourceType string `json:"sourceType"`
+
+	// Summary Compact reasoning summary when present.
+	Summary *string `json:"summary,omitempty"`
+
+	// Text Reasoning text when plaintext content is present.
+	Text *string `json:"text,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the reasoning entry when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+}
+
+// CodexSessionTokenUsage defines model for CodexSessionTokenUsage.
+type CodexSessionTokenUsage struct {
+	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
+	InputTokens           *int `json:"inputTokens,omitempty"`
+	OutputTokens          *int `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           *int `json:"totalTokens,omitempty"`
+}
+
+// CodexSessionTurnSummary defines model for CodexSessionTurnSummary.
+type CodexSessionTurnSummary struct {
+	// EventCount Number of parsed events associated with the turn.
+	EventCount int `json:"eventCount"`
+
+	// FunctionCallCount Number of function or tool calls associated with the turn.
+	FunctionCallCount int `json:"functionCallCount"`
+
+	// Index One-based chronological execution turn index.
+	Index int `json:"index"`
+
+	// ReasoningCount Number of reasoning entries associated with the turn.
+	ReasoningCount int `json:"reasoningCount"`
+
+	// ResponseItemCount Number of response_item records associated with the turn.
+	ResponseItemCount int `json:"responseItemCount"`
+
+	// StartedAt First event timestamp associated with the turn when present.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+}
+
+// CodexSessionUnknownEvent defines model for CodexSessionUnknownEvent.
+type CodexSessionUnknownEvent struct {
+	// LineNumber One-based line number of the unknown event.
+	LineNumber int `json:"lineNumber"`
+
+	// PayloadType Raw nested payload type when present.
+	PayloadType *string `json:"payloadType,omitempty"`
+
+	// Type Raw top-level event type when present.
+	Type *string `json:"type,omitempty"`
 }
 
 // CommandDiagnostic defines model for CommandDiagnostic.

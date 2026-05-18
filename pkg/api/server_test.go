@@ -365,6 +365,90 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 		resp.Parse.MalformedLineCount != 1 || resp.Parse.UnknownEventCount != 1 {
 		t.Fatalf("parse summary = %#v, want line/event/malformed/unknown counts", resp.Parse)
 	}
+	if len(resp.Parse.Turns) != 1 || resp.Parse.Turns[0].ReasoningCount != 1 {
+		t.Fatalf("turn summaries = %#v, want one inferred reasoning turn", resp.Parse.Turns)
+	}
+	if len(resp.Parse.Reasoning) != 1 || resp.Parse.Reasoning[0].SourceType != "reasoning" {
+		t.Fatalf("reasoning summaries = %#v, want response reasoning entry", resp.Parse.Reasoning)
+	}
+	if len(resp.Parse.ParseErrors) != 1 || resp.Parse.ParseErrors[0].LineNumber != 4 {
+		t.Fatalf("parse errors = %#v, want malformed line 4", resp.Parse.ParseErrors)
+	}
+	if len(resp.Parse.UnknownEvents) != 1 || resp.Parse.UnknownEvents[0].LineNumber != 3 {
+		t.Fatalf("unknown events = %#v, want unknown event line 3", resp.Parse.UnknownEvents)
+	}
+}
+
+func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
+	session := strings.Join([]string{
+		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":["checked input"],"encrypted_content":"sealed"}}`,
+		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":{"cmd":"go test ./pkg/api"}}}`,
+		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok"}}`,
+		`{"timestamp":"2026-05-18T10:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":5,"total_tokens":130}}}}`,
+		`{"timestamp":"2026-05-18T10:00:05Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:06Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-2","name":"apply_patch","input":"patch text","status":"in_progress"}}`,
+		`{"timestamp":"2026-05-18T10:00:07Z","type":"event_msg","payload":{"type":"new_future_event"}}`,
+		`{"timestamp":"2026-05-18T10:00:08Z","type":"unexpected_top_level"}`,
+		`{bad json`,
+	}, "\n")
+
+	summary, err := parseCodexSessionSummary(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session summary: %v", err)
+	}
+
+	if summary.LineCount != 10 || summary.EventCount != 9 || summary.MalformedLineCount != 1 || summary.UnknownEventCount != 2 {
+		t.Fatalf("counts = %#v, want parsed, malformed, and unknown counts", summary)
+	}
+	if len(summary.Turns) != 2 {
+		t.Fatalf("turns = %#v, want two chronological turns", summary.Turns)
+	}
+	if summary.Turns[0].Index != 1 || summary.Turns[0].ResponseItemCount != 3 ||
+		summary.Turns[0].FunctionCallCount != 1 || summary.Turns[0].ReasoningCount != 1 {
+		t.Fatalf("first turn = %#v, want response items, function call, and reasoning", summary.Turns[0])
+	}
+	if summary.Turns[1].Index != 2 || summary.Turns[1].FunctionCallCount != 1 {
+		t.Fatalf("second turn = %#v, want custom tool call", summary.Turns[1])
+	}
+	if len(summary.FunctionCalls) != 2 {
+		t.Fatalf("function calls = %#v, want two calls", summary.FunctionCalls)
+	}
+	firstCall := summary.FunctionCalls[0]
+	if firstCall.Order != 1 || stringValue(firstCall.Name) != "exec_command" ||
+		stringValue(firstCall.Arguments) != `{"cmd":"go test ./pkg/api"}` ||
+		stringValue(firstCall.Output) != "ok" || stringValue(firstCall.Status) != "completed" {
+		t.Fatalf("first function call = %#v, want ordered call with args and completed output", firstCall)
+	}
+	secondCall := summary.FunctionCalls[1]
+	if secondCall.Order != 2 || stringValue(secondCall.Name) != "apply_patch" ||
+		stringValue(secondCall.Status) != "in_progress" || stringValue(secondCall.Output) != "" {
+		t.Fatalf("second function call = %#v, want custom tool call without fabricated output", secondCall)
+	}
+	if len(summary.Reasoning) != 1 ||
+		stringValue(summary.Reasoning[0].Summary) != `["checked input"]` ||
+		summary.Reasoning[0].Encrypted == nil || !*summary.Reasoning[0].Encrypted {
+		t.Fatalf("reasoning = %#v, want summary and encrypted marker", summary.Reasoning)
+	}
+	if summary.TokenUsage == nil ||
+		intValue(summary.TokenUsage.InputTokens) != 100 ||
+		intValue(summary.TokenUsage.CachedInputTokens) != 40 ||
+		intValue(summary.TokenUsage.OutputTokens) != 25 ||
+		intValue(summary.TokenUsage.ReasoningOutputTokens) != 5 ||
+		intValue(summary.TokenUsage.TotalTokens) != 130 {
+		t.Fatalf("token usage = %#v, want total consumed token fields", summary.TokenUsage)
+	}
+	if len(summary.UnknownEvents) != 2 ||
+		summary.UnknownEvents[0].LineNumber != 8 ||
+		stringValue(summary.UnknownEvents[0].Type) != "event_msg" ||
+		stringValue(summary.UnknownEvents[0].PayloadType) != "new_future_event" ||
+		summary.UnknownEvents[1].LineNumber != 9 ||
+		stringValue(summary.UnknownEvents[1].Type) != "unexpected_top_level" {
+		t.Fatalf("unknown events = %#v, want compact line-level unknown records", summary.UnknownEvents)
+	}
+	if len(summary.ParseErrors) != 1 || summary.ParseErrors[0].LineNumber != 10 {
+		t.Fatalf("parse errors = %#v, want malformed line retained", summary.ParseErrors)
+	}
 }
 
 func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {

@@ -676,6 +676,11 @@ components:
         - lineCount
         - malformedLineCount
         - unknownEventCount
+        - turns
+        - functionCalls
+        - reasoning
+        - parseErrors
+        - unknownEvents
       properties:
         eventCount:
           type: integer
@@ -693,6 +698,176 @@ components:
           type: integer
           minimum: 0
           description: Number of parsed JSON events without a recognized type field.
+        turns:
+          type: array
+          description: Chronological execution turns inferred from turn boundaries and response activity.
+          items:
+            $ref: '#/components/schemas/CodexSessionTurnSummary'
+        functionCalls:
+          type: array
+          description: Function and tool calls observed in chronological order.
+          items:
+            $ref: '#/components/schemas/CodexSessionFunctionCallSummary'
+        reasoning:
+          type: array
+          description: Reasoning entries or summaries observed in chronological order.
+          items:
+            $ref: '#/components/schemas/CodexSessionReasoningSummary'
+        tokenUsage:
+          $ref: '#/components/schemas/CodexSessionTokenUsage'
+        parseErrors:
+          type: array
+          description: Line-level parse errors for malformed event-stream records.
+          items:
+            $ref: '#/components/schemas/CodexSessionLineError'
+        unknownEvents:
+          type: array
+          description: Compact list of events with unknown or unsupported type fields.
+          items:
+            $ref: '#/components/schemas/CodexSessionUnknownEvent'
+    CodexSessionTurnSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - index
+        - eventCount
+        - responseItemCount
+        - functionCallCount
+        - reasoningCount
+      properties:
+        index:
+          type: integer
+          minimum: 1
+          description: One-based chronological execution turn index.
+        eventCount:
+          type: integer
+          minimum: 0
+          description: Number of parsed events associated with the turn.
+        responseItemCount:
+          type: integer
+          minimum: 0
+          description: Number of response_item records associated with the turn.
+        functionCallCount:
+          type: integer
+          minimum: 0
+          description: Number of function or tool calls associated with the turn.
+        reasoningCount:
+          type: integer
+          minimum: 0
+          description: Number of reasoning entries associated with the turn.
+        startedAt:
+          type: string
+          format: date-time
+          description: First event timestamp associated with the turn when present.
+    CodexSessionFunctionCallSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - order
+        - type
+      properties:
+        order:
+          type: integer
+          minimum: 1
+          description: Chronological order of the function or tool call in the session stream.
+        turnIndex:
+          type: integer
+          minimum: 1
+          description: One-based execution turn index associated with the call when inferable.
+        callId:
+          type: string
+          description: Provider call identifier when present in the session stream.
+        type:
+          type: string
+          description: Raw response item type for the call, such as function_call or custom_tool_call.
+        name:
+          type: string
+          description: Function or tool name when present.
+        arguments:
+          type: string
+          description: Compact argument payload when present.
+        output:
+          type: string
+          description: Compact output payload when present.
+        status:
+          type: string
+          description: Result status inferred from the call output or explicit status fields.
+    CodexSessionReasoningSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - order
+        - sourceType
+      properties:
+        order:
+          type: integer
+          minimum: 1
+          description: Chronological order of the reasoning entry in the session stream.
+        turnIndex:
+          type: integer
+          minimum: 1
+          description: One-based execution turn index associated with the reasoning entry when inferable.
+        sourceType:
+          type: string
+          description: Event or response item type that carried the reasoning entry.
+        text:
+          type: string
+          description: Reasoning text when plaintext content is present.
+        summary:
+          type: string
+          description: Compact reasoning summary when present.
+        encrypted:
+          type: boolean
+          description: Whether the reasoning entry only exposed encrypted content.
+    CodexSessionTokenUsage:
+      type: object
+      additionalProperties: false
+      properties:
+        inputTokens:
+          type: integer
+          minimum: 0
+        cachedInputTokens:
+          type: integer
+          minimum: 0
+        outputTokens:
+          type: integer
+          minimum: 0
+        reasoningOutputTokens:
+          type: integer
+          minimum: 0
+        totalTokens:
+          type: integer
+          minimum: 0
+    CodexSessionLineError:
+      type: object
+      additionalProperties: false
+      required:
+        - lineNumber
+        - message
+      properties:
+        lineNumber:
+          type: integer
+          minimum: 1
+          description: One-based line number of the malformed event-stream record.
+        message:
+          type: string
+          description: Client-safe parse error message for the malformed line.
+    CodexSessionUnknownEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - lineNumber
+      properties:
+        lineNumber:
+          type: integer
+          minimum: 1
+          description: One-based line number of the unknown event.
+        type:
+          type: string
+          description: Raw top-level event type when present.
+        payloadType:
+          type: string
+          description: Raw nested payload type when present.
     StringMap:
       type: object
       additionalProperties:
