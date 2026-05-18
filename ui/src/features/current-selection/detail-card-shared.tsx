@@ -64,7 +64,7 @@ export const REQUEST_SELECTION_STATUS_CLASS = cx(
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cx(
-  "grid w-full gap-[0.4rem] rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-af-ink/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
+  "grid w-full gap-1.5 rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-af-ink/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const WORK_SELECTION_BUTTON_CLASS =
