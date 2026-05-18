@@ -139,6 +139,38 @@ func TestBuildProviderEnv_UsesDeterministicPrecedenceForOverlappingKeys(t *testi
 	}
 }
 
+func TestModelWorkerCommandRequest_MergesEnvironmentWithDeterministicPrecedence(t *testing.T) {
+	t.Setenv("GIT_EDITOR", "vim")
+	t.Setenv("GIT_SEQUENCE_EDITOR", "vim")
+	t.Setenv("AGENT_FACTORY_PROVIDER_ENV_PRECEDENCE", "process")
+
+	behavior := providerBehaviorFor(string(ModelProviderClaude), nil)
+	req := behavior.BuildCommandRequest(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderClaude),
+		UserMessage:   "fix it",
+		EnvVars: map[string]string{
+			"AGENT_FACTORY_PROVIDER_ENV_PRECEDENCE": "provider",
+			"AGENT_FACTORY_PROVIDER_ONLY":           "present",
+			"GIT_EDITOR":                            "nano",
+			"GIT_SEQUENCE_EDITOR":                   "nano",
+		},
+	}, []string{"-p", "fix it"})
+
+	assertEnvValue(t, req.Env, "GIT_EDITOR", "true")
+	assertEnvValue(t, req.Env, "GIT_SEQUENCE_EDITOR", "true")
+	assertEnvValue(t, req.Env, "AGENT_FACTORY_PROVIDER_ENV_PRECEDENCE", "provider")
+	assertEnvValue(t, req.Env, "AGENT_FACTORY_PROVIDER_ONLY", "present")
+
+	for _, name := range []string{
+		"AGENT_FACTORY_PROVIDER_ENV_PRECEDENCE",
+		"AGENT_FACTORY_PROVIDER_ONLY",
+		"GIT_EDITOR",
+		"GIT_SEQUENCE_EDITOR",
+	} {
+		assertEnvEntryCount(t, req.Env, name, 1)
+	}
+}
+
 func TestBuildProviderEnv_PreservesExplicitLegacyPortOSEnvKeys(t *testing.T) {
 	env := buildProviderEnv(map[string]string{
 		"PORTOS_BRANCH": "ralph/legacy-feature",

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -220,21 +219,6 @@ func cloneStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {
 		out[k] = v
-	}
-	return out
-}
-
-func envSliceToMap(env []string) map[string]string {
-	if len(env) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(env))
-	for _, pair := range env {
-		name, value, ok := strings.Cut(pair, "=")
-		if !ok {
-			continue
-		}
-		out[name] = value
 	}
 	return out
 }
