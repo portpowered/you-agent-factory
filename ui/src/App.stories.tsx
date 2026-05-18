@@ -8,13 +8,6 @@ import type {
   DashboardWorkstationRequest,
 } from "./api/dashboard";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "./components/ui/dashboard-typography";
-import {
   dashboardWorkstationRequestFixtures,
   failureAnalysisTimelineEvents,
   resourceCountTimelineEvents,
@@ -24,6 +17,14 @@ import {
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_PAGE_HEADING_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "./components/ui/dashboard-typography";
+import { DashboardScreen } from "./features/dashboard";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 
 const activeStoryTrace: DashboardTrace = {
@@ -415,14 +416,18 @@ async function expectTimelineToolbarAlignment(
   const toolbar = await canvas.findByRole("region", {
     name: "dashboard summary",
   });
-  const heading = within(toolbar).getByRole("heading", { name: "Infinite You" });
+  const heading = within(toolbar).getByRole("heading", {
+    name: "Infinite You",
+  });
   const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
   });
   const streamStatus = within(toolbar).getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
-  const exportButton = within(toolbar).getByRole("button", { name: "Export PNG" });
+  const exportButton = within(toolbar).getByRole("button", {
+    name: "Export PNG",
+  });
   const sliderShell = requireValue(
     slider.closest<HTMLElement>("div"),
     "expected slider shell in dashboard toolbar",
@@ -1090,7 +1095,9 @@ export const WorkstationRequestSelectionNoResponse = {
       ),
     ).toBeVisible();
     await expect(
-      currentSelection.getByText("No inference events are available for this selected work item."),
+      currentSelection.getByText(
+        "No inference events are available for this selected work item.",
+      ),
     ).toBeVisible();
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
@@ -1538,6 +1545,48 @@ export const HeaderTimelineAlignmentVerification = {
   },
 };
 
+export const HeaderLocalizationVerification = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      timelineSnapshots: [
+        historicalWorkOutcomeSnapshot,
+        liveWorkOutcomeSnapshot,
+      ],
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <DashboardScreen locale="zh-CN" />
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const toolbar = await canvas.findByRole("region", {
+      name: "仪表板概览",
+    });
+
+    await expect(
+      within(toolbar).getByRole("heading", { name: "Infinite You" }),
+    ).toBeVisible();
+    await expect(
+      within(toolbar).getByRole("slider", { name: "时间线刻度" }),
+    ).toBeVisible();
+    await expect(await canvas.findByText("第 5 个刻度，共 5 个")).toBeVisible();
+    await expect(
+      within(toolbar).getByRole("status", {
+        name: /Infinite You 事件流(正在连接|在线)/,
+      }),
+    ).toBeVisible();
+    await expect(
+      within(toolbar).getByRole("button", { name: "返回当前刻度" }),
+    ).toBeVisible();
+    await expect(
+      within(toolbar).getByRole("button", { name: "导出 PNG" }),
+    ).toBeVisible();
+  },
+};
+
 export const SelectedPositionCurrentWork = {
   parameters: {
     dashboardApi: {
@@ -1693,7 +1742,9 @@ export const FailureAnalysisEventReplaySmoke = {
       failedSelection.getAllByText("provider_rate_limit").length,
     ).toBeGreaterThan(0);
     await expect(
-      failedSelection.getByText("No inference events are available for this selected work item."),
+      failedSelection.getByText(
+        "No inference events are available for this selected work item.",
+      ),
     ).toBeVisible();
     await expect(
       failedSelection.getByText(

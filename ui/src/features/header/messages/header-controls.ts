@@ -4,8 +4,11 @@ import {
 } from "../../../i18n";
 
 export interface HeaderControlsMessages {
+  brandWordmark: string;
   currentTickStatusTemplate: string;
   dashboardSummaryLabel: string;
+  dashboardUnavailableTitle: string;
+  loadingDashboardTitle: string;
   returnToCurrentTickLabel: string;
   sliderAriaLabel: string;
   sliderLabel: string;
@@ -20,8 +23,11 @@ export const HEADER_MAX_TICK_TOKEN = "{{maxTick}}";
 
 const headerControlsMessagesByLocale = {
   en: {
+    brandWordmark: "Infinite You",
     currentTickStatusTemplate: `Tick ${HEADER_CURRENT_TICK_TOKEN} of ${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "dashboard summary",
+    dashboardUnavailableTitle: "Dashboard unavailable",
+    loadingDashboardTitle: "Loading dashboard",
     returnToCurrentTickLabel: "Return to current tick",
     sliderAriaLabel: "Timeline tick",
     sliderLabel: "Timeline tick",
@@ -31,8 +37,11 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "Waiting for more ticks",
   },
   ja: {
+    brandWordmark: "Infinite You",
     currentTickStatusTemplate: `${HEADER_MAX_TICK_TOKEN} 件中 ${HEADER_CURRENT_TICK_TOKEN} 件目のティック`,
     dashboardSummaryLabel: "ダッシュボードの概要",
+    dashboardUnavailableTitle: "ダッシュボードを利用できません",
+    loadingDashboardTitle: "ダッシュボードを読み込み中",
     returnToCurrentTickLabel: "現在のティックに戻る",
     sliderAriaLabel: "タイムラインティック",
     sliderLabel: "タイムラインティック",
@@ -43,8 +52,11 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "ティックが増えるまで待機しています",
   },
   ko: {
+    brandWordmark: "Infinite You",
     currentTickStatusTemplate: `틱 ${HEADER_CURRENT_TICK_TOKEN} / ${HEADER_MAX_TICK_TOKEN}`,
     dashboardSummaryLabel: "대시보드 요약",
+    dashboardUnavailableTitle: "대시보드를 사용할 수 없음",
+    loadingDashboardTitle: "대시보드 로드 중",
     returnToCurrentTickLabel: "현재 틱으로 돌아가기",
     sliderAriaLabel: "타임라인 틱",
     sliderLabel: "타임라인 틱",
@@ -55,8 +67,11 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "틱이 더 쌓일 때까지 기다리는 중",
   },
   "zh-CN": {
+    brandWordmark: "Infinite You",
     currentTickStatusTemplate: `第 ${HEADER_CURRENT_TICK_TOKEN} 个刻度，共 ${HEADER_MAX_TICK_TOKEN} 个`,
     dashboardSummaryLabel: "仪表板概览",
+    dashboardUnavailableTitle: "仪表板不可用",
+    loadingDashboardTitle: "正在加载仪表板",
     returnToCurrentTickLabel: "返回当前刻度",
     sliderAriaLabel: "时间线刻度",
     sliderLabel: "时间线刻度",

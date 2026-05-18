@@ -15,12 +15,14 @@ const DETAIL_COPY_CLASS = cx("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
 
 interface DashboardStatusPanelProps {
   detail?: string;
+  locale?: string;
   title: string;
   tone?: "default" | "error";
 }
 
 export function DashboardStatusPanel({
   detail,
+  locale,
   title,
   tone = "default",
 }: DashboardStatusPanelProps) {
@@ -32,7 +34,11 @@ export function DashboardStatusPanel({
   return (
     <section className={panelClassName}>
       <p className={EYEBROW_CLASS}>
-        <DashboardBrandLockup className="gap-2" wordmarkClassName="truncate" />
+        <DashboardBrandLockup
+          className="gap-2"
+          locale={locale}
+          wordmarkClassName="truncate"
+        />
       </p>
       <h1 className={DASHBOARD_TITLE_CLASS}>{title}</h1>
       {detail ? <p className={DETAIL_COPY_CLASS}>{detail}</p> : null}

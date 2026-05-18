@@ -5,20 +5,29 @@ import {
   DashboardHeader,
   DashboardStatusPanel,
 } from "../header";
+import { getHeaderControlsMessages } from "../header/messages/header-controls";
 import { useDashboardSnapshot } from "./useDashboardSnapshot";
 
 const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
 
-export function DashboardScreen() {
+export interface DashboardScreenProps {
+  locale?: string;
+}
+
+export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
   const { snapshot, isInitialLoading, error } = useDashboardSnapshot({
     refreshToken,
   });
+  const messages = getHeaderControlsMessages(locale);
 
   if (isInitialLoading) {
     return (
       <main className={DASHBOARD_SHELL_CLASS}>
-        <DashboardStatusPanel title="Loading dashboard" />
+        <DashboardStatusPanel
+          locale={locale}
+          title={messages.loadingDashboardTitle}
+        />
       </main>
     );
   }
@@ -28,7 +37,8 @@ export function DashboardScreen() {
       <main className={DASHBOARD_SHELL_CLASS}>
         <DashboardStatusPanel
           detail={error.message}
-          title="Dashboard unavailable"
+          locale={locale}
+          title={messages.dashboardUnavailableTitle}
           tone="error"
         />
       </main>
@@ -41,9 +51,9 @@ export function DashboardScreen() {
 
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
-      <DashboardHeader />
+      <DashboardHeader locale={locale} />
       <DashboardBento />
-      <DashboardExportDialog />
+      <DashboardExportDialog locale={locale} />
     </main>
   );
 }
