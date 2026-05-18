@@ -26,6 +26,7 @@ import {
 } from "./components/ui/dashboard-typography";
 import { DashboardScreen } from "./features/dashboard";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
+import { AppLocaleProvider, useAppLocale } from "./i18n";
 
 const activeStoryTrace: DashboardTrace = {
   trace_id: "trace-active-story",
@@ -640,6 +641,34 @@ function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
   expect(
     outcomeChart.querySelector('[data-chart-series="failed"]'),
   ).not.toBeNull();
+}
+
+function LocalePropagationStory() {
+  return (
+    <AppLocaleProvider initialLocale="en">
+      <LocalePropagationControls />
+      <div style={{ maxWidth: "100%", width: "1280px" }}>
+        <DashboardScreen />
+      </div>
+    </AppLocaleProvider>
+  );
+}
+
+function LocalePropagationControls() {
+  const { locale, setLocale } = useAppLocale();
+
+  return (
+    <fieldset style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
+      <legend>Locale verification controls</legend>
+      <span>Current locale: {locale}</span>
+      <button onClick={() => setLocale("en")} type="button">
+        Switch to English
+      </button>
+      <button onClick={() => setLocale("zh-CN")} type="button">
+        Switch to zh-CN
+      </button>
+    </fieldset>
+  );
 }
 
 export default {
@@ -1584,6 +1613,57 @@ export const HeaderLocalizationVerification = {
     await expect(
       within(toolbar).getByRole("button", { name: "导出 PNG" }),
     ).toBeVisible();
+  },
+};
+
+export const LocalePropagationVerification = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      timelineSnapshots: [
+        historicalWorkOutcomeSnapshot,
+        liveWorkOutcomeSnapshot,
+      ],
+    },
+  },
+  render: () => <LocalePropagationStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const controls = await canvas.findByRole("group", {
+      name: "Locale verification controls",
+    });
+    const englishToolbar = await canvas.findByRole("region", {
+      name: "dashboard summary",
+    });
+
+    await expect(
+      within(controls).getByText("Current locale: en"),
+    ).toBeVisible();
+    await expect(
+      within(englishToolbar).getByRole("button", {
+        name: "Return to current tick",
+      }),
+    ).toBeVisible();
+    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+
+    await userEvent.click(
+      within(controls).getByRole("button", {
+        name: "Switch to zh-CN",
+      }),
+    );
+
+    const mandarinToolbar = await canvas.findByRole("region", {
+      name: "仪表板概览",
+    });
+    await expect(
+      within(controls).getByText("Current locale: zh-CN"),
+    ).toBeVisible();
+    await expect(
+      within(mandarinToolbar).getByRole("button", {
+        name: "返回当前刻度",
+      }),
+    ).toBeVisible();
+    await expect(await canvas.findByText("第 5 个刻度，共 5 个")).toBeVisible();
   },
 };
 

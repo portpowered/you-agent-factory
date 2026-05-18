@@ -6,6 +6,7 @@ import {
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../components/ui/dashboard-typography";
+import { useAppLocale } from "../../i18n";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../export/messages/export-dialog";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
@@ -40,6 +41,7 @@ export interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ locale }: DashboardHeaderProps) {
+  const { locale: resolvedLocale } = useAppLocale(locale);
   const snapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
   );
@@ -50,8 +52,8 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
   const openExportDialog = useExportDialogStore(
     (state) => state.openExportDialog,
   );
-  const exportMessages = getExportDialogMessages(locale);
-  const headerMessages = getHeaderControlsMessages(locale);
+  const exportMessages = getExportDialogMessages(resolvedLocale);
+  const headerMessages = getHeaderControlsMessages(resolvedLocale);
 
   if (!snapshot) {
     return null;
@@ -63,13 +65,16 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       aria-label={headerMessages.dashboardSummaryLabel}
     >
       <h1 className={DASHBOARD_TITLE_CLASS}>
-        <DashboardBrandLockup locale={locale} wordmarkClassName="truncate" />
+        <DashboardBrandLockup
+          locale={resolvedLocale}
+          wordmarkClassName="truncate"
+        />
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
-        <TickSliderControl locale={locale} />
+        <TickSliderControl locale={resolvedLocale} />
         <div className={STREAM_STATUS_SHELL_CLASS}>
           <div
-            aria-label={streamStatusLabel(streamState.status, locale)}
+            aria-label={streamStatusLabel(streamState.status, resolvedLocale)}
             className={streamStatusClassName(streamState.status)}
             role="status"
           >

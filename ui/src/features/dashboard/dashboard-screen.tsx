@@ -1,3 +1,4 @@
+import { useAppLocale } from "../../i18n";
 import { DashboardBento } from "../bento";
 import { useDashboardBentoStore } from "../bento/state/dashboardBentoStore";
 import {
@@ -15,17 +16,18 @@ export interface DashboardScreenProps {
 }
 
 export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
+  const { locale: resolvedLocale } = useAppLocale(locale);
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
   const { snapshot, isInitialLoading, error } = useDashboardSnapshot({
     refreshToken,
   });
-  const messages = getHeaderControlsMessages(locale);
+  const messages = getHeaderControlsMessages(resolvedLocale);
 
   if (isInitialLoading) {
     return (
       <main className={DASHBOARD_SHELL_CLASS}>
         <DashboardStatusPanel
-          locale={locale}
+          locale={resolvedLocale}
           title={messages.loadingDashboardTitle}
         />
       </main>
@@ -37,7 +39,7 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
       <main className={DASHBOARD_SHELL_CLASS}>
         <DashboardStatusPanel
           detail={error.message}
-          locale={locale}
+          locale={resolvedLocale}
           title={messages.dashboardUnavailableTitle}
           tone="error"
         />
@@ -51,9 +53,9 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
 
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
-      <DashboardHeader locale={locale} />
-      <DashboardBento locale={locale} />
-      <DashboardExportDialog locale={locale} />
+      <DashboardHeader locale={resolvedLocale} />
+      <DashboardBento locale={resolvedLocale} />
+      <DashboardExportDialog locale={resolvedLocale} />
     </main>
   );
 }
