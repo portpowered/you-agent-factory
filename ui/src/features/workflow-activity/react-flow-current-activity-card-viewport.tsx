@@ -75,6 +75,7 @@ export function CurrentActivityGraphViewport({
   onAddAction,
   onAddMenuOpenChange,
   onConnect,
+  onEditorEdgeClick,
   onEditorNodeClick,
   onSelectTool,
   openAddMenu,
@@ -97,6 +98,7 @@ export function CurrentActivityGraphViewport({
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
   onConnect?: (connection: Connection) => void;
+  onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   openAddMenu?: boolean;
@@ -176,8 +178,14 @@ export function CurrentActivityGraphViewport({
           minZoom={0.25}
           nodeTypes={nodeTypes}
           nodes={nodes}
+          edgesFocusable={editorMode && activeTool === "delete"}
           nodesConnectable={editorMode && activeTool === "connect"}
           onConnect={onConnect}
+          onEdgeClick={(_, edge) => {
+            if (editorMode) {
+              onEditorEdgeClick?.(edge.id);
+            }
+          }}
           nodesDraggable={true}
           onNodeClick={(_, node) => {
             if (editorMode) {

@@ -1,6 +1,7 @@
 import type {
   FactoryGraphDraft,
   FactoryGraphDraftEdgeChange,
+  FactoryGraphEdge,
   FactoryGraphNode,
   FactoryGraphNodeKind,
   FactoryGraphTopology,
@@ -278,6 +279,41 @@ export function applyFactoryGraphEdgeAddition(
   nextDraft.edgeChanges.additions = appendUniqueEdgeChange(
     nextDraft.edgeChanges.additions,
     edgeChange,
+  );
+  return nextDraft;
+}
+
+export function applyFactoryGraphEdgeRemoval(
+  currentDraft: FactoryGraphDraft,
+  currentTopology: FactoryGraphTopology,
+  edge: FactoryGraphEdge,
+): FactoryGraphDraft {
+  const nextDraft = structuredClone(currentDraft);
+  if (edge.kind === "work-type-state") {
+    return nextDraft;
+  }
+  const nextEdgeId = edge.id;
+
+  const hadPendingAddition = nextDraft.edgeChanges.additions.some(
+    (entry) => edgeChangeId(entry) === nextEdgeId,
+  );
+  nextDraft.edgeChanges.additions = nextDraft.edgeChanges.additions.filter(
+    (entry) => edgeChangeId(entry) !== nextEdgeId,
+  );
+  if (hadPendingAddition) {
+    return nextDraft;
+  }
+  if (!currentTopology.edges.some((entry) => entry.id === nextEdgeId)) {
+    return nextDraft;
+  }
+
+  nextDraft.edgeChanges.removals = appendUniqueEdgeChange(
+    nextDraft.edgeChanges.removals,
+    {
+      kind: edge.kind,
+      source: edge.source,
+      target: edge.target,
+    },
   );
   return nextDraft;
 }

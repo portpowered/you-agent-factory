@@ -1,4 +1,5 @@
 import {
+  applyFactoryGraphEdgeRemoval,
   applyFactoryGraphEdgeAddition,
   buildFactoryGraphConnectionNotice,
   buildFactoryGraphEdgeChangeFromConnection,
@@ -139,5 +140,95 @@ describe("factory graph editor connections", () => {
     ).toBe(
       "Failure connections from review cannot connect to Continue on story:queued.",
     );
+  });
+
+  it("records existing edge removals in the draft", () => {
+    const topologyWithEdge: FactoryGraphTopology = {
+      ...connectableTopology,
+      edges: [
+        {
+          id: "workstation-on-failure:workstation:review->work-state:story:queued",
+          kind: "workstation-on-failure",
+          source: { kind: "workstation", name: "review" },
+          sourceId: "workstation:review",
+          target: {
+            kind: "work-state",
+            stateName: "queued",
+            workTypeName: "story",
+          },
+          targetId: "work-state:story:queued",
+        },
+      ],
+    };
+
+    expect(
+      applyFactoryGraphEdgeRemoval(
+        baseDraft,
+        topologyWithEdge,
+        topologyWithEdge.edges[0] as FactoryGraphTopology["edges"][number],
+      ).edgeChanges.removals,
+    ).toEqual([
+      {
+        kind: "workstation-on-failure",
+        source: {
+          kind: "workstation",
+          name: "review",
+        },
+        target: {
+          kind: "work-state",
+          stateName: "queued",
+          workTypeName: "story",
+        },
+      },
+    ]);
+  });
+
+  it("discards pending draft-only edge additions when they are removed", () => {
+    const pendingAdditionDraft: FactoryGraphDraft = {
+      ...baseDraft,
+      edgeChanges: {
+        additions: [
+          {
+            kind: "workstation-on-failure",
+            source: {
+              kind: "workstation",
+              name: "review",
+            },
+            target: {
+              kind: "work-state",
+              stateName: "queued",
+              workTypeName: "story",
+            },
+          },
+        ],
+        removals: [],
+      },
+    };
+    const topologyWithPendingEdge: FactoryGraphTopology = {
+      ...connectableTopology,
+      edges: [
+        {
+          id: "workstation-on-failure:workstation:review->work-state:story:queued",
+          kind: "workstation-on-failure",
+          source: { kind: "workstation", name: "review" },
+          sourceId: "workstation:review",
+          target: {
+            kind: "work-state",
+            stateName: "queued",
+            workTypeName: "story",
+          },
+          targetId: "work-state:story:queued",
+        },
+      ],
+    };
+
+    const nextDraft = applyFactoryGraphEdgeRemoval(
+      pendingAdditionDraft,
+      topologyWithPendingEdge,
+      topologyWithPendingEdge.edges[0] as FactoryGraphTopology["edges"][number],
+    );
+
+    expect(nextDraft.edgeChanges.additions).toEqual([]);
+    expect(nextDraft.edgeChanges.removals).toEqual([]);
   });
 });

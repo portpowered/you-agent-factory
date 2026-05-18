@@ -23,47 +23,18 @@ import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore"
 export function useFactoryGraphEditorViewModel(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
-  const baseTopology = useMemo(
-    () =>
-      editor.draftState.latestDocument
-        ? buildFactoryGraphTopologyFromDefinition(
-            editor.draftState.latestDocument.factoryDefinition,
-          )
-        : { edges: [], nodes: [] },
-    [editor.draftState.latestDocument],
-  );
-  const displayTopology = useMemo(
-    () => ({
-      edges: mergeById(baseTopology.edges, editor.draftState.graph.edges),
-      nodes: mergeById(baseTopology.nodes, editor.draftState.graph.nodes),
-    }),
-    [baseTopology.edges, baseTopology.nodes, editor.draftState.graph.edges, editor.draftState.graph.nodes],
-  );
-  const pendingRemovalNodeIds = useMemo(
-    () =>
-      editor.draftState.latestDocument
-        ? collectPendingRemovalNodeIds(
-            editor.draftState.latestDocument.factoryDefinition,
-            editor.draftState.draft,
-          )
-        : new Set<string>(),
-    [editor.draftState.draft, editor.draftState.latestDocument],
-  );
-  const pendingRemovalEdgeIds = useMemo(
-    () =>
-      editor.draftState.latestDocument
-        ? collectPendingRemovalEdgeIds(
-            editor.draftState.latestDocument.factoryDefinition,
-            editor.draftState.draft,
-          )
-        : new Set<string>(),
-    [editor.draftState.draft, editor.draftState.latestDocument],
-  );
+  const {
+    displayTopology,
+    pendingAdditionEdgeIds,
+    pendingRemovalEdgeIds,
+    pendingRemovalNodeIds,
+  } = useFactoryGraphEditorDraftGraphState(editor);
   const editorGraph = useMemo(
     () =>
       buildFactoryGraphEditorFlowModel({
         canEditConnections: editor.activeTool === "connect",
         onConnectionAnchorClick: editor.handleConnectionAnchorClick,
+        pendingAdditionEdgeIds,
         pendingConnectionSource: editor.pendingConnectionSource,
         pendingAdditionNodeIds: collectPendingNodeIds(editor.draftState.draft),
         pendingRemovalEdgeIds,
@@ -75,6 +46,7 @@ export function useFactoryGraphEditorViewModel(
       editor.draftState.draft,
       editor.activeTool,
       editor.handleConnectionAnchorClick,
+      pendingAdditionEdgeIds,
       editor.pendingConnectionSource,
       pendingRemovalEdgeIds,
       pendingRemovalNodeIds,
@@ -133,6 +105,68 @@ export function useFactoryGraphEditorViewModel(
     nodeTypes: FACTORY_GRAPH_EDITOR_NODE_TYPES,
     nodes,
     setStoredNodePosition,
+  };
+}
+
+function useFactoryGraphEditorDraftGraphState(
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+) {
+  const baseTopology = useMemo(
+    () =>
+      editor.draftState.latestDocument
+        ? buildFactoryGraphTopologyFromDefinition(
+            editor.draftState.latestDocument.factoryDefinition,
+          )
+        : { edges: [], nodes: [] },
+    [editor.draftState.latestDocument],
+  );
+  const displayTopology = useMemo(
+    () => ({
+      edges: mergeById(baseTopology.edges, editor.draftState.graph.edges),
+      nodes: mergeById(baseTopology.nodes, editor.draftState.graph.nodes),
+    }),
+    [
+      baseTopology.edges,
+      baseTopology.nodes,
+      editor.draftState.graph.edges,
+      editor.draftState.graph.nodes,
+    ],
+  );
+  const pendingRemovalNodeIds = useMemo(
+    () =>
+      editor.draftState.latestDocument
+        ? collectPendingRemovalNodeIds(
+            editor.draftState.latestDocument.factoryDefinition,
+            editor.draftState.draft,
+          )
+        : new Set<string>(),
+    [editor.draftState.draft, editor.draftState.latestDocument],
+  );
+  const pendingRemovalEdgeIds = useMemo(
+    () =>
+      editor.draftState.latestDocument
+        ? collectPendingRemovalEdgeIds(
+            editor.draftState.latestDocument.factoryDefinition,
+            editor.draftState.draft,
+          )
+        : new Set<string>(),
+    [editor.draftState.draft, editor.draftState.latestDocument],
+  );
+  const pendingAdditionEdgeIds = useMemo(
+    () =>
+      new Set(
+        editor.draftState.draft.edgeChanges.additions.map((edge) =>
+          `${edge.kind}:${nodeKeyId(edge.source)}->${nodeKeyId(edge.target)}`,
+        ),
+      ),
+    [editor.draftState.draft.edgeChanges.additions],
+  );
+
+  return {
+    displayTopology,
+    pendingAdditionEdgeIds,
+    pendingRemovalEdgeIds,
+    pendingRemovalNodeIds,
   };
 }
 

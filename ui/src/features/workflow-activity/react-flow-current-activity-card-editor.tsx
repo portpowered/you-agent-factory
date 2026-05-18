@@ -6,8 +6,6 @@ import {
   useSaveCurrentEditableFactoryDefinition,
 } from "../current-factory-definition";
 import {
-  applyFactoryGraphEntityRemoval,
-  buildFactoryGraphRemovalIntent,
   createEmptyFactoryGraphDraft,
   useFactoryGraphDraftState,
 } from "../factory-graph-editor/factory-graph-draft";
@@ -27,6 +25,7 @@ import {
   type FactoryGraphEditorTool,
 } from "../factory-graph-editor/factory-graph-editor-controls";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
+import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 
 const CURRENT_ACTIVITY_HEADER_ROW_CLASS =
   "flex items-start justify-between gap-3";
@@ -44,15 +43,17 @@ export function useCurrentActivityGraphEditor(
     projectedTopology,
   });
   const saveEditableDefinition = useSaveCurrentEditableFactoryDefinition();
-  const canInteractWithEditor = editorMode && editableDefinitionQuery.status === "success" && saveEditableDefinition.status !== "pending";
-  const canSaveDraft =
-    draftState.hasChanges &&
-    draftState.pendingFactoryDefinition !== null &&
-    draftState.validationErrors.length === 0 &&
-    draftState.latestDocument !== null;
-  const currentFactoryDefinition = draftState.pendingFactoryDefinition ?? draftState.latestDocument?.factoryDefinition ?? draftState.baseDocument?.factoryDefinition ?? null;
-  const addMenuActions =
-    buildFactoryGraphAddEntityMenuActions(currentFactoryDefinition);
+  const {
+    addMenuActions,
+    canInteractWithEditor,
+    canSaveDraft,
+    currentFactoryDefinition,
+  } = useFactoryGraphEditorSessionState({
+    draftState,
+    editorMode,
+    editableDefinitionQuery,
+    saveEditableDefinition,
+  });
   const addEntityController = useFactoryGraphAddEntityController({
     currentFactoryDefinition,
     draftState,
@@ -72,9 +73,11 @@ export function useCurrentActivityGraphEditor(
   const {
     blockedRemovalReason,
     handleConfirmRemoval,
+    handleEditorEdgeDelete,
     handleEditorNodeDelete,
     pendingRemovalIntent,
     setBlockedRemovalReason,
+    setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
   } = useFactoryGraphRemovalController({
     activeTool,
@@ -82,27 +85,149 @@ export function useCurrentActivityGraphEditor(
     draftState,
     saveEditableDefinition,
   });
+  const {
+    handleDiscardEditorChanges,
+    handleEditorModeToggle,
+    handleSaveBeforeLeavingEditor,
+  } = useFactoryGraphEditorLeaveHandlers({
+    addEntityController,
+    canSaveDraft,
+    draftState,
+    editorMode,
+    saveEditableDefinition,
+    setActiveTool,
+    setConnectionNotice,
+    setEditorMode,
+    setIsConfirmingLeaveEditor,
+    setPendingRemovalEdgeId,
+    setPendingRemovalNodeId,
+  });
+
+  return buildCurrentActivityGraphEditorValue({
+    activeTool,
+    addEntityController,
+    addMenuActions,
+    blockedRemovalReason,
+    canInteractWithEditor,
+    canSaveDraft,
+    connectionNotice,
+    currentFactoryDefinition,
+    draftState,
+    editableDefinitionQuery,
+    editorMode,
+    handleConfirmRemoval,
+    handleConnectionAnchorClick,
+    handleDiscardEditorChanges,
+    handleEditorConnect,
+    handleEditorEdgeDelete,
+    handleEditorModeToggle,
+    handleEditorNodeDelete,
+    handleSaveBeforeLeavingEditor,
+    isConfirmingLeaveEditor,
+    pendingConnectionSource,
+    pendingRemovalIntent,
+    saveEditableDefinition,
+    setActiveTool,
+    setBlockedRemovalReason,
+    setConnectionNotice,
+    setIsConfirmingLeaveEditor,
+    setPendingRemovalEdgeId,
+    setPendingRemovalNodeId,
+  });
+}
+
+function useFactoryGraphEditorSessionState({
+  draftState,
+  editorMode,
+  editableDefinitionQuery,
+  saveEditableDefinition,
+}: {
+  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  editorMode: boolean;
+  editableDefinitionQuery: ReturnType<
+    typeof useCurrentEditableFactoryDefinitionDocument
+  >;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentEditableFactoryDefinition>;
+}) {
+  const canInteractWithEditor =
+    editorMode &&
+    editableDefinitionQuery.status === "success" &&
+    saveEditableDefinition.status !== "pending";
+  const canSaveDraft =
+    draftState.hasChanges &&
+    draftState.pendingFactoryDefinition !== null &&
+    draftState.validationErrors.length === 0 &&
+    draftState.latestDocument !== null;
+  const currentFactoryDefinition =
+    draftState.pendingFactoryDefinition ??
+    draftState.latestDocument?.factoryDefinition ??
+    draftState.baseDocument?.factoryDefinition ??
+    null;
+
+  return {
+    addMenuActions:
+      buildFactoryGraphAddEntityMenuActions(currentFactoryDefinition),
+    canInteractWithEditor,
+    canSaveDraft,
+    currentFactoryDefinition,
+  };
+}
+
+function useFactoryGraphEditorLeaveHandlers({
+  addEntityController,
+  canSaveDraft,
+  draftState,
+  editorMode,
+  saveEditableDefinition,
+  setActiveTool,
+  setConnectionNotice,
+  setEditorMode,
+  setIsConfirmingLeaveEditor,
+  setPendingRemovalEdgeId,
+  setPendingRemovalNodeId,
+}: {
+  addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
+  canSaveDraft: boolean;
+  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  editorMode: boolean;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentEditableFactoryDefinition>;
+  setActiveTool: (tool: FactoryGraphEditorTool) => void;
+  setConnectionNotice: ReturnType<
+    typeof useFactoryGraphConnectionController
+  >["setConnectionNotice"];
+  setEditorMode: (mode: boolean) => void;
+  setIsConfirmingLeaveEditor: (open: boolean) => void;
+  setPendingRemovalEdgeId: (edgeId: string | null) => void;
+  setPendingRemovalNodeId: (nodeId: string | null) => void;
+}) {
   const leaveEditor = useCallback(() => {
     setEditorMode(false);
     setActiveTool(null);
     addEntityController.reset();
     setIsConfirmingLeaveEditor(false);
     setConnectionNotice(null);
+    setPendingRemovalEdgeId(null);
     setPendingRemovalNodeId(null);
-  }, [addEntityController, setConnectionNotice, setPendingRemovalNodeId]);
+  }, [
+    addEntityController,
+    setActiveTool,
+    setConnectionNotice,
+    setEditorMode,
+    setIsConfirmingLeaveEditor,
+    setPendingRemovalEdgeId,
+    setPendingRemovalNodeId,
+  ]);
   const handleEditorModeToggle = useCallback(() => {
     if (!editorMode) {
       setEditorMode(true);
       return;
     }
-
     if (draftState.hasChanges) {
       setIsConfirmingLeaveEditor(true);
       return;
     }
-
     leaveEditor();
-  }, [draftState.hasChanges, editorMode, leaveEditor]);
+  }, [draftState.hasChanges, editorMode, leaveEditor, setEditorMode, setIsConfirmingLeaveEditor]);
   const handleDiscardEditorChanges = useCallback(() => {
     draftState.resetDraft();
     leaveEditor();
@@ -125,35 +250,11 @@ export function useCurrentActivityGraphEditor(
     }
   }, [canSaveDraft, draftState, leaveEditor, saveEditableDefinition]);
 
-  return buildCurrentActivityGraphEditorValue({
-    activeTool,
-    addEntityController,
-    addMenuActions,
-    blockedRemovalReason,
-    canInteractWithEditor,
-    canSaveDraft,
-    connectionNotice,
-    currentFactoryDefinition,
-    draftState,
-    editableDefinitionQuery,
-    editorMode,
-    handleConfirmRemoval,
-    handleConnectionAnchorClick,
+  return {
     handleDiscardEditorChanges,
-    handleEditorConnect,
     handleEditorModeToggle,
-    handleEditorNodeDelete,
     handleSaveBeforeLeavingEditor,
-    isConfirmingLeaveEditor,
-    pendingConnectionSource,
-    pendingRemovalIntent,
-    saveEditableDefinition,
-    setActiveTool,
-    setBlockedRemovalReason,
-    setConnectionNotice,
-    setIsConfirmingLeaveEditor,
-    setPendingRemovalNodeId,
-  });
+  };
 }
 
 function useFactoryGraphAddEntityController({
@@ -226,98 +327,6 @@ function useFactoryGraphAddEntityController({
   };
 }
 
-function useFactoryGraphRemovalController({
-  activeTool,
-  canInteractWithEditor,
-  draftState,
-  saveEditableDefinition,
-}: {
-  activeTool: FactoryGraphEditorTool;
-  canInteractWithEditor: boolean;
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  saveEditableDefinition: ReturnType<
-    typeof useSaveCurrentEditableFactoryDefinition
-  >;
-}) {
-  const [pendingRemovalNodeId, setPendingRemovalNodeId] = useState<
-    string | null
-  >(null);
-  const [blockedRemovalReason, setBlockedRemovalReason] = useState<
-    string | null
-  >(null);
-  const pendingRemovalIntent =
-    draftState.latestDocument && pendingRemovalNodeId
-      ? buildFactoryGraphRemovalIntent({
-          baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
-          draft: draftState.draft,
-          nodeId: pendingRemovalNodeId,
-        })
-      : null;
-
-  const handleEditorNodeDelete = useCallback(
-    (nodeId: string) => {
-      if (
-        !canInteractWithEditor ||
-        activeTool !== "delete" ||
-        !draftState.latestDocument
-      ) {
-        return;
-      }
-
-      const intent = buildFactoryGraphRemovalIntent({
-        baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
-        draft: draftState.draft,
-        nodeId,
-      });
-      if (!intent) {
-        return;
-      }
-      if (intent.ineligibleReason) {
-        setBlockedRemovalReason(intent.ineligibleReason);
-        saveEditableDefinition.reset();
-        return;
-      }
-
-      setBlockedRemovalReason(null);
-      setPendingRemovalNodeId(nodeId);
-      saveEditableDefinition.reset();
-    },
-    [
-      activeTool,
-      canInteractWithEditor,
-      draftState.draft,
-      draftState.latestDocument,
-      saveEditableDefinition,
-    ],
-  );
-
-  const handleConfirmRemoval = useCallback(() => {
-    const latestDocument = draftState.latestDocument;
-    if (!latestDocument || !pendingRemovalIntent) {
-      return;
-    }
-
-    draftState.updateDraft((currentDraft) =>
-      applyFactoryGraphEntityRemoval(
-        currentDraft,
-        latestDocument.factoryDefinition,
-        pendingRemovalIntent.key,
-      ),
-    );
-    setBlockedRemovalReason(null);
-    setPendingRemovalNodeId(null);
-  }, [draftState, pendingRemovalIntent]);
-
-  return {
-    blockedRemovalReason,
-    handleConfirmRemoval,
-    handleEditorNodeDelete,
-    pendingRemovalIntent,
-    setBlockedRemovalReason,
-    setPendingRemovalNodeId,
-  };
-}
-
 function buildCurrentActivityGraphEditorValue(args: {
   activeTool: FactoryGraphEditorTool;
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
@@ -340,6 +349,7 @@ function buildCurrentActivityGraphEditorValue(args: {
   handleEditorConnect: ReturnType<
     typeof useFactoryGraphConnectionController
   >["handleEditorConnect"];
+  handleEditorEdgeDelete: (edgeId: string) => void;
   handleEditorModeToggle: () => void;
   handleEditorNodeDelete: (nodeId: string) => void;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
@@ -357,6 +367,7 @@ function buildCurrentActivityGraphEditorValue(args: {
     typeof useFactoryGraphConnectionController
   >["setConnectionNotice"];
   setIsConfirmingLeaveEditor: (open: boolean) => void;
+  setPendingRemovalEdgeId: (edgeId: string | null) => void;
   setPendingRemovalNodeId: (nodeId: string | null) => void;
 }) {
   return {
@@ -379,6 +390,7 @@ function buildCurrentActivityGraphEditorValue(args: {
     handleConnectionAnchorClick: args.handleConnectionAnchorClick,
     handleDiscardEditorChanges: args.handleDiscardEditorChanges,
     handleEditorConnect: args.handleEditorConnect,
+    handleEditorEdgeDelete: args.handleEditorEdgeDelete,
     handleEditorModeToggle: args.handleEditorModeToggle,
     handleEditorNodeDelete: args.handleEditorNodeDelete,
     handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
@@ -394,6 +406,7 @@ function buildCurrentActivityGraphEditorValue(args: {
     setBlockedRemovalReason: args.setBlockedRemovalReason,
     setConnectionNotice: args.setConnectionNotice,
     setIsConfirmingLeaveEditor: args.setIsConfirmingLeaveEditor,
+    setPendingRemovalEdgeId: args.setPendingRemovalEdgeId,
     setPendingRemovalNodeId: args.setPendingRemovalNodeId,
   };
 }

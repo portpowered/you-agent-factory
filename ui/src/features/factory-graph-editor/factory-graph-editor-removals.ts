@@ -1,5 +1,9 @@
 import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import {
+  buildEdgeRemovalDescription,
+  describeEdgeLabel,
+} from "./factory-graph-editor-edge-removal-copy";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -22,6 +26,14 @@ export interface FactoryGraphRemovalIntent {
   confirmLabel: string;
   ineligibleReason?: string;
   key: FactoryGraphNodeKey;
+  title: string;
+}
+
+export interface FactoryGraphEdgeRemovalIntent {
+  confirmDescription: string;
+  confirmLabel: string;
+  edge: FactoryGraphEdge;
+  ineligibleReason?: string;
   title: string;
 }
 
@@ -103,6 +115,40 @@ export function applyFactoryGraphEntityRemoval(
   addRelationshipRemovals(nextDraft, currentFactoryDefinition, key);
 
   return nextDraft;
+}
+
+export function buildFactoryGraphEdgeRemovalIntent(options: {
+  baseFactoryDefinition: CanonicalFactoryDefinition;
+  draft: FactoryGraphDraft;
+  edgeId: string;
+}): FactoryGraphEdgeRemovalIntent | null {
+  const currentFactoryDefinition =
+    buildPendingFactoryDefinition(options.baseFactoryDefinition, options.draft) ??
+    options.baseFactoryDefinition;
+  const currentTopology =
+    buildFactoryGraphTopologyFromDefinition(currentFactoryDefinition);
+  const edge = currentTopology.edges.find((entry) => entry.id === options.edgeId);
+
+  if (!edge) {
+    return null;
+  }
+  if (edge.kind === "work-type-state") {
+    return {
+      confirmDescription: "",
+      confirmLabel: "",
+      edge,
+      ineligibleReason:
+        "Work type ordering edges are managed by work-state membership and cannot be removed directly.",
+      title: "",
+    };
+  }
+
+  return {
+    confirmDescription: buildEdgeRemovalDescription(edge),
+    confirmLabel: `Remove ${describeEdgeLabel(edge)}`,
+    edge,
+    title: `Remove ${describeEdgeLabel(edge)}?`,
+  };
 }
 
 export function collectPendingRemovalNodeIds(

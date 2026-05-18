@@ -70,6 +70,7 @@ export function CurrentActivityGraphSurface({
         onAddAction={editor.handleAddEntityAction}
         onAddMenuOpenChange={editor.setAddMenuOpen}
         onConnect={editor.handleEditorConnect}
+        onEditorEdgeClick={editor.handleEditorEdgeDelete}
         onEditorNodeClick={editor.handleEditorNodeDelete}
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}

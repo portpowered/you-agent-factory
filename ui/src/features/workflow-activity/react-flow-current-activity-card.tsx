@@ -422,6 +422,7 @@ export function ReactFlowCurrentActivityCard(
         }
         isOpen={editor.pendingRemovalIntent !== null}
         onCancel={() => {
+          editor.setPendingRemovalEdgeId(null);
           editor.setPendingRemovalNodeId(null);
         }}
         onConfirm={editor.handleConfirmRemoval}

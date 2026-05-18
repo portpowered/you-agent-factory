@@ -62,6 +62,7 @@ const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
 function PendingRemovalStory() {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections: false,
+    pendingAdditionEdgeIds: new Set<string>(),
     pendingConnectionSource: null,
     pendingAdditionNodeIds: new Set<string>(),
     pendingRemovalEdgeIds: new Set([
@@ -125,11 +126,101 @@ function ConnectionAnchorsStory() {
           : endpoint,
       );
     },
+    pendingAdditionEdgeIds: new Set<string>(),
     pendingConnectionSource,
     pendingAdditionNodeIds: new Set<string>(),
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: new Set<string>(),
     topology: CONNECTABLE_TOPOLOGY,
+  });
+
+  return (
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
+const PENDING_EDGE_CHANGES_TOPOLOGY: FactoryGraphTopology = {
+  edges: [
+    {
+      id: "workstation-output:workstation:review->work-state:story:done",
+      kind: "workstation-output",
+      source: { kind: "workstation", name: "review" },
+      sourceId: "workstation:review",
+      target: {
+        kind: "work-state",
+        stateName: "done",
+        workTypeName: "story",
+      },
+      targetId: "work-state:story:done",
+    },
+    {
+      id: "workstation-on-failure:workstation:review->work-state:story:queued",
+      kind: "workstation-on-failure",
+      source: { kind: "workstation", name: "review" },
+      sourceId: "workstation:review",
+      target: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      targetId: "work-state:story:queued",
+    },
+  ],
+  nodes: [
+    {
+      id: "workstation:review",
+      key: { kind: "workstation", name: "review" },
+      kind: "workstation",
+      label: "review",
+    },
+    {
+      id: "work-state:story:done",
+      key: {
+        kind: "work-state",
+        stateName: "done",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:done",
+    },
+    {
+      id: "work-state:story:queued",
+      key: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:queued",
+    },
+  ],
+};
+
+function PendingEdgeChangesStory() {
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: false,
+    pendingAdditionEdgeIds: new Set([
+      "workstation-on-failure:workstation:review->work-state:story:queued",
+    ]),
+    pendingConnectionSource: null,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set([
+      "workstation-output:workstation:review->work-state:story:done",
+    ]),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: PENDING_EDGE_CHANGES_TOPOLOGY,
   });
 
   return (
@@ -198,5 +289,32 @@ export const ConnectionAnchors = {
 
     await userEvent.click(failureSource);
     await expect(failureSource).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const PendingEdgeChanges = {
+  render: () => <PendingEdgeChangesStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const edgeLabels = canvas.getAllByText(/route$/);
+    const edgePaths = Array.from(
+      canvasElement.querySelectorAll(".react-flow__edge-path"),
+    );
+
+    await expect(canvas.getByText("review")).toBeVisible();
+    await expect(edgeLabels).toHaveLength(2);
+    await expect(edgePaths).toHaveLength(2);
+    await expect(edgePaths[0]?.getAttribute("style") ?? "").toContain(
+      "var(--color-af-danger-ink)",
+    );
+    await expect(edgePaths[0]?.getAttribute("style") ?? "").toContain(
+      "stroke-dasharray: 7, 5",
+    );
+    await expect(edgePaths[1]?.getAttribute("style") ?? "").toContain(
+      "var(--color-af-warning-ink)",
+    );
+    await expect(edgePaths[1]?.getAttribute("style") ?? "").toContain(
+      "stroke-dasharray: 9, 4",
+    );
   },
 };

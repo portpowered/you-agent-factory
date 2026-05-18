@@ -1,6 +1,7 @@
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import {
   applyFactoryGraphEntityRemoval,
+  buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
   buildPendingFactoryDefinition,
   collectPendingRemovalEdgeIds,
@@ -172,5 +173,38 @@ describe("factory graph editor removals", () => {
         worker: "writer",
       },
     ]);
+  });
+
+  it("describes routing impact before removing workstation transition edges", () => {
+    const draft = createEmptyFactoryGraphDraft();
+
+    expect(
+      buildFactoryGraphEdgeRemovalIntent({
+        baseFactoryDefinition,
+        draft,
+        edgeId:
+          "workstation-output:workstation:review->work-state:story:done",
+      }),
+    ).toMatchObject({
+      confirmLabel: "Remove review success route",
+      title: "Remove review success route?",
+      confirmDescription:
+        "This will remove the success route from review to story:done.",
+    });
+  });
+
+  it("blocks direct removal of work-type membership edges", () => {
+    const draft = createEmptyFactoryGraphDraft();
+
+    expect(
+      buildFactoryGraphEdgeRemovalIntent({
+        baseFactoryDefinition,
+        draft,
+        edgeId: "work-type-state:work-type:story->work-state:story:queued",
+      }),
+    ).toMatchObject({
+      ineligibleReason:
+        "Work type ordering edges are managed by work-state membership and cannot be removed directly.",
+    });
   });
 });

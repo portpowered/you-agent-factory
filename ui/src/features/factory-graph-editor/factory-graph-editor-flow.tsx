@@ -73,6 +73,7 @@ export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
+  pendingAdditionEdgeIds: ReadonlySet<string>;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
   pendingAdditionNodeIds: ReadonlySet<string>;
   pendingRemovalEdgeIds: ReadonlySet<string>;
@@ -131,28 +132,44 @@ export function buildFactoryGraphEditorFlowModel(input: {
   return {
     edges: input.topology.edges.map((edge) => {
       const color = EDGE_COLOR_BY_KIND[edge.kind];
+      const pendingAddition = input.pendingAdditionEdgeIds.has(edge.id);
       const pendingRemoval = input.pendingRemovalEdgeIds.has(edge.id);
+      const edgeLabel = describeEdgeKind(edge.kind);
       return {
         animated:
           edge.kind === "workstation-on-continue" ||
           edge.kind === "workstation-on-failure" ||
           edge.kind === "workstation-on-rejection",
+        ariaLabel: `${edgeLabel} from ${describeNodeKey(edge.source)} to ${describeNodeKey(edge.target)}`,
+        ariaRole: "button",
+        focusable: true,
         id: edge.id,
-        label: edge.kind,
+        interactionWidth: 24,
+        label: edgeLabel,
         markerEnd: {
-          color,
+          color: pendingRemoval
+            ? "var(--color-af-danger-ink)"
+            : pendingAddition
+              ? "var(--color-af-warning-ink)"
+              : color,
           type: MarkerType.ArrowClosed,
         },
         source: edge.sourceId,
         style: {
           opacity: pendingRemoval ? 0.48 : 1,
-          stroke: pendingRemoval ? "var(--color-af-danger-ink)" : color,
+          stroke: pendingRemoval
+            ? "var(--color-af-danger-ink)"
+            : pendingAddition
+              ? "var(--color-af-warning-ink)"
+              : color,
           strokeDasharray: pendingRemoval
             ? "7 5"
-            : edge.kind === "worker-resource" || edge.kind === "workstation-resource"
-              ? "4 5"
-              : undefined,
-          strokeWidth: pendingRemoval ? 2 : 1.7,
+            : pendingAddition
+              ? "9 4"
+              : edge.kind === "worker-resource" || edge.kind === "workstation-resource"
+                ? "4 5"
+                : undefined,
+          strokeWidth: pendingRemoval || pendingAddition ? 2 : 1.7,
         },
         target: edge.targetId,
       } satisfies Edge;
@@ -166,6 +183,35 @@ export function buildFactoryGraphEditorFlowModel(input: {
       },
     })) as FactoryGraphEditorNode[],
   };
+}
+
+function describeEdgeKind(kind: FactoryGraphTopology["edges"][number]["kind"]) {
+  switch (kind) {
+    case "worker-assignment":
+      return "Worker assignment";
+    case "worker-resource":
+      return "Worker resource";
+    case "work-type-state":
+      return "State membership";
+    case "workstation-input":
+      return "Input route";
+    case "workstation-on-continue":
+      return "Continue route";
+    case "workstation-on-failure":
+      return "Failure route";
+    case "workstation-on-rejection":
+      return "Reject route";
+    case "workstation-output":
+      return "Success route";
+    case "workstation-resource":
+      return "Station resource";
+    default:
+      return String(kind);
+  }
+}
+
+function describeNodeKey(key: FactoryGraphTopology["edges"][number]["source"]) {
+  return key.kind === "work-state" ? `${key.workTypeName}:${key.stateName}` : key.name;
 }
 
 function FactoryGraphEditorNodeView({
