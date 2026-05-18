@@ -156,6 +156,8 @@ describe("dashboard trend cards", () => {
     const failureScope = within(resolvedFailureCard);
     const reworkScope = within(resolvedReworkCard);
     const timingScope = within(resolvedTimingCard);
+    const toolbar = failureScope.getByText("Time range").closest("div");
+    const summary = failureScope.getByText("Failed in range").closest("dl");
 
     expect(failureScope.getByText("Time range").className).toContain(
       DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -163,7 +165,13 @@ describe("dashboard trend cards", () => {
     expect(failureScope.getByLabelText("Time range").className).toContain(
       DASHBOARD_BODY_TEXT_CLASS,
     );
-    expect(failureScope.getByText("Failed in range").closest("dl")?.className).toContain(
+    expect(requireValue(toolbar, "expected failure trend toolbar").className).toContain(
+      "md:flex-row",
+    );
+    expect(requireValue(summary, "expected failure summary").className).toContain(
+      "md:grid-cols-3",
+    );
+    expect(summary?.className).toContain(
       DASHBOARD_SUPPORTING_LABELS_CLASS,
     );
     expect(

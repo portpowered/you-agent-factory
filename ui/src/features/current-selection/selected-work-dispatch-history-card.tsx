@@ -205,19 +205,19 @@ function DispatchHistoryHeader({
   workstationLabel: string | undefined;
 }) {
   return (
-    <div className="flex items-start justify-between gap-[0.8rem]">
-      <div className="grid min-w-0 gap-[0.18rem]">
+    <div className="flex items-start justify-between gap-3">
+      <div className="grid min-w-0 gap-1">
         <strong className="min-w-0 [overflow-wrap:anywhere]">
           {workstationLabel || dispatchID || messages.unknownDispatchTitle}
         </strong>
-        <div className="flex flex-wrap items-center gap-[0.45rem]">
+        <div className="flex flex-wrap items-center gap-2">
           <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
             {outcome ?? messages.pendingOutcome}
           </p>
           {isCurrentDispatch ? (
             <span
               className={cx(
-                "inline-flex rounded-full border border-af-accent/35 bg-af-accent/10 px-2 py-[0.18rem] text-af-accent",
+                "inline-flex rounded-full border border-af-accent/35 bg-af-accent/10 px-2 py-0.5 text-af-accent",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
             >
@@ -241,7 +241,7 @@ function DispatchSummaryDetails({
   view: DispatchHistoryView;
 }) {
   return (
-    <dl className={cx("mt-[0.65rem]", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+    <dl className={cx("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
       <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
       <InferenceAttemptDetail label={messages.transitionIdLabel} code value={request.transition_id} />
       <InferenceAttemptDetail label={messages.dispatchedCountLabel} value={view.counts.dispatchedCount} />

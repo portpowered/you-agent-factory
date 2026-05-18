@@ -39,9 +39,9 @@ export function SelectedWorkDispatchHistorySection({
   return (
     <section
       aria-labelledby="selected-work-dispatch-history-heading"
-      className="mt-4 grid gap-[0.65rem]"
+      className="mt-4 grid gap-2.5"
     >
-      <div className="grid gap-[0.18rem]">
+      <div className="grid gap-1">
         <h4
           className={DASHBOARD_SECTION_HEADING_CLASS}
           id="selected-work-dispatch-history-heading"
@@ -53,7 +53,7 @@ export function SelectedWorkDispatchHistorySection({
         </p>
       </div>
       {requests.length > 0 ? (
-        <div className="grid gap-[0.8rem]">
+        <div className="grid gap-3">
           {requests.map((request) => (
             <DispatchHistoryCard
               activeTraceID={activeTraceID}

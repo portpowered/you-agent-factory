@@ -19,23 +19,23 @@ import type {
 } from "./detail-card-types";
 
 export const EXECUTION_PILL_CLASS = cx(
-  "inline-flex rounded-full bg-af-info/15 px-2 py-[0.18rem] text-af-info-ink",
+  "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
 export const PROVIDER_SESSION_CARD_CLASS =
-  "rounded-lg border border-af-overlay/8 bg-af-overlay/4 p-[0.85rem]";
+  "rounded-lg border border-af-overlay/8 bg-af-overlay/4 p-3.5";
 export const HISTORY_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 [&_h4]:m-0";
 export const HISTORY_TOGGLE_CLASS = cx(
-  "shrink-0 cursor-pointer rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-[0.65rem] py-[0.45rem] text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
+  "shrink-0 cursor-pointer rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const WORKSTATION_SUMMARY_ITEM_CLASS =
-  "grid min-w-0 gap-[0.18rem] rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
+  "grid min-w-0 gap-1 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
 export const INFERENCE_ATTEMPT_CARD_CLASS =
-  "grid min-w-0 gap-[0.65rem] rounded-lg border border-af-overlay/8 p-[0.85rem]";
+  "grid min-w-0 gap-2.5 rounded-lg border border-af-overlay/8 p-3.5";
 export const INFERENCE_ATTEMPT_DETAIL_CLASS = cx(
-  "m-0 grid gap-[0.35rem] [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[8.5rem_minmax(0,1fr)] [&_div]:gap-2",
+  "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[8.5rem_minmax(0,1fr)] [&_div]:gap-2",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const INFERENCE_ATTEMPT_TEXT_CLASS = cx(
@@ -43,14 +43,14 @@ export const INFERENCE_ATTEMPT_TEXT_CLASS = cx(
   DASHBOARD_BODY_CODE_CLASS,
 );
 export const REQUEST_AUTHORED_TEXT_CLASS = cx(
-  "grid gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere] [&_code]:rounded-[0.3rem] [&_code]:bg-af-overlay/12 [&_code]:px-[0.3rem] [&_code]:py-[0.15rem] [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-af-overlay/8 [&_pre]:bg-af-overlay/12 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5",
+  "grid gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-af-overlay/12 [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-af-overlay/8 [&_pre]:bg-af-overlay/12 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const INFERENCE_REQUEST_PROMPT_LABEL = "Request prompt";
 export const INFERENCE_RESPONSE_LABEL = "Response";
 export const WORKSTATION_RESPONSE_TEXT_LABEL = "Response text";
 export const RUNTIME_DETAILS_SECTION_CLASS =
-  "mt-4 grid gap-[0.75rem] border-t border-af-overlay/8 pt-4 [&_h4]:m-0";
+  "mt-4 grid gap-3 border-t border-af-overlay/8 pt-4 [&_h4]:m-0";
 export const RUNTIME_DETAIL_VALUE_CLASS = "min-w-0 [overflow-wrap:anywhere]";
 export const RUNTIME_DETAIL_CODE_CLASS = cx(
   DASHBOARD_BODY_CODE_CLASS,
@@ -63,7 +63,7 @@ export const REQUEST_SELECTION_STATUS_CLASS = cx(
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const WORK_SELECTION_BUTTON_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-[0.65rem] py-[0.45rem] text-xs font-bold text-af-ink/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
+  "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs font-bold text-af-ink/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
 export const REQUEST_HISTORY_TEXT_CLASS = cx(
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
@@ -108,7 +108,7 @@ export function InferenceAttemptTextSection({
   value,
 }: InferenceAttemptTextSectionProps) {
   return (
-    <section aria-label={label} className="grid gap-[0.3rem]">
+    <section aria-label={label} className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>{value}</pre>
     </section>

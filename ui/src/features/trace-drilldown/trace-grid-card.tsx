@@ -46,10 +46,10 @@ import { TraceWorkstationPath } from "./trace-workstation-path";
 
 const TRACE_EXPANDER_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
-const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-[0.65rem] py-[0.45rem]";
+const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-2.5 py-2";
 const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-[12rem]";
 const TRACE_WORK_ITEM_BUTTON_CLASS = cx(
-  "h-auto min-h-0 justify-start border-af-accent/35 bg-af-accent/10 px-[0.65rem] py-[0.35rem] text-left text-af-accent",
+  "h-auto min-h-0 justify-start border-af-accent/35 bg-af-accent/10 px-2.5 py-1.5 text-left text-af-accent",
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
 
@@ -150,10 +150,10 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
   }, []);
 
   return (
-    <div className="grid min-w-0 w-full gap-[0.8rem]">
+    <div className="grid min-w-0 w-full gap-3">
       <dl
         className={cx(
-          "m-0 grid gap-[0.8rem] [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-overlay/6 [&_div]:pt-3 [&_dt]:mb-1",
+          "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-overlay/6 [&_div]:pt-3 [&_dt]:mb-1",
           DASHBOARD_SUPPORTING_LABELS_CLASS,
           DASHBOARD_BODY_TEXT_CLASS,
         )}
@@ -177,11 +177,11 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
           <dd>
             {workItems.length > 0 ? (
               <Collapsible
-                className="grid gap-[0.65rem]"
+                className="grid gap-2.5"
                 onOpenChange={setWorkItemsExpanded}
                 open={workItemsExpanded}
               >
-                <section aria-labelledby={`${workItemsID}-heading`} className="grid gap-[0.65rem]">
+                <section aria-labelledby={`${workItemsID}-heading`} className="grid gap-2.5">
                   <div className={TRACE_EXPANDER_HEADER_CLASS}>
                     <h3
                       className={DASHBOARD_SUPPORTING_LABEL_CLASS}
@@ -266,7 +266,7 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
                 <TableHead className="align-top" scope="row">
                   <span
                     className={cx(
-                      "inline-flex rounded-full bg-af-info/15 px-2 py-[0.18rem] text-af-info-ink",
+                      "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
                       DASHBOARD_SUPPORTING_CODE_CLASS,
                     )}
                   >
@@ -322,7 +322,7 @@ function SelectableWorkList({
   workItems: DashboardWorkItemRef[];
 }) {
   return (
-    <ul className="m-0 grid gap-[0.35rem] p-0">
+    <ul className="m-0 grid gap-1.5 p-0">
       {workItems.map((workItem) => (
         <li className="list-none" key={workItem.work_id}>
           {onSelectWorkID ? (

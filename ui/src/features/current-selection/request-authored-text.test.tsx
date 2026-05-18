@@ -3,7 +3,7 @@ import { RequestAuthoredText } from "./detail-card-shared";
 
 describe("RequestAuthoredText", () => {
   it("renders headings, lists, inline code, and fenced code blocks for markdown-authored request text", () => {
-    render(
+    const { container } = render(
       <RequestAuthoredText
         value={[
           "## Review checklist",
@@ -21,8 +21,12 @@ describe("RequestAuthoredText", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Review checklist" })).toBeTruthy();
     expect(screen.getByRole("list")).toBeTruthy();
     expect(screen.getByText("Confirm the latest diff")).toBeTruthy();
-    expect(screen.getAllByText("bun test", { selector: "code" })).toHaveLength(2);
+    const codeBlocks = screen.getAllByText("bun test", { selector: "code" });
+    expect(codeBlocks).toHaveLength(2);
     expect(screen.getAllByText("bun test", { selector: "pre code" })).toHaveLength(1);
+    expect(container.firstElementChild?.className).toContain("[&_code]:rounded-sm");
+    expect(container.firstElementChild?.className).toContain("[&_code]:px-1");
+    expect(container.firstElementChild?.className).toContain("[&_code]:py-0.5");
   });
 
   it("renders plain text as readable fallback without requiring markdown syntax", () => {
@@ -53,4 +57,3 @@ describe("RequestAuthoredText", () => {
     expect(container.textContent).toContain('<script>alert("xss")</script>');
   });
 });
-

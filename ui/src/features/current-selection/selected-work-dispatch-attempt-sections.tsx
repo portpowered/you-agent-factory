@@ -43,10 +43,10 @@ export function DispatchInferenceAttemptsSection({
   return (
     <section
       aria-label="Inference attempts"
-      className="mt-[0.75rem] grid gap-[0.45rem] border-t border-af-overlay/8 pt-[0.75rem]"
+      className="mt-3 grid gap-2 border-t border-af-overlay/8 pt-3"
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Inference attempts</h4>
-      <div className="grid gap-[0.65rem]">
+      <div className="grid gap-2.5">
         {attempts.length > 0
           ? attempts.map((attempt) => (
               <InferenceAttemptCard attempt={attempt} key={attempt.inference_request_id} />
@@ -75,10 +75,10 @@ export function DispatchScriptAttemptsSection({
   return (
     <section
       aria-label="Script attempts"
-      className="mt-[0.75rem] grid gap-[0.45rem] border-t border-af-overlay/8 pt-[0.75rem]"
+      className="mt-3 grid gap-2 border-t border-af-overlay/8 pt-3"
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Script attempts</h4>
-      <div className="grid gap-[0.65rem]">
+      <div className="grid gap-2.5">
         {scriptRequest ? (
           <ScriptRequestAttemptCard request={request} scriptRequest={scriptRequest} />
         ) : null}
@@ -110,14 +110,14 @@ function ScriptRequestAttemptCard({
 
   return (
     <article className={PROVIDER_SESSION_CARD_CLASS}>
-      <div className="flex items-start justify-between gap-[0.8rem]">
-        <div className="grid min-w-0 gap-[0.18rem]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
           <strong>Request attempt {attemptNumber ?? "pending"}</strong>
           <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>PENDING</p>
         </div>
         <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-request"}</span>
       </div>
-      <dl className={`mt-[0.65rem] ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
+      <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
         <InferenceAttemptDetail label="Script request ID" code value={requestID} />
         <InferenceAttemptDetail
           label="Script attempt"
@@ -159,8 +159,8 @@ function ScriptResponseAttemptCard({
 
   return (
     <article className={PROVIDER_SESSION_CARD_CLASS}>
-      <div className="flex items-start justify-between gap-[0.8rem]">
-        <div className="grid min-w-0 gap-[0.18rem]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
           <strong>Response attempt {attemptNumber ?? "completed"}</strong>
           <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
             {scriptResponse.outcome ?? "RECORDED"}
@@ -168,7 +168,7 @@ function ScriptResponseAttemptCard({
         </div>
         <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-response"}</span>
       </div>
-      <dl className={`mt-[0.65rem] ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
+      <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
         <InferenceAttemptDetail label="Script request ID" code value={requestID} />
         <InferenceAttemptDetail
           label="Script attempt"

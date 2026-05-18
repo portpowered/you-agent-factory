@@ -25,9 +25,9 @@ export function ScriptArgsSection({
   }
 
   return (
-    <div className="grid gap-[0.3rem]">
+    <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <div className="grid gap-[0.25rem]">
+      <div className="grid gap-1">
         {args.map((arg) => (
           <code className={RUNTIME_DETAIL_CODE_CLASS} key={arg}>
             {arg}
@@ -48,7 +48,7 @@ export function ScriptOutputSection({
   value: string | undefined;
 }) {
   return (
-    <div className="grid gap-[0.3rem]">
+    <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       {value ? (
         <pre className={REQUEST_HISTORY_TEXT_CLASS}>{value}</pre>
@@ -69,7 +69,7 @@ export function DispatchDetailSection({
   return (
     <section
       aria-label={title}
-      className="mt-[0.75rem] grid gap-[0.45rem] border-t border-af-overlay/8 pt-[0.75rem]"
+      className="mt-3 grid gap-2 border-t border-af-overlay/8 pt-3"
     >
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{title}</span>
       {children}
@@ -125,9 +125,9 @@ export function WorkItemActionGroup({
   }
 
   return (
-    <div className="grid gap-[0.3rem]">
+    <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <div className="flex flex-wrap gap-[0.45rem]">
+      <div className="flex flex-wrap gap-2">
         {items.map((workItem) => (
           <button
             aria-label={selectWorkItemAccessibleLabel(
@@ -169,9 +169,9 @@ export function TraceActionGroup({
   }
 
   return (
-    <div className="grid gap-[0.3rem]">
+    <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <div className="flex flex-wrap gap-[0.45rem]">
+      <div className="flex flex-wrap gap-2">
         {traceIDs.map((traceID) => (
           <a
             className={TRACE_ACTION_LINK_CLASS}
