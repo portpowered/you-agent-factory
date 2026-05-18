@@ -215,17 +215,6 @@ export async function saveCurrentEditableFactoryDefinitionDocument(
   });
 }
 
-export async function saveCurrentEditableFactoryDefinition(
-  input: SaveCurrentEditableFactoryDefinitionInput,
-  options: SaveCurrentEditableFactoryDefinitionOptions = {},
-): Promise<CanonicalFactoryDefinition> {
-  const document = await saveCurrentEditableFactoryDefinitionDocument(
-    input,
-    options,
-  );
-  return document.factoryDefinition;
-}
-
 function normalizeEditableFactoryDefinitionDocument(
   responseBody: unknown,
   responseDetails: Pick<
