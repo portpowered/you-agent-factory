@@ -18,6 +18,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -905,6 +906,47 @@ func TestRunCommand_QuietFlag(t *testing.T) {
 	}
 	if !strings.Contains(runCmd.Long, "--quiet") {
 		t.Fatal("expected run command long help text to mention --quiet")
+	}
+}
+
+func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
+	originalListWork := listWork
+	defer func() {
+		listWork = originalListWork
+	}()
+
+	var got workcli.ListConfig
+	listWork = func(cfg workcli.ListConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"work",
+		"list",
+		"--state-name", "review",
+		"--state-type", "PROCESSING",
+		"--port", "9090",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list: %v", err)
+	}
+
+	if got.StateName != "review" {
+		t.Fatalf("state name = %q, want review", got.StateName)
+	}
+	if got.StateType != "PROCESSING" {
+		t.Fatalf("state type = %q, want PROCESSING", got.StateType)
+	}
+	if got.Port != 9090 {
+		t.Fatalf("port = %d, want 9090", got.Port)
+	}
+	if got.Output == nil {
+		t.Fatal("expected output writer")
 	}
 }
 

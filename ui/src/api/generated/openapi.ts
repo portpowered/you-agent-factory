@@ -1197,6 +1197,10 @@ export interface components {
         MaxResults: number;
         /** @description Optional base64-encoded token ID cursor. */
         NextToken: string;
+        /** @description Optional current work state name filter. */
+        StateName: string;
+        /** @description Optional current work state type filter. */
+        StateType: components["schemas"]["WorkStateType"];
         /** @description Work or token identifier, depending on route. */
         WorkOrTokenID: string;
     };
@@ -1213,6 +1217,10 @@ export interface operations {
                 maxResults?: components["parameters"]["MaxResults"];
                 /** @description Optional base64-encoded token ID cursor. */
                 nextToken?: components["parameters"]["NextToken"];
+                /** @description Optional current work state name filter. */
+                "state.name"?: components["parameters"]["StateName"];
+                /** @description Optional current work state type filter. */
+                "state.type"?: components["parameters"]["StateType"];
             };
             header?: never;
             path?: never;

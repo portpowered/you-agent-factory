@@ -55,6 +55,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/MaxResults'
         - $ref: '#/components/parameters/NextToken'
+        - $ref: '#/components/parameters/StateName'
+        - $ref: '#/components/parameters/StateType'
       responses:
         '200':
           description: Current work tokens.
@@ -240,6 +242,20 @@ components:
       description: Optional base64-encoded token ID cursor.
       schema:
         type: string
+    StateName:
+      name: state.name
+      in: query
+      required: false
+      description: Optional current work state name filter.
+      schema:
+        type: string
+    StateType:
+      name: state.type
+      in: query
+      required: false
+      description: Optional current work state type filter.
+      schema:
+        $ref: '#/components/schemas/WorkStateType'
     WorkOrTokenID:
       name: id
       in: path

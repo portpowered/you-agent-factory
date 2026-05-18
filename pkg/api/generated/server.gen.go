@@ -1204,6 +1204,12 @@ type MaxResults = int
 // NextToken defines model for NextToken.
 type NextToken = string
 
+// StateName defines model for StateName.
+type StateName = string
+
+// StateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
+type StateType = WorkStateType
+
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
@@ -1232,6 +1238,12 @@ type ListWorkParams struct {
 
 	// NextToken Optional base64-encoded token ID cursor.
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+
+	// StateName Optional current work state name filter.
+	StateName *StateName `form:"state.name,omitempty" json:"state.name,omitempty"`
+
+	// StateType Optional current work state type filter.
+	StateType *StateType `form:"state.type,omitempty" json:"state.type,omitempty"`
 }
 
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
@@ -1679,6 +1691,22 @@ func (siw *ServerInterfaceWrapper) ListWork(w http.ResponseWriter, r *http.Reque
 	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state.name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state.name", r.URL.Query(), &params.StateName)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.name", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state.type" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state.type", r.URL.Query(), &params.StateType)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.type", Err: err})
 		return
 	}
 

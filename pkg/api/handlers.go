@@ -180,6 +180,11 @@ func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factoryapi.ListWorkParams) {
+	if params.StateType != nil && !validWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
+		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
+		return
+	}
+
 	snapshot, err := s.runtime.GetEngineStateSnapshot(r.Context())
 	if err != nil {
 		s.logger.Error("get engine state snapshot failed", zap.Error(err))
@@ -187,15 +192,19 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		return
 	}
 
-	// Collect and sort tokens by ID for deterministic pagination.
-	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
+	// Collect, filter, and sort public work by token ID for deterministic pagination.
+	items := make([]listWorkItem, 0, len(snapshot.Marking.Tokens))
 	for _, t := range snapshot.Marking.Tokens {
 		if !publicWorkToken(t) {
 			continue
 		}
-		tokens = append(tokens, t)
+		work := tokenToWork(t, snapshot.Topology)
+		if !workMatchesListFilters(work, params) {
+			continue
+		}
+		items = append(items, listWorkItem{cursorID: t.ID, work: work})
 	}
-	sort.Slice(tokens, func(i, j int) bool { return tokens[i].ID < tokens[j].ID })
+	sort.Slice(items, func(i, j int) bool { return items[i].cursorID < items[j].cursorID })
 
 	// Consume the generated route params directly. Non-positive values still fall back
 	// to the default page size after successful integer binding.
@@ -209,8 +218,8 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		decoded, err := base64.StdEncoding.DecodeString(cursor)
 		if err == nil {
 			cursorID := string(decoded)
-			for i, t := range tokens {
-				if t.ID > cursorID {
+			for i, item := range items {
+				if item.cursorID > cursorID {
 					startIdx = i
 					break
 				}
@@ -219,17 +228,12 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	}
 
 	// Slice the results.
-	end := min(startIdx+maxResults, len(tokens))
-	page := tokens[startIdx:end]
+	end := min(startIdx+maxResults, len(items))
+	page := items[startIdx:end]
 
-	results := make([]factoryapi.Work, len(page))
-	for i, t := range page {
-		results[i] = tokenToWork(t, snapshot.Topology)
-	}
-
-	resp := factoryapi.ListWorkResponse{Results: results}
-	if end < len(tokens) {
-		lastID := page[len(page)-1].ID
+	resp := factoryapi.ListWorkResponse{Results: listWorkResults(page)}
+	if end < len(items) {
+		lastID := page[len(page)-1].cursorID
 		nextToken := base64.StdEncoding.EncodeToString([]byte(lastID))
 		resp.PaginationContext = &factoryapi.PaginationContext{
 			MaxResults: maxResults,
@@ -238,6 +242,45 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
+}
+
+func validWorkStateType(stateType factoryapi.WorkStateType) bool {
+	switch stateType {
+	case factoryapi.WorkStateTypeINITIAL,
+		factoryapi.WorkStateTypePROCESSING,
+		factoryapi.WorkStateTypeTERMINAL,
+		factoryapi.WorkStateTypeFAILED:
+		return true
+	default:
+		return false
+	}
+}
+
+type listWorkItem struct {
+	cursorID string
+	work     factoryapi.Work
+}
+
+func listWorkResults(items []listWorkItem) []factoryapi.Work {
+	results := make([]factoryapi.Work, len(items))
+	for i, item := range items {
+		results[i] = item.work
+	}
+	return results
+}
+
+func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+	if params.StateName != nil {
+		if work.State == nil || work.State.Name != *params.StateName {
+			return false
+		}
+	}
+	if params.StateType != nil {
+		if work.State == nil || work.State.Type != *params.StateType {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) GetWork(w http.ResponseWriter, r *http.Request, id factoryapi.WorkOrTokenID) {

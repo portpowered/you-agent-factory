@@ -92,23 +92,47 @@ func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*int
 	for i := 1; i <= count; i++ {
 		suffix := string(rune('0' + i))
 		id := "tok-" + prefix + "-" + suffix
-		tokens[id] = &interfaces.Token{
-			ID:      id,
-			PlaceID: prefix + ":init",
-			Color: interfaces.TokenColor{
-				WorkID:     "work-" + prefix + "-" + suffix,
-				WorkTypeID: prefix,
-			},
-			CreatedAt: now,
-			EnteredAt: now,
-			History: interfaces.TokenHistory{
-				TotalVisits:         make(map[string]int),
-				ConsecutiveFailures: make(map[string]int),
-				PlaceVisits:         make(map[string]int),
-			},
-		}
+		tokens[id] = listWorkToken(id, "work-"+prefix+"-"+suffix, prefix+":init", prefix, now)
 	}
 	return tokens
+}
+
+func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *interfaces.Token {
+	return &interfaces.Token{
+		ID:      id,
+		PlaceID: placeID,
+		Color: interfaces.TokenColor{
+			WorkID:     workID,
+			WorkTypeID: workTypeID,
+		},
+		CreatedAt: now,
+		EnteredAt: now,
+		History: interfaces.TokenHistory{
+			TotalVisits:         make(map[string]int),
+			ConsecutiveFailures: make(map[string]int),
+			PlaceVisits:         make(map[string]int),
+		},
+	}
+}
+
+func listWorkFilterTopology() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init":   {ID: "task:init", TypeID: "task", State: "init"},
+			"task:review": {ID: "task:review", TypeID: "task", State: "review"},
+			"task:failed": {ID: "task:failed", TypeID: "task", State: "failed"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "review", Category: state.StateCategoryProcessing},
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+		},
+	}
 }
 
 func TestSubmitWork(t *testing.T) {
@@ -1906,6 +1930,67 @@ func TestListWork(t *testing.T) {
 	if stringValue(resp.PaginationContext.NextToken) == "" {
 		t.Error("expected non-empty nextToken")
 	}
+}
+
+func TestListWork_FiltersByStateNameAndType(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkToken("tok-1", "work-init", "task:init", "task", now),
+		"tok-2": listWorkToken("tok-2", "work-review", "task:review", "task", now),
+		"tok-3": listWorkToken("tok-3", "work-failed", "task:failed", "task", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	for _, tc := range []struct {
+		name        string
+		query       string
+		wantWorkIDs []string
+	}{
+		{name: "state name", query: "state.name=review", wantWorkIDs: []string{"work-review"}},
+		{name: "state type", query: "state.type=PROCESSING", wantWorkIDs: []string{"work-review"}},
+		{name: "combined", query: "state.name=review&state.type=PROCESSING", wantWorkIDs: []string{"work-review"}},
+		{name: "combined mismatch", query: "state.name=review&state.type=FAILED", wantWorkIDs: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/work?"+tc.query, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+
+			var resp factoryapi.ListWorkResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(resp.Results) != len(tc.wantWorkIDs) {
+				t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(tc.wantWorkIDs), resp.Results)
+			}
+			for i, wantWorkID := range tc.wantWorkIDs {
+				got := resp.Results[i]
+				if stringValue(got.WorkId) != wantWorkID {
+					t.Fatalf("result[%d].workId = %q, want %q", i, stringValue(got.WorkId), wantWorkID)
+				}
+				if got.State == nil {
+					t.Fatalf("result[%d].state is nil", i)
+				}
+			}
+		})
+	}
+}
+
+func TestListWork_InvalidStateTypeReturnsBadRequest(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	req := httptest.NewRequest(http.MethodGet, "/work?state.type=UNKNOWN", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
 }
 
 func TestListWork_InvalidMaxResultsUsesGeneratedBadRequest(t *testing.T) {

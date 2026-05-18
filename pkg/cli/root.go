@@ -17,6 +17,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,7 @@ var flattenFactoryConfig = configcli.FlattenFactoryConfig
 var expandFactoryConfig = configcli.ExpandFactoryConfig
 var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
+var listWork = workcli.List
 
 const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
@@ -64,9 +66,37 @@ func NewRootCommand() *cobra.Command {
 		newInitCommand(),
 		newRunCommand(),
 		newSubmitCommand(),
+		newWorkCommand(),
 	)
 
 	return root
+}
+
+func newWorkCommand() *cobra.Command {
+	workCmd := &cobra.Command{
+		Use:   "work",
+		Short: "Inspect work from a running factory",
+	}
+	workCmd.AddCommand(newWorkListCommand())
+	return workCmd
+}
+
+func newWorkListCommand() *cobra.Command {
+	cfg := workcli.ListConfig{Port: 8080}
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List work from a running factory",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Output = cmd.OutOrStdout()
+			return listWork(cfg)
+		},
+	}
+
+	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().StringVar(&cfg.StateName, "state-name", "", "filter by current state name")
+	cmd.Flags().StringVar(&cfg.StateType, "state-type", "", "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)")
+	return cmd
 }
 
 func newDocsCommand() *cobra.Command {
