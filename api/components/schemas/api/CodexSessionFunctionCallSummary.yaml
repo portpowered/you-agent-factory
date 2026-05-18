@@ -1,0 +1,32 @@
+type: object
+additionalProperties: false
+required:
+  - order
+  - type
+properties:
+  order:
+    type: integer
+    minimum: 1
+    description: Chronological order of the function or tool call in the session stream.
+  turnIndex:
+    type: integer
+    minimum: 1
+    description: One-based execution turn index associated with the call when inferable.
+  callId:
+    type: string
+    description: Provider call identifier when present in the session stream.
+  type:
+    type: string
+    description: Raw response item type for the call, such as function_call or custom_tool_call.
+  name:
+    type: string
+    description: Function or tool name when present.
+  arguments:
+    type: string
+    description: Compact argument payload when present.
+  output:
+    type: string
+    description: Compact output payload when present.
+  status:
+    type: string
+    description: Result status inferred from the call output or explicit status fields.

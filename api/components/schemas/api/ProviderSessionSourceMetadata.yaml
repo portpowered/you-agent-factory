@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - relativePath
+  - sizeBytes
+properties:
+  relativePath:
+    type: string
+    description: Path to the loaded session file relative to the configured Codex sessions root.
+  sizeBytes:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Size of the loaded session file in bytes.
+  modifiedAt:
+    type: string
+    format: date-time
+    description: Filesystem modification time when available.

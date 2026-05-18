@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required:
+  - lineNumber
+properties:
+  lineNumber:
+    type: integer
+    minimum: 1
+    description: One-based line number of the unknown event.
+  type:
+    type: string
+    description: Raw top-level event type when present.
+  payloadType:
+    type: string
+    description: Raw nested payload type when present.

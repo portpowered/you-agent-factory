@@ -62,6 +62,10 @@ export const REQUEST_SELECTION_STATUS_CLASS = cx(
   "m-0 text-af-ink/68",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
+export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cx(
+  "grid w-full gap-[0.4rem] rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-af-ink/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
+  DASHBOARD_BODY_TEXT_CLASS,
+);
 export const WORK_SELECTION_BUTTON_CLASS =
   "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-[0.65rem] py-[0.45rem] text-xs font-bold text-af-ink/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
 export const REQUEST_HISTORY_TEXT_CLASS = cx(
