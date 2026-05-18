@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -91,7 +93,7 @@ func List(cfg ListConfig) error {
 		return err
 	}
 
-	if _, err := fmt.Fprintln(cfg.Output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE"); err != nil {
+	if _, err := fmt.Fprintln(cfg.Output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
 		return err
 	}
 	for _, work := range result.Results {
@@ -101,11 +103,66 @@ func List(cfg ListConfig) error {
 			stateName = work.State.Name
 			stateType = string(work.State.Type)
 		}
-		if _, err := fmt.Fprintf(cfg.Output, "%s\t%s\t%s\t%s\n", stringValue(work.WorkId), work.Name, stateName, stateType); err != nil {
+		if _, err := fmt.Fprintf(
+			cfg.Output,
+			"%s\t%s\t%s\t%s\t%s\n",
+			stringValue(work.WorkId),
+			work.Name,
+			stateName,
+			stateType,
+			formatWorkRelations(work.Relations),
+		); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func formatWorkRelations(relations *[]factoryapi.Relation) string {
+	if relations == nil || len(*relations) == 0 {
+		return "none"
+	}
+
+	sorted := make([]factoryapi.Relation, len(*relations))
+	copy(sorted, *relations)
+	sort.Slice(sorted, func(i, j int) bool {
+		left := sorted[i]
+		right := sorted[j]
+		if left.Type != right.Type {
+			return left.Type < right.Type
+		}
+		if left.TargetWorkName != right.TargetWorkName {
+			return left.TargetWorkName < right.TargetWorkName
+		}
+		if stringValue(left.TargetWorkId) != stringValue(right.TargetWorkId) {
+			return stringValue(left.TargetWorkId) < stringValue(right.TargetWorkId)
+		}
+		return stringValue(left.RequiredState) < stringValue(right.RequiredState)
+	})
+
+	parts := make([]string, 0, len(sorted))
+	for _, relation := range sorted {
+		parts = append(parts, formatRelationSummary(relation))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func formatRelationSummary(relation factoryapi.Relation) string {
+	var builder strings.Builder
+	builder.WriteString(string(relation.Type))
+	builder.WriteString(": ")
+	builder.WriteString(relation.TargetWorkName)
+	if relation.TargetWorkId != nil && *relation.TargetWorkId != "" {
+		builder.WriteString(" [")
+		builder.WriteString(*relation.TargetWorkId)
+		builder.WriteString("]")
+	}
+	if relation.RequiredState != nil && *relation.RequiredState != "" {
+		builder.WriteString(" (requires ")
+		builder.WriteString(*relation.RequiredState)
+		builder.WriteString(")")
+	}
+	return builder.String()
 }
 
 func validWorkStateType(stateType string) bool {
