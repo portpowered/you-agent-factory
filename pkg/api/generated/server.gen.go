@@ -168,6 +168,16 @@ const (
 	WorkstationTypeModelWorkstation WorkstationType = "MODEL_WORKSTATION"
 )
 
+// Defines values for SortBy.
+const (
+	SortByStateType SortBy = "state.type"
+)
+
+// Defines values for ListWorkParamsSortBy.
+const (
+	ListWorkParamsSortByStateType ListWorkParamsSortBy = "state.type"
+)
+
 // BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile.
 type BundledFile struct {
 	// Content Inline content payload for a portable bundled file.
@@ -1204,6 +1214,9 @@ type MaxResults = int
 // NextToken defines model for NextToken.
 type NextToken = string
 
+// SortBy defines model for SortBy.
+type SortBy string
+
 // StateName defines model for StateName.
 type StateName = string
 
@@ -1244,7 +1257,13 @@ type ListWorkParams struct {
 
 	// StateType Optional current work state type filter.
 	StateType *StateType `form:"state.type,omitempty" json:"state.type,omitempty"`
+
+	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
+	SortBy *ListWorkParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
 }
+
+// ListWorkParamsSortBy defines parameters for ListWork.
+type ListWorkParamsSortBy string
 
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = Factory
@@ -1707,6 +1726,14 @@ func (siw *ServerInterfaceWrapper) ListWork(w http.ResponseWriter, r *http.Reque
 	err = runtime.BindQueryParameter("form", true, false, "state.type", r.URL.Query(), &params.StateType)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.type", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sortBy" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sortBy", r.URL.Query(), &params.SortBy)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sortBy", Err: err})
 		return
 	}
 

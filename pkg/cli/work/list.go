@@ -20,6 +20,7 @@ type ListConfig struct {
 	Port       int
 	StateName  string
 	StateType  string
+	SortBy     string
 	MaxResults int
 	NextToken  string
 	JSON       bool
@@ -34,6 +35,9 @@ func List(cfg ListConfig) error {
 	if cfg.StateType != "" && !validWorkStateType(cfg.StateType) {
 		return fmt.Errorf("--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
 	}
+	if cfg.SortBy != "" && cfg.SortBy != string(factoryapi.SortByStateType) {
+		return fmt.Errorf("--sort-by must be state.type")
+	}
 
 	endpoint := url.URL{
 		Scheme: "http",
@@ -46,6 +50,9 @@ func List(cfg ListConfig) error {
 	}
 	if cfg.StateType != "" {
 		query.Set("state.type", cfg.StateType)
+	}
+	if cfg.SortBy != "" {
+		query.Set("sortBy", cfg.SortBy)
 	}
 	if cfg.MaxResults > 0 {
 		query.Set("maxResults", fmt.Sprintf("%d", cfg.MaxResults))

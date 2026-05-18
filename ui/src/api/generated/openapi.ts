@@ -1201,6 +1201,8 @@ export interface components {
         StateName: string;
         /** @description Optional current work state type filter. */
         StateType: components["schemas"]["WorkStateType"];
+        /** @description Optional list-work sort field. Use state.type to order by current work state type. */
+        SortBy: "state.type";
         /** @description Work or token identifier, depending on route. */
         WorkOrTokenID: string;
     };
@@ -1221,6 +1223,8 @@ export interface operations {
                 "state.name"?: components["parameters"]["StateName"];
                 /** @description Optional current work state type filter. */
                 "state.type"?: components["parameters"]["StateType"];
+                /** @description Optional list-work sort field. Use state.type to order by current work state type. */
+                sortBy?: components["parameters"]["SortBy"];
             };
             header?: never;
             path?: never;

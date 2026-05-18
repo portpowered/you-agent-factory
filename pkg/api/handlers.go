@@ -184,6 +184,10 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
 		return
 	}
+	if params.SortBy != nil && *params.SortBy != factoryapi.ListWorkParamsSortByStateType {
+		s.writeError(w, http.StatusBadRequest, "sortBy must be state.type", "BAD_REQUEST")
+		return
+	}
 
 	snapshot, err := s.runtime.GetEngineStateSnapshot(r.Context())
 	if err != nil {
@@ -204,7 +208,7 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		}
 		items = append(items, listWorkItem{cursorID: t.ID, work: work})
 	}
-	sortListWorkItems(items)
+	sortListWorkItems(items, listWorkSortMode(params.SortBy))
 
 	// Consume the generated route params directly. Non-positive values still fall back
 	// to the default page size after successful integer binding.
@@ -257,10 +261,28 @@ type listWorkItem struct {
 	work     factoryapi.Work
 }
 
-func sortListWorkItems(items []listWorkItem) {
+type listWorkSortModeValue int
+
+const (
+	listWorkSortDefault listWorkSortModeValue = iota
+	listWorkSortStateType
+)
+
+func listWorkSortMode(sortBy *factoryapi.ListWorkParamsSortBy) listWorkSortModeValue {
+	if sortBy != nil && *sortBy == factoryapi.ListWorkParamsSortByStateType {
+		return listWorkSortStateType
+	}
+	return listWorkSortDefault
+}
+
+func sortListWorkItems(items []listWorkItem, mode listWorkSortModeValue) {
 	sort.Slice(items, func(i, j int) bool {
 		left := items[i]
 		right := items[j]
+		if mode == listWorkSortStateType {
+			return lessListWorkByStateType(left, right)
+		}
+
 		leftOrder := listWorkStateOrder(left.work.State)
 		rightOrder := listWorkStateOrder(right.work.State)
 		if leftOrder != rightOrder {
@@ -275,6 +297,15 @@ func sortListWorkItems(items []listWorkItem) {
 
 		return left.cursorID < right.cursorID
 	})
+}
+
+func lessListWorkByStateType(left, right listWorkItem) bool {
+	leftStateType := listWorkStateType(left.work.State)
+	rightStateType := listWorkStateType(right.work.State)
+	if leftStateType != rightStateType {
+		return leftStateType < rightStateType
+	}
+	return left.cursorID < right.cursorID
 }
 
 func listWorkStateOrder(workState *factoryapi.WorkState) int {

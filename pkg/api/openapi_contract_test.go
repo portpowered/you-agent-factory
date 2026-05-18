@@ -601,6 +601,7 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	}
 	assertParameterRef(t, parameters, "#/components/parameters/StateName")
 	assertParameterRef(t, parameters, "#/components/parameters/StateType")
+	assertParameterRef(t, parameters, "#/components/parameters/SortBy")
 }
 
 func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *testing.T) {

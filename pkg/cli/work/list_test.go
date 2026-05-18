@@ -21,6 +21,9 @@ func TestList_SendsStateFilters(t *testing.T) {
 		if r.URL.Query().Get("state.type") != "PROCESSING" {
 			t.Fatalf("state.type query = %q, want PROCESSING", r.URL.Query().Get("state.type"))
 		}
+		if r.URL.Query().Get("sortBy") != "state.type" {
+			t.Fatalf("sortBy query = %q, want state.type", r.URL.Query().Get("sortBy"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
 			Results: []factoryapi.Work{{
@@ -48,6 +51,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 		Port:      port,
 		StateName: "review",
 		StateType: "PROCESSING",
+		SortBy:    "state.type",
 		Output:    &out,
 	})
 	if err != nil {
@@ -126,6 +130,16 @@ func TestList_InvalidStateType(t *testing.T) {
 		t.Fatal("expected invalid state type error")
 	}
 	if got := err.Error(); got != "--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED" {
+		t.Fatalf("error = %q", got)
+	}
+}
+
+func TestList_InvalidSortBy(t *testing.T) {
+	err := List(ListConfig{Port: 8080, SortBy: "name", Output: &bytes.Buffer{}})
+	if err == nil {
+		t.Fatal("expected invalid sort-by error")
+	}
+	if got := err.Error(); got != "--sort-by must be state.type" {
 		t.Fatalf("error = %q", got)
 	}
 }

@@ -2023,6 +2023,43 @@ func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing
 	}
 }
 
+func TestListWork_SortsByStateType(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkToken("tok-1", "work-complete", "task:complete", "task", now),
+		"tok-2": listWorkToken("tok-2", "work-failed", "task:failed", "task", now),
+		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", now),
+		"tok-4": listWorkToken("tok-4", "work-init", "task:init", "task", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work?sortBy=state.type", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	wantWorkIDs := []string{"work-failed", "work-init", "work-review", "work-complete"}
+	if len(resp.Results) != len(wantWorkIDs) {
+		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
+	}
+	for i, wantWorkID := range wantWorkIDs {
+		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
+		}
+	}
+}
+
 func TestListWork_InvalidStateTypeReturnsBadRequest(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
@@ -2031,6 +2068,16 @@ func TestListWork_InvalidStateTypeReturnsBadRequest(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
+}
+
+func TestListWork_InvalidSortByReturnsBadRequest(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+
+	req := httptest.NewRequest(http.MethodGet, "/work?sortBy=name", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "sortBy must be state.type")
 }
 
 func TestListWork_InvalidMaxResultsUsesGeneratedBadRequest(t *testing.T) {

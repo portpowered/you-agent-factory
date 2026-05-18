@@ -929,6 +929,7 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		"list",
 		"--state-name", "review",
 		"--state-type", "PROCESSING",
+		"--sort-by", "state.type",
 		"--max-results", "25",
 		"--next-token", "cursor-1",
 		"--json",
@@ -944,6 +945,9 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	}
 	if got.StateType != "PROCESSING" {
 		t.Fatalf("state type = %q, want PROCESSING", got.StateType)
+	}
+	if got.SortBy != "state.type" {
+		t.Fatalf("sort by = %q, want state.type", got.SortBy)
 	}
 	if got.Port != 9090 {
 		t.Fatalf("port = %d, want 9090", got.Port)

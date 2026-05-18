@@ -57,6 +57,7 @@ paths:
         - $ref: '#/components/parameters/NextToken'
         - $ref: '#/components/parameters/StateName'
         - $ref: '#/components/parameters/StateType'
+        - $ref: '#/components/parameters/SortBy'
       responses:
         '200':
           description: Current work tokens.
@@ -256,6 +257,15 @@ components:
       description: Optional current work state type filter.
       schema:
         $ref: '#/components/schemas/WorkStateType'
+    SortBy:
+      name: sortBy
+      in: query
+      required: false
+      description: Optional list-work sort field. Use state.type to order by current work state type.
+      schema:
+        type: string
+        enum:
+          - state.type
     WorkOrTokenID:
       name: id
       in: path
