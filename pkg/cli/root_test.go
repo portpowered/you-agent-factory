@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +16,10 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
@@ -36,12 +41,13 @@ func TestNewRootCommand_HasSubcommands(t *testing.T) {
 	root := NewRootCommand()
 
 	want := map[string]bool{
-		"config": false,
-		"docs":   false,
-		"init":   false,
-		"run":    false,
-		"submit": false,
-		"work":   false,
+		"config":  false,
+		"docs":    false,
+		"factory": false,
+		"init":    false,
+		"run":     false,
+		"submit":  false,
+		"work":    false,
 	}
 
 	for _, sub := range root.Commands() {
@@ -54,6 +60,67 @@ func TestNewRootCommand_HasSubcommands(t *testing.T) {
 		if !found {
 			t.Errorf("expected subcommand %q to be registered", name)
 		}
+	}
+}
+
+func TestFactoryQueryCommand_PortFlagMapsToConfig(t *testing.T) {
+	originalQueryFactory := queryFactory
+	defer func() {
+		queryFactory = originalQueryFactory
+	}()
+
+	var got factorycli.QueryConfig
+	queryFactory = func(cfg factorycli.QueryConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query", "--port", "9090"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query: %v", err)
+	}
+
+	if got.Port != 9090 {
+		t.Fatalf("port = %d, want 9090", got.Port)
+	}
+	if got.Output == nil {
+		t.Fatal("expected output writer")
+	}
+}
+
+func TestFactoryQueryCommand_DefaultRootOutput(t *testing.T) {
+	factoryDir := t.TempDir()
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name:             apisurface.DefaultCurrentFactoryName,
+		FactoryDirectory: &factoryDir,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
+		fmt.Sprintf("%s\tdefault-root\t\t%s\n", apisurface.DefaultCurrentFactoryName, factoryDir)
+	if got := string(out); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestFactoryQueryCommand_NamedFactoryOutput(t *testing.T) {
+	factoryID := "customer-factory"
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name: "beta",
+		Id:   &factoryID,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
+		"beta\tnamed\tcustomer-factory\t\n"
+	if got := string(out); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
 
@@ -231,6 +298,30 @@ func executeRootCommand(t *testing.T, args ...string) []byte {
 		t.Fatalf("execute root command %v: %v", args, err)
 	}
 	return out.Bytes()
+}
+
+func rootCurrentFactoryServer(t *testing.T, current factoryapi.Factory) *httptest.Server {
+	t.Helper()
+
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory/~current" {
+			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(current); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+}
+
+func rootServerPort(t *testing.T, srv *httptest.Server) int {
+	t.Helper()
+
+	var port int
+	if _, err := fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port); err != nil {
+		t.Fatalf("parse test server port: %v", err)
+	}
+	return port
 }
 
 func decodeFlattenPayload(t *testing.T, out []byte) map[string]any {

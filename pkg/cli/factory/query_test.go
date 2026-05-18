@@ -6,11 +6,52 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 )
+
+func TestQuery_WritesHumanReadableDefaultRootFactory(t *testing.T) {
+	factoryDir := t.TempDir()
+	srv := currentFactoryServer(t, factoryapi.Factory{
+		Name:             apisurface.DefaultCurrentFactoryName,
+		FactoryDirectory: &factoryDir,
+	})
+	defer srv.Close()
+
+	var out strings.Builder
+	if err := Query(QueryConfig{Port: serverPort(t, srv), Output: &out}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
+		fmt.Sprintf("%s\tdefault-root\t\t%s\n", apisurface.DefaultCurrentFactoryName, factoryDir)
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestQuery_WritesHumanReadableNamedFactory(t *testing.T) {
+	factoryID := "customer-factory"
+	srv := currentFactoryServer(t, factoryapi.Factory{
+		Name: "beta",
+		Id:   &factoryID,
+	})
+	defer srv.Close()
+
+	var out strings.Builder
+	if err := Query(QueryConfig{Port: serverPort(t, srv), Output: &out}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
+		"beta\tnamed\tcustomer-factory\t\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
 
 func TestQueryCurrent_ReturnsDefaultRootFactory(t *testing.T) {
 	factoryDir := t.TempDir()

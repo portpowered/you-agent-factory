@@ -14,6 +14,7 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
@@ -28,6 +29,7 @@ var expandFactoryConfig = configcli.ExpandFactoryConfig
 var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
+var queryFactory = factorycli.Query
 
 const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
@@ -63,6 +65,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(
 		newConfigCommand(),
 		newDocsCommand(),
+		newFactoryCommand(),
 		newInitCommand(),
 		newRunCommand(),
 		newSubmitCommand(),
@@ -70,6 +73,31 @@ func NewRootCommand() *cobra.Command {
 	)
 
 	return root
+}
+
+func newFactoryCommand() *cobra.Command {
+	factoryCmd := &cobra.Command{
+		Use:   "factory",
+		Short: "Inspect factory runtime state",
+	}
+	factoryCmd.AddCommand(newFactoryQueryCommand())
+	return factoryCmd
+}
+
+func newFactoryQueryCommand() *cobra.Command {
+	cfg := factorycli.QueryConfig{Port: 8080}
+
+	cmd := &cobra.Command{
+		Use:   "query",
+		Short: "Show the current active factory",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Output = cmd.OutOrStdout()
+			return queryFactory(cfg)
+		},
+	}
+
+	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	return cmd
 }
 
 func newWorkCommand() *cobra.Command {
