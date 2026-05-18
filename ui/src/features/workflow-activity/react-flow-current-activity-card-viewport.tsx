@@ -3,6 +3,7 @@ import {
   Controls,
   type Edge,
   type FitViewOptions,
+  type Node,
   type NodeChange,
   type NodeTypes,
   ReactFlow,
@@ -11,8 +12,10 @@ import {
 import type { CSSProperties } from "react";
 
 import { cx } from "../../lib/cx";
-import { FactoryGraphEditorToolbar } from "../factory-graph-editor/factory-graph-editor-controls";
-import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
+import {
+  FactoryGraphEditorToolbar,
+  type FactoryGraphEditorMenuAction,
+} from "../factory-graph-editor/factory-graph-editor-controls";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import {
   DashboardFlowAxisLegend,
@@ -52,6 +55,7 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 
 export function CurrentActivityGraphViewport({
   activeTool,
+  addMenuActions,
   canInteractWithEditor,
   editorMode,
   edges,
@@ -64,10 +68,14 @@ export function CurrentActivityGraphViewport({
   locale,
   nodeTypes,
   nodes,
+  onAddAction,
+  onAddMenuOpenChange,
   onSelectTool,
+  openAddMenu,
   setStoredNodePosition,
 }: {
   activeTool: "add" | "connect" | "delete" | null;
+  addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteractWithEditor: boolean;
   editorMode: boolean;
   edges: Edge[];
@@ -79,8 +87,11 @@ export function CurrentActivityGraphViewport({
   initialFitViewOptions: FitViewOptions;
   locale?: string;
   nodeTypes: NodeTypes;
-  nodes: CurrentActivityNode[];
+  nodes: Node[];
+  onAddAction?: (actionID: string) => void;
+  onAddMenuOpenChange?: (open: boolean) => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
+  openAddMenu?: boolean;
   setStoredNodePosition: (
     graphKey: string,
     nodeId: string,
@@ -150,9 +161,13 @@ export function CurrentActivityGraphViewport({
         </ReactFlow>
         <FactoryGraphEditorToolbar
           activeTool={activeTool}
+          addMenuActions={addMenuActions}
           canInteract={canInteractWithEditor}
           hasPendingChanges={hasPendingChanges}
+          onAddAction={onAddAction}
+          onAddMenuOpenChange={onAddMenuOpenChange}
           onSelectTool={onSelectTool}
+          openAddMenu={openAddMenu}
           visible={editorMode}
         />
         <GraphDropOverlay dropState={imports.dropState} locale={locale} />

@@ -715,6 +715,151 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(screen.getByText("Editor mode active")).toBeTruthy();
   });
 
+  it("lists the supported add-entity options and validates duplicate worker names before mutating the draft", async () => {
+    const updateDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      updateDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open add entity menu" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Workstation" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Worker" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Work type" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Work state" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resource" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Worker" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
+      target: { value: "writer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    expect(
+      screen.getByText('A worker named "writer" already exists in the draft.'),
+    ).toBeTruthy();
+    expect(updateDraft).not.toHaveBeenCalled();
+  });
+
+  it("submits valid add-entity forms into the pending graph draft", async () => {
+    const updateDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      updateDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open add entity menu" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Work type" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
+      target: { value: "essay" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "First state" }), {
+      target: { value: "queued" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    const updater = updateDraft.mock.calls[0]?.[0] as typeof defaultDraftState.updateDraft;
+    const nextDraft = updater(defaultDraftState.draft);
+    expect(nextDraft.additions.workTypes).toEqual([
+      {
+        name: "essay",
+        states: [
+          {
+            name: "queued",
+            type: "INITIAL",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("renders pending draft-only graph nodes while editor mode is active", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      graph: {
+        edges: [],
+        nodes: [
+          {
+            id: "worker:writer",
+            key: { kind: "worker", name: "writer" },
+            kind: "worker",
+            label: "writer",
+          },
+          {
+            id: "workstation:review",
+            key: { kind: "workstation", name: "review" },
+            kind: "workstation",
+            label: "review",
+          },
+        ],
+      },
+      hasChanges: true,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workstations: [
+            {
+              inputs: [],
+              name: "review",
+              outputs: [],
+              type: "MODEL_WORKSTATION",
+              worker: "writer",
+            },
+          ],
+        },
+      },
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    expect(await screen.findByText("review")).toBeTruthy();
+    expect(screen.getByText("Pending")).toBeTruthy();
+  });
+
   it("shows a loading editor state while the editable definition is still fetching", async () => {
     vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
       data: undefined,

@@ -9,6 +9,16 @@ import {
   createEmptyFactoryGraphDraft,
   useFactoryGraphDraftState,
 } from "../factory-graph-editor/factory-graph-draft";
+import type { CanonicalFactoryDefinition } from "../factory-graph-editor/factory-graph-draft-types";
+import {
+  applyFactoryGraphAddEntityDraft,
+  buildFactoryGraphAddEntityMenuActions,
+  createFactoryGraphAddEntityDraft,
+  type FactoryGraphAddEntityDraft,
+  type FactoryGraphAddEntityFieldErrors,
+  type FactoryGraphAddEntityKind,
+  validateFactoryGraphAddEntityDraft,
+} from "../factory-graph-editor/factory-graph-editor-additions";
 import {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
@@ -38,12 +48,26 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
     draftState.pendingFactoryDefinition !== null &&
     draftState.validationErrors.length === 0 &&
     draftState.latestDocument !== null;
+  const currentFactoryDefinition =
+    draftState.pendingFactoryDefinition ??
+    draftState.latestDocument?.factoryDefinition ??
+    draftState.baseDocument?.factoryDefinition ??
+    null;
+  const addMenuActions = buildFactoryGraphAddEntityMenuActions(
+    currentFactoryDefinition,
+  );
+  const addEntityController = useFactoryGraphAddEntityController({
+    currentFactoryDefinition,
+    draftState,
+    setActiveTool,
+  });
 
   const leaveEditor = useCallback(() => {
     setEditorMode(false);
     setActiveTool(null);
+    addEntityController.reset();
     setIsConfirmingLeaveEditor(false);
-  }, []);
+  }, [addEntityController]);
 
   const handleEditorModeToggle = useCallback(() => {
     if (!editorMode) {
@@ -79,19 +103,99 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
 
   return {
     activeTool,
+    addEntityDraft: addEntityController.addEntityDraft,
+    addEntityErrors: addEntityController.addEntityErrors,
+    addMenuActions,
+    addMenuOpen: addEntityController.addMenuOpen,
     canInteractWithEditor,
     canSaveDraft,
+    currentFactoryDefinition,
     draftState,
     editorMode,
     editableDefinitionQuery,
+    handleAddEntityAction: addEntityController.handleAddEntityAction,
+    handleAddEntitySubmit: addEntityController.handleAddEntitySubmit,
     handleDiscardEditorChanges,
     handleEditorModeToggle,
     handleSaveBeforeLeavingEditor,
     isConfirmingLeaveEditor,
     leaveDialogOpen: isConfirmingLeaveEditor,
     saveEditableDefinition,
+    setAddEntityDraft: addEntityController.setAddEntityDraft,
+    setAddEntityErrors: addEntityController.setAddEntityErrors,
+    setAddMenuOpen: addEntityController.setAddMenuOpen,
     setActiveTool,
     setIsConfirmingLeaveEditor,
+  };
+}
+
+function useFactoryGraphAddEntityController({
+  currentFactoryDefinition,
+  draftState,
+  setActiveTool,
+}: {
+  currentFactoryDefinition: CanonicalFactoryDefinition | null;
+  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  setActiveTool: (tool: FactoryGraphEditorTool) => void;
+}) {
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [addEntityDraft, setAddEntityDraft] =
+    useState<FactoryGraphAddEntityDraft | null>(null);
+  const [addEntityErrors, setAddEntityErrors] =
+    useState<FactoryGraphAddEntityFieldErrors>({});
+
+  const handleAddEntityAction = useCallback(
+    (actionID: string) => {
+      setActiveTool("add");
+      setAddEntityDraft(
+        createFactoryGraphAddEntityDraft(
+          actionID as FactoryGraphAddEntityKind,
+          currentFactoryDefinition,
+        ),
+      );
+      setAddEntityErrors({});
+      setAddMenuOpen(false);
+    },
+    [currentFactoryDefinition, setActiveTool],
+  );
+
+  const handleAddEntitySubmit = useCallback(() => {
+    if (addEntityDraft === null) {
+      return;
+    }
+
+    const validationErrors = validateFactoryGraphAddEntityDraft(
+      addEntityDraft,
+      currentFactoryDefinition,
+    );
+    if (Object.keys(validationErrors).length > 0) {
+      setAddEntityErrors(validationErrors);
+      return;
+    }
+
+    draftState.updateDraft((currentDraft) =>
+      applyFactoryGraphAddEntityDraft(currentDraft, addEntityDraft),
+    );
+    setAddEntityDraft(null);
+    setAddEntityErrors({});
+  }, [addEntityDraft, currentFactoryDefinition, draftState]);
+
+  const reset = useCallback(() => {
+    setAddMenuOpen(false);
+    setAddEntityDraft(null);
+    setAddEntityErrors({});
+  }, []);
+
+  return {
+    addEntityDraft,
+    addEntityErrors,
+    addMenuOpen,
+    handleAddEntityAction,
+    handleAddEntitySubmit,
+    reset,
+    setAddEntityDraft,
+    setAddEntityErrors,
+    setAddMenuOpen,
   };
 }
 

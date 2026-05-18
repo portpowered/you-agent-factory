@@ -1,10 +1,6 @@
 import "@xyflow/react/dist/style.css";
 
-import {
-  applyNodeChanges,
-  type FitViewOptions,
-  type NodeChange,
-} from "@xyflow/react";
+import { applyNodeChanges, type FitViewOptions, type NodeChange } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
@@ -15,6 +11,7 @@ import type {
 import type { FactoryValue } from "../../api/named-factory";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
+import { FactoryGraphEditorAddEntityDialog } from "../factory-graph-editor/factory-graph-editor-add-dialog";
 import { FactoryGraphEditorLeaveDialog } from "../factory-graph-editor/factory-graph-editor-controls";
 import {
   CURRENT_ACTIVITY_NODE_TYPES,
@@ -38,6 +35,7 @@ import {
   CurrentActivityGraphEditorHeader,
   useCurrentActivityGraphEditor,
 } from "./react-flow-current-activity-card-editor";
+import { useFactoryGraphEditorViewModel } from "./react-flow-current-activity-card-editor-graph";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
@@ -334,28 +332,21 @@ function useCurrentActivityGraphViewModel({
   };
 }
 
-function EmptyCurrentActivityCard() {
+function EmptyCurrentActivityState() {
   return (
-    <section
-      aria-labelledby="workflow-graph-heading"
-      className={CURRENT_ACTIVITY_CARD_CLASS}
-    >
-      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityCardHeading />
-      </div>
-      <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
-        <h3>No workflow topology loaded</h3>
-        <p>The factory has not published any workstation graph yet.</p>
-      </div>
-    </section>
+    <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
+      <h3>No workflow topology loaded</h3>
+      <p>The factory has not published any workstation graph yet.</p>
+    </div>
   );
 }
 
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
-  const graph = useCurrentActivityGraphViewModel(props);
   const editor = useCurrentActivityGraphEditor(props.snapshot.topology);
+  const graph = useCurrentActivityGraphViewModel(props);
+  const editorGraph = useFactoryGraphEditorViewModel(editor);
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
     onFactoryActivated: props.onFactoryActivated,
@@ -368,10 +359,6 @@ export function ReactFlowCurrentActivityCard(
     imports.importPreviewState.status === "ready"
       ? imports.importPreviewState
       : null;
-
-  if (props.snapshot.topology.workstation_node_ids.length === 0) {
-    return <EmptyCurrentActivityCard />;
-  }
 
   return (
     <section
@@ -390,23 +377,13 @@ export function ReactFlowCurrentActivityCard(
           title={<CurrentActivityCardHeading />}
         />
       </div>
-
-      <CurrentActivityGraphViewport
-        activeTool={editor.activeTool}
-        canInteractWithEditor={editor.canInteractWithEditor}
-        editorMode={editor.editorMode}
-        edges={graph.edges}
-        graphKey={graph.graphKey}
-        handleNodesChange={graph.handleNodesChange}
-        hasPendingChanges={editor.draftState.hasChanges}
+      <CurrentActivityGraphSurface
+        editor={editor}
+        editorGraph={editorGraph}
+        graph={graph}
         imports={imports}
-        initialFitViewKey={graph.initialFitViewKey}
-        initialFitViewOptions={graph.initialFitViewOptions}
         locale={props.locale}
-        nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
-        nodes={graph.nodes}
-        onSelectTool={editor.setActiveTool}
-        setStoredNodePosition={graph.setStoredNodePosition}
+        snapshot={props.snapshot}
       />
       {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
         <FactoryImportPreviewDialog
@@ -444,6 +421,67 @@ export function ReactFlowCurrentActivityCard(
           void editor.handleSaveBeforeLeavingEditor();
         }}
       />
+      <FactoryGraphEditorAddEntityDialog
+        currentFactoryDefinition={editor.currentFactoryDefinition}
+        draft={editor.addEntityDraft}
+        errors={editor.addEntityErrors}
+        isOpen={editor.addEntityDraft !== null}
+        onChange={(draft) => {
+          editor.setAddEntityDraft(draft);
+          editor.setAddEntityErrors({});
+        }}
+        onClose={() => {
+          editor.setAddEntityDraft(null);
+          editor.setAddEntityErrors({});
+        }}
+        onSubmit={editor.handleAddEntitySubmit}
+      />
     </section>
+  );
+}
+
+function CurrentActivityGraphSurface({
+  editor,
+  editorGraph,
+  graph,
+  imports,
+  locale,
+  snapshot,
+}: {
+  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  editorGraph: ReturnType<typeof useFactoryGraphEditorViewModel>;
+  graph: ReturnType<typeof useCurrentActivityGraphViewModel>;
+  imports: CurrentActivityImportController;
+  locale?: string;
+  snapshot: DashboardSnapshot;
+}) {
+  if (snapshot.topology.workstation_node_ids.length === 0 && !editor.editorMode) {
+    return <EmptyCurrentActivityState />;
+  }
+
+  const activeGraph = editor.editorMode ? editorGraph : graph;
+
+  return (
+    <CurrentActivityGraphViewport
+      activeTool={editor.activeTool}
+      addMenuActions={editor.addMenuActions}
+      canInteractWithEditor={editor.canInteractWithEditor}
+      editorMode={editor.editorMode}
+      edges={activeGraph.edges}
+      graphKey={activeGraph.graphKey}
+      handleNodesChange={activeGraph.handleNodesChange}
+      hasPendingChanges={editor.draftState.hasChanges}
+      imports={imports}
+      initialFitViewKey={activeGraph.initialFitViewKey}
+      initialFitViewOptions={activeGraph.initialFitViewOptions}
+      locale={locale}
+      nodeTypes={editor.editorMode ? editorGraph.nodeTypes : CURRENT_ACTIVITY_NODE_TYPES}
+      nodes={activeGraph.nodes}
+      onAddAction={editor.handleAddEntityAction}
+      onAddMenuOpenChange={editor.setAddMenuOpen}
+      onSelectTool={editor.setActiveTool}
+      openAddMenu={editor.addMenuOpen}
+      setStoredNodePosition={activeGraph.setStoredNodePosition}
+    />
   );
 }
