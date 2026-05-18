@@ -1,0 +1,123 @@
+[
+  {
+    "file": "scripts/capture-heap-sampling-profile.mjs",
+    "kind": "file",
+    "name": "scripts/capture-heap-sampling-profile.mjs"
+  },
+  {
+    "file": "scripts/release-dashboard-smoke.mjs",
+    "kind": "file",
+    "name": "scripts/release-dashboard-smoke.mjs"
+  },
+  {
+    "file": "src/api/events/types.ts",
+    "kind": "type",
+    "name": "FactoryInputType"
+  },
+  {
+    "file": "src/api/events/types.ts",
+    "kind": "type",
+    "name": "FactoryProviderDiagnostic"
+  },
+  {
+    "file": "src/api/events/types.ts",
+    "kind": "type",
+    "name": "FactoryProviderFailure"
+  },
+  {
+    "file": "src/api/events/types.ts",
+    "kind": "type",
+    "name": "FactoryRenderedPromptDiagnostic"
+  },
+  {
+    "file": "src/api/events/types.ts",
+    "kind": "type",
+    "name": "FactoryStateDefinition"
+  },
+  {
+    "file": "src/api/events/types.ts",
+    "kind": "type",
+    "name": "ScriptExecutionOutcome"
+  },
+  {
+    "file": "src/api/events/types.ts",
+    "kind": "type",
+    "name": "ScriptFailureType"
+  },
+  {
+    "file": "src/components/dashboard/place-labels.ts",
+    "kind": "file",
+    "name": "src/components/dashboard/place-labels.ts"
+  },
+  {
+    "file": "src/components/ui/dialog.tsx",
+    "kind": "export",
+    "name": "DialogClose"
+  },
+  {
+    "file": "src/components/ui/dialog.tsx",
+    "kind": "export",
+    "name": "DialogTrigger"
+  },
+  {
+    "file": "src/components/ui/formatters.ts",
+    "kind": "export",
+    "name": "formatTraceMutation"
+  },
+  {
+    "file": "src/components/ui/formatters.ts",
+    "kind": "export",
+    "name": "formatTraceToken"
+  },
+  {
+    "file": "src/features/current-selection/detail-card-shared.tsx",
+    "kind": "export",
+    "name": "INFERENCE_RESPONSE_LABEL"
+  },
+  {
+    "file": "src/features/current-selection/selected-work-dispatch-history-helpers.ts",
+    "kind": "export",
+    "name": "hasResponseDetails"
+  },
+  {
+    "file": "src/features/current-selection/useCurrentSelection.ts",
+    "kind": "type",
+    "name": "UseCurrentSelectionResult"
+  },
+  {
+    "file": "src/features/export/factory-png-export.ts",
+    "kind": "type",
+    "name": "CanonicalFactoryDefinition",
+    "namespace": "factoryPngExportModule"
+  },
+  {
+    "file": "src/features/import/use-factory-import-activation.ts",
+    "kind": "type",
+    "name": "FactoryImportActivationErrorCode"
+  },
+  {
+    "file": "src/features/trace-drilldown/typography.ts",
+    "kind": "file",
+    "name": "src/features/trace-drilldown/typography.ts"
+  },
+  {
+    "file": "src/features/work-outcome/chart-contract.ts",
+    "kind": "export",
+    "name": "DASHBOARD_CHART_GRID_CLASS"
+  },
+  {
+    "file": "src/features/work-outcome/d3-information-card.tsx",
+    "kind": "type",
+    "name": "D3CompletionInformationCardProps"
+  },
+  {
+    "file": "src/features/work-outcome/trends.ts",
+    "kind": "type",
+    "name": "ThroughputTrendModel"
+  },
+  {
+    "file": "src/types/elkjs-bundled.d.ts",
+    "kind": "file",
+    "name": "src/types/elkjs-bundled.d.ts"
+  }
+]
