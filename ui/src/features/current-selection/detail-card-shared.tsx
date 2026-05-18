@@ -47,7 +47,6 @@ export const REQUEST_AUTHORED_TEXT_CLASS = cx(
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const INFERENCE_REQUEST_PROMPT_LABEL = "Request prompt";
-export const INFERENCE_RESPONSE_LABEL = "Response";
 export const WORKSTATION_RESPONSE_TEXT_LABEL = "Response text";
 export const RUNTIME_DETAILS_SECTION_CLASS =
   "mt-4 grid gap-[0.75rem] border-t border-af-overlay/8 pt-4 [&_h4]:m-0";
