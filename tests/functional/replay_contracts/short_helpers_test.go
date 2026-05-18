@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func assertReplayArtifactDoesNotContainRawValue(t *testing.T, artifactPath, rawValue string) {
@@ -21,24 +20,7 @@ func assertReplayArtifactDoesNotContainRawValue(t *testing.T, artifactPath, rawV
 	}
 }
 
-func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {
-	count := 0
-	for _, event := range artifact.Events {
-		if event.Type == eventType {
-			count++
-		}
-	}
-	return count
-}
-
 func factoryWorksValue(value *[]factoryapi.Work) []factoryapi.Work {
-	if value == nil {
-		return nil
-	}
-	return *value
-}
-
-func factoryRelationsValue(value *[]factoryapi.Relation) []factoryapi.Relation {
 	if value == nil {
 		return nil
 	}
