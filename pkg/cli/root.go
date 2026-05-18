@@ -97,6 +97,7 @@ func newFactoryQueryCommand() *cobra.Command {
 	}
 
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API current-factory JSON response")
 	return cmd
 }
 

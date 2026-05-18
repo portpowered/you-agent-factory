@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +51,65 @@ func TestQuery_WritesHumanReadableNamedFactory(t *testing.T) {
 		"beta\tnamed\tcustomer-factory\t\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestQuery_WritesJSONDefaultRootFactory(t *testing.T) {
+	factoryDir := t.TempDir()
+	srv := currentFactoryServer(t, factoryapi.Factory{
+		Name:             apisurface.DefaultCurrentFactoryName,
+		FactoryDirectory: &factoryDir,
+	})
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := Query(QueryConfig{Port: serverPort(t, srv), JSON: true, Output: &out}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("NAME\tKIND")) {
+		t.Fatalf("json output included human-readable text: %q", out.String())
+	}
+
+	var got factoryapi.Factory
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json output is not valid Factory JSON: %v\n%s", err, out.String())
+	}
+	if got.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", got.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if got.FactoryDirectory == nil || *got.FactoryDirectory != factoryDir {
+		t.Fatalf("factory directory = %#v, want %q", got.FactoryDirectory, factoryDir)
+	}
+}
+
+func TestQuery_WritesJSONNamedFactory(t *testing.T) {
+	factoryID := "customer-factory"
+	workers := []factoryapi.Worker{{Name: "executor"}}
+	srv := currentFactoryServer(t, factoryapi.Factory{
+		Name:    "beta",
+		Id:      &factoryID,
+		Workers: &workers,
+	})
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := Query(QueryConfig{Port: serverPort(t, srv), JSON: true, Output: &out}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("NAME\tKIND")) {
+		t.Fatalf("json output included human-readable text: %q", out.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json output is not valid Factory JSON: %v\n%s", err, out.String())
+	}
+	if got["name"] != "beta" || got["id"] != factoryID {
+		t.Fatalf("factory JSON = %#v, want name beta and id %q", got, factoryID)
+	}
+	workerPayloads, ok := got["workers"].([]any)
+	if !ok || len(workerPayloads) != 1 {
+		t.Fatalf("workers = %#v, want one API worker payload", got["workers"])
 	}
 }
 

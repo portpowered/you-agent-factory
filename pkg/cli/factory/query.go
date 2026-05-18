@@ -29,6 +29,7 @@ type QueryCurrentConfig struct {
 // QueryConfig holds parameters for the factory query command.
 type QueryConfig struct {
 	Port   int
+	JSON   bool
 	Output io.Writer
 }
 
@@ -41,6 +42,9 @@ func Query(cfg QueryConfig) error {
 	current, err := QueryCurrent(QueryCurrentConfig{Port: cfg.Port})
 	if err != nil {
 		return err
+	}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(current)
 	}
 
 	return RenderCurrentFactory(current, cfg.Output)

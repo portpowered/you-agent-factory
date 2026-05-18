@@ -78,7 +78,7 @@ func TestFactoryQueryCommand_PortFlagMapsToConfig(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "query", "--port", "9090"})
+	root.SetArgs([]string{"factory", "query", "--port", "9090", "--json"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute factory query: %v", err)
@@ -86,6 +86,9 @@ func TestFactoryQueryCommand_PortFlagMapsToConfig(t *testing.T) {
 
 	if got.Port != 9090 {
 		t.Fatalf("port = %d, want 9090", got.Port)
+	}
+	if !got.JSON {
+		t.Fatal("expected json output flag")
 	}
 	if got.Output == nil {
 		t.Fatal("expected output writer")
@@ -121,6 +124,59 @@ func TestFactoryQueryCommand_NamedFactoryOutput(t *testing.T) {
 		"beta\tnamed\tcustomer-factory\t\n"
 	if got := string(out); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestFactoryQueryCommand_DefaultRootJSONOutput(t *testing.T) {
+	factoryDir := t.TempDir()
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name:             apisurface.DefaultCurrentFactoryName,
+		FactoryDirectory: &factoryDir,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--json", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	if bytes.Contains(out, []byte("NAME\tKIND")) {
+		t.Fatalf("json output included human-readable text: %q", string(out))
+	}
+
+	var got factoryapi.Factory
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("json output is not valid Factory JSON: %v\n%s", err, string(out))
+	}
+	if got.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", got.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if got.FactoryDirectory == nil || *got.FactoryDirectory != factoryDir {
+		t.Fatalf("factory directory = %#v, want %q", got.FactoryDirectory, factoryDir)
+	}
+}
+
+func TestFactoryQueryCommand_NamedFactoryJSONOutput(t *testing.T) {
+	factoryID := "customer-factory"
+	workers := []factoryapi.Worker{{Name: "executor"}}
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name:    "beta",
+		Id:      &factoryID,
+		Workers: &workers,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--port", strconv.Itoa(rootServerPort(t, srv)), "--json")
+	if bytes.Contains(out, []byte("NAME\tKIND")) {
+		t.Fatalf("json output included human-readable text: %q", string(out))
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("json output is not valid Factory JSON: %v\n%s", err, string(out))
+	}
+	if got["name"] != "beta" || got["id"] != factoryID {
+		t.Fatalf("factory JSON = %#v, want name beta and id %q", got, factoryID)
+	}
+	workerPayloads, ok := got["workers"].([]any)
+	if !ok || len(workerPayloads) != 1 {
+		t.Fatalf("workers = %#v, want one API worker payload", got["workers"])
 	}
 }
 
