@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/main.tsx",
+    "src/**/*.test.{ts,tsx,mjs}",
+    "src/**/*.stories.tsx",
+    "integration/**/*.test.mjs",
+    "vitest.storybook.config.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "integration/**/*.mjs",
+    "scripts/**/*.{ts,mjs}",
+    "*.{ts,tsx,mjs}",
+    "!src/api/generated/**",
+    "!fallback_dist/**"
+  ],
+  "ignore": ["src/api/generated/**", "fallback_dist/**"],
+  "ignoreExportsUsedInFile": true
+}

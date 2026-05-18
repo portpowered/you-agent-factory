@@ -37,6 +37,7 @@ make test-full
 make typecheck
 make release-surface-smoke
 make lint
+make ui-deadcode
 make script-timeout-companion-smoke-100
 make current-factory-watcher-switch-smoke
 make fmt
@@ -73,7 +74,7 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make typecheck` is the root-level dashboard typecheck command and should stay aligned with the CI `bun run tsc` step.
 
-`make lint` runs `go vet ./...` and the pinned deadcode analyzer. The deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating the baseline.
+`make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/development/frontend-deadcode-baseline.json`. The backend deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating either baseline.
 
 Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for handwritten frontend code, not as a prompt to add new suppressions. Generated API artifacts under `ui/src/api/generated/` may keep generated-code-specific exceptions, but handwritten app code, tests, stories, and fixtures should stay under the standard limits by decomposing the surface into smaller feature components, story modules, shared fixtures, or named test helpers. Review-ready proof for that decomposition is the normal `make typecheck`, `make lint`, and behavior-specific test or Storybook evidence for the touched surface, not a separate source-inventory audit.
 
@@ -93,6 +94,23 @@ make deadcode
 ```
 
 The seeded command should exit non-zero and point reviewers at `bin/deadcode-current.txt`; remove the seed file before continuing normal verification.
+
+To reproduce the frontend dead-code gate directly, run:
+
+```bash
+make ui-deadcode
+```
+
+To prove the gate fails on newly introduced unused frontend code without keeping the seed in the worktree, run:
+
+```bash
+seed_file=ui/src/deadcode-seed-for-review.ts
+trap 'rm -f "$seed_file"' EXIT
+printf 'export function seededUnusedFrontendDeadCodeForReview() { return true; }\n' > "$seed_file"
+make ui-deadcode
+```
+
+The seeded command should exit non-zero and point reviewers at `bin/frontend-deadcode-current.json`; remove the seed file before continuing normal verification.
 
 `make release VERSION=v1.2.3` is the maintainer-owned release-preparation path. It must run from a clean `main` checkout, reruns the repository readiness targets, creates the semver tag locally, and pushes only the tag so GitHub Actions owns publication.
 
@@ -272,7 +290,7 @@ behavior explicit inside the test that needs it.
 - When retiring a public `Factory` config field from `api/openapi.yaml`, remove it from the generated/public `Factory` model, drop any orphaned OpenAPI component schemas that existed only for that field, reject the raw input at `FactoryConfigMapper.Expand` with migration guidance once the validation story lands, and migrate checked-in fixtures/examples to the supported replacement contract in the same change.
 - Guarded loop breakers authored as `type: LOGICAL_MOVE` plus `visit_count` guards stay normal scheduler-dispatched workstations when docs or tests need dispatcher-visible execution history; reserve `TransitionExhaustion` for legacy or system circuit-breaker paths such as retired `exhaustion_rules` and time-expiry consumption.
 - File watcher input handling should parse `FACTORY_REQUEST_BATCH` JSON as the only structured submit format, map public batch item `workTypeName` values into runtime work type IDs, fill missing batch item work types from the watched folder, wrap Markdown and non-batch JSON files as one-item `WorkRequest` batches with raw file content payloads, reject item work-type conflicts before submitting, and parse plus validate all preseed files before calling the factory so startup failures do not create partial work.
-- Deadcode findings are baseline-managed through `docs/internal/development/deadcode-baseline.txt`. Remove confirmed stale symbols first, then update the baseline only for accepted remaining library or test-helper debt.
+- Deadcode findings are baseline-managed through `docs/internal/development/deadcode-baseline.txt` for Go and `docs/internal/development/frontend-deadcode-baseline.json` for the UI. Remove confirmed stale symbols first, then update the baseline only for accepted remaining library, public-surface, or test-helper debt.
 
 ## Extending the Type System
 
