@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - providerSession
+  - source
+  - parse
+properties:
+  providerSession:
+    $ref: '../events/ProviderSessionMetadata.yaml'
+  source:
+    $ref: './ProviderSessionSourceMetadata.yaml'
+  parse:
+    $ref: './CodexSessionParseSummary.yaml'
