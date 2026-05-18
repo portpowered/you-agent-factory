@@ -52,7 +52,7 @@ const WORK_CHART_OVERLAY_CLASS =
   "grid h-full grid-rows-[auto_1fr_auto] gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
 const WORK_CHART_TOP_OVERLAY_CLASS = "flex items-start justify-between gap-3";
 const WORK_CHART_ZOOM_CONTEXT_CLASS =
-  "pointer-events-auto flex max-w-[70%] flex-wrap items-center justify-end gap-2 text-right sm:max-w-none";
+  "pointer-events-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 text-right";
 const WORK_CHART_X_AXIS_OVERLAY_CLASS = "justify-self-end";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
