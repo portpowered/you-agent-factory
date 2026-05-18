@@ -120,6 +120,53 @@ func TestNamedFactoryAPI_CreateFactoryEmitsCanonicalFactoryChangeEvent(t *testin
 	}
 }
 
+func TestNamedFactoryAPI_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFunctionalServerWithConfig(t, rootDir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.Logger = zap.NewNop()
+	})
+
+	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	_, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
+
+	saved := saveEditableCurrentFactoryDefinition(t, server.URL(), `{"factoryDefinition":`+functionalNamedFactoryBody("alpha", "story")+`}`)
+	if saved.FactoryDefinition.WorkTypes == nil || len(*saved.FactoryDefinition.WorkTypes) != 1 || (*saved.FactoryDefinition.WorkTypes)[0].Name != "story" {
+		t.Fatalf("saved editable work types = %#v, want story", saved.FactoryDefinition.WorkTypes)
+	}
+
+	change := factoryapi.FactoryEvent{}
+	for range 6 {
+		candidate := stream.next(5 * time.Second)
+		if candidate.Type == factoryapi.FactoryEventTypeFactoryChange {
+			change = candidate
+			break
+		}
+	}
+	if change.Type != factoryapi.FactoryEventTypeFactoryChange {
+		t.Fatalf("editable-definition save did not emit factory-change within bounded follow-up window")
+	}
+	if change.Context.Tick <= initialStructure.Context.Tick {
+		t.Fatalf("factory-change tick = %d, want > %d", change.Context.Tick, initialStructure.Context.Tick)
+	}
+
+	payload, err := change.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode factory-change payload: %v", err)
+	}
+	if payload.Factory.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("factory-change payload name = %q, want alpha", payload.Factory.Name)
+	}
+	if payload.Factory.WorkTypes == nil || len(*payload.Factory.WorkTypes) != 1 || (*payload.Factory.WorkTypes)[0].Name != "story" {
+		t.Fatalf("factory-change payload work types = %#v, want story", payload.Factory.WorkTypes)
+	}
+	if payload.Factory.Workstations == nil || len(*payload.Factory.Workstations) != 1 || (*payload.Factory.Workstations)[0].Name != "plan-task" {
+		t.Fatalf("factory-change payload workstations = %#v, want edited plan-task topology", payload.Factory.Workstations)
+	}
+}
+
 func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	t.Helper()
 	if _, err := config.PersistNamedFactory(rootDir, name, functionalNamedFactoryPayloadWithWorkType(t, name, workType)); err != nil {
@@ -158,6 +205,29 @@ func getNamedFactoryCurrent(t *testing.T, serverURL string) factoryapi.Factory {
 	var current factoryapi.Factory
 	decodeNamedFactoryJSONResponse(t, resp, &current, "decode current factory response")
 	return current
+}
+
+func saveEditableCurrentFactoryDefinition(t *testing.T, serverURL, body string) factoryapi.EditableFactoryDefinition {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPut, serverURL+"/factory/~current/editable-definition", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("new editable-definition request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT /factory/~current/editable-definition: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		t.Fatalf("PUT /factory/~current/editable-definition status = %d, want 200", resp.StatusCode)
+	}
+
+	var saved factoryapi.EditableFactoryDefinition
+	decodeNamedFactoryJSONResponse(t, resp, &saved, "decode editable-definition save response")
+	return saved
 }
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {

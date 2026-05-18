@@ -481,7 +481,7 @@ describe("useDashboardSnapshot", () => {
     expect(window.__agentFactoryTimelineDebug__?.summarize().selectedTick).toBe(4);
   });
 
-  it("hydrates the editable current-factory cache from a streamed factory-change event", async () => {
+  it("updates streamed dashboard topology and the editable current-factory cache from a factory-change event", async () => {
     renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),
     });
@@ -546,6 +546,20 @@ describe("useDashboardSnapshot", () => {
           ],
         },
       );
+    });
+
+    await waitFor(() => {
+      expect(useFactoryTimelineStore.getState().latestTick).toBe(8);
+    });
+
+    expect(useFactoryTimelineStore.getState().worldViewCache[8]?.topology).toMatchObject({
+      submit_work_types: [{ work_type_name: "story" }],
+      workstation_node_ids: ["review"],
+      workstation_nodes_by_id: {
+        review: expect.objectContaining({
+          workstation_name: "Review",
+        }),
+      },
     });
   });
 });
