@@ -3,23 +3,26 @@ import {
   Controls,
   type Edge,
   type FitViewOptions,
+  type NodeChange,
   type NodeTypes,
   ReactFlow,
-  type NodeChange,
   type XYPosition,
 } from "@xyflow/react";
 import type { CSSProperties } from "react";
 
 import { cx } from "../../lib/cx";
 import { FactoryGraphEditorToolbar } from "../factory-graph-editor/factory-graph-editor-controls";
+import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
-import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
-import { GraphDropOverlay, graphDropStateAttribute } from "./react-flow-current-activity-card-import";
+import {
+  GraphDropOverlay,
+  graphDropStateAttribute,
+} from "./react-flow-current-activity-card-import";
 
 const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
 const GRAPH_BACKGROUND_GAP = 24;
@@ -27,7 +30,8 @@ const GRAPH_BACKGROUND_SIZE = 1;
 const CURRENT_ACTIVITY_LEGEND_CLASS =
   "absolute left-7 top-7 z-10 max-[720px]:left-4 max-[720px]:right-4 max-[720px]:top-4";
 
-type CSSPropertiesWithVariables = CSSProperties & Record<`--${string}`, string | number>;
+type CSSPropertiesWithVariables = CSSProperties &
+  Record<`--${string}`, string | number>;
 
 const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   "--xy-controls-box-shadow": "none",
@@ -53,6 +57,7 @@ export function CurrentActivityGraphViewport({
   edges,
   graphKey,
   handleNodesChange,
+  hasPendingChanges,
   imports,
   initialFitViewKey,
   initialFitViewOptions,
@@ -68,6 +73,7 @@ export function CurrentActivityGraphViewport({
   edges: Edge[];
   graphKey: string;
   handleNodesChange: (changes: NodeChange[]) => void;
+  hasPendingChanges: boolean;
   imports: CurrentActivityImportController;
   initialFitViewKey: string;
   initialFitViewOptions: FitViewOptions;
@@ -75,7 +81,11 @@ export function CurrentActivityGraphViewport({
   nodeTypes: NodeTypes;
   nodes: CurrentActivityNode[];
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
-  setStoredNodePosition: (graphKey: string, nodeId: string, position: XYPosition) => void;
+  setStoredNodePosition: (
+    graphKey: string,
+    nodeId: string,
+    position: XYPosition,
+  ) => void;
 }) {
   return (
     <div className="relative min-h-0 flex-1">
@@ -141,6 +151,7 @@ export function CurrentActivityGraphViewport({
         <FactoryGraphEditorToolbar
           activeTool={activeTool}
           canInteract={canInteractWithEditor}
+          hasPendingChanges={hasPendingChanges}
           onSelectTool={onSelectTool}
           visible={editorMode}
         />

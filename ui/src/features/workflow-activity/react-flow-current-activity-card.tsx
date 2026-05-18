@@ -35,6 +35,10 @@ import {
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
 import {
+  CurrentActivityGraphEditorHeader,
+  useCurrentActivityGraphEditor,
+} from "./react-flow-current-activity-card-editor";
+import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
@@ -46,15 +50,17 @@ import {
   initialFocusNodes,
 } from "./react-flow-current-activity-card-graph";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
-import { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
-import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 import {
-  CurrentActivityGraphEditorHeader,
-  useCurrentActivityGraphEditor,
-} from "./react-flow-current-activity-card-editor";
+  currentActivityGraphKey,
+  currentActivityTopologyKey,
+} from "./react-flow-current-activity-card-keys";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
+import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
-export { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
+export {
+  currentActivityGraphKey,
+  currentActivityTopologyKey,
+} from "./react-flow-current-activity-card-keys";
 
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
@@ -376,7 +382,9 @@ export function ReactFlowCurrentActivityCard(
         <CurrentActivityGraphEditorHeader
           editorMode={editor.editorMode}
           hasChanges={editor.draftState.hasChanges}
-          isDefinitionLoading={editor.editableDefinitionQuery.status === "pending"}
+          isDefinitionLoading={
+            editor.editableDefinitionQuery.status === "pending"
+          }
           loadErrorMessage={editor.editableDefinitionQuery.error?.message}
           onToggle={editor.handleEditorModeToggle}
           title={<CurrentActivityCardHeading />}
@@ -390,6 +398,7 @@ export function ReactFlowCurrentActivityCard(
         edges={graph.edges}
         graphKey={graph.graphKey}
         handleNodesChange={graph.handleNodesChange}
+        hasPendingChanges={editor.draftState.hasChanges}
         imports={imports}
         initialFitViewKey={graph.initialFitViewKey}
         initialFitViewOptions={graph.initialFitViewOptions}
