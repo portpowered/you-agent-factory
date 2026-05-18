@@ -56,6 +56,18 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	initialState := "queued"
 	initialWorkState := factoryapi.WorkState{Name: initialState, Type: factoryapi.WorkStateTypeINITIAL}
 	tags := factoryapi.StringMap{"priority": "high"}
+	relation := factoryapi.Relation{
+		Type:           factoryapi.RelationTypeDependsOn,
+		SourceWorkName: "publish",
+		TargetWorkName: "draft",
+		RequiredState:  stringPtr("complete"),
+	}
+	parentChildRelation := factoryapi.Relation{
+		Type:           factoryapi.RelationTypeParentChild,
+		SourceWorkName: "draft",
+		TargetWorkName: "epic",
+	}
+	workRelations := []factoryapi.Relation{relation, parentChildRelation}
 	batchWork := factoryapi.Work{
 		Name:                     "draft",
 		WorkId:                   &workID,
@@ -67,17 +79,7 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 		TraceId:                  &traceID,
 		Payload:                  map[string]any{"title": "first draft"},
 		Tags:                     &tags,
-	}
-	relation := factoryapi.Relation{
-		Type:           factoryapi.RelationTypeDependsOn,
-		SourceWorkName: "publish",
-		TargetWorkName: "draft",
-		RequiredState:  stringPtr("complete"),
-	}
-	parentChildRelation := factoryapi.Relation{
-		Type:           factoryapi.RelationTypeParentChild,
-		SourceWorkName: "draft",
-		TargetWorkName: "epic",
+		Relations:                &workRelations,
 	}
 	workstationKind := factoryapi.WorkstationKindCron
 	workstationRuntimeType := factoryapi.WorkstationTypeModelWorkstation
@@ -141,6 +143,24 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	}
 	if (*workRequest.Works)[0].PreviousChainingTraceIds == nil || len(*(*workRequest.Works)[0].PreviousChainingTraceIds) != 2 {
 		t.Fatal("generated work request contracts should expose predecessor chaining trace IDs")
+	}
+	if (*workRequest.Works)[0].Relations == nil || len(*(*workRequest.Works)[0].Relations) != 2 || (*(*workRequest.Works)[0].Relations)[0].Type != factoryapi.RelationTypeDependsOn {
+		t.Fatal("generated work contracts should expose API-aligned relation entries")
+	}
+	withoutRelations := factoryapi.Work{Name: "no-relations"}
+	withoutRelationsJSON, err := json.Marshal(withoutRelations)
+	if err != nil {
+		t.Fatalf("marshal generated work without relations: %v", err)
+	}
+	if strings.Contains(string(withoutRelationsJSON), `"relations"`) {
+		t.Fatalf("generated work without relations should omit optional relations: %s", withoutRelationsJSON)
+	}
+	var decodedWithoutRelations factoryapi.Work
+	if err := json.Unmarshal(withoutRelationsJSON, &decodedWithoutRelations); err != nil {
+		t.Fatalf("unmarshal generated work without relations: %v", err)
+	}
+	if decodedWithoutRelations.Relations != nil {
+		t.Fatalf("decoded generated work relations = %#v, want nil when omitted", decodedWithoutRelations.Relations)
 	}
 }
 
