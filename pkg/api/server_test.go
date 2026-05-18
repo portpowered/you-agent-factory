@@ -843,6 +843,63 @@ func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *t
 	}
 }
 
+func TestSaveEditableCurrentFactoryDefinition_MapsTopologyValidationTargets(t *testing.T) {
+	field := "factoryDefinition.workstations[0].outputs[0]"
+	targetID := "process->story:missing-state"
+	target := factoryapi.ErrorTarget{Kind: "edge", Id: &targetID, Field: &field}
+	srv := newTestServer(&testutil.MockFactory{
+		SaveEditableFactoryErr: apisurface.NewTopologyValidationError("dangling output", []factoryapi.ErrorTarget{target}),
+	})
+
+	body := `{"factoryDefinition":{"name":"beta"}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("INVALID_FACTORY") {
+		t.Fatalf("error code = %q, want INVALID_FACTORY", response.Code)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 {
+		t.Fatalf("error targets = %#v, want one topology target", response.Targets)
+	}
+	gotTarget := (*response.Targets)[0]
+	if gotTarget.Kind != "edge" || gotTarget.Id == nil || *gotTarget.Id != "process->story:missing-state" || gotTarget.Field == nil || *gotTarget.Field != field {
+		t.Fatalf("error target = %#v, want dangling output edge target", gotTarget)
+	}
+}
+
+func TestSaveEditableCurrentFactoryDefinition_MapsStaleVersion(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SaveEditableFactoryErr: apisurface.ErrEditableFactoryVersionStale})
+
+	body := `{"factoryDefinition":{"name":"beta"}}`
+	req := httptest.NewRequest(http.MethodPut, "/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409: %s", rec.Code, rec.Body.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("STALE_FACTORY_VERSION") {
+		t.Fatalf("error code = %q, want STALE_FACTORY_VERSION", response.Code)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Kind != "save" {
+		t.Fatalf("error targets = %#v, want save stale-version target", response.Targets)
+	}
+}
+
 func TestCreateFactory_RejectsDuplicateFactoryName(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CreateNamedFactoryErr: factoryconfig.ErrNamedFactoryAlreadyExists,

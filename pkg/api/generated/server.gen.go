@@ -42,6 +42,7 @@ const (
 	INVALIDFACTORY       ErrorResponseCode = "INVALID_FACTORY"
 	INVALIDFACTORYNAME   ErrorResponseCode = "INVALID_FACTORY_NAME"
 	NOTFOUND             ErrorResponseCode = "NOT_FOUND"
+	STALEFACTORYVERSION  ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryEventSchemaVersion.

@@ -289,7 +289,7 @@ export interface components {
              * @description Stable machine-readable error code.
              * @enum {string}
              */
-            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "NOT_FOUND" | "INTERNAL_ERROR";
+            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "NOT_FOUND" | "INTERNAL_ERROR";
             /** @description Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages. */
             targets?: components["schemas"]["ErrorTarget"][];
         };

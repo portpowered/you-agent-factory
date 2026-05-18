@@ -36,6 +36,41 @@ var ErrInvalidNamedFactory = errors.New("invalid named factory")
 // pointer could be resolved for named-factory readback.
 var ErrCurrentNamedFactoryNotFound = errors.New("current named factory not found")
 
+// ErrEditableFactoryVersionStale reports that a complete editable-definition
+// save was based on an older factory definition version than the current one.
+var ErrEditableFactoryVersionStale = errors.New("editable factory definition version is stale")
+
+// TopologyValidationError carries validation targets that the graph editor can
+// map back to form fields, nodes, edges, or save-level messages.
+type TopologyValidationError struct {
+	Message string
+	Targets []factoryapi.ErrorTarget
+}
+
+func (e *TopologyValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Message != "" {
+		return e.Message
+	}
+	return "factory topology validation failed"
+}
+
+func (e *TopologyValidationError) Is(target error) bool {
+	return target == ErrInvalidNamedFactory
+}
+
+func NewTopologyValidationError(message string, targets []factoryapi.ErrorTarget) *TopologyValidationError {
+	if message == "" {
+		message = "factory topology validation failed"
+	}
+	return &TopologyValidationError{
+		Message: message,
+		Targets: append([]factoryapi.ErrorTarget(nil), targets...),
+	}
+}
+
 // DefaultCurrentFactoryName is the reserved current-factory identifier used
 // when the active runtime is the root factory and no named-factory pointer
 // exists.

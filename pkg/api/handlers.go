@@ -208,12 +208,23 @@ func (s *Server) SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *
 
 	saved, err := s.runtime.SaveEditableFactoryDefinition(r.Context(), req)
 	if err != nil {
+		var topologyErr *apisurface.TopologyValidationError
 		switch {
 		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
 			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
 			return
 		case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
 			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.ErrorTarget{errorTarget("field", "", "factoryDefinition.name")})
+			return
+		case errors.Is(err, apisurface.ErrEditableFactoryVersionStale):
+			s.writeErrorWithTargets(w, http.StatusConflict, "Editable factory definition is stale. Refresh the graph before saving.", "STALE_FACTORY_VERSION", []factoryapi.ErrorTarget{errorTarget("save", "stale-version", "")})
+			return
+		case errors.As(err, &topologyErr):
+			targets := topologyErr.Targets
+			if len(targets) == 0 {
+				targets = []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")}
+			}
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
 			return
 		case errors.Is(err, apisurface.ErrInvalidNamedFactory):
 			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.ErrorTarget{errorTarget("form", "", "factoryDefinition")})
