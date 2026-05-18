@@ -74,6 +74,37 @@ test("scanTailwindSpacingTokens rejects arbitrary spacing utilities and custom b
   }
 });
 
+test("scanTailwindSpacingTokens skips story, test, and generated files", async () => {
+  const { srcDir, tempRoot } = await createSourceTree({
+    "feature.tsx": `
+      export function Feature() {
+        return <div className="gap-4 p-4 md:grid-cols-2" />;
+      }
+    `,
+    "feature.test.tsx": `
+      export function FeatureTest() {
+        return <div className="p-[18px] max-[720px]:grid" />;
+      }
+    `,
+    "feature.stories.tsx": `
+      export function FeatureStory() {
+        return <div className="gap-[0.8rem]" />;
+      }
+    `,
+    "generated/openapi.tsx": `
+      export function GeneratedArtifact() {
+        return <div className="rounded-[1.25rem]" />;
+      }
+    `,
+  });
+
+  try {
+    await expect(scanTailwindSpacingTokens(srcDir)).resolves.toEqual([]);
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
 test("CLI output reports actionable violations", async () => {
   const { srcDir, tempRoot } = await createSourceTree({
     "feature.tsx": `
