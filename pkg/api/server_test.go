@@ -1935,22 +1935,25 @@ func TestListWork(t *testing.T) {
 	}
 }
 
-func TestListWork_ReturnsRuntimeRelations(t *testing.T) {
+func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.T) {
 	now := time.Now()
 	tokens := map[string]*interfaces.Token{
 		"tok-1": listWorkToken("tok-1", "work-review", "task:init", "task", now),
 		"tok-2": listWorkToken("tok-2", "work-draft", "task:init", "task", now),
 		"tok-3": listWorkToken("tok-3", "work-parent", "task:init", "task", now),
 		"tok-4": listWorkToken("tok-4", "work-standalone", "task:init", "task", now),
+		"tok-5": listWorkToken("tok-5", "work-origin", "task:init", "task", now),
 	}
 	tokens["tok-1"].Color.Name = "review"
 	tokens["tok-1"].Color.Relations = []interfaces.Relation{
 		{Type: interfaces.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"},
 		{Type: interfaces.RelationParentChild, TargetWorkID: "work-parent"},
+		{Type: interfaces.RelationSpawnedBy, TargetWorkID: "work-origin"},
 	}
 	tokens["tok-2"].Color.Name = "draft"
 	tokens["tok-3"].Color.Name = "parent"
 	tokens["tok-4"].Color.Name = "standalone"
+	tokens["tok-5"].Color.Name = "origin"
 
 	srv := newTestServer(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{Tokens: tokens},
@@ -1974,8 +1977,8 @@ func TestListWork_ReturnsRuntimeRelations(t *testing.T) {
 		t.Fatal("review relations are nil, want runtime relations")
 	}
 	relations := *review.Relations
-	if len(relations) != 2 {
-		t.Fatalf("review relations = %d, want 2: %#v", len(relations), relations)
+	if len(relations) != 3 {
+		t.Fatalf("review relations = %d, want 3: %#v", len(relations), relations)
 	}
 	if got := relations[0]; got.Type != factoryapi.RelationTypeDependsOn ||
 		got.SourceWorkName != "review" ||
@@ -1990,6 +1993,13 @@ func TestListWork_ReturnsRuntimeRelations(t *testing.T) {
 		stringValue(got.TargetWorkId) != "work-parent" ||
 		got.RequiredState != nil {
 		t.Fatalf("parent_child relation = %#v, want review -> parent without required state", got)
+	}
+	if got := relations[2]; got.Type != factoryapi.RelationTypeSpawnedBy ||
+		got.SourceWorkName != "review" ||
+		got.TargetWorkName != "origin" ||
+		stringValue(got.TargetWorkId) != "work-origin" ||
+		got.RequiredState != nil {
+		t.Fatalf("spawned_by relation = %#v, want review -> origin without required state", got)
 	}
 	standalone := listedWorkByID(t, resp.Results, "work-standalone")
 	if standalone.Relations != nil {

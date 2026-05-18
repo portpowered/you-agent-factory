@@ -971,7 +971,7 @@ type Work struct {
 	// PreviousChainingTraceIds Explicit predecessor chaining traces that directly caused this work item.
 	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
 
-	// Relations Current relationships attached to this work item when returned by read APIs.
+	// Relations Current outbound relationships attached to this listed source work item when returned by read APIs.
 	Relations *[]Relation `json:"relations,omitempty"`
 
 	// RequestId Identifier for the original request that created this work, if applicable
