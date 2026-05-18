@@ -55,7 +55,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotQuery == "" {
 		t.Fatal("expected request query")
 	}
-	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\nwork-1\tReview PRD\treview\tPROCESSING\n" {
+	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\treview\tPROCESSING\tnone\n" {
 		t.Fatalf("output = %q", got)
 	}
 }
@@ -113,8 +113,8 @@ func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\n" +
-		"work-1\tReview PRD\treview\tPROCESSING\n"
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\treview\tPROCESSING\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -159,9 +159,109 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\n" +
-		"work-1\tPlan feature\tinit\tINITIAL\n" +
-		"work-2\tReview PRD\treview\tPROCESSING\n"
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tPlan feature\tinit\tINITIAL\tnone\n" +
+		"work-2\tReview PRD\treview\tPROCESSING\tnone\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
+	requiredState := "complete"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Review PRD",
+				WorkId:       stringPtr("work-1"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "review",
+					Type: factoryapi.WorkStateTypePROCESSING,
+				},
+				Relations: &[]factoryapi.Relation{{
+					Type:           factoryapi.RelationTypeDependsOn,
+					SourceWorkName: "Review PRD",
+					TargetWorkName: "Draft PRD",
+					TargetWorkId:   stringPtr("work-draft"),
+					RequiredState:  &requiredState,
+				}},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\treview\tPROCESSING\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testing.T) {
+	requiredState := "reviewed"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Publish Release",
+				WorkId:       stringPtr("work-3"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "blocked",
+					Type: factoryapi.WorkStateTypeFAILED,
+				},
+				Relations: &[]factoryapi.Relation{
+					{
+						Type:           factoryapi.RelationTypeSpawnedBy,
+						SourceWorkName: "Publish Release",
+						TargetWorkName: "Release Train",
+						TargetWorkId:   stringPtr("work-parent"),
+					},
+					{
+						Type:           factoryapi.RelationTypeDependsOn,
+						SourceWorkName: "Publish Release",
+						TargetWorkName: "Review PRD",
+						TargetWorkId:   stringPtr("work-review"),
+						RequiredState:  &requiredState,
+					},
+					{
+						Type:           factoryapi.RelationTypeParentChild,
+						SourceWorkName: "Publish Release",
+						TargetWorkName: "Epic Release",
+						TargetWorkId:   stringPtr("work-epic"),
+					},
+				},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-3\tPublish Release\tblocked\tFAILED\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -288,6 +388,7 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 
 func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *testing.T) {
 	nextToken := "cursor-review-2"
+	requiredState := "approved"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state.name") != "review" {
 			t.Fatalf("state.name query = %q, want review", r.URL.Query().Get("state.name"))
@@ -308,6 +409,13 @@ func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *t
 					Name: "review",
 					Type: factoryapi.WorkStateTypePROCESSING,
 				},
+				Relations: &[]factoryapi.Relation{{
+					Type:           factoryapi.RelationTypeDependsOn,
+					SourceWorkName: "Review PRD",
+					TargetWorkName: "Approve Scope",
+					TargetWorkId:   stringPtr("work-approve"),
+					RequiredState:  &requiredState,
+				}},
 			}},
 			PaginationContext: &factoryapi.PaginationContext{
 				MaxResults: 1,
@@ -343,9 +451,59 @@ func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *t
 	if selected["workId"] != "work-review" {
 		t.Fatalf("selected workId = %#v, want work-review", selected["workId"])
 	}
+	dependency := selectJSONRelationByType(t, selected, "DEPENDS_ON")
+	if dependency["targetWorkName"] != "Approve Scope" || dependency["targetWorkId"] != "work-approve" || dependency["requiredState"] != requiredState {
+		t.Fatalf("dependency relation = %#v, want target work and required state preserved", dependency)
+	}
 	pagination := jsonObject(t, got, "paginationContext")
 	if pagination["maxResults"] != float64(1) || pagination["nextToken"] != nextToken {
 		t.Fatalf("paginationContext = %#v, want maxResults=1 nextToken=%q", pagination, nextToken)
+	}
+}
+
+func TestList_JSONOutputLeavesRelationsOmittedWhenAPIResponseDoesNotIncludeThem(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Plan Release",
+				WorkId:       stringPtr("work-plan"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "planned",
+					Type: factoryapi.WorkStateTypeINITIAL,
+				},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		JSON:   true,
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json output is invalid: %v\n%s", err, out.String())
+	}
+	results, ok := got["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one JSON array item", got["results"])
+	}
+	work, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0] = %#v, want JSON object", results[0])
+	}
+	if _, hasRelations := work["relations"]; hasRelations {
+		t.Fatalf("relations = %#v, want omitted when API response omits relations", work["relations"])
 	}
 }
 
@@ -371,6 +529,26 @@ func TestList_InvalidSortBy(t *testing.T) {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func selectJSONRelationByType(t *testing.T, work map[string]any, relationType string) map[string]any {
+	t.Helper()
+
+	relations, ok := work["relations"].([]any)
+	if !ok {
+		t.Fatalf("relations = %#v, want JSON array", work["relations"])
+	}
+	for _, item := range relations {
+		relation, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("relation item = %#v, want JSON object", item)
+		}
+		if relation["type"] == relationType {
+			return relation
+		}
+	}
+	t.Fatalf("no relation selected by type=%q from %#v", relationType, relations)
+	return nil
 }
 
 func selectJSONWorkByState(t *testing.T, response map[string]any, stateName string, stateType string) map[string]any {
