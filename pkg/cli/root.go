@@ -79,6 +79,9 @@ func newFactoryCommand() *cobra.Command {
 	factoryCmd := &cobra.Command{
 		Use:   "factory",
 		Short: "Inspect factory runtime state",
+		Long: "Inspect factory runtime state from a running infinite-you service.\n\n" +
+			"Use the query subcommand to ask the live API server which factory is currently active " +
+			"instead of inferring runtime state from local factory files.",
 	}
 	factoryCmd.AddCommand(newFactoryQueryCommand())
 	return factoryCmd
@@ -90,6 +93,14 @@ func newFactoryQueryCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "query",
 		Short:        "Show the current active factory",
+		Long: "Show the current active factory from a running infinite-you service.\n\n" +
+			"By default the command writes a human-readable table with the current factory name and " +
+			"runtime-identifying fields. Use --json for the API-shaped current-factory payload, and " +
+			"use --port to target the same server-port selection pattern as work list.",
+		Example: "  # Show the current factory from the running service on the default port.\n" +
+			"  " + cliBinaryName + " factory query\n\n" +
+			"  # Query a different service port and emit API-shaped JSON for automation.\n" +
+			"  " + cliBinaryName + " factory query --port 7437 --json",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()

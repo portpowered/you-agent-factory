@@ -222,6 +222,55 @@ func TestFactoryQueryCommand_UnreachableServerFails(t *testing.T) {
 	}
 }
 
+func TestFactoryCommand_HelpListsQuerySubcommand(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"Inspect factory runtime state from a running infinite-you service.",
+		"query",
+		"Show the current active factory",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("factory help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestFactoryQueryCommand_HelpDocumentsOutputModesAndPort(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"Show the current active factory from a running infinite-you service.",
+		"human-readable table",
+		"Use --json for the API-shaped current-factory payload",
+		"--port",
+		"--json",
+		"infinite-you factory query --port 7437 --json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("factory query help missing %q:\n%s", want, help)
+		}
+	}
+}
+
 func TestDocsCommand_HelpDocumentsSupportedTopics(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
