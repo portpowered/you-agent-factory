@@ -221,6 +221,71 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 	}
 }
 
+func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
+	nextToken := "cursor-2"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Review PRD",
+				WorkId:       stringPtr("work-1"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "review",
+					Type: factoryapi.WorkStateTypePROCESSING,
+				},
+			}},
+			PaginationContext: &factoryapi.PaginationContext{
+				MaxResults: 1,
+				NextToken:  &nextToken,
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		JSON:   true,
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("WORK ID")) || bytes.Contains(out.Bytes(), []byte("No work found.")) {
+		t.Fatalf("json output included human-readable text: %q", out.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json output is invalid: %v\n%s", err, out.String())
+	}
+	results, ok := got["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one JSON array item", got["results"])
+	}
+	work, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0] = %#v, want JSON object", results[0])
+	}
+	state, ok := work["state"].(map[string]any)
+	if !ok {
+		t.Fatalf("state = %#v, want JSON object", work["state"])
+	}
+	if work["workId"] != "work-1" || state["name"] != "review" || state["type"] != "PROCESSING" {
+		t.Fatalf("work JSON = %#v, want workId and structured state fields", work)
+	}
+	pagination, ok := got["paginationContext"].(map[string]any)
+	if !ok {
+		t.Fatalf("paginationContext = %#v, want JSON object", got["paginationContext"])
+	}
+	if pagination["maxResults"] != float64(1) || pagination["nextToken"] != nextToken {
+		t.Fatalf("paginationContext = %#v, want maxResults=1 nextToken=%q", pagination, nextToken)
+	}
+}
+
 func TestList_InvalidStateType(t *testing.T) {
 	err := List(ListConfig{Port: 8080, StateType: "UNKNOWN", Output: &bytes.Buffer{}})
 	if err == nil {
