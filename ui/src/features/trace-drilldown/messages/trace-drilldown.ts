@@ -55,14 +55,16 @@ const traceDrilldownMessagesByLocale = {
     dispatchPathOutputPrefix: "Out",
     dispatchPathPendingOutcome: "Observed",
     dispatchPathSectionLabel: "Dispatch",
-    emptyMessage: "No retained dispatch history is currently available for this work item.",
+    emptyMessage:
+      "No retained dispatch history is currently available for this work item.",
     emptyTitle: "Trace history unavailable",
     errorTitle: "Trace lookup failed",
     idleMessage:
       "Select active, completed, or failed work to inspect retained trace history.",
     idleTitle: "No trace selected",
     inputItemsColumnLabel: "Input items",
-    loadingMessage: (workID) => `Reconstructing dispatch history for ${workID}.`,
+    loadingMessage: (workID) =>
+      `Reconstructing dispatch history for ${workID}.`,
     loadingTitle: "Loading trace",
     noBatchRelations: "None",
     noInputItems: "No input items recorded.",
@@ -76,7 +78,8 @@ const traceDrilldownMessagesByLocale = {
     title: "Trace drill-down",
     traceIdLabel: "Trace ID",
     unavailableValue: "Unavailable",
-    workItemsExpandLabel: (expanded) => (expanded ? "Collapse" : "Expand"),
+    workItemsExpandLabel: (expanded): string =>
+      expanded ? "Collapse" : "Expand",
     workItemsLabel: "Work items",
     workItemsSummary: (count) => `${count} work item${count === 1 ? "" : "s"}`,
     workstationColumnLabel: "Workstation",
@@ -114,7 +117,7 @@ const traceDrilldownMessagesByLocale = {
     title: "追踪下钻",
     traceIdLabel: "追踪 ID",
     unavailableValue: "不可用",
-    workItemsExpandLabel: (expanded) => (expanded ? "折叠" : "展开"),
+    workItemsExpandLabel: (expanded): string => (expanded ? "折叠" : "展开"),
     workItemsLabel: "工作项",
     workItemsSummary: (count) => `${count} 个工作项`,
     workstationColumnLabel: "工作站",

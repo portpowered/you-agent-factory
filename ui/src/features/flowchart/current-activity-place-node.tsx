@@ -1,20 +1,25 @@
-import type { ReactNode } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
+import type { ReactNode } from "react";
 
 import type { DashboardPlaceRef } from "../../api/dashboard/types";
-import { cx } from "../../lib/cx";
 import {
   formatDashboardPlaceLabel,
   getDashboardPlaceLabelParts,
 } from "../../components/ui/place-labels";
-import { GraphSemanticIcon } from "./graph-semantic-icon";
+import { cx } from "../../lib/cx";
+import { getWorkflowActivityShellMessages } from "../workflow-activity/messages/activity-shell";
+import {
+  ActivityGraphNodeShell,
+  type PlaceNodeType,
+} from "./current-activity-node-shell";
 import type { GraphSemanticIconKind } from "./graph-semantic-icon";
-import { ActivityGraphNodeShell, type PlaceNodeType } from "./current-activity-node-shell";
+import { GraphSemanticIcon } from "./graph-semantic-icon";
 
 export interface BasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
   incomingHandleCount: number;
+  locale?: string;
   muted: boolean;
   onSelectStateNode?: (placeId: string) => void;
   outgoingHandleCount: number;
@@ -35,9 +40,15 @@ export interface ConstraintNodeData extends BasePlaceNodeData {
   place: DashboardPlaceRef;
 }
 
-export type CurrentActivityStatePositionNode = Node<StatePositionNodeData, "statePosition">;
+export type CurrentActivityStatePositionNode = Node<
+  StatePositionNodeData,
+  "statePosition"
+>;
 export type CurrentActivityResourceNode = Node<ResourceNodeData, "resource">;
-export type CurrentActivityConstraintNode = Node<ConstraintNodeData, "constraint">;
+export type CurrentActivityConstraintNode = Node<
+  ConstraintNodeData,
+  "constraint"
+>;
 export type CurrentActivityPlaceNode =
   | CurrentActivityConstraintNode
   | CurrentActivityResourceNode
@@ -49,21 +60,29 @@ const STATE_POSITION_CONTENT_CONTAINER_CLASSNAME =
 const RESOURCE_CONTENT_CONTAINER_CLASSNAME =
   "grid min-w-0 w-full grid-rows-[1.5rem_auto] overflow-hidden";
 
-export function StatePositionNodeView(props: NodeProps<CurrentActivityStatePositionNode>) {
+export function StatePositionNodeView(
+  props: NodeProps<CurrentActivityStatePositionNode>,
+) {
   return <PlaceNodeView {...props} />;
 }
 
-export function ResourceNodeView(props: NodeProps<CurrentActivityResourceNode>) {
+export function ResourceNodeView(
+  props: NodeProps<CurrentActivityResourceNode>,
+) {
   return <PlaceNodeView {...props} />;
 }
 
-export function ConstraintNodeView(props: NodeProps<CurrentActivityConstraintNode>) {
+export function ConstraintNodeView(
+  props: NodeProps<CurrentActivityConstraintNode>,
+) {
   return <PlaceNodeView {...props} />;
 }
 
 function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
+  const messages = getWorkflowActivityShellMessages(data.locale);
   const placeLabel = formatDashboardPlaceLabel(data.place);
-  const selectable = data.place.kind === "work_state" && data.onSelectStateNode !== undefined;
+  const selectable =
+    data.place.kind === "work_state" && data.onSelectStateNode !== undefined;
   const showStateMarkers = data.place.kind === "work_state";
   const nodeType: PlaceNodeType =
     data.place.kind === "work_state"
@@ -73,7 +92,9 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
         : "constraint";
   const nodeClassName = cx(
     placeNodeClassName(data.place),
-    data.activeFlow && !data.selectedStateNode && "border-af-success/70 shadow-af-success-chip",
+    data.activeFlow &&
+      !data.selectedStateNode &&
+      "border-af-success/70 shadow-af-success-chip",
     data.selectedStateNode && "border-af-accent/70 shadow-af-accent-selected",
     data.muted && "opacity-[0.45]",
   );
@@ -87,7 +108,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
     >
       {selectable ? (
         <button
-          aria-label={`Select ${placeLabel} state`}
+          aria-label={messages.selectStateLabel(placeLabel)}
           aria-pressed={data.selectedStateNode}
           className={cx(
             "nodrag nopan cursor-pointer border-0 bg-transparent p-0 text-left text-inherit",
@@ -100,12 +121,21 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
           }}
           type="button"
         >
-          <StatePositionNodeContent place={data.place} tokenCount={data.tokenCount} />
+          <StatePositionNodeContent
+            place={data.place}
+            tokenCount={data.tokenCount}
+          />
         </button>
       ) : showStateMarkers ? (
-        <StatePositionNodeContent place={data.place} tokenCount={data.tokenCount} />
+        <StatePositionNodeContent
+          place={data.place}
+          tokenCount={data.tokenCount}
+        />
       ) : (
-        <StaticPlaceNodeContent place={data.place} tokenCount={data.tokenCount} />
+        <StaticPlaceNodeContent
+          place={data.place}
+          tokenCount={data.tokenCount}
+        />
       )}
     </ActivityGraphNodeShell>
   );
@@ -149,7 +179,9 @@ function placeKindLabel(place: DashboardPlaceRef): string {
   return place.kind === "limit" ? "Limit" : "Constraint";
 }
 
-function placeSemanticIconKind(place: DashboardPlaceRef): GraphSemanticIconKind {
+function placeSemanticIconKind(
+  place: DashboardPlaceRef,
+): GraphSemanticIconKind {
   if (place.kind === "work_state") {
     if (place.state_category === "TERMINAL") {
       return "terminal";
@@ -229,14 +261,16 @@ function statePositionMarkers(count: number): ReactNode {
       data-state-work-progress="dots"
       role="status"
     >
-      {Array.from({ length: count }, (_, dotNumber) => dotNumber + 1).map((dotNumber) => (
-        <span
-          key={`${count}-${dotNumber}`}
-          aria-hidden="true"
-          className="h-2 w-2 rounded-full bg-af-success"
-          data-state-work-progress-dot={String(dotNumber - 1)}
-        />
-      ))}
+      {Array.from({ length: count }, (_, dotNumber) => dotNumber + 1).map(
+        (dotNumber) => (
+          <span
+            key={`${count}-${dotNumber}`}
+            aria-hidden="true"
+            className="h-2 w-2 rounded-full bg-af-success"
+            data-state-work-progress-dot={String(dotNumber - 1)}
+          />
+        ),
+      )}
     </span>
   );
 }
@@ -250,7 +284,10 @@ function tokenCountLabel(place: DashboardPlaceRef, count: number): string {
   return `${count} ${placeKindLabel(place).toLowerCase()} ${tokenLabel}`;
 }
 
-function placeTokenCountDisplay(place: DashboardPlaceRef, count: number): ReactNode {
+function placeTokenCountDisplay(
+  place: DashboardPlaceRef,
+  count: number,
+): ReactNode {
   return (
     <span
       aria-label={tokenCountLabel(place, count)}
@@ -335,7 +372,9 @@ function StatePositionNodeContent({
         data-state-marker-zone
         title={label}
       >
-        {marker ?? <span className="sr-only">{activeItemCountLabel(tokenCount)}</span>}
+        {marker ?? (
+          <span className="sr-only">{activeItemCountLabel(tokenCount)}</span>
+        )}
       </span>
     </>
   );
@@ -352,7 +391,10 @@ function StaticPlaceNodeContent({
 
   if (place.kind !== "resource") {
     return (
-      <div className="grid min-w-0 gap-[0.1rem] overflow-hidden" data-place-label-container>
+      <div
+        className="grid min-w-0 gap-[0.1rem] overflow-hidden"
+        data-place-label-container
+      >
         <span
           className="flex min-w-0 items-center gap-1.5 overflow-hidden"
           data-place-label-zone
@@ -375,7 +417,10 @@ function StaticPlaceNodeContent({
   }
 
   return (
-    <div className={RESOURCE_CONTENT_CONTAINER_CLASSNAME} data-place-label-container>
+    <div
+      className={RESOURCE_CONTENT_CONTAINER_CLASSNAME}
+      data-place-label-container
+    >
       <span
         aria-label={label}
         className="grid h-[1.5rem] max-h-[1.5rem] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
@@ -395,4 +440,3 @@ function StaticPlaceNodeContent({
     </div>
   );
 }
-

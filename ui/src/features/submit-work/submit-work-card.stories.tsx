@@ -32,10 +32,7 @@ export default {
 
 export const Configured = {
   args: {
-    submitWorkTypes: [
-      { work_type_name: "story" },
-      { work_type_name: "task" },
-    ],
+    submitWorkTypes: [{ work_type_name: "story" }, { work_type_name: "task" }],
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -43,7 +40,9 @@ export const Configured = {
     const scope = within(card);
 
     await expect(
-      scope.queryByText("Send a new request to the current factory from the dashboard."),
+      scope.queryByText(
+        "Send a new request to the current factory from the dashboard.",
+      ),
     ).toBeNull();
     const workType = scope.getByRole("combobox", { name: "Work type" });
     const requestName = scope.getByRole("textbox", { name: "Request name" });
@@ -53,7 +52,10 @@ export const Configured = {
     await expect(submitButton).toBeDisabled();
     await userEvent.selectOptions(workType, "story");
     await userEvent.type(requestName, "Driver review");
-    await userEvent.type(requestText, "Review the queue and summarize the next driver issue.");
+    await userEvent.type(
+      requestText,
+      "Review the queue and summarize the next driver issue.",
+    );
     await expect(submitButton).toBeEnabled();
   },
 };
@@ -67,11 +69,21 @@ export const Unconfigured = {
     const card = await canvas.findByRole("article", { name: "Submit work" });
     const scope = within(card);
 
-    await expect(scope.getByRole("combobox", { name: "Work type" })).toBeDisabled();
-    await expect(scope.getByRole("textbox", { name: "Request name" })).toBeDisabled();
-    await expect(scope.getByRole("textbox", { name: "Request" })).toBeDisabled();
-    await expect(scope.getByRole("button", { name: "Submit work" })).toBeDisabled();
-    await expect(scope.getByText("No work types are available to submit right now.")).toBeVisible();
+    await expect(
+      scope.getByRole("combobox", { name: "Work type" }),
+    ).toBeDisabled();
+    await expect(
+      scope.getByRole("textbox", { name: "Request name" }),
+    ).toBeDisabled();
+    await expect(
+      scope.getByRole("textbox", { name: "Request" }),
+    ).toBeDisabled();
+    await expect(
+      scope.getByRole("button", { name: "Submit work" }),
+    ).toBeDisabled();
+    await expect(
+      scope.getByText("No work types are available to submit right now."),
+    ).toBeVisible();
   },
 };
 
@@ -99,14 +111,44 @@ export const FailureRetry = {
     const card = await canvas.findByRole("article", { name: "Submit work" });
     const scope = within(card);
 
-    await expect(scope.getByRole("combobox", { name: "Work type" })).toHaveValue("story");
-    await expect(scope.getByRole("textbox", { name: "Request name" })).toHaveValue(
-      "Retry dashboard request",
-    );
+    await expect(
+      scope.getByRole("combobox", { name: "Work type" }),
+    ).toHaveValue("story");
+    await expect(
+      scope.getByRole("textbox", { name: "Request name" }),
+    ).toHaveValue("Retry dashboard request");
     await expect(scope.getByRole("textbox", { name: "Request" })).toHaveValue(
       "Retry the broken submission.",
     );
     await expect(scope.getByText("work_type_name is required")).toBeVisible();
-    await expect(scope.getByRole("button", { name: "Submit work" })).toBeEnabled();
+    await expect(
+      scope.getByRole("button", { name: "Submit work" }),
+    ).toBeEnabled();
+  },
+};
+
+export const LocalizedZhCN = {
+  args: {
+    locale: "zh-CN",
+    submitWorkTypes: [{ work_type_name: "story" }, { work_type_name: "task" }],
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "提交工作" });
+    const scope = within(card);
+
+    await expect(
+      scope.getByRole("combobox", { name: "工作类型" }),
+    ).toBeVisible();
+    await expect(
+      scope.getByRole("textbox", { name: "请求名称" }),
+    ).toBeVisible();
+    await expect(scope.getByRole("textbox", { name: "请求" })).toBeVisible();
+    await expect(
+      scope.getByText("先选择工作类型，再描述你需要完成什么。"),
+    ).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: "提交工作" }),
+    ).toBeDisabled();
   },
 };

@@ -1,14 +1,10 @@
 import "@xyflow/react/dist/style.css";
 import {
-  applyNodeChanges,
   Background,
   Controls,
-  type FitViewOptions,
-  type NodeChange,
   ReactFlow,
 } from "@xyflow/react";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -19,9 +15,7 @@ import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-t
 import { cx } from "../../lib/cx";
 import {
   CURRENT_ACTIVITY_NODE_TYPES,
-  type CurrentActivityNode,
 } from "../flowchart/current-activity-nodes";
-import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
 import {
   FactoryImportPreviewDialog,
   type FactoryPngImportValue,
@@ -36,37 +30,26 @@ import {
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
-import {
-  groupActiveExecutionsByWorkstationNodeID,
-  useActiveExecutions,
-} from "./react-flow-current-activity-card-active-executions";
-import {
-  buildActiveGraphHighlights,
-  buildActiveItemLabelsByPlaceId,
-  buildCurrentActivityNodes,
-  buildGraphEdges,
-  buildHandleAssignments,
-  buildVisibleGraphEdges,
-  EMPTY_GRAPH_LAYOUT,
-  EMPTY_NODE_POSITIONS,
-  initialFocusNodes,
-} from "./react-flow-current-activity-card-graph";
+import { EmptyCurrentActivityCard } from "./empty-current-activity-card";
+import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
 import {
   GraphDropOverlay,
   GraphImportErrorPanel,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
-import { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
-import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
-import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
+import { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card-view-model";
 
-export { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
+export {
+  currentActivityGraphKey,
+  currentActivityTopologyKey,
+} from "./react-flow-current-activity-card-keys";
 
 const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
 const GRAPH_BACKGROUND_GAP = 24;
 const GRAPH_BACKGROUND_SIZE = 1;
 
-type CSSPropertiesWithVariables = CSSProperties & Record<`--${string}`, string | number>;
+type CSSPropertiesWithVariables = CSSProperties &
+  Record<`--${string}`, string | number>;
 
 const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   "--xy-controls-box-shadow": "none",
@@ -85,8 +68,6 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
   overflow: "hidden",
 };
 
-const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
-const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
 const CURRENT_ACTIVITY_CARD_CLASS =
   "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
 const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
@@ -134,251 +115,6 @@ interface ReactFlowCurrentActivityCardProps {
   snapshot: DashboardSnapshot;
 }
 
-function useGraphLayout(snapshot: DashboardSnapshot) {
-  const topologyKey = useMemo(
-    () => currentActivityTopologyKey(snapshot.topology),
-    [snapshot.topology],
-  );
-  const layoutTopology = useMemo(() => snapshot.topology, [snapshot.topology]);
-  const [graphLayout, setGraphLayout] =
-    useState<GraphLayout>(EMPTY_GRAPH_LAYOUT);
-
-  useEffect(() => {
-    let cancelled = false;
-    const cachedLayout = GRAPH_LAYOUT_CACHE.get(topologyKey);
-    if (cachedLayout) {
-      setGraphLayout(cachedLayout);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const inFlightLayout =
-      GRAPH_LAYOUT_PROMISE_CACHE.get(topologyKey) ??
-      buildGraphLayout(layoutTopology);
-    GRAPH_LAYOUT_PROMISE_CACHE.set(topologyKey, inFlightLayout);
-
-    inFlightLayout
-      .then((layout) => {
-        GRAPH_LAYOUT_CACHE.set(topologyKey, layout);
-        GRAPH_LAYOUT_PROMISE_CACHE.delete(topologyKey);
-        if (!cancelled) {
-          setGraphLayout(layout);
-        }
-      })
-      .catch(() => {
-        GRAPH_LAYOUT_PROMISE_CACHE.delete(topologyKey);
-        if (!cancelled) {
-          setGraphLayout(EMPTY_GRAPH_LAYOUT);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [layoutTopology, topologyKey]);
-
-  return graphLayout;
-}
-
-function useCurrentActivityBaseNodes({
-  activeExecutionsByWorkstationNodeID,
-  activeGraphHighlights,
-  activeItemLabelsByPlaceId,
-  graphLayout,
-  handleAssignments,
-  now,
-  onSelectStateNode,
-  onSelectWorkItem,
-  onSelectWorkstation,
-  selection,
-  snapshot,
-  storedNodePositions,
-}: Pick<
-  ReactFlowCurrentActivityCardProps,
-  | "now"
-  | "onSelectStateNode"
-  | "onSelectWorkItem"
-  | "onSelectWorkstation"
-  | "selection"
-  | "snapshot"
-> & {
-  activeExecutionsByWorkstationNodeID: Record<
-    string,
-    DashboardActiveExecution[]
-  >;
-  activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
-  activeItemLabelsByPlaceId: ReturnType<typeof buildActiveItemLabelsByPlaceId>;
-  graphLayout: GraphLayout;
-  handleAssignments: ReturnType<typeof buildHandleAssignments>;
-  storedNodePositions: typeof EMPTY_NODE_POSITIONS;
-}) {
-  return useMemo<CurrentActivityNode[]>(
-    () =>
-      buildCurrentActivityNodes({
-        activeExecutionsByWorkstationNodeID,
-        activeGraphHighlights,
-        activeItemLabelsByPlaceId,
-        graphLayout,
-        handleAssignments,
-        now,
-        onSelectStateNode,
-        onSelectWorkItem,
-        onSelectWorkstation,
-        selection,
-        snapshot,
-        storedNodePositions,
-      }),
-    [
-      activeExecutionsByWorkstationNodeID,
-      activeGraphHighlights,
-      activeItemLabelsByPlaceId,
-      graphLayout,
-      handleAssignments,
-      now,
-      onSelectStateNode,
-      onSelectWorkItem,
-      onSelectWorkstation,
-      selection,
-      snapshot,
-      storedNodePositions,
-    ],
-  );
-}
-
-function useCurrentActivityGraphViewModel({
-  now,
-  onSelectStateNode,
-  onSelectWorkItem,
-  onSelectWorkstation,
-  selection,
-  snapshot,
-}: Pick<
-  ReactFlowCurrentActivityCardProps,
-  | "now"
-  | "onSelectStateNode"
-  | "onSelectWorkItem"
-  | "onSelectWorkstation"
-  | "selection"
-  | "snapshot"
->) {
-  const activeExecutions = useActiveExecutions(snapshot);
-  const activeExecutionsByWorkstationNodeID = useMemo(
-    () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
-    [activeExecutions],
-  );
-  const graphLayout = useGraphLayout(snapshot);
-  const graphKey = useMemo(
-    () => currentActivityGraphKey(graphLayout),
-    [graphLayout],
-  );
-  const storedNodePositions = useCurrentActivityGraphStore(
-    (state) => state.positionsByGraphKey[graphKey] ?? EMPTY_NODE_POSITIONS,
-  );
-  const setStoredNodePosition = useCurrentActivityGraphStore(
-    (state) => state.setNodePosition,
-  );
-  const visibleGraphEdges = useMemo(
-    () => buildVisibleGraphEdges(graphLayout),
-    [graphLayout],
-  );
-  const handleAssignments = useMemo(
-    () => buildHandleAssignments(visibleGraphEdges),
-    [visibleGraphEdges],
-  );
-  const activeGraphHighlights = useMemo(
-    () => buildActiveGraphHighlights(activeExecutions, visibleGraphEdges),
-    [activeExecutions, visibleGraphEdges],
-  );
-  const activeItemLabelsByPlaceId = useMemo(
-    () => buildActiveItemLabelsByPlaceId(activeExecutions),
-    [activeExecutions],
-  );
-  const baseNodes = useCurrentActivityBaseNodes({
-    activeExecutionsByWorkstationNodeID,
-    activeGraphHighlights,
-    activeItemLabelsByPlaceId,
-    graphLayout,
-    handleAssignments,
-    now,
-    onSelectStateNode,
-    onSelectWorkItem,
-    onSelectWorkstation,
-    selection,
-    snapshot,
-    storedNodePositions,
-  });
-  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
-
-  useEffect(() => {
-    setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
-      );
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
-    });
-  }, [baseNodes]);
-
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes(
-      (currentNodes) =>
-        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
-    );
-  }, []);
-  const edges = useMemo(
-    () =>
-      buildGraphEdges(
-        activeGraphHighlights,
-        handleAssignments,
-        visibleGraphEdges,
-      ),
-    [activeGraphHighlights, handleAssignments, visibleGraphEdges],
-  );
-  const initialFitViewOptions = useMemo<FitViewOptions>(
-    () => ({
-      maxZoom: 1.15,
-      minZoom: 0.7,
-      nodes: initialFocusNodes(graphLayout),
-      padding: 0.18,
-    }),
-    [graphLayout],
-  );
-
-  return {
-    edges,
-    graphKey,
-    handleNodesChange,
-    initialFitViewKey:
-      initialFitViewOptions.nodes?.map((node) => node.id).join(":") ||
-      "full-graph",
-    initialFitViewOptions,
-    nodes,
-    setStoredNodePosition,
-  };
-}
-
-function EmptyCurrentActivityCard({ locale }: { locale?: string }) {
-  const messages = getWorkflowActivityShellMessages(locale);
-
-  return (
-    <section
-      aria-labelledby="workflow-graph-heading"
-      className={CURRENT_ACTIVITY_CARD_CLASS}
-    >
-      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityCardHeading locale={locale} />
-      </div>
-      <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
-        <h3>{messages.emptyTitle}</h3>
-        <p>{messages.emptyMessage}</p>
-      </div>
-    </section>
-  );
-}
-
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
@@ -392,7 +128,8 @@ export function ReactFlowCurrentActivityCard(
   const imports = props.importController ?? fallbackImportController;
   const shouldRenderImportPreviewDialog = props.importController === undefined;
 
-  if (props.snapshot.topology.workstation_node_ids.length === 0) return <EmptyCurrentActivityCard locale={props.locale} />;
+  if (props.snapshot.topology.workstation_node_ids.length === 0)
+    return <EmptyCurrentActivityCard locale={props.locale} />;
   const shellMessages = getWorkflowActivityShellMessages(props.locale);
 
   const readyImportPreviewState =
