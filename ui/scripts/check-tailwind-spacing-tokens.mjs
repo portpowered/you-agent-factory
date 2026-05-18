@@ -13,6 +13,7 @@ const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const skippedFileSuffixes = [".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".stories.tsx"];
 const skippedDirectoryNames = new Set(["generated"]);
 const skippedPathFragments = [`${path.sep}api${path.sep}generated${path.sep}`];
+const intrinsicSizingExceptionMarker = "tailwind-exception: intrinsic-sizing";
 const utilityPrefixPattern = [
   "p",
   "px",
@@ -69,6 +70,12 @@ const utilityPrefixPattern = [
   "rounded-tr",
   "rounded-br",
   "rounded-bl",
+  "w",
+  "min-w",
+  "max-w",
+  "h",
+  "min-h",
+  "max-h",
 ].join("|");
 const arbitrarySpacingPattern = new RegExp(
   String.raw`(?:^|:)(-?(?:${utilityPrefixPattern})-\[[^\]]+\])$`,
@@ -76,6 +83,7 @@ const arbitrarySpacingPattern = new RegExp(
 const customBreakpointVariantPattern = /(?:^|:)(?:max|min)-\[[^\]]+\]:/;
 const customMediaVariantPattern = /(?:^|:)\[@media[^\]]+\]:/;
 const tokenPattern = /[^\s"'`]+/g;
+const arbitrarySizeUtilityPattern = /(?:^|:)-?(?:w|min-w|max-w|h|min-h|max-h)-\[[^\]]+\]$/;
 
 function stripTokenPunctuation(rawToken) {
   return rawToken
@@ -135,11 +143,18 @@ function indexToPosition(sourceText, index) {
   return { column, line };
 }
 
+function hasIntrinsicSizingException(sourceLines, lineNumber) {
+  const candidateLines = sourceLines.slice(Math.max(0, lineNumber - 3), lineNumber);
+  return candidateLines.some((line) => line.includes(intrinsicSizingExceptionMarker));
+}
+
 function findTailwindTokenViolations(sourceText) {
+  const sourceLines = sourceText.split("\n");
   const violations = [];
   for (const match of sourceText.matchAll(tokenPattern)) {
     const rawToken = match[0];
     const token = stripTokenPunctuation(rawToken);
+    const tokenIndex = match.index ?? 0;
 
     if (token.length === 0) {
       continue;
@@ -151,7 +166,7 @@ function findTailwindTokenViolations(sourceText) {
         message:
           "Custom responsive breakpoint variants are not allowed for ordinary layout. Use approved variants such as sm:, md:, lg:, xl:, 2xl:, or a documented named project breakpoint.",
         token,
-        tokenIndex: match.index ?? 0,
+        tokenIndex,
       });
       continue;
     }
@@ -161,12 +176,19 @@ function findTailwindTokenViolations(sourceText) {
       continue;
     }
 
+    if (
+      arbitrarySizeUtilityPattern.test(arbitrarySpacingMatch[1]) &&
+      hasIntrinsicSizingException(sourceLines, indexToPosition(sourceText, tokenIndex).line)
+    ) {
+      continue;
+    }
+
     violations.push({
       kind: "arbitrary-spacing",
       message:
-        "Arbitrary Tailwind spacing utilities are not allowed for ordinary layout rhythm. Use an approved spacing token or move a true intrinsic sizing exception out of the spacing utility set.",
+        "Arbitrary Tailwind spacing utilities are not allowed for ordinary layout rhythm. Use an approved spacing token or document a true intrinsic sizing case with `tailwind-exception: intrinsic-sizing`.",
       token: arbitrarySpacingMatch[1],
-      tokenIndex: match.index ?? 0,
+      tokenIndex,
     });
   }
 

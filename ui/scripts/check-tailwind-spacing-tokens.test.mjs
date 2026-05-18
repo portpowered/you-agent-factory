@@ -31,9 +31,14 @@ async function createSourceTree(files) {
 test("scanTailwindSpacingTokens allows standard tokens and intrinsic sizing exceptions", async () => {
   const { srcDir, tempRoot } = await createSourceTree({
     "feature.tsx": `
+      // tailwind-exception: intrinsic-sizing
+      const INTRINSIC_PANEL_CLASS = "min-h-[34rem] h-[min(80vh,48rem)]";
+
       export function Feature() {
         return (
           <div className="grid gap-4 rounded-2xl p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+            <div className={INTRINSIC_PANEL_CLASS} />
+            {/* tailwind-exception: intrinsic-sizing */}
             <div className="w-[min(92vw,60rem)] max-h-[24rem] min-h-[34rem]" />
           </div>
         );
@@ -53,7 +58,7 @@ test("scanTailwindSpacingTokens rejects arbitrary spacing utilities and custom b
     "feature.tsx": `
       export function Feature() {
         return (
-          <div className="gap-[0.8rem] rounded-[1.25rem] p-4 max-[900px]:p-3 min-[901px]:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]" />
+          <div className="gap-[0.8rem] rounded-[1.25rem] p-4 max-w-[32rem] max-[900px]:p-3 min-[901px]:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]" />
         );
       }
     `,
@@ -63,6 +68,7 @@ test("scanTailwindSpacingTokens rejects arbitrary spacing utilities and custom b
     await expect(scanTailwindSpacingTokens(srcDir)).resolves.toEqual([
       expect.objectContaining({ kind: "arbitrary-spacing", token: "gap-[0.8rem]" }),
       expect.objectContaining({ kind: "arbitrary-spacing", token: "rounded-[1.25rem]" }),
+      expect.objectContaining({ kind: "arbitrary-spacing", token: "max-w-[32rem]" }),
       expect.objectContaining({ kind: "custom-breakpoint", token: "max-[900px]:p-3" }),
       expect.objectContaining({
         kind: "custom-breakpoint",
@@ -123,6 +129,14 @@ test("CLI output reports actionable violations", async () => {
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining("Tailwind spacing token guard failed."),
+    });
+    await expect(
+      execFileAsync(process.execPath, [scriptPath], {
+        cwd: tempRoot,
+        env: { ...process.env, AGENT_FACTORY_UI_SRC_DIR: srcDir },
+      }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("tailwind-exception: intrinsic-sizing"),
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });

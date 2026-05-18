@@ -35,6 +35,7 @@ export const WORK_CHART_ERROR_TITLE = "Work outcome chart unavailable";
 export const WORK_CHART_ERROR_MESSAGE =
   "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.";
 const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
+// tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =
   "h-[16rem] min-h-[14rem] px-5 pb-5 pt-4 sm:h-[18rem] sm:px-6 sm:pb-6 sm:pt-5";
 const WORK_CHART_OVERLAY_CLASS =

@@ -38,6 +38,7 @@ export const INFERENCE_ATTEMPT_DETAIL_CLASS = cx(
   "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[8.5rem_minmax(0,1fr)] [&_div]:gap-2",
   DASHBOARD_BODY_TEXT_CLASS,
 );
+// tailwind-exception: intrinsic-sizing
 export const INFERENCE_ATTEMPT_TEXT_CLASS = cx(
   "m-0 min-h-[20rem] whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 md:min-h-[26rem] lg:min-h-[min(70vh,36rem)] [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
