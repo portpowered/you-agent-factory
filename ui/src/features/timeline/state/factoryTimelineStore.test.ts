@@ -191,7 +191,10 @@ workRequest.context.traceIds = ["trace-batch"];
 workRequest.context.workIds = ["work-batch-first", "work-batch-second"];
 relationshipChangeRequest.context.requestId = "request-batch-1";
 relationshipChangeRequest.context.traceIds = ["trace-batch"];
-relationshipChangeRequest.context.workIds = ["work-batch-second", "work-batch-first"];
+relationshipChangeRequest.context.workIds = [
+  "work-batch-second",
+  "work-batch-first",
+];
 workInput.context.requestId = "request-work-1";
 workInput.context.traceIds = ["trace-1"];
 workInput.context.workIds = ["work-1"];
@@ -315,11 +318,16 @@ failedInferenceResponse.context.traceIds = ["trace-1"];
 failedInferenceResponse.context.workIds = ["work-1"];
 failedInferenceResponse.context.eventTime = "2026-04-16T12:00:07Z";
 
-const lifecycle = event("event-5", 5, FACTORY_EVENT_TYPES.factoryStateResponse, {
-  previousState: "RUNNING",
-  reason: "test",
-  state: "PAUSED",
-});
+const lifecycle = event(
+  "event-5",
+  5,
+  FACTORY_EVENT_TYPES.factoryStateResponse,
+  {
+    previousState: "RUNNING",
+    reason: "test",
+    state: "PAUSED",
+  },
+);
 
 const resourceInitialStructure = event(
   "event-resource-1",
@@ -382,12 +390,12 @@ const failedWorkInput = event(
   FACTORY_EVENT_TYPES.workRequest,
   {
     type: "FACTORY_REQUEST_BATCH",
-  works: [
-    {
-      name: "Blocked Timeline Story",
-      trace_id: "trace-failed",
-      work_id: "work-failed",
-      work_type_id: "story",
+    works: [
+      {
+        name: "Blocked Timeline Story",
+        trace_id: "trace-failed",
+        work_id: "work-failed",
+        work_type_id: "story",
       },
     ],
   },
@@ -570,11 +578,11 @@ const rejectedResponse = event(
   {
     dispatchId: "dispatch-rejected",
     diagnostics: {
-        provider: {
-          model: "gpt-5.4-mini",
-          provider: "codex",
-          requestMetadata: {
-            prompt_source: "factory-renderer",
+      provider: {
+        model: "gpt-5.4-mini",
+        provider: "codex",
+        requestMetadata: {
+          prompt_source: "factory-renderer",
         },
         responseMetadata: {
           retry_count: "0",
@@ -1062,11 +1070,14 @@ scriptFailedDispatchResponse.context.dispatchId = "dispatch-script-failed";
 scriptFailedDispatchResponse.context.traceIds = ["trace-script-failed"];
 scriptFailedDispatchResponse.context.workIds = ["work-script-failed"];
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this regression suite intentionally stays in one block so long-running timeline scenarios remain easy to audit together.
-describe("factory timeline reconstruction", () => {
+function resetTimelineStoreAfterEach() {
   afterEach(() => {
     useFactoryTimelineStore.getState().reset();
   });
+}
+
+describe("factory timeline reconstruction topology", () => {
+  resetTimelineStoreAfterEach();
 
   it("prefers configured work-type names for submit-work options", () => {
     expect(resolveConfiguredWorkTypeName("story-internal", "story")).toBe(
@@ -1088,9 +1099,7 @@ describe("factory timeline reconstruction", () => {
       "complete",
       "review",
     ]);
-    expect(snapshot.runtime.place_token_counts?.["story:new"]).toBe(
-      1,
-    );
+    expect(snapshot.runtime.place_token_counts?.["story:new"]).toBe(1);
     expect(
       snapshot.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
@@ -1136,9 +1145,7 @@ describe("factory timeline reconstruction", () => {
       },
     ]);
     expect(
-      tickTwo.runtime.current_work_items_by_place_id?.[
-        "story:review"
-      ],
+      tickTwo.runtime.current_work_items_by_place_id?.["story:review"],
     ).toEqual([]);
     expect(tickTwo.topology.edges).toEqual([
       {
@@ -1154,22 +1161,17 @@ describe("factory timeline reconstruction", () => {
     ]);
     expect(tickTwo.runtime.in_flight_dispatch_count).toBe(0);
     expect(tickThree.runtime.in_flight_dispatch_count).toBe(1);
-    expect(
-      tickThree.runtime.place_token_counts?.["story:new"],
-    ).toBeUndefined();
+    expect(tickThree.runtime.place_token_counts?.["story:new"]).toBeUndefined();
     expect(
       tickThree.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([]);
-    expect(tickThree.runtime.active_workstation_node_ids).toEqual([
-      "review",
-    ]);
+    expect(tickThree.runtime.active_workstation_node_ids).toEqual(["review"]);
     expect(tickFour.runtime.session.completed_count).toBe(1);
     expect(tickFour.runtime.session.completed_work_labels).toEqual([
       "Timeline Story",
     ]);
     expect(
-      tickFour.runtime.session.provider_sessions?.[0]
-        ?.provider_session?.id,
+      tickFour.runtime.session.provider_sessions?.[0]?.provider_session?.id,
     ).toBe("session-1");
     expect(
       tickFour.runtime.current_work_items_by_place_id?.["story:done"],
@@ -1201,25 +1203,17 @@ describe("factory timeline reconstruction", () => {
       },
     ]);
     expect(
-      tickTwo.runtime.current_work_items_by_place_id?.[
-        "story:review"
-      ],
+      tickTwo.runtime.current_work_items_by_place_id?.["story:review"],
     ).toEqual([]);
-    expect(
-      tickThree.runtime.place_token_counts?.["story:new"],
-    ).toBeUndefined();
+    expect(tickThree.runtime.place_token_counts?.["story:new"]).toBeUndefined();
     expect(
       tickThree.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([]);
     expect(
-      tickThree.runtime.current_work_items_by_place_id?.[
-        "story:review"
-      ],
+      tickThree.runtime.current_work_items_by_place_id?.["story:review"],
     ).toEqual([]);
     expect(
-      tickThree.runtime.current_work_items_by_place_id?.[
-        "story:done"
-      ],
+      tickThree.runtime.current_work_items_by_place_id?.["story:done"],
     ).toBeUndefined();
     expect(tickThree.runtime.in_flight_dispatch_count).toBe(1);
   });
@@ -1251,7 +1245,9 @@ describe("factory timeline reconstruction", () => {
       output_place_ids: ["story:done", "story:retry"],
       output_work_type_ids: ["story"],
     });
-    expect(continued.runtime.current_work_items_by_place_id?.["story:retry"]).toEqual([
+    expect(
+      continued.runtime.current_work_items_by_place_id?.["story:retry"],
+    ).toEqual([
       {
         display_name: "Continued Timeline Story",
         trace_id: "trace-continued",
@@ -1259,10 +1255,13 @@ describe("factory timeline reconstruction", () => {
         work_type_id: "story",
       },
     ]);
-    expect(continued.runtime.current_work_items_by_place_id?.["story:done"]).toBeUndefined();
     expect(
-      continued.runtime.workstation_requests_by_dispatch_id?.["dispatch-continued"]?.response
-        ?.outcome,
+      continued.runtime.current_work_items_by_place_id?.["story:done"],
+    ).toBeUndefined();
+    expect(
+      continued.runtime.workstation_requests_by_dispatch_id?.[
+        "dispatch-continued"
+      ]?.response?.outcome,
     ).toBe("CONTINUE");
   });
 
@@ -1276,22 +1275,16 @@ describe("factory timeline reconstruction", () => {
     const active = buildFactoryTimelineSnapshot(events, 2);
     const released = buildFactoryTimelineSnapshot(events, 3);
 
-    expect(
-      idle.runtime.place_token_counts?.["agent-slot:available"],
-    ).toBe(2);
-    expect(idle.runtime.place_token_counts?.["gpu:available"]).toBe(
-      1,
-    );
+    expect(idle.runtime.place_token_counts?.["agent-slot:available"]).toBe(2);
+    expect(idle.runtime.place_token_counts?.["gpu:available"]).toBe(1);
     expect(
       idle.runtime.place_token_counts?.["empty-slot:available"],
     ).toBeUndefined();
-    expect(
-      active.runtime.place_token_counts?.["agent-slot:available"],
-    ).toBe(1);
+    expect(active.runtime.place_token_counts?.["agent-slot:available"]).toBe(1);
     expect(active.runtime.in_flight_dispatch_count).toBe(1);
-    expect(
-      released.runtime.place_token_counts?.["agent-slot:available"],
-    ).toBe(2);
+    expect(released.runtime.place_token_counts?.["agent-slot:available"]).toBe(
+      2,
+    );
     expect(released.runtime.in_flight_dispatch_count).toBe(0);
   });
 
@@ -1476,8 +1469,12 @@ describe("factory timeline reconstruction", () => {
     const completed = buildFactoryTimelineSnapshot(events, 4);
 
     expect(queued.topology.workstation_node_ids).toEqual(["ideafy"]);
-    expect(queued.runtime.place_token_counts?.["executor-slot:available"]).toBe(10);
-    expect(queued.runtime.current_work_items_by_place_id?.["thoughts:init"]).toEqual([
+    expect(queued.runtime.place_token_counts?.["executor-slot:available"]).toBe(
+      10,
+    );
+    expect(
+      queued.runtime.current_work_items_by_place_id?.["thoughts:init"],
+    ).toEqual([
       {
         display_name: "agents-04-21-2026",
         trace_id: "trace-camel-1",
@@ -1487,7 +1484,9 @@ describe("factory timeline reconstruction", () => {
     ]);
 
     expect(active.runtime.in_flight_dispatch_count).toBe(1);
-    expect(active.runtime.place_token_counts?.["executor-slot:available"]).toBe(9);
+    expect(active.runtime.place_token_counts?.["executor-slot:available"]).toBe(
+      9,
+    );
     expect(
       active.runtime.active_executions_by_dispatch_id?.["dispatch-camel-1"]
         ?.model_provider,
@@ -1496,12 +1495,14 @@ describe("factory timeline reconstruction", () => {
       active.runtime.active_executions_by_dispatch_id?.["dispatch-camel-1"]
         ?.provider,
     ).toBe("SCRIPT_WRAP");
-    expect(active.runtime.current_work_items_by_place_id?.["thoughts:init"]).toEqual(
-      [],
-    );
+    expect(
+      active.runtime.current_work_items_by_place_id?.["thoughts:init"],
+    ).toEqual([]);
 
     expect(completed.runtime.in_flight_dispatch_count).toBe(0);
-    expect(completed.runtime.place_token_counts?.["executor-slot:available"]).toBe(10);
+    expect(
+      completed.runtime.place_token_counts?.["executor-slot:available"],
+    ).toBe(10);
     expect(
       completed.runtime.current_work_items_by_place_id?.["thoughts:complete"],
     ).toBeUndefined();
@@ -1581,23 +1582,21 @@ describe("factory timeline reconstruction", () => {
     );
 
     expect(
-      idle.runtime.place_token_counts?.[
-        resourceCountAvailablePlaceID
-      ],
+      idle.runtime.place_token_counts?.[resourceCountAvailablePlaceID],
     ).toBe(2);
     expect(
-      active.runtime.place_token_counts?.[
-        resourceCountAvailablePlaceID
-      ],
+      active.runtime.place_token_counts?.[resourceCountAvailablePlaceID],
     ).toBe(1);
     expect(active.runtime.in_flight_dispatch_count).toBe(1);
     expect(
-      released.runtime.place_token_counts?.[
-        resourceCountAvailablePlaceID
-      ],
+      released.runtime.place_token_counts?.[resourceCountAvailablePlaceID],
     ).toBe(2);
     expect(released.runtime.in_flight_dispatch_count).toBe(0);
   });
+});
+
+describe("factory timeline reconstruction trace lineage", () => {
+  resetTimelineStoreAfterEach();
 
   it("preserves batch membership and dependency relations from canonical events", () => {
     const tickTwo = buildFactoryTimelineSnapshot(
@@ -1748,9 +1747,8 @@ describe("factory timeline reconstruction", () => {
     );
 
     expect(
-      tickThree.runtime.active_executions_by_dispatch_id?.[
-        "dispatch-chain"
-      ]?.work_items,
+      tickThree.runtime.active_executions_by_dispatch_id?.["dispatch-chain"]
+        ?.work_items,
     ).toEqual([
       {
         current_chaining_trace_id: "chain-a",
@@ -1787,9 +1785,8 @@ describe("factory timeline reconstruction", () => {
       },
     ]);
     expect(
-      tickFour.runtime.workstation_requests_by_dispatch_id?.[
-        "dispatch-chain"
-      ]?.request?.input_work_items,
+      tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
+        ?.request?.input_work_items,
     ).toEqual([
       {
         current_chaining_trace_id: "chain-a",
@@ -1807,9 +1804,8 @@ describe("factory timeline reconstruction", () => {
       },
     ]);
     expect(
-      tickFour.runtime.workstation_requests_by_dispatch_id?.[
-        "dispatch-chain"
-      ]?.response?.output_work_items,
+      tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
+        ?.response?.output_work_items,
     ).toEqual([
       {
         current_chaining_trace_id: "chain-a",
@@ -1833,19 +1829,20 @@ describe("factory timeline reconstruction", () => {
         work_type_id: "story",
       },
     ]);
-    expect(tickFour.workstationRequestsByDispatchID["dispatch-chain"]?.work_items)
-      .toEqual(
-        expect.arrayContaining([
-          {
-            current_chaining_trace_id: "chain-a",
-            display_name: "Fan In Result",
-            previous_chaining_trace_ids: ["chain-a", "chain-b"],
-            trace_id: "chain-a",
-            work_id: "work-chain-result",
-            work_type_id: "story",
-          },
-        ]),
-      );
+    expect(
+      tickFour.workstationRequestsByDispatchID["dispatch-chain"]?.work_items,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          current_chaining_trace_id: "chain-a",
+          display_name: "Fan In Result",
+          previous_chaining_trace_ids: ["chain-a", "chain-b"],
+          trace_id: "chain-a",
+          work_id: "work-chain-result",
+          work_type_id: "story",
+        },
+      ]),
+    );
     expect(
       tickFour.tracesByWorkID["work-chain-result"].dispatches[0],
     ).toMatchObject({
@@ -2021,19 +2018,16 @@ describe("factory timeline reconstruction", () => {
         ?.previous_chaining_trace_ids,
     ).toEqual(["chain-a", "chain-b"]);
     expect(
-      tickFour.runtime.workstation_requests_by_dispatch_id?.[
-        "dispatch-chain"
-      ]?.request?.current_chaining_trace_id,
+      tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
+        ?.request?.current_chaining_trace_id,
     ).toBe("chain-a");
     expect(
-      tickFour.runtime.workstation_requests_by_dispatch_id?.[
-        "dispatch-chain"
-      ]?.request?.previous_chaining_trace_ids,
+      tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
+        ?.request?.previous_chaining_trace_ids,
     ).toEqual(["chain-a", "chain-b"]);
     expect(
-      tickFour.runtime.workstation_requests_by_dispatch_id?.[
-        "dispatch-chain"
-      ]?.response?.output_work_items,
+      tickFour.runtime.workstation_requests_by_dispatch_id?.["dispatch-chain"]
+        ?.response?.output_work_items,
     ).toEqual([
       {
         current_chaining_trace_id: "chain-a",
@@ -2089,9 +2083,7 @@ describe("factory timeline reconstruction", () => {
     expect(failedTick.runtime.session.failed_work_labels).toEqual([
       "Blocked Timeline Story",
     ]);
-    expect(
-      failedTick.runtime.session.provider_sessions?.[0],
-    ).toMatchObject({
+    expect(failedTick.runtime.session.provider_sessions?.[0]).toMatchObject({
       dispatch_id: "dispatch-failed",
       failure_message: "Provider rate limit exceeded.",
       failure_reason: "throttled",
@@ -2240,6 +2232,10 @@ describe("factory timeline reconstruction", () => {
       "Reworked Story",
     ]);
   });
+});
+
+describe("factory timeline reconstruction request state", () => {
+  resetTimelineStoreAfterEach();
 
   it("excludes system-time failures from replay failed_count while preserving customer failures", () => {
     const rawSystemTime = "__system_time";
@@ -2448,9 +2444,9 @@ describe("factory timeline reconstruction", () => {
     const completedTick = buildFactoryTimelineSnapshot(events, 5);
 
     const pendingAttempt =
-      pendingTick.runtime.inference_attempts_by_dispatch_id?.[
-        "dispatch-1"
-      ]?.["dispatch-1/inference-request/1"];
+      pendingTick.runtime.inference_attempts_by_dispatch_id?.["dispatch-1"]?.[
+        "dispatch-1/inference-request/1"
+      ];
     expect(pendingAttempt).toMatchObject({
       attempt: 1,
       dispatch_id: "dispatch-1",
@@ -2464,9 +2460,9 @@ describe("factory timeline reconstruction", () => {
     expect(pendingAttempt?.outcome).toBeUndefined();
 
     const completedAttempt =
-      completedTick.runtime.inference_attempts_by_dispatch_id?.[
-        "dispatch-1"
-      ]?.["dispatch-1/inference-request/1"];
+      completedTick.runtime.inference_attempts_by_dispatch_id?.["dispatch-1"]?.[
+        "dispatch-1/inference-request/1"
+      ];
     expect(completedAttempt).toMatchObject({
       duration_millis: 1250,
       outcome: "SUCCEEDED",
@@ -2474,8 +2470,8 @@ describe("factory timeline reconstruction", () => {
       response_time: "2026-04-16T12:00:05Z",
     });
 
-    const failedAttempt = buildFactoryTimelineSnapshot(events, 7)
-      .runtime.inference_attempts_by_dispatch_id?.["dispatch-1"]?.[
+    const failedAttempt = buildFactoryTimelineSnapshot(events, 7).runtime
+      .inference_attempts_by_dispatch_id?.["dispatch-1"]?.[
       "dispatch-1/inference-request/2"
     ];
     expect(failedAttempt).toMatchObject({
@@ -2615,9 +2611,7 @@ describe("factory timeline reconstruction", () => {
     ).toBeUndefined();
 
     expect(
-      mixedTick.runtime.workstation_requests_by_dispatch_id?.[
-        "dispatch-1"
-      ],
+      mixedTick.runtime.workstation_requests_by_dispatch_id?.["dispatch-1"],
     ).toMatchObject({
       counts: {
         dispatched_count: 1,
@@ -2692,9 +2686,7 @@ describe("factory timeline reconstruction", () => {
     );
 
     expect(
-      successTick.runtime.workstation_requests_by_dispatch_id?.[
-        "dispatch-1"
-      ],
+      successTick.runtime.workstation_requests_by_dispatch_id?.["dispatch-1"],
     ).toMatchObject({
       counts: {
         dispatched_count: 1,
@@ -2806,7 +2798,9 @@ describe("factory timeline reconstruction", () => {
       [initialStructureRequest, workInput, request, inferenceRequest],
       4,
     );
-    expect(activeProjected.workstationRequestsByDispatchID["dispatch-1"]).toMatchObject({
+    expect(
+      activeProjected.workstationRequestsByDispatchID["dispatch-1"],
+    ).toMatchObject({
       counts: {
         dispatched_count: 1,
         errored_count: 0,
@@ -2827,7 +2821,8 @@ describe("factory timeline reconstruction", () => {
       },
     });
     expect(
-      activeProjected.workstationRequestsByDispatchID["dispatch-1"].response_view,
+      activeProjected.workstationRequestsByDispatchID["dispatch-1"]
+        .response_view,
     ).toBeUndefined();
 
     const successfulProjected = buildFactoryTimelineSnapshot(
@@ -2842,7 +2837,9 @@ describe("factory timeline reconstruction", () => {
       5,
     );
 
-    expect(Object.keys(successfulProjected.workstationRequestsByDispatchID)).toEqual(["dispatch-1"]);
+    expect(
+      Object.keys(successfulProjected.workstationRequestsByDispatchID),
+    ).toEqual(["dispatch-1"]);
     const successfulRequest =
       successfulProjected.workstationRequestsByDispatchID["dispatch-1"];
     expect(successfulRequest).toMatchObject({
@@ -2936,9 +2933,9 @@ describe("factory timeline reconstruction", () => {
       ],
     });
     expect(
-      successfulProjected.workstationRequestsByDispatchID["dispatch-1"].inference_attempts.map(
-        (attempt) => attempt.inference_request_id,
-      ),
+      successfulProjected.workstationRequestsByDispatchID[
+        "dispatch-1"
+      ].inference_attempts.map((attempt) => attempt.inference_request_id),
     ).toEqual(["dispatch-1/inference-request/1"]);
 
     const rejectedProjected = buildFactoryTimelineSnapshot(
@@ -3042,7 +3039,9 @@ describe("factory timeline reconstruction", () => {
       ],
       5,
     );
-    expect(failedProjected.workstationRequestsByDispatchID["dispatch-failed"]).toMatchObject({
+    expect(
+      failedProjected.workstationRequestsByDispatchID["dispatch-failed"],
+    ).toMatchObject({
       counts: {
         dispatched_count: 1,
         errored_count: 1,
@@ -3066,6 +3065,10 @@ describe("factory timeline reconstruction", () => {
       ],
     });
   });
+});
+
+describe("factory timeline reconstruction dispatch projection", () => {
+  resetTimelineStoreAfterEach();
 
   it("replays legacy dispatch payload fallbacks through active and completed workstation projections", () => {
     const legacyWorkRequest = event(
@@ -3167,7 +3170,9 @@ describe("factory timeline reconstruction", () => {
       3,
     );
     expect(
-      activeProjected.runtime.active_executions_by_dispatch_id?.["dispatch-legacy"],
+      activeProjected.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-legacy"
+      ],
     ).toMatchObject({
       workstation_name: "Legacy Review",
     });
@@ -3295,7 +3300,10 @@ describe("factory timeline reconstruction", () => {
             work_type_id: "story",
           },
         ],
-        previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+        previous_chaining_trace_ids: [
+          "chain-legacy-backfill-a",
+          "chain-legacy-backfill-b",
+        ],
         transitionId: "review",
         workstation: {
           name: "Legacy Review",
@@ -3318,14 +3326,20 @@ describe("factory timeline reconstruction", () => {
         outputWork: [
           {
             name: "Legacy Timeline Story",
-            previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+            previous_chaining_trace_ids: [
+              "chain-legacy-backfill-a",
+              "chain-legacy-backfill-b",
+            ],
             state: "done",
             trace_id: "trace-legacy-backfill",
             work_id: "work-legacy-backfill",
             work_type_id: "story",
           },
         ],
-        previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+        previous_chaining_trace_ids: [
+          "chain-legacy-backfill-a",
+          "chain-legacy-backfill-b",
+        ],
         transitionId: "review",
         workstation: {
           name: "Legacy Review",
@@ -3382,7 +3396,9 @@ describe("factory timeline reconstruction", () => {
       5,
     );
 
-    expect(projected.tracesByWorkID["work-legacy-backfill"]?.dispatches[0]).toMatchObject({
+    expect(
+      projected.tracesByWorkID["work-legacy-backfill"]?.dispatches[0],
+    ).toMatchObject({
       current_chaining_trace_id: "chain-legacy-backfill-current",
       diagnostics: {
         provider: {
@@ -3397,7 +3413,10 @@ describe("factory timeline reconstruction", () => {
         },
       },
       dispatch_id: "dispatch-legacy-backfill",
-      previous_chaining_trace_ids: ["chain-legacy-backfill-a", "chain-legacy-backfill-b"],
+      previous_chaining_trace_ids: [
+        "chain-legacy-backfill-a",
+        "chain-legacy-backfill-b",
+      ],
       provider_session: {
         id: "legacy-session-2",
         provider: "openai",
@@ -3421,6 +3440,10 @@ describe("factory timeline reconstruction", () => {
       workstation_name: "Legacy Review",
     });
   });
+});
+
+describe("factory timeline store replay", () => {
+  resetTimelineStoreAfterEach();
 
   it("projects script-aware workstation requests by dispatch id without inference-shaped fallbacks", () => {
     const projected = buildFactoryTimelineSnapshot(
@@ -3464,7 +3487,8 @@ describe("factory timeline reconstruction", () => {
       workstation_node_id: "review",
     });
     expect(
-      projected.workstationRequestsByDispatchID["dispatch-script-pending"].response,
+      projected.workstationRequestsByDispatchID["dispatch-script-pending"]
+        .response,
     ).toBeUndefined();
     expect(
       projected.workstationRequestsByDispatchID["dispatch-script-pending"]
@@ -3493,7 +3517,8 @@ describe("factory timeline reconstruction", () => {
       },
     });
     expect(
-      projected.workstationRequestsByDispatchID["dispatch-script-success"].response,
+      projected.workstationRequestsByDispatchID["dispatch-script-success"]
+        .response,
     ).toBeUndefined();
 
     expect(
@@ -3521,10 +3546,13 @@ describe("factory timeline reconstruction", () => {
       },
     });
     expect(
-      projected.workstationRequestsByDispatchID["dispatch-script-failed"].response,
+      projected.workstationRequestsByDispatchID["dispatch-script-failed"]
+        .response,
     ).toBeUndefined();
 
-    expect(projected.workstationRequestsByDispatchID["dispatch-1"]).toMatchObject({
+    expect(
+      projected.workstationRequestsByDispatchID["dispatch-1"],
+    ).toMatchObject({
       dispatched_request_count: 1,
       errored_request_count: 0,
       responded_request_count: 1,
@@ -3558,9 +3586,7 @@ describe("factory timeline reconstruction", () => {
     );
 
     expect(
-      projected.runtime.active_executions_by_dispatch_id?.[
-        "dispatch-thin-1"
-      ],
+      projected.runtime.active_executions_by_dispatch_id?.["dispatch-thin-1"],
     ).toMatchObject({
       transition_id: "review",
       workstation_name: "Review",
@@ -3664,7 +3690,9 @@ describe("factory timeline reconstruction", () => {
       5,
     );
 
-    expect(projected.workstationRequestsByDispatchID["dispatch-failed"]).toMatchObject({
+    expect(
+      projected.workstationRequestsByDispatchID["dispatch-failed"],
+    ).toMatchObject({
       dispatched_request_count: 1,
       errored_request_count: 1,
       responded_request_count: 0,
@@ -3692,9 +3720,7 @@ describe("factory timeline reconstruction", () => {
       ],
     ).toBeUndefined();
     expect(
-      activeTick.runtime.current_work_items_by_place_id?.[
-        "story:new"
-      ],
+      activeTick.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
       {
         display_name: "Queued Analysis Story",
@@ -3709,9 +3735,7 @@ describe("factory timeline reconstruction", () => {
       4,
     );
     expect(
-      failedTick.runtime.current_work_items_by_place_id?.[
-        "story:new"
-      ],
+      failedTick.runtime.current_work_items_by_place_id?.["story:new"],
     ).toEqual([
       {
         display_name: "Queued Analysis Story",
@@ -3881,9 +3905,7 @@ describe("factory timeline reconstruction", () => {
     expect(activeTick.topology.submit_work_types).toEqual([
       { work_type_name: "story" },
     ]);
-    expect(activeTick.topology.workstation_node_ids).toEqual([
-      "daily-refresh",
-    ]);
+    expect(activeTick.topology.workstation_node_ids).toEqual(["daily-refresh"]);
     expect(
       activeTick.topology.workstation_nodes_by_id["daily-refresh"],
     ).toMatchObject({
@@ -3892,9 +3914,7 @@ describe("factory timeline reconstruction", () => {
       workstation_name: "Daily refresh",
     });
     expect(
-      activeTick.runtime.place_token_counts?.[
-        "__system_time:pending"
-      ],
+      activeTick.runtime.place_token_counts?.["__system_time:pending"],
     ).toBeUndefined();
     expect(
       activeTick.runtime.current_work_items_by_place_id?.[
@@ -3905,13 +3925,9 @@ describe("factory timeline reconstruction", () => {
       "time:expire",
     ]);
     expect(activeTick.runtime.active_dispatch_ids).toEqual([]);
-    expect(
-      activeTick.runtime.active_executions_by_dispatch_id,
-    ).toEqual({});
+    expect(activeTick.runtime.active_executions_by_dispatch_id).toEqual({});
     expect(activeTick.runtime.in_flight_dispatch_count).toBe(0);
-    expect(
-      activeTick.runtime.workstation_activity_by_node_id,
-    ).toEqual({});
+    expect(activeTick.runtime.workstation_activity_by_node_id).toEqual({});
     expect(activeTick.runtime.session.completed_count).toBe(0);
     expect(activeTick.runtime.session.dispatched_count).toBe(0);
     expect(activeTick.runtime.session.has_data).toBe(false);
@@ -3920,9 +3936,7 @@ describe("factory timeline reconstruction", () => {
     expect(completedTick.runtime.session.has_data).toBe(false);
     expect(completedTick.tracesByWorkID["time-daily-refresh"]).toBeUndefined();
     expect(JSON.stringify(activeTick)).not.toContain(rawSystemTime);
-    expect(JSON.stringify(completedTick)).not.toContain(
-      rawSystemTime,
-    );
+    expect(JSON.stringify(completedTick)).not.toContain(rawSystemTime);
   });
 
   it("follows latest tick in current mode and preserves selected tick in fixed mode", () => {
