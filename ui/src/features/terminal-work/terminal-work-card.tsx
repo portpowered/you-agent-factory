@@ -70,19 +70,19 @@ interface TerminalWorkRowProps {
   toggleLabel: string;
 }
 
-const TERMINAL_ROWS_CLASS = "grid gap-[0.8rem]";
+const TERMINAL_ROWS_CLASS = "grid gap-3";
 const TERMINAL_ROW_CLASS =
-  "grid gap-3 rounded-lg border border-af-overlay/8 p-[0.85rem]";
+  "grid gap-3 rounded-lg border border-af-overlay/8 p-3.5";
 const TERMINAL_FAILED_ROW_CLASS = "border-af-danger/50";
 const TERMINAL_ROW_HEADER_CLASS =
-  "mb-[0.55rem] flex items-center justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-ink/58";
+  "mb-2 flex items-center justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-ink/58";
 const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
 const TERMINAL_TOGGLE_CLASS =
-  "min-h-9 shrink-0 border-af-overlay/12 bg-af-overlay/6 px-[0.65rem] py-[0.45rem] text-xs text-af-ink/78 hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink";
+  "min-h-9 shrink-0 border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs text-af-ink/78 hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink";
 const TERMINAL_BUTTON_CLASS = cx(
-  "grid h-auto min-h-0 w-full justify-start gap-[0.3rem] border-af-info/35 bg-af-info/10 px-3 py-[0.55rem] text-left text-af-info-ink [overflow-wrap:anywhere]",
+  "grid h-auto min-h-0 w-full justify-start gap-1 border-af-info/35 bg-af-info/10 px-3 py-2 text-left text-af-info-ink [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const TERMINAL_BUTTON_FAILED_CLASS =
