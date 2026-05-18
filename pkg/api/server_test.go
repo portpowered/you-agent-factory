@@ -119,9 +119,10 @@ func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *inter
 func listWorkFilterTopology() *state.Net {
 	return &state.Net{
 		Places: map[string]*petri.Place{
-			"task:init":   {ID: "task:init", TypeID: "task", State: "init"},
-			"task:review": {ID: "task:review", TypeID: "task", State: "review"},
-			"task:failed": {ID: "task:failed", TypeID: "task", State: "failed"},
+			"task:init":     {ID: "task:init", TypeID: "task", State: "init"},
+			"task:review":   {ID: "task:review", TypeID: "task", State: "review"},
+			"task:failed":   {ID: "task:failed", TypeID: "task", State: "failed"},
+			"task:complete": {ID: "task:complete", TypeID: "task", State: "complete"},
 		},
 		WorkTypes: map[string]*state.WorkType{
 			"task": {
@@ -130,6 +131,7 @@ func listWorkFilterTopology() *state.Net {
 					{Value: "init", Category: state.StateCategoryInitial},
 					{Value: "review", Category: state.StateCategoryProcessing},
 					{Value: "failed", Category: state.StateCategoryFailed},
+					{Value: "complete", Category: state.StateCategoryTerminal},
 				},
 			},
 		},
@@ -1981,6 +1983,43 @@ func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkToken("tok-1", "work-complete", "task:complete", "task", now),
+		"tok-2": listWorkToken("tok-2", "work-failed", "task:failed", "task", now),
+		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", now),
+		"tok-4": listWorkToken("tok-4", "work-init", "task:init", "task", now),
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	wantWorkIDs := []string{"work-init", "work-review", "work-failed", "work-complete"}
+	if len(resp.Results) != len(wantWorkIDs) {
+		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
+	}
+	for i, wantWorkID := range wantWorkIDs {
+		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
+		}
 	}
 }
 

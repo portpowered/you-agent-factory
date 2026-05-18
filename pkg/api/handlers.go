@@ -192,7 +192,7 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		return
 	}
 
-	// Collect, filter, and sort public work by token ID for deterministic pagination.
+	// Collect, filter, and sort public work for deterministic pagination.
 	items := make([]listWorkItem, 0, len(snapshot.Marking.Tokens))
 	for _, t := range snapshot.Marking.Tokens {
 		if !publicWorkToken(t) {
@@ -204,7 +204,7 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		}
 		items = append(items, listWorkItem{cursorID: t.ID, work: work})
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].cursorID < items[j].cursorID })
+	sortListWorkItems(items)
 
 	// Consume the generated route params directly. Non-positive values still fall back
 	// to the default page size after successful integer binding.
@@ -217,14 +217,7 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	if cursor := stringValue(params.NextToken); cursor != "" {
 		decoded, err := base64.StdEncoding.DecodeString(cursor)
 		if err == nil {
-			cursorID := string(decoded)
-			startIdx = len(items)
-			for i, item := range items {
-				if item.cursorID > cursorID {
-					startIdx = i
-					break
-				}
-			}
+			startIdx = nextListWorkIndex(items, string(decoded))
 		}
 	}
 
@@ -262,6 +255,60 @@ func validWorkStateType(stateType factoryapi.WorkStateType) bool {
 type listWorkItem struct {
 	cursorID string
 	work     factoryapi.Work
+}
+
+func sortListWorkItems(items []listWorkItem) {
+	sort.Slice(items, func(i, j int) bool {
+		left := items[i]
+		right := items[j]
+		leftOrder := listWorkStateOrder(left.work.State)
+		rightOrder := listWorkStateOrder(right.work.State)
+		if leftOrder != rightOrder {
+			return leftOrder < rightOrder
+		}
+
+		leftStateType := listWorkStateType(left.work.State)
+		rightStateType := listWorkStateType(right.work.State)
+		if leftStateType != rightStateType {
+			return leftStateType < rightStateType
+		}
+
+		return left.cursorID < right.cursorID
+	})
+}
+
+func listWorkStateOrder(workState *factoryapi.WorkState) int {
+	if workState == nil {
+		return 4
+	}
+	switch workState.Type {
+	case factoryapi.WorkStateTypeINITIAL:
+		return 0
+	case factoryapi.WorkStateTypePROCESSING:
+		return 1
+	case factoryapi.WorkStateTypeFAILED:
+		return 2
+	case factoryapi.WorkStateTypeTERMINAL:
+		return 3
+	default:
+		return 4
+	}
+}
+
+func listWorkStateType(workState *factoryapi.WorkState) string {
+	if workState == nil {
+		return ""
+	}
+	return string(workState.Type)
+}
+
+func nextListWorkIndex(items []listWorkItem, cursorID string) int {
+	for i, item := range items {
+		if item.cursorID == cursorID {
+			return i + 1
+		}
+	}
+	return len(items)
 }
 
 func listWorkResults(items []listWorkItem) []factoryapi.Work {
