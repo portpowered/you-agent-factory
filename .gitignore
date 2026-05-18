@@ -12,6 +12,7 @@ ui/dist_embed_generated.go
 ui/dist_stamp.go
 
 tasks/todo
+factory/internal/**
 factory/inputs/**
 !factory/inputs/BATCH/
 !factory/inputs/BATCH/default/

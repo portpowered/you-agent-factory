@@ -1,5 +1,232 @@
 # meta view
 
+## 2026-05-17 fetch-confirmed queue hold
+
+### world state
+
+- as of `2026-05-17T23:01:08+07:00`, `git pull` is blocked by local
+  unstaged meta-log edits and untracked scratch state, but `git fetch origin
+  main` succeeds and `git rev-list --left-right --count HEAD...origin/main`
+  reports `0 0`
+- local `main` and `origin/main` are still aligned at `46eb3da`, the merge
+  commit for PR `#171` (`workflow-graph-padding`)
+- the recent merged PR surface is unchanged from the prior snapshot:
+  PR `#185` (`further-comment-restriction`), PR `#184`
+  (`update-instrucctions`), PR `#183`
+  (`split-functionallong-guards-batch-helpers-from-default-support`), PR
+  `#182` (`python3`), and PR `#171` (`workflow-graph-padding`) are all already
+  reflected in current `main`
+- the canonical ask surface is still `factory/logs/meta/asks.md`, with active
+  priorities through `2026-05-25` unchanged: checklist conformance, backend
+  `90%` functional coverage, website `90%` coverage, and simplification
+- the checked-in workflow contract from `factory/README.md` is unchanged:
+  default to one standalone idea under `factory/inputs/idea/default/`, and use
+  a batch only for dependency ordering, parent-child membership, or mixed work
+  types
+
+### direct verification truth
+
+- the visible operating inbox still contains one active local idea:
+  `factory/inputs/idea/default/canonicalize-repo-owned-workspace-setup-python3-surfaces.md`
+- that idea remains local operating queue state rather than tracked starter
+  content:
+  `git ls-files factory/inputs` still lists only the `.gitkeep` sentinels, and
+  `git log --all -- factory/inputs/idea/default/canonicalize-repo-owned-workspace-setup-python3-surfaces.md`
+  shows no committed history for the idea file
+- the active idea is still live on current `main`:
+  the checked-in worker at `factory/workers/workspace-setup/AGENTS.md` uses
+  `command: python3`, while repo-owned mirrors and replay evidence still
+  preserve `command: python` in
+  `tests/adhoc/factory/workers/workspace-setup/AGENTS.md`,
+  `tests/functional_test/testdata/idea_plan_execute_review_with_limits/workers/workspace-setup/AGENTS.md`,
+  `ui/integration/fixtures/event-stream-replay-2.jsonl`,
+  `ui/integration/fixtures/terminal-summary-regression-replay.jsonl`, and
+  `factory/logs/agent-fails.json`
+- related config-owned tests still model the old interpreter through portable
+  setup-workspace examples, including `pkg/config/layout_script_copy_test.go`
+  and nearby config mapping/validator coverage
+- the ask-critical remote ownership picture is still separate:
+  `origin/ralph/audit-repository-against-2026-website-and-backend-checklists`
+  remains visible for checklist work, and several `origin/ralph/*coverage*`
+  branches remain visible for backend/frontend coverage work
+
+### queue decision
+
+- update the worldview and progress log only this cycle
+- do not dispatch a new ask or cleanup file
+- reason:
+  the existing local inbox already holds the best current narrow cleanup lane,
+  the highest-priority asks still have visible remote ownership, and adding
+  another local request would reduce queue clarity without changing the most
+  important next action
+
+### theory of mind
+
+- the current factory-maintainer problem is coordination, not discovery:
+  current `main` already encodes the live `python3` behavior, while stale
+  repo-owned evidence still needs one focused cleanup worker to converge it
+- the meta layer should treat `factory/inputs/**` files as operating queue
+  state even when they are not tracked by git; visible untracked idea files are
+  real work-in-flight and should suppress duplicate dispatch
+- ask handling remains ownership-sensitive:
+  coverage and checklist asks are still important, but the correct local move
+  is to avoid creating competing task lanes while remote branches already own
+  those areas
+
+## 2026-05-17 mainline refresh and active-idea hold
+
+### world state
+
+- as of `2026-05-17T22:05:24+07:00`, `git pull --rebase --autostash` leaves
+  the workspace current at `origin/main` `46eb3da`
+- `main` moved again after the previous worldview snapshot:
+  PR `#185` (`further-comment-restriction`) is merged at `3d506cc`, and
+  PR `#171` (`workflow-graph-padding`) is merged at `46eb3da`
+- the canonical ask surface is still `factory/logs/meta/asks.md`, with the
+  same active priorities through `2026-05-25`: checklist conformance, backend
+  `90%` functional coverage, website `90%` coverage, and simplification
+- the checked-in workflow contract from `factory/README.md` is unchanged:
+  default to one standalone idea under `factory/inputs/idea/default/`, and use
+  a batch only for real dependency ordering or mixed work types
+- the checked-in inbox is no longer sentinel-only in this checkout:
+  `find factory/inputs -maxdepth 3 -type f` now shows
+  `factory/inputs/idea/default/canonicalize-repo-owned-workspace-setup-python3-surfaces.md`
+  alongside the tracked `.gitkeep` sentinels
+
+### direct verification truth
+
+- the active local cleanup lane remains live and unresolved:
+  `factory/inputs/idea/default/canonicalize-repo-owned-workspace-setup-python3-surfaces.md`
+  has no visible history in `git log --all -- <that file>`, and
+  `git branch -r --list '*python3*' '*workspace-setup*'` shows only the older
+  merged `origin/python3` branch rather than a new remote owner for the
+  repo-owned mirror cleanup
+- the underlying repository-owned portability drift still exists on current
+  `main`:
+  `tests/adhoc/factory/workers/workspace-setup/AGENTS.md`,
+  `tests/functional_test/testdata/idea_plan_execute_review_with_limits/workers/workspace-setup/AGENTS.md`,
+  `ui/integration/fixtures/event-stream-replay-2.jsonl`,
+  `ui/integration/fixtures/terminal-summary-regression-replay.jsonl`,
+  `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`,
+  `pkg/config/layout_script_copy_test.go`,
+  `pkg/config/factory_config_mapping_test.go`, and
+  `pkg/config/config_validator_test.go` still preserve `python`-based
+  repository-owned evidence while the live checked-in worker already uses
+  `python3`
+- the ask-critical lanes still present separate remote ownership:
+  `origin/ralph/fix-gocoveragecheck-zero-coverage-report-gap` remains the live
+  backend coverage branch, and
+  `origin/ralph/audit-repository-against-2026-website-and-backend-checklists`
+  remains the visible checklist-audit branch
+
+### queue decision
+
+- update the worldview to match current `main`
+- hold ask-driven dispatch and do not add another cleanup request this cycle
+- reason:
+  the checked-in inbox already contains one narrow unresolved cleanup idea,
+  the ask-critical lanes still have separate remote owners, and widening the
+  local queue again would reduce clarity rather than improve leverage
+
+### theory of mind
+
+- the meta layer now has to reason about a real checked-in local queue item,
+  not a hypothetical empty inbox:
+  once `factory/inputs/idea/default/canonicalize-repo-owned-workspace-setup-python3-surfaces.md`
+  exists locally, the default contract favors clearing or superseding that lane
+  before authoring another idea
+- queue discipline matters as much as cleanup selection:
+  the right move is not “find any additional simplification seam,” but “keep
+  one active local cleanup lane aligned with live repository reality while
+  avoiding duplicated ask ownership”
+- current `main` truth is more about contract convergence than feature work:
+  the repository already accepted the primary `python3` behavior change, so the
+  remaining value is in retiring stale repo-owned mirrors and evidence instead
+  of widening into unrelated UI or coverage work
+
+## 2026-05-17 mainline refresh, ask hold, and python3 cleanup dispatch
+
+### world state
+
+- as of `2026-05-17T20:03:25+07:00`, `git pull` leaves the workspace current
+  at `origin/main` `2730d28`
+- recent `main` history moved again since the previous worldview snapshot:
+  PR `#184` (`update-instrucctions`) is now merged at `2730d28`, PR `#183`
+  (`split-functionallong-guards-batch-helpers-from-default-support`) is merged
+  at `60f10e1`, and PR `#182` (`python3`) is merged at `54a141f`
+- the checked-in workflow contract from `factory/README.md` is unchanged:
+  default to one standalone idea under `factory/inputs/idea/default/`, and use
+  a batch only for real ordering or mixed-work-type needs
+- before this refresh, the checked-in inbox contract was still clean:
+  `find factory/inputs -maxdepth 3 -type f` showed only the tracked `.gitkeep`
+  sentinels
+- the canonical ask surface is still `factory/logs/meta/asks.md`, with the
+  same active priorities through `2026-05-25`: checklist conformance, backend
+  `90%` functional coverage, website `90%` coverage, and simplification
+- the external checklist source still exposes the same visible repository-level
+  checklist files as of `2026-05-17`: `backend-development-checklist.md` and
+  `website-development-checklist.md` in `portpowered/checklists`
+
+### delegated verification truth
+
+- one delegated explorer reconfirmed the highest-priority ask lanes still have
+  active remote ownership:
+  `origin/ralph/fix-gocoveragecheck-zero-coverage-report-gap` and
+  `origin/ralph/audit-repository-against-2026-website-and-backend-checklists`
+  both remain ahead of `main` and should not be cloned into another local
+  ask-driven request
+- direct verification shows the backend coverage gate is still materially open
+  on `main`:
+  `go run ./cmd/gocoveragecheck -min 80 -timeout 300s` still exits successfully
+  with `Go coverage 86.6% meets minimum 80.0%.` while the run reports
+  `pkg/apisurface`, `pkg/buffers`, and `pkg/cli/default` at `0.0%`
+- the previous worldview is now stale on the `workspace-setup` portability
+  seam:
+  `factory/workers/workspace-setup/AGENTS.md` now uses `command: python3`, so
+  the old “main worker still uses python” claim is false on current `main`
+- the remaining live seam is narrower and repository-owned:
+  fixture mirrors, replay evidence, and config-owned examples still model the
+  old `python` command in
+  `tests/adhoc/factory/workers/workspace-setup/AGENTS.md`,
+  `tests/functional_test/testdata/idea_plan_execute_review_with_limits/workers/workspace-setup/AGENTS.md`,
+  `ui/integration/fixtures/event-stream-replay-2.jsonl`,
+  `ui/integration/fixtures/terminal-summary-regression-replay.jsonl`,
+  `factory/logs/agent-fails.json`,
+  `factory/logs/agent-fails.replay.json`,
+  `pkg/config/layout_script_copy_test.go`,
+  `pkg/config/factory_config_mapping_test.go`, and
+  `pkg/config/config_validator_test.go`
+- the previously dispatched guards-batch helper split is now solved on `main`,
+  so it should no longer be treated as an open local queue item
+
+### queue decision
+
+- update the worldview to match current `main`
+- hold ask-driven dispatch because the ask-critical coverage and checklist
+  lanes already have active remote owners
+- dispatch one new standalone cleanup idea:
+  `factory/inputs/idea/default/canonicalize-repo-owned-workspace-setup-python3-surfaces.md`
+- reason:
+  the checked-in inbox was empty in this checkout, the remaining `python`
+  surface is now a narrow repository-owned cleanup seam, and it does not
+  overlap the active remote ask lanes
+
+### theory of mind
+
+- the meta layer has to track merged reality, not queued intent:
+  once PR `#182` landed, the live portability problem stopped being “switch the
+  main worker to python3” and became “retire stale repository-owned python
+  mirrors and evidence”
+- ask handling still depends on ownership truth first:
+  the backend coverage and checklist asks remain real, but duplicating them
+  locally while remote branches are active would widen the queue without adding
+  new leverage
+- the best cleanup work right now is repository-contract convergence:
+  keep the checked-in worker, its fixture mirrors, replay samples, and config
+  expectations on one canonical interpreter story instead of preserving a
+  redundant legacy alias in owned assets
+
 ## 2026-05-17 mainline refresh and guards-batch dispatch
 
 ### world state
