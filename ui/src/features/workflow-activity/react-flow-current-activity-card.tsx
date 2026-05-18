@@ -1,5 +1,4 @@
 import "@xyflow/react/dist/style.css";
-
 import {
   applyNodeChanges,
   Background,
@@ -10,7 +9,6 @@ import {
 } from "@xyflow/react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -60,6 +58,7 @@ import {
 } from "./react-flow-current-activity-card-import";
 import { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
+import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
 
 export { currentActivityGraphKey, currentActivityTopologyKey } from "./react-flow-current-activity-card-keys";
 
@@ -102,12 +101,14 @@ export type CurrentActivitySelection =
   | { kind: "state-node"; placeId: string }
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
 
-function CurrentActivityCardHeading() {
+function CurrentActivityCardHeading({ locale }: { locale?: string }) {
+  const messages = getWorkflowActivityShellMessages(locale);
+
   return (
     <div>
-      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>Operator View</p>
+      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>{messages.eyebrow}</p>
       <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
-        Current activity
+        {messages.title}
       </h2>
     </div>
   );
@@ -359,18 +360,20 @@ function useCurrentActivityGraphViewModel({
   };
 }
 
-function EmptyCurrentActivityCard() {
+function EmptyCurrentActivityCard({ locale }: { locale?: string }) {
+  const messages = getWorkflowActivityShellMessages(locale);
+
   return (
     <section
       aria-labelledby="workflow-graph-heading"
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
       <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityCardHeading />
+        <CurrentActivityCardHeading locale={locale} />
       </div>
       <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
-        <h3>No workflow topology loaded</h3>
-        <p>The factory has not published any workstation graph yet.</p>
+        <h3>{messages.emptyTitle}</h3>
+        <p>{messages.emptyMessage}</p>
       </div>
     </section>
   );
@@ -389,9 +392,8 @@ export function ReactFlowCurrentActivityCard(
   const imports = props.importController ?? fallbackImportController;
   const shouldRenderImportPreviewDialog = props.importController === undefined;
 
-  if (props.snapshot.topology.workstation_node_ids.length === 0) {
-    return <EmptyCurrentActivityCard />;
-  }
+  if (props.snapshot.topology.workstation_node_ids.length === 0) return <EmptyCurrentActivityCard locale={props.locale} />;
+  const shellMessages = getWorkflowActivityShellMessages(props.locale);
 
   const readyImportPreviewState =
     imports.importPreviewState.status === "ready"
@@ -404,7 +406,7 @@ export function ReactFlowCurrentActivityCard(
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
       <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityCardHeading />
+        <CurrentActivityCardHeading locale={props.locale} />
       </div>
 
       <div className="relative min-h-0 flex-1">
@@ -417,7 +419,7 @@ export function ReactFlowCurrentActivityCard(
         />
         <section
           aria-describedby="workflow-graph-heading"
-          aria-label="Work graph viewport"
+          aria-label={shellMessages.viewportLabel}
           className={cx(
             "relative h-full min-h-0 overflow-hidden rounded-[1.4rem] border transition-colors",
             (imports.dropState.status === "drag-active" ||

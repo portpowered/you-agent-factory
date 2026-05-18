@@ -23,6 +23,7 @@ import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
 } from "../../components/dashboard/widget-board";
+import { getWorkOutcomeMessages } from "./messages/work-outcome";
 import type { WorkChartModel, WorkChartSeriesKey } from "./trends";
 
 export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
@@ -61,6 +62,7 @@ export interface WorkChartProps {
   className?: string;
   emptyMessage?: string;
   emptyTitle?: string;
+  locale?: string;
   model?: WorkChartModel;
   series: readonly WorkChartSeriesDefinition[];
   state?: WorkChartState;
@@ -73,14 +75,20 @@ const READY_WORK_CHART_STATE: WorkChartState = { status: "ready" };
 export function WorkChart({
   ariaLabel,
   className = "",
-  emptyMessage = WORK_CHART_EMPTY_MESSAGE,
-  emptyTitle = WORK_CHART_EMPTY_TITLE,
+  emptyMessage,
+  emptyTitle,
+  locale,
   model,
   series,
   state = READY_WORK_CHART_STATE,
-  xAxisLabel = "Ticks",
-  yAxisLabel = "Work count",
+  xAxisLabel,
+  yAxisLabel,
 }: WorkChartProps) {
+  const messages = getWorkOutcomeMessages(locale).chart;
+  const resolvedEmptyMessage = emptyMessage ?? messages.emptyMessage;
+  const resolvedEmptyTitle = emptyTitle ?? messages.emptyTitle;
+  const resolvedXAxisLabel = xAxisLabel ?? messages.xAxisLabel;
+  const resolvedYAxisLabel = yAxisLabel ?? messages.yAxisLabel;
   const chartData = useMemo(() => {
     if (state.status !== "ready") {
       return { status: state.status };
@@ -94,9 +102,9 @@ export function WorkChart({
       <WorkChartStatusPanel
         ariaBusy={true}
         loading={true}
-        message={state.message ?? WORK_CHART_LOADING_MESSAGE}
+        message={state.message ?? messages.loadingMessage}
         role="status"
-        title={state.title ?? WORK_CHART_LOADING_TITLE}
+        title={state.title ?? messages.loadingTitle}
       />
     );
   }
@@ -106,14 +114,14 @@ export function WorkChart({
       <WorkChartStatusPanel
         message={
           state.status === "error"
-            ? (state.message ?? WORK_CHART_ERROR_MESSAGE)
-            : WORK_CHART_ERROR_MESSAGE
+            ? (state.message ?? messages.errorMessage)
+            : messages.errorMessage
         }
         role="alert"
         title={
           state.status === "error"
-            ? (state.title ?? WORK_CHART_ERROR_TITLE)
-            : WORK_CHART_ERROR_TITLE
+            ? (state.title ?? messages.errorTitle)
+            : messages.errorTitle
         }
       />
     );
@@ -121,10 +129,10 @@ export function WorkChart({
 
   if (chartData.status === "empty") {
     return (
-      <WorkChartStatusPanel
-        message={emptyMessage}
+        <WorkChartStatusPanel
+        message={resolvedEmptyMessage}
         role="status"
-        title={emptyTitle}
+        title={resolvedEmptyTitle}
       />
     );
   }
@@ -132,9 +140,9 @@ export function WorkChart({
   if (chartData.status !== "ready") {
     return (
       <WorkChartStatusPanel
-        message={WORK_CHART_ERROR_MESSAGE}
+        message={messages.errorMessage}
         role="alert"
-        title={WORK_CHART_ERROR_TITLE}
+        title={messages.errorTitle}
       />
     );
   }
@@ -143,8 +151,9 @@ export function WorkChart({
     ariaLabel,
     chartData: chartData.data,
     className,
-    xAxisLabel,
-    yAxisLabel,
+    locale,
+    xAxisLabel: resolvedXAxisLabel,
+    yAxisLabel: resolvedYAxisLabel,
   });
 }
 
@@ -152,6 +161,7 @@ interface ReadyWorkChartProps {
   ariaLabel: string;
   chartData: WorkChartData;
   className: string;
+  locale?: string;
   xAxisLabel: string;
   yAxisLabel: string;
 }
@@ -160,9 +170,12 @@ function renderReadyWorkChart({
   ariaLabel,
   chartData,
   className,
+  locale,
   xAxisLabel,
   yAxisLabel,
 }: ReadyWorkChartProps) {
+  const chartMessages = getWorkOutcomeMessages(locale).chart;
+
   return (
     <ChartContainer
       className={cn(WORK_CHART_READY_CLASS, className)}
@@ -189,7 +202,7 @@ function renderReadyWorkChart({
           dataKey="tick"
           minTickGap={24}
           tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
-          tickFormatter={formatAxisNumber}
+          tickFormatter={(value) => formatAxisNumber(value)}
           tickLine={false}
         />
         <YAxis
@@ -197,13 +210,17 @@ function renderReadyWorkChart({
           axisLine={false}
           tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
           tickCount={5}
-          tickFormatter={formatAxisNumber}
+          tickFormatter={(value) => formatAxisNumber(value)}
           tickLine={false}
           width={WORK_CHART_Y_AXIS_WIDTH}
         />
         <ChartTooltip
           content={(props) => {
-            const label = props.payload?.[0]?.payload?.label ?? props.label;
+            const tickValue = props.payload?.[0]?.payload?.tick;
+            const label =
+              typeof tickValue === "number"
+                ? chartMessages.tickLabel(tickValue)
+                : (props.payload?.[0]?.payload?.label ?? props.label);
             return <ChartTooltipContent {...props} label={label} />;
           }}
           cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}

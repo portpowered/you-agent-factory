@@ -223,6 +223,23 @@ describe("SubmitWorkWidget", () => {
       screen.getByText("No work types are available to submit right now."),
     ).toBeTruthy();
   });
+
+  it("renders zh-CN copy for the submit-work form shell", () => {
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        locale="zh-CN"
+        submitWorkTypes={[{ work_type_name: "story" }]}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "提交工作" });
+
+    expect(within(card).getByRole("combobox", { name: "工作类型" })).toBeTruthy();
+    expect(within(card).getByRole("textbox", { name: "请求名称" })).toBeTruthy();
+    expect(within(card).getByRole("textbox", { name: "请求" })).toBeTruthy();
+    expect(within(card).getByText("先选择工作类型，再描述你需要完成什么。")).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "提交工作" })).toBeTruthy();
+  });
 });
 
 function renderSubmitWorkWidget(element: React.ReactElement) {

@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
+import { WorkChartCard } from "./d3-information-card";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 import type { WorkChartModel } from "./trends";
 import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
@@ -216,6 +217,22 @@ describe("WorkChart", () => {
     expect(screen.getByRole("status")).toBeTruthy();
     expect(screen.getByText("No work outcome samples")).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Work chart zero series" })).toBeNull();
+  });
+
+  it("renders zh-CN chart labels", () => {
+    render(
+      <WorkChartCard
+        locale="zh-CN"
+        model={sparseWorkChartModel}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "15m 的工作结果图表" });
+    expect(within(chart).getByText("排队中")).toBeTruthy();
+    expect(within(chart).getByText("进行中")).toBeTruthy();
+    expect(within(chart).getByText("已完成")).toBeTruthy();
+    expect(within(chart).getByText("刻度")).toBeTruthy();
+    expect(within(chart).getByText("工作计数")).toBeTruthy();
   });
 
   it("renders an accessible loading placeholder before chart data is ready", () => {

@@ -29,6 +29,7 @@ import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
+import { getTraceDrilldownMessages } from "./messages/trace-drilldown";
 import {
   getCachedTraceGraphLayout,
   layoutTraceGraphWithElk,
@@ -66,6 +67,7 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 interface PathNodeData extends Record<string, unknown> {
   inputSummary: string;
   label: string;
+  locale?: string;
   outcome?: string;
   outputSummary: string;
 }
@@ -78,12 +80,18 @@ const PATH_NODE_TYPES = {
 
 export interface TraceWorkstationPathProps {
   dispatches: DashboardTraceDispatch[];
+  locale?: string;
 }
 
 export function TraceWorkstationPath({
   dispatches,
+  locale,
 }: TraceWorkstationPathProps) {
-  const graph = useMemo(() => buildDispatchGraph(dispatches), [dispatches]);
+  const messages = getTraceDrilldownMessages(locale);
+  const graph = useMemo(
+    () => buildDispatchGraph(dispatches, locale),
+    [dispatches, locale],
+  );
   const graphDimensions = useMemo(
     () =>
       new Map(graph.nodes.map((node) => [node.id, {
@@ -153,12 +161,12 @@ export function TraceWorkstationPath({
   }, []);
 
   if (graph.nodes.length === 0) {
-    return <span>Unavailable</span>;
+    return <span>{messages.dispatchPathEmpty}</span>;
   }
 
   return (
     <section
-      aria-label="Dispatch relationship graph"
+      aria-label={messages.dispatchPathGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-workstation-path
     >
@@ -203,6 +211,8 @@ export function TraceWorkstationPath({
 function WorkstationPathGraphNode({
   data,
 }: NodeProps<WorkstationPathNode>) {
+  const messages = getTraceDrilldownMessages(data.locale);
+
   return (
     <article className={cx(PATH_NODE_CLASS, outcomeToneClassName(data.outcome))}>
       <Handle className="opacity-0" position={Position.Left} type="target" />
@@ -214,7 +224,7 @@ function WorkstationPathGraphNode({
             DASHBOARD_SUPPORTING_LABEL_CLASS,
           )}
         >
-          Dispatch
+          {messages.dispatchPathSectionLabel}
         </span>
         <span
           className={cx(
@@ -222,7 +232,9 @@ function WorkstationPathGraphNode({
             DASHBOARD_SUPPORTING_LABEL_CLASS,
           )}
         >
-          {data.outcome ? formatTraceOutcome(data.outcome) : "Observed"}
+          {data.outcome
+            ? formatTraceOutcome(data.outcome)
+            : messages.dispatchPathPendingOutcome}
         </span>
       </div>
       <strong
@@ -231,10 +243,10 @@ function WorkstationPathGraphNode({
         {data.label}
       </strong>
       <p className="text-[0.76rem] text-af-ink/72 [overflow-wrap:anywhere]">
-        In: {data.inputSummary}
+        {messages.dispatchPathInputPrefix}: {data.inputSummary}
       </p>
       <p className="text-[0.76rem] text-af-ink/72 [overflow-wrap:anywhere]">
-        Out: {data.outputSummary}
+        {messages.dispatchPathOutputPrefix}: {data.outputSummary}
       </p>
     </article>
   );
@@ -242,11 +254,12 @@ function WorkstationPathGraphNode({
 
 function buildDispatchGraph(
   dispatches: DashboardTraceDispatch[],
+  locale?: string,
 ): {
   edges: Edge[];
   nodes: WorkstationPathNode[];
 } {
-  const dispatchGraph = dispatchDependencyGraph(dispatches);
+  const dispatchGraph = dispatchDependencyGraph(dispatches, locale);
 
   return {
     edges: dispatchGraph.edges,
@@ -254,6 +267,7 @@ function buildDispatchGraph(
       data: {
         label: node.label,
         inputSummary: node.inputSummary,
+        locale,
         outcome: node.outcome,
         outputSummary: node.outputSummary,
       },
@@ -268,6 +282,7 @@ function buildDispatchGraph(
 
 function dispatchDependencyGraph(
   dispatches: DashboardTraceDispatch[],
+  locale?: string,
 ): {
   edges: Edge[];
   nodes: Array<{
@@ -280,10 +295,10 @@ function dispatchDependencyGraph(
 } {
   const nodes = dispatches.map((dispatch) => ({
     id: dispatch.dispatch_id,
-    inputSummary: summarizeWorkItems(dispatch.input_items),
+    inputSummary: summarizeWorkItems(dispatch.input_items, locale),
     label: dispatch.workstation_name || dispatch.transition_id || "Unknown workstation",
     outcome: dispatch.outcome,
-    outputSummary: summarizeWorkItems(dispatch.output_items),
+    outputSummary: summarizeWorkItems(dispatch.output_items, locale),
   }));
   const edgeKeys = new Set<string>();
   const latestDispatchIDByChainingTraceID = new Map<string, string>();
@@ -402,9 +417,12 @@ function uniqueNonEmptyStrings(values: Array<string | undefined>): string[] {
   return [...seen];
 }
 
-function summarizeWorkItems(workItems: DashboardWorkItemRef[] | undefined): string {
+function summarizeWorkItems(
+  workItems: DashboardWorkItemRef[] | undefined,
+  locale?: string,
+): string {
   if (!workItems || workItems.length === 0) {
-    return "None";
+    return getTraceDrilldownMessages(locale).noBatchRelations;
   }
 
   const labels = dedupeWorkItems(workItems).map(formatTypedWorkItemLabel);
@@ -419,21 +437,22 @@ function dedupeWorkItems(workItems: DashboardWorkItemRef[]): DashboardWorkItemRe
   const itemsByID = new Map<string, DashboardWorkItemRef>();
 
   for (const workItem of workItems) {
-    itemsByID.set(workItem.work_id, workItem);
+    if (workItem.work_id) {
+      itemsByID.set(workItem.work_id, workItem);
+    }
   }
 
   return [...itemsByID.values()];
 }
 
-function outcomeToneClassName(outcome: string | undefined): string {
-  switch (outcome?.toUpperCase()) {
-    case "ACCEPTED":
-      return "border-af-success/22 bg-af-success/8";
-    case "REJECTED":
-      return "border-af-accent/28 bg-af-accent/10";
-    case "FAILED":
-      return "border-af-danger/28 bg-af-danger/8";
-    default:
-      return "border-af-overlay/12 bg-af-canvas";
+function outcomeToneClassName(outcome?: string): string {
+  if (!outcome) {
+    return "border-af-overlay/10 bg-af-canvas";
   }
+
+  if (outcome.toUpperCase() === "FAILED" || outcome.toUpperCase() === "REJECTED") {
+    return "border-af-danger/24 bg-af-danger/6";
+  }
+
+  return "border-af-success/20 bg-af-success/6";
 }
