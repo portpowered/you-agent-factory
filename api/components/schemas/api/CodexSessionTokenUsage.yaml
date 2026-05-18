@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+properties:
+  inputTokens:
+    type: integer
+    minimum: 0
+  cachedInputTokens:
+    type: integer
+    minimum: 0
+  outputTokens:
+    type: integer
+    minimum: 0
+  reasoningOutputTokens:
+    type: integer
+    minimum: 0
+  totalTokens:
+    type: integer
+    minimum: 0

@@ -1,11 +1,24 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { DashboardWorkstationRequest } from "../../api/dashboard/types";
 import { ProviderSessionAttempts } from "./provider-session-attempts";
+import {
+  providerSessionSelectionKey,
+  type LoadableProviderSessionRef,
+} from "./provider-session-details";
 
 describe("ProviderSessionAttempts", () => {
-  it("uses the default workstation-detail helper messages when no localized messages are provided", () => {
+  it("uses the default workstation-detail helper messages when no localized messages are provided", async () => {
+    const user = userEvent.setup();
+    const onSelectProviderSession = vi.fn();
     const onSelectWorkID = vi.fn();
     const onSelectWorkstationRequest = vi.fn();
+    const expectedSession: LoadableProviderSessionRef = {
+      dispatchID: "dispatch-review-active",
+      id: "sess_active",
+      kind: "session_id",
+      provider: "codex",
+    };
     const request: DashboardWorkstationRequest = {
       dispatch_id: "dispatch-review-active",
       dispatched_request_count: 1,
@@ -32,6 +45,11 @@ describe("ProviderSessionAttempts", () => {
           {
             dispatch_id: "dispatch-review-active",
             outcome: "ACCEPTED",
+            provider_session: {
+              id: expectedSession.id,
+              kind: expectedSession.kind,
+              provider: expectedSession.provider,
+            },
             transition_id: "transition-review",
             workstation_name: "Review",
             work_items: [
@@ -46,15 +64,22 @@ describe("ProviderSessionAttempts", () => {
           {
             dispatch_id: "dispatch-review-missing-details",
             outcome: "FAILED",
+            provider_session: {
+              id: "unsupported-session",
+              kind: "path",
+              provider: "codex",
+            },
             transition_id: "transition-review",
             workstation_name: "Review",
           },
         ]}
         currentDispatchID="dispatch-review-active"
         emptyMessage="No workstation runs have been recorded for this workstation yet."
+        onSelectProviderSession={onSelectProviderSession}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
         renderHeading={(attempt) => attempt.dispatch_id}
+        selectedProviderSessionKey={providerSessionSelectionKey(expectedSession)}
         workstationKind="standard"
         workstationRequestsByDispatchID={{
           [request.dispatch_id]: request,
@@ -73,6 +98,20 @@ describe("ProviderSessionAttempts", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText("Open request details")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+        })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByText("Session selected")).toBeTruthy();
+    expect(screen.getByText("Session details unavailable")).toBeTruthy();
     expect(screen.getAllByText("Session log unavailable")).toHaveLength(2);
     expect(
       screen.getByText(
@@ -88,13 +127,26 @@ describe("ProviderSessionAttempts", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Select work item Active Story" }),
     );
-    fireEvent.click(
+    await user.click(
       screen.getByRole("button", {
         name: "Select workstation request dispatch-review-active",
       }),
     );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+      }),
+    );
+    screen
+      .getByRole("button", {
+        name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+      })
+      .focus();
+    await user.keyboard("{Enter}");
 
     expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
     expect(onSelectWorkstationRequest).toHaveBeenCalledWith(request);
+    expect(onSelectProviderSession).toHaveBeenNthCalledWith(1, expectedSession);
+    expect(onSelectProviderSession).toHaveBeenNthCalledWith(2, expectedSession);
   });
 });

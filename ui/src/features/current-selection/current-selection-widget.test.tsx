@@ -1,4 +1,7 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import {
   buildDashboardInferenceAttemptFixture,
@@ -121,6 +124,7 @@ function buildSelectedWorkItemFixture() {
 describe("CurrentSelectionWidget", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
+    vi.stubGlobal("fetch", vi.fn());
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue({
       data: undefined,
       error: null,
@@ -156,6 +160,7 @@ describe("CurrentSelectionWidget", () => {
 
   afterEach(() => {
     resetSelectionHistoryStore();
+    vi.unstubAllGlobals();
   });
 
   it("keeps the work item card visible even when terminal work metadata is present", () => {
@@ -174,7 +179,41 @@ describe("CurrentSelectionWidget", () => {
       traceWorkID: workItem.work_id,
     };
 
-    render(
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          parse: {
+            eventCount: 1,
+            functionCalls: [],
+            lineCount: 1,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          providerSession: {
+            id: "sess_active",
+            kind: "session_id",
+            provider: "codex",
+          },
+          source: {
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 512,
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
           selectedNode,
@@ -267,6 +306,319 @@ describe("CurrentSelectionWidget", () => {
         name: "Work session runs list",
       }),
     ).toBeNull();
+  });
+
+  it("selects a provider-session card without changing the selected work item detail", async () => {
+    const user = userEvent.setup();
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const dispatchId = "dispatch-review-active";
+    const execution =
+      snapshot.runtime.active_executions_by_dispatch_id?.[dispatchId];
+    const workItem = execution?.work_items?.[0];
+
+    if (!execution || !workItem || !selectedNode) {
+      throw new Error(
+        "expected current-selection fixture for provider-session selection",
+      );
+    }
+
+    const selection: DashboardSelection = {
+      dispatchId,
+      execution,
+      kind: "work-item",
+      nodeId: selectedNode.node_id,
+      workItem,
+    };
+    const providerSessions = [
+      {
+        dispatch_id: dispatchId,
+        outcome: "ACCEPTED",
+        provider_session: {
+          id: "sess_active",
+          kind: "session_id",
+          provider: "codex",
+        },
+        transition_id: selectedNode.transition_id,
+        work_items: [workItem],
+        workstation_name: selectedNode.workstation_name,
+      },
+    ];
+    const executionDetails = selectWorkItemExecutionDetails({
+      activeExecution: execution,
+      dispatchID: dispatchId,
+      inferenceAttemptsByDispatchID:
+        snapshot.runtime.inference_attempts_by_dispatch_id,
+      providerSessions,
+      selectedNode,
+      workItem,
+      workstationRequestsByDispatchID:
+        snapshot.runtime.workstation_requests_by_dispatch_id,
+    });
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          parse: {
+            eventCount: 1,
+            functionCalls: [],
+            lineCount: 1,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          providerSession: {
+            id: "sess_active",
+            kind: "session_id",
+            provider: "codex",
+          },
+          source: {
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 512,
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selectedWorkDispatchAttempts: providerSessions,
+          selectedWorkProviderSessions: providerSessions,
+          selection,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={executionDetails}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const selectSessionButton = within(currentSelection).getByRole("button", {
+      name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+    });
+
+    expect(selectSessionButton.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(selectSessionButton);
+
+    expect(within(currentSelection).getByText(workItem.work_id)).toBeTruthy();
+    expect(
+      within(currentSelection)
+        .getByRole("button", {
+          name: "Select provider session codex / session_id / sess_active for dispatch dispatch-review-active",
+        })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(currentSelection).queryByRole("heading", {
+        name: "Request details",
+      }),
+    ).toBeNull();
+    expect(
+      within(currentSelection).getByRole("heading", {
+        name: "Selected session details",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("refreshes the session-detail panel when a different provider-session card is selected", async () => {
+    const user = userEvent.setup();
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const dispatchId = "dispatch-review-active";
+    const execution =
+      snapshot.runtime.active_executions_by_dispatch_id?.[dispatchId];
+    const workItem = execution?.work_items?.[0];
+
+    if (!execution || !workItem || !selectedNode) {
+      throw new Error(
+        "expected current-selection fixture for provider-session selection",
+      );
+    }
+
+    const selection: DashboardSelection = {
+      dispatchId,
+      execution,
+      kind: "work-item",
+      nodeId: selectedNode.node_id,
+      workItem,
+    };
+    const providerSessions = [
+      {
+        dispatch_id: dispatchId,
+        outcome: "ACCEPTED",
+        provider_session: {
+          id: "sess_first",
+          kind: "session_id",
+          provider: "codex",
+        },
+        transition_id: selectedNode.transition_id,
+        work_items: [workItem],
+        workstation_name: selectedNode.workstation_name,
+      },
+      {
+        dispatch_id: `${dispatchId}-retry`,
+        outcome: "ACCEPTED",
+        provider_session: {
+          id: "sess_second",
+          kind: "session_id",
+          provider: "codex",
+        },
+        transition_id: selectedNode.transition_id,
+        work_items: [workItem],
+        workstation_name: selectedNode.workstation_name,
+      },
+    ];
+    const executionDetails = selectWorkItemExecutionDetails({
+      activeExecution: execution,
+      dispatchID: dispatchId,
+      inferenceAttemptsByDispatchID:
+        snapshot.runtime.inference_attempts_by_dispatch_id,
+      providerSessions,
+      selectedNode,
+      workItem,
+      workstationRequestsByDispatchID:
+        snapshot.runtime.workstation_requests_by_dispatch_id,
+    });
+
+    let resolveSecondResponse: ((value: Response) => void) | null = null;
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const requestURL = String(input);
+      if (requestURL.includes("id=sess_first")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              parse: {
+                eventCount: 1,
+                functionCalls: [],
+                lineCount: 1,
+                malformedLineCount: 0,
+                parseErrors: [],
+                reasoning: [],
+                turns: [],
+                unknownEventCount: 0,
+                unknownEvents: [],
+              },
+              providerSession: {
+                id: "sess_first",
+                kind: "session_id",
+                provider: "codex",
+              },
+              source: {
+                relativePath: "2026/05/18/rollout-sess_first.jsonl",
+                sizeBytes: 256,
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        );
+      }
+
+      if (requestURL.includes("id=sess_second")) {
+        return new Promise<Response>((resolve) => {
+          resolveSecondResponse = resolve;
+        });
+      }
+
+      throw new Error(`unexpected provider-session request: ${requestURL}`);
+    });
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selectedWorkDispatchAttempts: providerSessions,
+          selectedWorkProviderSessions: providerSessions,
+          selection,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={executionDetails}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const firstButton = within(currentSelection).getByRole("button", {
+      name: "Select provider session codex / session_id / sess_first for dispatch dispatch-review-active",
+    });
+    const secondButton = within(currentSelection).getByRole("button", {
+      name: "Select provider session codex / session_id / sess_second for dispatch dispatch-review-active-retry",
+    });
+
+    await user.click(firstButton);
+
+    expect(
+      await within(currentSelection).findByText(
+        "2026/05/18/rollout-sess_first.jsonl",
+      ),
+    ).toBeTruthy();
+
+    await user.click(secondButton);
+
+    expect(within(currentSelection).getByText("Loading session details...")).toBeTruthy();
+    expect(
+      within(currentSelection).queryByText("2026/05/18/rollout-sess_first.jsonl"),
+    ).toBeNull();
+
+    resolveSecondResponse?.(
+      new Response(
+        JSON.stringify({
+          parse: {
+            eventCount: 1,
+            functionCalls: [],
+            lineCount: 1,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          providerSession: {
+            id: "sess_second",
+            kind: "session_id",
+            provider: "codex",
+          },
+          source: {
+            relativePath: "2026/05/18/rollout-sess_second.jsonl",
+            sizeBytes: 384,
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    expect(
+      await within(currentSelection).findByText(
+        "2026/05/18/rollout-sess_second.jsonl",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders selected state details when a state node is active", () => {
@@ -717,6 +1069,18 @@ function buildEditableDefinitionResult(
     refetch: vi.fn(),
     status: "success",
   } as never;
+}
+
+function renderWithQueryClient(view: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>{view}</QueryClientProvider>,
+  );
 }
 
 function buildEditableFactoryDefinition(overrides?: {

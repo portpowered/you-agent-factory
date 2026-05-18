@@ -108,6 +108,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider-sessions/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get provider session details
+         * @description Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+         */
+        get: operations["getProviderSessionDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory": {
         parameters: {
             query?: never;
@@ -246,6 +266,116 @@ export interface components {
              * @enum {string}
              */
             code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "NOT_FOUND" | "INTERNAL_ERROR";
+        };
+        ProviderSessionDetailResponse: {
+            providerSession: components["schemas"]["ProviderSessionMetadata"];
+            source: components["schemas"]["ProviderSessionSourceMetadata"];
+            parse: components["schemas"]["CodexSessionParseSummary"];
+        };
+        ProviderSessionSourceMetadata: {
+            /** @description Path to the loaded session file relative to the configured Codex sessions root. */
+            relativePath: string;
+            /**
+             * Format: int64
+             * @description Size of the loaded session file in bytes.
+             */
+            sizeBytes: number;
+            /**
+             * Format: date-time
+             * @description Filesystem modification time when available.
+             */
+            modifiedAt?: string;
+        };
+        CodexSessionParseSummary: {
+            /** @description Number of JSON event records parsed from the session stream. */
+            eventCount: number;
+            /** @description Number of non-empty event-stream lines inspected. */
+            lineCount: number;
+            /** @description Number of non-empty lines that could not be parsed as JSON objects. */
+            malformedLineCount: number;
+            /** @description Number of parsed JSON events without a recognized type field. */
+            unknownEventCount: number;
+            /** @description Chronological execution turns inferred from turn boundaries and response activity. */
+            turns: components["schemas"]["CodexSessionTurnSummary"][];
+            /** @description Function and tool calls observed in chronological order. */
+            functionCalls: components["schemas"]["CodexSessionFunctionCallSummary"][];
+            /** @description Reasoning entries or summaries observed in chronological order. */
+            reasoning: components["schemas"]["CodexSessionReasoningSummary"][];
+            tokenUsage?: components["schemas"]["CodexSessionTokenUsage"];
+            /** @description Line-level parse errors for malformed event-stream records. */
+            parseErrors: components["schemas"]["CodexSessionLineError"][];
+            /** @description Compact list of events with unknown or unsupported type fields. */
+            unknownEvents: components["schemas"]["CodexSessionUnknownEvent"][];
+        };
+        CodexSessionTurnSummary: {
+            /** @description One-based chronological execution turn index. */
+            index: number;
+            /** @description Number of parsed events associated with the turn. */
+            eventCount: number;
+            /** @description Number of response_item records associated with the turn. */
+            responseItemCount: number;
+            /** @description Number of function or tool calls associated with the turn. */
+            functionCallCount: number;
+            /** @description Number of reasoning entries associated with the turn. */
+            reasoningCount: number;
+            /**
+             * Format: date-time
+             * @description First event timestamp associated with the turn when present.
+             */
+            startedAt?: string;
+        };
+        CodexSessionFunctionCallSummary: {
+            /** @description Chronological order of the function or tool call in the session stream. */
+            order: number;
+            /** @description One-based execution turn index associated with the call when inferable. */
+            turnIndex?: number;
+            /** @description Provider call identifier when present in the session stream. */
+            callId?: string;
+            /** @description Raw response item type for the call, such as function_call or custom_tool_call. */
+            type: string;
+            /** @description Function or tool name when present. */
+            name?: string;
+            /** @description Compact argument payload when present. */
+            arguments?: string;
+            /** @description Compact output payload when present. */
+            output?: string;
+            /** @description Result status inferred from the call output or explicit status fields. */
+            status?: string;
+        };
+        CodexSessionReasoningSummary: {
+            /** @description Chronological order of the reasoning entry in the session stream. */
+            order: number;
+            /** @description One-based execution turn index associated with the reasoning entry when inferable. */
+            turnIndex?: number;
+            /** @description Event or response item type that carried the reasoning entry. */
+            sourceType: string;
+            /** @description Reasoning text when plaintext content is present. */
+            text?: string;
+            /** @description Compact reasoning summary when present. */
+            summary?: string;
+            /** @description Whether the reasoning entry only exposed encrypted content. */
+            encrypted?: boolean;
+        };
+        CodexSessionTokenUsage: {
+            inputTokens?: number;
+            cachedInputTokens?: number;
+            outputTokens?: number;
+            reasoningOutputTokens?: number;
+            totalTokens?: number;
+        };
+        CodexSessionLineError: {
+            /** @description One-based line number of the malformed event-stream record. */
+            lineNumber: number;
+            /** @description Client-safe parse error message for the malformed line. */
+            message: string;
+        };
+        CodexSessionUnknownEvent: {
+            /** @description One-based line number of the unknown event. */
+            lineNumber: number;
+            /** @description Raw top-level event type when present. */
+            type?: string;
+            /** @description Raw nested payload type when present. */
+            payloadType?: string;
         };
         StringMap: {
             [key: string]: string;
@@ -1371,6 +1501,36 @@ export interface operations {
                     "application/json": components["schemas"]["StatusResponse"];
                 };
             };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getProviderSessionDetails: {
+        parameters: {
+            query: {
+                /** @description Provider that emitted the session identifier. Only codex sessions are currently loadable. */
+                provider: string;
+                /** @description Provider-session identifier kind. Only session_id is currently loadable. */
+                kind: string;
+                /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Parsed provider-session details. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderSessionDetailResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

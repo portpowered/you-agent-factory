@@ -14,9 +14,11 @@ export function SelectedWorkDispatchHistorySection({
   activeTraceID,
   currentDispatchID,
   fallbackProviderSessions,
+  onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
   requests,
+  selectedProviderSessionKey,
   selectedWorkID,
   traceTargetId,
   workstationKind,
@@ -27,8 +29,10 @@ export function SelectedWorkDispatchHistorySection({
         attempts={fallbackProviderSessions}
         currentDispatchID={currentDispatchID}
         emptyMessage="No workstation dispatch has been recorded yet for this work item."
+        onSelectProviderSession={onSelectProviderSession}
         onSelectWorkID={onSelectWorkID}
         renderHeading={(attempt) => attempt.workstation_name || attempt.transition_id}
+        selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selectedWorkID}
         title="Workstation dispatches"
         workstationKind={workstationKind}

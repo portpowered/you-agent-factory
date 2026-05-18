@@ -1,0 +1,33 @@
+type: object
+additionalProperties: false
+required:
+  - index
+  - eventCount
+  - responseItemCount
+  - functionCallCount
+  - reasoningCount
+properties:
+  index:
+    type: integer
+    minimum: 1
+    description: One-based chronological execution turn index.
+  eventCount:
+    type: integer
+    minimum: 0
+    description: Number of parsed events associated with the turn.
+  responseItemCount:
+    type: integer
+    minimum: 0
+    description: Number of response_item records associated with the turn.
+  functionCallCount:
+    type: integer
+    minimum: 0
+    description: Number of function or tool calls associated with the turn.
+  reasoningCount:
+    type: integer
+    minimum: 0
+    description: Number of reasoning entries associated with the turn.
+  startedAt:
+    type: string
+    format: date-time
+    description: First event timestamp associated with the turn when present.
