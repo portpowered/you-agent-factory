@@ -21,11 +21,6 @@ import type { FactoryEvent } from "./api/events";
 import { FACTORY_EVENT_TYPES } from "./api/events";
 import type { FactoryValue } from "./api/named-factory";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "./components/ui/dashboard-typography";
-import {
   buildDashboardSnapshotFixture,
   dashboardWorkstationRequestFixtures,
   failureAnalysisTimelineEvents,
@@ -47,9 +42,16 @@ import {
   semanticWorkflowDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_PAGE_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+} from "./components/ui/dashboard-typography";
 import { formatDurationMillis } from "./components/ui/formatters";
 import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
 import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
+import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
@@ -58,14 +60,12 @@ import * as factoryPngExportModule from "./features/export/factory-png-export";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "./features/import";
 import * as factoryPngImportModule from "./features/import/factory-png-import";
-import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   TraceDrilldownWidget,
   useTraceDrilldown,
 } from "./features/trace-drilldown";
-import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
 
 vi.mock("./features/current-factory-definition", async () => {
   const actual = await vi.importActual("./features/current-factory-definition");
@@ -115,6 +115,10 @@ class MockEventSource {
 }
 
 interface RenderAppOptions {
+  browserLanguage?: string | null;
+  browserLanguages?: readonly string[] | null;
+  initialLocale?: string | null;
+  locationSearch?: string | null;
   snapshot: DashboardSnapshot;
   timelineEvents?: FactoryEvent[];
   timelineSnapshots?: DashboardSnapshot[];
@@ -1257,6 +1261,10 @@ function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
 }
 
 function renderApp({
+  browserLanguage,
+  browserLanguages,
+  initialLocale,
+  locationSearch,
   snapshot,
   timelineEvents,
   timelineSnapshots,
@@ -1303,7 +1311,12 @@ function renderApp({
 
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <App />
+      <App
+        browserLanguage={browserLanguage}
+        browserLanguages={browserLanguages}
+        initialLocale={initialLocale}
+        locationSearch={locationSearch}
+      />
     </QueryClientProvider>,
   );
 
@@ -1879,6 +1892,136 @@ describe("App", () => {
       writeFactoryExportPngSpy.mockRestore();
       exportProbe.restore();
     }
+  });
+
+  it("switches the live dashboard to zh-CN across header, dialogs, and widgets while keeping data values stable", async () => {
+    const file = new File(["png"], "factory-import.png", { type: "image/png" });
+    const importValue = createFactoryImportValue();
+    vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
+      ok: true,
+      value: importValue,
+    });
+    const { fetchMock } = renderApp({
+      initialLocale: "en",
+      snapshot: terminalSnapshot,
+    });
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const path =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? `${input.pathname}${input.search}`
+            : input.url;
+
+      if (path === "/factory/~current") {
+        return jsonResponse(currentNamedFactoryExportResponse);
+      }
+
+      throw new Error(`unexpected fetch for ${path}`);
+    });
+
+    const englishToolbar = await screen.findByRole("region", {
+      name: "dashboard summary",
+    });
+    const languageSwitcher = within(englishToolbar).getByRole("combobox", {
+      name: "Language",
+    });
+
+    expect(
+      within(englishToolbar).getByRole("button", { name: "Export PNG" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
+
+    fireEvent.change(languageSwitcher, { target: { value: "zh-CN" } });
+
+    const localizedToolbar = await screen.findByRole("region", {
+      name: "仪表板概览",
+    });
+
+    expect(
+      within(localizedToolbar).getByRole("combobox", { name: "语言" }),
+    ).toBeTruthy();
+    expect(
+      within(localizedToolbar).getByRole("slider", { name: "时间线刻度" }),
+    ).toBeTruthy();
+    expect(screen.getByText("正在等待更多刻度")).toBeTruthy();
+    expect(
+      within(localizedToolbar).getByRole("button", { name: "导出 PNG" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "工作总计" })).toBeTruthy();
+    expect(screen.getByLabelText("已完成：1")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "工厂图" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "工作图视口" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
+
+    fireEvent.drop(
+      screen.getByRole("region", { name: "工作图视口" }),
+      createFileDropTransfer([file]),
+    );
+
+    const importDialog = await screen.findByRole("dialog", {
+      name: "检查工厂导入",
+    });
+    expect(importDialog.textContent).toContain("Dropped Factory");
+    expect(importDialog.textContent).toContain("factory-import.png");
+    expect(
+      within(importDialog).getByRole("img", {
+        name: "Dropped Factory 预览图",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(importDialog).getByRole("button", { name: "启用工厂" }),
+    ).toBeTruthy();
+    expect(
+      within(importDialog).getByRole("button", { name: "取消导入" }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(importDialog).getByRole("button", { name: "取消导入" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "检查工厂导入" })).toBeNull();
+    });
+
+    fireEvent.click(
+      within(localizedToolbar).getByRole("button", { name: "导出 PNG" }),
+    );
+
+    const exportDialog = await screen.findByRole("dialog", {
+      name: "导出工厂",
+    });
+    await waitFor(() => {
+      expect(
+        within(exportDialog).getByDisplayValue("semantic-workflow"),
+      ).toBeTruthy();
+    });
+    expect(within(exportDialog).getByLabelText("工厂名称")).toBeTruthy();
+    expect(within(exportDialog).getByLabelText("封面图片")).toBeTruthy();
+
+    fireEvent.click(within(exportDialog).getByRole("button", { name: "取消" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "导出工厂" })).toBeNull();
+    });
+  });
+
+  it("falls back to English when the configured app locale is unsupported", async () => {
+    renderApp({
+      locationSearch: "?locale=fr-CA",
+      snapshot: terminalSnapshot,
+    });
+
+    expect(
+      await screen.findByRole("region", { name: "dashboard summary" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Language" })).toBeTruthy();
+    expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "语言" })).toBeNull();
   });
 
   it("applies the shared typography helpers to the dashboard toolbar summary shell", async () => {
