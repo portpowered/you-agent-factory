@@ -286,6 +286,69 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 	}
 }
 
+func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *testing.T) {
+	nextToken := "cursor-review-2"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("state.name") != "review" {
+			t.Fatalf("state.name query = %q, want review", r.URL.Query().Get("state.name"))
+		}
+		if r.URL.Query().Get("state.type") != "PROCESSING" {
+			t.Fatalf("state.type query = %q, want PROCESSING", r.URL.Query().Get("state.type"))
+		}
+		if r.URL.Query().Get("maxResults") != "1" {
+			t.Fatalf("maxResults query = %q, want 1", r.URL.Query().Get("maxResults"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Review PRD",
+				WorkId:       stringPtr("work-review"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "review",
+					Type: factoryapi.WorkStateTypePROCESSING,
+				},
+			}},
+			PaginationContext: &factoryapi.PaginationContext{
+				MaxResults: 1,
+				NextToken:  &nextToken,
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:       serverPort(t, srv),
+		StateName:  "review",
+		StateType:  "PROCESSING",
+		MaxResults: 1,
+		JSON:       true,
+		Output:     &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("WORK ID")) || bytes.Contains(out.Bytes(), []byte("No work found.")) {
+		t.Fatalf("json output included human-readable text: %q", out.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("json output is invalid: %v\n%s", err, out.String())
+	}
+	selected := selectJSONWorkByState(t, got, "review", "PROCESSING")
+	if selected["workId"] != "work-review" {
+		t.Fatalf("selected workId = %#v, want work-review", selected["workId"])
+	}
+	pagination := jsonObject(t, got, "paginationContext")
+	if pagination["maxResults"] != float64(1) || pagination["nextToken"] != nextToken {
+		t.Fatalf("paginationContext = %#v, want maxResults=1 nextToken=%q", pagination, nextToken)
+	}
+}
+
 func TestList_InvalidStateType(t *testing.T) {
 	err := List(ListConfig{Port: 8080, StateType: "UNKNOWN", Output: &bytes.Buffer{}})
 	if err == nil {
@@ -308,6 +371,37 @@ func TestList_InvalidSortBy(t *testing.T) {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func selectJSONWorkByState(t *testing.T, response map[string]any, stateName string, stateType string) map[string]any {
+	t.Helper()
+
+	results, ok := response["results"].([]any)
+	if !ok {
+		t.Fatalf("results = %#v, want JSON array", response["results"])
+	}
+	for _, item := range results {
+		work, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("result item = %#v, want JSON object", item)
+		}
+		state := jsonObject(t, work, "state")
+		if state["name"] == stateName && state["type"] == stateType {
+			return work
+		}
+	}
+	t.Fatalf("no work selected by state.name=%q and state.type=%q from %#v", stateName, stateType, results)
+	return nil
+}
+
+func jsonObject(t *testing.T, object map[string]any, key string) map[string]any {
+	t.Helper()
+
+	value, ok := object[key].(map[string]any)
+	if !ok {
+		t.Fatalf("%s = %#v, want JSON object", key, object[key])
+	}
+	return value
 }
 
 func serverPort(t *testing.T, srv *httptest.Server) int {
