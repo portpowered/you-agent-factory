@@ -53,13 +53,14 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	currentChainingTraceID := "chain-work-1"
 	previousChainingTraceIDs := []string{"chain-a", "chain-z"}
 	initialState := "queued"
+	initialWorkState := factoryapi.WorkState{Name: initialState, Type: factoryapi.WorkStateTypeINITIAL}
 	tags := factoryapi.StringMap{"priority": "high"}
 	batchWork := factoryapi.Work{
 		Name:                     "draft",
 		WorkId:                   &workID,
 		RequestId:                &requestID,
 		WorkTypeName:             stringPtr("task"),
-		State:                    &initialState,
+		State:                    &initialWorkState,
 		CurrentChainingTraceId:   &currentChainingTraceID,
 		PreviousChainingTraceIds: &previousChainingTraceIDs,
 		TraceId:                  &traceID,
@@ -131,7 +132,7 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	if workRequest.Relations == nil || len(*workRequest.Relations) != 2 || (*workRequest.Relations)[1].Type != factoryapi.RelationTypeParentChild {
 		t.Fatal("generated work request relations should advertise parent-child support")
 	}
-	if workRequest.Works == nil || len(*workRequest.Works) != 1 || (*workRequest.Works)[0].State == nil || *(*workRequest.Works)[0].State != initialState {
+	if workRequest.Works == nil || len(*workRequest.Works) != 1 || (*workRequest.Works)[0].State == nil || (*workRequest.Works)[0].State.Name != initialState {
 		t.Fatal("generated work request works should advertise explicit state support")
 	}
 	if workRequest.CurrentChainingTraceId == nil || *workRequest.CurrentChainingTraceId != "chain-request-1" || (*workRequest.Works)[0].CurrentChainingTraceId == nil || *(*workRequest.Works)[0].CurrentChainingTraceId != currentChainingTraceID {

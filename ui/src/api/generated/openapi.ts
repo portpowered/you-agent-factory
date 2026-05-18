@@ -181,7 +181,7 @@ export interface components {
             traceId: string;
         };
         ListWorkResponse: {
-            results: components["schemas"]["TokenResponse"][];
+            results: components["schemas"]["Work"][];
             paginationContext?: components["schemas"]["PaginationContext"];
         };
         PaginationContext: {
@@ -1108,8 +1108,8 @@ export interface components {
             requestId?: string;
             /** @description Configured work type name from factory.json for this submitted work item. */
             workTypeName?: string;
-            /** @description Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type. */
-            state?: string;
+            /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
+            state?: components["schemas"]["WorkState"];
             /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
             chainingTraceDepth?: number;
             /** @description Explicit chaining-trace identifier for this submitted work item. */

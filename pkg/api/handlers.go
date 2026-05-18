@@ -222,9 +222,9 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	end := min(startIdx+maxResults, len(tokens))
 	page := tokens[startIdx:end]
 
-	results := make([]factoryapi.TokenResponse, len(page))
+	results := make([]factoryapi.Work, len(page))
 	for i, t := range page {
-		results[i] = tokenToResponse(t, false)
+		results[i] = tokenToWork(t, snapshot.Topology)
 	}
 
 	resp := factoryapi.ListWorkResponse{Results: results}
@@ -345,6 +345,51 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 		}
 	}
 	return resp
+}
+
+func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
+	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
+	return factoryapi.Work{
+		Name:                     name,
+		WorkId:                   stringPtrIfNotEmpty(t.Color.WorkID),
+		WorkTypeName:             stringPtrIfNotEmpty(t.Color.WorkTypeID),
+		State:                    workStateForToken(t, net),
+		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
+		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
+		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
+		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
+		Tags:                     stringMapPtr(t.Color.Tags),
+	}
+}
+
+func workStateForToken(t *interfaces.Token, net *state.Net) *factoryapi.WorkState {
+	if t == nil {
+		return nil
+	}
+	workTypeID, stateName := state.SplitPlaceID(t.PlaceID)
+	if t.Color.WorkTypeID != "" {
+		workTypeID = t.Color.WorkTypeID
+	}
+	if net != nil {
+		if place, ok := net.Places[t.PlaceID]; ok {
+			workTypeID = place.TypeID
+			stateName = place.State
+		}
+	}
+	if stateName == "" {
+		return nil
+	}
+	return &factoryapi.WorkState{
+		Name: stateName,
+		Type: factoryapi.WorkStateType(state.CategoryForState(workTypesFromNet(net), workTypeID, stateName)),
+	}
+}
+
+func workTypesFromNet(net *state.Net) map[string]*state.WorkType {
+	if net == nil {
+		return nil
+	}
+	return net.WorkTypes
 }
 
 func publicWorkToken(token *interfaces.Token) bool {
@@ -510,6 +555,13 @@ func stringValue(value *string) string {
 	return *value
 }
 
+func generatedWorkStateName(value *factoryapi.WorkState) string {
+	if value == nil {
+		return ""
+	}
+	return value.Name
+}
+
 func intValue(value *int) int {
 	if value == nil {
 		return 0
@@ -609,7 +661,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkReq
 				WorkID:                   stringValue(work.WorkId),
 				RequestID:                stringValue(work.RequestId),
 				WorkTypeID:               stringValue(work.WorkTypeName),
-				State:                    stringValue(work.State),
+				State:                    generatedWorkStateName(work.State),
 				ChainingTraceDepth:       intValue(work.ChainingTraceDepth),
 				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
 				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),

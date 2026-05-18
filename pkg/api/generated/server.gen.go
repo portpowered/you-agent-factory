@@ -646,7 +646,7 @@ type IntegerMap map[string]int
 // ListWorkResponse defines model for ListWorkResponse.
 type ListWorkResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
-	Results           []TokenResponse    `json:"results"`
+	Results           []Work             `json:"results"`
 }
 
 // PaginationContext defines model for PaginationContext.
@@ -955,8 +955,8 @@ type Work struct {
 	// RequestId Identifier for the original request that created this work, if applicable
 	RequestId *string `json:"requestId,omitempty"`
 
-	// State Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
-	State *string    `json:"state,omitempty"`
+	// State A lifecycle state that a work item can occupy inside one work type.
+	State *WorkState `json:"state,omitempty"`
 	Tags  *StringMap `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.

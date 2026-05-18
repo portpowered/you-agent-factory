@@ -160,7 +160,7 @@ func generatedReplayOutputWorkPtr(items []interfaces.FactoryWorkItem) *[]factory
 			Name:                     item.DisplayName,
 			WorkId:                   stringPtrIfNotEmpty(item.ID),
 			WorkTypeName:             stringPtrIfNotEmpty(item.WorkTypeID),
-			State:                    stringPtrIfNotEmpty(item.State),
+			State:                    generatedWorkStatePtr(item.State),
 			CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
 			PreviousChainingTraceIds: slicePtr(item.PreviousChainingTraceIDs),
 			TraceId:                  stringPtrIfNotEmpty(item.TraceID),
@@ -168,6 +168,13 @@ func generatedReplayOutputWorkPtr(items []interfaces.FactoryWorkItem) *[]factory
 		})
 	}
 	return &out
+}
+
+func generatedWorkStatePtr(name string) *factoryapi.WorkState {
+	if name == "" {
+		return nil
+	}
+	return &factoryapi.WorkState{Name: name, Type: factoryapi.WorkStateTypePROCESSING}
 }
 
 func TestReduceReplayEvents_ThinDispatchRequestUsesContextIdentityAndFactoryTopology(t *testing.T) {

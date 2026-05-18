@@ -387,7 +387,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/TokenResponse'
+            $ref: '#/components/schemas/Work'
         paginationContext:
           $ref: '#/components/schemas/PaginationContext'
     PaginationContext:
@@ -2197,8 +2197,8 @@ components:
           type: string
           description: Configured work type name from factory.json for this submitted work item.
         state:
-          type: string
-          description: Explicit initial state for the submitted work item. Omit this to use the configured initial state for the work type.
+          $ref: '#/components/schemas/WorkState'
+          description: Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided.
         chainingTraceDepth:
           type: integer
           minimum: 1

@@ -573,6 +573,27 @@ func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) 
 	assertWorkstationRequestScriptBoundarySchemas(t, schemas)
 }
 
+func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+
+	listWorkResponse := schemaObject(t, schemas, "ListWorkResponse")
+	listWorkProperties := schemaProperties(t, listWorkResponse, "ListWorkResponse")
+	assertArrayItemRef(t, listWorkProperties, "results", "#/components/schemas/Work")
+	if _, ok := listWorkProperties["paginationContext"].(map[string]any); !ok {
+		t.Fatal("ListWorkResponse.properties.paginationContext is missing")
+	}
+
+	work := schemaObject(t, schemas, "Work")
+	workProperties := schemaProperties(t, work, "Work")
+	state, ok := workProperties["state"].(map[string]any)
+	if !ok {
+		t.Fatal("Work.properties.state is missing")
+	}
+	if got := state["$ref"]; got != "#/components/schemas/WorkState" {
+		t.Fatalf("Work.properties.state.$ref = %v, want #/components/schemas/WorkState", got)
+	}
+}
+
 func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 

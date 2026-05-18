@@ -118,7 +118,7 @@ func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTime
 	}
 
 	work := server.ListWork(t)
-	if len(work.Results) != 1 || work.Results[0].TraceId != traceID {
+	if len(work.Results) != 1 || stringPointerValue(work.Results[0].TraceId) != traceID {
 		t.Fatalf("completed work = %#v, want one result for trace %q", work.Results, traceID)
 	}
 }

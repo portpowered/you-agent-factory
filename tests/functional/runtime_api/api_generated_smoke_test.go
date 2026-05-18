@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -38,23 +37,15 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	if len(work.Results) != 1 {
 		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
 	}
-	token := work.Results[0]
-	if token.TraceId != traceID {
-		t.Fatalf("GET /work trace_id = %q, want %q", token.TraceId, traceID)
+	item := work.Results[0]
+	if stringPointerValue(item.TraceId) != traceID {
+		t.Fatalf("GET /work trace_id = %q, want %q", stringPointerValue(item.TraceId), traceID)
 	}
-	if token.WorkType != "task" {
-		t.Fatalf("GET /work work_type = %q, want task", token.WorkType)
+	if stringPointerValue(item.WorkTypeName) != "task" {
+		t.Fatalf("GET /work work type = %q, want task", stringPointerValue(item.WorkTypeName))
 	}
-	if token.PlaceId != "task:complete" {
-		t.Fatalf("GET /work place_id = %q, want task:complete", token.PlaceId)
-	}
-
-	workDetail := getGeneratedJSON[factoryapi.TokenResponse](t, server.URL()+"/work/"+url.PathEscape(token.Id))
-	if workDetail.Id != token.Id {
-		t.Fatalf("GET /work/{id} id = %q, want %q", workDetail.Id, token.Id)
-	}
-	if workDetail.History == nil {
-		t.Fatal("GET /work/{id} omitted generated token history")
+	if generatedWorkStateName(item.State) != "complete" || generatedWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", item.State)
 	}
 
 	statusRead := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
@@ -87,9 +78,9 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 		t.Fatalf("agent-factory submit --work-type-name: %v", err)
 	}
 
-	token := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
-	if token.WorkType != "task" || token.PlaceId != "task:complete" {
-		t.Fatalf("CLI-submitted token = %#v, want task in task:complete", token)
+	item := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	if stringPointerValue(item.WorkTypeName) != "task" || generatedWorkStateName(item.State) != "complete" {
+		t.Fatalf("CLI-submitted work = %#v, want task in complete state", item)
 	}
 }
 
@@ -118,10 +109,10 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", resp)
 	}
 
-	tokens := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
-	for _, token := range tokens {
-		if token.WorkType != "task" {
-			t.Fatalf("generated batch token %s work_type = %q, want task", token.Id, token.WorkType)
+	items := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
+	for _, item := range items {
+		if stringPointerValue(item.WorkTypeName) != "task" {
+			t.Fatalf("generated batch work %s work type = %q, want task", stringPointerValue(item.WorkId), stringPointerValue(item.WorkTypeName))
 		}
 	}
 
@@ -237,8 +228,8 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
-		for _, token := range work.Results {
-			if token.TraceId == traceID && token.PlaceId == placeID {
+		for _, item := range work.Results {
+			if stringPointerValue(item.TraceId) == traceID && generatedWorkPlaceID(item) == placeID {
 				return work
 			}
 		}
@@ -247,24 +238,24 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 	return getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
 }
 
-func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType string, timeout time.Duration) factoryapi.TokenResponse {
+func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType string, timeout time.Duration) factoryapi.Work {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
-		for _, token := range work.Results {
-			if token.WorkType == workType && token.PlaceId == workType+":complete" {
-				return token
+		for _, item := range work.Results {
+			if stringPointerValue(item.WorkTypeName) == workType && generatedWorkStateName(item.State) == "complete" {
+				return item
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
 	t.Fatalf("timed out waiting for completed work type %q; last work response: %#v", workType, work)
-	return factoryapi.TokenResponse{}
+	return factoryapi.Work{}
 }
 
-func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []string, timeout time.Duration) []factoryapi.TokenResponse {
+func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []string, timeout time.Duration) []factoryapi.Work {
 	t.Helper()
 	want := make(map[string]bool, len(workIDs))
 	for _, workID := range workIDs {
@@ -273,24 +264,32 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
-		found := make(map[string]factoryapi.TokenResponse, len(want))
-		for _, token := range work.Results {
-			if want[token.WorkId] && strings.HasSuffix(token.PlaceId, ":complete") {
-				found[token.WorkId] = token
+		found := make(map[string]factoryapi.Work, len(want))
+		for _, item := range work.Results {
+			workID := stringPointerValue(item.WorkId)
+			if want[workID] && generatedWorkStateName(item.State) == "complete" {
+				found[workID] = item
 			}
 		}
 		if len(found) == len(want) {
-			tokens := make([]factoryapi.TokenResponse, 0, len(workIDs))
+			items := make([]factoryapi.Work, 0, len(workIDs))
 			for _, workID := range workIDs {
-				tokens = append(tokens, found[workID])
+				items = append(items, found[workID])
 			}
-			return tokens
+			return items
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
 	t.Fatalf("timed out waiting for completed work IDs %v; last work response: %#v", workIDs, work)
 	return nil
+}
+
+func generatedWorkPlaceID(work factoryapi.Work) string {
+	if work.State == nil {
+		return stringPointerValue(work.WorkTypeName) + ":"
+	}
+	return stringPointerValue(work.WorkTypeName) + ":" + work.State.Name
 }
 
 func functionalServerPort(t *testing.T, rawURL string) int {

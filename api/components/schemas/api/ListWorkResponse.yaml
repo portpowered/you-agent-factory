@@ -6,7 +6,6 @@ properties:
   results:
     type: array
     items:
-      $ref: './TokenResponse.yaml'
+      $ref: '../data-models/Work.yaml'
   paginationContext:
     $ref: './PaginationContext.yaml'
-

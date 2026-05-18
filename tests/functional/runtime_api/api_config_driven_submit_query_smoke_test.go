@@ -80,11 +80,11 @@ func assertListWorkResponse(t *testing.T, srv *api.Server) {
 		t.Fatalf("GET /work: expected 1 result, got %d", len(listResp.Results))
 	}
 
-	token := listResp.Results[0]
-	if token.WorkType != "task" {
-		t.Errorf("GET /work: expected work_type 'task', got %q", token.WorkType)
+	work := listResp.Results[0]
+	if stringPointerValue(work.WorkTypeName) != "task" {
+		t.Errorf("GET /work: expected work type 'task', got %q", stringPointerValue(work.WorkTypeName))
 	}
-	if token.PlaceId != "task:complete" {
-		t.Errorf("GET /work: expected place_id 'task:complete', got %q", token.PlaceId)
+	if generatedWorkStateName(work.State) != "complete" || generatedWorkStateType(work.State) != factoryapi.WorkStateTypeTERMINAL {
+		t.Errorf("GET /work: expected state complete/TERMINAL, got %#v", work.State)
 	}
 }

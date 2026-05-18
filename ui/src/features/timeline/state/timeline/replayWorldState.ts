@@ -10,6 +10,7 @@ import {
 } from "./replayCompletion";
 import {
   eventWorkTypeID,
+  factoryWorkStateName,
   factoryWorkToItem,
   initialPlaceForWork,
   normalizeFactoryPayload,
@@ -389,7 +390,7 @@ function applyResponse(
         event.payload.transitionId,
         event.payload.outcome,
         eventWorkTypeID(work) ?? "",
-        work.state ?? "",
+        factoryWorkStateName(work) ?? "",
       ),
     ),
   );

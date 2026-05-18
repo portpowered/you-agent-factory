@@ -276,6 +276,14 @@ export function eventWorkTypeID(work: FactoryWork): string | undefined {
   );
 }
 
+export function factoryWorkStateName(work: FactoryWork): string | undefined {
+  const state = work.state as FactoryWork["state"] | string | undefined;
+  if (typeof state === "string") {
+    return state || undefined;
+  }
+  return state?.name;
+}
+
 export function initialPlaceForWork(
   state: ReplayWorldState,
   workTypeID: string,

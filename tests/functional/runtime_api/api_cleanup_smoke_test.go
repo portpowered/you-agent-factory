@@ -28,11 +28,11 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
 	}
 	completed := work.Results[0]
-	if completed.TraceId != traceID {
-		t.Fatalf("GET /work trace_id = %q, want %q", completed.TraceId, traceID)
+	if support.StringPointerValue(completed.TraceId) != traceID {
+		t.Fatalf("GET /work trace_id = %q, want %q", support.StringPointerValue(completed.TraceId), traceID)
 	}
-	if completed.PlaceId != "task:complete" {
-		t.Fatalf("GET /work place_id = %q, want task:complete", completed.PlaceId)
+	if generatedWorkStateName(completed.State) != "complete" || generatedWorkStateType(completed.State) != factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", completed.State)
 	}
 
 	statusRead := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
@@ -42,7 +42,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 	if statusRead.Categories.Terminal != 1 {
 		t.Fatalf("GET /status terminal count = %d, want 1", statusRead.Categories.Terminal)
 	}
-	assertCleanupSmokeCanonicalFactoryEvents(t, server, completed.WorkId)
+	assertCleanupSmokeCanonicalFactoryEvents(t, server, support.StringPointerValue(completed.WorkId))
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
 	assertCleanupSmokeDashboardShell(t, server.URL())
 }

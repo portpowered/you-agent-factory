@@ -233,8 +233,8 @@ func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	if err := json.NewDecoder(listResp.Body).Decode(&listBody); err != nil {
 		t.Fatalf("decode list work response: %v", err)
 	}
-	if len(listBody.Results) != 1 || listBody.Results[0].Id != "tok-api-surface-1" {
-		t.Fatalf("GET /work results = %#v, want tok-api-surface-1", listBody.Results)
+	if len(listBody.Results) != 1 || stringValue(listBody.Results[0].WorkId) != "work-api-surface-1" {
+		t.Fatalf("GET /work results = %#v, want work-api-surface-1", listBody.Results)
 	}
 	if mf.EngineStateSnapshotCalls == 0 {
 		t.Fatal("expected GET /work to read engine state snapshot through the embedded API factory contract")
@@ -1206,6 +1206,19 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 		CreatedAt: now,
 		EnteredAt: now,
 	}
+	mf.Net = &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+				},
+			},
+		},
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/work", nil)
 	rec = httptest.NewRecorder()
@@ -1223,36 +1236,24 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 		t.Fatalf("work result count = %d, want 1", len(listResp.Results))
 	}
 
-	token := listResp.Results[0]
-	if token.Id != "tok-inventory-1" {
-		t.Fatalf("token id = %q, want tok-inventory-1", token.Id)
+	work := listResp.Results[0]
+	if work.Name != "Inventory story" {
+		t.Fatalf("name = %q, want Inventory story", work.Name)
 	}
-	if token.PlaceId != "task:init" {
-		t.Fatalf("place_id = %q, want task:init", token.PlaceId)
+	if stringValue(work.WorkId) != "work-inventory-1" {
+		t.Fatalf("work_id = %q, want work-inventory-1", stringValue(work.WorkId))
 	}
-	if stringValue(token.Name) != "Inventory story" {
-		t.Fatalf("name = %q, want Inventory story", stringValue(token.Name))
+	if stringValue(work.WorkTypeName) != "task" {
+		t.Fatalf("work_type = %q, want task", stringValue(work.WorkTypeName))
 	}
-	if token.WorkId != "work-inventory-1" {
-		t.Fatalf("work_id = %q, want work-inventory-1", token.WorkId)
+	if stringValue(work.TraceId) != "trace-inventory-1" {
+		t.Fatalf("trace_id = %q, want trace-inventory-1", stringValue(work.TraceId))
 	}
-	if token.WorkType != "task" {
-		t.Fatalf("work_type = %q, want task", token.WorkType)
+	if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypeINITIAL {
+		t.Fatalf("state = %#v, want init/INITIAL", work.State)
 	}
-	if token.TraceId != "trace-inventory-1" {
-		t.Fatalf("trace_id = %q, want trace-inventory-1", token.TraceId)
-	}
-	if token.Tags == nil || (*token.Tags)["branch"] != "api-standardization" {
-		t.Fatalf("tags = %#v, want branch api-standardization", token.Tags)
-	}
-	if token.CreatedAt.Format(time.RFC3339) != "2026-04-12T16:30:00Z" {
-		t.Fatalf("created_at = %q, want RFC3339 timestamp", token.CreatedAt)
-	}
-	if token.EnteredAt.Format(time.RFC3339) != "2026-04-12T16:30:00Z" {
-		t.Fatalf("entered_at = %q, want RFC3339 timestamp", token.EnteredAt)
-	}
-	if token.History != nil {
-		t.Fatalf("list token history = %#v, want omitted history", token.History)
+	if work.Tags == nil || (*work.Tags)["branch"] != "api-standardization" {
+		t.Fatalf("tags = %#v, want branch api-standardization", work.Tags)
 	}
 }
 
@@ -1472,8 +1473,8 @@ func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	if len(resp.Results) != 1 || resp.Results[0].Id != "tok-story" {
-		t.Fatalf("listed tokens = %#v, want only customer token", resp.Results)
+	if len(resp.Results) != 1 || stringValue(resp.Results[0].WorkId) != "work-story" {
+		t.Fatalf("listed work = %#v, want only customer work", resp.Results)
 	}
 	if resp.PaginationContext != nil {
 		t.Fatalf("pagination context = %#v, want none after internal token filtering", resp.PaginationContext)
@@ -1546,8 +1547,8 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 	if len(firstResp.Results) != 2 {
 		t.Fatalf("first page results = %d, want 2", len(firstResp.Results))
 	}
-	if firstResp.Results[0].Id != "tok-filter-1" || firstResp.Results[1].Id != "tok-filter-3" {
-		t.Fatalf("first page listed tokens = %#v, want public tokens before pagination", firstResp.Results)
+	if stringValue(firstResp.Results[0].WorkId) != "work-filter-1" || stringValue(firstResp.Results[1].WorkId) != "work-filter-3" {
+		t.Fatalf("first page listed work = %#v, want public work before pagination", firstResp.Results)
 	}
 	if firstResp.PaginationContext == nil {
 		t.Fatal("expected first page pagination context")
@@ -1570,8 +1571,8 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 	if err := json.NewDecoder(secondRec.Body).Decode(&secondResp); err != nil {
 		t.Fatalf("decode second page: %v", err)
 	}
-	if len(secondResp.Results) != 1 || secondResp.Results[0].Id != "tok-filter-4" {
-		t.Fatalf("second page listed tokens = %#v, want remaining public token", secondResp.Results)
+	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-filter-4" {
+		t.Fatalf("second page listed work = %#v, want remaining public work", secondResp.Results)
 	}
 	if secondResp.PaginationContext != nil {
 		t.Fatalf("second page pagination context = %#v, want none on final page", secondResp.PaginationContext)
@@ -2012,12 +2013,12 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	if secondResp.PaginationContext != nil {
 		t.Fatalf("expected final page to omit pagination context, got %#v", secondResp.PaginationContext)
 	}
-	if firstResp.Results[0].WorkId != "work-cursor-1" ||
-		firstResp.Results[1].WorkId != "work-cursor-2" {
+	if stringValue(firstResp.Results[0].WorkId) != "work-cursor-1" ||
+		stringValue(firstResp.Results[1].WorkId) != "work-cursor-2" {
 		t.Fatalf("unexpected first page work ids: %#v", firstResp.Results)
 	}
-	if secondResp.Results[0].WorkId != "work-cursor-3" {
-		t.Fatalf("unexpected continued work id %q", secondResp.Results[0].WorkId)
+	if stringValue(secondResp.Results[0].WorkId) != "work-cursor-3" {
+		t.Fatalf("unexpected continued work id %q", stringValue(secondResp.Results[0].WorkId))
 	}
 }
 

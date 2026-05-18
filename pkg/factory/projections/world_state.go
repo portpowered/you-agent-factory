@@ -1274,7 +1274,7 @@ func factoryWorkItemFromGenerated(work factoryapi.Work) interfaces.FactoryWorkIt
 	return interfaces.FactoryWorkItem{
 		ID:                       stringValue(work.WorkId),
 		WorkTypeID:               stringValue(work.WorkTypeName),
-		State:                    stringValue(work.State),
+		State:                    generatedWorkStateName(work.State),
 		DisplayName:              work.Name,
 		ChainingTraceDepth:       intValue(work.ChainingTraceDepth),
 		CurrentChainingTraceID:   currentChainingTraceID,
@@ -1540,6 +1540,13 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func generatedWorkStateName(value *factoryapi.WorkState) string {
+	if value == nil {
+		return ""
+	}
+	return value.Name
 }
 
 func intValue(value *int) int {

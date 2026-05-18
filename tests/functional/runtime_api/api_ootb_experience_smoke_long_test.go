@@ -31,11 +31,11 @@ func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 	}
 
 	token := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
-	if token.WorkType != "task" {
-		t.Fatalf("GET /work completed work_type = %q, want task", token.WorkType)
+	if stringPointerValue(token.WorkTypeName) != "task" {
+		t.Fatalf("GET /work completed work type = %q, want task", stringPointerValue(token.WorkTypeName))
 	}
-	if token.PlaceId != "task:complete" {
-		t.Fatalf("GET /work completed place_id = %q, want task:complete", token.PlaceId)
+	if generatedWorkStateName(token.State) != "complete" {
+		t.Fatalf("GET /work completed state = %#v, want complete", token.State)
 	}
 
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
@@ -63,11 +63,11 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	token := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
-	if token.WorkType != "task" {
-		t.Fatalf("GET /work completed work_type = %q, want task", token.WorkType)
+	if stringPointerValue(token.WorkTypeName) != "task" {
+		t.Fatalf("GET /work completed work type = %q, want task", stringPointerValue(token.WorkTypeName))
 	}
-	if token.PlaceId != "task:complete" {
-		t.Fatalf("GET /work completed place_id = %q, want task:complete", token.PlaceId)
+	if generatedWorkStateName(token.State) != "complete" {
+		t.Fatalf("GET /work completed state = %#v, want complete", token.State)
 	}
 
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")

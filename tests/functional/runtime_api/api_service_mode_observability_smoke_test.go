@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -117,14 +118,14 @@ func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayRea
 	if len(work.Results) != 1 {
 		t.Fatalf("work result count = %d, want 1", len(work.Results))
 	}
-	if work.Results[0].TraceId != traceID {
-		t.Fatalf("completed work trace ID = %q, want %q", work.Results[0].TraceId, traceID)
+	if support.StringPointerValue(work.Results[0].TraceId) != traceID {
+		t.Fatalf("completed work trace ID = %q, want %q", support.StringPointerValue(work.Results[0].TraceId), traceID)
 	}
-	if work.Results[0].PlaceId != "task:complete" {
-		t.Fatalf("completed work place = %q, want task:complete", work.Results[0].PlaceId)
+	if work.Results[0].State == nil || work.Results[0].State.Name != "complete" || work.Results[0].State.Type != factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("completed work state = %#v, want complete/TERMINAL", work.Results[0].State)
 	}
-	if work.Results[0].WorkId != activeWorkItem.WorkId {
-		t.Fatalf("completed work ID = %q, want %q", work.Results[0].WorkId, activeWorkItem.WorkId)
+	if support.StringPointerValue(work.Results[0].WorkId) != activeWorkItem.WorkId {
+		t.Fatalf("completed work ID = %q, want %q", support.StringPointerValue(work.Results[0].WorkId), activeWorkItem.WorkId)
 	}
 
 	postCompletionState := server.GetState(t)

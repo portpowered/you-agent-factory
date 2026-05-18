@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -14,6 +15,20 @@ import (
 type functionalAPIServer struct {
 	factory apisurface.APISurface
 	*support.FunctionalAPIServer
+}
+
+func generatedWorkStateName(state *factoryapi.WorkState) string {
+	if state == nil {
+		return ""
+	}
+	return state.Name
+}
+
+func generatedWorkStateType(state *factoryapi.WorkState) factoryapi.WorkStateType {
+	if state == nil {
+		return ""
+	}
+	return state.Type
 }
 
 func simplePipelineConfig() map[string]any {
