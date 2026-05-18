@@ -5,7 +5,10 @@ import type { PropsWithChildren } from "react";
 import type { DashboardSnapshot } from "../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../api/events";
 import { createReplayHarness } from "../../testing/replay-harness";
-import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../current-factory-definition";
+import {
+  CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+  CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+} from "../current-factory-definition";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../timeline/state/factoryTimelineDebug";
 import {
   type WorldState,
@@ -482,6 +485,19 @@ describe("useDashboardSnapshot", () => {
   });
 
   it("updates streamed dashboard topology and the editable current-factory cache from a factory-change event", async () => {
+    queryClient.setQueryData(CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY, {
+      factoryDefinition: {
+        name: "factory",
+        workers: [],
+        workstations: [],
+        workTypes: [],
+      },
+      version: {
+        logical: 7,
+        physical: "2026-05-17T14:59:00Z",
+      },
+    });
+
     renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),
     });
@@ -546,6 +562,14 @@ describe("useDashboardSnapshot", () => {
           ],
         },
       );
+    });
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryState(
+          CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+        )?.isInvalidated,
+      ).toBe(true);
     });
 
     await waitFor(() => {

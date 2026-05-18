@@ -11,18 +11,10 @@ import type {
 import type { FactoryValue } from "../../api/named-factory";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
-import { FactoryGraphEditorAddEntityDialog } from "../factory-graph-editor/factory-graph-editor-add-dialog";
-import {
-  FactoryGraphEditorConfirmationDialog,
-  FactoryGraphEditorLeaveDialog,
-} from "../factory-graph-editor/factory-graph-editor-controls";
+import { FactoryGraphEditorDraftActions } from "../factory-graph-editor/factory-graph-editor-draft-actions";
 import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
-import {
-  FactoryImportPreviewDialog,
-  type FactoryPngImportValue,
-  type ReadFactoryImportFile,
-} from "../import";
+import type { FactoryPngImportValue, ReadFactoryImportFile } from "../import";
 import {
   type CurrentActivityImportController,
   useCurrentActivityImportController,
@@ -32,9 +24,10 @@ import {
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
 import {
-  CurrentActivityGraphEditorHeader,
   useCurrentActivityGraphEditor,
 } from "./react-flow-current-activity-card-editor";
+import { CurrentActivityGraphEditorHeader } from "./react-flow-current-activity-card-editor-chrome";
+import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { useFactoryGraphEditorViewModel } from "./react-flow-current-activity-card-editor-graph";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 import {
@@ -48,7 +41,6 @@ import {
   EMPTY_NODE_POSITIONS,
   initialFocusNodes,
 } from "./react-flow-current-activity-card-graph";
-import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
@@ -335,7 +327,7 @@ export function useCurrentActivityGraphViewModel({
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
-  const editor = useCurrentActivityGraphEditor(props.snapshot.topology);
+  const editor = useCurrentActivityGraphEditor(props.snapshot);
   const graph = useCurrentActivityGraphViewModel(props);
   const editorGraph = useFactoryGraphEditorViewModel(editor, props.snapshot);
   const fallbackImportController = useCurrentActivityImportController({
@@ -368,6 +360,17 @@ export function ReactFlowCurrentActivityCard(
           title={<CurrentActivityCardHeading />}
         />
       </div>
+      <FactoryGraphEditorDraftActions
+        canSave={editor.canSaveDraft}
+        description={editor.saveSummary.description}
+        isSaving={editor.saveEditableDefinition.status === "pending"}
+        onDiscard={editor.handleDiscardPendingChanges}
+        onSave={() => {
+          editor.setIsConfirmingSave(true);
+        }}
+        saveDisabledReason={editor.saveBlockedReason}
+        visible={editor.editorMode && editor.draftState.hasChanges}
+      />
       <CurrentActivityGraphSurface
         editor={editor}
         editorGraph={editorGraph}
@@ -376,72 +379,12 @@ export function ReactFlowCurrentActivityCard(
         locale={props.locale}
         snapshot={props.snapshot}
       />
-      {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
-        <FactoryImportPreviewDialog
-          activationState={imports.activationState}
-          locale={props.locale}
-          onCancel={() => {
-            imports.clearActivationError();
-            imports.closeImportPreview();
-          }}
-          onConfirm={() => {
-            void imports.activateImport(readyImportPreviewState.value);
-          }}
-          previewState={readyImportPreviewState}
-        />
-      ) : null}
-      {imports.dropState.status === "error" ? (
-        <GraphImportErrorPanel
-          error={imports.dropState.error}
-          fileName={imports.dropState.fileName}
-          locale={props.locale}
-          onDismiss={imports.clearError}
-        />
-      ) : null}
-      <FactoryGraphEditorLeaveDialog
-        canSave={editor.canSaveDraft}
-        isOpen={editor.leaveDialogOpen}
-        isSaving={editor.saveEditableDefinition.status === "pending"}
-        onCancel={() => {
-          if (editor.saveEditableDefinition.status !== "pending") {
-            editor.setIsConfirmingLeaveEditor(false);
-          }
-        }}
-        onDiscard={editor.handleDiscardEditorChanges}
-        onSave={() => {
-          void editor.handleSaveBeforeLeavingEditor();
-        }}
-      />
-      <FactoryGraphEditorConfirmationDialog
-        cancelLabel="Cancel removal"
-        confirmLabel={editor.pendingRemovalIntent?.confirmLabel ?? "Delete entity"}
-        confirmTone="destructive"
-        description={
-          editor.pendingRemovalIntent?.confirmDescription ??
-          "Remove this graph entity from the current draft."
-        }
-        isOpen={editor.pendingRemovalIntent !== null}
-        onCancel={() => {
-          editor.setPendingRemovalEdgeId(null);
-          editor.setPendingRemovalNodeId(null);
-        }}
-        onConfirm={editor.handleConfirmRemoval}
-        title={editor.pendingRemovalIntent?.title ?? "Remove graph entity?"}
-      />
-      <FactoryGraphEditorAddEntityDialog
-        currentFactoryDefinition={editor.currentFactoryDefinition}
-        draft={editor.addEntityDraft}
-        errors={editor.addEntityErrors}
-        isOpen={editor.addEntityDraft !== null}
-        onChange={(draft) => {
-          editor.setAddEntityDraft(draft);
-          editor.setAddEntityErrors({});
-        }}
-        onClose={() => {
-          editor.setAddEntityDraft(null);
-          editor.setAddEntityErrors({});
-        }}
-        onSubmit={editor.handleAddEntitySubmit}
+      <CurrentActivityGraphEditorDialogs
+        editor={editor}
+        imports={imports}
+        locale={props.locale}
+        readyImportPreviewState={readyImportPreviewState}
+        shouldRenderImportPreviewDialog={shouldRenderImportPreviewDialog}
       />
     </section>
   );

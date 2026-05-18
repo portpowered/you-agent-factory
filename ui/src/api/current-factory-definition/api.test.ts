@@ -344,4 +344,54 @@ describe("getCurrentEditableFactoryDefinition", () => {
       ],
     });
   });
+  it("preserves active-work save rejections from the editable current-factory API", async () => {
+    await expect(
+      saveCurrentEditableFactoryDefinitionDocument(
+        {
+          baseVersion: {
+            logical: 9,
+            physical: "2026-05-18T14:25:00Z",
+          },
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "FACTORY_NOT_IDLE",
+                message: "Current factory runtime must be idle before activation.",
+                targets: [
+                  {
+                    id: "active-work",
+                    kind: "save",
+                  },
+                ],
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 409,
+                statusText: "Conflict",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+      status: 409,
+      targets: [
+        {
+          id: "active-work",
+          kind: "save",
+        },
+      ],
+    });
+  });
 });

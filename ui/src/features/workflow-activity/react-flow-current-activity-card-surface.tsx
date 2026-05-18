@@ -46,9 +46,31 @@ export function CurrentActivityGraphSurface({
           {editor.connectionNotice}
         </FactoryGraphEditorNotice>
       ) : null}
+      {editor.hasActiveWork && editor.draftState.hasChanges ? (
+        <FactoryGraphEditorNotice title="Topology edits are blocked" tone="danger">
+          Save is unavailable while active work is still running in the current
+          factory.
+        </FactoryGraphEditorNotice>
+      ) : null}
+      {editor.isStaleDraft ? (
+        <FactoryGraphEditorNotice
+          title="A newer factory definition is available"
+          tone="warning"
+        >
+          Refresh or discard the current draft before saving so you do not
+          overwrite a newer topology version.
+        </FactoryGraphEditorNotice>
+      ) : null}
       {editor.saveEditableDefinition.error ? (
         <FactoryGraphEditorNotice title="Topology save failed" tone="danger">
           {editor.saveEditableDefinition.error.message}
+        </FactoryGraphEditorNotice>
+      ) : null}
+      {editor.saveEditableDefinition.status === "success" &&
+      !editor.draftState.hasChanges ? (
+        <FactoryGraphEditorNotice title="Topology saved" tone="neutral">
+          The draft has been cleared and the graph is waiting for the latest
+          factory-change event refresh.
         </FactoryGraphEditorNotice>
       ) : null}
       <FactoryGraphEditorVisibilityPanel

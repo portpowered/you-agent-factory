@@ -23,6 +23,7 @@ export interface EditableFactoryDefinitionDocument {
 
 export type CurrentEditableFactoryDefinitionErrorCode =
   | "BAD_REQUEST"
+  | "FACTORY_NOT_IDLE"
   | "INTERNAL_ERROR"
   | "INVALID_FACTORY_DEFINITION"
   | "NETWORK_ERROR"
@@ -325,6 +326,8 @@ function normalizeCurrentEditableFactoryDefinitionErrorCode(
     case "BAD_REQUEST":
       return code;
     case "NOT_FOUND":
+      return code;
+    case "FACTORY_NOT_IDLE":
       return code;
     case "STALE_FACTORY_VERSION":
       return code;

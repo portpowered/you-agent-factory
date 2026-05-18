@@ -816,7 +816,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
   it("keeps editor controls unavailable until the graph editor mode is enabled", async () => {
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
     expect(
@@ -836,7 +836,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
     fireEvent.click(
@@ -869,7 +869,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
     fireEvent.click(
@@ -910,7 +910,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
     fireEvent.click(
@@ -958,7 +958,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
     fireEvent.click(
@@ -1412,6 +1412,210 @@ function registerCurrentActivityCardTestLifecycle(): void {
     expect(resetDraft).toHaveBeenCalledTimes(1);
   });
 
+  it("shows explicit save and discard actions for pending graph changes", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+        },
+      },
+      hasChanges: true,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    const actions = await screen.findByRole("region", {
+      name: "Pending graph changes",
+    });
+    expect(within(actions).getByRole("button", { name: "Discard changes" })).toBeTruthy();
+    expect(within(actions).getByRole("button", { name: "Save changes" })).toBeTruthy();
+    expect(
+      within(actions).getByText(
+        "This save will apply 1 created entity.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("confirms pending save changes before saving the graph draft", async () => {
+    const mutateAsync = vi
+      .fn()
+      .mockResolvedValue(editableFactoryDefinitionDocument);
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
+      mutateAsync,
+      reset: vi.fn(),
+      status: "idle",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+        },
+      },
+      hasChanges: true,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      within(
+        await screen.findByRole("region", { name: "Pending graph changes" }),
+      ).getByRole("button", { name: "Save changes" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Save factory graph changes?",
+    });
+    expect(
+      within(dialog).getByText("This save will apply 1 created entity."),
+    ).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save topology" }));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        baseVersion: editableFactoryDefinitionDocument.version,
+        factoryDefinition: editableFactoryDefinition,
+      });
+    });
+  });
+
+  it("warns when a newer editable-definition version arrives during a dirty draft", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      baseDocument: editableFactoryDefinitionDocument,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+        },
+      },
+      hasChanges: true,
+      latestDocument: {
+        ...editableFactoryDefinitionDocument,
+        version: {
+          logical: 9,
+          physical: "2026-05-19T01:45:00Z",
+        },
+      },
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    expect(
+      await screen.findByText("A newer factory definition is available"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Refresh or discard the current draft before saving so you do not overwrite a newer topology version.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Save changes" }).getAttribute("disabled"),
+    ).not.toBeNull();
+  });
+
+  it("blocks topology save while active work is still running", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        additions: {
+          ...defaultDraftState.draft.additions,
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+        },
+      },
+      hasChanges: true,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(1),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    expect(
+      await screen.findByText("Topology edits are blocked"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Save is unavailable while active work is still running in the current factory.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Save changes" }).getAttribute("disabled"),
+    ).not.toBeNull();
+  });
+
   it("saves the pending editable definition before leaving editor mode", async () => {
     const mutateAsync = vi
       .fn()
@@ -1424,6 +1628,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
       mutateAsync,
+      reset: vi.fn(),
       status: "idle",
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue({
@@ -1433,7 +1638,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
 
     renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
     fireEvent.click(
@@ -1443,7 +1648,11 @@ function registerCurrentActivityCardTestLifecycle(): void {
       screen.getByRole("button", { name: "Leave factory graph editor" }),
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: "Save changes" }),
+      within(
+        await screen.findByRole("dialog", {
+          name: "Leave graph editor with unsaved changes?",
+        }),
+      ).getByRole("button", { name: "Save changes" }),
     );
 
     await waitFor(() => {

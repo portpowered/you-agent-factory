@@ -4,6 +4,7 @@ import { expect, userEvent, within } from "storybook/test";
 
 import "../../styles.css";
 import { Button } from "../../components/ui";
+import { FactoryGraphEditorDraftActions } from "./factory-graph-editor-draft-actions";
 import {
   FactoryGraphEditorActionPopover,
   FactoryGraphEditorConfirmationDialog,
@@ -115,6 +116,36 @@ function DeleteConfirmationStory() {
         onCancel={() => {}}
         onConfirm={() => {}}
         title="Remove review workstation?"
+      />
+    </div>
+  );
+}
+
+function PendingDraftActionsStory() {
+  return (
+    <div className="grid gap-4 p-6">
+      <FactoryGraphEditorDraftActions
+        canSave={true}
+        description="This save will apply 2 created entities, 1 deleted entity and 3 changed edges."
+        onDiscard={() => {}}
+        onSave={() => {}}
+        visible={true}
+      />
+    </div>
+  );
+}
+
+function SaveConfirmationStory() {
+  return (
+    <div className="grid gap-4 p-6">
+      <FactoryGraphEditorConfirmationDialog
+        cancelLabel="Keep editing"
+        confirmLabel="Save topology"
+        description="This save will apply 2 created entities, 1 deleted entity and 3 changed edges."
+        isOpen={true}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+        title="Save factory graph changes?"
       />
     </div>
   );
@@ -238,6 +269,42 @@ export const DeleteConfirmation = {
     ).toBeVisible();
     await expect(
       within(dialog).getByRole("button", { name: "Delete review workstation" }),
+    ).toBeVisible();
+  },
+};
+
+export const PendingDraftActions = {
+  render: () => <PendingDraftActionsStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("Pending graph changes")).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Discard changes" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Save changes" }),
+    ).toBeVisible();
+  },
+};
+
+export const SaveConfirmation = {
+  render: () => <SaveConfirmationStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole(
+      "dialog",
+      {
+        name: "Save factory graph changes?",
+      },
+    );
+
+    await expect(
+      within(dialog).getByText(
+        "This save will apply 2 created entities, 1 deleted entity and 3 changed edges.",
+      ),
+    ).toBeVisible();
+    await expect(
+      within(dialog).getByRole("button", { name: "Save topology" }),
     ).toBeVisible();
   },
 };
