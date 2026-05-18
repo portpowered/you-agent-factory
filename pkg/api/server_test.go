@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1500,8 +1501,8 @@ func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 	if len(resp.Results) != 1 || stringValue(resp.Results[0].WorkId) != "work-story" {
 		t.Fatalf("listed work = %#v, want only customer work", resp.Results)
 	}
-	if resp.PaginationContext != nil {
-		t.Fatalf("pagination context = %#v, want none after internal token filtering", resp.PaginationContext)
+	if resp.PaginationContext == nil || stringValue(resp.PaginationContext.NextToken) != "" {
+		t.Fatalf("pagination context = %#v, want metadata without next token after internal token filtering", resp.PaginationContext)
 	}
 }
 
@@ -1598,8 +1599,8 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-filter-4" {
 		t.Fatalf("second page listed work = %#v, want remaining public work", secondResp.Results)
 	}
-	if secondResp.PaginationContext != nil {
-		t.Fatalf("second page pagination context = %#v, want none on final page", secondResp.PaginationContext)
+	if secondResp.PaginationContext == nil || stringValue(secondResp.PaginationContext.NextToken) != "" {
+		t.Fatalf("second page pagination context = %#v, want metadata without next token on final page", secondResp.PaginationContext)
 	}
 }
 
@@ -2044,8 +2045,8 @@ func TestListWork_NonPositiveMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 			if len(resp.Results) != len(tokens) {
 				t.Fatalf("expected defaulted response with %d results, got %d", len(tokens), len(resp.Results))
 			}
-			if resp.PaginationContext != nil {
-				t.Fatalf("expected no pagination context when maxResults defaults to %d, got %#v", defaultMaxResults, resp.PaginationContext)
+			if resp.PaginationContext == nil || resp.PaginationContext.MaxResults != defaultMaxResults || stringValue(resp.PaginationContext.NextToken) != "" {
+				t.Fatalf("expected pagination context with maxResults %d and no next token, got %#v", defaultMaxResults, resp.PaginationContext)
 			}
 		})
 	}
@@ -2095,8 +2096,8 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	if len(secondResp.Results) != 1 {
 		t.Fatalf("second page results = %d, want 1", len(secondResp.Results))
 	}
-	if secondResp.PaginationContext != nil {
-		t.Fatalf("expected final page to omit pagination context, got %#v", secondResp.PaginationContext)
+	if secondResp.PaginationContext == nil || secondResp.PaginationContext.MaxResults != 2 || stringValue(secondResp.PaginationContext.NextToken) != "" {
+		t.Fatalf("expected final page pagination context with maxResults 2 and no next token, got %#v", secondResp.PaginationContext)
 	}
 	if stringValue(firstResp.Results[0].WorkId) != "work-cursor-1" ||
 		stringValue(firstResp.Results[1].WorkId) != "work-cursor-2" {
@@ -2104,6 +2105,26 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	}
 	if stringValue(secondResp.Results[0].WorkId) != "work-cursor-3" {
 		t.Fatalf("unexpected continued work id %q", stringValue(secondResp.Results[0].WorkId))
+	}
+
+	trailingToken := base64.StdEncoding.EncodeToString([]byte("tok-cursor-3"))
+	trailingReq := httptest.NewRequest(http.MethodGet, "/work?maxResults=2&nextToken="+trailingToken, nil)
+	trailingRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(trailingRec, trailingReq)
+
+	if trailingRec.Code != http.StatusOK {
+		t.Fatalf("trailing page status = %d, want %d", trailingRec.Code, http.StatusOK)
+	}
+
+	var trailingResp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(trailingRec.Body).Decode(&trailingResp); err != nil {
+		t.Fatalf("decode trailing page: %v", err)
+	}
+	if len(trailingResp.Results) != 0 {
+		t.Fatalf("trailing page results = %d, want 0: %#v", len(trailingResp.Results), trailingResp.Results)
+	}
+	if trailingResp.PaginationContext == nil || trailingResp.PaginationContext.MaxResults != 2 || stringValue(trailingResp.PaginationContext.NextToken) != "" {
+		t.Fatalf("trailing page pagination context = %#v, want maxResults 2 and no next token", trailingResp.PaginationContext)
 	}
 }
 

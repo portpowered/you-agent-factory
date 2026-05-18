@@ -929,6 +929,9 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 		"list",
 		"--state-name", "review",
 		"--state-type", "PROCESSING",
+		"--max-results", "25",
+		"--next-token", "cursor-1",
+		"--json",
 		"--port", "9090",
 	})
 
@@ -944,6 +947,15 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	}
 	if got.Port != 9090 {
 		t.Fatalf("port = %d, want 9090", got.Port)
+	}
+	if got.MaxResults != 25 {
+		t.Fatalf("max results = %d, want 25", got.MaxResults)
+	}
+	if got.NextToken != "cursor-1" {
+		t.Fatalf("next token = %q, want cursor-1", got.NextToken)
+	}
+	if !got.JSON {
+		t.Fatal("expected json output flag")
 	}
 	if got.Output == nil {
 		t.Fatal("expected output writer")

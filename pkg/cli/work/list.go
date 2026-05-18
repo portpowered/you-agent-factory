@@ -17,10 +17,13 @@ const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
-	Port      int
-	StateName string
-	StateType string
-	Output    io.Writer
+	Port       int
+	StateName  string
+	StateType  string
+	MaxResults int
+	NextToken  string
+	JSON       bool
+	Output     io.Writer
 }
 
 // List requests available work from a running factory via HTTP.
@@ -44,6 +47,12 @@ func List(cfg ListConfig) error {
 	if cfg.StateType != "" {
 		query.Set("state.type", cfg.StateType)
 	}
+	if cfg.MaxResults > 0 {
+		query.Set("maxResults", fmt.Sprintf("%d", cfg.MaxResults))
+	}
+	if cfg.NextToken != "" {
+		query.Set("nextToken", cfg.NextToken)
+	}
 	endpoint.RawQuery = query.Encode()
 
 	client := &http.Client{Timeout: listRequestTimeout}
@@ -64,6 +73,10 @@ func List(cfg ListConfig) error {
 	var result factoryapi.ListWorkResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("parse response: %w", err)
+	}
+	if cfg.JSON {
+		encoder := json.NewEncoder(cfg.Output)
+		return encoder.Encode(result)
 	}
 
 	if len(result.Results) == 0 {

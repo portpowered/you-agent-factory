@@ -96,6 +96,9 @@ func newWorkListCommand() *cobra.Command {
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
 	cmd.Flags().StringVar(&cfg.StateName, "state-name", "", "filter by current state name")
 	cmd.Flags().StringVar(&cfg.StateType, "state-type", "", "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)")
+	cmd.Flags().IntVar(&cfg.MaxResults, "max-results", 0, "maximum work items to return")
+	cmd.Flags().StringVar(&cfg.NextToken, "next-token", "", "pagination cursor returned by a previous work list response")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-work JSON response")
 	return cmd
 }
 

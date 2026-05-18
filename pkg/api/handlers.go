@@ -218,6 +218,7 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 		decoded, err := base64.StdEncoding.DecodeString(cursor)
 		if err == nil {
 			cursorID := string(decoded)
+			startIdx = len(items)
 			for i, item := range items {
 				if item.cursorID > cursorID {
 					startIdx = i
@@ -231,14 +232,16 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	end := min(startIdx+maxResults, len(items))
 	page := items[startIdx:end]
 
-	resp := factoryapi.ListWorkResponse{Results: listWorkResults(page)}
+	resp := factoryapi.ListWorkResponse{
+		Results: listWorkResults(page),
+		PaginationContext: &factoryapi.PaginationContext{
+			MaxResults: maxResults,
+		},
+	}
 	if end < len(items) {
 		lastID := page[len(page)-1].cursorID
 		nextToken := base64.StdEncoding.EncodeToString([]byte(lastID))
-		resp.PaginationContext = &factoryapi.PaginationContext{
-			MaxResults: maxResults,
-			NextToken:  &nextToken,
-		}
+		resp.PaginationContext.NextToken = &nextToken
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
