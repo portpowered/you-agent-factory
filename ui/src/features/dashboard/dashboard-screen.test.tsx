@@ -28,20 +28,20 @@ function StatusPanelProbe({
 }
 
 vi.mock("../bento", () => ({
-  DashboardBento: () => {
-    const { locale } = useAppLocale();
-    return <section>Dashboard bento {locale}</section>;
+  DashboardBento: ({ locale }: { locale?: string }) => {
+    const { locale: resolvedLocale } = useAppLocale(locale);
+    return <section>Dashboard bento {resolvedLocale}</section>;
   },
 }));
 
 vi.mock("../header", () => ({
-  DashboardExportDialog: () => {
-    const { locale } = useAppLocale();
-    return <div>Dashboard export dialog {locale}</div>;
+  DashboardExportDialog: ({ locale }: { locale?: string }) => {
+    const { locale: resolvedLocale } = useAppLocale(locale);
+    return <div>Dashboard export dialog {resolvedLocale}</div>;
   },
-  DashboardHeader: () => {
-    const { locale } = useAppLocale();
-    return <header>Dashboard header {locale}</header>;
+  DashboardHeader: ({ locale }: { locale?: string }) => {
+    const { locale: resolvedLocale } = useAppLocale(locale);
+    return <header>Dashboard header {resolvedLocale}</header>;
   },
   DashboardStatusPanel: ({
     detail,
@@ -146,6 +146,20 @@ describe("DashboardScreen", () => {
     );
 
     expectDashboardShellContract();
+    expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
+    expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
+    expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
+  });
+
+  it("keeps direct locale overrides available to the dashboard children", () => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: false,
+      snapshot: {} as never,
+    };
+
+    render(<DashboardScreen locale="zh-CN" />);
+
     expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();

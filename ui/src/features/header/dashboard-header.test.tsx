@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../api/events";
+import { AppLocaleProvider } from "../../i18n";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../export/messages/export-dialog";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
@@ -34,6 +35,56 @@ function timelineEvent(
   };
 }
 
+function seedDashboardHeaderSnapshot() {
+  act(() => {
+    useFactoryTimelineStore.setState({
+      events: [
+        timelineEvent(
+          "tick-1",
+          1,
+          FACTORY_EVENT_TYPES.initialStructureRequest,
+          {
+            factory: {
+              workTypes: [
+                {
+                  name: "story",
+                  states: [{ name: "ready", type: "INITIAL" }],
+                },
+              ],
+              workstations: [],
+              workers: [],
+            },
+          },
+        ),
+        timelineEvent(
+          "tick-2",
+          2,
+          FACTORY_EVENT_TYPES.initialStructureRequest,
+          {
+            factory: {
+              workTypes: [
+                {
+                  name: "story",
+                  states: [{ name: "ready", type: "INITIAL" }],
+                },
+              ],
+              workstations: [],
+              workers: [],
+            },
+          },
+        ),
+      ],
+      latestTick: 2,
+      mode: "fixed",
+      selectedTick: 1,
+      worldViewCache: {
+        1: {} as never,
+        2: {} as never,
+      },
+    });
+  });
+}
+
 describe("DashboardHeader", () => {
   afterEach(() => {
     useExportDialogStore.setState({ isExportDialogOpen: false });
@@ -47,53 +98,7 @@ describe("DashboardHeader", () => {
   });
 
   it("renders shared neutral header action buttons and opens the export dialog state", () => {
-    act(() => {
-      useFactoryTimelineStore.setState({
-        events: [
-          timelineEvent(
-            "tick-1",
-            1,
-            FACTORY_EVENT_TYPES.initialStructureRequest,
-            {
-              factory: {
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [{ name: "ready", type: "INITIAL" }],
-                  },
-                ],
-                workstations: [],
-                workers: [],
-              },
-            },
-          ),
-          timelineEvent(
-            "tick-2",
-            2,
-            FACTORY_EVENT_TYPES.initialStructureRequest,
-            {
-              factory: {
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [{ name: "ready", type: "INITIAL" }],
-                  },
-                ],
-                workstations: [],
-                workers: [],
-              },
-            },
-          ),
-        ],
-        latestTick: 2,
-        mode: "fixed",
-        selectedTick: 1,
-        worldViewCache: {
-          1: {} as never,
-          2: {} as never,
-        },
-      });
-    });
+    seedDashboardHeaderSnapshot();
 
     render(<DashboardHeader />);
     const messages = getExportDialogMessages("en");
@@ -140,35 +145,7 @@ describe("DashboardHeader", () => {
   });
 
   it("resolves the export trigger accessible name from the export locale catalog", () => {
-    act(() => {
-      useFactoryTimelineStore.setState({
-        events: [
-          timelineEvent(
-            "tick-1",
-            1,
-            FACTORY_EVENT_TYPES.initialStructureRequest,
-            {
-              factory: {
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [{ name: "ready", type: "INITIAL" }],
-                  },
-                ],
-                workstations: [],
-                workers: [],
-              },
-            },
-          ),
-        ],
-        latestTick: 1,
-        mode: "fixed",
-        selectedTick: 1,
-        worldViewCache: {
-          1: {} as never,
-        },
-      });
-    });
+    seedDashboardHeaderSnapshot();
 
     const messages = getExportDialogMessages("ja");
     render(<DashboardHeader locale="ja" />);
@@ -179,52 +156,8 @@ describe("DashboardHeader", () => {
   });
 
   it("resolves the header summary, brand, slider, and stream-status labels from the requested locale catalog", () => {
+    seedDashboardHeaderSnapshot();
     act(() => {
-      useFactoryTimelineStore.setState({
-        events: [
-          timelineEvent(
-            "tick-1",
-            1,
-            FACTORY_EVENT_TYPES.initialStructureRequest,
-            {
-              factory: {
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [{ name: "ready", type: "INITIAL" }],
-                  },
-                ],
-                workstations: [],
-                workers: [],
-              },
-            },
-          ),
-          timelineEvent(
-            "tick-2",
-            2,
-            FACTORY_EVENT_TYPES.initialStructureRequest,
-            {
-              factory: {
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [{ name: "ready", type: "INITIAL" }],
-                  },
-                ],
-                workstations: [],
-                workers: [],
-              },
-            },
-          ),
-        ],
-        latestTick: 2,
-        mode: "fixed",
-        selectedTick: 1,
-        worldViewCache: {
-          1: {} as never,
-          2: {} as never,
-        },
-      });
       useDashboardStreamStore.setState({
         streamState: {
           message: "Infinite You event stream is offline.",
@@ -256,51 +189,11 @@ describe("DashboardHeader", () => {
   });
 
   it("renders each localized stream-status accessible name from the header catalog", () => {
+    seedDashboardHeaderSnapshot();
     act(() => {
       useFactoryTimelineStore.setState({
-        events: [
-          timelineEvent(
-            "tick-1",
-            1,
-            FACTORY_EVENT_TYPES.initialStructureRequest,
-            {
-              factory: {
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [{ name: "ready", type: "INITIAL" }],
-                  },
-                ],
-                workstations: [],
-                workers: [],
-              },
-            },
-          ),
-          timelineEvent(
-            "tick-2",
-            2,
-            FACTORY_EVENT_TYPES.initialStructureRequest,
-            {
-              factory: {
-                workTypes: [
-                  {
-                    name: "story",
-                    states: [{ name: "ready", type: "INITIAL" }],
-                  },
-                ],
-                workstations: [],
-                workers: [],
-              },
-            },
-          ),
-        ],
-        latestTick: 2,
         mode: "current",
         selectedTick: 2,
-        worldViewCache: {
-          1: {} as never,
-          2: {} as never,
-        },
       });
     });
 
@@ -332,5 +225,72 @@ describe("DashboardHeader", () => {
 
       expect(screen.getByRole("status", { name: label })).toBeTruthy();
     }
+  });
+
+  it("switches the header locale between English and Mandarin through session state", () => {
+    seedDashboardHeaderSnapshot();
+
+    render(
+      <AppLocaleProvider initialLocale="en">
+        <DashboardHeader />
+      </AppLocaleProvider>,
+    );
+
+    const englishMessages = getHeaderControlsMessages("en");
+    const englishExportMessages = getExportDialogMessages("en");
+    const mandarinMessages = getHeaderControlsMessages("zh-CN");
+    const mandarinExportMessages = getExportDialogMessages("zh-CN");
+    const switcher = screen.getByRole("combobox", {
+      name: englishMessages.languageLabel,
+    });
+
+    expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: englishExportMessages.triggerLabel,
+      }),
+    ).toBeTruthy();
+
+    fireEvent.change(switcher, { target: { value: "zh-CN" } });
+
+    expect(
+      screen.getByRole("combobox", { name: mandarinMessages.languageLabel }),
+    ).toBeTruthy();
+    expect(screen.getByText("第 1 个刻度，共 2 个")).toBeTruthy();
+    expect(
+      screen.getByRole("region", {
+        name: mandarinMessages.dashboardSummaryLabel,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("status", {
+        name: mandarinMessages.streamStatusConnectingLabel,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: mandarinExportMessages.triggerLabel,
+      }),
+    ).toBeTruthy();
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: mandarinMessages.languageLabel }),
+      { target: { value: "en" } },
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: englishMessages.languageLabel }),
+    ).toBeTruthy();
+    expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: englishMessages.returnToCurrentTickLabel,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: englishExportMessages.triggerLabel,
+      }),
+    ).toBeTruthy();
   });
 });

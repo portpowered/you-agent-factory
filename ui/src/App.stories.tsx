@@ -1586,32 +1586,83 @@ export const HeaderLocalizationVerification = {
   },
   render: () => (
     <div style={{ maxWidth: "100%", width: "1280px" }}>
-      <DashboardScreen locale="zh-CN" />
+      <App initialLocale="en" />
     </div>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const toolbar = await canvas.findByRole("region", {
-      name: "仪表板概览",
+    const englishToolbar = await canvas.findByRole("region", {
+      name: "dashboard summary",
+    });
+    const switcher = within(englishToolbar).getByRole("combobox", {
+      name: "Language",
     });
 
     await expect(
-      within(toolbar).getByRole("heading", { name: "Infinite You" }),
+      within(englishToolbar).getByRole("heading", { name: "Infinite You" }),
     ).toBeVisible();
     await expect(
-      within(toolbar).getByRole("slider", { name: "时间线刻度" }),
+      within(englishToolbar).getByRole("button", { name: "Export PNG" }),
+    ).toBeVisible();
+    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+
+    await userEvent.tab();
+    await expect(switcher).toHaveFocus();
+    await userEvent.selectOptions(switcher, "zh-CN");
+
+    const localizedToolbar = await canvas.findByRole("region", {
+      name: "仪表板概览",
+    });
+    await expect(
+      within(localizedToolbar).getByRole("combobox", { name: "语言" }),
+    ).toBeVisible();
+    await expect(
+      within(localizedToolbar).getByRole("slider", { name: "时间线刻度" }),
     ).toBeVisible();
     await expect(await canvas.findByText("第 5 个刻度，共 5 个")).toBeVisible();
     await expect(
-      within(toolbar).getByRole("status", {
+      within(localizedToolbar).getByRole("status", {
         name: /Infinite You 事件流(正在连接|在线)/,
       }),
     ).toBeVisible();
     await expect(
-      within(toolbar).getByRole("button", { name: "返回当前刻度" }),
+      within(localizedToolbar).getByRole("button", { name: "返回当前刻度" }),
     ).toBeVisible();
     await expect(
-      within(toolbar).getByRole("button", { name: "导出 PNG" }),
+      within(localizedToolbar).getByRole("button", { name: "导出 PNG" }),
+    ).toBeVisible();
+
+    await userEvent.click(
+      within(localizedToolbar).getByRole("button", { name: "导出 PNG" }),
+    );
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole(
+      "dialog",
+      { name: "导出工厂" },
+    );
+    await expect(
+      within(dialog).getByRole("button", { name: "取消" }),
+    ).toBeVisible();
+    await expect(
+      within(dialog).getByRole("button", { name: "导出 PNG" }),
+    ).toBeVisible();
+    await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+
+    const localizedSwitcher = within(localizedToolbar).getByRole("combobox", {
+      name: "语言",
+    });
+    localizedSwitcher.focus();
+    await expect(localizedSwitcher).toHaveFocus();
+    await userEvent.selectOptions(localizedSwitcher, "en");
+
+    const restoredToolbar = await canvas.findByRole("region", {
+      name: "dashboard summary",
+    });
+    await expect(
+      within(restoredToolbar).getByRole("combobox", { name: "Language" }),
+    ).toBeVisible();
+    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+    await expect(
+      within(restoredToolbar).getByRole("button", { name: "Export PNG" }),
     ).toBeVisible();
   },
 };

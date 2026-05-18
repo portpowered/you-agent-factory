@@ -53,9 +53,9 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
 
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
-      <DashboardHeader locale={resolvedLocale} />
-      <DashboardBento locale={resolvedLocale} />
-      <DashboardExportDialog locale={resolvedLocale} />
+      <DashboardHeader locale={locale} />
+      <DashboardBento locale={locale} />
+      <DashboardExportDialog locale={locale} />
     </main>
   );
 }

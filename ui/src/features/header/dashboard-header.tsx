@@ -1,6 +1,6 @@
 import type { DashboardStreamState } from "../../api/dashboard/types";
 import { TickSliderControl } from "../../components/dashboard";
-import { cx } from "../../components/ui";
+import { cx, Select } from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
@@ -26,6 +26,14 @@ const DASHBOARD_CONTROLS_CLASS = cx(
   "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-4",
   "max-[720px]:ml-0 max-[720px]:w-full max-[720px]:justify-stretch",
 );
+const LANGUAGE_SWITCHER_SHELL_CLASS = cx(
+  "flex min-w-[11rem] shrink-0 flex-col gap-1",
+  "max-[720px]:min-w-0 max-[720px]:flex-1",
+);
+const LANGUAGE_SWITCHER_LABEL_CLASS = cx(
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  "text-[0.72rem] uppercase tracking-[0.2em] text-af-ink/62",
+);
 const STREAM_STATUS_SHELL_CLASS = cx(
   "flex shrink-0 items-center justify-end",
   "max-[720px]:justify-start",
@@ -41,7 +49,7 @@ export interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ locale }: DashboardHeaderProps) {
-  const { locale: resolvedLocale } = useAppLocale(locale);
+  const { locale: resolvedLocale, setLocale } = useAppLocale(locale);
   const snapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
   );
@@ -71,6 +79,27 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
         />
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
+        <label
+          className={LANGUAGE_SWITCHER_SHELL_CLASS}
+          htmlFor="dashboard-language-switcher"
+        >
+          <span className={LANGUAGE_SWITCHER_LABEL_CLASS}>
+            {headerMessages.languageLabel}
+          </span>
+          <Select
+            aria-label={headerMessages.languageLabel}
+            id="dashboard-language-switcher"
+            onChange={(event) => {
+              setLocale(event.currentTarget.value);
+            }}
+            value={resolveLanguageSwitcherValue(resolvedLocale)}
+          >
+            <option value="en">{headerMessages.languageEnglishLabel}</option>
+            <option value="zh-CN">
+              {headerMessages.languageMandarinLabel}
+            </option>
+          </Select>
+        </label>
         <TickSliderControl locale={resolvedLocale} />
         <div className={STREAM_STATUS_SHELL_CLASS}>
           <div
@@ -106,6 +135,10 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       </div>
     </section>
   );
+}
+
+function resolveLanguageSwitcherValue(locale: string): "en" | "zh-CN" {
+  return locale === "zh-CN" ? "zh-CN" : "en";
 }
 
 function streamStatusClassName(status: DashboardStreamState["status"]): string {

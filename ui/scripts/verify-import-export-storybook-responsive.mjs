@@ -49,11 +49,6 @@ const storyChecks = [
     label: "dashboard header",
   },
   {
-    assertions: verifyLocalizedDashboardHeader,
-    id: "infinite-you-workflow-dashboard--header-localization-verification",
-    label: "localized dashboard header",
-  },
-  {
     assertions: (page, _dialog, viewport) =>
       verifyLocalizedSubmitWorkCard({
         expectNoHorizontalOverflow,
@@ -291,6 +286,7 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
   const toolbar = await waitForStoryRegion(page, "dashboard summary");
   const heading = toolbar.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
+  const switcher = page.locator("#dashboard-language-switcher");
   const slider = toolbar.getByRole("slider", { name: "Timeline tick" });
   const streamStatus = toolbar.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
@@ -303,6 +299,11 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
 
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible Infinite You wordmark");
+  await expectVisible(switcher, "Dashboard language switcher");
+  await expectVisible(
+    toolbar.getByText("Language"),
+    "Dashboard language label",
+  );
   await expectVisible(slider, "Timeline slider");
   await expectVisible(streamStatus, "Dashboard stream status");
   await expectVisible(currentTick, "Current timeline tick text");
@@ -329,73 +330,33 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
-      [heading, slider, streamStatus, exportButton],
+      [heading, switcher, slider, streamStatus, exportButton],
       "Dashboard header desktop controls",
     );
   }
 
+  await page.selectOption("#dashboard-language-switcher", "zh-CN");
+  const localizedToolbar = await waitForStoryRegion(page, "仪表板概览");
+  await expectVisible(
+    page.locator("#dashboard-language-switcher"),
+    "Localized dashboard language switcher",
+  );
+  await expectVisible(
+    localizedToolbar.getByText("语言"),
+    "Localized dashboard language label",
+  );
+  await expectVisible(
+    localizedToolbar.getByRole("button", { name: "导出 PNG" }),
+    "Localized export trigger button",
+  );
+  await expectVisible(
+    page.getByText("第 5 个刻度，共 5 个"),
+    "Localized current timeline tick text",
+  );
+
   await expectNoHorizontalOverflow(
     page,
     `Dashboard header at ${viewport.label}`,
-  );
-}
-
-async function verifyLocalizedDashboardHeader(page, _dialog, viewport) {
-  const toolbar = await waitForStoryRegion(page, "仪表板概览");
-  const heading = toolbar.getByRole("heading", { name: "Infinite You" });
-  const hiddenWordmark = heading.getByText("Infinite You");
-  const slider = toolbar.getByRole("slider", { name: "时间线刻度" });
-  const streamStatus = toolbar.getByRole("status", {
-    name: /Infinite You 事件流(正在连接|在线)/,
-  });
-  const currentTick = page.getByText("第 5 个刻度，共 5 个");
-  const currentButton = toolbar.getByRole("button", {
-    name: "返回当前刻度",
-  });
-  const exportButton = toolbar.getByRole("button", { name: "导出 PNG" });
-
-  await expectVisible(heading, "Localized dashboard heading");
-  await expectVisible(
-    hiddenWordmark,
-    "Localized accessible Infinite You wordmark",
-  );
-  await expectVisible(slider, "Localized timeline slider");
-  await expectVisible(streamStatus, "Localized dashboard stream status");
-  await expectVisible(currentTick, "Localized current timeline tick text");
-  await expectVisible(currentButton, "Localized return-to-current button");
-  await expectVisible(exportButton, "Localized export PNG button");
-
-  const hiddenWordmarkClass = await hiddenWordmark.getAttribute("class");
-  if (!hiddenWordmarkClass?.includes("sr-only")) {
-    throw new Error(
-      "Localized dashboard heading wordmark was not hidden with sr-only styling.",
-    );
-  }
-
-  await slider.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expectVisible(
-    page.getByText("第 4 个刻度，共 5 个"),
-    "Localized keyboard-updated timeline tick text",
-  );
-
-  await currentButton.focus();
-  await page.keyboard.press("Enter");
-  await expectVisible(
-    currentTick,
-    "Localized restored current timeline tick text",
-  );
-
-  if (viewport.label === "desktop") {
-    await expectOrderedLeftEdges(
-      [heading, slider, streamStatus, exportButton],
-      "Localized dashboard header desktop controls",
-    );
-  }
-
-  await expectNoHorizontalOverflow(
-    page,
-    `Localized dashboard header at ${viewport.label}`,
   );
 }
 
