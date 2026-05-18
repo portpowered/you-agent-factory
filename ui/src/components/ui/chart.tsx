@@ -1,13 +1,19 @@
+import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { createContext, useContext } from "react";
-import type { CSSProperties, ReactNode } from "react";
 import {
   Legend as RechartsLegend,
-  ResponsiveContainer,
   Tooltip as RechartsTooltip,
+  ResponsiveContainer,
   type TooltipContentProps,
 } from "recharts";
-import type { Props as RechartsLegendContentProps, LegendPayload } from "recharts/types/component/DefaultLegendContent";
-import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
+import type {
+  LegendPayload,
+  Props as RechartsLegendContentProps,
+} from "recharts/types/component/DefaultLegendContent";
+import type {
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
 
 import { cn } from "../../lib/cn";
 
@@ -34,15 +40,19 @@ export function ChartContainer({
   children,
   className,
   config,
+  interactionAttributes,
   overlay,
   rootAttributes,
+  style,
   title,
 }: {
   children: ReactNode;
   className?: string;
   config: ChartConfig;
+  interactionAttributes?: HTMLAttributes<HTMLDivElement>;
   overlay?: ReactNode;
   rootAttributes?: Record<string, string>;
+  style?: CSSProperties;
   title: string;
 }) {
   return (
@@ -55,15 +65,29 @@ export function ChartContainer({
         )}
         data-chart-container=""
         role="img"
+        {...interactionAttributes}
         {...rootAttributes}
         style={
-          Object.fromEntries(
-            Object.entries(config).map(([key, value]) => [`--color-${key}`, value.color]),
-          ) as CSSProperties
+          {
+            ...Object.fromEntries(
+              Object.entries(config).map(([key, value]) => [
+                `--color-${key}`,
+                value.color,
+              ]),
+            ),
+            ...style,
+          } as CSSProperties
         }
       >
-        {overlay ? <div className="pointer-events-none absolute inset-0">{overlay}</div> : null}
-        <ResponsiveContainer height="100%" minHeight={0} minWidth={0} width="100%">
+        {overlay ? (
+          <div className="pointer-events-none absolute inset-0">{overlay}</div>
+        ) : null}
+        <ResponsiveContainer
+          height="100%"
+          minHeight={0}
+          minWidth={0}
+          width="100%"
+        >
           {children}
         </ResponsiveContainer>
       </div>
@@ -100,11 +124,17 @@ export function ChartTooltipContent({
           const item = config[key];
 
           return (
-            <div className="flex items-center justify-between gap-3 text-af-ink/78" key={key}>
+            <div
+              className="flex items-center justify-between gap-3 text-af-ink/78"
+              key={key}
+            >
               <div className="flex items-center gap-2">
                 <span
                   className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: item?.color ?? entry.color ?? "currentColor" }}
+                  style={{
+                    backgroundColor:
+                      item?.color ?? entry.color ?? "currentColor",
+                  }}
                 />
                 <span>{item?.label ?? key}</span>
               </div>
@@ -128,7 +158,12 @@ export function ChartLegendContent({
   }
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-4 pt-3 text-xs text-af-ink/66", className)}>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-4 pt-3 text-xs text-af-ink/66",
+        className,
+      )}
+    >
       {payload.map((entry: LegendPayload) => {
         const key = entry.dataKey?.toString() ?? "";
         const item = config[key];
@@ -137,7 +172,9 @@ export function ChartLegendContent({
           <div className="flex items-center gap-2" key={key}>
             <span
               className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: item?.color ?? entry.color ?? "currentColor" }}
+              style={{
+                backgroundColor: item?.color ?? entry.color ?? "currentColor",
+              }}
             />
             <span>{item?.label ?? key}</span>
           </div>
