@@ -243,7 +243,7 @@ function ProviderSessionAttemptList({
                 )}
                 aria-pressed={providerSessionSelected}
                 className={cx(
-                  "mt-[0.55rem]",
+                  "mt-2",
                   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
                   providerSessionSelected &&
                     "border-af-accent/35 bg-af-accent/10 text-af-accent",
@@ -259,7 +259,7 @@ function ProviderSessionAttemptList({
                 <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
               </button>
             ) : (
-              <div className="mt-[0.55rem] grid gap-[0.2rem]">
+              <div className="mt-2 grid gap-1">
                 <code className={cx("text-af-code-ink/72", DASHBOARD_BODY_CODE_CLASS)}>
                   {providerSessionLabel}
                 </code>
