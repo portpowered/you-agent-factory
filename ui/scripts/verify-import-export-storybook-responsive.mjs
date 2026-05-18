@@ -1,5 +1,11 @@
 import process from "node:process";
 import { chromium } from "playwright";
+import {
+  verifyLocalizedSubmitWorkCard,
+  verifyLocalizedTraceGrid,
+  verifyLocalizedWorkflowActivity,
+  verifyLocalizedWorkOutcomeChart,
+} from "./verify-localized-widget-storybook-responsive.mjs";
 
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
@@ -46,6 +52,50 @@ const storyChecks = [
     assertions: verifyLocalizedDashboardHeader,
     id: "infinite-you-workflow-dashboard--header-localization-verification",
     label: "localized dashboard header",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedSubmitWorkCard({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-submit-work-card--localized-zh-cn",
+    label: "submit work widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedTraceGrid({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-trace-grid-bento-card--localized-zh-cn",
+    label: "trace drilldown widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedWorkOutcomeChart({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-work-outcome-chart-card--localized-zh-cn",
+    label: "work outcome widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedWorkflowActivity({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-react-flow-current-activity-card--localized-zh-cn",
+    label: "workflow activity widget (zh-CN)",
   },
 ];
 
@@ -99,6 +149,7 @@ async function expectDialogWithinViewport(dialog, viewport, label) {
 }
 
 async function expectVisible(locator, label) {
+  await locator.scrollIntoViewIfNeeded();
   if (!(await locator.isVisible())) {
     throw new Error(`${label} was not visible.`);
   }
@@ -205,7 +256,11 @@ async function verifyLocalizedImportDialog(page, dialog, viewport) {
     dialog.getByRole("button", { name: "关闭导入预览" }),
     "Localized import close button",
   );
-  await expectDialogWithinViewport(dialog, viewport, "Localized import preview");
+  await expectDialogWithinViewport(
+    dialog,
+    viewport,
+    "Localized import preview",
+  );
   await expectNoHorizontalOverflow(
     page,
     `Localized import preview dialog at ${viewport.label}`,

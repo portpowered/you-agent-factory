@@ -5,13 +5,14 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationNode,
 } from "../../api/dashboard/types";
-import { cx } from "../../lib/cx";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../components/ui/formatters";
-import { GraphSemanticIcon } from "./graph-semantic-icon";
+import { cx } from "../../lib/cx";
+import { getWorkflowActivityShellMessages } from "../workflow-activity/messages/activity-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
+import { GraphSemanticIcon } from "./graph-semantic-icon";
 import { workstationIconMetadata } from "./workstation-icon-metadata";
 
 export interface WorkstationNodeData extends Record<string, unknown> {
@@ -19,6 +20,7 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   executions: DashboardActiveExecution[];
   incomingHandleCount: number;
+  locale?: string;
   muted: boolean;
   now: number;
   outgoingHandleCount: number;
@@ -34,7 +36,10 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   ) => void;
 }
 
-export type CurrentActivityWorkstationNode = Node<WorkstationNodeData, "workstation">;
+export type CurrentActivityWorkstationNode = Node<
+  WorkstationNodeData,
+  "workstation"
+>;
 
 const WORKSTATION_SUMMARY_DOT_LIMIT = 10;
 const WORKSTATION_VISIBLE_WORK_ITEM_LIMIT = 3;
@@ -43,14 +48,20 @@ const WORKSTATION_TITLE_DENSE_LENGTH = 28;
 const WORK_ITEM_LABEL_COMPACT_LENGTH = 28;
 const WORK_ITEM_LABEL_DENSE_LENGTH = 48;
 
-export function WorkstationNodeView({ data }: NodeProps<CurrentActivityWorkstationNode>) {
+export function WorkstationNodeView({
+  data,
+}: NodeProps<CurrentActivityWorkstationNode>) {
+  const messages = getWorkflowActivityShellMessages(data.locale);
   const semanticIconMetadata = workstationIconMetadata(data.workstation);
   const exhaustionRule = semanticIconMetadata.semanticKind === "exhaustion";
   const selectedWork = data.selectedWorkID !== null;
   const workItemEntries = data.executions.flatMap((execution) =>
     (execution.work_items ?? []).map((workItem) => ({ execution, workItem })),
   );
-  const visibleWorkItemEntries = workItemEntries.slice(0, WORKSTATION_VISIBLE_WORK_ITEM_LIMIT);
+  const visibleWorkItemEntries = workItemEntries.slice(
+    0,
+    WORKSTATION_VISIBLE_WORK_ITEM_LIMIT,
+  );
   const workstationTitle =
     data.workstation.workstation_name ||
     data.workstation.transition_id ||
@@ -58,7 +69,9 @@ export function WorkstationNodeView({ data }: NodeProps<CurrentActivityWorkstati
   const nodeClassName = cx(
     "min-w-0 w-full justify-start overflow-hidden border-2 bg-af-surface/88",
     exhaustionRule ? "border-dashed border-af-danger/36" : "border-af-info/28",
-    !exhaustionRule && semanticIconMetadata.semanticKind === "repeater" && "border-double",
+    !exhaustionRule &&
+      semanticIconMetadata.semanticKind === "repeater" &&
+      "border-double",
     !exhaustionRule &&
       data.active &&
       !data.selectedWorkstation &&
@@ -68,7 +81,9 @@ export function WorkstationNodeView({ data }: NodeProps<CurrentActivityWorkstati
       !data.selectedWorkstation &&
       "agent-flow-node--active ring-2 ring-af-success/18",
     data.selectedWorkstation && "border-af-accent/70 shadow-af-accent-selected",
-    !exhaustionRule && selectedWork && "border-af-info/70 shadow-af-info-selected",
+    !exhaustionRule &&
+      selectedWork &&
+      "border-af-info/70 shadow-af-info-selected",
     data.muted && "opacity-[0.45]",
   );
 
@@ -80,10 +95,15 @@ export function WorkstationNodeView({ data }: NodeProps<CurrentActivityWorkstati
       outgoingHandleCount={data.outgoingHandleCount}
     >
       {exhaustionRule ? (
-        <ExhaustionRuleNodeButton data={data} workstationTitle={workstationTitle} />
+        <ExhaustionRuleNodeButton
+          data={data}
+          messages={messages}
+          workstationTitle={workstationTitle}
+        />
       ) : (
         <ActiveWorkstationNodeContent
           data={data}
+          messages={messages}
           semanticIconMetadata={semanticIconMetadata}
           selectedWork={selectedWork}
           visibleWorkItemEntries={visibleWorkItemEntries}
@@ -97,16 +117,18 @@ export function WorkstationNodeView({ data }: NodeProps<CurrentActivityWorkstati
 
 function ExhaustionRuleNodeButton({
   data,
+  messages,
   workstationTitle,
 }: {
   data: WorkstationNodeData;
+  messages: ReturnType<typeof getWorkflowActivityShellMessages>;
   workstationTitle: string;
 }) {
   const semanticIconMetadata = workstationIconMetadata(data.workstation);
 
   return (
     <button
-      aria-label={`Select ${workstationTitle} exhaustion rule`}
+      aria-label={messages.selectExhaustionRuleLabel(workstationTitle)}
       aria-pressed={data.selectedWorkstation}
       className="nodrag flex h-full min-w-0 w-full cursor-pointer items-center gap-2 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit"
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
@@ -138,6 +160,7 @@ function ExhaustionRuleNodeButton({
 
 function ActiveWorkstationNodeContent({
   data,
+  messages,
   semanticIconMetadata,
   selectedWork,
   visibleWorkItemEntries,
@@ -145,6 +168,7 @@ function ActiveWorkstationNodeContent({
   workstationTitle,
 }: {
   data: WorkstationNodeData;
+  messages: ReturnType<typeof getWorkflowActivityShellMessages>;
   semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
   selectedWork: boolean;
   visibleWorkItemEntries: Array<{
@@ -166,7 +190,7 @@ function ActiveWorkstationNodeContent({
       data-workstation-kind={semanticIconMetadata.semanticKind}
     >
       <button
-        aria-label={`Select ${workstationTitle} workstation`}
+        aria-label={messages.selectWorkstationLabel(workstationTitle)}
         aria-pressed={data.selectedWorkstation}
         className="nodrag flex min-w-0 w-full cursor-pointer items-center justify-between gap-2 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit"
         onClick={() => data.onSelectWorkstation(data.workstation.node_id)}
@@ -184,7 +208,10 @@ function ActiveWorkstationNodeContent({
             label={semanticIconMetadata.label}
           />
         </span>
-        <span className={workstationTitleClassName(workstationTitle)} data-workstation-title>
+        <span
+          className={workstationTitleClassName(workstationTitle)}
+          data-workstation-title
+        >
           {workstationTitle}
         </span>
         {data.active ? (
@@ -206,7 +233,10 @@ function ActiveWorkstationNodeContent({
         {visibleWorkItemEntries.map(({ execution, workItem }) => {
           const workItemSelected = data.selectedWorkID === workItem.work_id;
           const workItemLabel = formatWorkItemLabel(workItem);
-          const durationLabel = formatDurationFromISO(execution.started_at, data.now);
+          const durationLabel = formatDurationFromISO(
+            execution.started_at,
+            data.now,
+          );
 
           return (
             <li key={`${execution.dispatch_id}:${workItem.work_id}`}>
@@ -214,7 +244,8 @@ function ActiveWorkstationNodeContent({
                 aria-pressed={workItemSelected}
                 className={cx(
                   "nodrag nopan grid min-w-0 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-overlay/8 bg-af-surface px-2 py-[0.4rem] text-left text-[0.74rem] text-inherit",
-                  workItemSelected && "border-af-info/60 bg-af-info/15 shadow-af-info-chip",
+                  workItemSelected &&
+                    "border-af-info/60 bg-af-info/15 shadow-af-info-chip",
                 )}
                 data-selected={workItemSelected ? "true" : undefined}
                 onClick={(event) => {
@@ -229,7 +260,10 @@ function ActiveWorkstationNodeContent({
                 title={`${workItemLabel} - ${durationLabel}`}
                 type="button"
               >
-                <span className={workItemLabelClassName(workItemLabel)} data-active-work-label>
+                <span
+                  className={workItemLabelClassName(workItemLabel)}
+                  data-active-work-label
+                >
                   {workItemLabel}
                 </span>
                 <span
@@ -243,7 +277,10 @@ function ActiveWorkstationNodeContent({
           );
         })}
       </ul>
-      {workstationOverflowMarkers(workItemEntries.length, visibleWorkItemEntries.length)}
+      {workstationOverflowMarkers(
+        workItemEntries.length,
+        visibleWorkItemEntries.length,
+      )}
     </div>
   );
 }
@@ -274,7 +311,10 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
       data-workstation-work-progress="dots"
       role="status"
     >
-      {Array.from({ length: remainingCount }, (_, dotNumber) => dotNumber + 1).map((dotNumber) => (
+      {Array.from(
+        { length: remainingCount },
+        (_, dotNumber) => dotNumber + 1,
+      ).map((dotNumber) => (
         <span
           key={`${remainingCount}-${dotNumber}`}
           aria-hidden="true"
@@ -316,4 +356,3 @@ function workItemLabelClassName(label: string): string {
     textSizeClassName,
   );
 }
-

@@ -137,7 +137,9 @@ const WORK_OUTCOME_CHART_SERIES = getDashboardWorkChartSeriesDefinitions([
 ]);
 
 function expectWorkOutcomeChartContract(card: HTMLElement): void {
-  const chart = within(card).getByRole("img", { name: "Work outcome chart for 15m" });
+  const chart = within(card).getByRole("img", {
+    name: "Work outcome chart for 15m",
+  });
 
   expect(chart).toBeVisible();
   expect(within(card).getByText("Queued")).toBeVisible();
@@ -153,8 +155,12 @@ function expectWorkOutcomeChartContract(card: HTMLElement): void {
     );
 
     expect(path).not.toBeNull();
-    expect(path?.getAttribute("data-chart-series-color")).toBe(series.lineColor);
-    expect(path ? window.getComputedStyle(path).strokeWidth : "").toBe("2.25px");
+    expect(path?.getAttribute("data-chart-series-color")).toBe(
+      series.lineColor,
+    );
+    expect(path ? window.getComputedStyle(path).strokeWidth : "").toBe(
+      "2.25px",
+    );
   }
 
   expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
@@ -165,7 +171,9 @@ function expectWorkOutcomeChartContract(card: HTMLElement): void {
   expect(chart.className).toContain("sm:pb-6");
   expect(chart.className).toContain("sm:pt-5");
 
-  const overlay = chart.querySelector<HTMLElement>("[data-work-chart-overlay='true']");
+  const overlay = chart.querySelector<HTMLElement>(
+    "[data-work-chart-overlay='true']",
+  );
 
   expect(overlay).not.toBeNull();
   expect(overlay?.className).toContain("px-5");
@@ -180,7 +188,9 @@ function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
   const shell = canvasElement.querySelector<HTMLElement>("[data-story-shell]");
 
   expect(shell).not.toBeNull();
-  expect(shell ? shell.getBoundingClientRect().width : 0).toBeLessThanOrEqual(360);
+  expect(shell ? shell.getBoundingClientRect().width : 0).toBeLessThanOrEqual(
+    360,
+  );
   expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
 }
 
@@ -196,7 +206,9 @@ export const Populated = {
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Work outcome chart" });
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
 
     expectWorkOutcomeChartContract(card);
   },
@@ -219,7 +231,10 @@ export const LoadingData = {
 
 export const ConstrainedWidth = {
   render: () => (
-    <div data-story-shell="work-outcome" style={{ maxWidth: "360px", padding: "1rem" }}>
+    <div
+      data-story-shell="work-outcome"
+      style={{ maxWidth: "360px", padding: "1rem" }}
+    >
       <D3CompletionInformationCard
         model={populatedTrend}
         widgetId="work-outcome-chart-narrow-story"
@@ -228,9 +243,31 @@ export const ConstrainedWidth = {
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Work outcome chart" });
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
 
     expectWorkOutcomeChartContract(card);
     expectNoOverflowInStoryShell(canvasElement);
+  },
+};
+
+export const LocalizedZhCN = {
+  args: {
+    locale: "zh-CN",
+    model: populatedTrend,
+    widgetId: "work-outcome-chart-zh-cn-story",
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", { name: "工作结果图表" });
+    const chart = within(card).getByRole("img", { name: "15m 的工作结果图表" });
+
+    await expect(chart).toBeVisible();
+    await expect(within(card).getByText("排队中")).toBeVisible();
+    await expect(within(card).getByText("进行中")).toBeVisible();
+    await expect(within(card).getByText("已完成")).toBeVisible();
+    await expect(within(card).getByText("刻度")).toBeVisible();
+    await expect(within(card).getByText("工作计数")).toBeVisible();
   },
 };

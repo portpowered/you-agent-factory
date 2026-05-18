@@ -30,7 +30,7 @@ import {
 } from "./trace-elk-layout";
 
 const GRAPH_SHELL_CLASS =
-  "h-[60rem] min-h-[40rem] overflow-hidden rounded-xl border border-af-overlay/8 bg-af-overlay/4";
+  "h-[60rem] min-h-[40rem] rounded-xl border border-af-overlay/8 bg-af-overlay/4";
 const RELATION_NODE_CLASS =
   "flex h-full min-w-0 w-full flex-col gap-[0.35rem] overflow-hidden rounded-lg border border-af-overlay/10 bg-af-canvas px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-colors";
 const RELATION_NODE_ACTIVE_CLASS = "hover:border-af-accent/28 hover:bg-af-accent/8";
@@ -172,6 +172,7 @@ export function TraceRelationFlow({
       aria-label={messages.batchRelationGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-relation-flow
+      style={{ overflowX: "hidden", overflowY: "hidden" }}
     >
       <ReactFlow
         defaultEdgeOptions={{

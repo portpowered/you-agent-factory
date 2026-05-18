@@ -37,7 +37,7 @@ import {
 } from "./trace-elk-layout";
 
 const GRAPH_SHELL_CLASS =
-  "h-[36rem] min-h-[36rem] overflow-hidden rounded-xl border border-af-overlay/8 bg-af-overlay/4";
+  "h-[36rem] min-h-[36rem] rounded-xl border border-af-overlay/8 bg-af-overlay/4";
 const PATH_NODE_CLASS =
   "flex h-full min-w-0 w-full flex-col gap-[0.35rem] overflow-hidden rounded-lg border px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)]";
 const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
@@ -169,6 +169,7 @@ export function TraceWorkstationPath({
       aria-label={messages.dispatchPathGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-workstation-path
+      style={{ overflowX: "hidden", overflowY: "hidden" }}
     >
       <ReactFlow
         defaultEdgeOptions={{

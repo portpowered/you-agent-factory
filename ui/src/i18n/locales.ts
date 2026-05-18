@@ -7,7 +7,7 @@ export const SUPPORTED_LOCALES = ["en", "zh-CN", "ko", "ja"] as const;
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
-export const DEFAULT_LOCALE: SupportedLocale = "en";
+export const DEFAULT_LOCALE = "en" as const satisfies SupportedLocale;
 export const REQUIRED_LOCALES = ["en", "zh-CN"] as const;
 
 export type RequiredLocale = (typeof REQUIRED_LOCALES)[number];
