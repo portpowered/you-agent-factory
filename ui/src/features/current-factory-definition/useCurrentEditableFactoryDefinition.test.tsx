@@ -4,9 +4,14 @@ import type { ReactNode } from "react";
 
 import {
   getCurrentEditableFactoryDefinition,
+  getCurrentEditableFactoryDefinitionDocument,
   type CanonicalFactoryDefinition,
+  type EditableFactoryDefinitionDocument,
 } from "../../api/current-factory-definition";
-import { useCurrentEditableFactoryDefinition } from "./useCurrentEditableFactoryDefinition";
+import {
+  useCurrentEditableFactoryDefinition,
+  useCurrentEditableFactoryDefinitionDocument,
+} from "./useCurrentEditableFactoryDefinition";
 
 vi.mock("../../api/current-factory-definition", async () => {
   const actual = await vi.importActual("../../api/current-factory-definition");
@@ -14,6 +19,7 @@ vi.mock("../../api/current-factory-definition", async () => {
   return {
     ...actual,
     getCurrentEditableFactoryDefinition: vi.fn(),
+    getCurrentEditableFactoryDefinitionDocument: vi.fn(),
   };
 });
 
@@ -53,6 +59,7 @@ const editableFactoryDefinition: CanonicalFactoryDefinition = {
 describe("useCurrentEditableFactoryDefinition", () => {
   beforeEach(() => {
     vi.mocked(getCurrentEditableFactoryDefinition).mockReset();
+    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockReset();
   });
 
   it("does not fetch while workstation editing is disabled", () => {
@@ -107,6 +114,36 @@ describe("useCurrentEditableFactoryDefinition", () => {
         },
         isPending: false,
         status: "error",
+      });
+    });
+  });
+
+  it("returns the editable current-factory document with version metadata", async () => {
+    const editableFactoryDefinitionDocument: EditableFactoryDefinitionDocument =
+      {
+        factoryDefinition: editableFactoryDefinition,
+        version: {
+          logical: 4,
+          physical: "2026-05-18T14:48:00Z",
+        },
+      };
+    vi.mocked(getCurrentEditableFactoryDefinitionDocument).mockResolvedValue(
+      editableFactoryDefinitionDocument,
+    );
+
+    const { result } = renderHook(
+      () => useCurrentEditableFactoryDefinitionDocument(),
+      {
+        wrapper: createQueryClientWrapper(),
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        data: editableFactoryDefinitionDocument,
+        error: null,
+        isPending: false,
+        status: "success",
       });
     });
   });

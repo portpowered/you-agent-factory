@@ -1,6 +1,7 @@
 import {
   CurrentEditableFactoryDefinitionError,
   getCurrentEditableFactoryDefinition,
+  getCurrentEditableFactoryDefinitionDocument,
 } from "./api";
 
 describe("getCurrentEditableFactoryDefinition", () => {
@@ -9,37 +10,43 @@ describe("getCurrentEditableFactoryDefinition", () => {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            id: "factory-current",
-            name: "Current Factory",
-            workers: [
-              {
-                model: "gpt-5",
-                name: "writer",
-                type: "MODEL_WORKER",
-              },
-            ],
-            workstations: [
-              {
-                body: "Summarize the work item before review.",
-                inputs: [
-                  {
-                    state: "queued",
-                    workType: "task",
-                  },
-                ],
-                name: "Draft",
-                outputs: [
-                  {
-                    state: "reviewed",
-                    workType: "task",
-                  },
-                ],
-                promptFile: "prompts/draft.md",
-                type: "MODEL_WORKSTATION",
-                worker: "writer",
-              },
-            ],
-            workTypes: [],
+            factoryDefinition: {
+              id: "factory-current",
+              name: "Current Factory",
+              workers: [
+                {
+                  model: "gpt-5",
+                  name: "writer",
+                  type: "MODEL_WORKER",
+                },
+              ],
+              workstations: [
+                {
+                  body: "Summarize the work item before review.",
+                  inputs: [
+                    {
+                      state: "queued",
+                      workType: "task",
+                    },
+                  ],
+                  name: "Draft",
+                  outputs: [
+                    {
+                      state: "reviewed",
+                      workType: "task",
+                    },
+                  ],
+                  promptFile: "prompts/draft.md",
+                  type: "MODEL_WORKSTATION",
+                  worker: "writer",
+                },
+              ],
+              workTypes: [],
+            },
+            version: {
+              logical: 7,
+              physical: "2026-05-18T14:22:00Z",
+            },
           }),
           {
             headers: {
@@ -87,6 +94,47 @@ describe("getCurrentEditableFactoryDefinition", () => {
     });
   });
 
+  it("returns version metadata together with the editable current factory definition document", async () => {
+    const document = await getCurrentEditableFactoryDefinitionDocument({
+      fetch: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            factoryDefinition: {
+              name: "Current Factory",
+              workers: [],
+              workstations: [],
+              workTypes: [],
+            },
+            version: {
+              logical: 9,
+              physical: "2026-05-18T14:25:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      ),
+    });
+
+    expect(document).toEqual({
+      factoryDefinition: {
+        name: "Current Factory",
+        workers: [],
+        workstations: [],
+        workTypes: [],
+      },
+      version: {
+        logical: 9,
+        physical: "2026-05-18T14:25:00Z",
+      },
+    });
+  });
+
   it("surfaces current-factory transport failures with the original API error code", async () => {
     await expect(
       getCurrentEditableFactoryDefinition({
@@ -123,16 +171,22 @@ describe("getCurrentEditableFactoryDefinition", () => {
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
-              name: "Current Factory",
-              workers: [
-                {
-                  model: 42,
-                  name: "writer",
-                  type: "MODEL_WORKER",
-                },
-              ],
-              workstations: [],
-              workTypes: [],
+              factoryDefinition: {
+                name: "Current Factory",
+                workers: [
+                  {
+                    model: 42,
+                    name: "writer",
+                    type: "MODEL_WORKER",
+                  },
+                ],
+                workstations: [],
+                workTypes: [],
+              },
+              version: {
+                logical: 12,
+                physical: "2026-05-18T14:30:00Z",
+              },
             }),
             {
               headers: {
@@ -152,18 +206,24 @@ describe("getCurrentEditableFactoryDefinition", () => {
     expect(thrown).toMatchObject({
       code: "INVALID_FACTORY_DEFINITION",
       message:
-        "The current factory API returned a factory definition the dashboard cannot edit. factory.workers[0].model must be a string.",
+        "The current factory editing API returned a factory definition the dashboard cannot edit. factory.workers[0].model must be a string.",
       responseBody: {
-        name: "Current Factory",
-        workers: [
-          {
-            model: 42,
-            name: "writer",
-            type: "MODEL_WORKER",
-          },
-        ],
-        workstations: [],
-        workTypes: [],
+        factoryDefinition: {
+          name: "Current Factory",
+          workers: [
+            {
+              model: 42,
+              name: "writer",
+              type: "MODEL_WORKER",
+            },
+          ],
+          workstations: [],
+          workTypes: [],
+        },
+        version: {
+          logical: 12,
+          physical: "2026-05-18T14:30:00Z",
+        },
       },
     });
   });
