@@ -38,6 +38,19 @@ infinite-you init --executor claude --dir my-factory
 infinite-you docs workstation
 ```
 
+## Inspect Runtime State
+
+With the service running, ask the live API which factory is currently active:
+
+```sh
+infinite-you factory query
+infinite-you factory query --port 7437 --json
+```
+
+`factory query` reads the running service's current-factory API. It does not infer
+the answer from local `factory.json` files, so the output reflects the active
+default-root runtime or the currently activated named factory on that server.
+
 
 ## Example
 Here's an example of the factory for infinite-you dispatching roughly 5-10 agents. 
