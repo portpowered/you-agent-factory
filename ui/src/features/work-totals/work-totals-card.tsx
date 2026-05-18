@@ -1,5 +1,5 @@
-import { cx } from "../../lib/cx";
 import { AgentBentoCard } from "../../components/ui";
+import { cx } from "../../lib/cx";
 
 interface WorkTotalsCardProps {
   completedCount: number;
@@ -15,7 +15,7 @@ interface StatCardProps {
 }
 
 const STAT_CARD_CLASS =
-  "min-h-0 rounded-lg border border-af-overlay/10 bg-af-surface/72 p-2 px-3 backdrop-blur-[18px]";
+  "min-h-0 rounded-lg border border-af-overlay/10 bg-af-surface/72 p-2 px-3 backdrop-blur-lg";
 
 export function WorkTotalsCard({
   completedCount,
@@ -26,10 +26,14 @@ export function WorkTotalsCard({
   return (
     <AgentBentoCard title="Work totals">
       <section
-        className="grid grid-cols-4 gap-2 max-[720px]:grid-cols-2"
+        className="grid grid-cols-2 gap-2 md:grid-cols-4"
         aria-label="work totals"
       >
-        <StatCard label="In progress" value={inFlightDispatchCount} tone="live" />
+        <StatCard
+          label="In progress"
+          value={inFlightDispatchCount}
+          tone="live"
+        />
         <StatCard label="Completed" value={completedCount} tone="success" />
         <StatCard label="Failed" value={failedCount} tone="danger" />
         <StatCard label="Dispatched" value={dispatchedCount} tone="neutral" />
@@ -48,9 +52,12 @@ function StatCard({ label, value, tone }: StatCardProps) {
         tone === "danger" && "border-af-danger/30",
       )}
     >
-      <span className="mb-1 block text-[0.68rem] uppercase text-af-ink/64">{label}</span>
-      <strong className="font-display text-[1.35rem] leading-none">{value}</strong>
+      <span className="mb-1 block text-[0.68rem] uppercase text-af-ink/64">
+        {label}
+      </span>
+      <strong className="font-display text-[1.35rem] leading-none">
+        {value}
+      </strong>
     </article>
   );
 }
-

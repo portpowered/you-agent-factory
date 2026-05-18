@@ -711,14 +711,15 @@ describe("ReactFlowCurrentActivityCard", () => {
       name: "Work graph viewport",
     });
 
-    expect(card?.className).toContain("p-[1.2rem]");
-    expect(card?.className).toContain("max-[720px]:p-4");
+    expect(card?.className).toContain("p-4");
+    expect(card?.className).toContain("md:p-5");
     expect(header?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(legend?.className).toContain("absolute");
     expect(legend?.className).toContain("left-7");
     expect(legend?.className).toContain("top-7");
-    expect(legend?.className).toContain("max-[720px]:left-4");
-    expect(legend?.className).toContain("max-[720px]:right-4");
+    expect(legend?.className).toContain("right-4");
+    expect(legend?.className).toContain("md:left-7");
+    expect(legend?.className).toContain("md:right-auto");
     expect(legend?.className).not.toContain("right-0");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
@@ -1620,10 +1621,10 @@ describe("ReactFlowCurrentActivityCard", () => {
 
     expect(longStateNode?.getAttribute("style")).toContain("width: 164px");
     expect(longStateNode?.getAttribute("style")).toContain("height: 86px");
-    expect(longStateButton.className).toContain("grid-rows-[1.5rem_auto]");
+    expect(longStateButton.className).toContain("flex-col");
     expect(longStateButton.className).toContain("overflow-hidden");
-    expect(labelZone?.className).toContain("h-[1.5rem]");
-    expect(labelZone?.className).toContain("max-h-[1.5rem]");
+    expect(labelZone?.className).toContain("h-6");
+    expect(labelZone?.className).toContain("max-h-6");
     expect(labelZone?.className).toContain("overflow-hidden");
     expect(workType?.className).toContain("text-ellipsis");
     expect(workType?.getAttribute("title")).toBe(

@@ -6,10 +6,10 @@ import {
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
 const PANEL_CLASS =
-  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
-const STATUS_PANEL_CLASS = cx(PANEL_CLASS, "mb-4 p-5 px-6");
+  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5 md:px-6";
+const STATUS_PANEL_CLASS = cx(PANEL_CLASS, "mb-4");
 const EYEBROW_CLASS =
-  "mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
+  "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
 const DASHBOARD_TITLE_CLASS = cx("m-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DETAIL_COPY_CLASS = cx("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
 
