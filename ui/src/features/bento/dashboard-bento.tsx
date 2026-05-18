@@ -136,6 +136,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
       <DashboardImportPreviewDialog
         activationState={importController.activationState}
         importPreviewState={importController.importPreviewState}
+        locale={resolvedLocale}
         onCancel={() => {
           importController.clearActivationError();
           importController.closeImportPreview();
