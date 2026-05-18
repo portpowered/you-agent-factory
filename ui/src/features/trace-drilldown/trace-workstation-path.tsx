@@ -35,6 +35,7 @@ import {
   traceGraphLayoutKey,
 } from "./trace-elk-layout";
 
+// tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
   "h-[36rem] min-h-[36rem] overflow-hidden rounded-xl border border-af-overlay/8 bg-af-overlay/4";
 const PATH_NODE_CLASS =

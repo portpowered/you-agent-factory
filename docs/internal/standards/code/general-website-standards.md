@@ -142,6 +142,7 @@ Allowed intrinsic-value exceptions:
 - Intrinsic visualization geometry may keep direct numeric values when the number describes the visualization rather than reusable spacing rhythm, such as chart view boxes, graph canvas extents, node coordinates, axis tick geometry, or drag bounds.
 - Viewport and container sizing may keep direct values when they express a real runtime constraint, such as `min-h-[100dvh]`, viewport clamps, split-pane library sizing, or third-party component dimensions that cannot be expressed through the spacing scale without changing behavior.
 - Generated artifacts, third-party style hooks, data-driven transforms, and asset metadata may keep required numeric values, but handwritten UI should isolate and comment the exception when it is not obvious from the surrounding code.
+- Runtime `ui/src` arbitrary width or height utilities that are true intrinsic sizing exceptions **MUST** carry the inline marker `tailwind-exception: intrinsic-sizing` on the same line or immediately above the class usage so the repo-owned lint guard can distinguish documented exceptions from ordinary layout drift.
 - Exceptions must not be used for routine padding, margin, gap, inset, radius, or breakpoint choices that can be expressed with approved Tailwind tokens.
 
 Recommended token categories:

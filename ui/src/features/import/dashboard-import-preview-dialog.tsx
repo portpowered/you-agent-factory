@@ -155,7 +155,7 @@ export function FactoryImportPreviewDialog({
         <div className="overflow-hidden rounded-3xl border border-af-overlay/10 bg-af-overlay/4 p-3">
           <img
             alt={messages.previewImageAlt(previewState.value.factory.name)}
-            className="block h-full max-h-[24rem] w-full rounded-2xl object-contain"
+            className="block h-full max-h-96 w-full rounded-2xl object-contain"
             src={previewState.value.previewImageSrc}
           />
         </div>

@@ -47,7 +47,9 @@ import { TraceWorkstationPath } from "./trace-workstation-path";
 const TRACE_EXPANDER_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2";
 const TRACE_EXPANDER_TOGGLE_CLASS = "min-h-9 shrink-0 px-2.5 py-2";
-const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-[12rem]";
+const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
+// tailwind-exception: intrinsic-sizing
+const TRACE_GRID_TABLE_CLASS = "min-w-[860px]";
 const TRACE_WORK_ITEM_BUTTON_CLASS = cx(
   "h-auto min-h-0 justify-start border-af-accent/35 bg-af-accent/10 px-2.5 py-1.5 text-left text-af-accent",
   DASHBOARD_SUPPORTING_CODE_CLASS,
@@ -237,7 +239,7 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
       </dl>
 
       {trace.dispatches.length > 0 ? (
-        <Table className={cx("min-w-[860px]", DASHBOARD_BODY_TEXT_CLASS)}>
+        <Table className={cx(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}>
           <TableCaption className={cx("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
             Trace dispatch grid
           </TableCaption>
