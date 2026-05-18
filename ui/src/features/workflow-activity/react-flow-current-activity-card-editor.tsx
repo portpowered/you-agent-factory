@@ -6,6 +6,8 @@ import {
   useSaveCurrentEditableFactoryDefinition,
 } from "../current-factory-definition";
 import {
+  applyFactoryGraphEntityRemoval,
+  buildFactoryGraphRemovalIntent,
   createEmptyFactoryGraphDraft,
   useFactoryGraphDraftState,
 } from "../factory-graph-editor/factory-graph-draft";
@@ -61,13 +63,25 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
     draftState,
     setActiveTool,
   });
+  const {
+    handleConfirmRemoval,
+    handleEditorNodeDelete,
+    pendingRemovalIntent,
+    setPendingRemovalNodeId,
+  } = useFactoryGraphRemovalController({
+    activeTool,
+    canInteractWithEditor,
+    draftState,
+    saveEditableDefinition,
+  });
 
   const leaveEditor = useCallback(() => {
     setEditorMode(false);
     setActiveTool(null);
     addEntityController.reset();
     setIsConfirmingLeaveEditor(false);
-  }, [addEntityController]);
+    setPendingRemovalNodeId(null);
+  }, [addEntityController, setPendingRemovalNodeId]);
 
   const handleEditorModeToggle = useCallback(() => {
     if (!editorMode) {
@@ -90,15 +104,20 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
 
   const handleSaveBeforeLeavingEditor = useCallback(async () => {
     if (!canSaveDraft || draftState.pendingFactoryDefinition == null) {
-      return;
+      return false;
     }
 
-    await saveEditableDefinition.mutateAsync({
-      baseVersion: draftState.latestDocument?.version,
-      factoryDefinition: draftState.pendingFactoryDefinition,
-    });
-    draftState.replaceDraft(createEmptyFactoryGraphDraft());
-    leaveEditor();
+    try {
+      await saveEditableDefinition.mutateAsync({
+        baseVersion: draftState.latestDocument?.version,
+        factoryDefinition: draftState.pendingFactoryDefinition,
+      });
+      draftState.replaceDraft(createEmptyFactoryGraphDraft());
+      leaveEditor();
+      return true;
+    } catch {
+      return false;
+    }
   }, [canSaveDraft, draftState, leaveEditor, saveEditableDefinition]);
 
   return {
@@ -120,12 +139,16 @@ export function useCurrentActivityGraphEditor(projectedTopology: DashboardTopolo
     handleSaveBeforeLeavingEditor,
     isConfirmingLeaveEditor,
     leaveDialogOpen: isConfirmingLeaveEditor,
+    handleConfirmRemoval,
+    handleEditorNodeDelete,
     saveEditableDefinition,
     setAddEntityDraft: addEntityController.setAddEntityDraft,
     setAddEntityErrors: addEntityController.setAddEntityErrors,
     setAddMenuOpen: addEntityController.setAddMenuOpen,
     setActiveTool,
     setIsConfirmingLeaveEditor,
+    setPendingRemovalNodeId,
+    pendingRemovalIntent,
   };
 }
 
@@ -196,6 +219,84 @@ function useFactoryGraphAddEntityController({
     setAddEntityDraft,
     setAddEntityErrors,
     setAddMenuOpen,
+  };
+}
+
+function useFactoryGraphRemovalController({
+  activeTool,
+  canInteractWithEditor,
+  draftState,
+  saveEditableDefinition,
+}: {
+  activeTool: FactoryGraphEditorTool;
+  canInteractWithEditor: boolean;
+  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentEditableFactoryDefinition>;
+}) {
+  const [pendingRemovalNodeId, setPendingRemovalNodeId] = useState<string | null>(
+    null,
+  );
+  const pendingRemovalIntent =
+    draftState.latestDocument && pendingRemovalNodeId
+      ? buildFactoryGraphRemovalIntent({
+          baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
+          draft: draftState.draft,
+          nodeId: pendingRemovalNodeId,
+        })
+      : null;
+
+  const handleEditorNodeDelete = useCallback(
+    (nodeId: string) => {
+      if (
+        !canInteractWithEditor ||
+        activeTool !== "delete" ||
+        !draftState.latestDocument
+      ) {
+        return;
+      }
+
+      const intent = buildFactoryGraphRemovalIntent({
+        baseFactoryDefinition: draftState.latestDocument.factoryDefinition,
+        draft: draftState.draft,
+        nodeId,
+      });
+      if (!intent || intent.ineligibleReason) {
+        return;
+      }
+
+      setPendingRemovalNodeId(nodeId);
+      saveEditableDefinition.reset();
+    },
+    [
+      activeTool,
+      canInteractWithEditor,
+      draftState.draft,
+      draftState.latestDocument,
+      saveEditableDefinition,
+    ],
+  );
+
+  const handleConfirmRemoval = useCallback(() => {
+    const latestDocument = draftState.latestDocument;
+    if (!latestDocument || !pendingRemovalIntent) {
+      return;
+    }
+
+    draftState.updateDraft((currentDraft) =>
+      applyFactoryGraphEntityRemoval(
+        currentDraft,
+        latestDocument.factoryDefinition,
+        pendingRemovalIntent.key,
+      ),
+    );
+    setPendingRemovalNodeId(null);
+  }, [draftState, pendingRemovalIntent]);
+
+  return {
+    handleConfirmRemoval,
+    handleEditorNodeDelete,
+    pendingRemovalIntent,
+    setPendingRemovalNodeId,
   };
 }
 

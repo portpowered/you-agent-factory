@@ -14,9 +14,9 @@ import type {
 
 type FactoryGraphEditorNode = Node<
   {
+    draftStatus: "addition" | "none" | "removal";
     kind: FactoryGraphNodeKind;
     label: string;
-    pending: boolean;
   },
   "factoryEntity"
 >;
@@ -61,7 +61,9 @@ export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {
 };
 
 export function buildFactoryGraphEditorFlowModel(input: {
-  pendingNodeIds: ReadonlySet<string>;
+  pendingAdditionNodeIds: ReadonlySet<string>;
+  pendingRemovalEdgeIds: ReadonlySet<string>;
+  pendingRemovalNodeIds: ReadonlySet<string>;
   topology: FactoryGraphTopology;
 }): {
   edges: Edge[];
@@ -86,9 +88,13 @@ export function buildFactoryGraphEditorFlowModel(input: {
 
       return {
         data: {
+          draftStatus: input.pendingRemovalNodeIds.has(node.id)
+            ? "removal"
+            : input.pendingAdditionNodeIds.has(node.id)
+              ? "addition"
+              : "none",
           kind: node.kind,
           label: node.label,
-          pending: input.pendingNodeIds.has(node.id),
         },
         draggable: true,
         id: node.id,
@@ -103,6 +109,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   return {
     edges: input.topology.edges.map((edge) => {
       const color = EDGE_COLOR_BY_KIND[edge.kind];
+      const pendingRemoval = input.pendingRemovalEdgeIds.has(edge.id);
       return {
         animated:
           edge.kind === "workstation-on-continue" ||
@@ -116,12 +123,14 @@ export function buildFactoryGraphEditorFlowModel(input: {
         },
         source: edge.sourceId,
         style: {
-          stroke: color,
-          strokeDasharray:
-            edge.kind === "worker-resource" || edge.kind === "workstation-resource"
+          opacity: pendingRemoval ? 0.48 : 1,
+          stroke: pendingRemoval ? "var(--color-af-danger-ink)" : color,
+          strokeDasharray: pendingRemoval
+            ? "7 5"
+            : edge.kind === "worker-resource" || edge.kind === "workstation-resource"
               ? "4 5"
               : undefined,
-          strokeWidth: 1.7,
+          strokeWidth: pendingRemoval ? 2 : 1.7,
         },
         target: edge.targetId,
       } satisfies Edge;
@@ -152,7 +161,9 @@ function FactoryGraphEditorNodeView({
       className={cx(
         "min-w-0 w-full justify-start border text-left shadow-none",
         KIND_CLASS[data.kind],
-        data.pending && "ring-2 ring-af-warning/34",
+        data.draftStatus === "addition" && "ring-2 ring-af-warning/34",
+        data.draftStatus === "removal" &&
+          "border-af-danger/28 bg-af-danger/8 opacity-70 ring-2 ring-af-danger/24",
       )}
       incomingHandleCount={data.incomingHandleCount}
       nodeType={data.kind === "workstation" ? "workstation" : "resource"}
@@ -163,9 +174,14 @@ function FactoryGraphEditorNodeView({
           <span className="rounded-full border border-af-overlay/14 bg-af-overlay/8 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-ink/64">
             {KIND_LABEL[data.kind]}
           </span>
-          {data.pending ? (
+          {data.draftStatus === "addition" ? (
             <span className="rounded-full border border-af-warning/24 bg-af-warning/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-warning-ink">
               Pending
+            </span>
+          ) : null}
+          {data.draftStatus === "removal" ? (
+            <span className="rounded-full border border-af-danger/24 bg-af-danger/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-danger-ink">
+              Removing
             </span>
           ) : null}
         </div>

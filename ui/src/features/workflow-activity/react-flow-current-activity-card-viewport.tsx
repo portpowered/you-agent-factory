@@ -70,6 +70,7 @@ export function CurrentActivityGraphViewport({
   nodes,
   onAddAction,
   onAddMenuOpenChange,
+  onEditorNodeClick,
   onSelectTool,
   openAddMenu,
   setStoredNodePosition,
@@ -90,6 +91,7 @@ export function CurrentActivityGraphViewport({
   nodes: Node[];
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onEditorNodeClick?: (nodeId: string) => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   openAddMenu?: boolean;
   setStoredNodePosition: (
@@ -138,6 +140,11 @@ export function CurrentActivityGraphViewport({
           nodes={nodes}
           nodesConnectable={editorMode && activeTool === "connect"}
           nodesDraggable={true}
+          onNodeClick={(_, node) => {
+            if (editorMode) {
+              onEditorNodeClick?.(node.id);
+            }
+          }}
           onNodeDragStop={(_, node) => {
             if (graphKey) {
               setStoredNodePosition(graphKey, node.id, node.position);

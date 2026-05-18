@@ -3,3 +3,4 @@ export * from "./factory-graph-draft-graph";
 export * from "./factory-graph-draft-hook";
 export * from "./factory-graph-draft-types";
 export * from "./factory-graph-draft-validation";
+export * from "./factory-graph-editor-removals";

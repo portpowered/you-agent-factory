@@ -661,6 +661,7 @@ function registerCurrentActivityCardTestLifecycle(): void {
     } as never);
     vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
       mutateAsync: vi.fn(),
+      reset: vi.fn(),
       status: "idle",
     } as never);
     vi.mocked(useFactoryGraphDraftState).mockReturnValue(defaultDraftState as never);
@@ -858,6 +859,107 @@ function registerCurrentActivityCardTestLifecycle(): void {
 
     expect(await screen.findByText("review")).toBeTruthy();
     expect(screen.getByText("Pending")).toBeTruthy();
+  });
+
+  it("confirms workstation removal from delete mode and records a pending workstation removal", async () => {
+    const updateDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      graph: {
+        edges: [
+          {
+            id: "worker-assignment:worker:writer->workstation:review",
+            kind: "worker-assignment",
+            source: { kind: "worker", name: "writer" },
+            sourceId: "worker:writer",
+            target: { kind: "workstation", name: "review" },
+            targetId: "workstation:review",
+          },
+        ],
+        nodes: [
+          {
+            id: "worker:writer",
+            key: { kind: "worker", name: "writer" },
+            kind: "worker",
+            label: "writer",
+          },
+          {
+            id: "workstation:review",
+            key: { kind: "workstation", name: "review" },
+            kind: "workstation",
+            label: "review",
+          },
+        ],
+      },
+      updateDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByText("review"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove review workstation?",
+    });
+    expect(
+      within(dialog).getByText("This will remove 3 graph edges."),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete review workstation",
+      }),
+    );
+
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    const updater = updateDraft.mock.calls[0]?.[0] as typeof defaultDraftState.updateDraft;
+    const nextDraft = updater(defaultDraftState.draft);
+    expect(nextDraft.removals.workstations).toEqual(["review"]);
+  });
+
+  it("keeps removed server-backed nodes visible with a pending-removal badge", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      draft: {
+        ...defaultDraftState.draft,
+        removals: {
+          ...defaultDraftState.draft.removals,
+          workstations: ["review"],
+        },
+      },
+      graph: {
+        edges: [],
+        nodes: [],
+      },
+      hasChanges: true,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    expect(await screen.findByText("review")).toBeTruthy();
+    expect(screen.getByText("Removing")).toBeTruthy();
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {

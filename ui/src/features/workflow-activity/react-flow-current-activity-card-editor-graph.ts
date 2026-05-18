@@ -6,7 +6,12 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { nodeKeyId } from "../factory-graph-editor/factory-graph-draft";
+import {
+  buildFactoryGraphTopologyFromDefinition,
+  collectPendingRemovalEdgeIds,
+  collectPendingRemovalNodeIds,
+  nodeKeyId,
+} from "../factory-graph-editor/factory-graph-draft";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
@@ -18,13 +23,56 @@ import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore"
 export function useFactoryGraphEditorViewModel(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
+  const baseTopology = useMemo(
+    () =>
+      editor.draftState.latestDocument
+        ? buildFactoryGraphTopologyFromDefinition(
+            editor.draftState.latestDocument.factoryDefinition,
+          )
+        : { edges: [], nodes: [] },
+    [editor.draftState.latestDocument],
+  );
+  const displayTopology = useMemo(
+    () => ({
+      edges: mergeById(baseTopology.edges, editor.draftState.graph.edges),
+      nodes: mergeById(baseTopology.nodes, editor.draftState.graph.nodes),
+    }),
+    [baseTopology.edges, baseTopology.nodes, editor.draftState.graph.edges, editor.draftState.graph.nodes],
+  );
+  const pendingRemovalNodeIds = useMemo(
+    () =>
+      editor.draftState.latestDocument
+        ? collectPendingRemovalNodeIds(
+            editor.draftState.latestDocument.factoryDefinition,
+            editor.draftState.draft,
+          )
+        : new Set<string>(),
+    [editor.draftState.draft, editor.draftState.latestDocument],
+  );
+  const pendingRemovalEdgeIds = useMemo(
+    () =>
+      editor.draftState.latestDocument
+        ? collectPendingRemovalEdgeIds(
+            editor.draftState.latestDocument.factoryDefinition,
+            editor.draftState.draft,
+          )
+        : new Set<string>(),
+    [editor.draftState.draft, editor.draftState.latestDocument],
+  );
   const editorGraph = useMemo(
     () =>
       buildFactoryGraphEditorFlowModel({
-        pendingNodeIds: collectPendingNodeIds(editor.draftState.draft),
-        topology: editor.draftState.graph,
+        pendingAdditionNodeIds: collectPendingNodeIds(editor.draftState.draft),
+        pendingRemovalEdgeIds,
+        pendingRemovalNodeIds,
+        topology: displayTopology,
       }),
-    [editor.draftState.draft, editor.draftState.graph],
+    [
+      displayTopology,
+      editor.draftState.draft,
+      pendingRemovalEdgeIds,
+      pendingRemovalNodeIds,
+    ],
   );
   const graphKey = useMemo(
     () =>
@@ -80,6 +128,21 @@ export function useFactoryGraphEditorViewModel(
     nodes,
     setStoredNodePosition,
   };
+}
+
+function mergeById<T extends { id: string }>(baseItems: T[], nextItems: T[]) {
+  const itemsById = new Map<string, T>();
+
+  for (const item of baseItems) {
+    itemsById.set(item.id, item);
+  }
+  for (const item of nextItems) {
+    itemsById.set(item.id, item);
+  }
+
+  return Array.from(itemsById.values()).sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
 }
 
 function collectPendingNodeIds(

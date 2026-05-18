@@ -12,11 +12,11 @@ import type { FactoryValue } from "../../api/named-factory";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
 import { FactoryGraphEditorAddEntityDialog } from "../factory-graph-editor/factory-graph-editor-add-dialog";
-import { FactoryGraphEditorLeaveDialog } from "../factory-graph-editor/factory-graph-editor-controls";
 import {
-  CURRENT_ACTIVITY_NODE_TYPES,
-  type CurrentActivityNode,
-} from "../flowchart/current-activity-nodes";
+  FactoryGraphEditorConfirmationDialog,
+  FactoryGraphEditorLeaveDialog,
+} from "../factory-graph-editor/factory-graph-editor-controls";
+import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
 import {
   FactoryImportPreviewDialog,
@@ -36,6 +36,7 @@ import {
   useCurrentActivityGraphEditor,
 } from "./react-flow-current-activity-card-editor";
 import { useFactoryGraphEditorViewModel } from "./react-flow-current-activity-card-editor-graph";
+import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
@@ -52,7 +53,6 @@ import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "./react-flow-current-activity-card-keys";
-import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
 export {
@@ -218,7 +218,7 @@ function useCurrentActivityBaseNodes({
   );
 }
 
-function useCurrentActivityGraphViewModel({
+export function useCurrentActivityGraphViewModel({
   now,
   onSelectStateNode,
   onSelectWorkItem,
@@ -332,15 +332,6 @@ function useCurrentActivityGraphViewModel({
   };
 }
 
-function EmptyCurrentActivityState() {
-  return (
-    <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
-      <h3>No workflow topology loaded</h3>
-      <p>The factory has not published any workstation graph yet.</p>
-    </div>
-  );
-}
-
 export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
@@ -421,6 +412,21 @@ export function ReactFlowCurrentActivityCard(
           void editor.handleSaveBeforeLeavingEditor();
         }}
       />
+      <FactoryGraphEditorConfirmationDialog
+        cancelLabel="Cancel removal"
+        confirmLabel={editor.pendingRemovalIntent?.confirmLabel ?? "Delete entity"}
+        confirmTone="destructive"
+        description={
+          editor.pendingRemovalIntent?.confirmDescription ??
+          "Remove this graph entity from the current draft."
+        }
+        isOpen={editor.pendingRemovalIntent !== null}
+        onCancel={() => {
+          editor.setPendingRemovalNodeId(null);
+        }}
+        onConfirm={editor.handleConfirmRemoval}
+        title={editor.pendingRemovalIntent?.title ?? "Remove graph entity?"}
+      />
       <FactoryGraphEditorAddEntityDialog
         currentFactoryDefinition={editor.currentFactoryDefinition}
         draft={editor.addEntityDraft}
@@ -437,51 +443,5 @@ export function ReactFlowCurrentActivityCard(
         onSubmit={editor.handleAddEntitySubmit}
       />
     </section>
-  );
-}
-
-function CurrentActivityGraphSurface({
-  editor,
-  editorGraph,
-  graph,
-  imports,
-  locale,
-  snapshot,
-}: {
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
-  editorGraph: ReturnType<typeof useFactoryGraphEditorViewModel>;
-  graph: ReturnType<typeof useCurrentActivityGraphViewModel>;
-  imports: CurrentActivityImportController;
-  locale?: string;
-  snapshot: DashboardSnapshot;
-}) {
-  if (snapshot.topology.workstation_node_ids.length === 0 && !editor.editorMode) {
-    return <EmptyCurrentActivityState />;
-  }
-
-  const activeGraph = editor.editorMode ? editorGraph : graph;
-
-  return (
-    <CurrentActivityGraphViewport
-      activeTool={editor.activeTool}
-      addMenuActions={editor.addMenuActions}
-      canInteractWithEditor={editor.canInteractWithEditor}
-      editorMode={editor.editorMode}
-      edges={activeGraph.edges}
-      graphKey={activeGraph.graphKey}
-      handleNodesChange={activeGraph.handleNodesChange}
-      hasPendingChanges={editor.draftState.hasChanges}
-      imports={imports}
-      initialFitViewKey={activeGraph.initialFitViewKey}
-      initialFitViewOptions={activeGraph.initialFitViewOptions}
-      locale={locale}
-      nodeTypes={editor.editorMode ? editorGraph.nodeTypes : CURRENT_ACTIVITY_NODE_TYPES}
-      nodes={activeGraph.nodes}
-      onAddAction={editor.handleAddEntityAction}
-      onAddMenuOpenChange={editor.setAddMenuOpen}
-      onSelectTool={editor.setActiveTool}
-      openAddMenu={editor.addMenuOpen}
-      setStoredNodePosition={activeGraph.setStoredNodePosition}
-    />
   );
 }
