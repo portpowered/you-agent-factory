@@ -1560,7 +1560,7 @@ function _getDispatchHistoryCard(
   return card;
 }
 
-describe("App", () => {
+function registerAppDashboardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
     MockEventSource.instances = [];
@@ -1614,6 +1614,40 @@ describe("App", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+}
+
+function registerAppFollowUpTestLifecycle(): void {
+  beforeEach(() => {
+    window.localStorage.clear();
+    MockEventSource.instances = [];
+    restoreBrowserTestShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    for (const queryClient of queryClients.splice(0)) {
+      queryClient.clear();
+    }
+    cleanup();
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+    useExportDialogStore.setState({
+      isExportDialogOpen: false,
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useFactoryTimelineStore.getState().reset();
+    restoreBrowserTestShims?.();
+    restoreBrowserTestShims = null;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+}
+
+describe("App shell import and export flows", () => {
+  registerAppDashboardTestLifecycle();
 
   it("renders the operator graph for an empty runtime snapshot", async () => {
     renderApp({ snapshot: baselineSnapshot });
@@ -2430,6 +2464,10 @@ describe("App", () => {
       exportProbe.restore();
     }
   });
+});
+
+describe("App timeline reconstruction flows", () => {
+  registerAppDashboardTestLifecycle();
 
   it("disables the timeline control until at least two ticks are available", async () => {
     renderApp({ snapshot: historicalTimelineSnapshot });
@@ -2684,6 +2722,10 @@ describe("App", () => {
       verify(currentSelection);
     });
   });
+});
+
+describe("App streamed replay smoke flows", () => {
+  registerAppDashboardTestLifecycle();
 
   it("smoke tests /events replay rendering without the removed dashboard snapshot route", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
@@ -3222,6 +3264,10 @@ describe("App", () => {
       ).toBeTruthy();
     });
   });
+});
+
+describe("App dashboard layout and graph behavior", () => {
+  registerAppDashboardTestLifecycle();
 
   it("renders backend tick-zero initial structure instead of staying in loading state", async () => {
     renderApp({
@@ -3511,33 +3557,7 @@ describe("App", () => {
 });
 
 describe("App dashboard follow-up flows", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    MockEventSource.instances = [];
-    restoreBrowserTestShims = installDashboardBrowserTestShims();
-  });
-
-  afterEach(() => {
-    for (const queryClient of queryClients.splice(0)) {
-      queryClient.clear();
-    }
-    cleanup();
-    useDashboardBentoStore.setState({
-      refreshToken: 0,
-      selectedTraceID: null,
-    });
-    useExportDialogStore.setState({
-      isExportDialogOpen: false,
-    });
-    useDashboardStreamStore.setState({
-      streamState: createDefaultDashboardStreamState(),
-    });
-    useFactoryTimelineStore.getState().reset();
-    restoreBrowserTestShims?.();
-    restoreBrowserTestShims = null;
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
+  registerAppFollowUpTestLifecycle();
 
   it("renders the submit-work card alongside the existing dashboard widgets", async () => {
     renderApp({ snapshot: terminalSnapshot });
