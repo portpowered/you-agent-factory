@@ -1,14 +1,13 @@
 import { useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../api/dashboard/types";
-import {
-  DashboardImportPreviewDialog,
-} from "../import";
+import { useAppLocale } from "../../i18n";
 import {
   CurrentSelectionWidget,
   useCurrentSelection,
   useCurrentSelectionDetails,
 } from "../current-selection";
+import { DashboardImportPreviewDialog } from "../import";
 import { SubmitWorkWidget } from "../submit-work";
 import { TerminalWorkWidget } from "../terminal-work";
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
@@ -50,6 +49,7 @@ export interface DashboardBentoProps {
 }
 
 export function DashboardBento({ locale }: DashboardBentoProps = {}) {
+  const { locale: resolvedLocale } = useAppLocale(locale);
   const { dashboardLayout, persistDashboardLayout } = useDashboardLayout();
   const now = useDashboardNow();
   const incrementRefreshToken = useDashboardBentoStore(
@@ -111,7 +111,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const cards = buildDashboardCards({
     currentSelection,
     importController,
-    locale,
+    locale: resolvedLocale,
     now,
     selectedTrace,
     selectedTraceID,

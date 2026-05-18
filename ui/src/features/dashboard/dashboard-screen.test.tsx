@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
+import { AppLocaleProvider, useAppLocale } from "../../i18n";
 import { getHeaderControlsMessages } from "../header/messages/header-controls";
 import { DashboardScreen } from "./dashboard-screen";
 
@@ -9,31 +10,46 @@ let dashboardSnapshotState: ReturnType<
   typeof import("./useDashboardSnapshot").useDashboardSnapshot
 >;
 
-vi.mock("../bento", () => ({
-  DashboardBento: () => <section>Dashboard bento</section>,
-}));
+function StatusPanelProbe({
+  detail,
+  title,
+}: {
+  detail?: string;
+  title: string;
+}) {
+  const { locale } = useAppLocale();
 
-vi.mock("../header", () => ({
-  DashboardExportDialog: ({ locale }: { locale?: string }) => (
-    <div>Dashboard export dialog {locale}</div>
-  ),
-  DashboardHeader: ({ locale }: { locale?: string }) => (
-    <header>Dashboard header {locale}</header>
-  ),
-  DashboardStatusPanel: ({
-    detail,
-    locale,
-    title,
-  }: {
-    detail?: string;
-    locale?: string;
-    title: string;
-  }) => (
+  return (
     <section data-locale={locale}>
       <h1>{title}</h1>
       {detail ? <p>{detail}</p> : null}
     </section>
-  ),
+  );
+}
+
+vi.mock("../bento", () => ({
+  DashboardBento: () => {
+    const { locale } = useAppLocale();
+    return <section>Dashboard bento {locale}</section>;
+  },
+}));
+
+vi.mock("../header", () => ({
+  DashboardExportDialog: () => {
+    const { locale } = useAppLocale();
+    return <div>Dashboard export dialog {locale}</div>;
+  },
+  DashboardHeader: () => {
+    const { locale } = useAppLocale();
+    return <header>Dashboard header {locale}</header>;
+  },
+  DashboardStatusPanel: ({
+    detail,
+    title,
+  }: {
+    detail?: string;
+    title: string;
+  }) => <StatusPanelProbe detail={detail} title={title} />,
 }));
 
 vi.mock("./useDashboardSnapshot", () => ({
@@ -85,7 +101,11 @@ describe("DashboardScreen", () => {
 
   it("renders localized loading and error shell titles", () => {
     const messages = getHeaderControlsMessages("zh-CN");
-    const { rerender } = render(<DashboardScreen locale="zh-CN" />);
+    const { rerender } = render(
+      <AppLocaleProvider initialLocale="zh-CN">
+        <DashboardScreen />
+      </AppLocaleProvider>,
+    );
 
     expect(
       screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
@@ -99,7 +119,11 @@ describe("DashboardScreen", () => {
       isInitialLoading: false,
       snapshot: null,
     };
-    rerender(<DashboardScreen locale="zh-CN" />);
+    rerender(
+      <AppLocaleProvider initialLocale="zh-CN">
+        <DashboardScreen />
+      </AppLocaleProvider>,
+    );
 
     expect(
       screen.getByRole("heading", {
@@ -115,11 +139,15 @@ describe("DashboardScreen", () => {
       snapshot: {} as never,
     };
 
-    render(<DashboardScreen locale="zh-CN" />);
+    render(
+      <AppLocaleProvider initialLocale="zh-CN">
+        <DashboardScreen />
+      </AppLocaleProvider>,
+    );
 
     expectDashboardShellContract();
     expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
-    expect(screen.getByText("Dashboard bento")).toBeTruthy();
+    expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
   });
 });
