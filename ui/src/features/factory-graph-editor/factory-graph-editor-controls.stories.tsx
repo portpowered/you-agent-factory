@@ -183,7 +183,7 @@ export const ObserveMode = {
     await expect(canvas.getByText("Observe mode")).toBeVisible();
     await userEvent.hover(toggle);
     await expect(
-      within(canvasElement.ownerDocument.body).getByRole("tooltip", {
+      await within(canvasElement.ownerDocument.body).findByRole("tooltip", {
         name: "Enter factory graph editor",
       }),
     ).toBeVisible();
@@ -264,6 +264,25 @@ export const ActiveWorkBlocked = {
       factory.
     </NoticeStory>
   ),
+};
+
+export const RemovalBlocked = {
+  render: () => (
+    <NoticeStory title="Removal blocked" tone="warning">
+      This worker is still assigned to 1 workstation. Reassign or remove those
+      workstations before deleting writer.
+    </NoticeStory>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByText("Removal blocked")).toBeVisible();
+    await expect(
+      canvas.getByText(
+        "This worker is still assigned to 1 workstation. Reassign or remove those workstations before deleting writer.",
+      ),
+    ).toBeVisible();
+  },
 };
 
 export const StaleTimestampWarning = {
