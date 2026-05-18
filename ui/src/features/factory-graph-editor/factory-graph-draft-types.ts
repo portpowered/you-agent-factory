@@ -151,7 +151,10 @@ export interface FactoryGraphDraftDerivedState {
   hasChanges: boolean;
   latestDocument: EditableFactoryDefinitionDocument | null;
   pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+  replaceDraft: (draft: FactoryGraphDraft) => void;
+  resetDraft: () => void;
   source: "editable-definition" | "projection";
+  updateDraft: (updater: (draft: FactoryGraphDraft) => FactoryGraphDraft) => void;
   validationErrors: FactoryGraphDraftValidationError[];
 }
 

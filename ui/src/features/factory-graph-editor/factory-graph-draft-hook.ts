@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
 import {
@@ -22,6 +22,62 @@ export function useFactoryGraphDraftState(options: {
   const editableDefinitionDocument = options.editableDefinitionDocument;
   const [sessionState, setSessionState] =
     useState<FactoryGraphDraftSessionState | null>(null);
+
+  const replaceDraft = useCallback((draft: FactoryGraphDraftSessionState["draft"]) => {
+    setSessionState((currentState) => {
+      const document = editableDefinitionDocument ?? currentState?.latestDocument;
+      if (!document) {
+        return currentState;
+      }
+
+      return {
+        draft: structuredClone(draft),
+        latestDocument: document,
+        sessionStartDocument: currentState?.sessionStartDocument ?? document,
+      };
+    });
+  }, [editableDefinitionDocument]);
+
+  const updateDraft = useCallback(
+    (
+      updater: (
+        draft: FactoryGraphDraftSessionState["draft"],
+      ) => FactoryGraphDraftSessionState["draft"],
+    ) => {
+      setSessionState((currentState) => {
+        const document =
+          editableDefinitionDocument ?? currentState?.latestDocument;
+        if (!document) {
+          return currentState;
+        }
+
+        const currentDraft =
+          currentState?.draft ?? createEmptyFactoryGraphDraft();
+
+        return {
+          draft: structuredClone(updater(currentDraft)),
+          latestDocument: document,
+          sessionStartDocument: currentState?.sessionStartDocument ?? document,
+        };
+      });
+    },
+    [editableDefinitionDocument],
+  );
+
+  const resetDraft = useCallback(() => {
+    setSessionState((currentState) => {
+      const document = editableDefinitionDocument ?? currentState?.latestDocument;
+      if (!document) {
+        return currentState;
+      }
+
+      return {
+        draft: createEmptyFactoryGraphDraft(),
+        latestDocument: document,
+        sessionStartDocument: document,
+      };
+    });
+  }, [editableDefinitionDocument]);
 
   useEffect(() => {
     if (!editableDefinitionDocument) {
@@ -61,7 +117,10 @@ export function useFactoryGraphDraftState(options: {
       hasChanges: hasFactoryGraphDraftChanges(sessionState.draft),
       latestDocument: sessionState.latestDocument,
       pendingFactoryDefinition,
+      replaceDraft,
+      resetDraft,
       source: "editable-definition",
+      updateDraft,
       validationErrors,
     };
   }
@@ -75,7 +134,10 @@ export function useFactoryGraphDraftState(options: {
     hasChanges: false,
     latestDocument: null,
     pendingFactoryDefinition: null,
+    replaceDraft,
+    resetDraft,
     source: "projection",
+    updateDraft,
     validationErrors: [],
   };
 }

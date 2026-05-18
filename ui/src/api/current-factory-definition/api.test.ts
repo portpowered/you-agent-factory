@@ -2,6 +2,7 @@ import {
   CurrentEditableFactoryDefinitionError,
   getCurrentEditableFactoryDefinition,
   getCurrentEditableFactoryDefinitionDocument,
+  saveCurrentEditableFactoryDefinitionDocument,
 } from "./api";
 
 describe("getCurrentEditableFactoryDefinition", () => {
@@ -225,6 +226,122 @@ describe("getCurrentEditableFactoryDefinition", () => {
           physical: "2026-05-18T14:30:00Z",
         },
       },
+    });
+  });
+
+  it("saves the editable current-factory definition with version metadata", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+          version: {
+            logical: 10,
+            physical: "2026-05-18T14:40:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    const document = await saveCurrentEditableFactoryDefinitionDocument(
+      {
+        baseVersion: {
+          logical: 9,
+          physical: "2026-05-18T14:25:00Z",
+        },
+        factoryDefinition: {
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+      },
+      { fetch },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/factory/~current/editable-definition"),
+      expect.objectContaining({
+        body: JSON.stringify({
+          baseVersion: {
+            logical: 9,
+            physical: "2026-05-18T14:25:00Z",
+          },
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "PUT",
+      }),
+    );
+    expect(document.version.logical).toBe(10);
+  });
+
+  it("preserves structured save error targets when the API rejects a topology edit", async () => {
+    await expect(
+      saveCurrentEditableFactoryDefinitionDocument(
+        {
+          baseVersion: {
+            logical: 9,
+            physical: "2026-05-18T14:25:00Z",
+          },
+          factoryDefinition: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        },
+        {
+          fetch: vi.fn().mockResolvedValue(
+            new Response(
+              JSON.stringify({
+                code: "STALE_FACTORY_VERSION",
+                message: "The editable definition is stale.",
+                targets: [
+                  {
+                    id: "base-version",
+                    kind: "save",
+                  },
+                ],
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                status: 409,
+                statusText: "Conflict",
+              },
+            ),
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      status: 409,
+      targets: [
+        {
+          id: "base-version",
+          kind: "save",
+        },
+      ],
     });
   });
 });

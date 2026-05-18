@@ -14,6 +14,10 @@ import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
+import type {
+  CanonicalFactoryDefinition,
+  EditableFactoryDefinitionDocument,
+} from "../../api/current-factory-definition";
 import {
   type FactoryValue,
   NamedFactoryAPIError,
@@ -46,6 +50,31 @@ import {
 import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
+import {
+  useCurrentEditableFactoryDefinitionDocument,
+  useSaveCurrentEditableFactoryDefinition,
+} from "../current-factory-definition";
+import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
+
+vi.mock("../current-factory-definition", async () => {
+  const actual = await vi.importActual("../current-factory-definition");
+
+  return {
+    ...actual,
+    useCurrentEditableFactoryDefinitionDocument: vi.fn(),
+    useSaveCurrentEditableFactoryDefinition: vi.fn(),
+  };
+});
+
+vi.mock("../factory-graph-editor/factory-graph-draft", async () => {
+  const actual = await vi.importActual("../factory-graph-editor/factory-graph-draft");
+
+  return {
+    ...actual,
+    useFactoryGraphDraftState: vi.fn(),
+  };
+});
+
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
 interface RenderCurrentActivityOptions {
@@ -77,6 +106,96 @@ const LEGEND_ICON_EXPECTATIONS = [
     EXHAUSTION_WORKSTATION_ICON_METADATA.iconKind,
   ],
 ] as const;
+
+const editableFactoryDefinition: CanonicalFactoryDefinition = {
+  name: "Current Factory",
+  workers: [
+    {
+      model: "gpt-5",
+      name: "writer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    {
+      body: "Review the work item.",
+      inputs: [
+        {
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      name: "review",
+      outputs: [
+        {
+          state: "done",
+          workType: "story",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "writer",
+    },
+  ],
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+};
+
+const editableFactoryDefinitionDocument: EditableFactoryDefinitionDocument = {
+  factoryDefinition: editableFactoryDefinition,
+  version: {
+    logical: 8,
+    physical: "2026-05-18T15:32:00Z",
+  },
+};
+
+const defaultDraftState = {
+  baseDocument: editableFactoryDefinitionDocument,
+  draft: {
+    additions: {
+      resources: [],
+      workers: [],
+      workStates: [],
+      workTypes: [],
+      workstations: [],
+    },
+    edgeChanges: {
+      additions: [],
+      removals: [],
+    },
+    removals: {
+      resources: [],
+      workers: [],
+      workStates: [],
+      workTypes: [],
+      workstations: [],
+    },
+  },
+  graph: {
+    edges: [],
+    nodes: [],
+  },
+  hasChanges: false,
+  latestDocument: editableFactoryDefinitionDocument,
+  pendingFactoryDefinition: editableFactoryDefinition,
+  replaceDraft: vi.fn(),
+  resetDraft: vi.fn(),
+  source: "editable-definition" as const,
+  updateDraft: vi.fn(),
+  validationErrors: [],
+};
 
 function dashboardSnapshotWithStateCounts(
   overrides: Record<string, number>,
@@ -535,12 +654,186 @@ function registerCurrentActivityCardTestLifecycle(): void {
     window.localStorage.clear();
     useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
     restoreBrowserTestShims = installDashboardBrowserTestShims();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      status: "pending",
+    } as never);
+    vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
+      mutateAsync: vi.fn(),
+      status: "idle",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue(defaultDraftState as never);
   });
 
   afterEach(() => {
     cleanup();
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
+    vi.clearAllMocks();
+  });
+
+  it("keeps editor controls unavailable until the graph editor mode is enabled", async () => {
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "Factory graph editor tools" }),
+    ).toBeNull();
+    expect(screen.getByText("Observe mode")).toBeTruthy();
+  });
+
+  it("shows the add, delete, and connect toolbar in editor mode", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(within(toolbar).getByRole("button", { name: "Add" })).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Delete" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Connect" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Editor mode active")).toBeTruthy();
+  });
+
+  it("shows a loading editor state while the editable definition is still fetching", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      status: "pending",
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(screen.getByText("Loading editor definition")).toBeTruthy();
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Add" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Delete" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Connect" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
+  });
+
+  it("requires save, discard, or keep editing before leaving editor mode with unsaved changes", async () => {
+    const resetDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      hasChanges: true,
+      resetDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Leave factory graph editor" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Leave graph editor with unsaved changes?",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: "Discard changes" }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Discard changes" }),
+    );
+
+    expect(resetDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves the pending editable definition before leaving editor mode", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue(editableFactoryDefinitionDocument);
+    const replaceDraft = vi.fn();
+    vi.mocked(useCurrentEditableFactoryDefinitionDocument).mockReturnValue({
+      data: editableFactoryDefinitionDocument,
+      error: null,
+      status: "success",
+    } as never);
+    vi.mocked(useSaveCurrentEditableFactoryDefinition).mockReturnValue({
+      mutateAsync,
+      status: "idle",
+    } as never);
+    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
+      ...defaultDraftState,
+      hasChanges: true,
+      replaceDraft,
+    } as never);
+
+    renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Leave factory graph editor" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        baseVersion: editableFactoryDefinitionDocument.version,
+        factoryDefinition: editableFactoryDefinition,
+      });
+    });
+    expect(replaceDraft).toHaveBeenCalledTimes(1);
   });
 }
 

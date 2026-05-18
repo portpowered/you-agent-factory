@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getCurrentEditableFactoryDefinition,
   getCurrentEditableFactoryDefinitionDocument,
+  saveCurrentEditableFactoryDefinitionDocument,
   type CanonicalFactoryDefinition,
   type CurrentEditableFactoryDefinitionError,
   type EditableFactoryDefinitionDocument,
+  type SaveCurrentEditableFactoryDefinitionInput,
 } from "../../api/current-factory-definition";
 
 export const CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY = [
@@ -39,5 +41,27 @@ export function useCurrentEditableFactoryDefinitionDocument(isEnabled = true) {
     gcTime: 0,
     refetchOnWindowFocus: false,
     retry: false,
+  });
+}
+
+export function useSaveCurrentEditableFactoryDefinition() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    EditableFactoryDefinitionDocument,
+    CurrentEditableFactoryDefinitionError,
+    SaveCurrentEditableFactoryDefinitionInput
+  >({
+    mutationFn: (input) => saveCurrentEditableFactoryDefinitionDocument(input),
+    onSuccess: (document) => {
+      queryClient.setQueryData(
+        CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+        document,
+      );
+      queryClient.setQueryData(
+        CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+        document.factoryDefinition,
+      );
+    },
   });
 }

@@ -12,6 +12,9 @@ type EditableFactoryDefinition =
   components["schemas"]["EditableFactoryDefinition"];
 export type EditableFactoryDefinitionVersion =
   components["schemas"]["HybridLogicalTimestamp"];
+type ErrorTarget = components["schemas"]["ErrorTarget"];
+type SaveEditableFactoryDefinitionRequest =
+  components["schemas"]["SaveEditableFactoryDefinitionRequest"];
 
 export interface EditableFactoryDefinitionDocument {
   factoryDefinition: CanonicalFactoryDefinition;
@@ -19,10 +22,12 @@ export interface EditableFactoryDefinitionDocument {
 }
 
 export type CurrentEditableFactoryDefinitionErrorCode =
+  | "BAD_REQUEST"
   | "INTERNAL_ERROR"
   | "INVALID_FACTORY_DEFINITION"
   | "NETWORK_ERROR"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "STALE_FACTORY_VERSION";
 
 export interface CurrentEditableFactoryDefinitionErrorDetails {
   cause?: unknown;
@@ -30,6 +35,7 @@ export interface CurrentEditableFactoryDefinitionErrorDetails {
   responseBody?: unknown;
   status?: number;
   statusText?: string;
+  targets?: ErrorTarget[];
 }
 
 export interface GetCurrentEditableFactoryDefinitionOptions {
@@ -39,6 +45,16 @@ export interface GetCurrentEditableFactoryDefinitionOptions {
 interface APIErrorResponse {
   code?: string;
   message?: string;
+  targets?: ErrorTarget[];
+}
+
+export interface SaveCurrentEditableFactoryDefinitionOptions {
+  fetch?: typeof globalThis.fetch;
+}
+
+export interface SaveCurrentEditableFactoryDefinitionInput {
+  baseVersion?: EditableFactoryDefinitionVersion;
+  factoryDefinition: CanonicalFactoryDefinition;
 }
 
 const GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT =
@@ -50,6 +66,7 @@ export class CurrentEditableFactoryDefinitionError extends Error {
   public readonly responseBody?: unknown;
   public readonly status?: number;
   public readonly statusText?: string;
+  public readonly targets?: ErrorTarget[];
 
   public constructor(
     message: string,
@@ -62,6 +79,7 @@ export class CurrentEditableFactoryDefinitionError extends Error {
     this.responseBody = details.responseBody;
     this.status = details.status;
     this.statusText = details.statusText;
+    this.targets = details.targets;
   }
 }
 
@@ -118,6 +136,7 @@ export async function getCurrentEditableFactoryDefinitionDocument(
         responseBody,
         status: response.status,
         statusText: response.statusText,
+        targets: errorBody?.targets,
       },
     );
   }
@@ -126,6 +145,84 @@ export async function getCurrentEditableFactoryDefinitionDocument(
     status: response.status,
     statusText: response.statusText,
   });
+}
+
+export async function saveCurrentEditableFactoryDefinitionDocument(
+  input: SaveCurrentEditableFactoryDefinitionInput,
+  options: SaveCurrentEditableFactoryDefinitionOptions = {},
+): Promise<EditableFactoryDefinitionDocument> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+
+  if (typeof fetchImplementation !== "function") {
+    throw new CurrentEditableFactoryDefinitionError(
+      "Current factory editing is unavailable in this environment.",
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
+  }
+
+  const requestBody: SaveEditableFactoryDefinitionRequest = {
+    baseVersion: input.baseVersion,
+    factoryDefinition: input.factoryDefinition,
+  };
+
+  let response: Response;
+  try {
+    response = await fetchImplementation(
+      factoryAPIURL(GET_CURRENT_EDITABLE_FACTORY_DEFINITION_ENDPOINT),
+      {
+        body: JSON.stringify(requestBody),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "PUT",
+      },
+    );
+  } catch (error) {
+    throw new CurrentEditableFactoryDefinitionError(
+      "The dashboard could not reach the current factory editing API.",
+      {
+        cause: error,
+        code: "NETWORK_ERROR",
+        responseBody: error,
+      },
+    );
+  }
+
+  const responseBody = await readResponseBody(response);
+  if (!response.ok) {
+    const errorBody = asAPIErrorResponse(responseBody);
+    throw new CurrentEditableFactoryDefinitionError(
+      errorBody?.message ??
+        "The current factory editing API rejected the save request.",
+      {
+        code: normalizeCurrentEditableFactoryDefinitionErrorCode(
+          errorBody?.code,
+        ),
+        responseBody,
+        status: response.status,
+        statusText: response.statusText,
+        targets: errorBody?.targets,
+      },
+    );
+  }
+
+  return normalizeEditableFactoryDefinitionDocument(responseBody, {
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+export async function saveCurrentEditableFactoryDefinition(
+  input: SaveCurrentEditableFactoryDefinitionInput,
+  options: SaveCurrentEditableFactoryDefinitionOptions = {},
+): Promise<CanonicalFactoryDefinition> {
+  const document = await saveCurrentEditableFactoryDefinitionDocument(
+    input,
+    options,
+  );
+  return document.factoryDefinition;
 }
 
 function normalizeEditableFactoryDefinitionDocument(
@@ -215,6 +312,9 @@ function asAPIErrorResponse(value: unknown): APIErrorResponse | null {
   return {
     code: typeof value.code === "string" ? value.code : undefined,
     message: typeof value.message === "string" ? value.message : undefined,
+    targets: Array.isArray(value.targets)
+      ? value.targets.filter(isErrorTarget)
+      : undefined,
   };
 }
 
@@ -222,8 +322,14 @@ function normalizeCurrentEditableFactoryDefinitionErrorCode(
   code: string | undefined,
 ): CurrentEditableFactoryDefinitionErrorCode {
   switch (code) {
+    case "BAD_REQUEST":
+      return code;
     case "NOT_FOUND":
       return code;
+    case "STALE_FACTORY_VERSION":
+      return code;
+    case "INVALID_FACTORY":
+      return "INVALID_FACTORY_DEFINITION";
     default:
       return "INTERNAL_ERROR";
   }
@@ -241,4 +347,8 @@ function isEditableFactoryDefinitionValue(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isErrorTarget(value: unknown): value is ErrorTarget {
+  return isRecord(value) && typeof value.kind === "string";
 }

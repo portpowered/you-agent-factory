@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 
 import type {
   CanonicalFactoryDefinition,
@@ -294,6 +294,43 @@ describe("factory graph draft state", () => {
     expect(synced.draft.additions.workers).toEqual(dirtyDraft.additions.workers);
     expect(synced.sessionStartDocument.version.logical).toBe(5);
     expect(synced.latestDocument.version.logical).toBe(6);
+  });
+
+  it("resets a dirty draft back to the latest server-backed document", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphDraftState({
+        editableDefinitionDocument,
+      }),
+    );
+
+    act(() => {
+      result.current.replaceDraft({
+        ...createEmptyFactoryGraphDraft(),
+        additions: {
+          resources: [],
+          workers: [
+            {
+              model: "gpt-5-mini",
+              name: "reviewer",
+              type: "MODEL_WORKER",
+            },
+          ],
+          workStates: [],
+          workTypes: [],
+          workstations: [],
+        },
+      });
+    });
+
+    expect(result.current.hasChanges).toBe(true);
+
+    act(() => {
+      result.current.resetDraft();
+    });
+
+    expect(result.current.hasChanges).toBe(false);
+    expect(result.current.baseDocument?.version.logical).toBe(5);
+    expect(result.current.latestDocument?.version.logical).toBe(5);
   });
 
   it("falls back to projection topology until the editable definition is available", () => {
