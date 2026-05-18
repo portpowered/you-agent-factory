@@ -55,7 +55,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotQuery == "" {
 		t.Fatal("expected request query")
 	}
-	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\nwork-1\tReview PRD\treview\tPROCESSING\n" {
+	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\treview\tPROCESSING\tnone\n" {
 		t.Fatalf("output = %q", got)
 	}
 }
@@ -113,8 +113,8 @@ func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\n" +
-		"work-1\tReview PRD\treview\tPROCESSING\n"
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\treview\tPROCESSING\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -159,9 +159,109 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\n" +
-		"work-1\tPlan feature\tinit\tINITIAL\n" +
-		"work-2\tReview PRD\treview\tPROCESSING\n"
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tPlan feature\tinit\tINITIAL\tnone\n" +
+		"work-2\tReview PRD\treview\tPROCESSING\tnone\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
+	requiredState := "complete"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Review PRD",
+				WorkId:       stringPtr("work-1"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "review",
+					Type: factoryapi.WorkStateTypePROCESSING,
+				},
+				Relations: &[]factoryapi.Relation{{
+					Type:           factoryapi.RelationTypeDependsOn,
+					SourceWorkName: "Review PRD",
+					TargetWorkName: "Draft PRD",
+					TargetWorkId:   stringPtr("work-draft"),
+					RequiredState:  &requiredState,
+				}},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-1\tReview PRD\treview\tPROCESSING\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testing.T) {
+	requiredState := "reviewed"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Publish Release",
+				WorkId:       stringPtr("work-3"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "blocked",
+					Type: factoryapi.WorkStateTypeFAILED,
+				},
+				Relations: &[]factoryapi.Relation{
+					{
+						Type:           factoryapi.RelationTypeSpawnedBy,
+						SourceWorkName: "Publish Release",
+						TargetWorkName: "Release Train",
+						TargetWorkId:   stringPtr("work-parent"),
+					},
+					{
+						Type:           factoryapi.RelationTypeDependsOn,
+						SourceWorkName: "Publish Release",
+						TargetWorkName: "Review PRD",
+						TargetWorkId:   stringPtr("work-review"),
+						RequiredState:  &requiredState,
+					},
+					{
+						Type:           factoryapi.RelationTypeParentChild,
+						SourceWorkName: "Publish Release",
+						TargetWorkName: "Epic Release",
+						TargetWorkId:   stringPtr("work-epic"),
+					},
+				},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
+		"work-3\tPublish Release\tblocked\tFAILED\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
