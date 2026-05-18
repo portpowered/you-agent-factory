@@ -22,6 +22,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../components/ui/dashboard-typography";
 import type { DashboardWorkRelation } from "../../api/dashboard/types";
+import { getTraceDrilldownMessages } from "./messages/trace-drilldown";
 import {
   getCachedTraceGraphLayout,
   layoutTraceGraphWithElk,
@@ -61,6 +62,7 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 
 interface RelationFlowNodeData extends Record<string, unknown> {
   label: string;
+  locale?: string;
   onSelectWorkID?: (workID: string) => void;
   selectable: boolean;
   workID?: string;
@@ -73,17 +75,20 @@ const RELATION_NODE_TYPES = {
 };
 
 export interface TraceRelationFlowProps {
+  locale?: string;
   onSelectWorkID?: (workID: string) => void;
   relations: DashboardWorkRelation[];
 }
 
 export function TraceRelationFlow({
+  locale,
   onSelectWorkID,
   relations,
 }: TraceRelationFlowProps) {
+  const messages = getTraceDrilldownMessages(locale);
   const graph = useMemo(
-    () => buildRelationGraph(relations),
-    [relations],
+    () => buildRelationGraph(relations, locale),
+    [locale, relations],
   );
   const graphDimensions = useMemo(
     () =>
@@ -159,12 +164,12 @@ export function TraceRelationFlow({
   }, []);
 
   if (relations.length === 0) {
-    return <span>None</span>;
+    return <span>{messages.noBatchRelations}</span>;
   }
 
   return (
     <section
-      aria-label="Batch relation graph"
+      aria-label={messages.batchRelationGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-relation-flow
     >
@@ -210,6 +215,7 @@ export function TraceRelationFlow({
 function RelationWorkNode({
   data,
 }: NodeProps<RelationFlowNode>) {
+  const messages = getTraceDrilldownMessages(data.locale);
   const handleSelectWork = () => {
     if (data.workID && data.onSelectWorkID) {
       data.onSelectWorkID(data.workID);
@@ -220,7 +226,9 @@ function RelationWorkNode({
     <>
       <Handle className="opacity-0" position={Position.Left} type="target" />
       <Handle className="opacity-0" position={Position.Right} type="source" />
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Work</span>
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+        {messages.workItemsLabel}
+      </span>
       <strong
         className={cx("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
       >
@@ -251,6 +259,7 @@ function RelationWorkNode({
 
 function buildRelationGraph(
   relations: DashboardWorkRelation[],
+  locale?: string,
 ): {
   edges: Edge[];
   nodes: RelationFlowNode[];
@@ -295,8 +304,9 @@ function buildRelationGraph(
     nodes: [...nodeRecords.values()].map((record) => ({
       data: {
         label: record.label,
-        workID: record.workID,
+        locale,
         selectable: false,
+        workID: record.workID,
       },
       id: record.id,
       position: { x: 0, y: record.order * (RELATION_NODE_HEIGHT + 20) },

@@ -20,6 +20,7 @@ import {
   type ThroughputRangeID,
   type TimingTrendModel,
 } from "./trends";
+import { getWorkOutcomeMessages } from "./messages/work-outcome";
 import {
   DETAIL_CARD_WIDE_CLASS,
   DETAIL_COPY_CLASS,
@@ -31,6 +32,7 @@ import { DashboardWidgetFrame } from "../../components/ui";
 
 interface FailureTrendCardProps {
   className?: string;
+  locale?: string;
   model: FailureTrendModel;
   onRangeChange: (rangeID: ThroughputRangeID) => void;
   rangeID: ThroughputRangeID;
@@ -39,12 +41,14 @@ interface FailureTrendCardProps {
 
 interface ReworkTrendCardProps {
   className?: string;
+  locale?: string;
   model: ReworkTrendModel;
   widgetId?: string;
 }
 
 interface TimingTrendCardProps {
   className?: string;
+  locale?: string;
   model: TimingTrendModel;
   widgetId?: string;
 }
@@ -80,11 +84,13 @@ const TIMING_TREND_CHART_STYLE = getDashboardChartSemanticStyle("timingTrend");
 
 export function FailureTrendCard({
   className = "",
+  locale,
   model,
   onRangeChange,
   rangeID,
   widgetId = "failure-trend",
 }: FailureTrendCardProps) {
+  const messages = getWorkOutcomeMessages(locale).trends;
   const changeRange = (value: string) => {
     if (isThroughputRangeID(value)) {
       onRangeChange(value);
@@ -94,24 +100,24 @@ export function FailureTrendCard({
   return (
     <DashboardWidgetFrame
       className={cx(DETAIL_CARD_WIDE_CLASS, className)}
-      title="Failure trend"
+      title={messages.failureTitle}
       widgetId={widgetId}
     >
       <div className={TREND_TOOLBAR_CLASS}>
         <p className={WIDGET_SUBTITLE_CLASS}>
-          Failed work and cause groups from the selected factory timeline.
+          {messages.failureSummary}
         </p>
         <label className={TREND_RANGE_LABEL_CLASS}>
-          <span className={TREND_RANGE_TEXT_CLASS}>Time range</span>
+          <span className={TREND_RANGE_TEXT_CLASS}>{messages.rangeLabel}</span>
           <select
-            aria-label="Time range"
+            aria-label={messages.rangeLabel}
             className={TREND_RANGE_SELECT_CLASS}
             value={rangeID}
             onChange={(event) => changeRange(event.target.value)}
           >
             {THROUGHPUT_RANGE_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>
-                {option.label}
+                {messages.rangeOptionLabel(option.id, option.label)}
               </option>
             ))}
           </select>
@@ -120,15 +126,15 @@ export function FailureTrendCard({
 
       <dl className={TREND_SUMMARY_CLASS}>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Failed in range</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.failedInRangeLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.failureDelta}</dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Total failed</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.totalFailedLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.currentFailed}</dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Cause groups</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.causeGroupsLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.groups.length}</dd>
         </div>
       </dl>
@@ -137,7 +143,7 @@ export function FailureTrendCard({
         <svg
           className={TREND_CHART_CLASS}
           role="img"
-          aria-label={`Failed work trend for ${model.rangeLabel}`}
+          aria-label={messages.failureChartAriaLabel(model.rangeLabel)}
           viewBox="0 0 320 120"
         >
           <TrendAxes />
@@ -162,13 +168,16 @@ export function FailureTrendCard({
         </svg>
       ) : (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>No failure samples</h3>
-          <p>Failure trend data appears after the event stream receives work history.</p>
+          <h3>{messages.failureEmptyTitle}</h3>
+          <p>{messages.failureEmptyMessage}</p>
         </div>
       )}
 
       {model.groups.length > 0 ? (
-        <ul className={TREND_CAUSE_LIST_CLASS} aria-label="Failure cause groups">
+        <ul
+          className={TREND_CAUSE_LIST_CLASS}
+          aria-label={messages.causeGroupsRegionLabel}
+        >
           {model.groups.map((group) => (
             <li className={TREND_CAUSE_ITEM_CLASS} key={group.label}>
               <span className={TREND_CAUSE_LABEL_CLASS}>{group.label}</span>
@@ -177,7 +186,7 @@ export function FailureTrendCard({
           ))}
         </ul>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>No failed work has been grouped yet.</p>
+        <p className={DETAIL_COPY_CLASS}>{messages.causeGroupsEmpty}</p>
       )}
     </DashboardWidgetFrame>
   );
@@ -185,30 +194,33 @@ export function FailureTrendCard({
 
 export function ReworkTrendCard({
   className = "",
+  locale,
   model,
   widgetId = "rework-trend",
 }: ReworkTrendCardProps) {
+  const messages = getWorkOutcomeMessages(locale).trends;
+
   return (
     <DashboardWidgetFrame
       className={cx(DETAIL_CARD_WIDE_CLASS, className)}
-      title="Retry and rework trend"
+      title={messages.reworkTitle}
       widgetId={widgetId}
     >
       <p className={WIDGET_SUBTITLE_CLASS}>
-        Reject, retry, or rework activity from the selected work trace.
+        {messages.reworkSummary}
       </p>
 
       <dl className={TREND_SUMMARY_CLASS}>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Trace work</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.traceWorkLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.currentWorkLabel}</dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Retry or rework</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.retryOrReworkLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.retryOrReworkCount}</dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Latest outcome</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.latestOutcomeLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>
             {formatTraceOutcome(model.terminalOutcome)}
           </dd>
@@ -219,7 +231,7 @@ export function ReworkTrendCard({
         <svg
           className={TREND_CHART_CLASS}
           role="img"
-          aria-label={`Retry and rework trend for ${model.currentWorkLabel}`}
+          aria-label={messages.reworkChartAriaLabel(model.currentWorkLabel)}
           viewBox="0 0 320 120"
         >
           <TrendAxes />
@@ -246,8 +258,8 @@ export function ReworkTrendCard({
         </svg>
       ) : (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>No selected trace</h3>
-          <p>Select active work with retained trace history to see retry activity.</p>
+          <h3>{messages.reworkEmptyTitle}</h3>
+          <p>{messages.reworkEmptyMessage}</p>
         </div>
       )}
     </DashboardWidgetFrame>
@@ -256,32 +268,35 @@ export function ReworkTrendCard({
 
 export function TimingTrendCard({
   className = "",
+  locale,
   model,
   widgetId = "timing-trend",
 }: TimingTrendCardProps) {
+  const messages = getWorkOutcomeMessages(locale).trends;
+
   return (
     <DashboardWidgetFrame
       className={cx(DETAIL_CARD_WIDE_CLASS, className)}
-      title="Timing trend"
+      title={messages.timingTitle}
       widgetId={widgetId}
     >
       <p className={WIDGET_SUBTITLE_CLASS}>
-        Dispatch duration trend from the selected work trace.
+        {messages.timingSummary}
       </p>
 
       <dl className={TREND_SUMMARY_CLASS}>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Trace work</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.traceWorkLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.currentWorkLabel}</dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Slowest dispatch</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.slowestDurationLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>
             {formatDurationMillis(model.slowestDurationMillis)}
           </dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>Average duration</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.averageDurationLabel}</dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>
             {formatDurationMillis(model.averageDurationMillis)}
           </dd>
@@ -293,7 +308,7 @@ export function TimingTrendCard({
           <svg
             className={TREND_CHART_CLASS}
             role="img"
-            aria-label={`Timing trend for ${model.currentWorkLabel}`}
+            aria-label={messages.timingChartAriaLabel(model.currentWorkLabel)}
             viewBox="0 0 320 120"
           >
             <TrendAxes />
@@ -318,15 +333,18 @@ export function TimingTrendCard({
               </circle>
             ))}
           </svg>
-          <dl className={TIMING_RANGE_SUMMARY_CLASS} aria-label="Timing range">
+          <dl
+            className={TIMING_RANGE_SUMMARY_CLASS}
+            aria-label={messages.timingRangeLabel}
+          >
             <div>
-              <dt className={TREND_SUMMARY_TERM_CLASS}>Fastest</dt>
+              <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.fastestDurationLabel}</dt>
               <dd className={TREND_SUMMARY_VALUE_CLASS}>
                 {formatDurationMillis(model.fastestDurationMillis)}
               </dd>
             </div>
             <div>
-              <dt className={TREND_SUMMARY_TERM_CLASS}>Latest</dt>
+              <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.latestDurationLabel}</dt>
               <dd className={TREND_SUMMARY_VALUE_CLASS}>
                 {formatDurationMillis(model.latestDurationMillis)}
               </dd>
@@ -335,8 +353,8 @@ export function TimingTrendCard({
         </>
       ) : (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>No selected trace</h3>
-          <p>Select active work with retained trace history to compare dispatch timing.</p>
+          <h3>{messages.reworkEmptyTitle}</h3>
+          <p>{messages.timingEmptyMessage}</p>
         </div>
       )}
     </DashboardWidgetFrame>

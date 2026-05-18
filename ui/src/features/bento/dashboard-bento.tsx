@@ -45,7 +45,11 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
   uptime_seconds: 0,
 };
 
-export function DashboardBento() {
+export interface DashboardBentoProps {
+  locale?: string;
+}
+
+export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const { dashboardLayout, persistDashboardLayout } = useDashboardLayout();
   const now = useDashboardNow();
   const incrementRefreshToken = useDashboardBentoStore(
@@ -107,6 +111,7 @@ export function DashboardBento() {
   const cards = buildDashboardCards({
     currentSelection,
     importController,
+    locale,
     now,
     selectedTrace,
     selectedTraceID,
@@ -146,6 +151,7 @@ export function DashboardBento() {
 interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
   importController: ReturnType<typeof useCurrentActivityImportController>;
+  locale?: string;
   now: number;
   selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
   selectedTraceID: string | null;
@@ -161,6 +167,7 @@ interface DashboardCardBuilderArgs {
 function buildDashboardCards({
   currentSelection,
   importController,
+  locale,
   now,
   selectedTrace,
   selectedTraceID,
@@ -173,13 +180,14 @@ function buildDashboardCards({
   return [
     {
       id: DASHBOARD_WIDGET_IDS.workTotals,
-      children: <WorkTotalsWidget snapshot={snapshot} />,
+      children: <WorkTotalsWidget locale={locale} snapshot={snapshot} />,
     },
     {
       id: DASHBOARD_WIDGET_IDS.workGraph,
       children: (
         <WorkflowActivityWidget
           importController={importController}
+          locale={locale}
           now={now}
           onSelectStateNode={currentSelection.selectStateNode}
           onSelectWorkItem={currentSelection.selectWorkItem}
@@ -195,6 +203,7 @@ function buildDashboardCards({
         <TerminalWorkWidget
           completedItems={currentSelection.completedWorkItems}
           failedItems={currentSelection.failedWorkItems}
+          locale={locale}
           onSelectItem={currentSelection.openTerminalWorkDetail}
           selectedItem={currentSelection.terminalWorkDetail}
           widgetId={DASHBOARD_WIDGET_IDS.terminalWork}
@@ -205,6 +214,7 @@ function buildDashboardCards({
       id: DASHBOARD_WIDGET_IDS.workOutcomeChart,
       children: (
         <WorkOutcomeWidget
+          locale={locale}
           model={workChartModel}
           widgetId={DASHBOARD_WIDGET_IDS.workOutcomeChart}
         />
@@ -219,6 +229,7 @@ function buildDashboardCards({
           failedWorkDetailsByWorkID={
             snapshot.runtime.session.failed_work_details_by_work_id
           }
+          locale={locale}
           now={now}
           onSelectTraceID={setSelectedTraceID}
           selectedTrace={selectedTrace}
@@ -231,6 +242,7 @@ function buildDashboardCards({
       id: DASHBOARD_WIDGET_IDS.submitWork,
       children: (
         <SubmitWorkWidget
+          locale={locale}
           submitWorkTypes={snapshot.topology.submit_work_types}
         />
       ),
@@ -239,6 +251,7 @@ function buildDashboardCards({
       id: DASHBOARD_WIDGET_IDS.trace,
       children: (
         <TraceDrilldownWidget
+          locale={locale}
           onSelectWorkID={currentSelection.selectWorkByID}
           state={traceGridState}
           widgetId={DASHBOARD_WIDGET_IDS.trace}
