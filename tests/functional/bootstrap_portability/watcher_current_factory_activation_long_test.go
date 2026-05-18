@@ -186,8 +186,8 @@ func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *t
 			len(snapshot.Marking.Tokens),
 		)
 	}
-	if work.Results[0].PlaceId != "task:beta-complete" {
-		t.Fatalf("GET /work place_id after activation = %q, want task:beta-complete", work.Results[0].PlaceId)
+	if generatedWorkPlaceID(work.Results[0]) != "task:beta-complete" {
+		t.Fatalf("GET /work place_id after activation = %q, want task:beta-complete", generatedWorkPlaceID(work.Results[0]))
 	}
 
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
@@ -470,14 +470,14 @@ func functionalNamedFactoryPayloadWithTerminalState(t *testing.T, project, termi
 			"model":            "claude-sonnet-4-20250514",
 		}},
 		"workstations": []map[string]any{{
-			"name":           "process",
-			"behavior":       "STANDARD",
-			"worker":         "worker-a",
-			"inputs":         []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":        []map[string]string{{"workType": "task", "state": terminalState}},
-			"onFailure":      []map[string]string{{"workType": "task", "state": "failed"}},
-			"type":           "MODEL_WORKSTATION",
-			"promptTemplate": "Do the " + project + " work.",
+			"name":      "process",
+			"behavior":  "STANDARD",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": terminalState}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			"type":      "MODEL_WORKSTATION",
+			"body":      "Do the " + project + " work.",
 		}},
 	})
 	if err != nil {

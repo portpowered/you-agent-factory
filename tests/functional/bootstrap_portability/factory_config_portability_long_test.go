@@ -94,9 +94,13 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 	if got := string(workerAgents); got != "You are the portable factory executor.\n" {
 		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
 	}
-	expandedWorkstation, err := factoryconfig.LoadWorkstationConfig(filepath.Join(dir, "workstations", "execute-task"))
+	loadedExpanded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
-		t.Fatalf("expanded workstation AGENTS.md should load: %v", err)
+		t.Fatalf("expanded factory should load through runtime config after split expansion: %v", err)
+	}
+	expandedWorkstation, ok := loadedExpanded.Workstation("execute-task")
+	if !ok {
+		t.Fatal("expected expanded fat-factory workstation definition to load")
 	}
 	if expandedWorkstation.WorkerTypeName != "executor" || expandedWorkstation.PromptTemplate != "Complete {{ (index .Inputs 0).WorkID }}." {
 		t.Fatalf("expanded workstation definition did not preserve canonical fields: %#v", expandedWorkstation)
@@ -117,11 +121,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 		t.Fatalf("expanded then flattened config changed semantics\nwant: %s\ngot:  %s", prettyJSON(t, want), prettyJSON(t, got))
 	}
 
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("expanded factory should load through runtime config: %v", err)
-	}
-	workerDef, ok := loaded.Worker("executor")
+	workerDef, ok := loadedExpanded.Worker("executor")
 	if !ok {
 		t.Fatal("expected expanded fat-factory worker definition to load")
 	}
@@ -134,7 +134,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 	if workerDef.Body != "You are the portable factory executor." {
 		t.Fatalf("expanded worker body = %q", workerDef.Body)
 	}
-	if _, ok := loaded.Workstation("execute-task"); !ok {
+	if _, ok := loadedExpanded.Workstation("execute-task"); !ok {
 		t.Fatal("expected expanded fat-factory workstation definition to load")
 	}
 }
