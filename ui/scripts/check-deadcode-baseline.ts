@@ -29,7 +29,7 @@ const uiRoot = resolve(import.meta.dir, "..");
 const repoRoot = resolve(uiRoot, "..");
 const baselinePath = resolve(
   repoRoot,
-  "docs/development/frontend-deadcode-baseline.json",
+  "docs/internal/development/frontend-deadcode-baseline.json",
 );
 const currentPath = resolve(repoRoot, "bin/frontend-deadcode-current.json");
 const updateBaseline = process.argv.includes("--update-baseline");

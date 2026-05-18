@@ -149,6 +149,26 @@ func appendUniqueDispatchWorkID(values []string, value string) []string {
 	return append(values, value)
 }
 
+func LastFactoryEventTick(events []factoryapi.FactoryEvent) int {
+	tick := 0
+	for _, event := range events {
+		if event.Context.Tick > tick {
+			tick = event.Context.Tick
+		}
+	}
+	return tick
+}
+
+func CountFactoryEvents(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
+}
+
 func eventStringSlice(values *[]string) []string {
 	if values == nil {
 		return nil

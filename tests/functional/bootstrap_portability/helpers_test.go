@@ -1,18 +1,9 @@
 package bootstrap_portability
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/api"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -43,28 +34,4 @@ func startFunctionalServerWithConfig(
 	})
 	server.FunctionalAPIServer = base
 	return server
-}
-
-func (fs *functionalAPIServer) URL() string {
-	return fs.httpSrv.URL
-}
-
-func getGeneratedJSON[T any](t *testing.T, endpoint string) T {
-	t.Helper()
-
-	resp, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET %s: %v", endpoint, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET %s status = %d, want 200", endpoint, resp.StatusCode)
-	}
-
-	var out T
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode %s: %v", endpoint, err)
-	}
-	return out
 }

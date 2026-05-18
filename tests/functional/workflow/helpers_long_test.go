@@ -37,19 +37,6 @@ func newAdhocProcessReviewHarness(
 	return dir, provider, harness
 }
 
-func dispatchesForWorkstation(
-	history []interfaces.CompletedDispatch,
-	workstationName string,
-) []interfaces.CompletedDispatch {
-	dispatches := make([]interfaces.CompletedDispatch, 0, len(history))
-	for _, dispatch := range history {
-		if dispatch.WorkstationName == workstationName {
-			dispatches = append(dispatches, dispatch)
-		}
-	}
-	return dispatches
-}
-
 func assertProviderCallWorkstations(
 	t *testing.T,
 	calls []interfaces.ProviderInferenceRequest,

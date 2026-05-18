@@ -113,6 +113,21 @@ func WriteSeedFile(t *testing.T, dir, workType string, payload []byte) {
 	}
 }
 
+// WriteSeedMarkdownFile writes raw content as a .md seed file with the given
+// filename (without extension). The file watcher derives the SubmitRequest Name
+// from the filename, so this exercises the non-JSON submission path.
+func WriteSeedMarkdownFile(t *testing.T, dir, workType, name string, content []byte) {
+	t.Helper()
+	inputDir := filepath.Join(dir, interfaces.InputsDir, workType, interfaces.DefaultChannelName)
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
+		t.Fatalf("WriteSeedMarkdownFile: create input dir: %v", err)
+	}
+	filename := fmt.Sprintf("%s.md", name)
+	if err := os.WriteFile(filepath.Join(inputDir, filename), content, 0o644); err != nil {
+		t.Fatalf("WriteSeedMarkdownFile: write file: %v", err)
+	}
+}
+
 // WriteSeedRequest marshals a one-item FACTORY_REQUEST_BATCH as a seed file.
 // Use this instead of WriteSeedFile when the test needs to preserve TraceID,
 // Tags, state placement, or internal execution fields through the file watcher
@@ -124,6 +139,31 @@ func WriteSeedRequest(t *testing.T, dir string, req interfaces.SubmitRequest) {
 		t.Fatalf("WriteSeedRequest: marshal: %v", err)
 	}
 	WriteSeedFile(t, dir, req.WorkTypeID, data)
+}
+
+// WriteSeedBatchFile writes a canonical FACTORY_REQUEST_BATCH watched-file input
+// into inputs/BATCH/default so functional tests exercise the public mixed-work-
+// type file-watcher boundary instead of direct API or runtime helpers.
+func WriteSeedBatchFile(t *testing.T, dir string, request interfaces.WorkRequest) {
+	t.Helper()
+
+	data, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("WriteSeedBatchFile: marshal: %v", err)
+	}
+
+	inputDir := filepath.Join(dir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName)
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
+		t.Fatalf("WriteSeedBatchFile: create input dir: %v", err)
+	}
+
+	filename := request.RequestID
+	if filename == "" {
+		filename = fmt.Sprintf("batch-%d", seedFileCounter.Add(1))
+	}
+	if err := os.WriteFile(filepath.Join(inputDir, filename+".json"), data, 0o644); err != nil {
+		t.Fatalf("WriteSeedBatchFile: write file: %v", err)
+	}
 }
 
 type seedWorkRequest struct {

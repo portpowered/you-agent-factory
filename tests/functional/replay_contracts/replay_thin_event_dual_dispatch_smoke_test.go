@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -675,6 +676,23 @@ func thinEventDispatchIDForWork(t *testing.T, events []factoryapi.FactoryEvent, 
 	index := requireThinEventDispatchRequestIndexForWork(t, events, workID)
 	return thinEventDispatchIDFromEvent(t, events[index], workID)
 }
+
+func thinEventCompletedDispatchForID(
+	t *testing.T,
+	completions []interfaces.FactoryWorldDispatchCompletion,
+	dispatchID string,
+) interfaces.FactoryWorldDispatchCompletion {
+	t.Helper()
+
+	for _, completion := range completions {
+		if completion.DispatchID == dispatchID {
+			return completion
+		}
+	}
+	t.Fatalf("completed dispatches = %#v, want dispatch %q", completions, dispatchID)
+	return interfaces.FactoryWorldDispatchCompletion{}
+}
+
 func thinEventDispatchIDFromEvent(t *testing.T, event factoryapi.FactoryEvent, workID string) string {
 	t.Helper()
 

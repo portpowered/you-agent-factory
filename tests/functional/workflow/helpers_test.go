@@ -34,6 +34,19 @@ func assertDispatchHistoryContainsWorkstationRoute(
 	)
 }
 
+func dispatchesForWorkstation(
+	history []interfaces.CompletedDispatch,
+	workstationName string,
+) []interfaces.CompletedDispatch {
+	dispatches := make([]interfaces.CompletedDispatch, 0, len(history))
+	for _, dispatch := range history {
+		if dispatch.WorkstationName == workstationName {
+			dispatches = append(dispatches, dispatch)
+		}
+	}
+	return dispatches
+}
+
 func assertDispatchHistoryContainsWorkstation(
 	t *testing.T,
 	history []interfaces.CompletedDispatch,
