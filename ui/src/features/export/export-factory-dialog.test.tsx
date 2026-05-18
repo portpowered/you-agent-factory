@@ -356,8 +356,8 @@ describe("ExportFactoryDialog", () => {
   });
 
   it("renders the localized export dialog surface for a non-default locale", async () => {
-    const messages = getExportDialogMessages("ja");
-    renderDialog({ locale: "ja" });
+    const messages = getExportDialogMessages("zh-CN");
+    renderDialog({ locale: "zh-CN" });
 
     const dialog = await screen.findByRole("dialog", { name: messages.title });
 
@@ -374,5 +374,46 @@ describe("ExportFactoryDialog", () => {
     expect(
       within(dialog).getByRole("button", { name: messages.closeLabel }),
     ).toBeTruthy();
+  });
+
+  it("shows zh-CN validation copy when required export fields are missing", async () => {
+    const messages = getExportDialogMessages("zh-CN");
+    renderDialog({ initialFactoryName: "", locale: "zh-CN" });
+
+    fireEvent.click(screen.getByRole("button", { name: messages.exportAction }));
+
+    expect(await screen.findByText(messages.nameRequiredValidation)).toBeTruthy();
+    expect(screen.getByText(messages.imageRequiredValidation)).toBeTruthy();
+  });
+
+  it("shows the zh-CN export success state after a completed download", async () => {
+    vi.mocked(writeFactoryExportPng).mockResolvedValue({
+      blob: new Blob(["png"], { type: "image/png" }),
+      envelope: {
+        schemaVersion: "portos.agent-factory.png.v1",
+        ...factory,
+        name: "Factory Aurora",
+      },
+      ok: true,
+    });
+    const messages = getExportDialogMessages("zh-CN");
+    renderDialog({ locale: "zh-CN" });
+
+    fireEvent.change(screen.getByLabelText(messages.imageLabel), {
+      target: {
+        files: [new File(["binary"], "cover.png", { type: "image/png" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: messages.exportAction }));
+
+    await waitFor(() => {
+      expect(downloadBlobAsFile).toHaveBeenCalledWith({
+        blob: expect.any(Blob),
+        filename: "factory-aurora.png",
+      });
+    });
+    expect(screen.getByRole("status").textContent).toContain(
+      messages.successMessage("factory-aurora.png"),
+    );
   });
 });

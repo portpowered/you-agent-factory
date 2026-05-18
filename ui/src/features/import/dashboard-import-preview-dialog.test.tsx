@@ -284,9 +284,9 @@ describe("DashboardImportPreviewDialog", () => {
     });
   });
 
-  it("renders the localized dialog copy and controls for a non-default locale", async () => {
-    const { onCancel } = renderDialog({ locale: "ja" });
-    const messages = getImportPreviewDialogMessages("ja");
+  it("renders the localized dialog copy and controls for zh-CN", async () => {
+    const { onCancel } = renderDialog({ locale: "zh-CN" });
+    const messages = getImportPreviewDialogMessages("zh-CN");
 
     const previewDialog = await screen.findByRole("dialog", { name: messages.title });
     const scope = within(previewDialog);
@@ -301,6 +301,27 @@ describe("DashboardImportPreviewDialog", () => {
     fireEvent.click(scope.getByRole("button", { name: messages.cancelAction }));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders mapped activation error copy for zh-CN", async () => {
+    renderDialog({
+      activationState: {
+        error: new NamedFactoryAPIError("Network unreachable", {
+          code: "NETWORK_ERROR",
+        }),
+        status: "error",
+      },
+      locale: "zh-CN",
+    });
+    const messages = getImportPreviewDialogMessages("zh-CN");
+
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
+    const alert = within(previewDialog).getByRole("alert");
+
+    expect(alert.textContent).toContain(messages.activationErrorTitle);
+    expect(alert.textContent).toContain(messages.errorByCode.NETWORK_ERROR);
   });
 
   it("does not render when no preview is ready", () => {

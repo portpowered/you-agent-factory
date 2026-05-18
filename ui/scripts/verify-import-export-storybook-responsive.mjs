@@ -17,13 +17,25 @@ const storyChecks = [
     assertions: verifyExportDialog,
     dialogName: "Export factory",
     id: "infinite-you-dashboard-export-factory-dialog--ready",
-    label: "export dialog",
+    label: "export dialog (en)",
+  },
+  {
+    assertions: verifyLocalizedExportDialog,
+    dialogName: "导出工厂",
+    id: "infinite-you-dashboard-export-factory-dialog--localized-zh-cn",
+    label: "export dialog (zh-CN)",
   },
   {
     assertions: verifyImportDialog,
     dialogName: "Review factory import",
     id: "infinite-you-dashboard-import-preview-dialog--ready",
-    label: "import preview dialog",
+    label: "import preview dialog (en)",
+  },
+  {
+    assertions: verifyLocalizedImportDialog,
+    dialogName: "检查工厂导入",
+    id: "infinite-you-dashboard-import-preview-dialog--localized-zh-cn",
+    label: "import preview dialog (zh-CN)",
   },
   {
     assertions: verifyDashboardHeader,
@@ -141,6 +153,62 @@ async function verifyImportDialog(page, dialog, viewport) {
   await expectNoHorizontalOverflow(
     page,
     `Import preview dialog at ${viewport.label}`,
+  );
+}
+
+async function verifyLocalizedExportDialog(page, dialog, viewport) {
+  await expectVisible(
+    dialog.getByRole("textbox", { name: "工厂名称" }),
+    "Localized factory name input",
+  );
+  await expectVisible(
+    dialog.getByLabel("封面图片"),
+    "Localized cover image input",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "取消" }),
+    "Localized export cancel button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "导出 PNG" }),
+    "Localized export action button",
+  );
+  await expectVisible(
+    dialog.getByText("确认导出不会更改当前仪表板状态"),
+    "Localized export helper copy",
+  );
+  await expectDialogWithinViewport(dialog, viewport, "Localized export");
+  await expectNoHorizontalOverflow(
+    page,
+    `Localized export dialog at ${viewport.label}`,
+  );
+}
+
+async function verifyLocalizedImportDialog(page, dialog, viewport) {
+  await expectVisible(
+    dialog.getByRole("img", { name: "Dropped Factory 预览图" }),
+    "Localized import preview image",
+  );
+  await expectVisible(
+    dialog.getByText("factory-import.png"),
+    "Localized dropped file name",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "取消导入" }),
+    "Localized import cancel button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "启用工厂" }),
+    "Localized import activate button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "关闭导入预览" }),
+    "Localized import close button",
+  );
+  await expectDialogWithinViewport(dialog, viewport, "Localized import preview");
+  await expectNoHorizontalOverflow(
+    page,
+    `Localized import preview dialog at ${viewport.label}`,
   );
 }
 
