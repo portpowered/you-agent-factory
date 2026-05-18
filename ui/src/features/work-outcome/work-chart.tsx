@@ -12,6 +12,7 @@ import {
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
 } from "../../components/dashboard/widget-board";
+import { Button } from "../../components/ui/button";
 import {
   ChartContainer,
   ChartLegend,
@@ -47,8 +48,11 @@ const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
 const WORK_CHART_READY_CLASS =
   "h-64 min-h-56 px-5 pb-5 pt-4 sm:h-72 sm:px-6 sm:pb-6 sm:pt-5";
 const WORK_CHART_OVERLAY_CLASS =
-  "flex items-start justify-between gap-3 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
-const WORK_CHART_X_AXIS_OVERLAY_CLASS = "self-end";
+  "grid h-full grid-rows-[auto_1fr_auto] gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
+const WORK_CHART_TOP_OVERLAY_CLASS = "flex items-start justify-between gap-3";
+const WORK_CHART_ZOOM_CONTEXT_CLASS =
+  "pointer-events-auto flex max-w-[70%] flex-wrap items-center justify-end gap-2 text-right sm:max-w-none";
+const WORK_CHART_X_AXIS_OVERLAY_CLASS = "justify-self-end";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
 export type WorkChartState =
@@ -179,6 +183,10 @@ function ReadyWorkChart({
     selectionStartTick,
     selectionEndTick,
   );
+  const zoomContext =
+    zoomRange === null
+      ? null
+      : `Zoomed to ticks ${formatAxisNumber(zoomRange.startTick)}-${formatAxisNumber(zoomRange.endTick)}`;
 
   const beginSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
     const tick = readPointerTick(event, visibleRows);
@@ -224,7 +232,27 @@ function ReadyWorkChart({
           className={WORK_CHART_OVERLAY_CLASS}
           data-work-chart-overlay="true"
         >
-          <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>{yAxisLabel}</p>
+          <div className={WORK_CHART_TOP_OVERLAY_CLASS}>
+            <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>
+              {yAxisLabel}
+            </p>
+            {zoomContext === null ? null : (
+              <div className={WORK_CHART_ZOOM_CONTEXT_CLASS}>
+                <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>
+                  {zoomContext}
+                </p>
+                <Button
+                  aria-label="Reset work outcome chart zoom"
+                  className="min-h-8 rounded-lg px-2.5 py-1.5 text-xs"
+                  onClick={() => setZoomRange(null)}
+                  size="sm"
+                  tone="outline"
+                >
+                  Reset zoom
+                </Button>
+              </div>
+            )}
+          </div>
           <p
             className={cn(
               "m-0",

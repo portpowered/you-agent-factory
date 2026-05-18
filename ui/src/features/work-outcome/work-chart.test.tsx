@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
@@ -226,6 +227,100 @@ describe("WorkChart", () => {
     );
   });
 
+  it("shows active zoom context and resets the chart range when reset is clicked", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <WorkChart
+        ariaLabel="Resettable work chart"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "Resettable work chart" });
+    expect(
+      screen.queryByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    ).toBeNull();
+
+    dragWorkChart(chart, { endX: 650, startX: 60 });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
+    expect(screen.getByText("Zoomed to ticks 10-20")).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    );
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
+    expect(screen.queryByText("Zoomed to ticks 10-20")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    ).toBeNull();
+  });
+
+  it("lets keyboard users focus and activate reset zoom with Enter and Space", async () => {
+    const user = userEvent.setup();
+
+    const { rerender } = render(
+      <WorkChart
+        ariaLabel="Keyboard reset work chart"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    let chart = screen.getByRole("img", { name: "Keyboard reset work chart" });
+    dragWorkChart(chart, { endX: 650, startX: 60 });
+
+    await user.tab();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    );
+
+    await user.keyboard("{Enter}");
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    ).toBeNull();
+
+    rerender(
+      <WorkChart
+        ariaLabel="Keyboard reset work chart"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    chart = screen.getByRole("img", { name: "Keyboard reset work chart" });
+    dragWorkChart(chart, { endX: 650, startX: 60 });
+    await user.tab();
+    await user.keyboard(" ");
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    ).toBeNull();
+  });
+
   it("keeps missing series points absent instead of fabricating zero-valued rows", () => {
     render(
       <WorkChart
@@ -268,6 +363,11 @@ describe("WorkChart", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Work chart empty" })).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    ).toBeNull();
   });
 
   it("renders explicit no-data state when series definitions are unavailable", () => {
@@ -305,6 +405,11 @@ describe("WorkChart", () => {
     expect(
       screen.queryByRole("img", { name: "Work chart loading" }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    ).toBeNull();
   });
 
   it("renders an error-safe fallback when the chart model shape is incomplete", () => {
@@ -332,6 +437,11 @@ describe("WorkChart", () => {
     ).toBeTruthy();
     expect(
       screen.queryByRole("img", { name: "Work chart malformed" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
     ).toBeNull();
   });
 });
