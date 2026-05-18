@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -676,7 +675,6 @@ func thinEventDispatchIDForWork(t *testing.T, events []factoryapi.FactoryEvent, 
 	index := requireThinEventDispatchRequestIndexForWork(t, events, workID)
 	return thinEventDispatchIDFromEvent(t, events[index], workID)
 }
-
 func thinEventDispatchIDFromEvent(t *testing.T, event factoryapi.FactoryEvent, workID string) string {
 	t.Helper()
 
@@ -685,22 +683,6 @@ func thinEventDispatchIDFromEvent(t *testing.T, event factoryapi.FactoryEvent, w
 		t.Fatalf("DISPATCH_REQUEST context.dispatchId is empty for work %q", workID)
 	}
 	return dispatchID
-}
-
-func thinEventCompletedDispatchForID(
-	t *testing.T,
-	completions []interfaces.FactoryWorldDispatchCompletion,
-	dispatchID string,
-) interfaces.FactoryWorldDispatchCompletion {
-	t.Helper()
-
-	for _, completion := range completions {
-		if completion.DispatchID == dispatchID {
-			return completion
-		}
-	}
-	t.Fatalf("completed dispatches = %#v, want dispatch %q", completions, dispatchID)
-	return interfaces.FactoryWorldDispatchCompletion{}
 }
 
 func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, artifact *interfaces.ReplayArtifact) {
