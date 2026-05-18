@@ -6,14 +6,24 @@ import {
 } from "@xyflow/react";
 
 import { cx } from "../../lib/cx";
-import { ActivityGraphNodeShell } from "../flowchart/current-activity-node-shell";
+import {
+  ActivityGraphNodeShell,
+  type ActivityGraphNodeHandle,
+} from "../flowchart/current-activity-node-shell";
 import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
+import {
+  getFactoryGraphConnectionAnchors,
+  isValidFactoryGraphConnection,
+  type FactoryGraphConnectionEndpoint,
+} from "./factory-graph-editor-connections";
 
 type FactoryGraphEditorNode = Node<
   {
+    canEditConnections: boolean;
+    connectionAnchors: ActivityGraphNodeHandle[];
     draftStatus: "addition" | "none" | "removal";
     kind: FactoryGraphNodeKind;
     label: string;
@@ -61,6 +71,9 @@ export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {
 };
 
 export function buildFactoryGraphEditorFlowModel(input: {
+  canEditConnections: boolean;
+  onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
+  pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
   pendingAdditionNodeIds: ReadonlySet<string>;
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
@@ -88,6 +101,15 @@ export function buildFactoryGraphEditorFlowModel(input: {
 
       return {
         data: {
+          canEditConnections: input.canEditConnections,
+          connectionAnchors: buildNodeHandles({
+            canEditConnections: input.canEditConnections,
+            node,
+            onConnectionAnchorClick: input.onConnectionAnchorClick,
+            pendingConnectionSource: input.pendingConnectionSource,
+            pendingRemovalNodeIds: input.pendingRemovalNodeIds,
+            topology: input.topology,
+          }),
           draftStatus: input.pendingRemovalNodeIds.has(node.id)
             ? "removal"
             : input.pendingAdditionNodeIds.has(node.id)
@@ -165,6 +187,7 @@ function FactoryGraphEditorNodeView({
         data.draftStatus === "removal" &&
           "border-af-danger/28 bg-af-danger/8 opacity-70 ring-2 ring-af-danger/24",
       )}
+      handles={data.connectionAnchors}
       incomingHandleCount={data.incomingHandleCount}
       nodeType={data.kind === "workstation" ? "workstation" : "resource"}
       outgoingHandleCount={data.outgoingHandleCount}
@@ -191,6 +214,11 @@ function FactoryGraphEditorNodeView({
         >
           {data.label}
         </p>
+        {data.canEditConnections ? (
+          <p className="m-0 text-[0.65rem] leading-5 text-af-ink/60">
+            Use labeled anchors for compatible connections.
+          </p>
+        ) : null}
       </div>
     </ActivityGraphNodeShell>
   );
@@ -206,4 +234,77 @@ function countHandles(topology: FactoryGraphTopology) {
   }
 
   return { incoming, outgoing };
+}
+
+function buildNodeHandles(input: {
+  canEditConnections: boolean;
+  node: FactoryGraphTopology["nodes"][number];
+  onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
+  pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
+  pendingRemovalNodeIds: ReadonlySet<string>;
+  topology: FactoryGraphTopology;
+}): ActivityGraphNodeHandle[] {
+  const selectedSource =
+    input.pendingConnectionSource?.nodeId === input.node.id
+      ? input.pendingConnectionSource
+      : null;
+  const nodeIsPendingRemoval = input.pendingRemovalNodeIds.has(input.node.id);
+
+  return getFactoryGraphConnectionAnchors(input.node.kind).map((anchor) => {
+    const selected =
+      selectedSource?.anchorId === anchor.id && anchor.role === "source";
+    const compatible =
+      input.pendingConnectionSource !== null &&
+      input.pendingConnectionSource.nodeId !== input.node.id &&
+      anchor.role === "target" &&
+      isValidFactoryGraphConnection({
+        sourceAnchorId: input.pendingConnectionSource.anchorId,
+        sourceNodeKind: findNode(
+          input.topology,
+          input.pendingConnectionSource.nodeId,
+        ).kind,
+        targetAnchorId: anchor.id,
+        targetNodeKind: input.node.kind,
+      });
+
+    return {
+      buttonAriaLabel:
+        anchor.role === "source"
+          ? `Choose ${input.node.label} ${anchor.label} connection source`
+          : `Connect to ${input.node.label} ${anchor.label} anchor`,
+      buttonDisabled: !input.canEditConnections || nodeIsPendingRemoval,
+      buttonPressed: selected || undefined,
+      buttonTitle: anchor.description,
+      connectable: input.canEditConnections && !nodeIsPendingRemoval,
+      id: anchor.id,
+      label: anchor.label,
+      onButtonClick:
+        input.onConnectionAnchorClick &&
+        input.canEditConnections &&
+        !nodeIsPendingRemoval
+          ? () =>
+              input.onConnectionAnchorClick?.({
+                anchorId: anchor.id,
+                nodeId: input.node.id,
+              })
+          : undefined,
+      side: anchor.side,
+      type: anchor.role,
+      variant: selected
+        ? "selected"
+        : compatible
+          ? "valid-target"
+          : input.canEditConnections
+            ? "default"
+            : "muted",
+    } satisfies ActivityGraphNodeHandle;
+  });
+}
+
+function findNode(topology: FactoryGraphTopology, nodeId: string) {
+  const node = topology.nodes.find((entry) => entry.id === nodeId);
+  if (!node) {
+    throw new Error(`Expected graph node "${nodeId}" to exist in editor topology.`);
+  }
+  return node;
 }

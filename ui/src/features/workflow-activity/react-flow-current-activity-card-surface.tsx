@@ -38,6 +38,11 @@ export function CurrentActivityGraphSurface({
           {editor.blockedRemovalReason}
         </FactoryGraphEditorNotice>
       ) : null}
+      {editor.connectionNotice ? (
+        <FactoryGraphEditorNotice title="Connection blocked" tone="warning">
+          {editor.connectionNotice}
+        </FactoryGraphEditorNotice>
+      ) : null}
       {editor.saveEditableDefinition.error ? (
         <FactoryGraphEditorNotice title="Topology save failed" tone="danger">
           {editor.saveEditableDefinition.error.message}
@@ -64,6 +69,7 @@ export function CurrentActivityGraphSurface({
         nodes={activeGraph.nodes}
         onAddAction={editor.handleAddEntityAction}
         onAddMenuOpenChange={editor.setAddMenuOpen}
+        onConnect={editor.handleEditorConnect}
         onEditorNodeClick={editor.handleEditorNodeDelete}
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}

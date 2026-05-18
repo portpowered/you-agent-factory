@@ -62,6 +62,9 @@ export function useFactoryGraphEditorViewModel(
   const editorGraph = useMemo(
     () =>
       buildFactoryGraphEditorFlowModel({
+        canEditConnections: editor.activeTool === "connect",
+        onConnectionAnchorClick: editor.handleConnectionAnchorClick,
+        pendingConnectionSource: editor.pendingConnectionSource,
         pendingAdditionNodeIds: collectPendingNodeIds(editor.draftState.draft),
         pendingRemovalEdgeIds,
         pendingRemovalNodeIds,
@@ -70,6 +73,9 @@ export function useFactoryGraphEditorViewModel(
     [
       displayTopology,
       editor.draftState.draft,
+      editor.activeTool,
+      editor.handleConnectionAnchorClick,
+      editor.pendingConnectionSource,
       pendingRemovalEdgeIds,
       pendingRemovalNodeIds,
     ],

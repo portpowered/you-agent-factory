@@ -1,8 +1,10 @@
 import {
   Background,
+  type Connection,
   Controls,
   type Edge,
   type FitViewOptions,
+  type IsValidConnection,
   type Node,
   type NodeChange,
   type NodeTypes,
@@ -12,6 +14,8 @@ import {
 import type { CSSProperties } from "react";
 
 import { cx } from "../../lib/cx";
+import type { FactoryGraphNodeKind } from "../factory-graph-editor/factory-graph-draft-types";
+import { isValidFactoryGraphConnection } from "../factory-graph-editor/factory-graph-editor-connections";
 import {
   FactoryGraphEditorToolbar,
   type FactoryGraphEditorMenuAction,
@@ -70,6 +74,7 @@ export function CurrentActivityGraphViewport({
   nodes,
   onAddAction,
   onAddMenuOpenChange,
+  onConnect,
   onEditorNodeClick,
   onSelectTool,
   openAddMenu,
@@ -91,6 +96,7 @@ export function CurrentActivityGraphViewport({
   nodes: Node[];
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onConnect?: (connection: Connection) => void;
   onEditorNodeClick?: (nodeId: string) => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   openAddMenu?: boolean;
@@ -100,6 +106,37 @@ export function CurrentActivityGraphViewport({
     position: XYPosition,
   ) => void;
 }) {
+  const isValidConnection: IsValidConnection = (connection) => {
+    if (
+      !editorMode ||
+      activeTool !== "connect" ||
+      !connection.source ||
+      !connection.sourceHandle ||
+      !connection.target ||
+      !connection.targetHandle
+    ) {
+      return false;
+    }
+
+    const sourceNode = nodes.find((node) => node.id === connection.source);
+    const targetNode = nodes.find((node) => node.id === connection.target);
+    if (!sourceNode || !targetNode) {
+      return false;
+    }
+    const sourceNodeKind = (sourceNode.data as { kind?: FactoryGraphNodeKind }).kind;
+    const targetNodeKind = (targetNode.data as { kind?: FactoryGraphNodeKind }).kind;
+    if (!sourceNodeKind || !targetNodeKind) {
+      return false;
+    }
+
+    return isValidFactoryGraphConnection({
+      sourceAnchorId: connection.sourceHandle,
+      sourceNodeKind,
+      targetAnchorId: connection.targetHandle,
+      targetNodeKind,
+    });
+  };
+
   return (
     <div className="relative min-h-0 flex-1">
       <DashboardFlowAxisLegend
@@ -134,11 +171,13 @@ export function CurrentActivityGraphViewport({
           fitView
           fitViewOptions={initialFitViewOptions}
           key={initialFitViewKey}
+          isValidConnection={isValidConnection}
           maxZoom={2}
           minZoom={0.25}
           nodeTypes={nodeTypes}
           nodes={nodes}
           nodesConnectable={editorMode && activeTool === "connect"}
+          onConnect={onConnect}
           nodesDraggable={true}
           onNodeClick={(_, node) => {
             if (editorMode) {

@@ -26,6 +26,7 @@ import {
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
 } from "../factory-graph-editor/factory-graph-editor-controls";
+import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 
 const CURRENT_ACTIVITY_HEADER_ROW_CLASS =
   "flex items-start justify-between gap-3";
@@ -35,35 +36,38 @@ export function useCurrentActivityGraphEditor(
 ) {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
-  const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
-  const editableDefinitionQuery =
-    useCurrentEditableFactoryDefinitionDocument(editorMode);
+  const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] =
+    useState(false);
+  const editableDefinitionQuery = useCurrentEditableFactoryDefinitionDocument(editorMode);
   const draftState = useFactoryGraphDraftState({
     editableDefinitionDocument: editableDefinitionQuery.data,
     projectedTopology,
   });
   const saveEditableDefinition = useSaveCurrentEditableFactoryDefinition();
-  const canInteractWithEditor =
-    editorMode &&
-    editableDefinitionQuery.status === "success" &&
-    saveEditableDefinition.status !== "pending";
+  const canInteractWithEditor = editorMode && editableDefinitionQuery.status === "success" && saveEditableDefinition.status !== "pending";
   const canSaveDraft =
     draftState.hasChanges &&
     draftState.pendingFactoryDefinition !== null &&
     draftState.validationErrors.length === 0 &&
     draftState.latestDocument !== null;
-  const currentFactoryDefinition =
-    draftState.pendingFactoryDefinition ??
-    draftState.latestDocument?.factoryDefinition ??
-    draftState.baseDocument?.factoryDefinition ??
-    null;
-  const addMenuActions = buildFactoryGraphAddEntityMenuActions(
-    currentFactoryDefinition,
-  );
+  const currentFactoryDefinition = draftState.pendingFactoryDefinition ?? draftState.latestDocument?.factoryDefinition ?? draftState.baseDocument?.factoryDefinition ?? null;
+  const addMenuActions =
+    buildFactoryGraphAddEntityMenuActions(currentFactoryDefinition);
   const addEntityController = useFactoryGraphAddEntityController({
     currentFactoryDefinition,
     draftState,
     setActiveTool,
+  });
+  const {
+    connectionNotice,
+    handleConnectionAnchorClick,
+    handleEditorConnect,
+    pendingConnectionSource,
+    setConnectionNotice,
+  } = useFactoryGraphConnectionController({
+    activeTool,
+    canInteractWithEditor,
+    draftState,
   });
   const {
     blockedRemovalReason,
@@ -78,15 +82,14 @@ export function useCurrentActivityGraphEditor(
     draftState,
     saveEditableDefinition,
   });
-
   const leaveEditor = useCallback(() => {
     setEditorMode(false);
     setActiveTool(null);
     addEntityController.reset();
     setIsConfirmingLeaveEditor(false);
+    setConnectionNotice(null);
     setPendingRemovalNodeId(null);
-  }, [addEntityController, setPendingRemovalNodeId]);
-
+  }, [addEntityController, setConnectionNotice, setPendingRemovalNodeId]);
   const handleEditorModeToggle = useCallback(() => {
     if (!editorMode) {
       setEditorMode(true);
@@ -100,12 +103,10 @@ export function useCurrentActivityGraphEditor(
 
     leaveEditor();
   }, [draftState.hasChanges, editorMode, leaveEditor]);
-
   const handleDiscardEditorChanges = useCallback(() => {
     draftState.resetDraft();
     leaveEditor();
   }, [draftState, leaveEditor]);
-
   const handleSaveBeforeLeavingEditor = useCallback(async () => {
     if (!canSaveDraft || draftState.pendingFactoryDefinition == null) {
       return false;
@@ -124,38 +125,35 @@ export function useCurrentActivityGraphEditor(
     }
   }, [canSaveDraft, draftState, leaveEditor, saveEditableDefinition]);
 
-  return {
+  return buildCurrentActivityGraphEditorValue({
     activeTool,
-    addEntityDraft: addEntityController.addEntityDraft,
-    addEntityErrors: addEntityController.addEntityErrors,
+    addEntityController,
     addMenuActions,
-    addMenuOpen: addEntityController.addMenuOpen,
     blockedRemovalReason,
     canInteractWithEditor,
     canSaveDraft,
+    connectionNotice,
     currentFactoryDefinition,
     draftState,
-    editorMode,
     editableDefinitionQuery,
-    handleAddEntityAction: addEntityController.handleAddEntityAction,
-    handleAddEntitySubmit: addEntityController.handleAddEntitySubmit,
+    editorMode,
+    handleConfirmRemoval,
+    handleConnectionAnchorClick,
     handleDiscardEditorChanges,
+    handleEditorConnect,
     handleEditorModeToggle,
+    handleEditorNodeDelete,
     handleSaveBeforeLeavingEditor,
     isConfirmingLeaveEditor,
-    leaveDialogOpen: isConfirmingLeaveEditor,
-    handleConfirmRemoval,
-    handleEditorNodeDelete,
-    saveEditableDefinition,
-    setAddEntityDraft: addEntityController.setAddEntityDraft,
-    setAddEntityErrors: addEntityController.setAddEntityErrors,
-    setAddMenuOpen: addEntityController.setAddMenuOpen,
-    setActiveTool,
-    setIsConfirmingLeaveEditor,
-    setBlockedRemovalReason,
-    setPendingRemovalNodeId,
+    pendingConnectionSource,
     pendingRemovalIntent,
-  };
+    saveEditableDefinition,
+    setActiveTool,
+    setBlockedRemovalReason,
+    setConnectionNotice,
+    setIsConfirmingLeaveEditor,
+    setPendingRemovalNodeId,
+  });
 }
 
 function useFactoryGraphAddEntityController({
@@ -317,6 +315,86 @@ function useFactoryGraphRemovalController({
     pendingRemovalIntent,
     setBlockedRemovalReason,
     setPendingRemovalNodeId,
+  };
+}
+
+function buildCurrentActivityGraphEditorValue(args: {
+  activeTool: FactoryGraphEditorTool;
+  addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
+  addMenuActions: ReturnType<typeof buildFactoryGraphAddEntityMenuActions>;
+  blockedRemovalReason: string | null;
+  canInteractWithEditor: boolean;
+  canSaveDraft: boolean;
+  connectionNotice: string | null;
+  currentFactoryDefinition: CanonicalFactoryDefinition | null;
+  draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  editableDefinitionQuery: ReturnType<
+    typeof useCurrentEditableFactoryDefinitionDocument
+  >;
+  editorMode: boolean;
+  handleConfirmRemoval: () => void;
+  handleConnectionAnchorClick: ReturnType<
+    typeof useFactoryGraphConnectionController
+  >["handleConnectionAnchorClick"];
+  handleDiscardEditorChanges: () => void;
+  handleEditorConnect: ReturnType<
+    typeof useFactoryGraphConnectionController
+  >["handleEditorConnect"];
+  handleEditorModeToggle: () => void;
+  handleEditorNodeDelete: (nodeId: string) => void;
+  handleSaveBeforeLeavingEditor: () => Promise<boolean>;
+  isConfirmingLeaveEditor: boolean;
+  pendingConnectionSource: ReturnType<
+    typeof useFactoryGraphConnectionController
+  >["pendingConnectionSource"];
+  pendingRemovalIntent: ReturnType<
+    typeof useFactoryGraphRemovalController
+  >["pendingRemovalIntent"];
+  saveEditableDefinition: ReturnType<typeof useSaveCurrentEditableFactoryDefinition>;
+  setActiveTool: (tool: FactoryGraphEditorTool) => void;
+  setBlockedRemovalReason: (reason: string | null) => void;
+  setConnectionNotice: ReturnType<
+    typeof useFactoryGraphConnectionController
+  >["setConnectionNotice"];
+  setIsConfirmingLeaveEditor: (open: boolean) => void;
+  setPendingRemovalNodeId: (nodeId: string | null) => void;
+}) {
+  return {
+    activeTool: args.activeTool,
+    addEntityDraft: args.addEntityController.addEntityDraft,
+    addEntityErrors: args.addEntityController.addEntityErrors,
+    addMenuActions: args.addMenuActions,
+    addMenuOpen: args.addEntityController.addMenuOpen,
+    blockedRemovalReason: args.blockedRemovalReason,
+    canInteractWithEditor: args.canInteractWithEditor,
+    canSaveDraft: args.canSaveDraft,
+    connectionNotice: args.connectionNotice,
+    currentFactoryDefinition: args.currentFactoryDefinition,
+    draftState: args.draftState,
+    editableDefinitionQuery: args.editableDefinitionQuery,
+    editorMode: args.editorMode,
+    handleAddEntityAction: args.addEntityController.handleAddEntityAction,
+    handleAddEntitySubmit: args.addEntityController.handleAddEntitySubmit,
+    handleConfirmRemoval: args.handleConfirmRemoval,
+    handleConnectionAnchorClick: args.handleConnectionAnchorClick,
+    handleDiscardEditorChanges: args.handleDiscardEditorChanges,
+    handleEditorConnect: args.handleEditorConnect,
+    handleEditorModeToggle: args.handleEditorModeToggle,
+    handleEditorNodeDelete: args.handleEditorNodeDelete,
+    handleSaveBeforeLeavingEditor: args.handleSaveBeforeLeavingEditor,
+    isConfirmingLeaveEditor: args.isConfirmingLeaveEditor,
+    leaveDialogOpen: args.isConfirmingLeaveEditor,
+    pendingConnectionSource: args.pendingConnectionSource,
+    pendingRemovalIntent: args.pendingRemovalIntent,
+    saveEditableDefinition: args.saveEditableDefinition,
+    setActiveTool: args.setActiveTool,
+    setAddEntityDraft: args.addEntityController.setAddEntityDraft,
+    setAddEntityErrors: args.addEntityController.setAddEntityErrors,
+    setAddMenuOpen: args.addEntityController.setAddMenuOpen,
+    setBlockedRemovalReason: args.setBlockedRemovalReason,
+    setConnectionNotice: args.setConnectionNotice,
+    setIsConfirmingLeaveEditor: args.setIsConfirmingLeaveEditor,
+    setPendingRemovalNodeId: args.setPendingRemovalNodeId,
   };
 }
 

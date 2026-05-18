@@ -1,5 +1,6 @@
 import { Background, Controls, ReactFlow } from "@xyflow/react";
-import { expect, within } from "storybook/test";
+import { useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../styles.css";
 import type { FactoryGraphTopology } from "./factory-graph-draft-types";
@@ -7,6 +8,7 @@ import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "./factory-graph-editor-flow";
+import type { FactoryGraphConnectionEndpoint } from "./factory-graph-editor-connections";
 
 const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
   edges: [
@@ -59,6 +61,8 @@ const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
 
 function PendingRemovalStory() {
   const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: false,
+    pendingConnectionSource: null,
     pendingAdditionNodeIds: new Set<string>(),
     pendingRemovalEdgeIds: new Set([
       "worker-assignment:worker:writer->workstation:review",
@@ -66,6 +70,66 @@ function PendingRemovalStory() {
     ]),
     pendingRemovalNodeIds: new Set(["workstation:review"]),
     topology: PENDING_REMOVAL_TOPOLOGY,
+  });
+
+  return (
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-af-overlay/12 bg-af-surface/72 p-4">
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
+const CONNECTABLE_TOPOLOGY: FactoryGraphTopology = {
+  edges: [],
+  nodes: [
+    {
+      id: "work-state:story:queued",
+      key: {
+        kind: "work-state",
+        stateName: "queued",
+        workTypeName: "story",
+      },
+      kind: "work-state",
+      label: "story:queued",
+    },
+    {
+      id: "workstation:review",
+      key: { kind: "workstation", name: "review" },
+      kind: "workstation",
+      label: "review",
+    },
+  ],
+};
+
+function ConnectionAnchorsStory() {
+  const [pendingConnectionSource, setPendingConnectionSource] =
+    useState<FactoryGraphConnectionEndpoint | null>(null);
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: true,
+    onConnectionAnchorClick: (endpoint) => {
+      setPendingConnectionSource((currentSource) =>
+        currentSource &&
+        currentSource.nodeId === endpoint.nodeId &&
+        currentSource.anchorId === endpoint.anchorId
+          ? null
+          : endpoint,
+      );
+    },
+    pendingConnectionSource,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set<string>(),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: CONNECTABLE_TOPOLOGY,
   });
 
   return (
@@ -111,5 +175,28 @@ export const PendingRemoval = {
     await expect(edgePath.getAttribute("style") ?? "").toContain(
       "stroke-dasharray: 7, 5",
     );
+  },
+};
+
+export const ConnectionAnchors = {
+  render: () => <ConnectionAnchorsStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const failureSource = await canvas.findByRole("button", {
+      name: "Choose review Failure connection source",
+    });
+    const failureTarget = await canvas.findByRole("button", {
+      name: "Connect to story:queued Failure anchor",
+    });
+    const continueTarget = await canvas.findByRole("button", {
+      name: "Connect to story:queued Continue anchor",
+    });
+
+    await expect(failureSource).toBeVisible();
+    await expect(failureTarget).toBeVisible();
+    await expect(continueTarget).toBeVisible();
+
+    await userEvent.click(failureSource);
+    await expect(failureSource).toHaveAttribute("aria-pressed", "true");
   },
 };
