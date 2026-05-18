@@ -530,7 +530,7 @@ function dashboardSnapshotWithExhaustionRuleNode(): DashboardSnapshot {
 
 let restoreBrowserTestShims: (() => void) | null = null;
 
-describe("ReactFlowCurrentActivityCard", () => {
+function registerCurrentActivityCardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
     useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
@@ -542,6 +542,10 @@ describe("ReactFlowCurrentActivityCard", () => {
     restoreBrowserTestShims?.();
     restoreBrowserTestShims = null;
   });
+}
+
+describe("ReactFlowCurrentActivityCard import flows", () => {
+  registerCurrentActivityCardTestLifecycle();
 
   it("scopes file drag-over and drop handling to the graph viewport and opens a preview", async () => {
     const legendMessages = getDashboardFlowAxisLegendMessages("en");
@@ -974,6 +978,10 @@ describe("ReactFlowCurrentActivityCard", () => {
     ).toBeTruthy();
     expect(importValue.revokePreviewImageSrc).not.toHaveBeenCalled();
   });
+});
+
+describe("ReactFlowCurrentActivityCard graph semantics", () => {
+  registerCurrentActivityCardTestLifecycle();
 
   it("renders semantic workflow activity with active, terminal, and failed graph states", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
@@ -1387,6 +1395,10 @@ describe("ReactFlowCurrentActivityCard", () => {
     ).toBeNull();
     expect(screen.queryByText("Should Not Render")).toBeNull();
   });
+});
+
+describe("ReactFlowCurrentActivityCard node layout behavior", () => {
+  registerCurrentActivityCardTestLifecycle();
 
   it("renders the shared workstation-kind parity fixture with distinct supported icons", async () => {
     const { onSelectWorkstation } = renderCurrentActivity({
@@ -1835,6 +1847,10 @@ describe("ReactFlowCurrentActivityCard", () => {
     });
     expectFixedWorkstationNodeDimensions(reviewNode);
   });
+});
+
+describe("ReactFlowCurrentActivityCard topology selection and localization", () => {
+  registerCurrentActivityCardTestLifecycle();
 
   it("derives a stable topology cache key for equivalent cloned workflow topology", () => {
     const firstKey = currentActivityTopologyKey(

@@ -6,12 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": [
-      "**",
-      "!coverage",
-      "!dist",
-      "!storybook-static"
-    ]
+    "includes": ["**", "!coverage", "!dist", "!storybook-static"]
   },
   "formatter": {
     "enabled": true,
@@ -151,9 +146,7 @@
       }
     },
     {
-      "includes": [
-        "src/api/factory-definition/api.ts"
-      ],
+      "includes": ["src/api/factory-definition/api.ts"],
       "linter": {
         "rules": {
           "nursery": {
@@ -162,27 +155,6 @@
               "options": {
                 "maxLines": 3500,
                 "skipBlankLines": true
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "src/App.test.tsx",
-        "src/features/workflow-activity/react-flow-current-activity-card.test.tsx",
-        "src/state/factoryTimelineStore.test.ts"
-      ],
-      "linter": {
-        "rules": {
-          "complexity": {
-            "noExcessiveLinesPerFunction": {
-              "level": "error",
-              "options": {
-                "maxLines": 2200,
-                "skipBlankLines": true,
-                "skipIifes": true
               }
             }
           }
