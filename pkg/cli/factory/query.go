@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -16,6 +17,7 @@ import (
 )
 
 const queryCurrentRequestTimeout = 10 * time.Second
+const queryCurrentErrorBodyPreviewLimit = 200
 
 // ErrCurrentFactoryNotFound reports that the running service could not resolve
 // a current factory.
@@ -41,7 +43,7 @@ func Query(cfg QueryConfig) error {
 
 	current, err := QueryCurrent(QueryCurrentConfig{Port: cfg.Port})
 	if err != nil {
-		return err
+		return renderQueryCurrentError(err)
 	}
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(current)
@@ -65,12 +67,17 @@ func QueryCurrent(cfg QueryCurrentConfig) (factoryapi.Factory, error) {
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("read current factory response: %w", err)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return factoryapi.Factory{}, queryCurrentError(resp)
+		return factoryapi.Factory{}, queryCurrentError(resp.StatusCode, body)
 	}
 
 	var result factoryapi.Factory
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("parse current factory response: %w", err)
 	}
 	return result, nil
@@ -92,18 +99,36 @@ func RenderCurrentFactory(current factoryapi.Factory, output io.Writer) error {
 	return err
 }
 
-func queryCurrentError(resp *http.Response) error {
+func renderQueryCurrentError(err error) error {
+	if errors.Is(err, ErrCurrentFactoryNotFound) {
+		return fmt.Errorf("running service has no active current factory; start a factory or activate a named factory: %w", err)
+	}
+	return err
+}
+
+func queryCurrentError(statusCode int, body []byte) error {
 	var errResp factoryapi.ErrorResponse
-	if json.NewDecoder(resp.Body).Decode(&errResp) != nil || errResp.Message == "" {
-		if resp.StatusCode == http.StatusNotFound {
+	if json.Unmarshal(body, &errResp) != nil || errResp.Message == "" {
+		if statusCode == http.StatusNotFound {
 			return fmt.Errorf("%w: service returned 404", ErrCurrentFactoryNotFound)
 		}
-		return fmt.Errorf("query current factory failed (%d)", resp.StatusCode)
+		return unexpectedCurrentFactoryStatusError(statusCode, body)
 	}
-	if resp.StatusCode == http.StatusNotFound {
+	if statusCode == http.StatusNotFound && errResp.Code == factoryapi.NOTFOUND {
 		return fmt.Errorf("%w: %s", ErrCurrentFactoryNotFound, errResp.Message)
 	}
-	return fmt.Errorf("query current factory failed (%d): %s", resp.StatusCode, errResp.Message)
+	return fmt.Errorf("query current factory failed (%d): %s", statusCode, errResp.Message)
+}
+
+func unexpectedCurrentFactoryStatusError(statusCode int, body []byte) error {
+	preview := strings.TrimSpace(string(body))
+	if preview == "" {
+		return fmt.Errorf("query current factory failed (%d)", statusCode)
+	}
+	if len(preview) > queryCurrentErrorBodyPreviewLimit {
+		preview = preview[:queryCurrentErrorBodyPreviewLimit] + "..."
+	}
+	return fmt.Errorf("query current factory failed (%d): %s", statusCode, preview)
 }
 
 func currentFactoryKind(current factoryapi.Factory) string {

@@ -88,8 +88,9 @@ func newFactoryQueryCommand() *cobra.Command {
 	cfg := factorycli.QueryConfig{Port: 8080}
 
 	cmd := &cobra.Command{
-		Use:   "query",
-		Short: "Show the current active factory",
+		Use:          "query",
+		Short:        "Show the current active factory",
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
 			return queryFactory(cfg)

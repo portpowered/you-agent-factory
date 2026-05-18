@@ -180,6 +180,48 @@ func TestFactoryQueryCommand_NamedFactoryJSONOutput(t *testing.T) {
 	}
 }
 
+func TestFactoryQueryCommand_CurrentFactoryNotFoundFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory/~current" {
+			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Code:    factoryapi.NOTFOUND,
+			Message: "Current named factory not found.",
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	out, err := executeRootCommandErr(t, "factory", "query", "--json", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	if err == nil {
+		t.Fatal("expected missing current factory to fail")
+	}
+	if len(out) != 0 {
+		t.Fatalf("stdout = %q, want no success output", string(out))
+	}
+	want := "running service has no active current factory; start a factory or activate a named factory: current factory not found: Current named factory not found."
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestFactoryQueryCommand_UnreachableServerFails(t *testing.T) {
+	out, err := executeRootCommandErr(t, "factory", "query", "--port", "1")
+	if err == nil {
+		t.Fatal("expected unreachable server to fail")
+	}
+	if len(out) != 0 {
+		t.Fatalf("stdout = %q, want no success output", string(out))
+	}
+	if !strings.Contains(err.Error(), "factory not reachable at http://localhost:1/factory/~current") {
+		t.Fatalf("error = %q, want reachability context", err.Error())
+	}
+}
+
 func TestDocsCommand_HelpDocumentsSupportedTopics(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
@@ -354,6 +396,19 @@ func executeRootCommand(t *testing.T, args ...string) []byte {
 		t.Fatalf("execute root command %v: %v", args, err)
 	}
 	return out.Bytes()
+}
+
+func executeRootCommandErr(t *testing.T, args ...string) ([]byte, error) {
+	t.Helper()
+
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+
+	err := root.Execute()
+	return out.Bytes(), err
 }
 
 func rootCurrentFactoryServer(t *testing.T, current factoryapi.Factory) *httptest.Server {

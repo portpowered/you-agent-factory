@@ -113,6 +113,50 @@ func TestQuery_WritesJSONNamedFactory(t *testing.T) {
 	}
 }
 
+func TestQuery_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory/~current" {
+			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Code:    factoryapi.NOTFOUND,
+			Message: "Current named factory not found.",
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Query(QueryConfig{Port: serverPort(t, srv), JSON: true, Output: &out})
+	if !errors.Is(err, ErrCurrentFactoryNotFound) {
+		t.Fatalf("Query error = %v, want ErrCurrentFactoryNotFound", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("json mode should not print success output on error: %q", out.String())
+	}
+	want := "running service has no active current factory; start a factory or activate a named factory: current factory not found: Current named factory not found."
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestQuery_ReturnsReachableServerError(t *testing.T) {
+	var out bytes.Buffer
+	err := Query(QueryConfig{Port: 1, Output: &out})
+	if err == nil {
+		t.Fatal("expected query against unreachable server to fail")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("human mode should not print success output on error: %q", out.String())
+	}
+	if !strings.Contains(err.Error(), "factory not reachable at http://localhost:1/factory/~current") {
+		t.Fatalf("error = %q, want reachability context", err.Error())
+	}
+}
+
 func TestQueryCurrent_ReturnsDefaultRootFactory(t *testing.T) {
 	factoryDir := t.TempDir()
 	srv := currentFactoryServer(t, factoryapi.Factory{
@@ -176,6 +220,24 @@ func TestQueryCurrent_ReturnsInspectableNotFoundError(t *testing.T) {
 		t.Fatalf("QueryCurrent error = %v, want ErrCurrentFactoryNotFound", err)
 	}
 	if got := err.Error(); got != "current factory not found: Current named factory not found." {
+		t.Fatalf("error = %q", got)
+	}
+}
+
+func TestQueryCurrent_PreservesUnexpectedResponseBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory/~current" {
+			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		}
+		http.Error(w, "backend exploded", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := QueryCurrent(QueryCurrentConfig{Port: serverPort(t, srv)})
+	if err == nil {
+		t.Fatal("expected unexpected server error")
+	}
+	if got := err.Error(); got != "query current factory failed (500): backend exploded" {
 		t.Fatalf("error = %q", got)
 	}
 }
