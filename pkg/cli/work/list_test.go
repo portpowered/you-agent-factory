@@ -41,14 +41,9 @@ func TestList_SendsStateFilters(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	var port int
-	if _, err := fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port); err != nil {
-		t.Fatalf("parse test server port: %v", err)
-	}
-
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:      port,
+		Port:      serverPort(t, srv),
 		StateName: "review",
 		StateType: "PROCESSING",
 		SortBy:    "state.type",
@@ -60,8 +55,115 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotQuery == "" {
 		t.Fatal("expected request query")
 	}
-	if got := out.String(); got != "work-1\tReview PRD\treview\tPROCESSING\n" {
+	if got := out.String(); got != "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\nwork-1\tReview PRD\treview\tPROCESSING\n" {
 		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestList_HumanOutputShowsEmptyState(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	if got := out.String(); got != "No work found.\n" {
+		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name:         "Review PRD",
+				WorkId:       stringPtr("work-1"),
+				WorkTypeName: stringPtr("story"),
+				State: &factoryapi.WorkState{
+					Name: "review",
+					Type: factoryapi.WorkStateTypePROCESSING,
+				},
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\n" +
+		"work-1\tReview PRD\treview\tPROCESSING\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{
+				{
+					Name:         "Plan feature",
+					WorkId:       stringPtr("work-1"),
+					WorkTypeName: stringPtr("story"),
+					State: &factoryapi.WorkState{
+						Name: "init",
+						Type: factoryapi.WorkStateTypeINITIAL,
+					},
+				},
+				{
+					Name:         "Review PRD",
+					WorkId:       stringPtr("work-2"),
+					WorkTypeName: stringPtr("story"),
+					State: &factoryapi.WorkState{
+						Name: "review",
+						Type: factoryapi.WorkStateTypePROCESSING,
+					},
+				},
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Port:   serverPort(t, srv),
+		Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	want := "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE\n" +
+		"work-1\tPlan feature\tinit\tINITIAL\n" +
+		"work-2\tReview PRD\treview\tPROCESSING\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
 
@@ -95,14 +197,9 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	var port int
-	if _, err := fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port); err != nil {
-		t.Fatalf("parse test server port: %v", err)
-	}
-
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:       port,
+		Port:       serverPort(t, srv),
 		MaxResults: 2,
 		NextToken:  "cursor-1",
 		JSON:       true,
@@ -146,4 +243,14 @@ func TestList_InvalidSortBy(t *testing.T) {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func serverPort(t *testing.T, srv *httptest.Server) int {
+	t.Helper()
+
+	var port int
+	if _, err := fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port); err != nil {
+		t.Fatalf("parse test server port: %v", err)
+	}
+	return port
 }

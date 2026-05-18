@@ -91,6 +91,9 @@ func List(cfg ListConfig) error {
 		return err
 	}
 
+	if _, err := fmt.Fprintln(cfg.Output, "WORK ID\tNAME\tSTATE NAME\tSTATE TYPE"); err != nil {
+		return err
+	}
 	for _, work := range result.Results {
 		stateName := ""
 		stateType := ""

@@ -41,6 +41,7 @@ func TestNewRootCommand_HasSubcommands(t *testing.T) {
 		"init":   false,
 		"run":    false,
 		"submit": false,
+		"work":   false,
 	}
 
 	for _, sub := range root.Commands() {
