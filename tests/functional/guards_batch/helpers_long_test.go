@@ -90,16 +90,3 @@ func assertArgsContainSequence(t *testing.T, args, want []string) {
 
 	t.Fatalf("expected args %v to contain sequence %v", args, want)
 }
-
-func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.ProviderErrorCorpusEntry {
-	t.Helper()
-	return support.ProviderErrorCorpusEntry(t, name)
-}
-
-type panickingExecutor struct{}
-
-func (e *panickingExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	panic("intentional executor panic for testing")
-}
-
-var _ workers.WorkerExecutor = (*panickingExecutor)(nil)

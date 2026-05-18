@@ -54,7 +54,7 @@ func waitForGeneratedWorkAtPlace(
 	for time.Now().Before(deadline) {
 		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
 		for _, token := range work.Results {
-			if token.TraceId == traceID && token.PlaceId == placeID {
+			if generatedWorkTraceID(token) == traceID && generatedWorkPlaceID(token) == placeID {
 				return work
 			}
 		}
@@ -62,4 +62,25 @@ func waitForGeneratedWorkAtPlace(
 	}
 
 	return getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+}
+
+func generatedWorkPlaceID(work factoryapi.Work) string {
+	if work.State == nil {
+		return generatedWorkTraceID(work) + ":"
+	}
+	return generatedWorkTypeName(work) + ":" + work.State.Name
+}
+
+func generatedWorkTraceID(work factoryapi.Work) string {
+	if work.TraceId == nil {
+		return ""
+	}
+	return *work.TraceId
+}
+
+func generatedWorkTypeName(work factoryapi.Work) string {
+	if work.WorkTypeName == nil {
+		return ""
+	}
+	return *work.WorkTypeName
 }

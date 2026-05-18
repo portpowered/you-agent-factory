@@ -629,8 +629,8 @@ func assertThinEventWorkstationRequestProjection(t *testing.T, smoke dualDispatc
 		t.Fatalf("model inference attempts = %#v, want one attempt", modelAttempts)
 	}
 	for _, attempt := range modelAttempts {
-		if attempt.RequestTime.IsZero() || attempt.Prompt == "" || attempt.WorkingDirectory == "" || attempt.Worktree == "" || attempt.Response == "" {
-			t.Fatalf("model inference attempt = %#v, want attempt-owned request and response detail", attempt)
+		if attempt.InferenceRequestID == "" || attempt.RequestTime.IsZero() || attempt.Prompt == "" || attempt.Response == "" {
+			t.Fatalf("model inference attempt = %#v, want request ID plus prompt and response detail", attempt)
 		}
 	}
 
