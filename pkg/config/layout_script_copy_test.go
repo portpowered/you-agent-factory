@@ -13,7 +13,7 @@ func TestWriteExpandedFactoryLayout_CopiesReferencedScriptForOptedInScriptWorkst
 	sourceDir := t.TempDir()
 	targetDir := t.TempDir()
 
-	cfg := portableScriptFactoryConfig(true, "python", []string{"scripts/setup-workspace.py", "--mode", "portable"})
+	cfg := portableScriptFactoryConfig(true, "python3", []string{"scripts/setup-workspace.py", "--mode", "portable"})
 	canonical := flattenLayoutTestFactory(t, cfg)
 	scriptPath := filepath.Join(sourceDir, "scripts", "setup-workspace.py")
 	writeLayoutScriptTestFile(t, scriptPath, "#!/usr/bin/env python3\nprint('portable setup')\n")
@@ -39,7 +39,7 @@ func TestWriteExpandedFactoryLayout_CopiesReferencedScriptForOptedInScriptWorkst
 	if !ok {
 		t.Fatal("expected copied-script worker definition to load")
 	}
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "python" {
+	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "python3" {
 		t.Fatalf("loaded worker = %#v", worker)
 	}
 	if len(worker.Args) < 1 || worker.Args[0] != "scripts/setup-workspace.py" {

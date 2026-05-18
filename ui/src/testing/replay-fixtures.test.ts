@@ -37,6 +37,37 @@ describe("replay fixture helpers", () => {
     );
   });
 
+  it("preserves setup-workspace python3 script requests and task handoff evidence", () => {
+    const events = loadReplayFixtureEvents("runtimeConfigInterfaceConsolidation");
+
+    const setupWorkspaceScriptRequests = events.filter(
+      (event) =>
+        event.type === FACTORY_EVENT_TYPES.scriptRequest &&
+        event.payload.transitionId === "setup-workspace",
+    );
+    expect(setupWorkspaceScriptRequests).toHaveLength(2);
+    expect(
+      setupWorkspaceScriptRequests.map((event) => event.payload.command),
+    ).toEqual(["python3", "python3"]);
+
+    const acceptedSetupWorkspaceResponses = events.filter(
+      (event) =>
+        event.type === FACTORY_EVENT_TYPES.dispatchResponse &&
+        event.payload.transitionId === "setup-workspace" &&
+        event.payload.outcome === "ACCEPTED",
+    );
+
+    expect(
+      acceptedSetupWorkspaceResponses.flatMap(
+        (event) => event.payload.outputWork ?? [],
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ work_type_name: "task" }),
+      ]),
+    );
+  });
+
   it("projects canonical workstation behavior from maintained replay fixtures", () => {
     const snapshot = buildReplayFixtureTimelineSnapshot(
       "runtimeConfigInterfaceConsolidation",
@@ -67,5 +98,4 @@ describe("replay fixture helpers", () => {
     ]);
   });
 });
-
 

@@ -152,7 +152,7 @@ that are not runtime-capacity pools.
     "requiredTools": [
       {
         "name": "python",
-        "command": "python",
+        "command": "python3",
         "purpose": "Runs bundled helper scripts",
         "versionArgs": ["--version"]
       }
@@ -332,7 +332,7 @@ Portable script-backed example:
     {
       "name": "workspace-setup",
       "type": "SCRIPT_WORKER",
-      "command": "python",
+      "command": "python3",
       "args": ["scripts/setup-workspace.py", "--mode", "portable"]
     }
   ],

@@ -15,7 +15,7 @@ Current live evidence on `main`:
   already hit that exact failure path in
   `ui/integration/fixtures/terminal-summary-regression-replay.jsonl`:
   the accepted idea dispatches `setup-workspace`, then fails with
-  `exec: "python": executable file not found in $PATH`
+  `exec: "python3": executable file not found in $PATH`
 - the same `python` contract is still mirrored in the repository-owned workflow
   test fixtures under:
   - `tests/adhoc/factory/workers/workspace-setup/AGENTS.md`

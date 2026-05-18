@@ -114,7 +114,7 @@
                 "factory/scripts/setup-workspace.py",
                 "{{.Name}}"
               ],
-              "command": "python",
+              "command": "python3",
               "name": "workspace-setup",
               "type": "SCRIPT_WORKER"
             }

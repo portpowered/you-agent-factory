@@ -86,7 +86,7 @@ carry bundled helper files beyond workflow topology.
     "requiredTools": [
       {
         "name": "python",
-        "command": "python",
+        "command": "python3",
         "purpose": "Runs bundled helper scripts",
         "versionArgs": ["--version"]
       }

@@ -149,7 +149,7 @@ checks or bundled helper files that should travel with the factory contract.
     "requiredTools": [
       {
         "name": "python",
-        "command": "python",
+        "command": "python3",
         "purpose": "Runs bundled helper scripts",
         "versionArgs": ["--version"]
       }

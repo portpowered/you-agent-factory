@@ -47,7 +47,7 @@ describe("terminal summary replay regression", () => {
           "Failed at setup-workspace; codex / session_id /",
         ),
         failureMessage:
-          'execution cancelled: exec: "python": executable file not found in $PATH',
+          'execution cancelled: exec: "python3": executable file not found in $PATH',
         failureReason: "worker_error",
       }),
     );

@@ -1068,7 +1068,7 @@ func portableResourceManifestMapperFixture() *interfaces.FactoryConfig {
 		ResourceManifest: &interfaces.PortableResourceManifestConfig{
 			RequiredTools: []interfaces.RequiredToolConfig{{
 				Name:        "python",
-				Command:     "python",
+				Command:     "python3",
 				Purpose:     "Runs portable helper scripts",
 				VersionArgs: []string{"--version"},
 			}},
@@ -1116,8 +1116,8 @@ func assertFlattenedPortableResourceManifestPayload(t *testing.T, payload map[st
 		t.Fatalf("expected one required tool, got %#v", resourceManifest["requiredTools"])
 	}
 	requiredTool := requiredTools[0].(map[string]any)
-	if got := requiredTool["command"]; got != "python" {
-		t.Fatalf("required tool command = %#v, want %q", got, "python")
+	if got := requiredTool["command"]; got != "python3" {
+		t.Fatalf("required tool command = %#v, want %q", got, "python3")
 	}
 	if got := requiredTool["purpose"]; got != "Runs portable helper scripts" {
 		t.Fatalf("required tool purpose = %#v", got)
