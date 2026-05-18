@@ -35,6 +35,9 @@ make api-smoke
 make test
 make test-full
 make typecheck
+make verify-build-contracts
+make verify-tests
+make verify
 make release-surface-smoke
 make lint
 make ui-deadcode
@@ -60,13 +63,9 @@ The workflow currently executes these repository-owned commands in order:
 
 1. `cd ui && bun install --frozen-lockfile`
 2. `cd ui && bun run tsc`
-3. `make ui-build`
-4. `make build`
-5. `make lint`
-6. `make api-smoke`
-7. `cd ui && bunx playwright install --with-deps chromium`
-8. `make ui-test`
-9. `make test`
+3. `make verify-build-contracts`
+4. `cd ui && bunx playwright install chromium`
+5. `make verify-tests`
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
@@ -77,6 +76,12 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/development/frontend-deadcode-baseline.json`. The backend deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating either baseline.
 
 Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for handwritten frontend code, not as a prompt to add new suppressions. Generated API artifacts under `ui/src/api/generated/` may keep generated-code-specific exceptions, but handwritten app code, tests, stories, and fixtures should stay under the standard limits by decomposing the surface into smaller feature components, story modules, shared fixtures, or named test helpers. Review-ready proof for that decomposition is the normal `make typecheck`, `make lint`, and behavior-specific test or Storybook evidence for the touched surface, not a separate source-inventory audit.
+
+`make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
+
+`make verify-tests` is the repository-owned test lane used by CI after Playwright setup. It runs `make ui-test`, `make ui-test-coverage`, `make ui-replay-coverage-check`, `make test-coverage-go`, and `make test-functional`.
+
+`make verify` composes both aggregate lanes for a full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
 
 To reproduce the backend dead-code gate directly, run:
 
@@ -111,6 +116,12 @@ make ui-deadcode
 ```
 
 The seeded command should exit non-zero and point reviewers at `bin/frontend-deadcode-current.json`; remove the seed file before continuing normal verification.
+
+To run both dead-code gates through the normal integrated lint path, run:
+
+```bash
+make lint
+```
 
 `make release VERSION=v1.2.3` is the maintainer-owned release-preparation path. It must run from a clean `main` checkout, reruns the repository readiness targets, creates the semver tag locally, and pushes only the tag so GitHub Actions owns publication.
 
