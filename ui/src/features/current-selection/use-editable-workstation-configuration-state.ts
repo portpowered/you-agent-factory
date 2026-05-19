@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../api/dashboard/types";
 import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
@@ -30,14 +30,8 @@ export function useEditableWorkstationConfigurationState(
   selection: DashboardSelection | null,
   selectedNode: DashboardWorkstationNode | null,
 ): EditableWorkstationConfigurationState | undefined {
-  const editableDefinitionEnabled = useEditableDefinitionGate(
-    selection,
-    selectedNode,
-  );
   const editableDefinition = useCurrentEditableFactoryDefinition(
-    editableDefinitionEnabled &&
-      selection?.kind === "node" &&
-      selectedNode != null,
+    selection?.kind === "node" && selectedNode != null,
   );
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkstationSession(
@@ -290,37 +284,4 @@ function syncEditableWorkstationSession(
         ...currentState,
         latestDefinitionDraft: initialDraft,
       };
-}
-
-function useEditableDefinitionGate(
-  selection: DashboardSelection | null,
-  selectedNode: DashboardWorkstationNode | null,
-) {
-  const [editableDefinitionEnabled, setEditableDefinitionEnabled] =
-    useState(false);
-  const previousSelectedNodeID = useRef<string | null>(null);
-  const hasMounted = useRef(false);
-
-  useEffect(() => {
-    const selectedNodeID =
-      selection?.kind === "node" && selectedNode ? selectedNode.node_id : null;
-
-    if (!hasMounted.current) {
-      hasMounted.current = true;
-      previousSelectedNodeID.current = selectedNodeID;
-      return;
-    }
-
-    if (selectedNodeID && selectedNodeID !== previousSelectedNodeID.current) {
-      setEditableDefinitionEnabled(true);
-    }
-
-    if (!selectedNodeID) {
-      setEditableDefinitionEnabled(false);
-    }
-
-    previousSelectedNodeID.current = selectedNodeID;
-  }, [selectedNode, selection]);
-
-  return editableDefinitionEnabled;
 }

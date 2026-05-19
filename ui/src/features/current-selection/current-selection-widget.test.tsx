@@ -740,7 +740,7 @@ describe("CurrentSelectionWidget", () => {
       name: "Current selection",
     });
     expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
-      false,
+      true,
     );
     expect(
       within(currentSelection).getByRole("heading", { name: "Active work" }),
@@ -789,6 +789,38 @@ describe("CurrentSelectionWidget", () => {
     expect(
       vi.mocked(useCurrentEditableFactoryDefinition),
     ).toHaveBeenLastCalledWith(true);
+  });
+
+  it("loads editable workstation inputs when a workstation is already selected on mount", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+
+    render(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selection: { kind: "node", nodeId: selectedNode.node_id },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={null}
+      />,
+    );
+
+    expect(vi.mocked(useCurrentEditableFactoryDefinition)).toHaveBeenCalledWith(
+      true,
+    );
+
+    expandEditableConfiguration();
+
+    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+      "reviewer",
+    );
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
+      "Review the latest story changes before approval.",
+    );
   });
 
   it("initializes editable workstation inputs from the canonical factory definition and allows worker edits", () => {
