@@ -418,6 +418,49 @@ B: {{ (index .Inputs 1).WorkID }} {{ (index .Inputs 1).WorkTypeID }} {{ (index .
 	}
 }
 
+func TestPromptRenderer_MultipleInputTokens_PreservesPerInputCanonicalContent(t *testing.T) {
+	renderer := &DefaultPromptRenderer{}
+
+	tokens := []interfaces.Token{
+		{
+			ID: "tok-text",
+			Color: interfaces.TokenColor{
+				WorkID: "work-text",
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeText, Text: "plan"},
+				},
+				Payload: []byte("plan"),
+			},
+		},
+		{
+			ID: "tok-mixed",
+			Color: interfaces.TokenColor{
+				WorkID: "work-mixed",
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
+					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+				},
+				Payload: []byte("caption"),
+			},
+		},
+	}
+
+	tmpl := `{{ (index .Inputs 0).WorkID }}:{{ range (index .Inputs 0).Content }} [{{ .Type }}={{ .Text }}{{ .File }}]{{ end }}
+{{ (index .Inputs 1).WorkID }}:{{ range (index .Inputs 1).Content }} [{{ .Type }}={{ .Text }}{{ .File }}]{{ end }}`
+
+	result, err := renderer.Render(tmpl, tokens, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(result, "work-text: [text=plan]") {
+		t.Fatalf("first input content = %q, want preserved text-only input", result)
+	}
+	if !strings.Contains(result, "work-mixed: [text=caption] [image=fixtures/mockup.png]") {
+		t.Fatalf("second input content = %q, want ordered mixed-content input", result)
+	}
+}
+
 // TestPromptRenderer_ResourceToken_FirstInList verifies that when a resource token
 // appears before work tokens in the input list, both tokens remain explicitly
 // addressable by position through .Inputs.

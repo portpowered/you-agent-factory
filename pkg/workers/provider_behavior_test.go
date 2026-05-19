@@ -55,7 +55,10 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			if err != nil {
+				t.Fatalf("BuildArgs returned error: %v", err)
+			}
 			assertStringSlicesEqual(t, tc.want, args)
 		})
 	}
@@ -101,7 +104,10 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			args, err := behavior.BuildArgs(tc.req, tc.skipPermissions)
+			if err != nil {
+				t.Fatalf("BuildArgs returned error: %v", err)
+			}
 			assertStringSlicesEqual(t, tc.want, args)
 		})
 	}
