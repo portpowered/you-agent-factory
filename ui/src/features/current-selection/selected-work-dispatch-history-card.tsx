@@ -31,7 +31,6 @@ import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-
 import type { CurrentSelectionDispatchHistoryMessages } from "./messages/current-selection-dispatch-history";
 import {
   dedupeWorkItems,
-  requestCounts,
   requestDurationMillis,
   requestErrorClass,
   requestFailureMessage,
@@ -142,7 +141,6 @@ export function DispatchHistoryCard({
 }
 
 interface DispatchHistoryView {
-  counts: ReturnType<typeof requestCounts>;
   durationMillis: number | undefined;
   errorClass: string | undefined;
   failureMessage: string | undefined;
@@ -172,7 +170,6 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
   const sortedInferenceAttempts = requestInferenceAttempts(request);
 
   return {
-    counts: requestCounts(request),
     durationMillis: requestDurationMillis(request),
     errorClass,
     failureMessage,
@@ -245,9 +242,6 @@ function DispatchSummaryDetails({
     <dl className={cx("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
       <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
       <InferenceAttemptDetail label={messages.transitionIdLabel} code value={request.transition_id} />
-      <InferenceAttemptDetail label={messages.dispatchedCountLabel} value={view.counts.dispatchedCount} />
-      <InferenceAttemptDetail label={messages.respondedCountLabel} value={view.counts.respondedCount} />
-      <InferenceAttemptDetail label={messages.erroredCountLabel} value={view.counts.erroredCount} />
       <InferenceAttemptDetail label={messages.startedAtLabel} value={requestStartedAt(request)} />
       <InferenceAttemptDetail
         label={messages.durationLabel}
