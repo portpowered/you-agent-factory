@@ -15,6 +15,8 @@ export interface WorkOutcomeMessages {
     errorTitle: string;
     loadingMessage: string;
     loadingTitle: string;
+    resetZoomAction: string;
+    resetZoomLabel: string;
     seriesLabels: {
       completed: string;
       failed: string;
@@ -22,6 +24,7 @@ export interface WorkOutcomeMessages {
       queued: string;
     };
     tickLabel: (tick: number) => string;
+    tickRangeLabel: (startTick: number, endTick: number) => string;
     xAxisLabel: string;
     yAxisLabel: string;
   };
@@ -72,6 +75,8 @@ const workOutcomeMessagesByLocale = {
       errorTitle: "Work outcome chart unavailable",
       loadingMessage: "Waiting for dashboard timeline data.",
       loadingTitle: "Loading work outcome samples",
+      resetZoomAction: "Reset zoom",
+      resetZoomLabel: "Reset work outcome chart zoom",
       seriesLabels: {
         completed: "Completed",
         failed: "Failed/retried",
@@ -79,6 +84,8 @@ const workOutcomeMessagesByLocale = {
         queued: "Queued",
       },
       tickLabel: (tick) => `Tick ${formatNumber(tick, "en")}`,
+      tickRangeLabel: (startTick, endTick) =>
+        `Zoomed to ticks ${formatNumber(startTick, "en")}-${formatNumber(endTick, "en")}`,
       xAxisLabel: "Ticks",
       yAxisLabel: "Work count",
     },
@@ -128,6 +135,8 @@ const workOutcomeMessagesByLocale = {
       errorTitle: "工作结果图表不可用",
       loadingMessage: "正在等待仪表板时间线数据。",
       loadingTitle: "正在加载工作结果样本",
+      resetZoomAction: "重置缩放",
+      resetZoomLabel: "重置工作结果图表缩放",
       seriesLabels: {
         completed: "已完成",
         failed: "失败/重试",
@@ -135,6 +144,8 @@ const workOutcomeMessagesByLocale = {
         queued: "排队中",
       },
       tickLabel: (tick) => `刻度 ${formatNumber(tick, "zh-CN")}`,
+      tickRangeLabel: (startTick, endTick) =>
+        `已缩放到刻度 ${formatNumber(startTick, "zh-CN")}-${formatNumber(endTick, "zh-CN")}`,
       xAxisLabel: "刻度",
       yAxisLabel: "工作计数",
     },
