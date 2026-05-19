@@ -167,13 +167,13 @@ function buildStatus({
   if (draft.workTypeName.length === 0) {
     return {
       kind: "guidance",
-      message: "Choose a work type to continue.",
+      message: "Choose a work type to continue. Request details are optional.",
     };
   }
 
   return {
     kind: "guidance",
-    message: "Your request is ready to submit.",
+    message: "Ready to submit. Request details are optional.",
   };
 }
 

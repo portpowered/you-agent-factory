@@ -39,7 +39,14 @@ describe("SubmitWorkWidget", () => {
     ).toBeTruthy();
     expect(within(card).getByRole("textbox", { name: "Request" })).toBeTruthy();
     expect(
-      within(card).getByText("Choose a work type to continue."),
+      within(card).getByText(
+        "Choose a work type to continue. Request details are optional.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card).getByText(
+        "Optional. Leave this blank to submit an empty request.",
+      ),
     ).toBeTruthy();
     expect(
       within(card).getByRole("button", { name: "Submit work" }),
@@ -70,7 +77,11 @@ describe("SubmitWorkWidget", () => {
     });
 
     expect(submitButton.disabled).toBe(true);
-    expect(screen.getByText("Choose a work type to continue.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Choose a work type to continue. Request details are optional.",
+      ),
+    ).toBeTruthy();
 
     fireEvent.change(workType, { target: { value: "story" } });
     expect(submitButton.disabled).toBe(false);
@@ -83,7 +94,9 @@ describe("SubmitWorkWidget", () => {
     });
 
     expect(submitButton.disabled).toBe(false);
-    expect(screen.queryByText("Your request is ready to submit.")).toBeNull();
+    expect(
+      screen.getByText("Ready to submit. Request details are optional."),
+    ).toBeTruthy();
     expect(submitButton.className).toContain("bg-af-accent");
   });
 
