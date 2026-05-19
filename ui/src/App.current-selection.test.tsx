@@ -428,6 +428,29 @@ function expectDefinitionValue(
   expect(within(row).getByText(expectedValue)).toBeTruthy();
 }
 
+function getActiveStorySelectionButton(): HTMLElement {
+  const explicitSelectionButton = screen.queryByRole("button", {
+    name: "Select work item Active Story",
+  });
+  if (explicitSelectionButton) {
+    return explicitSelectionButton;
+  }
+
+  const activeStoryButton = screen
+    .getAllByRole("button")
+    .find((button) =>
+      /^Active Story/.test(
+        button.getAttribute("aria-label") ?? button.textContent ?? "",
+      ),
+    );
+
+  if (!(activeStoryButton instanceof HTMLElement)) {
+    throw new Error("expected an Active Story selection button");
+  }
+
+  return activeStoryButton;
+}
+
 function removeTraceIDFromWorkItem(
   workItem: DashboardWorkItemRef,
 ): DashboardWorkItemRef {
@@ -575,9 +598,7 @@ describe("App current selection", () => {
     expect(
       (await screen.findAllByText("dispatch-review-active")).length,
     ).toBeGreaterThan(0);
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const currentSelection = await screen.findByRole("article", {
       name: "Current selection",
@@ -643,9 +664,7 @@ describe("App current selection", () => {
       },
     });
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const currentSelection = await screen.findByRole("article", {
       name: "Current selection",
@@ -821,9 +840,7 @@ describe("App current selection", () => {
       },
     });
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const currentSelection = await screen.findByRole("article", {
       name: "Current selection",
@@ -859,9 +876,7 @@ describe("App current selection", () => {
       snapshot: activeSnapshotWithoutTraceID,
     });
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const currentSelection = await screen.findByRole("article", {
       name: "Current selection",
@@ -902,9 +917,7 @@ describe("App current selection", () => {
     });
     expect(screen.getByText("Input work types")).toBeTruthy();
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
     expect(await screen.findByText("Trace drill-down")).toBeTruthy();
   });
 
@@ -1222,9 +1235,7 @@ describe("App current selection layout", () => {
       },
     });
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const dashboardGrid = screen.getByRole("region", {
       name: "Infinite You bento board",
@@ -1256,9 +1267,7 @@ describe("App current selection layout", () => {
       },
     });
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const dashboardGrid = screen.getByRole("region", {
       name: "Infinite You bento board",
@@ -1508,9 +1517,7 @@ describe("App current selection layout", () => {
       within(dashboardGrid).queryByRole("article", { name: "Failure trend" }),
     ).toBeNull();
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const workDetail = screen.getByRole("region", {
       name: "Infinite You bento board",
@@ -1550,9 +1557,7 @@ describe("App current selection layout", () => {
       },
     });
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     const dashboardGrid = screen.getByRole("region", {
       name: "Infinite You bento board",
@@ -1923,9 +1928,7 @@ describe("App current selection terminal states", () => {
       snapshot: activeSnapshot,
     });
 
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
+    fireEvent.click(getActiveStorySelectionButton());
 
     expect(await screen.findByText("Trace history unavailable")).toBeTruthy();
     expect(
