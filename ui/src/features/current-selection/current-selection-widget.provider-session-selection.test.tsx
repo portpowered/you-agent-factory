@@ -251,6 +251,173 @@ describe("CurrentSelectionWidget provider-session selection", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("refreshes the shared session-detail panel when switching between inference-attempt sessions", async () => {
+    const user = userEvent.setup();
+    const { dispatchId, execution, selectedNode, selection, workItem } =
+      buildSelectedWorkItemFixture();
+    const requestWithSelectableInferenceAttempts =
+      buildDashboardWorkstationRequestFixture(dispatchId, {
+        inference_attempts: [
+          buildDashboardInferenceAttemptFixture(dispatchId, {
+            outcome: "SUCCEEDED",
+            provider_session: {
+              id: "sess_inference_first",
+              kind: "session_id",
+              provider: "codex",
+            },
+            response: "First inference-attempt session.",
+          }),
+          buildDashboardInferenceAttemptFixture(dispatchId, {
+            attempt: 2,
+            outcome: "SUCCEEDED",
+            provider_session: {
+              id: "sess_inference_second",
+              kind: "session_id",
+              provider: "codex",
+            },
+            response: "Second inference-attempt session.",
+          }),
+        ],
+      });
+    const executionDetails = selectWorkItemExecutionDetails({
+      activeExecution: execution,
+      dispatchID: dispatchId,
+      inferenceAttemptsByDispatchID: {},
+      providerSessions: [],
+      selectedNode,
+      workItem,
+    });
+
+    let resolveSecondResponse: ((value: Response) => void) | null = null;
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const requestURL = String(input);
+      if (requestURL.includes("id=sess_inference_first")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              parse: {
+                eventCount: 1,
+                functionCalls: [],
+                lineCount: 1,
+                malformedLineCount: 0,
+                parseErrors: [],
+                reasoning: [],
+                turns: [],
+                unknownEventCount: 0,
+                unknownEvents: [],
+              },
+              providerSession: {
+                id: "sess_inference_first",
+                kind: "session_id",
+                provider: "codex",
+              },
+              source: {
+                relativePath: "2026/05/18/rollout-sess_inference_first.jsonl",
+                sizeBytes: 640,
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        );
+      }
+
+      if (requestURL.includes("id=sess_inference_second")) {
+        return new Promise<Response>((resolve) => {
+          resolveSecondResponse = resolve;
+        });
+      }
+
+      throw new Error(`unexpected provider-session request: ${requestURL}`);
+    });
+
+    renderWithQueryClient(
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selectedWorkDispatchAttempts: [],
+          selectedWorkProviderSessions: [],
+          selectedWorkRequestHistory: [requestWithSelectableInferenceAttempts],
+          selection,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={executionDetails}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const firstButton = within(currentSelection).getByRole("button", {
+      name: "Select provider session codex / session_id / sess_inference_first for dispatch dispatch-review-active",
+    });
+    const secondButton = within(currentSelection).getByRole("button", {
+      name: "Select provider session codex / session_id / sess_inference_second for dispatch dispatch-review-active",
+    });
+
+    await user.click(firstButton);
+
+    expect(
+      await within(currentSelection).findByText(
+        "2026/05/18/rollout-sess_inference_first.jsonl",
+      ),
+    ).toBeTruthy();
+
+    await user.click(secondButton);
+
+    expect(within(currentSelection).getByText("Loading session details...")).toBeTruthy();
+    expect(
+      within(currentSelection).queryByText(
+        "2026/05/18/rollout-sess_inference_first.jsonl",
+      ),
+    ).toBeNull();
+
+    resolveSecondResponse?.(
+      new Response(
+        JSON.stringify({
+          parse: {
+            eventCount: 1,
+            functionCalls: [],
+            lineCount: 1,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            turns: [],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          providerSession: {
+            id: "sess_inference_second",
+            kind: "session_id",
+            provider: "codex",
+          },
+          source: {
+            relativePath: "2026/05/18/rollout-sess_inference_second.jsonl",
+            sizeBytes: 768,
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    expect(
+      await within(currentSelection).findByText(
+        "2026/05/18/rollout-sess_inference_second.jsonl",
+      ),
+    ).toBeTruthy();
+  });
 });
 
 function renderWithQueryClient(view: ReactNode) {
