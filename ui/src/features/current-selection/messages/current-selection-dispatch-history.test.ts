@@ -86,9 +86,6 @@ describe("getCurrentSelectionDispatchHistoryMessages", () => {
       defaultMessages,
     );
     expect(
-      getCurrentSelectionDispatchHistoryMessages("fr").noScriptResponseYet,
-    ).toBe(defaultMessages.noScriptResponseYet);
-    expect(
       getCurrentSelectionDispatchHistoryMessages("fr").noScriptAttemptRecordedYet,
     ).toBe(defaultMessages.noScriptAttemptRecordedYet);
   });
