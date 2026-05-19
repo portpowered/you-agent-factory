@@ -1,7 +1,4 @@
-import {
-  SubmitWorkAPIError,
-  submitWork,
-} from "./api";
+import { SubmitWorkAPIError, submitWork } from "./api";
 
 describe("submitWork", () => {
   afterEach(() => {
@@ -10,7 +7,7 @@ describe("submitWork", () => {
 
   it("posts to /work and returns the accepted trace id", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ trace_id: "trace-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-story" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -23,16 +20,16 @@ describe("submitWork", () => {
       submitWork({
         name: "Driver review",
         payload: "Review the runtime failure.",
-        work_type_name: "story",
+        workTypeName: "story",
       }),
-    ).resolves.toEqual({ trace_id: "trace-story" });
+    ).resolves.toEqual({ traceId: "trace-story" });
     expect(fetchMock).toHaveBeenCalledWith(
       "/work",
       expect.objectContaining({
         body: JSON.stringify({
           name: "Driver review",
           payload: "Review the runtime failure.",
-          work_type_name: "story",
+          workTypeName: "story",
         }),
         method: "POST",
       }),
@@ -56,7 +53,7 @@ describe("submitWork", () => {
     await expect(
       submitWork({
         payload: "Review the runtime failure.",
-        work_type_name: "story",
+        workTypeName: "story",
       }),
     ).rejects.toEqual(
       new SubmitWorkAPIError({
@@ -66,5 +63,33 @@ describe("submitWork", () => {
       }),
     );
   });
-});
 
+  it("posts an explicit empty payload without dropping the submit-work contract field", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitWork({
+        payload: "",
+        workTypeName: "story",
+      }),
+    ).resolves.toEqual({ traceId: "trace-story" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/work",
+      expect.objectContaining({
+        body: JSON.stringify({
+          payload: "",
+          workTypeName: "story",
+        }),
+        method: "POST",
+      }),
+    );
+  });
+});

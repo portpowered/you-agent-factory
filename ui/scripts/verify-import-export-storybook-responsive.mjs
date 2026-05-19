@@ -182,10 +182,12 @@ export async function expectDialogWithinViewport(dialog, viewport, label) {
 }
 
 export async function expectVisible(locator, label) {
-  await locator.waitFor({
-    state: "visible",
-    timeout: STORY_RENDER_TIMEOUT_MS,
-  });
+  if (typeof locator.waitFor === "function") {
+    await locator.waitFor({
+      state: "visible",
+      timeout: STORY_RENDER_TIMEOUT_MS,
+    });
+  }
 
   if (!(await locator.isVisible())) {
     throw new Error(`${label} was not visible.`);

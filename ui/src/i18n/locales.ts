@@ -12,11 +12,15 @@ export const REQUIRED_LOCALES = ["en", "zh-CN"] as const;
 
 export type RequiredLocale = (typeof REQUIRED_LOCALES)[number];
 
+const SUPPORTED_LOCALE_LOOKUP: ReadonlyMap<string, SupportedLocale> = new Map(
+  SUPPORTED_LOCALES.map((locale) => [locale.toLowerCase(), locale]),
+);
+
 const LOCALE_ALIASES: Partial<Record<string, SupportedLocale>> = {
   zh: "zh-CN",
-  "zh-Hans": "zh-CN",
   "zh-cn": "zh-CN",
   "zh-hans": "zh-CN",
+  "zh-hans-cn": "zh-CN",
 };
 
 export function isSupportedLocale(locale: string): locale is SupportedLocale {
@@ -31,8 +35,9 @@ export function resolveSupportedLocale(
     return DEFAULT_LOCALE;
   }
 
-  if (isSupportedLocale(normalizedLocale)) {
-    return normalizedLocale;
+  const supportedLocale = SUPPORTED_LOCALE_LOOKUP.get(normalizedLocale);
+  if (supportedLocale) {
+    return supportedLocale;
   }
 
   return LOCALE_ALIASES[normalizedLocale] ?? DEFAULT_LOCALE;
@@ -41,7 +46,7 @@ export function resolveSupportedLocale(
 function normalizeLocaleInput(
   locale: string | undefined | null,
 ): string | undefined {
-  const normalizedLocale = locale?.trim().replaceAll("_", "-");
+  const normalizedLocale = locale?.trim().replaceAll("_", "-").toLowerCase();
 
   return normalizedLocale || undefined;
 }

@@ -1,6 +1,7 @@
 import {
   getProviderSessionDetails,
   ProviderSessionDetailsAPIError,
+  toProviderSessionDetailRef,
 } from "./api";
 
 describe("getProviderSessionDetails", () => {
@@ -140,5 +141,43 @@ describe("getProviderSessionDetails", () => {
       status: 200,
       statusText: "OK",
     });
+  });
+
+  it("canonicalizes supported provider-session metadata into the typed request shape", () => {
+    expect(
+      toProviderSessionDetailRef({
+        id: " sess_alpha ",
+        kind: " SESSION_ID ",
+        provider: " CoDeX ",
+      }),
+    ).toEqual({
+      id: "sess_alpha",
+      kind: "session_id",
+      provider: "codex",
+    });
+  });
+
+  it("rejects unsupported or unsafe provider-session metadata before issuing a request", () => {
+    expect(
+      toProviderSessionDetailRef({
+        id: "../sess_alpha",
+        kind: "session_id",
+        provider: "codex",
+      }),
+    ).toBeNull();
+    expect(
+      toProviderSessionDetailRef({
+        id: "sess_alpha",
+        kind: "path",
+        provider: "codex",
+      }),
+    ).toBeNull();
+    expect(
+      toProviderSessionDetailRef({
+        id: "sess_alpha",
+        kind: "session_id",
+        provider: "anthropic",
+      }),
+    ).toBeNull();
   });
 });
