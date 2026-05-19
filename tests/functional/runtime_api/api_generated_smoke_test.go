@@ -26,6 +26,7 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         "generated-api-integration-smoke",
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated API integration smoke"},
 	})
@@ -43,6 +44,9 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	}
 	if stringPointerValue(item.WorkTypeName) != "task" {
 		t.Fatalf("GET /work work type = %q, want task", stringPointerValue(item.WorkTypeName))
+	}
+	if item.Name != "generated-api-integration-smoke" {
+		t.Fatalf("GET /work name = %q, want generated-api-integration-smoke", item.Name)
 	}
 	if generatedWorkStateName(item.State) != "complete" || generatedWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
 		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", item.State)
@@ -71,6 +75,7 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 	}
 
 	if err := submitcli.Submit(submitcli.SubmitConfig{
+		Name:         "  cli-live-api-name  ",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Port:         functionalServerPort(t, server.URL()),
@@ -79,6 +84,9 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 	}
 
 	item := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	if item.Name != "cli-live-api-name" {
+		t.Fatalf("CLI-submitted work name = %q, want cli-live-api-name", item.Name)
+	}
 	if stringPointerValue(item.WorkTypeName) != "task" || generatedWorkStateName(item.State) != "complete" {
 		t.Fatalf("CLI-submitted work = %#v, want task in complete state", item)
 	}
