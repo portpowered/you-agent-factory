@@ -139,7 +139,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []interfaces.WorkResul
 					WorkstationName: entry.WorkstationName,
 					Outcome:         r.Outcome,
 					Reason:          completedDispatchReasonFromResult(r),
-					ProviderSession: cloneProviderSession(r.ProviderSession),
+					ProviderSession: interfaces.CloneProviderSessionMetadata(r.ProviderSession),
 					StartTime:       entry.StartTime,
 					EndTime:         now,
 					Duration:        now.Sub(entry.StartTime),
