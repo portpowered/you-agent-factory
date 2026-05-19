@@ -225,6 +225,57 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if string(mf.Submitted[0].Payload) != "Review this UI." {
+		t.Fatalf("payload = %q, want legacy text fallback", mf.Submitted[0].Payload)
+	}
+	if len(mf.Submitted[0].Content) != 2 {
+		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
+	}
+}
+
+func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"workTypeName":"prd","content":[{"type":"text","text":"canonical"}],"payload":"different"}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("work-1") has invalid content/payload: payload conflicts with explicit content`)
+}
+
+func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","payload":"legacy text"}]}`
+	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if len(mf.Submitted[0].Content) != 1 {
+		t.Fatalf("content count = %d, want 1", len(mf.Submitted[0].Content))
+	}
+	if mf.Submitted[0].Content[0].Text != "legacy text" {
+		t.Fatalf("content text = %q, want legacy text", mf.Submitted[0].Content[0].Text)
+	}
 }
 
 func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
