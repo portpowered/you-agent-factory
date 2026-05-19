@@ -63,6 +63,39 @@ func TestNewRootCommand_HasSubcommands(t *testing.T) {
 	}
 }
 
+func TestRootCommand_UsesInstalledBinaryName(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute root --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"Usage:\n  you",
+		"Running you with no arguments starts the out-of-the-box flow",
+		"you docs workstation",
+		"you run --dir factory",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("root help missing %q:\n%s", want, help)
+		}
+	}
+	for _, disallowed := range []string{
+		"Usage:\n  infinite-you",
+		"Running infinite-you with no arguments",
+		"infinite-you docs workstation",
+	} {
+		if strings.Contains(help, disallowed) {
+			t.Fatalf("root help still contains old executable token %q:\n%s", disallowed, help)
+		}
+	}
+}
+
 func TestFactoryQueryCommand_PortFlagMapsToConfig(t *testing.T) {
 	originalQueryFactory := queryFactory
 	defer func() {
@@ -263,7 +296,7 @@ func TestFactoryQueryCommand_HelpDocumentsOutputModesAndPort(t *testing.T) {
 		"Use --json for the API-shaped current-factory payload",
 		"--port",
 		"--json",
-		"infinite-you factory query --port 7437 --json",
+		"you factory query --port 7437 --json",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory query help missing %q:\n%s", want, help)
@@ -310,9 +343,9 @@ func TestRootCommand_HelpDocumentsSupportedDocsTopics(t *testing.T) {
 	help := out.String()
 	for _, want := range append(
 		[]string{
-			"Packaged reference topics are also available through infinite-you docs <topic>.",
+			"Packaged reference topics are also available through you docs <topic>.",
 			"Supported docs topics:",
-			"infinite-you docs workstation",
+			"you docs workstation",
 		},
 		docscli.SupportedTopics()...,
 	) {
@@ -997,13 +1030,13 @@ func TestRootCommand_HelpDocumentsOOTBQuickstart(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"Running infinite-you with no arguments starts the out-of-the-box flow",
+		"Running you with no arguments starts the out-of-the-box flow",
 		"factory/inputs/task/default",
 		"http://localhost:7437/dashboard/ui",
 		"printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md",
 		"docs",
 		"Print packaged markdown reference topics",
-		"infinite-you docs workstation",
+		"you docs workstation",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("root help missing %q:\n%s", want, help)
@@ -1055,7 +1088,7 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 	if runCmd.Long == "" {
 		t.Fatal("expected run command long help text")
 	}
-	if !strings.Contains(runCmd.Long, "run infinite-you with no arguments") {
+	if !strings.Contains(runCmd.Long, "run you with no arguments") {
 		t.Fatal("expected run command long help text to point users to no-arg default flow")
 	}
 	if !strings.Contains(runCmd.Long, "factory/inputs/task/default") {
