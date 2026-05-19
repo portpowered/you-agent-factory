@@ -1,9 +1,22 @@
 # Agent Factory CLI Reference
 
-This directory is the package-owned reference surface for a future
-`you docs <topic>` command. Each page stays short, focuses on the
-current supported contract, and links to the deeper package guide for the same
-topic.
+This directory is the package-owned reference surface for the customer docs and
+the future `you docs <topic>` command. Use the fixed CLI topic names for quick
+terminal help, then use the canonical concept owners below when you need the
+complete customer-facing contract.
+
+## Packaged CLI Topics
+
+`you docs <topic>` accepts these topics:
+
+| Topic | Packaged scope | Canonical or broader customer guide |
+|-------|----------------|--------------------------------------|
+| `config` | Split layout and `factory.json` placement | [Factory JSON and work configuration](work.md) |
+| `workstation` | Workstation quick reference | [Workstations](workstations.md) |
+| `workers` | Worker quick reference | [Workers](workers.md) |
+| `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Factory JSON and work configuration](work.md) |
+| `batch-work` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
+| `templates` | Template syntax quick reference | [Templates](templates.md) and [Prompt variables](prompt-variables.md) |
 
 ## Canonical Concept Owners
 
@@ -16,23 +29,29 @@ topic.
 - [Workers](workers.md) owns worker types, worker-scoped runtime fields,
   model/script backend fields, and split `workers/<name>/AGENTS.md` placement.
 
-Use overview and workflow pages for sequencing and examples. Use these
-canonical concept owners when you need the current contract.
+Use these canonical concept owners when you need the current contract.
 
-## Topics
+## Customer Guide Structure
 
 - [Config](config.md) explains the canonical split factory layout around
   `factory.json`, `workers/`, `workstations/`, and `inputs/`.
-- [Workstations](workstations.md) explains workstation kinds, route fields, and
-  the worker-binding contract for runtime steps.
-- [Workers](workers.md) explains worker types, worker-owned runtime fields, and
-  where worker `AGENTS.md` files fit in the split layout.
 - [Resources](resources.md) explains top-level resource pools and the
   `{name, capacity}` requirements consumed by workers or workstations.
 - [Batch work](batch-work.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces and the
   JSON-versus-Markdown quoting rules.
+- [Workstations and workers](workstations-and-workers.md) explains how
+  workstation steps and worker backends cooperate without owning their detailed
+  field contracts.
+- [Author workflows](authoring-workflows.md) keeps workflow sequencing,
+  examples, and run commands.
+- [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
+  placement, and prompt-authoring examples.
+- [Batch inputs](batch-inputs.md) owns submitted batch payload fields and
+  dependency relations.
+- [Prompt variables](prompt-variables.md) owns the complete variable list for
+  prompts and rendered runtime fields.
 
 ## Related
 
@@ -41,6 +60,8 @@ canonical concept owners when you need the current contract.
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Workstations and workers](workstations-and-workers.md)
+- [Resources](resources.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)
+- [Templates](templates.md)
 - [Prompt variables](prompt-variables.md)
