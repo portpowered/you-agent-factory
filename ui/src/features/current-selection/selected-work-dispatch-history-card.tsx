@@ -43,6 +43,7 @@ import {
   requestScriptRequest,
   requestScriptResponse,
   requestStartedAt,
+  requestTitle,
   requestTraceIDs,
   scriptAttemptNumber,
   scriptRequestID,
@@ -86,7 +87,7 @@ export function DispatchHistoryCard({
         isCurrentDispatch={isCurrentDispatch}
         messages={messages}
         outcome={view.outcome}
-        workstationLabel={request.workstation_name || request.transition_id}
+        title={requestTitle(request, selectedWorkID)}
       />
       <DispatchSummaryDetails messages={messages} request={request} view={view} />
       <DispatchRequestSection
@@ -196,19 +197,19 @@ function DispatchHistoryHeader({
   isCurrentDispatch,
   messages,
   outcome,
-  workstationLabel,
+  title,
 }: {
   dispatchID: string | undefined;
   isCurrentDispatch: boolean;
   messages: CurrentSelectionDispatchHistoryMessages;
   outcome: string | undefined;
-  workstationLabel: string | undefined;
+  title: string | undefined;
 }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="grid min-w-0 gap-1">
         <strong className="min-w-0 [overflow-wrap:anywhere]">
-          {workstationLabel || dispatchID || messages.unknownDispatchTitle}
+          {title || dispatchID || messages.unknownDispatchTitle}
         </strong>
         <div className="flex flex-wrap items-center gap-2">
           <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>

@@ -26,6 +26,7 @@ import {
   requestScriptRequest,
   requestScriptResponse,
   requestStartedAt,
+  requestTitle,
   requestTraceIDs,
   requestWorkingDirectory,
   requestWorktree,
@@ -157,6 +158,37 @@ describe("selected-work-dispatch-history-helpers", () => {
       ),
     ).toBe("2026-04-08T12:00:00Z");
     expect(requestStartedAt(runtime)).toBe("2026-04-08T12:00:02Z");
+  });
+
+  it("derives the dispatch title from the selected work-facing label before falling back", () => {
+    const projected = buildProjectedRequest({
+      work_items: [
+        {
+          display_name: "Selected Story",
+          trace_id: "trace-selected",
+          work_id: "work-selected",
+          work_type_id: "story",
+        },
+        inputWorkItem,
+      ],
+    });
+    const runtime = buildRuntimeRequest({
+      request: {
+        input_work_items: [
+          {
+            trace_id: "trace-runtime-selected",
+            work_id: "work-runtime-selected",
+            work_type_id: "story",
+          },
+        ],
+        started_at: "2026-04-08T12:00:02Z",
+        trace_ids: ["trace-input", "trace-runtime"],
+      },
+    });
+
+    expect(requestTitle(projected, "work-selected")).toBe("Selected Story");
+    expect(requestTitle(runtime, "work-runtime-selected")).toBe("work-runtime-selected");
+    expect(requestTitle(buildProjectedRequest({ work_items: [] }), "work-missing")).toBeUndefined();
   });
 
   it("keeps prompt, provider, model, working directory, worktree, session, and response text on projected requests only", () => {
