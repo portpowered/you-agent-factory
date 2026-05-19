@@ -35,7 +35,7 @@ const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
 const GRAPH_BACKGROUND_GAP = 24;
 const GRAPH_BACKGROUND_SIZE = 1;
 const CURRENT_ACTIVITY_LEGEND_CLASS =
-  "absolute left-7 top-7 z-10 max-[720px]:left-4 max-[720px]:right-4 max-[720px]:top-4";
+  "absolute left-7 top-7 z-10 max-md:left-4 max-md:right-4 max-md:top-4";
 
 type CSSPropertiesWithVariables = CSSProperties &
   Record<`--${string}`, string | number>;
@@ -152,7 +152,7 @@ export function CurrentActivityGraphViewport({
         aria-describedby="workflow-graph-heading"
         aria-label="Work graph viewport"
         className={cx(
-          "relative h-full min-h-0 overflow-hidden rounded-[1.4rem] border transition-colors",
+          "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-af-accent/35 bg-af-accent/6",

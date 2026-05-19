@@ -112,7 +112,7 @@ export function CurrentActivityGraphSurface({
 
 function EmptyCurrentActivityState() {
   return (
-    <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
+    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
       <h3>No workflow topology loaded</h3>
       <p>The factory has not published any workstation graph yet.</p>
     </div>

@@ -29,16 +29,16 @@ export interface FactoryGraphEditorVisibilityOption {
 }
 
 const TOOLBAR_SHELL_CLASS =
-  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-[720px]:bottom-3 max-[720px]:w-[calc(100%-1.5rem)] max-[720px]:justify-between";
+  "pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/94 px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:translate-x-0 max-md:justify-between";
 const STATUS_PILL_CLASS =
   "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold";
 const MENU_LIST_CLASS = "grid gap-1";
 const MENU_ACTION_CLASS =
-  "grid w-full gap-1 rounded-[1rem] border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
+  "grid w-full gap-1 rounded-2xl border border-transparent px-3 py-2 text-left transition hover:border-af-accent/20 hover:bg-af-overlay/6 focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:opacity-55";
 const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-ink";
 const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-ink/68";
 const VISIBILITY_PANEL_CLASS =
-  "pointer-events-auto absolute right-7 top-24 z-20 grid gap-3 rounded-[1.25rem] border border-af-overlay/12 bg-af-surface/94 p-3 shadow-af-panel backdrop-blur-[16px] max-[720px]:left-4 max-[720px]:right-4 max-[720px]:top-20";
+  "pointer-events-auto absolute right-7 top-24 z-20 grid gap-3 rounded-2xl border border-af-overlay/12 bg-af-surface/94 p-3 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-20";
 const TOOLTIP_COPY = {
   add: "Add supported graph entities",
   connect: "Create compatible graph connections",
@@ -276,7 +276,7 @@ export function FactoryGraphEditorVisibilityPanel({
             aria-label={`${option.visible ? "Hide" : "Show"} ${option.label.toLowerCase()} lane`}
             aria-pressed={option.visible}
             className={cx(
-              "flex items-center justify-between gap-3 rounded-[1rem] border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-af-accent",
+              "flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-af-accent",
               option.visible
                 ? "border-af-accent/20 bg-af-accent/8 text-af-ink"
                 : "border-af-overlay/12 bg-af-overlay/4 text-af-ink/72",
@@ -455,7 +455,7 @@ export function FactoryGraphEditorNotice({
   return (
     <section
       className={cx(
-        "grid gap-1 rounded-[1.25rem] border p-4",
+        "grid gap-1 rounded-2xl border p-4",
         NOTICE_TONE_CLASS[tone],
       )}
       role={tone === "danger" ? "alert" : "status"}

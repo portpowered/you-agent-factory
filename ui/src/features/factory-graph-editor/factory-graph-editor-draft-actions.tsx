@@ -1,7 +1,7 @@
 import { Button } from "../../components/ui";
 
 const DRAFT_ACTIONS_CLASS =
-  "flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-af-warning/24 bg-af-warning/8 px-4 py-3";
+  "flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-af-warning/24 bg-af-warning/8 px-4 py-3";
 
 export function FactoryGraphEditorDraftActions({
   canDiscard = true,
