@@ -72,10 +72,11 @@ At runtime:
 
 1. A submitted `task` work item starts in `task:init`.
 2. `process-task` is enabled when a token is present in that place.
-3. Accepted work routes through `outputs`.
-4. Ordinary partial-progress work routes through `onContinue` when configured.
-5. Rejected work routes through `onRejection` when configured.
-6. Failed or timed-out work routes through `onFailure`.
+3. Accepted work routes to `task:complete`.
+4. Failed or timed-out work routes to `task:failed`.
+
+Use [Factory JSON And Work Configuration](work.md#how-the-pieces-fit) for the
+canonical routing contract, including continue and rejection routes.
 
 ## Build Your First Workflow
 
@@ -258,24 +259,24 @@ you run --dir ./factory --with-mock-workers --work ./fixtures/story-001.json
 Or drop the file under `factory/inputs/story/default/` while the factory is
 already running.
 
+## Related Contract Detail
+
+- [Factory JSON And Work Configuration](work.md) owns work types, states,
+  routing, resources, and portability fields.
+- [Workstations](workstations.md) owns workstation kinds, runtime fields,
+  route fields, and guards.
+- [Workers](workers.md) owns worker types, backend fields, and worker
+  `AGENTS.md` placement.
+- [Author AGENTS.md](authoring-agents-md.md) owns split file shape, prompt
+  placement, and authoring patterns.
+
 ## Failure Routing And Provider Behavior
 
-Use `onFailure` on workstations for terminal worker failures and timeouts.
-Accepted work routes through `outputs`. Ordinary executor iteration routes
-through `onContinue` when configured. Explicit reviewer feedback routes through
-`onRejection`.
-
-For model-backed workers, normalized provider behavior applies before the token
-reaches its final route:
-
-- permanent auth, bad request, and misconfiguration failures are terminal
-- retryable provider failures retry inside the executor before the workflow
-  sees a final failure
-- throttling can pause the affected provider/model lane and requeue the
-  in-flight work to its pre-transition position
-
-The canonical timeout and normalized-failure reference lives in
-[Authoring AGENTS.md](./authoring-agents-md.md#timeout-and-failure-behavior).
+For workflow design, add explicit failure, continue, and rejection destinations
+to the topology so every outcome lands somewhere intentional. Use
+[Factory JSON And Work Configuration](work.md#how-the-pieces-fit) for the
+canonical routing contract, [Workstations](workstations.md) for route fields
+and execution limits, and [Workers](workers.md) for worker backend behavior.
 
 ## Test Workflows With Mock Workers
 
