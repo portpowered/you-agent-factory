@@ -1,10 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { DashboardSubmitWorkType } from "../../api/dashboard/types";
-import {
-  isSubmitWorkAPIError,
-  submitWork,
-} from "../../api/work";
+import { isSubmitWorkAPIError, submitWork } from "../../api/work";
 import type {
   SubmitWorkDraft,
   SubmitWorkStatus,
@@ -17,10 +14,14 @@ const EMPTY_DRAFT: SubmitWorkDraft = {
   workTypeName: "",
 };
 
-export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) {
+export function useSubmitWorkWidget(
+  submitWorkTypes: DashboardSubmitWorkType[],
+) {
   const [draft, setDraft] = useState<SubmitWorkDraft>(EMPTY_DRAFT);
   const [showValidation, setShowValidation] = useState(false);
-  const submitWorkTypeNames = submitWorkTypes.map((workType) => workType.work_type_name);
+  const submitWorkTypeNames = submitWorkTypes.map(
+    (workType) => workType.work_type_name,
+  );
 
   const mutation = useMutation({
     mutationFn: submitWork,
@@ -75,8 +76,10 @@ export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) 
       }
 
       mutation.mutate({
-        ...(draft.requestName.trim().length > 0 ? { name: draft.requestName } : {}),
-        payload: draft.requestText,
+        ...(draft.requestName.trim().length > 0
+          ? { name: draft.requestName }
+          : {}),
+        payload: draft.requestText.trim().length === 0 ? "" : draft.requestText,
         workTypeName: draft.workTypeName,
       });
     },
@@ -158,24 +161,10 @@ function buildStatus({
     };
   }
 
-  if (draft.workTypeName.length === 0 && draft.requestText.length === 0) {
-    return {
-      kind: "guidance",
-      message: "Choose a work type and describe what you need to get started.",
-    };
-  }
-
   if (draft.workTypeName.length === 0) {
     return {
       kind: "guidance",
       message: "Choose a work type to continue.",
-    };
-  }
-
-  if (draft.requestText.trim().length === 0) {
-    return {
-      kind: "guidance",
-      message: "Describe what you need to continue.",
     };
   }
 
@@ -185,18 +174,19 @@ function buildStatus({
   };
 }
 
-function buildValidationSummary(validationErrors: SubmitWorkValidationErrors): string {
-  if (validationErrors.workTypeName && validationErrors.requestText) {
-    return "Choose a work type and describe your request before submitting.";
-  }
+function buildValidationSummary(
+  validationErrors: SubmitWorkValidationErrors,
+): string {
   if (validationErrors.workTypeName) {
     return validationErrors.workTypeName;
   }
-  return validationErrors.requestText ?? "Fix the highlighted fields before submitting.";
+  return "Fix the highlighted fields before submitting.";
 }
 
-function hasValidationErrors(validationErrors: SubmitWorkValidationErrors): boolean {
-  return Boolean(validationErrors.requestText || validationErrors.workTypeName);
+function hasValidationErrors(
+  validationErrors: SubmitWorkValidationErrors,
+): boolean {
+  return Boolean(validationErrors.workTypeName);
 }
 
 function submitWorkErrorMessage(error: unknown): string {
@@ -213,10 +203,5 @@ function validateDraft(draft: SubmitWorkDraft): SubmitWorkValidationErrors {
     validationErrors.workTypeName = "Choose a work type before submitting.";
   }
 
-  if (draft.requestText.trim().length === 0) {
-    validationErrors.requestText = "Describe your request before submitting.";
-  }
-
   return validationErrors;
 }
-

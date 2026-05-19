@@ -1,7 +1,4 @@
-import {
-  SubmitWorkAPIError,
-  submitWork,
-} from "./api";
+import { SubmitWorkAPIError, submitWork } from "./api";
 
 describe("submitWork", () => {
   afterEach(() => {
@@ -66,5 +63,33 @@ describe("submitWork", () => {
       }),
     );
   });
-});
 
+  it("posts an explicit empty payload without dropping the submit-work contract field", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ trace_id: "trace-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitWork({
+        payload: "",
+        work_type_name: "story",
+      }),
+    ).resolves.toEqual({ trace_id: "trace-story" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/work",
+      expect.objectContaining({
+        body: JSON.stringify({
+          payload: "",
+          work_type_name: "story",
+        }),
+        method: "POST",
+      }),
+    );
+  });
+});
