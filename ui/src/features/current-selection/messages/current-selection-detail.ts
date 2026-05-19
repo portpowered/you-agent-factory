@@ -1,7 +1,4 @@
-import {
-  type LocalizedMessages,
-  resolveLocalizedMessages,
-} from "../../../i18n";
+import { type LocalizedMessages, resolveLocalizedMessages } from "../../../i18n";
 
 export interface CurrentSelectionDetailMessages {
   attemptAriaLabel: (attemptNumber: number) => string;
@@ -9,7 +6,9 @@ export interface CurrentSelectionDetailMessages {
   awaitingProviderResponse: string;
   commandLabel: string;
   commandUnavailable: string;
+  countLabel: string;
   consumedWorkItemsLabel: string;
+  currentWorkHeading: string;
   dispatchIdLabel: string;
   durationLabel: string;
   durationUnavailable: string;
@@ -35,6 +34,8 @@ export interface CurrentSelectionDetailMessages {
   providerLabel: string;
   providerResponseUnavailable: string;
   providerSessionLabel: string;
+  noCurrentWorkInPlace: string;
+  noWorkRecordedAtSelectedTick: string;
   requestBodyLabel: string;
   requestCountsHeading: string;
   requestCountsRegionLabel: string;
@@ -50,6 +51,7 @@ export interface CurrentSelectionDetailMessages {
   responseMetadataUnavailableErrored: string;
   responseMetadataUnavailableScript: string;
   responseTimeLabel: string;
+  selectedTickWorkUnavailable: string;
   scriptArgumentsUnavailable: string;
   scriptAttemptLabel: string;
   scriptAttemptUnavailable: string;
@@ -64,20 +66,41 @@ export interface CurrentSelectionDetailMessages {
   stderrLabel: string;
   stdoutEmpty: string;
   stdoutLabel: string;
+  stateLabel: string;
+  stateNodeIdLabel: string;
   totalDurationLabel: string;
   totalDurationUnavailable: string;
+  traceIdLabel: string;
   traceIdsLabel: string;
   traceUnavailable: string;
   transitionIdLabel: string;
+  workIdLabel: string;
   worktreeLabel: string;
   workstationLabel: string;
   workstationUnavailable: string;
+  workTypeLabel: string;
   workingDirectoryLabel: string;
   openWorkItemAction: (workItemLabel: string) => string;
 }
 
+const stateNodeDetailFallbackMessages = {
+  countLabel: "Count",
+  currentWorkHeading: "Current work",
+  noCurrentWorkInPlace: "No current work is occupying this place.",
+  noWorkRecordedAtSelectedTick:
+    "No work is recorded for this place at the selected tick.",
+  selectedTickWorkUnavailable:
+    "Represented work is unavailable for this place at the selected tick.",
+  stateLabel: "State",
+  stateNodeIdLabel: "State node ID",
+  traceIdLabel: "Trace ID",
+  workIdLabel: "Work ID",
+  workTypeLabel: "Work type",
+} satisfies Pick<CurrentSelectionDetailMessages, "countLabel" | "currentWorkHeading" | "noCurrentWorkInPlace" | "noWorkRecordedAtSelectedTick" | "selectedTickWorkUnavailable" | "stateLabel" | "stateNodeIdLabel" | "traceIdLabel" | "workIdLabel" | "workTypeLabel">;
+
 const currentSelectionDetailMessagesByLocale = {
   en: {
+    ...stateNodeDetailFallbackMessages,
     attemptAriaLabel: (attemptNumber: number) => `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
     awaitingProviderResponse: "Awaiting provider response.",
@@ -161,6 +184,7 @@ const currentSelectionDetailMessagesByLocale = {
     openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   ja: {
+    ...stateNodeDetailFallbackMessages,
     attemptAriaLabel: (attemptNumber: number) => `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
     awaitingProviderResponse: "Awaiting provider response.",
@@ -244,6 +268,7 @@ const currentSelectionDetailMessagesByLocale = {
     openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },
   ko: {
+    ...stateNodeDetailFallbackMessages,
     attemptAriaLabel: (attemptNumber: number) => `Inference attempt ${attemptNumber}`,
     attemptTitle: (attemptNumber: number) => `Attempt ${attemptNumber}`,
     awaitingProviderResponse: "Awaiting provider response.",
@@ -332,7 +357,9 @@ const currentSelectionDetailMessagesByLocale = {
     awaitingProviderResponse: "正在等待提供方响应。",
     commandLabel: "命令",
     commandUnavailable: "此工作站请求没有可用的脚本命令详情。",
+    countLabel: "数量",
     consumedWorkItemsLabel: "已消费的工作项",
+    currentWorkHeading: "当前工作",
     dispatchIdLabel: "分派 ID",
     durationLabel: "耗时",
     durationUnavailable: "此脚本响应的耗时详情暂不可用。",
@@ -360,6 +387,8 @@ const currentSelectionDetailMessagesByLocale = {
     providerLabel: "提供方",
     providerResponseUnavailable: "此推理尝试没有可用的提供方响应文本。",
     providerSessionLabel: "Provider session",
+    noCurrentWorkInPlace: "当前没有工作占用这个位置。",
+    noWorkRecordedAtSelectedTick: "在所选时间刻度，这个位置暂时没有记录到工作。",
     requestBodyLabel: "请求正文",
     requestCountsHeading: "请求计数",
     requestCountsRegionLabel: "请求计数",
@@ -377,6 +406,7 @@ const currentSelectionDetailMessagesByLocale = {
     responseMetadataUnavailableScript:
       "此脚本驱动的工作站请求没有可用的响应元数据。",
     responseTimeLabel: "响应时间",
+    selectedTickWorkUnavailable: "在所选时间刻度，这个位置对应的工作暂时不可用。",
     scriptArgumentsUnavailable: "此工作站请求没有可用的脚本参数。",
     scriptAttemptLabel: "脚本尝试",
     scriptAttemptUnavailable: "脚本尝试暂不可用。",
@@ -393,19 +423,23 @@ const currentSelectionDetailMessagesByLocale = {
     stderrLabel: "标准错误",
     stdoutEmpty: "此脚本响应没有记录 stdout。",
     stdoutLabel: "标准输出",
+    stateLabel: "状态",
+    stateNodeIdLabel: "状态节点 ID",
     totalDurationLabel: "总耗时",
     totalDurationUnavailable: "此工作站请求的总耗时暂不可用。",
+    traceIdLabel: "追踪 ID",
     traceIdsLabel: "追踪 ID",
     traceUnavailable: "此工作站请求的追踪详情暂不可用。",
     transitionIdLabel: "转换 ID",
+    workIdLabel: "工作 ID",
     worktreeLabel: "工作树",
     workstationLabel: "工作站",
     workstationUnavailable: "此请求没有可用的工作站详情。",
+    workTypeLabel: "工作类型",
     workingDirectoryLabel: "工作目录",
     openWorkItemAction: (workItemLabel: string) => `打开 ${workItemLabel}`,
   },
 } satisfies LocalizedMessages<CurrentSelectionDetailMessages>;
 
-export function getCurrentSelectionDetailMessages(locale?: string | null) {
-  return resolveLocalizedMessages(currentSelectionDetailMessagesByLocale, locale);
-}
+export const getCurrentSelectionDetailMessages = (locale?: string | null) =>
+  resolveLocalizedMessages(currentSelectionDetailMessagesByLocale, locale);

@@ -72,12 +72,6 @@ export const REQUEST_HISTORY_TEXT_CLASS = cx(
   DASHBOARD_BODY_CODE_CLASS,
 );
 
-const NO_CURRENT_WORK_IN_PLACE_COPY = "No current work is occupying this place.";
-const NO_WORK_RECORDED_AT_SELECTED_TICK_COPY =
-  "No work is recorded for this place at the selected tick.";
-const SELECTED_TICK_WORK_UNAVAILABLE_COPY =
-  "Represented work is unavailable for this place at the selected tick.";
-
 interface RequestAuthoredHeadingBlock {
   level: 1 | 2 | 3 | 4 | 5 | 6;
   text: string;
@@ -190,18 +184,24 @@ export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
 }
 
 export function emptyStatePlaceMessage(
+  messages: Pick<
+    ReturnType<typeof useCurrentSelectionDetailMessages>,
+    | "noCurrentWorkInPlace"
+    | "noWorkRecordedAtSelectedTick"
+    | "selectedTickWorkUnavailable"
+  >,
   usesRetainedWorkItems: boolean,
   tokenCount: number,
 ): string {
   if (!usesRetainedWorkItems) {
-    return NO_CURRENT_WORK_IN_PLACE_COPY;
+    return messages.noCurrentWorkInPlace;
   }
 
   if (tokenCount > 0) {
-    return SELECTED_TICK_WORK_UNAVAILABLE_COPY;
+    return messages.selectedTickWorkUnavailable;
   }
 
-  return NO_WORK_RECORDED_AT_SELECTED_TICK_COPY;
+  return messages.noWorkRecordedAtSelectedTick;
 }
 
 export function normalizeDetailText(value: string | undefined): string | undefined {

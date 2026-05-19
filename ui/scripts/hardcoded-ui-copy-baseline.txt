@@ -41,14 +41,6 @@ src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
 src/features/bento/agent-bento.tsx|155|18|jsx-attribute|Infinite You bento board
 src/features/current-selection/provider-session-detail-panel.tsx|262|25|jsx-text|Turn
 src/features/current-selection/provider-session-detail-panel.tsx|415|19|jsx-text|Encrypted reasoning content only.
-src/features/current-selection/state-node-detail.tsx|48|15|jsx-text|Work type
-src/features/current-selection/state-node-detail.tsx|52|15|jsx-text|State
-src/features/current-selection/state-node-detail.tsx|56|15|jsx-text|State node ID
-src/features/current-selection/state-node-detail.tsx|114|15|jsx-text|Work ID
-src/features/current-selection/state-node-detail.tsx|118|15|jsx-text|Work type
-src/features/current-selection/state-node-detail.tsx|123|17|jsx-text|Trace ID
-src/features/current-selection/state-node-detail.tsx|129|17|jsx-text|Failure reason
-src/features/current-selection/state-node-detail.tsx|135|17|jsx-text|Failure message
 src/features/flowchart/current-activity-workstation-node.tsx|221|19|jsx-attribute|Active
 src/features/terminal-work/terminal-work-card.tsx|288|51|jsx-text|at
 src/features/work-outcome/trend-cards.tsx|254|60|jsx-text|retry or rework events
