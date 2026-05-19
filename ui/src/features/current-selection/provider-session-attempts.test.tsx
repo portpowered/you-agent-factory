@@ -88,6 +88,9 @@ describe("ProviderSessionAttempts", () => {
     );
 
     expect(screen.getByText("Current dispatch")).toBeTruthy();
+    expect(screen.getByText("Current dispatch").className).toContain(
+      "text-on-foreground",
+    );
     expect(
       screen.getByRole("button", { name: "Select work item Active Story" }),
     ).toBeTruthy();
@@ -111,6 +114,9 @@ describe("ProviderSessionAttempts", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(screen.getByText("Session selected")).toBeTruthy();
+    expect(
+      screen.getByText("Session selected").closest("button")?.className,
+    ).toContain("border-on-foreground");
     expect(screen.getByText("Session details unavailable")).toBeTruthy();
     expect(screen.getAllByText("Session log unavailable")).toHaveLength(2);
     expect(
