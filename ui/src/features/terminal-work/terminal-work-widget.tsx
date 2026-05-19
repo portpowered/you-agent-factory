@@ -1,5 +1,5 @@
 import type { TerminalWorkDetail } from "../current-selection";
-import { isSupportedLocale } from "../../i18n";
+import { resolveSupportedLocale } from "../../i18n";
 import {
   CompletedFailedWorkstationCard,
   type TerminalWorkItem,
@@ -43,15 +43,7 @@ function resolveTerminalWorkLocale(locale?: string): string | undefined {
     return undefined;
   }
 
-  const normalizedLocale = localeCandidate.trim().replaceAll("_", "-").toLowerCase();
-  if (isSupportedLocale(normalizedLocale)) {
-    return normalizedLocale;
-  }
-
-  const primaryLanguage = normalizedLocale.split("-")[0];
-  return primaryLanguage && isSupportedLocale(primaryLanguage)
-    ? primaryLanguage
-    : undefined;
+  return resolveSupportedLocale(localeCandidate);
 }
 
 function getBrowserLocaleCandidate(): string | undefined {

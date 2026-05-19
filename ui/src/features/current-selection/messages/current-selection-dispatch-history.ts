@@ -90,8 +90,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     transitionIdLabel: "Transition ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "Unknown dispatch",
-    openWorkItemActionLabel: (workItemLabel: string) =>
-      `Open ${workItemLabel}`,
+    openWorkItemActionLabel: (workItemLabel: string) => `Open ${workItemLabel}`,
     workstationLabel: "Workstation",
     workSelectedActionLabel: "Work selected",
   },
@@ -186,12 +185,11 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     transitionIdLabel: "전환 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "알 수 없는 디스패치",
-    openWorkItemActionLabel: (workItemLabel: string) =>
-      `${workItemLabel} 열기`,
+    openWorkItemActionLabel: (workItemLabel: string) => `${workItemLabel} 열기`,
     workstationLabel: "워크스테이션",
     workSelectedActionLabel: "작업 선택됨",
   },
-  zh: {
+  "zh-CN": {
     commandLabel: "命令",
     currentDispatchBadge: "当前分派",
     dispatchedCountLabel: "分派次数",
@@ -230,8 +228,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     transitionIdLabel: "转换 ID",
     unknownDispatchId: "unknown-dispatch",
     unknownDispatchTitle: "未知分派",
-    openWorkItemActionLabel: (workItemLabel: string) =>
-      `打开 ${workItemLabel}`,
+    openWorkItemActionLabel: (workItemLabel: string) => `打开 ${workItemLabel}`,
     workstationLabel: "工作站",
     workSelectedActionLabel: "已选中工作项",
   },

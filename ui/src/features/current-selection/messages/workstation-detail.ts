@@ -309,7 +309,7 @@ const workstationDetailMessagesByLocale = {
     workSelectedAction: "작업 선택됨",
     workerTypeLabel: "워커 유형",
   },
-  zh: {
+  "zh-CN": {
     activeRunsLabel: "活动运行",
     activeWorkEmpty: "此工作站当前没有正在运行的活动工作。",
     activeWorkHeading: "活动工作",

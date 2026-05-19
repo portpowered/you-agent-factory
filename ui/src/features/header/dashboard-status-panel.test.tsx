@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { DashboardStatusPanel } from "./dashboard-status-panel";
+import { getHeaderControlsMessages } from "./messages/header-controls";
 
 describe("DashboardStatusPanel", () => {
   it("renders the default header state without optional detail copy", () => {
@@ -33,6 +34,24 @@ describe("DashboardStatusPanel", () => {
     expect(screen.getByText("Waiting for more timeline data.")).toBeTruthy();
     expect(container.querySelector("section")?.className).toContain(
       "border-af-danger/45",
+    );
+  });
+
+  it("resolves brand copy from the requested locale catalog", () => {
+    const messages = getHeaderControlsMessages("zh-CN");
+
+    render(
+      <DashboardStatusPanel
+        locale="zh-CN"
+        title={messages.loadingDashboardTitle}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
+    ).toBeTruthy();
+    expect(screen.getByText(messages.brandWordmark).className).toContain(
+      "sr-only",
     );
   });
 });

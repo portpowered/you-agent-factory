@@ -1,7 +1,9 @@
 import { cx } from "../../components/ui";
+import { getHeaderControlsMessages } from "./messages/header-controls";
 
 interface DashboardBrandLockupProps {
   className?: string;
+  locale?: string;
   wordmarkClassName?: string;
 }
 
@@ -10,8 +12,11 @@ const BRAND_MARK_CLASS =
 
 export function DashboardBrandLockup({
   className = "",
+  locale,
   wordmarkClassName = "",
 }: DashboardBrandLockupProps) {
+  const messages = getHeaderControlsMessages(locale);
+
   return (
     <span
       className={cx(
@@ -24,7 +29,7 @@ export function DashboardBrandLockup({
         <span className="text-[1.12rem] leading-none">U</span>
       </span>
       <span className={cx("sr-only", wordmarkClassName)}>
-        Infinite You
+        {messages.brandWordmark}
       </span>
     </span>
   );

@@ -111,7 +111,7 @@ const exportDialogMessagesByLocale = {
     title: "팩토리 내보내기",
     triggerLabel: "PNG 내보내기",
   },
-  zh: {
+  "zh-CN": {
     cancelAction: "取消",
     closeAction: "关闭",
     closeLabel: "关闭导出对话框",

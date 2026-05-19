@@ -10,6 +10,7 @@ import {
   formatWorkItemLabel,
 } from "../../components/ui/formatters";
 import { cx } from "../../lib/cx";
+import { getWorkflowActivityShellMessages } from "../workflow-activity/messages/activity-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 import { workstationIconMetadata } from "./workstation-icon-metadata";
@@ -19,6 +20,7 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   executions: DashboardActiveExecution[];
   incomingHandleCount: number;
+  locale?: string;
   muted: boolean;
   now: number;
   outgoingHandleCount: number;
@@ -49,6 +51,7 @@ const WORK_ITEM_LABEL_DENSE_LENGTH = 48;
 export function WorkstationNodeView({
   data,
 }: NodeProps<CurrentActivityWorkstationNode>) {
+  const messages = getWorkflowActivityShellMessages(data.locale);
   const semanticIconMetadata = workstationIconMetadata(data.workstation);
   const exhaustionRule = semanticIconMetadata.semanticKind === "exhaustion";
   const selectedWork = data.selectedWorkID !== null;
@@ -94,11 +97,13 @@ export function WorkstationNodeView({
       {exhaustionRule ? (
         <ExhaustionRuleNodeButton
           data={data}
+          messages={messages}
           workstationTitle={workstationTitle}
         />
       ) : (
         <ActiveWorkstationNodeContent
           data={data}
+          messages={messages}
           semanticIconMetadata={semanticIconMetadata}
           selectedWork={selectedWork}
           visibleWorkItemEntries={visibleWorkItemEntries}
@@ -112,16 +117,18 @@ export function WorkstationNodeView({
 
 function ExhaustionRuleNodeButton({
   data,
+  messages,
   workstationTitle,
 }: {
   data: WorkstationNodeData;
+  messages: ReturnType<typeof getWorkflowActivityShellMessages>;
   workstationTitle: string;
 }) {
   const semanticIconMetadata = workstationIconMetadata(data.workstation);
 
   return (
     <button
-      aria-label={`Select ${workstationTitle} exhaustion rule`}
+      aria-label={messages.selectExhaustionRuleLabel(workstationTitle)}
       aria-pressed={data.selectedWorkstation}
       className="nodrag flex h-full min-w-0 w-full cursor-pointer items-center gap-2 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit"
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
@@ -153,6 +160,7 @@ function ExhaustionRuleNodeButton({
 
 function ActiveWorkstationNodeContent({
   data,
+  messages,
   semanticIconMetadata,
   selectedWork,
   visibleWorkItemEntries,
@@ -160,6 +168,7 @@ function ActiveWorkstationNodeContent({
   workstationTitle,
 }: {
   data: WorkstationNodeData;
+  messages: ReturnType<typeof getWorkflowActivityShellMessages>;
   semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
   selectedWork: boolean;
   visibleWorkItemEntries: Array<{
@@ -181,7 +190,7 @@ function ActiveWorkstationNodeContent({
       data-workstation-kind={semanticIconMetadata.semanticKind}
     >
       <button
-        aria-label={`Select ${workstationTitle} workstation`}
+        aria-label={messages.selectWorkstationLabel(workstationTitle)}
         aria-pressed={data.selectedWorkstation}
         className="nodrag flex min-w-0 w-full cursor-pointer items-center justify-between gap-2 overflow-hidden border-0 bg-transparent p-0 text-left text-inherit"
         onClick={() => data.onSelectWorkstation(data.workstation.node_id)}

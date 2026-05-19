@@ -1,3 +1,4 @@
+import { useAppLocale } from "../../i18n";
 import { ExportFactoryDialog, useCurrentFactoryExport } from "../export";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
 
@@ -6,6 +7,7 @@ export interface DashboardExportDialogProps {
 }
 
 export function DashboardExportDialog({ locale }: DashboardExportDialogProps) {
+  const { locale: resolvedLocale } = useAppLocale(locale);
   const closeExportDialog = useExportDialogStore(
     (state) => state.closeExportDialog,
   );
@@ -27,7 +29,7 @@ export function DashboardExportDialog({ locale }: DashboardExportDialogProps) {
       }
       isOpen={isExportDialogOpen}
       isPreparing={isPreparing}
-      locale={locale}
+      locale={resolvedLocale}
       onClose={closeExportDialog}
       preparationFailure={currentFactoryExport.ok ? null : currentFactoryExport}
     />

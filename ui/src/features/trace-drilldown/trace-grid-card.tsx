@@ -41,6 +41,7 @@ import type {
   DashboardTrace,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
+import { getTraceDrilldownMessages } from "./messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
@@ -64,6 +65,7 @@ export type TraceGridState =
 
 export interface TraceGridBentoCardProps {
   className?: string;
+  locale?: string;
   onSelectWorkID?: (workID: string) => void;
   state: TraceGridState;
   title?: string;
@@ -72,10 +74,12 @@ export interface TraceGridBentoCardProps {
 
 export function TraceGridBentoCard({
   className = "",
+  locale,
   onSelectWorkID,
   state,
-  title = "Trace drill-down",
+  title,
 }: TraceGridBentoCardProps) {
+  const messages = getTraceDrilldownMessages(locale);
   const cardClassName = cx(
     DASHBOARD_WIDGET_CLASS,
     DETAIL_CARD_CLASS,
@@ -85,32 +89,35 @@ export function TraceGridBentoCard({
   );
 
   return (
-    <AgentBentoCard className={cardClassName} title={title}>
+    <AgentBentoCard className={cardClassName} title={title ?? messages.title}>
       <p className={DETAIL_COPY_CLASS}>
-        Resolves from selected-tick factory event history.
+        {messages.summary}
       </p>
-      {renderTraceState(state, onSelectWorkID)}
+      {renderTraceState(state, locale, onSelectWorkID)}
     </AgentBentoCard>
   );
 }
 
 function renderTraceState(
   state: TraceGridState,
+  locale?: string,
   onSelectWorkID?: (workID: string) => void,
 ) {
+  const messages = getTraceDrilldownMessages(locale);
+
   switch (state.status) {
     case "idle":
       return (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>No trace selected</h3>
-          <p>{state.message}</p>
+          <h3>{messages.idleTitle}</h3>
+          <p>{messages.idleMessage}</p>
         </div>
       );
     case "loading":
       return (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>Loading trace</h3>
-          <p>Reconstructing dispatch history for {state.workID}.</p>
+          <h3>{messages.loadingTitle}</h3>
+          <p>{messages.loadingMessage(state.workID)}</p>
           <div aria-hidden="true" className="grid gap-2 pt-2">
             <Skeleton className={TRACE_LOADING_SKELETON_CLASS} />
             <Skeleton className="h-24 w-full" />
@@ -121,28 +128,30 @@ function renderTraceState(
     case "empty":
       return (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>Trace history unavailable</h3>
-          <p>No retained dispatch history is currently available for this work item.</p>
+          <h3>{messages.emptyTitle}</h3>
+          <p>{messages.emptyMessage}</p>
         </div>
       );
     case "error":
       return (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>Trace lookup failed</h3>
+          <h3>{messages.errorTitle}</h3>
           <p>{state.message}</p>
         </div>
       );
     case "ready":
-      return <TraceGrid onSelectWorkID={onSelectWorkID} trace={state.trace} />;
+      return <TraceGrid locale={locale} onSelectWorkID={onSelectWorkID} trace={state.trace} />;
   }
 }
 
 interface TraceGridProps {
+  locale?: string;
   onSelectWorkID?: (workID: string) => void;
   trace: DashboardTrace;
 }
 
-function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
+function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
+  const messages = getTraceDrilldownMessages(locale);
   const workItems = useMemo(() => resolveTraceWorkItems(trace), [trace]);
   const [workItemsExpanded, setWorkItemsExpanded] = useState(false);
   const workItemsID = `trace-work-items-${trace.trace_id || "selected"}`;
@@ -152,7 +161,7 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
   }, []);
 
   return (
-    <div className="grid min-w-0 w-full gap-3">
+    <div className="grid min-w-0 w-full gap-3" style={{ overflowX: "hidden" }}>
       <dl
         className={cx(
           "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-overlay/6 [&_div]:pt-3 [&_dt]:mb-1",
@@ -161,21 +170,21 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
         )}
       >
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Trace ID</dt>
-          <dd>{trace.trace_id || "Unavailable"}</dd>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.traceIdLabel}</dt>
+          <dd>{trace.trace_id || messages.unavailableValue}</dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Dispatch flow</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.dispatchFlowLabel}</dt>
           <dd>
-            <TraceWorkstationPath dispatches={trace.dispatches} />
+            <TraceWorkstationPath dispatches={trace.dispatches} locale={locale} />
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Dispatch count</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.dispatchCountLabel}</dt>
           <dd>{trace.dispatches.length}</dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Work items</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.workItemsLabel}</dt>
           <dd>
             {workItems.length > 0 ? (
               <Collapsible
@@ -189,7 +198,7 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
                       className={DASHBOARD_SUPPORTING_LABEL_CLASS}
                       id={`${workItemsID}-heading`}
                     >
-                      {workItems.length} work item{workItems.length === 1 ? "" : "s"}
+                      {messages.workItemsSummary(workItems.length)}
                     </h3>
                     <CollapsibleTrigger asChild>
                       <Button
@@ -202,7 +211,7 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
                         size="sm"
                         tone="secondary"
                       >
-                        {workItemsExpanded ? "Collapse" : "Expand"}
+                        {messages.workItemsExpandLabel(workItemsExpanded)}
                       </Button>
                     </CollapsibleTrigger>
                   </div>
@@ -215,101 +224,105 @@ function TraceGrid({ onSelectWorkID, trace }: TraceGridProps) {
                 </section>
               </Collapsible>
             ) : (
-              "Unavailable"
+              messages.unavailableValue
             )}
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Request IDs</dt>
-          <dd>{trace.request_ids?.join(", ") || "Unavailable"}</dd>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.requestIdsLabel}</dt>
+          <dd>{trace.request_ids?.join(", ") || messages.unavailableValue}</dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>Batch relations</dt>
+          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.batchRelationsLabel}</dt>
           <dd>
             {trace.relations && trace.relations.length > 0 ? (
               <TraceRelationFlow
+                locale={locale}
                 onSelectWorkID={onSelectWorkID}
                 relations={trace.relations}
               />
             ) : (
-              "None"
+              messages.noBatchRelations
             )}
           </dd>
         </div>
       </dl>
 
       {trace.dispatches.length > 0 ? (
-        <Table className={cx(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}>
-          <TableCaption className={cx("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
-            Trace dispatch grid
-          </TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
-                Dispatch
-              </TableHead>
-              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
-                Workstation
-              </TableHead>
-              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
-                Outcome
-              </TableHead>
-              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
-                Input items
-              </TableHead>
-              <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
-                Output items
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {trace.dispatches.map((dispatch) => (
-              <TableRow key={dispatch.dispatch_id}>
-                <TableHead className="align-top" scope="row">
-                  <span
-                    className={cx(
-                      "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
-                      DASHBOARD_SUPPORTING_CODE_CLASS,
-                    )}
-                  >
-                    {dispatch.dispatch_id}
-                  </span>
+        <div className="min-w-0 overflow-x-auto">
+          <Table className={cx(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}>
+            <TableCaption className={cx("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
+              {messages.tableCaption}
+            </TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                  {messages.dispatchColumnLabel}
                 </TableHead>
-                <TableCell className="align-top">
-                  {dispatch.workstation_name || dispatch.transition_id}
-                </TableCell>
-                <TableCell className="align-top">
-                  {formatTraceOutcome(dispatch.outcome)} ·{" "}
-                  {formatDurationMillis(dispatch.duration_millis)}
-                </TableCell>
-                <TableCell className="align-top">
-                  {dispatch.input_items && dispatch.input_items.length > 0 ? (
-                    <SelectableWorkList
-                      onSelectWorkID={onSelectWorkID}
-                      workItems={dispatch.input_items}
-                    />
-                  ) : (
-                    <span>No input items recorded.</span>
-                  )}
-                </TableCell>
-                <TableCell className="align-top">
-                  {dispatch.output_items && dispatch.output_items.length > 0 ? (
-                    <SelectableWorkList
-                      onSelectWorkID={onSelectWorkID}
-                      workItems={dispatch.output_items}
-                    />
-                  ) : (
-                    <span>No output items recorded.</span>
-                  )}
-                </TableCell>
+                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                  {messages.workstationColumnLabel}
+                </TableHead>
+                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                  {messages.outcomeColumnLabel}
+                </TableHead>
+                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                  {messages.inputItemsColumnLabel}
+                </TableHead>
+                <TableHead className={DASHBOARD_SUPPORTING_LABEL_CLASS} scope="col">
+                  {messages.outputItemsColumnLabel}
+                </TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {trace.dispatches.map((dispatch) => (
+                <TableRow key={dispatch.dispatch_id}>
+                  <TableHead className="align-top" scope="row">
+                    <span
+                      className={cx(
+                        "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
+                        DASHBOARD_SUPPORTING_CODE_CLASS,
+                      )}
+                    >
+                      {dispatch.dispatch_id}
+                    </span>
+                  </TableHead>
+                  <TableCell className="align-top">
+                    {dispatch.workstation_name || dispatch.transition_id}
+                  </TableCell>
+                  <TableCell className="align-top">
+                    {formatTraceOutcome(dispatch.outcome)} ·{" "}
+                    {formatDurationMillis(dispatch.duration_millis)}
+                  </TableCell>
+                  <TableCell className="align-top">
+                    {dispatch.input_items && dispatch.input_items.length > 0 ? (
+                      <SelectableWorkList
+                        onSelectWorkID={onSelectWorkID}
+                        workItems={dispatch.input_items}
+                      />
+                    ) : (
+                      <span>{messages.noInputItems}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="align-top">
+                    {dispatch.output_items &&
+                    dispatch.output_items.length > 0 ? (
+                      <SelectableWorkList
+                        onSelectWorkID={onSelectWorkID}
+                        workItems={dispatch.output_items}
+                      />
+                    ) : (
+                      <span>{messages.noOutputItems}</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
         <div className={cx(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>Trace history unavailable</h3>
-          <p>No retained dispatch history is currently available for this work item.</p>
+          <h3>{messages.noTraceHistoryTitle}</h3>
+          <p>{messages.noTraceHistoryMessage}</p>
         </div>
       )}
     </div>

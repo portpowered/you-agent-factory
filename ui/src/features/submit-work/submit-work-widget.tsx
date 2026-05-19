@@ -1,12 +1,18 @@
 import type { DashboardSubmitWorkType } from "../../api/dashboard/types";
+import { getSubmitWorkMessages } from "./messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 import { useSubmitWorkWidget } from "./use-submit-work-widget";
 
 export interface SubmitWorkWidgetProps {
+  locale?: string;
   submitWorkTypes?: DashboardSubmitWorkType[];
 }
 
-export function SubmitWorkWidget({ submitWorkTypes = [] }: SubmitWorkWidgetProps) {
+export function SubmitWorkWidget({
+  locale,
+  submitWorkTypes = [],
+}: SubmitWorkWidgetProps) {
+  const messages = getSubmitWorkMessages(locale);
   const {
     draft,
     isSubmitting,
@@ -17,12 +23,13 @@ export function SubmitWorkWidget({ submitWorkTypes = [] }: SubmitWorkWidgetProps
     status,
     submitWorkTypeNames,
     validationErrors,
-  } = useSubmitWorkWidget(submitWorkTypes);
+  } = useSubmitWorkWidget(submitWorkTypes, messages);
 
   return (
     <SubmitWorkCard
       draft={draft}
       isSubmitting={isSubmitting}
+      locale={locale}
       onRequestNameChange={onRequestNameChange}
       onRequestTextChange={onRequestTextChange}
       onSubmit={onSubmit}
@@ -33,4 +40,3 @@ export function SubmitWorkWidget({ submitWorkTypes = [] }: SubmitWorkWidgetProps
     />
   );
 }
-

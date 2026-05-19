@@ -21,6 +21,7 @@ Every contributor **MUST** review this standard before conducting or requesting 
 - Request changes for correctness bugs, security issues, missing required tests, or standards violations.
 - Review AI-generated code with extra scrutiny.
 - Reject feature PRs that include generated one-off artifacts or prohibited task-management files.
+- Request changes when new user-facing production UI copy bypasses the feature-owned localization catalog path or the repo's hardcoded-copy quality gate without a documented exception.
 - Request changes for unexplained stateful helper paths, hidden side effects, special-case subsystem dispatch, dead code, or Go functions longer than 80 lines without a documented exception.
 
 ## Review Checklist

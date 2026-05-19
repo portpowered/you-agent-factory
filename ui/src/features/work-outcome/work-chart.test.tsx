@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
-import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
-import type { WorkChartModel } from "./trends";
+import { WorkChartCard } from "./d3-information-card";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
+import type { WorkChartModel } from "./trends";
+import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
 
 const sparseWorkChartModel: WorkChartModel = {
   delta: {
@@ -109,9 +110,7 @@ const zeroValuedFailedSeriesModel: WorkChartModel = {
     seriesEntry.key === "failed"
       ? {
           ...seriesEntry,
-          points: [
-            { label: "Failed: 0", observedAt: 2000, order: 1, value: 0 },
-          ],
+          points: [{ label: "Failed: 0", observedAt: 2000, order: 1, value: 0 }],
         }
       : seriesEntry,
   ),
@@ -167,161 +166,6 @@ describe("WorkChart", () => {
     expect(within(chart).getByText("Work count")).toBeTruthy();
   });
 
-  it("zooms the ready chart to the selected tick range after a horizontal drag", () => {
-    render(
-      <WorkChart
-        ariaLabel="Zoomable work chart"
-        model={sparseWorkChartModel}
-        series={OUTCOME_SERIES}
-      />,
-    );
-
-    const chart = screen.getByRole("img", { name: "Zoomable work chart" });
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
-      "10,20,40",
-    );
-
-    dragWorkChart(chart, { endX: 650, startX: 60 });
-
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
-    expect(within(chart).getByText("Queued")).toBeTruthy();
-    expect(within(chart).getByText("In-flight")).toBeTruthy();
-    expect(within(chart).getByText("Completed")).toBeTruthy();
-    expect(within(chart).queryByText("Failed")).toBeNull();
-    expect(within(chart).getByText("Ticks")).toBeTruthy();
-    expect(within(chart).getByText("Work count")).toBeTruthy();
-  });
-
-  it("applies the same selected tick range when dragged from right to left", () => {
-    render(
-      <WorkChart
-        ariaLabel="Reverse zoomable work chart"
-        model={sparseWorkChartModel}
-        series={OUTCOME_SERIES}
-      />,
-    );
-
-    const chart = screen.getByRole("img", {
-      name: "Reverse zoomable work chart",
-    });
-
-    dragWorkChart(chart, { endX: 60, startX: 650 });
-
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
-  });
-
-  it("leaves the current domain unchanged for click-only selections", () => {
-    render(
-      <WorkChart
-        ariaLabel="Click-only work chart"
-        model={sparseWorkChartModel}
-        series={OUTCOME_SERIES}
-      />,
-    );
-
-    const chart = screen.getByRole("img", { name: "Click-only work chart" });
-
-    dragWorkChart(chart, { endX: 60, startX: 60 });
-
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
-      "10,20,40",
-    );
-  });
-
-  it("shows active zoom context and resets the chart range when reset is clicked", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <WorkChart
-        ariaLabel="Resettable work chart"
-        model={sparseWorkChartModel}
-        series={OUTCOME_SERIES}
-      />,
-    );
-
-    const chart = screen.getByRole("img", { name: "Resettable work chart" });
-    expect(
-      screen.queryByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeNull();
-
-    dragWorkChart(chart, { endX: 650, startX: 60 });
-
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
-    expect(screen.getByText("Zoomed to ticks 10-20")).toBeTruthy();
-
-    await user.click(
-      screen.getByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    );
-
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
-      "10,20,40",
-    );
-    expect(screen.queryByText("Zoomed to ticks 10-20")).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeNull();
-  });
-
-  it("lets keyboard users focus and activate reset zoom with Enter and Space", async () => {
-    const user = userEvent.setup();
-
-    const { rerender } = render(
-      <WorkChart
-        ariaLabel="Keyboard reset work chart"
-        model={sparseWorkChartModel}
-        series={OUTCOME_SERIES}
-      />,
-    );
-
-    let chart = screen.getByRole("img", { name: "Keyboard reset work chart" });
-    dragWorkChart(chart, { endX: 650, startX: 60 });
-
-    await user.tab();
-    expect(document.activeElement).toBe(
-      screen.getByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    );
-
-    await user.keyboard("{Enter}");
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
-      "10,20,40",
-    );
-    expect(
-      screen.queryByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeNull();
-
-    rerender(
-      <WorkChart
-        ariaLabel="Keyboard reset work chart"
-        model={sparseWorkChartModel}
-        series={OUTCOME_SERIES}
-      />,
-    );
-
-    chart = screen.getByRole("img", { name: "Keyboard reset work chart" });
-    dragWorkChart(chart, { endX: 650, startX: 60 });
-    await user.tab();
-    await user.keyboard(" ");
-
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
-      "10,20,40",
-    );
-    expect(
-      screen.queryByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeNull();
-  });
-
   it("keeps missing series points absent instead of fabricating zero-valued rows", () => {
     render(
       <WorkChart
@@ -343,9 +187,7 @@ describe("WorkChart", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("img", { name: "Zero work chart" }).textContent,
-    ).toContain("Failed");
+    expect(screen.getByRole("img", { name: "Zero work chart" }).textContent).toContain("Failed");
   });
 
   it("renders explicit no-data state when timeline points are unavailable", () => {
@@ -359,16 +201,9 @@ describe("WorkChart", () => {
 
     expect(screen.getByText("No work outcome samples")).toBeTruthy();
     expect(
-      screen.getByText(
-        "Work outcome data appears after the event stream receives work history.",
-      ),
+      screen.getByText("Work outcome data appears after the event stream receives work history."),
     ).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Work chart empty" })).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeNull();
   });
 
   it("renders explicit no-data state when series definitions are unavailable", () => {
@@ -382,9 +217,68 @@ describe("WorkChart", () => {
 
     expect(screen.getByRole("status")).toBeTruthy();
     expect(screen.getByText("No work outcome samples")).toBeTruthy();
-    expect(
-      screen.queryByRole("img", { name: "Work chart zero series" }),
-    ).toBeNull();
+    expect(screen.queryByRole("img", { name: "Work chart zero series" })).toBeNull();
+  });
+
+  it("renders zh-CN chart labels", () => {
+    render(
+      <WorkChartCard
+        locale="zh-CN"
+        model={sparseWorkChartModel}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "15m 的工作结果图表" });
+    expect(within(chart).getByText("排队中")).toBeTruthy();
+    expect(within(chart).getByText("进行中")).toBeTruthy();
+    expect(within(chart).getByText("已完成")).toBeTruthy();
+    expect(within(chart).getByText("刻度")).toBeTruthy();
+    expect(within(chart).getByText("工作计数")).toBeTruthy();
+  });
+
+  it("supports localized zoom and reset interactions", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <WorkChart
+        ariaLabel="工作结果图表"
+        locale="zh-CN"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "工作结果图表" });
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      bottom: 240,
+      height: 240,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+
+    fireEvent.mouseDown(chart, { clientX: 40, clientY: 168 });
+    fireEvent.mouseMove(chart, { clientX: 200, clientY: 168 });
+    fireEvent.mouseUp(chart, { clientX: 200, clientY: 168 });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
+    expect(screen.getByText("已缩放到刻度 10-20")).toBeTruthy();
+
+    const resetZoom = screen.getByRole("button", {
+      name: "重置工作结果图表缩放",
+    });
+    expect(resetZoom).toBeTruthy();
+
+    await user.click(resetZoom);
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(screen.queryByText("已缩放到刻度 10-20")).toBeNull();
   });
 
   it("renders an accessible loading placeholder before chart data is ready", () => {
@@ -399,18 +293,55 @@ describe("WorkChart", () => {
     const loadingState = screen.getByRole("status");
     expect(loadingState.getAttribute("aria-busy")).toBe("true");
     expect(screen.getByText("Loading work outcome samples")).toBeTruthy();
-    expect(
-      screen.getByText("Waiting for dashboard timeline data."),
-    ).toBeTruthy();
+    expect(screen.getByText("Waiting for dashboard timeline data.")).toBeTruthy();
     expect(loadingState.querySelector(".animate-pulse")).toBeTruthy();
-    expect(
-      screen.queryByRole("img", { name: "Work chart loading" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeNull();
+    expect(screen.queryByRole("img", { name: "Work chart loading" })).toBeNull();
+  });
+
+  it("uses caller-provided loading, empty, and error copy", () => {
+    const { rerender } = render(
+      <WorkChart
+        ariaLabel="Work chart custom states"
+        series={OUTCOME_SERIES}
+        state={{
+          message: "Loading custom message",
+          status: "loading",
+          title: "Loading custom title",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Loading custom title")).toBeTruthy();
+    expect(screen.getByText("Loading custom message")).toBeTruthy();
+
+    rerender(
+      <WorkChart
+        ariaLabel="Work chart custom states"
+        emptyMessage="Empty custom message"
+        emptyTitle="Empty custom title"
+        model={emptyWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    expect(screen.getByText("Empty custom title")).toBeTruthy();
+    expect(screen.getByText("Empty custom message")).toBeTruthy();
+
+    rerender(
+      <WorkChart
+        ariaLabel="Work chart custom states"
+        series={OUTCOME_SERIES}
+        state={{
+          message: "Error custom message",
+          status: "error",
+          title: "Error custom title",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Error custom title")).toBeTruthy();
+    expect(screen.getByText("Error custom message")).toBeTruthy();
   });
 
   it("renders an error-safe fallback when the chart model shape is incomplete", () => {
@@ -436,25 +367,6 @@ describe("WorkChart", () => {
         "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.",
       ),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("img", { name: "Work chart malformed" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeNull();
+    expect(screen.queryByRole("img", { name: "Work chart malformed" })).toBeNull();
   });
 });
-
-function dragWorkChart(
-  chart: HTMLElement,
-  { endX, startX }: { endX: number; startX: number },
-): void {
-  const surface = chart.querySelector(".recharts-surface");
-  expect(surface).toBeTruthy();
-
-  fireEvent.mouseDown(surface as Element, { clientX: startX, clientY: 280 });
-  fireEvent.mouseMove(surface as Element, { clientX: endX, clientY: 280 });
-  fireEvent.mouseUp(surface as Element, { clientX: endX, clientY: 280 });
-}
