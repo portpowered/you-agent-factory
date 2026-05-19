@@ -5,6 +5,20 @@ This directory is the package-owned reference surface for a future
 current supported contract, and links to the deeper package guide for the same
 topic.
 
+## Canonical Concept Owners
+
+- [Factory JSON and work configuration](work.md) owns work types, work states,
+  top-level `factory.json`, routing behavior, runtime resources, and
+  portability fields.
+- [Workstations](workstations.md) owns workstation kinds, route fields, runtime
+  step behavior, prompt/runtime fields, and workstation-scoped execution
+  settings.
+- [Workers](workers.md) owns worker types, worker-scoped runtime fields,
+  model/script backend fields, and split `workers/<name>/AGENTS.md` placement.
+
+Use overview and workflow pages for sequencing and examples. Use these
+canonical concept owners when you need the current contract.
+
 ## Topics
 
 - [Config](config.md) explains the canonical split factory layout around
@@ -24,6 +38,8 @@ topic.
 
 - [Package docs index](../README.md)
 - [Factory JSON and work configuration](work.md)
+- [Workstations](workstations.md)
+- [Workers](workers.md)
 - [Workstations and workers](workstations-and-workers.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)

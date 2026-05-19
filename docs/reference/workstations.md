@@ -3,6 +3,12 @@
 Use this page when you need the current workstation authoring contract:
 topology fields, scheduling kinds, runtime `type`, and outcome routing.
 
+This is the canonical customer-facing guide for workstations. Keep workstation
+kinds, route fields, runtime step behavior, prompt/runtime fields, and
+workstation-scoped execution settings here. Keep worker backend fields in
+[Workers](workers.md) and top-level `factory.json` work type and routing
+context in [Factory JSON and work configuration](work.md).
+
 ## Current Contract
 
 - Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, or `CRON`.
@@ -71,7 +77,8 @@ terminal path.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Workstations and workers](workstations-and-workers.md)
+- [Workers reference](workers.md)
 - [Factory JSON and work configuration](work.md)
+- [Workstations and workers](workstations-and-workers.md)
 - [Workstation guards and guarded loop breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
 - [Parent-aware fan-in](../internal/development/parent-aware-fan-in.md)
