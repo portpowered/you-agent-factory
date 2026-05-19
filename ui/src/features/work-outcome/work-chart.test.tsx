@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../components/dashboard/test-browser-shims";
 import { WorkChartCard } from "./d3-information-card";
@@ -235,6 +236,51 @@ describe("WorkChart", () => {
     expect(within(chart).getByText("工作计数")).toBeTruthy();
   });
 
+  it("supports localized zoom and reset interactions", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <WorkChart
+        ariaLabel="工作结果图表"
+        locale="zh-CN"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "工作结果图表" });
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      bottom: 240,
+      height: 240,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+
+    fireEvent.mouseDown(chart, { clientX: 40, clientY: 168 });
+    fireEvent.mouseMove(chart, { clientX: 200, clientY: 168 });
+    fireEvent.mouseUp(chart, { clientX: 200, clientY: 168 });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
+    expect(screen.getByText("已缩放到刻度 10-20")).toBeTruthy();
+
+    const resetZoom = screen.getByRole("button", {
+      name: "重置工作结果图表缩放",
+    });
+    expect(resetZoom).toBeTruthy();
+
+    await user.click(resetZoom);
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(screen.queryByText("已缩放到刻度 10-20")).toBeNull();
+  });
+
   it("renders an accessible loading placeholder before chart data is ready", () => {
     render(
       <WorkChart
@@ -250,6 +296,52 @@ describe("WorkChart", () => {
     expect(screen.getByText("Waiting for dashboard timeline data.")).toBeTruthy();
     expect(loadingState.querySelector(".animate-pulse")).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Work chart loading" })).toBeNull();
+  });
+
+  it("uses caller-provided loading, empty, and error copy", () => {
+    const { rerender } = render(
+      <WorkChart
+        ariaLabel="Work chart custom states"
+        series={OUTCOME_SERIES}
+        state={{
+          message: "Loading custom message",
+          status: "loading",
+          title: "Loading custom title",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Loading custom title")).toBeTruthy();
+    expect(screen.getByText("Loading custom message")).toBeTruthy();
+
+    rerender(
+      <WorkChart
+        ariaLabel="Work chart custom states"
+        emptyMessage="Empty custom message"
+        emptyTitle="Empty custom title"
+        model={emptyWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    expect(screen.getByText("Empty custom title")).toBeTruthy();
+    expect(screen.getByText("Empty custom message")).toBeTruthy();
+
+    rerender(
+      <WorkChart
+        ariaLabel="Work chart custom states"
+        series={OUTCOME_SERIES}
+        state={{
+          message: "Error custom message",
+          status: "error",
+          title: "Error custom title",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Error custom title")).toBeTruthy();
+    expect(screen.getByText("Error custom message")).toBeTruthy();
   });
 
   it("renders an error-safe fallback when the chart model shape is incomplete", () => {
