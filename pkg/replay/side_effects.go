@@ -94,8 +94,8 @@ func (s *SideEffects) Infer(ctx context.Context, req interfaces.ProviderInferenc
 
 	return interfaces.InferenceResponse{
 		Content:         result.Output,
-		ProviderSession: cloneProviderSession(result.ProviderSession),
-		Diagnostics:     cloneWorkDiagnostics(record.completion.diagnostics),
+		ProviderSession: interfaces.CloneProviderSessionMetadata(result.ProviderSession),
+		Diagnostics:     interfaces.CloneWorkDiagnostics(record.completion.diagnostics),
 	}, nil
 }
 
@@ -223,85 +223,6 @@ func executionMetadataMatches(recorded, observed interfaces.ExecutionMetadata) b
 		return false
 	}
 	return true
-}
-
-func cloneProviderSession(in *interfaces.ProviderSessionMetadata) *interfaces.ProviderSessionMetadata {
-	if in == nil {
-		return nil
-	}
-	out := *in
-	return &out
-}
-
-func cloneWorkDiagnostics(in *interfaces.WorkDiagnostics) *interfaces.WorkDiagnostics {
-	if in == nil {
-		return nil
-	}
-	out := &interfaces.WorkDiagnostics{
-		RenderedPrompt: cloneRenderedPromptDiagnostic(in.RenderedPrompt),
-		Provider:       cloneProviderDiagnostic(in.Provider),
-		Command:        cloneCommandDiagnostic(in.Command),
-		Metadata:       cloneSideEffectStringMap(in.Metadata),
-	}
-	if in.Panic != nil {
-		out.Panic = &interfaces.PanicDiagnostic{
-			Message: in.Panic.Message,
-			Stack:   in.Panic.Stack,
-		}
-	}
-	return out
-}
-
-func cloneRenderedPromptDiagnostic(in *interfaces.RenderedPromptDiagnostic) *interfaces.RenderedPromptDiagnostic {
-	if in == nil {
-		return nil
-	}
-	return &interfaces.RenderedPromptDiagnostic{
-		SystemPromptHash: in.SystemPromptHash,
-		UserMessageHash:  in.UserMessageHash,
-		Variables:        cloneSideEffectStringMap(in.Variables),
-	}
-}
-
-func cloneProviderDiagnostic(in *interfaces.ProviderDiagnostic) *interfaces.ProviderDiagnostic {
-	if in == nil {
-		return nil
-	}
-	return &interfaces.ProviderDiagnostic{
-		Provider:         in.Provider,
-		Model:            in.Model,
-		RequestMetadata:  cloneSideEffectStringMap(in.RequestMetadata),
-		ResponseMetadata: cloneSideEffectStringMap(in.ResponseMetadata),
-	}
-}
-
-func cloneCommandDiagnostic(in *interfaces.CommandDiagnostic) *interfaces.CommandDiagnostic {
-	if in == nil {
-		return nil
-	}
-	return &interfaces.CommandDiagnostic{
-		Command:    in.Command,
-		Args:       append([]string(nil), in.Args...),
-		Stdin:      in.Stdin,
-		Env:        cloneSideEffectStringMap(in.Env),
-		Stdout:     in.Stdout,
-		Stderr:     in.Stderr,
-		ExitCode:   in.ExitCode,
-		TimedOut:   in.TimedOut,
-		Duration:   in.Duration,
-		WorkingDir: in.WorkingDir,
-	}
-}
-
-func cloneSideEffectStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
 }
 
 var _ workers.Provider = (*SideEffects)(nil)
