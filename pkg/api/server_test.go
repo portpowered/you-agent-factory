@@ -1542,7 +1542,11 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 			WorkID:     "work-inventory-1",
 			WorkTypeID: submitted.WorkTypeID,
 			TraceID:    submitted.TraceID,
-			Tags:       submitted.Tags,
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/inventory.png"},
+			},
+			Tags: submitted.Tags,
 		},
 		CreatedAt: now,
 		EnteredAt: now,
@@ -1593,6 +1597,10 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 	if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypeINITIAL {
 		t.Fatalf("state = %#v, want init/INITIAL", work.State)
 	}
+	assertGeneratedWorkContentParts(t, work.Content, []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/inventory.png"},
+	})
 	if work.Tags == nil || (*work.Tags)["branch"] != "api-standardization" {
 		t.Fatalf("tags = %#v, want branch api-standardization", work.Tags)
 	}
@@ -1613,6 +1621,10 @@ func TestGetWork(t *testing.T) {
 						CurrentChainingTraceID:   "chain-1",
 						PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 						TraceID:                  "trace-1",
+						Content: []interfaces.WorkContentPart{
+							{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
+							{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+						},
 					},
 					CreatedAt: now,
 					EnteredAt: now,
@@ -1652,11 +1664,47 @@ func TestGetWork(t *testing.T) {
 	if resp.PreviousChainingTraceIds == nil || len(*resp.PreviousChainingTraceIds) != 2 {
 		t.Errorf("expected previousChainingTraceIds [chain-a chain-b], got %#v", resp.PreviousChainingTraceIds)
 	}
+	assertGeneratedWorkContentParts(t, resp.Content, []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+	})
 	if resp.History == nil {
 		t.Error("expected history in single token response")
 	}
 	if resp.History.TotalVisits == nil || (*resp.History.TotalVisits)["execute"] != 1 {
 		t.Error("expected execute visit count of 1")
+	}
+}
+
+func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+	t.Helper()
+	if content == nil {
+		t.Fatalf("content = nil, want %#v", want)
+	}
+	if len(*content) != len(want) {
+		t.Fatalf("content count = %d, want %d", len(*content), len(want))
+	}
+	for i, wantPart := range want {
+		switch wantPart.Type {
+		case interfaces.WorkContentPartTypeText:
+			part, err := (*content)[i].AsWorkTextContentPart()
+			if err != nil {
+				t.Fatalf("content[%d] decode text: %v", i, err)
+			}
+			if part.Type != factoryapi.WorkContentPartTypeText || part.Text != wantPart.Text {
+				t.Fatalf("content[%d] = %#v, want text %q", i, part, wantPart.Text)
+			}
+		case interfaces.WorkContentPartTypeImage:
+			part, err := (*content)[i].AsWorkImageContentPart()
+			if err != nil {
+				t.Fatalf("content[%d] decode image: %v", i, err)
+			}
+			if part.Type != factoryapi.WorkContentPartTypeImage || part.File != wantPart.File {
+				t.Fatalf("content[%d] = %#v, want image %q", i, part, wantPart.File)
+			}
+		default:
+			t.Fatalf("unsupported expected content type %q", wantPart.Type)
+		}
 	}
 }
 

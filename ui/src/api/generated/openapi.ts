@@ -220,6 +220,8 @@ export interface components {
             currentChainingTraceId?: string;
             previousChainingTraceIds?: string[];
             traceId: string;
+            /** @description Ordered canonical content parts preserved on this work token. */
+            content?: components["schemas"]["WorkContent"];
             tags?: components["schemas"]["StringMap"];
             /** Format: date-time */
             createdAt: string;
