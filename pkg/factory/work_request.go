@@ -219,6 +219,7 @@ func WorkRequestRecordFromSubmitRequests(requestID string, source string, reques
 			CurrentChainingTraceID:   ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID),
 			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
+			Content:                  append([]interfaces.WorkContentPart(nil), req.Content...),
 			Tags:                     maps.Clone(req.Tags),
 		})
 	}

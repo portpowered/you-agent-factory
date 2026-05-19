@@ -461,6 +461,7 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  t.Color.TraceID,
+		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
 		CreatedAt:                t.CreatedAt,
 		EnteredAt:                t.EnteredAt,
@@ -493,6 +494,7 @@ func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
+		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
 	}
 }
@@ -861,6 +863,39 @@ func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.
 		return nil
 	}
 	return parts
+}
+
+func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+	if len(parts) == 0 {
+		return nil
+	}
+	content := make(factoryapi.WorkContent, 0, len(parts))
+	for _, part := range parts {
+		var generated factoryapi.WorkContentPart
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: part.Text,
+			}); err != nil {
+				continue
+			}
+		case interfaces.WorkContentPartTypeImage:
+			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+				Type: factoryapi.WorkContentPartTypeImage,
+				File: part.File,
+			}); err != nil {
+				continue
+			}
+		default:
+			continue
+		}
+		content = append(content, generated)
+	}
+	if len(content) == 0 {
+		return nil
+	}
+	return &content
 }
 
 func generatedWorkContentToDomainAtPath(content *factoryapi.WorkContent, fieldPath string) ([]interfaces.WorkContentPart, error) {

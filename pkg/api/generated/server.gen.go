@@ -1104,7 +1104,10 @@ type TokenHistory struct {
 
 // TokenResponse defines model for TokenResponse.
 type TokenResponse struct {
-	ChainingTraceDepth       *int          `json:"chainingTraceDepth,omitempty"`
+	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content                  *WorkContent  `json:"content,omitempty"`
 	CreatedAt                time.Time     `json:"createdAt"`
 	CurrentChainingTraceId   *string       `json:"currentChainingTraceId,omitempty"`
 	EnteredAt                time.Time     `json:"enteredAt"`

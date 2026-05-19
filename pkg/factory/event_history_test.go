@@ -555,6 +555,10 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 			CurrentChainingTraceID:   "trace-generated-current",
 			PreviousChainingTraceIDs: []string{"trace-a", "trace-z"},
 			TraceID:                  "trace-generated-current",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "review image"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+			},
 		}},
 	}, eventTime)
 
@@ -575,6 +579,34 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 	}
 	if got := stringSliceValueForEventHistoryTest(work.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
 		t.Fatalf("work previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
+	}
+	assertEventHistoryWorkContent(t, work.Content, []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "review image"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+	})
+}
+
+func assertEventHistoryWorkContent(t *testing.T, content *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+	t.Helper()
+	if content == nil {
+		t.Fatalf("work content = nil, want %#v", want)
+	}
+	if len(*content) != len(want) {
+		t.Fatalf("work content count = %d, want %d", len(*content), len(want))
+	}
+	textPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode text content: %v", err)
+	}
+	if textPart.Text != want[0].Text {
+		t.Fatalf("text content = %q, want %q", textPart.Text, want[0].Text)
+	}
+	imagePart, err := (*content)[1].AsWorkImageContentPart()
+	if err != nil {
+		t.Fatalf("decode image content: %v", err)
+	}
+	if imagePart.File != want[1].File {
+		t.Fatalf("image content = %q, want %q", imagePart.File, want[1].File)
 	}
 }
 

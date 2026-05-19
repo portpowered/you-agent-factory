@@ -128,6 +128,7 @@ type FactoryWorkItem struct {
 	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId,omitempty"`
+	Content                  []WorkContentPart `json:"content,omitempty"`
 	ParentID                 string            `json:"parentId,omitempty"`
 	PlaceID                  string            `json:"placeId,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
