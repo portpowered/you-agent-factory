@@ -111,6 +111,9 @@ describe("DashboardHeader", () => {
     const slider = screen.getByRole("slider", {
       name: headerMessages.sliderAriaLabel,
     });
+    const languageButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: headerMessages.languageMenuButtonLabel,
+    });
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
       name: messages.triggerLabel,
@@ -133,6 +136,11 @@ describe("DashboardHeader", () => {
     expect(slider.closest("div")?.parentElement?.className).toContain(
       "justify-end",
     );
+    expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
+    expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
+    expect(languageButton.getAttribute("aria-expanded")).toBe("false");
+    expect(languageButton.className).toContain("h-10");
+    expect(languageButton.className).toContain("w-10");
     expect(exportButton.className).toContain("h-10");
     expect(exportButton.className).toContain("w-10");
     expect(currentButton.className).toContain("h-10");
@@ -233,7 +241,50 @@ describe("DashboardHeader", () => {
     }
   });
 
-  it("switches the header locale between English and Mandarin through session state", () => {
+  it("opens and closes the locale menu through keyboard and dismissal events", async () => {
+    seedDashboardHeaderSnapshot();
+
+    render(<DashboardHeader />);
+
+    const messages = getHeaderControlsMessages("en");
+    const languageButton = screen.getByRole("button", {
+      name: messages.languageMenuButtonLabel,
+    });
+
+    languageButton.focus();
+    act(() => {
+      fireEvent.keyDown(languageButton, { key: "Enter" });
+    });
+
+    expect(
+      screen.getByRole("menu", { name: messages.languageLabel }),
+    ).toBeTruthy();
+    expect(languageButton.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(
+      screen.getByRole("menuitemradio", {
+        name: messages.languageEnglishLabel,
+      }),
+    );
+
+    act(() => {
+      fireEvent.keyDown(
+        screen.getByRole("menu", { name: messages.languageLabel }),
+        {
+          key: "Escape",
+        },
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menu", { name: messages.languageLabel }),
+      ).toBeNull();
+    });
+    expect(document.activeElement).toBe(languageButton);
+    expect(languageButton.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("switches the header locale between English and Mandarin through session state", async () => {
     seedDashboardHeaderSnapshot();
 
     render(
@@ -246,8 +297,8 @@ describe("DashboardHeader", () => {
     const englishExportMessages = getExportDialogMessages("en");
     const mandarinMessages = getHeaderControlsMessages("zh-CN");
     const mandarinExportMessages = getExportDialogMessages("zh-CN");
-    const switcher = screen.getByRole("combobox", {
-      name: englishMessages.languageLabel,
+    const languageButton = screen.getByRole("button", {
+      name: englishMessages.languageMenuButtonLabel,
     });
 
     expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
@@ -256,14 +307,23 @@ describe("DashboardHeader", () => {
         name: englishExportMessages.triggerLabel,
       }),
     ).toBeTruthy();
-    expect(switcher.className).toContain("min-h-10");
-    expect(switcher.className).toContain("rounded-lg");
+    expect(languageButton.className).toContain("h-10");
+    expect(languageButton.className).toContain("rounded-lg");
 
-    fireEvent.change(switcher, { target: { value: "zh-CN" } });
+    fireEvent.click(languageButton);
+    fireEvent.click(
+      screen.getByRole("menuitemradio", {
+        name: englishMessages.languageMandarinLabel,
+      }),
+    );
 
-    expect(
-      screen.getByRole("combobox", { name: mandarinMessages.languageLabel }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: mandarinMessages.languageMenuButtonLabel,
+        }),
+      ).toBeTruthy();
+    });
     expect(screen.getByText("第 1 个刻度，共 2 个")).toBeTruthy();
     expect(
       screen.getByRole("region", {
@@ -280,14 +340,31 @@ describe("DashboardHeader", () => {
         name: mandarinExportMessages.triggerLabel,
       }),
     ).toBeTruthy();
+    expect(
+      screen.queryByRole("menu", { name: mandarinMessages.languageLabel }),
+    ).toBeNull();
 
-    fireEvent.change(
-      screen.getByRole("combobox", { name: mandarinMessages.languageLabel }),
-      { target: { value: "en" } },
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: mandarinMessages.languageMenuButtonLabel,
+      }),
+    );
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: mandarinMessages.languageMandarinLabel,
+      }).getAttribute("aria-checked"),
+    ).toBe("true");
+
+    fireEvent.click(
+      screen.getByRole("menuitemradio", {
+        name: mandarinMessages.languageEnglishLabel,
+      }),
     );
 
     expect(
-      screen.getByRole("combobox", { name: englishMessages.languageLabel }),
+      screen.getByRole("button", {
+        name: englishMessages.languageMenuButtonLabel,
+      }),
     ).toBeTruthy();
     expect(screen.getByText("Tick 1 of 2")).toBeTruthy();
     expect(

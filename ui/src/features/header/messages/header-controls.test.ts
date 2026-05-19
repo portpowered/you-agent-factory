@@ -35,6 +35,7 @@ describe("getHeaderControlsMessages", () => {
     expect(messages.languageLabel).toBe(expectedLabel);
     expect(messages.languageEnglishLabel).toBe(expectedEnglish);
     expect(messages.languageMandarinLabel).toBe(expectedMandarin);
+    expect(messages.languageMenuButtonLabel).toBeTruthy();
   });
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
@@ -68,5 +69,6 @@ describe("getHeaderControlsMessages", () => {
     expect(messages.languageLabel).toBeTruthy();
     expect(messages.languageEnglishLabel).toBeTruthy();
     expect(messages.languageMandarinLabel).toBeTruthy();
+    expect(messages.languageMenuButtonLabel).toBeTruthy();
   });
 });

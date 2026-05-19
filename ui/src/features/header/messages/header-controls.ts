@@ -11,6 +11,7 @@ export interface HeaderControlsMessages {
   languageEnglishLabel: string;
   languageLabel: string;
   languageMandarinLabel: string;
+  languageMenuButtonLabel: string;
   loadingDashboardTitle: string;
   returnToCurrentTickLabel: string;
   sliderAriaLabel: string;
@@ -33,6 +34,7 @@ const headerControlsMessagesByLocale = {
     languageEnglishLabel: "English",
     languageLabel: "Language",
     languageMandarinLabel: "Mandarin Chinese (zh-CN)",
+    languageMenuButtonLabel: "Change language",
     loadingDashboardTitle: "Loading dashboard",
     returnToCurrentTickLabel: "Return to current tick",
     sliderAriaLabel: "Timeline tick",
@@ -50,6 +52,7 @@ const headerControlsMessagesByLocale = {
     languageEnglishLabel: "英語",
     languageLabel: "言語",
     languageMandarinLabel: "簡体字中国語 (zh-CN)",
+    languageMenuButtonLabel: "言語を変更",
     loadingDashboardTitle: "ダッシュボードを読み込み中",
     returnToCurrentTickLabel: "現在のティックに戻る",
     sliderAriaLabel: "タイムラインティック",
@@ -68,6 +71,7 @@ const headerControlsMessagesByLocale = {
     languageEnglishLabel: "영어",
     languageLabel: "언어",
     languageMandarinLabel: "중국어 간체 (zh-CN)",
+    languageMenuButtonLabel: "언어 변경",
     loadingDashboardTitle: "대시보드 로드 중",
     returnToCurrentTickLabel: "현재 틱으로 돌아가기",
     sliderAriaLabel: "타임라인 틱",
@@ -86,6 +90,7 @@ const headerControlsMessagesByLocale = {
     languageEnglishLabel: "英语",
     languageLabel: "语言",
     languageMandarinLabel: "简体中文 (zh-CN)",
+    languageMenuButtonLabel: "切换语言",
     loadingDashboardTitle: "正在加载仪表板",
     returnToCurrentTickLabel: "返回当前刻度",
     sliderAriaLabel: "时间线刻度",
