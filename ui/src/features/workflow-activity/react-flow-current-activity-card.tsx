@@ -60,10 +60,7 @@ const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
 const CURRENT_ACTIVITY_CARD_CLASS =
   "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5";
 const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
-const CURRENT_ACTIVITY_EYEBROW_CLASS =
-  "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
 const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const CURRENT_ACTIVITY_HEADER_TEXT_CLASS = "grid gap-2";
 
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
@@ -74,15 +71,13 @@ function CurrentActivityCardHeading({ locale }: { locale?: string }) {
   const messages = getWorkflowActivityShellMessages(locale);
 
   return (
-    <div className={CURRENT_ACTIVITY_HEADER_TEXT_CLASS}>
-      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>{messages.eyebrow}</p>
+    <div>
       <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
         {messages.title}
       </h2>
     </div>
   );
 }
-
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
   importController?: CurrentActivityImportController;

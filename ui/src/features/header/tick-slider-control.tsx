@@ -9,14 +9,14 @@ import {
 } from "./messages/header-controls";
 
 const TICK_SLIDER_SHELL_CLASS = cx(
-  "flex min-w-0 w-full flex-wrap items-center gap-3 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-3 py-2",
-  "md:w-auto md:min-w-88 md:max-w-xl",
+  "flex min-w-0 w-full flex-wrap items-center gap-2 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-3 py-2",
+  "md:w-auto md:min-w-80 md:max-w-xl",
 );
 const TICK_SLIDER_LABEL_CLASS =
-  "flex min-w-36 flex-1 flex-col gap-1 text-xs font-bold uppercase tracking-[0.16em] text-af-ink/62";
+  "flex min-w-32 flex-1 flex-col gap-1 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-ink/62";
 const TICK_SLIDER_INPUT_CLASS =
-  "h-2 min-w-44 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:opacity-45";
-const TICK_SLIDER_STATUS_CLASS = "text-sm text-af-ink/76";
+  "h-2 min-w-36 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:opacity-45";
+const TICK_SLIDER_STATUS_CLASS = "text-xs text-af-ink/76 md:text-sm";
 const MINIMUM_TIMELINE_TICKS = 2;
 
 interface TimelineBounds {
@@ -129,6 +129,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
       <DashboardHeaderActionButton
         className={cx(mode === "current" && "opacity-75")}
         aria-label={messages.returnToCurrentTickLabel}
+        compact
         disabled={isDisabled || mode === "current"}
         onClick={setCurrentMode}
       >

@@ -3,8 +3,7 @@ import { normalizeDetailText } from "./detail-card-shared";
 
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
-  inferenceRequestDetailsCopy: string;
-  inferenceResponseDetailsCopy: string;
+  hasFailedOutcome: boolean;
   isScriptBackedRequest: boolean;
   normalizedFailureMessage: string | undefined;
   normalizedFailureReason: string | undefined;
@@ -27,15 +26,21 @@ export function buildWorkstationRequestDetailView(
   const hasFailureDetails =
     normalizedFailureReason !== undefined ||
     normalizedFailureMessage !== undefined;
+  const normalizedOutcome = (request.outcome ?? request.script_response?.outcome)
+    ?.trim()
+    .toUpperCase();
+  const hasFailedOutcome =
+    hasFailureDetails ||
+    normalizedOutcome === "FAILED" ||
+    normalizedOutcome === "FAILED_EXIT_CODE" ||
+    normalizedOutcome === "TIMED_OUT" ||
+    normalizedOutcome === "REJECTED";
   const hasErroredRequest =
     request.errored_request_count > 0 || hasFailureDetails;
 
   return {
     hasFailureDetails,
-    inferenceRequestDetailsCopy:
-      "Prompt, request payload, working-directory, and worktree details are shown under Inference attempts when available.",
-    inferenceResponseDetailsCopy:
-      "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
+    hasFailedOutcome,
     isScriptBackedRequest,
     normalizedFailureMessage,
     normalizedFailureReason,

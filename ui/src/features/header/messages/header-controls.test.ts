@@ -25,16 +25,15 @@ describe("getHeaderControlsMessages", () => {
   });
 
   it.each([
-    ["en", "Language", "English", "Mandarin Chinese (zh-CN)"],
-    ["zh-CN", "语言", "英语", "简体中文 (zh-CN)"],
-    ["ko", "언어", "영어", "중국어 간체 (zh-CN)"],
-    ["ja", "言語", "英語", "簡体字中国語 (zh-CN)"],
-  ] as const)("keeps language-switcher labels available for %s", (locale, expectedLabel, expectedEnglish, expectedMandarin) => {
+    ["en", "Language"],
+    ["zh-CN", "语言"],
+    ["ko", "언어"],
+    ["ja", "言語"],
+  ] as const)("keeps language-switcher labels available for %s", (locale, expectedLabel) => {
     const messages = getHeaderControlsMessages(locale);
 
     expect(messages.languageLabel).toBe(expectedLabel);
-    expect(messages.languageEnglishLabel).toBe(expectedEnglish);
-    expect(messages.languageMandarinLabel).toBe(expectedMandarin);
+    expect(messages.languageMenuButtonLabel).toBeTruthy();
   });
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {
@@ -66,7 +65,6 @@ describe("getHeaderControlsMessages", () => {
     expect(messages.returnToCurrentTickLabel).toBeTruthy();
     expect(messages.waitingForMoreTicks).toBeTruthy();
     expect(messages.languageLabel).toBeTruthy();
-    expect(messages.languageEnglishLabel).toBeTruthy();
-    expect(messages.languageMandarinLabel).toBeTruthy();
+    expect(messages.languageMenuButtonLabel).toBeTruthy();
   });
 });

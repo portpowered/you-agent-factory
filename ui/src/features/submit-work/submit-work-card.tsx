@@ -76,6 +76,7 @@ export function SubmitWorkCard({
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
   const canSubmit =
     hasConfiguredWorkTypes && hasSelectedWorkType && !isSubmitting;
+  const requestHint = messages.requestHint?.trim();
   const requestNameID = `${widgetId}-request-name`;
   const requestTextID = `${widgetId}-request-text`;
   const requestTextHintID = `${widgetId}-request-text-hint`;
@@ -141,7 +142,7 @@ export function SubmitWorkCard({
             {messages.requestLabel}
           </label>
           <Textarea
-            aria-describedby={requestTextHintID}
+            aria-describedby={requestHint ? requestTextHintID : undefined}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             id={requestTextID}
@@ -149,9 +150,11 @@ export function SubmitWorkCard({
             placeholder={messages.requestPlaceholder}
             value={draft.requestText}
           />
-          <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
-            {messages.requestHint}
-          </p>
+          {requestHint ? (
+            <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
+              {requestHint}
+            </p>
+          ) : null}
         </div>
 
         <div className={ACTION_ROW_CLASS}>
