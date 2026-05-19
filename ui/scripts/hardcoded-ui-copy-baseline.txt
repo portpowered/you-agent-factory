@@ -74,7 +74,7 @@ src/features/current-selection/work-item-card.tsx|75|15|jsx-text|Workstation dis
 src/features/current-selection/work-item-card.tsx|139|18|jsx-attribute|Work relationships
 src/features/current-selection/work-item-card.tsx|142|55|jsx-text|Work relationships
 src/features/current-selection/work-item-card.tsx|160|17|jsx-text|Selected work
-src/features/current-selection/work-item-card.tsx|185|11|jsx-text|No parent, child, or dependency relationships are available for this work item.
+src/features/current-selection/work-item-card.tsx|187|11|jsx-text|No parent, child, or dependency relationships are available for this work item.
 src/features/current-selection/workstation-request-detail-response.tsx|25|18|jsx-attribute|Response details
 src/features/current-selection/workstation-request-detail-response.tsx|28|55|jsx-text|Response details
 src/features/current-selection/workstation-request-detail-response.tsx|49|18|jsx-attribute|Error details
