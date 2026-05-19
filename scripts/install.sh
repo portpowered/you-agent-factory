@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-BINARY_NAME="infinite-you"
+BINARY_NAME="you"
 RELEASE_BASE_URL="${INFINITE_YOU_INSTALL_BASE_URL:-https://github.com/portpowered/infinite-you/releases}"
 INSTALL_DIR="${INFINITE_YOU_INSTALL_DIR:-$HOME/.local/bin}"
 VERSION_OVERRIDE="${INFINITE_YOU_VERSION:-}"
@@ -13,7 +13,7 @@ say() {
 }
 
 fail() {
-  printf 'infinite-you install: %s\n' "$*" >&2
+  printf 'you install: %s\n' "$*" >&2
   exit 1
 }
 
@@ -97,7 +97,7 @@ resolve_tag() {
 
   require_command curl
   effective_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$RELEASE_BASE_URL/latest")" ||
-    fail "failed to resolve the latest infinite-you release from $RELEASE_BASE_URL/latest"
+    fail "failed to resolve the latest you release from $RELEASE_BASE_URL/latest"
 
   tag="${effective_url##*/}"
   case "$tag" in

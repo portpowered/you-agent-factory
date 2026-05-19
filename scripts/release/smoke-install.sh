@@ -9,7 +9,7 @@ fi
 INSTALL_SCRIPT_URL="$1"
 INSTALL_VERSION="$2"
 INSTALL_DIR="$3"
-BINARY_NAME="${4:-infinite-you}"
+BINARY_NAME="${4:-you}"
 TEMP_HOME="$(mktemp -d)"
 trap 'rm -rf "$TEMP_HOME"' EXIT
 

@@ -53,7 +53,7 @@ Use this sequence for every CLI release:
 The release workflow publishes one set of GitHub release archives and reuses
 that output for every supported installation path:
 
-- GoReleaser builds the tagged `infinite-you` archives and checksum file from
+- GoReleaser builds the tagged `you` archives and checksum file from
   `.goreleaser.yml`.
 - The publish workflow then uploads the repo-owned `scripts/install.sh` from the tagged
   commit as a GitHub release asset, so the hosted installer URL becomes:
