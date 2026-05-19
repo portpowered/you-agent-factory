@@ -32,11 +32,14 @@ export const WorkstationRequestSelection = {
     const inferenceAttempts = within(
       currentSelection.getByRole("region", { name: "Inference attempts" }),
     );
+    const formattedAttempt = within(
+      inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),
+    );
     const requestBody = within(
-      inferenceAttempts.getByRole("region", { name: "Request body" }),
+      formattedAttempt.getByRole("region", { name: "Request body" }),
     );
     const responseBody = within(
-      inferenceAttempts.getByRole("region", { name: "Response body" }),
+      formattedAttempt.getByRole("region", { name: "Response body" }),
     );
 
     await expect(
