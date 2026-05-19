@@ -251,6 +251,7 @@ export const ZoomInteraction = {
       name: "Reset work outcome chart zoom",
     });
     await expect(reset).toBeVisible();
+    expect(chart.contains(reset)).toBe(false);
 
     await userEvent.click(reset);
 
@@ -302,11 +303,11 @@ export const ConstrainedWidth = {
     expectWorkChartPaddingContract(chart);
     await dragWorkChart(chart, 0.1, 0.5);
     await expect(canvas.getByText("Zoomed to ticks 10-20")).toBeVisible();
-    await expect(
-      canvas.getByRole("button", {
-        name: "Reset work outcome chart zoom",
-      }),
-    ).toBeVisible();
+    const reset = canvas.getByRole("button", {
+      name: "Reset work outcome chart zoom",
+    });
+    await expect(reset).toBeVisible();
+    expect(chart.contains(reset)).toBe(false);
     expectNoOverflowInStoryShell(canvasElement);
   },
 };

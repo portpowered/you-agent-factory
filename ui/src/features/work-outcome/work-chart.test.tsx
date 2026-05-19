@@ -274,11 +274,55 @@ describe("WorkChart", () => {
       name: "重置工作结果图表缩放",
     });
     expect(resetZoom).toBeTruthy();
+    expect(chart.contains(resetZoom)).toBe(false);
 
     await user.click(resetZoom);
 
     expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
     expect(screen.queryByText("已缩放到刻度 10-20")).toBeNull();
+  });
+
+  it("keeps the reset zoom button above the chart interaction surface and keyboard operable", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <WorkChart
+        ariaLabel="Work chart keyboard zoom"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "Work chart keyboard zoom" });
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      bottom: 240,
+      height: 240,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+
+    fireEvent.mouseDown(chart, { clientX: 40, clientY: 168 });
+    fireEvent.mouseMove(chart, { clientX: 200, clientY: 168 });
+    fireEvent.mouseUp(chart, { clientX: 200, clientY: 168 });
+
+    const resetZoom = screen.getByRole("button", {
+      name: "Reset work outcome chart zoom",
+    });
+    expect(chart.contains(resetZoom)).toBe(false);
+
+    resetZoom.focus();
+    expect(document.activeElement).toBe(resetZoom);
+    await user.keyboard("[Enter]");
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(
+      screen.queryByRole("button", { name: "Reset work outcome chart zoom" }),
+    ).toBeNull();
   });
 
   it("renders an accessible loading placeholder before chart data is ready", () => {
