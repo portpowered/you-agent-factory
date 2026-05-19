@@ -11,6 +11,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
 } from "../../components/ui/dashboard-typography";
+import { getAgentBentoMessages } from "./messages/agent-bento";
 
 export interface AgentBentoLayoutItem {
   h: number;
@@ -34,6 +35,7 @@ export interface AgentBentoLayoutProps {
   className?: string;
   initialWidth?: number;
   layout: AgentBentoLayoutItem[];
+  locale?: string;
   onLayoutChange?: (layout: AgentBentoLayoutItem[]) => void;
 }
 
@@ -128,8 +130,10 @@ export function AgentBentoLayout({
   className = "",
   initialWidth = DEFAULT_BENTO_WIDTH,
   layout,
+  locale,
   onLayoutChange,
 }: AgentBentoLayoutProps) {
+  const messages = getAgentBentoMessages(locale);
   const normalizedLayout = useMemo(() => toGridLayout(layout), [layout]);
   const [currentLayout, setCurrentLayout] = useState<Layout>(normalizedLayout);
   const { containerRef, width } = useContainerWidth({ initialWidth });
@@ -157,7 +161,7 @@ export function AgentBentoLayout({
 
   return (
     <section
-      aria-label="Infinite You bento board"
+      aria-label={messages.boardLabel}
       className={layoutClassName}
       ref={containerRef}
     >

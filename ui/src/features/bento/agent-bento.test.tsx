@@ -164,6 +164,33 @@ describe("AgentBentoLayout", () => {
     }
   });
 
+  it("renders a localized accessible name for the movable board", () => {
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            children: (
+              <AgentBentoCard title="Current activity">
+                <p>Active workstation graph goes here.</p>
+              </AgentBentoCard>
+            ),
+          },
+        ]}
+        initialWidth={960}
+        layout={[{ id: "activity", x: 0, y: 0, w: 6, h: 2 }]}
+        locale="zh-CN"
+      />,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Infinite You Bento 看板" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "Infinite You bento board" }),
+    ).toBeNull();
+  });
+
   it.each([
     ["right", ".react-resizable-handle-e", { clientX: 80, clientY: 120 }],
     ["bottom", ".react-resizable-handle-s", { clientX: 260, clientY: 220 }],
