@@ -119,9 +119,31 @@ Rules:
 - Tailwind utility classes are the default styling mechanism for shared UI and feature layers.
 - Colors, spacing, typography, radius, elevation, and motion **SHOULD** come from shared tokens or named utility conventions.
 - Direct raw values **SHOULD NOT** be introduced when an existing semantic token can represent the intent.
+- Ordinary layout spacing **MUST** use the approved Tailwind spacing scale instead of arbitrary bracket values when styling padding, margin, gap, inset, width or height spacing, border radius, scroll margin or padding, and layout rhythm.
+- Responsive layout changes **MUST** use the approved breakpoint variants instead of custom bracket variants for ordinary mobile, tablet, and desktop behavior.
 - Shared typography, card, button, field, and panel patterns **SHOULD** be centralized and reused.
 - Visual language **MUST** remain consistent across screens in the same product area.
 - Any lint or static check that enforces token usage **MUST** pass before merge.
+
+Approved spacing tokens for ordinary layout:
+
+- Use named and scale-backed Tailwind utilities such as `p-0`, `px-1`, `py-1.5`, `p-2`, `p-3`, `p-4`, `p-6`, `p-8`, `m-0`, `mx-auto`, `mt-2`, `gap-1`, `gap-2`, `gap-3`, `gap-4`, `gap-6`, `space-y-2`, `space-x-3`, `inset-0`, `top-4`, `h-4`, `w-6`, `min-h-0`, `max-w-sm`, `rounded-sm`, `rounded-md`, `rounded-lg`, and semantic project classes that wrap the same scale.
+- Prefer the nearest approved scale value that preserves the intended hierarchy. For example, replace `p-[18px]` with `p-4` or `p-5` based on the surrounding component rhythm, replace `gap-[14px]` with `gap-3` or `gap-4`, and replace `rounded-[10px]` with `rounded-lg`.
+- Use component variants or shared primitives when the same spacing recipe appears in multiple places. For example, a repeated panel shell should become a primitive or named class instead of repeating one-off utility clusters.
+
+Approved responsive variants for ordinary layout:
+
+- Use mobile-first base classes plus Tailwind breakpoint variants such as `sm:`, `md:`, `lg:`, `xl:`, and `2xl:` for standard viewport changes.
+- Use Tailwind range variants such as `max-sm:` or `max-md:` only when the inverted condition is clearer than rewriting the base layout; do not use bracketed breakpoints such as `max-[767px]:`, `min-[920px]:`, or `[@media(...)]` for ordinary layout.
+- If a product surface needs a recurring non-default breakpoint, name it in the Tailwind or project token layer first, document why the default breakpoints are insufficient, and use the named variant consistently.
+
+Allowed intrinsic-value exceptions:
+
+- Intrinsic visualization geometry may keep direct numeric values when the number describes the visualization rather than reusable spacing rhythm, such as chart view boxes, graph canvas extents, node coordinates, axis tick geometry, or drag bounds.
+- Viewport and container sizing may keep direct values when they express a real runtime constraint, such as `min-h-[100dvh]`, viewport clamps, split-pane library sizing, or third-party component dimensions that cannot be expressed through the spacing scale without changing behavior.
+- Generated artifacts, third-party style hooks, data-driven transforms, and asset metadata may keep required numeric values, but handwritten UI should isolate and comment the exception when it is not obvious from the surrounding code.
+- Runtime `ui/src` arbitrary width or height utilities that are true intrinsic sizing exceptions **MUST** carry the inline marker `tailwind-exception: intrinsic-sizing` on the same line or immediately above the class usage so the repo-owned lint guard can distinguish documented exceptions from ordinary layout drift.
+- Exceptions must not be used for routine padding, margin, gap, inset, radius, or breakpoint choices that can be expressed with approved Tailwind tokens.
 
 Recommended token categories:
 

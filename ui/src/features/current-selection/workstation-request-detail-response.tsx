@@ -179,7 +179,7 @@ function TraceIDField({
   return (
     <div>
       <dt>Trace IDs</dt>
-      <dd className="grid gap-[0.25rem]">
+      <dd className="grid gap-1">
         {traceIDs && traceIDs.length > 0 ? (
           traceIDs.map((traceId: string) => (
             <code className={RUNTIME_DETAIL_CODE_CLASS} key={traceId}>

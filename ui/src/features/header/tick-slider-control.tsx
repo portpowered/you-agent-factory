@@ -10,7 +10,7 @@ import {
 
 const TICK_SLIDER_SHELL_CLASS = cx(
   "flex min-w-0 w-full flex-wrap items-center gap-3 rounded-lg border border-af-overlay/10 bg-af-overlay/4 px-3 py-2",
-  "min-[721px]:w-auto min-[721px]:min-w-[22rem] min-[721px]:max-w-xl",
+  "md:w-auto md:min-w-88 md:max-w-xl",
 );
 const TICK_SLIDER_LABEL_CLASS =
   "flex min-w-36 flex-1 flex-col gap-1 text-xs font-bold uppercase tracking-[0.16em] text-af-ink/62";

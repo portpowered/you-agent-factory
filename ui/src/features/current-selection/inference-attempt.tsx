@@ -26,7 +26,7 @@ export function InferenceAttemptCard({ attempt }: InferenceAttemptCardProps) {
       aria-label={`Inference attempt ${attempt.attempt}`}
       className={INFERENCE_ATTEMPT_CARD_CLASS}
     >
-      <div className="flex items-start justify-between gap-[0.8rem]">
+      <div className="flex items-start justify-between gap-3">
         <strong>Attempt {attempt.attempt}</strong>
         <span className={EXECUTION_PILL_CLASS}>{attempt.outcome ?? "PENDING"}</span>
       </div>

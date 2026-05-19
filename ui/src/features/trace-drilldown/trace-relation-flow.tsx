@@ -29,10 +29,11 @@ import {
   traceGraphLayoutKey,
 } from "./trace-elk-layout";
 
+// tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
   "h-[60rem] min-h-[40rem] rounded-xl border border-af-overlay/8 bg-af-overlay/4";
 const RELATION_NODE_CLASS =
-  "flex h-full min-w-0 w-full flex-col gap-[0.35rem] overflow-hidden rounded-lg border border-af-overlay/10 bg-af-canvas px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-colors";
+  "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border border-af-overlay/10 bg-af-canvas px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-colors";
 const RELATION_NODE_ACTIVE_CLASS = "hover:border-af-accent/28 hover:bg-af-accent/8";
 const RELATION_EDGE_STROKE = "var(--color-af-edge-muted)";
 const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
