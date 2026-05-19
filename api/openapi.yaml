@@ -37,6 +37,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SubmitWorkRequest'
+            examples:
+              textOnlyContent:
+                summary: Submit one work item with ordered text content parts.
+                value:
+                  name: summary-draft
+                  workTypeName: task
+                  content:
+                    - type: text
+                      text: Draft a short project summary.
+                    - type: text
+                      text: Keep it under 120 words.
+              textPlusImageContent:
+                summary: Submit one work item with ordered text and image content parts.
+                value:
+                  name: screenshot-review
+                  workTypeName: task
+                  content:
+                    - type: text
+                      text: Review this screenshot and list the highest-risk UI issues.
+                    - type: image
+                      file: fixtures/ui/dashboard-error-state.png
       responses:
         '201':
           description: Work was accepted for processing.
@@ -389,10 +410,12 @@ components:
       type: object
       additionalProperties: false
       required:
+        - name
         - workTypeName
       properties:
         name:
           type: string
+          description: Required authored name for this single-work submission.
         workTypeName:
           type: string
           description: Configured work type name from factory.json to submit to.
@@ -402,6 +425,9 @@ components:
         traceId:
           type: string
           description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Optional canonical ordered work content parts for this submission.
         payload:
           description: Opaque work payload forwarded as raw JSON.
         tags:
@@ -500,6 +526,9 @@ components:
             type: string
         traceId:
           type: string
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Ordered canonical content parts preserved on this work token.
         tags:
           $ref: '#/components/schemas/StringMap'
         createdAt:
@@ -2560,6 +2589,9 @@ components:
         traceId:
           type: string
           description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Optional canonical ordered work content parts for this work item.
         payload:
           description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else.
         tags:
@@ -2570,6 +2602,61 @@ components:
           description: Current outbound relationships attached to this listed source work item when returned by read APIs.
           items:
             $ref: '#/components/schemas/Relation'
+    WorkContent:
+      type: array
+      description: Ordered canonical content parts for one work item.
+      items:
+        $ref: '#/components/schemas/WorkContentPart'
+    WorkContentPart:
+      description: One ordered canonical content part on a work item.
+      oneOf:
+        - $ref: '#/components/schemas/WorkTextContentPart'
+        - $ref: '#/components/schemas/WorkImageContentPart'
+    WorkContentPartType:
+      type: string
+      description: Supported first-slice canonical work content part types.
+      x-enum-varnames:
+        - WorkContentPartTypeText
+        - WorkContentPartTypeImage
+      enum:
+        - text
+        - image
+      x-enum-descriptions:
+        - Inline text content.
+        - Image content referenced by file path.
+    WorkTextContentPart:
+      type: object
+      additionalProperties: false
+      description: Ordered inline text content for one work item.
+      required:
+        - type
+        - text
+      properties:
+        type:
+          allOf:
+            - $ref: '#/components/schemas/WorkContentPartType'
+          enum:
+            - text
+        text:
+          type: string
+          description: Inline text content preserved in canonical part order.
+    WorkImageContentPart:
+      type: object
+      additionalProperties: false
+      description: Ordered image content for one work item.
+      required:
+        - type
+        - file
+      properties:
+        type:
+          allOf:
+            - $ref: '#/components/schemas/WorkContentPartType'
+          enum:
+            - image
+        file:
+          type: string
+          minLength: 1
+          description: Image file reference preserved for later runtime materialization.
     Relation:
       type: object
       additionalProperties: false

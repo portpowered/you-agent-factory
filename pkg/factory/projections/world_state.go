@@ -1081,6 +1081,7 @@ func cloneWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWork
 	for i, item := range input {
 		out[i] = item
 		out[i].Tags = cloneStringMap(item.Tags)
+		out[i].Content = append([]interfaces.WorkContentPart(nil), item.Content...)
 	}
 	return out
 }
@@ -1270,6 +1271,7 @@ func factoryWorkItemFromGenerated(work factoryapi.Work) interfaces.FactoryWorkIt
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: cloneStringSlice(sliceValue(work.PreviousChainingTraceIds)),
 		TraceID:                  traceID,
+		Content:                  generatedWorkContentToDomain(work.Content),
 		Tags:                     stringMapFromGenerated(work.Tags),
 	}
 }
@@ -1299,6 +1301,9 @@ func mergeFactoryWorkItem(existing interfaces.FactoryWorkItem, incoming interfac
 	if incoming.PreviousChainingTraceIDs == nil {
 		incoming.PreviousChainingTraceIDs = append([]string(nil), existing.PreviousChainingTraceIDs...)
 	}
+	if incoming.Content == nil {
+		incoming.Content = append([]interfaces.WorkContentPart(nil), existing.Content...)
+	}
 	if incoming.ParentID == "" {
 		incoming.ParentID = existing.ParentID
 	}
@@ -1309,6 +1314,31 @@ func mergeFactoryWorkItem(existing interfaces.FactoryWorkItem, incoming interfac
 		incoming.Tags = cloneStringMap(existing.Tags)
 	}
 	return incoming
+}
+
+func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
+	if content == nil || len(*content) == 0 {
+		return nil
+	}
+	parts := make([]interfaces.WorkContentPart, 0, len(*content))
+	for _, part := range *content {
+		textPart, textErr := part.AsWorkTextContentPart()
+		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: textPart.Text,
+			})
+			continue
+		}
+		imagePart, imageErr := part.AsWorkImageContentPart()
+		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeImage,
+				File: imagePart.File,
+			})
+		}
+	}
+	return parts
 }
 
 func (r *factoryWorldReducer) factoryRelationsFromGenerated(relations *[]factoryapi.Relation, context factoryapi.FactoryEventContext) []interfaces.FactoryRelation {

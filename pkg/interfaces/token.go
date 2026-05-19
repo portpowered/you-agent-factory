@@ -24,6 +24,7 @@ type TokenColor struct {
 	ParentID                 string            `json:"parent_id"`
 	Tags                     map[string]string `json:"tags"`
 	Relations                []Relation        `json:"relations"`
+	Content                  []WorkContentPart `json:"content,omitempty"`
 	Payload                  []byte            `json:"payload"`
 }
 

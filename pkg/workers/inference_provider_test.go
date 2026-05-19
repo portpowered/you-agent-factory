@@ -339,7 +339,10 @@ func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *
 	}
 
 	behavior := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{})
-	expectedArgs := behavior.BuildArgs(req, true)
+	expectedArgs, err := behavior.BuildArgs(req, true)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
 	expectedRequest := behavior.BuildCommandRequest(req, expectedArgs)
 	assertCommandRequestAssemblyMatchesProviderBehavior(t, expectedRequest, fakeExec.request)
 	if len(fakeExec.request.Stdin) != 0 {
@@ -474,7 +477,10 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 	}
 
 	behavior := providerBehaviorFor(req.ModelProvider, logging.NoopLogger{})
-	expectedArgs := behavior.BuildArgs(req, true)
+	expectedArgs, err := behavior.BuildArgs(req, true)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
 	expectedRequest := behavior.BuildCommandRequest(req, expectedArgs)
 	assertCommandRequestAssemblyMatchesProviderBehavior(t, expectedRequest, fakeExec.request)
 	if string(fakeExec.request.Stdin) != "line 1\nline 2" {
@@ -485,6 +491,160 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 	}
 	assertStringSliceDoesNotContain(t, fakeExec.request.Args, "line 1\nline 2")
 	assertEnvContains(t, fakeExec.request.Env, "AGENT_FACTORY_CODEX_ENV=present")
+}
+
+func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *testing.T) {
+	workspace := t.TempDir()
+	imageOne := "fixtures/one.png"
+	imageTwo := "fixtures/two.png"
+	if err := os.MkdirAll(filepath.Join(workspace, "fixtures"), 0o755); err != nil {
+		t.Fatalf("create fixture directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, filepath.FromSlash(imageOne)), []byte("image-one"), 0o644); err != nil {
+		t.Fatalf("write first image: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, filepath.FromSlash(imageTwo)), []byte("image-two"), 0o644); err != nil {
+		t.Fatalf("write second image: %v", err)
+	}
+
+	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider:    string(ModelProviderCodex),
+		Model:            "gpt-5-codex",
+		UserMessage:      "inspect the images",
+		WorkingDirectory: workspace,
+		InputTokens: InputTokens(
+			interfaces.Token{
+				ID: "token-1",
+				Color: interfaces.TokenColor{
+					Content: []interfaces.WorkContentPart{
+						{Type: interfaces.WorkContentPartTypeText, Text: "before"},
+						{Type: interfaces.WorkContentPartTypeImage, File: imageOne},
+					},
+				},
+			},
+			interfaces.Token{
+				ID: "token-2",
+				Color: interfaces.TokenColor{
+					Content: []interfaces.WorkContentPart{
+						{Type: interfaces.WorkContentPartTypeImage, File: imageTwo},
+						{Type: interfaces.WorkContentPartTypeText, Text: "after"},
+					},
+				},
+			},
+		),
+	})
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+
+	wantArgs := []string{"exec", "--model", "gpt-5-codex", "-i", imageOne, "-i", imageTwo, "-"}
+	assertStringSlicesEqual(t, wantArgs, fakeExec.request.Args)
+	if string(fakeExec.request.Stdin) != "inspect the images" {
+		t.Fatalf("expected codex stdin to carry the prompt, got %q", string(fakeExec.request.Stdin))
+	}
+}
+
+func TestScriptWrapProvider_Infer_CodexTextOnlyContentDoesNotEmitImageArgs(t *testing.T) {
+	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderCodex),
+		Model:         "gpt-5-codex",
+		UserMessage:   "text only",
+		InputTokens: InputTokens(interfaces.Token{
+			ID: "token-1",
+			Color: interfaces.TokenColor{
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeText, Text: "only text"},
+				},
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+
+	wantArgs := []string{"exec", "--model", "gpt-5-codex", "-"}
+	assertStringSlicesEqual(t, wantArgs, fakeExec.request.Args)
+}
+
+func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.T) {
+	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider:    string(ModelProviderCodex),
+		Model:            "gpt-5-codex",
+		UserMessage:      "inspect",
+		WorkingDirectory: t.TempDir(),
+		InputTokens: InputTokens(interfaces.Token{
+			ID: "token-1",
+			Color: interfaces.TokenColor{
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/missing.png"},
+				},
+			},
+		}),
+	})
+	if err == nil {
+		t.Fatal("expected missing image to fail")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T: %v", err, err)
+	}
+	if providerErr.Type != interfaces.ProviderErrorTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypePermanentBadRequest)
+	}
+	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[0].file`) ||
+		!strings.Contains(providerErr.Message, `fixtures/missing.png`) {
+		t.Fatalf("provider error message = %q", providerErr.Message)
+	}
+	if fakeExec.calls != 0 {
+		t.Fatalf("expected runner not to be called, got %d calls", fakeExec.calls)
+	}
+}
+
+func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testing.T) {
+	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("claude output")}}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderClaude),
+		Model:         "claude-sonnet",
+		UserMessage:   "inspect",
+		InputTokens: InputTokens(interfaces.Token{
+			ID: "token-1",
+			Color: interfaces.TokenColor{
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
+					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+				},
+			},
+		}),
+	})
+	if err == nil {
+		t.Fatal("expected claude image content to fail")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T: %v", err, err)
+	}
+	if providerErr.Type != interfaces.ProviderErrorTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypePermanentBadRequest)
+	}
+	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[1].file`) ||
+		!strings.Contains(providerErr.Message, `model provider claude`) ||
+		!strings.Contains(providerErr.Message, `configure modelProvider codex`) {
+		t.Fatalf("provider error message = %q", providerErr.Message)
+	}
+	if fakeExec.calls != 0 {
+		t.Fatalf("expected runner not to be called, got %d calls", fakeExec.calls)
+	}
 }
 
 func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *testing.T) {
@@ -1606,9 +1766,11 @@ type recordingProviderExec struct {
 	request CommandRequest
 	result  CommandResult
 	err     error
+	calls   int
 }
 
 func (r *recordingProviderExec) Run(_ context.Context, req CommandRequest) (CommandResult, error) {
+	r.calls++
 	r.request = CommandRequest(interfaces.CloneSubprocessExecutionRequest(req))
 	return r.result, r.err
 }

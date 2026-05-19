@@ -344,6 +344,7 @@ func workDispatchInputTokensForReplay(
 				PreviousChainingTraceIDs: append([]string(nil), work.PreviousChainingTraceIDs...),
 				TraceID:                  traceID,
 				Name:                     work.Name,
+				Content:                  append([]interfaces.WorkContentPart(nil), work.Content...),
 				Tags:                     cloneStringMap(work.Tags),
 			},
 		})

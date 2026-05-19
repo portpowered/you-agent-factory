@@ -39,6 +39,7 @@ var retiredFactoryEventTypeStrings = []string{
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	var submitRequest factoryapi.SubmitWorkRequest
+	submitRequest.Name = "task-1"
 	submitRequest.WorkTypeName = "task"
 	submitRequest.CurrentChainingTraceId = stringPtr("chain-submit-1")
 	submitRelationState := "complete"
@@ -47,6 +48,12 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 		TargetWorkId:  "work-1",
 		RequiredState: &submitRelationState,
 	}}
+	if err := json.Unmarshal([]byte(`[
+		{"type":"text","text":"Draft a summary."},
+		{"type":"image","file":"fixtures/work-item.png"}
+	]`), &submitRequest.Content); err != nil {
+		t.Fatalf("unmarshal generated submit request content: %v", err)
+	}
 
 	workID := "work-1"
 	requestID := "request-1"
@@ -119,7 +126,7 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 		Schedule:       "*/5 * * * *",
 		TriggerAtStart: &triggerAtStart,
 	}
-	if submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
 	if submitRequest.CurrentChainingTraceId == nil || *submitRequest.CurrentChainingTraceId != "chain-submit-1" {
@@ -132,11 +139,20 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	if !strings.Contains(string(submitRequestJSON), `"relations"`) || !strings.Contains(string(submitRequestJSON), `"targetWorkId":"work-1"`) {
 		t.Fatalf("generated submit request JSON must preserve token-level relations: %s", submitRequestJSON)
 	}
+	if !strings.Contains(string(submitRequestJSON), `"content"`) || !strings.Contains(string(submitRequestJSON), `"file":"fixtures/work-item.png"`) {
+		t.Fatalf("generated submit request JSON must preserve canonical content parts: %s", submitRequestJSON)
+	}
 	if workRequest.Relations == nil || len(*workRequest.Relations) != 2 || (*workRequest.Relations)[1].Type != factoryapi.RelationTypeParentChild {
 		t.Fatal("generated work request relations should advertise parent-child support")
 	}
 	if workRequest.Works == nil || len(*workRequest.Works) != 1 || (*workRequest.Works)[0].State == nil || (*workRequest.Works)[0].State.Name != initialState {
 		t.Fatal("generated work request works should advertise explicit state support")
+	}
+	if err := json.Unmarshal([]byte(`[
+		{"type":"text","text":"Review the screenshot."},
+		{"type":"image","file":"fixtures/review.png"}
+	]`), &(*workRequest.Works)[0].Content); err != nil {
+		t.Fatalf("unmarshal generated work content: %v", err)
 	}
 	if workRequest.CurrentChainingTraceId == nil || *workRequest.CurrentChainingTraceId != "chain-request-1" || (*workRequest.Works)[0].CurrentChainingTraceId == nil || *(*workRequest.Works)[0].CurrentChainingTraceId != currentChainingTraceID {
 		t.Fatal("generated work request contracts should expose current chaining trace IDs")
@@ -146,6 +162,9 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	}
 	if (*workRequest.Works)[0].Relations == nil || len(*(*workRequest.Works)[0].Relations) != 2 || (*(*workRequest.Works)[0].Relations)[0].Type != factoryapi.RelationTypeDependsOn {
 		t.Fatal("generated work contracts should expose API-aligned relation entries")
+	}
+	if (*workRequest.Works)[0].Content == nil {
+		t.Fatal("generated work contracts should expose canonical content parts")
 	}
 	withoutRelations := factoryapi.Work{Name: "no-relations"}
 	withoutRelationsJSON, err := json.Marshal(withoutRelations)
