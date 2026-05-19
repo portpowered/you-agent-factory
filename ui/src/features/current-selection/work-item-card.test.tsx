@@ -1215,6 +1215,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(getDetailRow(dispatchCard, "Started at")).getByText("2026-04-08T12:00:01Z"),
     ).toBeTruthy();
+    expect(within(dispatchCard).queryByText("dispatchedCount")).toBeNull();
+    expect(within(dispatchCard).queryByText("respondedCount")).toBeNull();
+    expect(within(dispatchCard).queryByText("erroredCount")).toBeNull();
   });
 
   it("falls back to the dispatch id as the title when no associated work label is available", () => {
@@ -1336,10 +1339,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeTruthy();
     expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
     expect(within(dispatchCard).getByText("遷移 ID")).toBeTruthy();
-    expect(within(dispatchCard).getByText("ディスパッチ数")).toBeTruthy();
-    expect(within(dispatchCard).getByText("応答数")).toBeTruthy();
-    expect(within(dispatchCard).getByText("エラー数")).toBeTruthy();
+    expect(within(dispatchCard).getByText("開始時刻")).toBeTruthy();
     expect(within(dispatchCard).getByText("保留中")).toBeTruthy();
+    expect(within(dispatchCard).queryByText("ディスパッチ数")).toBeNull();
+    expect(within(dispatchCard).queryByText("応答数")).toBeNull();
+    expect(within(dispatchCard).queryByText("エラー数")).toBeNull();
     expect(
       within(localizedRequestDetails).getByText("解決済み引数"),
     ).toBeTruthy();
