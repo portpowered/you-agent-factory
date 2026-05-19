@@ -4,6 +4,13 @@ Use this page when you need the current worker contract, the canonical
 `workers/<name>/AGENTS.md` placement, and the split between worker-owned and
 workstation-owned runtime fields.
 
+This is the canonical customer-facing guide for workers. Keep worker types,
+worker-scoped runtime fields, model/script backend fields, and
+`workers/<name>/AGENTS.md` placement here. Keep workstation routing and
+prompt/runtime fields in [Workstations](workstations.md), and keep top-level
+`factory.json` work type and routing context in
+[Factory JSON and work configuration](work.md).
+
 ## Canonical Placement
 
 Keep worker runtime definitions in the split layout beside `factory.json`:
@@ -127,7 +134,7 @@ execution adapter should run it.
 
 - [CLI reference landing page](README.md)
 - [Package docs index](../README.md)
-- [Author AGENTS.md](authoring-agents-md.md)
 - [Workstations reference](workstations.md)
-- [Workstations and workers](workstations-and-workers.md)
 - [Factory JSON and work configuration](work.md)
+- [Author AGENTS.md](authoring-agents-md.md)
+- [Workstations and workers](workstations-and-workers.md)

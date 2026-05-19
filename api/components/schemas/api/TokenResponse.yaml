@@ -30,6 +30,9 @@ properties:
       type: string
   traceId:
     type: string
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Ordered canonical content parts preserved on this work token.
   tags:
     $ref: '../shared/StringMap.yaml'
   createdAt:

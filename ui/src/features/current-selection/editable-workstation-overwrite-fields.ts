@@ -12,11 +12,8 @@ export function resolveEditableWorkstationOverwriteFields(
   if (draft.prompt !== latestDefinitionDraft.prompt) {
     fields.push("prompt");
   }
-  if (draft.model !== latestDefinitionDraft.model) {
-    fields.push("model");
-  }
-  if (draft.promptFile !== latestDefinitionDraft.promptFile) {
-    fields.push("template");
+  if (draft.workerName !== latestDefinitionDraft.workerName) {
+    fields.push("worker");
   }
 
   return fields;
@@ -26,7 +23,7 @@ export function formatEditableOverwriteFieldLabels(
   overwriteFieldNames: EditableWorkstationOverwriteField[],
   messages: Pick<
     WorkstationDetailMessages,
-    "modelFieldLabel" | "promptFieldLabel" | "templateFieldLabel"
+    "promptFieldLabel" | "workerFieldLabel"
   >,
 ) {
   return formatList(
@@ -38,15 +35,13 @@ function fieldLabel(
   field: EditableWorkstationOverwriteField,
   messages: Pick<
     WorkstationDetailMessages,
-    "modelFieldLabel" | "promptFieldLabel" | "templateFieldLabel"
+    "promptFieldLabel" | "workerFieldLabel"
   >,
 ) {
   switch (field) {
-    case "model":
-      return messages.modelFieldLabel.toLowerCase();
     case "prompt":
       return messages.promptFieldLabel.toLowerCase();
-    case "template":
-      return messages.templateFieldLabel.toLowerCase();
+    case "worker":
+      return messages.workerFieldLabel.toLowerCase();
   }
 }

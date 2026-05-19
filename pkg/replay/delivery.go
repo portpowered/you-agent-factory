@@ -380,6 +380,9 @@ func cloneReplayFactoryWorkItems(items []interfaces.FactoryWorkItem) []interface
 		if items[i].PreviousChainingTraceIDs != nil {
 			out[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
 		}
+		if items[i].Content != nil {
+			out[i].Content = append([]interfaces.WorkContentPart(nil), items[i].Content...)
+		}
 		if items[i].Tags != nil {
 			out[i].Tags = cloneStringMap(items[i].Tags)
 		}

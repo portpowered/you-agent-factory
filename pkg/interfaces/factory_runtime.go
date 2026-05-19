@@ -31,6 +31,7 @@ type SubmitRequest struct {
 	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId"`
+	Content                  []WorkContentPart `json:"content,omitempty"`
 	Payload                  []byte            `json:"payload"`
 	Tags                     map[string]string `json:"tags"`
 	Relations                []Relation        `json:"relations"`
@@ -71,11 +72,28 @@ type Work struct {
 	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId,omitempty"`
+	Content                  []WorkContentPart `json:"content,omitempty"`
 	Payload                  any               `json:"payload,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
 	ExecutionID              string            `json:"-"`
 	RuntimeRelations         []Relation        `json:"-"`
 }
+
+// WorkContentPart is the backend-owned canonical work content shape mirrored
+// from the public API contract.
+type WorkContentPart struct {
+	Type WorkContentPartType `json:"type"`
+	Text string              `json:"text,omitempty"`
+	File string              `json:"file,omitempty"`
+}
+
+// WorkContentPartType identifies one canonical content part kind.
+type WorkContentPartType string
+
+const (
+	WorkContentPartTypeText  WorkContentPartType = "text"
+	WorkContentPartTypeImage WorkContentPartType = "image"
+)
 
 // WorkRelationType identifies a relationship between work items in a WorkRequest.
 type WorkRelationType string
@@ -110,6 +128,7 @@ type FactoryWorkItem struct {
 	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId,omitempty"`
+	Content                  []WorkContentPart `json:"content,omitempty"`
 	ParentID                 string            `json:"parentId,omitempty"`
 	PlaceID                  string            `json:"placeId,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../api/dashboard/types";
 import { useCurrentEditableFactoryDefinition } from "../current-factory-definition";
@@ -11,6 +11,7 @@ import {
 import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationValidationErrors,
+  EditableWorkstationWorkerOptionsState,
 } from "./detail-card-types";
 import { resolveEditableWorkstationOverwriteFields } from "./editable-workstation-overwrite-fields";
 import {
@@ -32,14 +33,8 @@ export function useEditableWorkstationConfigurationState(
   locale?: string | null,
 ): EditableWorkstationConfigurationState | undefined {
   const messages = getWorkstationDetailMessages(locale);
-  const editableDefinitionEnabled = useEditableDefinitionGate(
-    selection,
-    selectedNode,
-  );
   const editableDefinition = useCurrentEditableFactoryDefinition(
-    editableDefinitionEnabled &&
-      selection?.kind === "node" &&
-      selectedNode != null,
+    selection?.kind === "node" && selectedNode != null,
   );
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkstationSession(
@@ -95,26 +90,12 @@ export function useEditableWorkstationConfigurationState(
       sessionState.draft,
       sessionState.sessionStartDraft,
     ),
-    isModelEditable: selectedEditableValues.isModelEditable,
     markChangesSaved: () => {
       setSessionState((currentState) =>
         currentState
           ? {
               ...currentState,
               sessionStartDraft: currentState.draft,
-            }
-          : currentState,
-      );
-    },
-    onModelChange: (value) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                model: value,
-              },
             }
           : currentState,
       );
@@ -132,14 +113,14 @@ export function useEditableWorkstationConfigurationState(
           : currentState,
       );
     },
-    onPromptFileChange: (value) => {
+    onWorkerChange: (value) => {
       setSessionState((currentState) =>
         currentState
           ? {
               ...currentState,
               draft: {
                 ...currentState.draft,
-                promptFile: value,
+                workerName: value,
               },
             }
           : currentState,
@@ -152,6 +133,11 @@ export function useEditableWorkstationConfigurationState(
     pendingFactoryDefinition,
     status: "ready",
     validationErrors: resolvedValidationErrors,
+    workerOptionsState: resolveWorkerOptionsState(
+      sessionState.draft,
+      selectedEditableValues,
+      messages,
+    ),
   };
 }
 
@@ -198,33 +184,25 @@ export function validateEditableWorkstationDraft(
   selectedEditableValues?: ReturnType<typeof resolveEditableWorkstationValues>,
   messages: Pick<
     WorkstationDetailMessages,
-    | "editableConfigurationModelEditBlocked"
-    | "editableConfigurationModelRequired"
-    | "editableConfigurationPromptFileWhitespace"
     | "editableConfigurationPromptRequired"
+    | "editableConfigurationWorkerRequired"
+    | "editableConfigurationWorkerUnavailable"
   > = getWorkstationDetailMessages(undefined),
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
 
-  if (draft.model.trim().length === 0) {
-    validationErrors.model = messages.editableConfigurationModelRequired;
+  if (draft.workerName.trim().length === 0) {
+    validationErrors.workerName = messages.editableConfigurationWorkerRequired;
   } else if (
     selectedEditableValues &&
-    !selectedEditableValues.isModelEditable &&
-    draft.model.trim() !== (selectedEditableValues.model ?? "").trim()
+    !selectedEditableValues.workerOptions.includes(draft.workerName)
   ) {
-    validationErrors.model =
-      selectedEditableValues.modelEditBlockedReason ??
-      messages.editableConfigurationModelEditBlocked;
+    validationErrors.workerName =
+      messages.editableConfigurationWorkerUnavailable;
   }
 
   if (draft.prompt.trim().length === 0) {
     validationErrors.prompt = messages.editableConfigurationPromptRequired;
-  }
-
-  if (draft.promptFile.length > 0 && draft.promptFile.trim().length === 0) {
-    validationErrors.promptFile =
-      messages.editableConfigurationPromptFileWhitespace;
   }
 
   return validationErrors;
@@ -233,22 +211,51 @@ export function validateEditableWorkstationDraft(
 export function hasEditableWorkstationValidationErrors(
   validationErrors: EditableWorkstationValidationErrors,
 ): boolean {
-  return Boolean(
-    validationErrors.model ||
-      validationErrors.prompt ||
-      validationErrors.promptFile,
-  );
+  return Boolean(validationErrors.prompt || validationErrors.workerName);
 }
 
 function areEditableDraftsEqual(
   left: EditableWorkstationDraft,
   right: EditableWorkstationDraft,
 ): boolean {
-  return (
-    left.model === right.model &&
-    left.prompt === right.prompt &&
-    left.promptFile === right.promptFile
-  );
+  return left.prompt === right.prompt && left.workerName === right.workerName;
+}
+
+function resolveWorkerOptionsState(
+  draft: EditableWorkstationDraft,
+  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
+  messages: Pick<
+    WorkstationDetailMessages,
+    | "editableConfigurationEmpty"
+    | "editableConfigurationWorkerMissing"
+    | "editableConfigurationWorkerOptionsEmpty"
+  >,
+): EditableWorkstationWorkerOptionsState {
+  if (!selectedEditableValues) {
+    return {
+      message: messages.editableConfigurationEmpty,
+      status: "error",
+    };
+  }
+
+  if (selectedEditableValues.workerOptions.length === 0) {
+    return {
+      message: messages.editableConfigurationWorkerOptionsEmpty,
+      status: "empty",
+    };
+  }
+
+  if (!selectedEditableValues.workerOptions.includes(draft.workerName)) {
+    return {
+      message: messages.editableConfigurationWorkerMissing,
+      status: "error",
+    };
+  }
+
+  return {
+    options: selectedEditableValues.workerOptions,
+    status: "ready",
+  };
 }
 
 function syncEditableWorkstationSession(
@@ -292,37 +299,4 @@ function syncEditableWorkstationSession(
         ...currentState,
         latestDefinitionDraft: initialDraft,
       };
-}
-
-function useEditableDefinitionGate(
-  selection: DashboardSelection | null,
-  selectedNode: DashboardWorkstationNode | null,
-) {
-  const [editableDefinitionEnabled, setEditableDefinitionEnabled] =
-    useState(false);
-  const previousSelectedNodeID = useRef<string | null>(null);
-  const hasMounted = useRef(false);
-
-  useEffect(() => {
-    const selectedNodeID =
-      selection?.kind === "node" && selectedNode ? selectedNode.node_id : null;
-
-    if (!hasMounted.current) {
-      hasMounted.current = true;
-      previousSelectedNodeID.current = selectedNodeID;
-      return;
-    }
-
-    if (selectedNodeID && selectedNodeID !== previousSelectedNodeID.current) {
-      setEditableDefinitionEnabled(true);
-    }
-
-    if (!selectedNodeID) {
-      setEditableDefinitionEnabled(false);
-    }
-
-    previousSelectedNodeID.current = selectedNodeID;
-  }, [selectedNode, selection]);
-
-  return editableDefinitionEnabled;
 }

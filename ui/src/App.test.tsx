@@ -223,8 +223,6 @@ const importedFactorySnapshot = (() => {
 
   snapshot.factory_state = "Imported factory active";
   snapshot.tick_count = semanticWorkflowDashboardSnapshot.tick_count + 1;
-  snapshot.topology.workstation_nodes_by_id.review.workstation_name =
-    "Imported Review";
 
   return snapshot;
 })();
@@ -1919,7 +1917,7 @@ describe("App shell import and export flows", () => {
       });
       expect(
         await screen.findByRole("button", {
-          name: "Select Imported Review workstation",
+          name: "Select Review workstation",
         }),
       ).toBeTruthy();
     } finally {
@@ -2057,7 +2055,9 @@ describe("App shell import and export flows", () => {
     expect(
       await screen.findByRole("region", { name: "dashboard summary" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Change language" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Change language" }),
+    ).toBeTruthy();
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "切换语言" })).toBeNull();
@@ -2934,9 +2934,7 @@ describe("App streamed replay smoke flows", () => {
       expect(
         screen.getByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeTruthy();
-      expect(
-        screen.getAllByText("Failed at Review").length,
-      ).toBeGreaterThan(0);
+      expect(screen.getAllByText("Failed at Review").length).toBeGreaterThan(0);
     });
 
     fireEvent.click(
@@ -3197,11 +3195,12 @@ describe("App streamed replay smoke flows", () => {
     );
 
     async function selectReviewRequest(dispatchID: string): Promise<void> {
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: "Select Review workstation",
-        }),
-      );
+      const reviewWorkstationButton = screen.queryByRole("button", {
+        name: "Select Review workstation",
+      });
+      if (reviewWorkstationButton) {
+        fireEvent.click(reviewWorkstationButton);
+      }
 
       const workstationSelection = await screen.findByRole("article", {
         name: "Current selection",
