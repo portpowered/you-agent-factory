@@ -16,6 +16,7 @@ func (fs *functionalAPIServer) SubmitWork(t *testing.T, workTypeID string, paylo
 	t.Helper()
 
 	req := factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("bootstrap-portability-submit"),
 		WorkTypeName: workTypeID,
 		Payload:      payload,
 	}
@@ -83,4 +84,8 @@ func generatedWorkTypeName(work factoryapi.Work) string {
 		return ""
 	}
 	return *work.WorkTypeName
+}
+
+func stringPointer(value string) *string {
+	return &value
 }
