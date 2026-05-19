@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId, useState } from "react";
 
-import { Input, Textarea } from "../../components/ui";
+import { Select, Textarea } from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -9,7 +9,11 @@ import {
 } from "../../components/ui/dashboard-typography";
 import { formatList } from "../../components/ui/formatters";
 import { cx } from "../../lib/cx";
-import { WORKSTATION_SUMMARY_ITEM_CLASS } from "./detail-card-shared";
+import {
+  HISTORY_HEADER_CLASS,
+  HISTORY_TOGGLE_CLASS,
+  WORKSTATION_SUMMARY_ITEM_CLASS,
+} from "./detail-card-shared";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
@@ -29,42 +33,73 @@ export function EditableConfigurationSection({
   saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const sectionId = useId();
+  const contentId = `${sectionId}-content`;
+  const headingId = `${sectionId}-heading`;
+
   return (
-    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <div className="grid gap-1">
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-          {messages.editableConfigurationHeading}
-        </h4>
-        <p
-          className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+    <section
+      aria-labelledby={headingId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
+      <div className={HISTORY_HEADER_CLASS}>
+        <div className="grid min-w-0 gap-1">
+          <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
+            {messages.editableConfigurationHeading}
+          </h4>
+          <p
+            className={cx(
+              "m-0 text-af-ink/62",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
+            {messages.editableConfigurationSummary}
+          </p>
+        </div>
+        <button
+          aria-label={
+            expanded
+              ? messages.editableConfigurationCollapseActionLabel
+              : messages.editableConfigurationExpandActionLabel
+          }
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          className={HISTORY_TOGGLE_CLASS}
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
         >
-          {messages.editableConfigurationSummary}
-        </p>
+          {expanded ? messages.collapseAction : messages.expandAction}
+        </button>
       </div>
-      {state?.status === "loading" ? (
-        <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-          {messages.editableConfigurationLoading}
-        </p>
-      ) : null}
-      {state?.status === "error" ? (
-        <p
-          className={cx("m-0 text-af-danger", DASHBOARD_BODY_TEXT_CLASS)}
-          role="alert"
-        >
-          {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-        </p>
-      ) : null}
-      {state?.status === "empty" ? (
-        <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-          {state.message || messages.editableConfigurationEmpty}
-        </p>
-      ) : null}
-      {state?.status === "ready" ? (
-        <EditableConfigurationReadyForm
-          messages={messages}
-          saveState={saveState}
-          state={state}
-        />
+      {expanded ? (
+        <div className="grid gap-2.5" id={contentId}>
+          {state?.status === "loading" ? (
+            <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+              {messages.editableConfigurationLoading}
+            </p>
+          ) : null}
+          {state?.status === "error" ? (
+            <p
+              className={cx("m-0 text-af-danger", DASHBOARD_BODY_TEXT_CLASS)}
+              role="alert"
+            >
+              {messages.editableConfigurationErrorPrefix} {state.errorMessage}
+            </p>
+          ) : null}
+          {state?.status === "empty" ? (
+            <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+              {state.message || messages.editableConfigurationEmpty}
+            </p>
+          ) : null}
+          {state?.status === "ready" ? (
+            <EditableConfigurationReadyForm
+              messages={messages}
+              saveState={saveState}
+              state={state}
+            />
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
@@ -95,67 +130,12 @@ function EditableConfigurationReadyForm({
       <EditableConfigurationDraftStatus messages={messages} state={state} />
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
         <EditableConfigurationField
-          errorMessage={state.validationErrors.model}
-          fieldId="editable-workstation-model"
-          input={
-            <Input
-              aria-describedby={resolveModelFieldDescription(state)}
-              aria-invalid={state.validationErrors.model ? "true" : undefined}
-              className={DASHBOARD_BODY_TEXT_CLASS}
-              disabled={!state.isModelEditable}
-              id="editable-workstation-model"
-              onChange={(event) => state.onModelChange(event.target.value)}
-              value={state.draft.model}
-            />
-          }
-          label={messages.modelFieldLabel}
-          supportingContent={
-            !state.isModelEditable ? (
-              <p
-                className={cx(
-                  "m-0 text-af-ink/58",
-                  DASHBOARD_SUPPORTING_TEXT_CLASS,
-                )}
-                id="editable-workstation-model-description"
-              >
-                {state.initialValues.modelEditBlockedReason ??
-                  messages.editableConfigurationModelSharedWorkerHint}
-              </p>
-            ) : null
-          }
-        />
-        <EditableConfigurationField
-          errorMessage={state.validationErrors.promptFile}
-          fieldId="editable-workstation-template"
-          input={
-            <Input
-              aria-describedby={
-                state.validationErrors.promptFile
-                  ? "editable-workstation-template-error"
-                  : undefined
-              }
-              aria-invalid={
-                state.validationErrors.promptFile ? "true" : undefined
-              }
-              className={DASHBOARD_BODY_TEXT_CLASS}
-              id="editable-workstation-template"
-              onChange={(event) => state.onPromptFileChange(event.target.value)}
-              placeholder={messages.notConfiguredValue}
-              value={state.draft.promptFile}
-            />
-          }
-          label={messages.templateFieldLabel}
+          fieldId="editable-workstation-worker"
+          errorMessage={state.validationErrors.workerName}
+          input={<EditableConfigurationWorkerInput messages={messages} state={state} />}
+          label={messages.workerFieldLabel}
         />
       </div>
-      <dl className="m-0 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
-        <EditableConfigurationItem
-          label={messages.workerFieldLabel}
-          value={valueOrFallback(
-            state.initialValues.workerName,
-            messages.notConfiguredValue,
-          )}
-        />
-      </dl>
       <EditableConfigurationField
         errorMessage={state.validationErrors.prompt}
         fieldId="editable-workstation-prompt"
@@ -177,23 +157,6 @@ function EditableConfigurationReadyForm({
       />
     </form>
   );
-}
-
-function resolveModelFieldDescription(
-  state: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >,
-) {
-  const descriptions = [];
-  if (state.validationErrors.model) {
-    descriptions.push("editable-workstation-model-error");
-  }
-  if (!state.isModelEditable) {
-    descriptions.push("editable-workstation-model-description");
-  }
-
-  return descriptions.length > 0 ? descriptions.join(" ") : undefined;
 }
 
 function EditableConfigurationSaveFeedback({
@@ -292,6 +255,58 @@ function EditableConfigurationOverwriteWarning({
   );
 }
 
+function EditableConfigurationWorkerInput({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  if (state.workerOptionsState.status === "empty") {
+    return (
+      <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+        {state.workerOptionsState.message}
+      </p>
+    );
+  }
+
+  if (state.workerOptionsState.status === "error") {
+    return (
+      <p
+        className={cx("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationWorkerUnavailablePrefix}{" "}
+        {state.workerOptionsState.message}
+      </p>
+    );
+  }
+
+  return (
+    <Select
+      aria-describedby={
+        state.validationErrors.workerName
+          ? "editable-workstation-worker-error"
+          : undefined
+      }
+      aria-invalid={state.validationErrors.workerName ? "true" : undefined}
+      className={DASHBOARD_BODY_TEXT_CLASS}
+      id="editable-workstation-worker"
+      onChange={(event) => state.onWorkerChange(event.target.value)}
+      value={state.draft.workerName}
+    >
+      {state.workerOptionsState.options.map((workerName) => (
+        <option key={workerName} value={workerName}>
+          {valueOrFallback(workerName, messages.notConfiguredValue)}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
 export function WorkstationSummary({
   activeRunCount,
   historyCount,
@@ -362,37 +377,6 @@ function EditableConfigurationField({
           {errorMessage}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-function EditableConfigurationItem({
-  className,
-  label,
-  preserveWhitespace = false,
-  value,
-}: {
-  className?: string;
-  label: string;
-  preserveWhitespace?: boolean;
-  value: string;
-}) {
-  return (
-    <div
-      className={cx(
-        "grid gap-1 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3",
-        className,
-      )}
-    >
-      <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</dt>
-      <dd
-        className={cx(
-          "m-0 text-sm text-af-ink [overflow-wrap:anywhere]",
-          preserveWhitespace && "whitespace-pre-wrap",
-        )}
-      >
-        {value}
-      </dd>
     </div>
   );
 }

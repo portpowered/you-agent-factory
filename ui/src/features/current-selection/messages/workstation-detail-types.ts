@@ -5,6 +5,8 @@ export interface WorkstationDetailMessages {
   collapseAction: string;
   editableConfigurationEmpty: string;
   editableConfigurationErrorPrefix: string;
+  editableConfigurationCollapseActionLabel: string;
+  editableConfigurationExpandActionLabel: string;
   editableConfigurationHeading: string;
   editableConfigurationLoading: string;
   editableConfigurationDirtyStatus: string;
@@ -25,11 +27,13 @@ export interface WorkstationDetailMessages {
   editableConfigurationSaveSuccess: string;
   editableConfigurationSummary: string;
   editableConfigurationValidationStatus: string;
-  editableConfigurationModelRequired: string;
-  editableConfigurationModelEditBlocked: string;
   editableConfigurationPromptRequired: string;
-  editableConfigurationPromptFileWhitespace: string;
   editableConfigurationSaveFallbackError: string;
+  editableConfigurationWorkerMissing: string;
+  editableConfigurationWorkerOptionsEmpty: string;
+  editableConfigurationWorkerRequired: string;
+  editableConfigurationWorkerUnavailable: string;
+  editableConfigurationWorkerUnavailablePrefix: string;
   modelFieldLabel: string;
   notConfiguredValue: string;
   promptFieldLabel: string;
