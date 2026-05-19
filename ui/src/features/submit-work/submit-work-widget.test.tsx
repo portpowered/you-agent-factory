@@ -40,7 +40,7 @@ describe("SubmitWorkWidget", () => {
     expect(within(card).getByRole("textbox", { name: "Request" })).toBeTruthy();
     expect(
       within(card).getByText(
-        "Choose a work type to continue. Request details are optional.",
+        "Choose a work type and enter a request name to continue.",
       ),
     ).toBeTruthy();
     expect(
@@ -53,7 +53,7 @@ describe("SubmitWorkWidget", () => {
     ).toBeTruthy();
   });
 
-  it("enables submission once a configured work type is selected even if the request is blank", () => {
+  it("enables submission only after a configured work type and non-blank request name are present", () => {
     renderSubmitWorkWidget(
       <SubmitWorkWidget
         submitWorkTypes={[
@@ -79,12 +79,18 @@ describe("SubmitWorkWidget", () => {
     expect(submitButton.disabled).toBe(true);
     expect(
       screen.getByText(
-        "Choose a work type to continue. Request details are optional.",
+        "Choose a work type and enter a request name to continue.",
       ),
     ).toBeTruthy();
 
     fireEvent.change(workType, { target: { value: "story" } });
-    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.disabled).toBe(true);
+    expect(
+      screen.getByText("Enter a request name to continue."),
+    ).toBeTruthy();
+
+    fireEvent.change(requestName, { target: { value: "   " } });
+    expect(submitButton.disabled).toBe(true);
 
     fireEvent.change(requestName, { target: { value: "Driver review" } });
     expect(submitButton.disabled).toBe(false);
@@ -123,8 +129,16 @@ describe("SubmitWorkWidget", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      await screen.findAllByText("Choose a work type before submitting."),
-    ).toHaveLength(2);
+      await screen.findAllByText(
+        "Choose a work type and enter a request name before submitting.",
+      ),
+    ).toHaveLength(1);
+    expect(
+      screen.getByText("Choose a work type before submitting."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Enter a request name before submitting."),
+    ).toBeTruthy();
   });
 
   it("submits work with a request name, clears only request fields on success, and shows the returned trace", async () => {
@@ -236,7 +250,7 @@ describe("SubmitWorkWidget", () => {
     ).toBe("");
   });
 
-  it("submits an explicit blank request name when the field is blank", async () => {
+  it("shows inline request-name validation and skips the network request when the name is blank", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
@@ -253,24 +267,33 @@ describe("SubmitWorkWidget", () => {
     const workType = screen.getByRole<HTMLSelectElement>("combobox", {
       name: "Work type",
     });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Request",
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    });
+    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Submit work",
     });
 
     fireEvent.change(workType, { target: { value: "story" } });
-    fireEvent.change(requestText, {
-      target: { value: "Review the queue and summarize the failure." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+    expect(submitButton.disabled).toBe(true);
 
-    await screen.findByText(
-      "Your request was submitted. Trace ID: trace-submit-story.",
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      name: "",
-      payload: "Review the queue and summarize the failure.",
-      workTypeName: "story",
-    });
+    fireEvent.change(requestName, { target: { value: "   " } });
+    expect(submitButton.disabled).toBe(true);
+
+    const form = submitButton.closest("form");
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error(
+        "expected the submit button to be rendered inside a form",
+      );
+    }
+
+    fireEvent.submit(form);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findAllByText("Enter a request name before submitting."),
+    ).toHaveLength(2);
+    expect(requestName.getAttribute("aria-invalid")).toBe("true");
   });
 
   it("submits a blank request as an explicit empty payload", async () => {
@@ -290,8 +313,14 @@ describe("SubmitWorkWidget", () => {
     const workType = screen.getByRole<HTMLSelectElement>("combobox", {
       name: "Work type",
     });
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    });
 
     fireEvent.change(workType, { target: { value: "story" } });
+    fireEvent.change(requestName, {
+      target: { value: "Empty payload request" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
     expect(
@@ -300,7 +329,7 @@ describe("SubmitWorkWidget", () => {
       ),
     ).toBeTruthy();
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      name: "",
+      name: "Empty payload request",
       payload: "",
       workTypeName: "story",
     });
@@ -396,7 +425,7 @@ describe("SubmitWorkWidget", () => {
     expect(within(card).getByRole("textbox", { name: "请求" })).toBeTruthy();
     expect(
       within(card).getByText(
-        "先选择一个工作类型，然后即可继续。请求详情为可选。",
+        "先选择工作类型并填写请求名称，然后即可继续。",
       ),
     ).toBeTruthy();
     expect(within(card).getByRole("button", { name: "提交工作" })).toBeTruthy();
