@@ -36,10 +36,13 @@ func (s *Server) GetProviderSessionDetails(
 	r *http.Request,
 	params factoryapi.GetProviderSessionDetailsParams,
 ) {
+	if params.Provider != factoryapi.Codex || params.Kind != factoryapi.SessionID {
+		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
+		return
+	}
+
 	details, err := loadProviderSessionDetails(
 		s.codexSessionsRoot,
-		string(params.Provider),
-		string(params.Kind),
 		string(params.Id),
 	)
 	if err != nil {
@@ -60,13 +63,9 @@ func (s *Server) GetProviderSessionDetails(
 	s.writeJSON(w, http.StatusOK, details)
 }
 
-func loadProviderSessionDetails(root, provider, kind, id string) (factoryapi.ProviderSessionDetailResponse, error) {
-	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
-	normalizedKind := strings.TrimSpace(kind)
+func loadProviderSessionDetails(root, id string) (factoryapi.ProviderSessionDetailResponse, error) {
 	normalizedID := strings.TrimSpace(id)
-	if normalizedProvider != loadableProviderSessionProvider ||
-		normalizedKind != loadableProviderSessionKind ||
-		!safeProviderSessionIDPattern.MatchString(normalizedID) {
+	if !safeProviderSessionIDPattern.MatchString(normalizedID) {
 		return factoryapi.ProviderSessionDetailResponse{}, errInvalidProviderSessionIdentifier
 	}
 
@@ -91,8 +90,8 @@ func loadProviderSessionDetails(root, provider, kind, id string) (factoryapi.Pro
 
 	return factoryapi.ProviderSessionDetailResponse{
 		ProviderSession: factoryapi.LoadableProviderSessionRef{
-			Provider: factoryapi.LoadableProviderSessionProvider(normalizedProvider),
-			Kind:     factoryapi.LoadableProviderSessionKind(normalizedKind),
+			Provider: factoryapi.LoadableProviderSessionProvider(loadableProviderSessionProvider),
+			Kind:     factoryapi.LoadableProviderSessionKind(loadableProviderSessionKind),
 			Id:       normalizedID,
 		},
 		Source: factoryapi.ProviderSessionSourceMetadata{
