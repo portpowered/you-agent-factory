@@ -22,8 +22,6 @@ import {
 import {
   DispatchDetailList,
   DispatchDetailSection,
-  ScriptArgsSection,
-  ScriptOutputSection,
   TraceActionGroup,
   WorkItemActionGroup,
 } from "./selected-work-dispatch-history-card-shared";
@@ -44,10 +42,6 @@ import {
   requestStartedAt,
   requestTitle,
   requestTraceIDs,
-  scriptAttemptNumber,
-  scriptRequestID,
-  scriptResponseDurationMillis,
-  scriptResponseExitCode,
   scriptResponseFailureType,
 } from "./selected-work-dispatch-history-helpers";
 
@@ -265,32 +259,9 @@ function DispatchRequestSection({
   return (
     <DispatchDetailSection title={messages.requestDetailsTitle}>
       {view.isScriptBackedRequest ? (
-        <>
-          <p className={DETAIL_COPY_CLASS}>
-            {messages.promptDetailsNotApplicable}
-          </p>
-          <DispatchDetailList
-            entries={[
-              {
-                label: messages.scriptRequestIdLabel,
-                value: view.scriptRequest?.script_request_id,
-                code: true,
-              },
-              {
-                label: messages.scriptAttemptLabel,
-                value:
-                  view.scriptRequest?.attempt !== undefined
-                    ? String(view.scriptRequest.attempt)
-                    : undefined,
-              },
-              { label: messages.commandLabel, value: view.scriptRequest?.command, code: true },
-            ]}
-          />
-          <ScriptArgsSection
-            args={view.scriptRequest?.args}
-            label={messages.resolvedArgsLabel}
-          />
-        </>
+        <p className={DETAIL_COPY_CLASS}>
+          {messages.promptDetailsNotApplicable}
+        </p>
       ) : (
         <p className={DETAIL_COPY_CLASS}>
           {messages.inferenceRequestGuidance}
@@ -330,7 +301,6 @@ function DispatchResponseSection({
 }) {
   return (
     <DispatchDetailSection title={messages.responseDetailsTitle}>
-      <ScriptResponseContent messages={messages} view={view} />
       <WorkItemActionGroup
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
@@ -393,65 +363,6 @@ function DispatchTraceSection({
         traceTargetId={traceTargetId}
       />
     </DispatchDetailSection>
-  );
-}
-
-function ScriptResponseContent({
-  messages,
-  view,
-}: {
-  messages: CurrentSelectionDispatchHistoryMessages;
-  view: DispatchHistoryView;
-}) {
-  if (!view.scriptResponse) {
-    return <p className={DETAIL_COPY_CLASS}>{messages.noScriptResponseYet}</p>;
-  }
-
-  return (
-    <>
-      <DispatchDetailList
-        entries={[
-          {
-            label: messages.scriptRequestIdLabel,
-            value: scriptRequestID(view.scriptResponse),
-            code: true,
-          },
-          {
-            label: messages.scriptAttemptLabel,
-            value:
-              scriptAttemptNumber(view.scriptResponse) !== undefined
-                ? String(scriptAttemptNumber(view.scriptResponse))
-                : undefined,
-          },
-          { label: messages.outcomeLabel, value: view.scriptResponse.outcome },
-          {
-            label: messages.durationLabel,
-            value:
-              scriptResponseDurationMillis(view.scriptResponse) !== undefined
-                ? formatDurationMillis(scriptResponseDurationMillis(view.scriptResponse) ?? 0)
-                : undefined,
-          },
-          {
-            label: messages.exitCodeLabel,
-            value:
-              scriptResponseExitCode(view.scriptResponse) !== undefined
-                ? String(scriptResponseExitCode(view.scriptResponse))
-                : undefined,
-          },
-          { label: messages.failureTypeLabel, value: scriptResponseFailureType(view.scriptResponse) },
-        ]}
-      />
-      <ScriptOutputSection
-        emptyMessage={messages.noStdoutRecorded}
-        label={messages.stdoutLabel}
-        value={view.normalizedScriptStdout}
-      />
-      <ScriptOutputSection
-        emptyMessage={messages.noStderrRecorded}
-        label={messages.stderrLabel}
-        value={view.normalizedScriptStderr}
-      />
-    </>
   );
 }
 

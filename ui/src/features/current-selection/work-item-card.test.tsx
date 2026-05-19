@@ -1132,34 +1132,43 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         "Prompt details are not applicable to this script-backed dispatch.",
       ),
     ).toBeTruthy();
+    const scriptAttempts = within(dispatchCard).getByRole("region", {
+      name: "Script attempts",
+    });
     expect(
-      within(dispatchCard).getAllByText(
+      within(scriptAttempts).getByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.command ?? "",
-      ).length,
-    ).toBeGreaterThan(0);
+      ),
+    ).toBeTruthy();
     expect(
-      within(dispatchCard).getAllByText(
+      within(scriptAttempts).getAllByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.script_request_id ?? "",
       ).length,
     ).toBeGreaterThan(0);
-    expect(within(dispatchCard).getAllByText("--work").length).toBeGreaterThan(
-      0,
-    );
-    const scriptAttempts = within(dispatchCard).getByRole("region", {
-      name: "Script attempts",
-    });
+    expect(within(scriptAttempts).getByText("--work")).toBeTruthy();
+    expect(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Request details" }),
+      ).queryByText("Resolved args"),
+    ).toBeNull();
+    expect(
+      within(dispatchCard).queryByText(
+        dashboardWorkstationRequestFixtures.scriptPending.script_request
+          ?.command ?? "",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Response details" }),
+      ).queryByText("No script response yet for this dispatch."),
+    ).toBeNull();
     expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
     expect(within(scriptAttempts).getByText("PENDING")).toBeTruthy();
     expect(
       within(scriptAttempts).getByText(
         "No script response attempt has been recorded yet.",
-      ),
-    ).toBeTruthy();
-    expect(
-      within(dispatchCard).getByText(
-        "No script response yet for this dispatch.",
       ),
     ).toBeTruthy();
     expect(
@@ -1333,10 +1342,15 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Script attempts" }),
+      ).getByText("No script response attempt has been recorded yet."),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).queryByText(
         "このディスパッチにはまだスクリプト応答がありません。",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
     expect(within(dispatchCard).getByText("遷移 ID")).toBeTruthy();
     expect(within(dispatchCard).getByText("開始時刻")).toBeTruthy();
@@ -1344,9 +1358,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(dispatchCard).queryByText("ディスパッチ数")).toBeNull();
     expect(within(dispatchCard).queryByText("応答数")).toBeNull();
     expect(within(dispatchCard).queryByText("エラー数")).toBeNull();
-    expect(
-      within(localizedRequestDetails).getByText("解決済み引数"),
-    ).toBeTruthy();
+    expect(within(localizedRequestDetails).queryByText("解決済み引数")).toBeNull();
     expect(
       within(dispatchCard).getByRole("button", {
         name: "作業項目 Active Story を選択",
@@ -1417,14 +1429,17 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(dispatchCard).getByText(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Script attempts" }),
+      ).getByText("No script response attempt has been recorded yet."),
+    ).toBeTruthy();
+    expect(
+      within(dispatchCard).queryByText(
         "No script response yet for this dispatch.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(within(dispatchCard).getByText("Workstation")).toBeTruthy();
-    expect(
-      within(fallbackRequestDetails).getByText("Resolved args"),
-    ).toBeTruthy();
+    expect(within(fallbackRequestDetails).queryByText("Resolved args")).toBeNull();
     expect(
       within(dispatchCard).getByRole("button", {
         name: "Select work item Active Story",
@@ -1487,24 +1502,35 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
     expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
     expect(
-      within(dispatchCard).getAllByText(
+      within(scriptAttempts).getByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_request
           ?.command ?? "",
-      ).length,
-    ).toBeGreaterThan(0);
+      ),
+    ).toBeTruthy();
     expect(
-      within(dispatchCard).getAllByText(
+      within(scriptAttempts).getAllByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_response
           ?.script_request_id ?? "",
       ).length,
     ).toBeGreaterThan(0);
-    expect(within(dispatchCard).getAllByText("222ms").length).toBeGreaterThan(
-      0,
-    );
+    expect(within(scriptAttempts).getByText("222ms")).toBeTruthy();
     expect(
-      within(dispatchCard).getAllByText(/script success stdout/).length,
-    ).toBeGreaterThan(0);
+      within(scriptAttempts).getByText(/script success stdout/),
+    );
     expect(within(scriptAttempts).getAllByRole("article")).toHaveLength(2);
+    expect(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Request details" }),
+      ).queryByText(
+        dashboardWorkstationRequestFixtures.scriptSuccess.script_request
+          ?.command ?? "",
+      ),
+    ).toBeNull();
+    expect(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Response details" }),
+      ).queryByText(/script success stdout/),
+    ).toBeNull();
     expect(within(dispatchCard).queryByText("Provider session")).toBeNull();
   });
 
@@ -1553,12 +1579,15 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     });
     expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
     expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
-    expect(within(dispatchCard).getAllByText("TIMEOUT").length).toBeGreaterThan(
-      0,
-    );
+    expect(within(scriptAttempts).getByText("TIMEOUT")).toBeTruthy();
     expect(
-      within(dispatchCard).getAllByText(/script timed out/i).length,
-    ).toBeGreaterThan(0);
+      within(scriptAttempts).getByText(/script timed out/i),
+    ).toBeTruthy();
+    expect(
+      within(
+        within(dispatchCard).getByRole("region", { name: "Response details" }),
+      ).queryByText("TIMEOUT"),
+    ).toBeNull();
     expect(
       within(dispatchCard).queryByText(
         "Response text is unavailable because this dispatch ended with an error.",
