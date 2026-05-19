@@ -485,7 +485,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
           path: "/work",
           response: {
             body: {
-              trace_id: "trace-submit-story",
+              traceId: "trace-submit-story",
             },
             status: 201,
           },
@@ -533,7 +533,8 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     ).toBeVisible();
     await expect(requestNameField).toHaveValue("");
     await expect(requestField).toHaveValue("");
-    await expect(submitButton).toBeDisabled();
+    await expect(workTypeField).toHaveValue("story");
+    await expect(submitButton).toBeEnabled();
   },
 };
 
@@ -574,4 +575,3 @@ export const DashboardSubmitWorkRetryableFailure = {
     await expect(requestField).toHaveValue(requestText);
   },
 };
-
