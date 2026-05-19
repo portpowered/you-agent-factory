@@ -3,6 +3,8 @@ package interfaces
 import (
 	"reflect"
 	"testing"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 func TestWorkDiagnosticsFromSafeWorkDiagnostics_NilSafe(t *testing.T) {
@@ -110,5 +112,53 @@ func TestSafeWorkDiagnosticsRoundTrip_PreservesSafeFieldsOnly(t *testing.T) {
 	}
 	if rehydrated.Metadata != nil {
 		t.Fatalf("rehydrated metadata = %#v, want nil", rehydrated.Metadata)
+	}
+}
+
+func TestGeneratedSafeWorkDiagnostics_ClonesMapsAndPreservesNil(t *testing.T) {
+	diagnostics := &SafeWorkDiagnostics{
+		RenderedPrompt: &SafeRenderedPromptDiagnostic{
+			Variables: map[string]string{"prompt_source": "factory"},
+		},
+		Provider: &SafeProviderDiagnostic{
+			RequestMetadata:  map[string]string{"session_id": "req-1"},
+			ResponseMetadata: map[string]string{"retry_count": "0"},
+		},
+	}
+
+	generated := GeneratedSafeWorkDiagnostics(diagnostics)
+	(*generated.RenderedPrompt.Variables)["prompt_source"] = "mutated"
+	(*generated.Provider.RequestMetadata)["session_id"] = "mutated"
+	(*generated.Provider.ResponseMetadata)["retry_count"] = "1"
+
+	if diagnostics.RenderedPrompt.Variables["prompt_source"] != "factory" {
+		t.Fatalf("safe rendered prompt variables mutated = %#v", diagnostics.RenderedPrompt.Variables)
+	}
+	if diagnostics.Provider.RequestMetadata["session_id"] != "req-1" {
+		t.Fatalf("safe request metadata mutated = %#v", diagnostics.Provider.RequestMetadata)
+	}
+	if diagnostics.Provider.ResponseMetadata["retry_count"] != "0" {
+		t.Fatalf("safe response metadata mutated = %#v", diagnostics.Provider.ResponseMetadata)
+	}
+
+	if got := GeneratedSafeWorkDiagnostics(&SafeWorkDiagnostics{
+		RenderedPrompt: &SafeRenderedPromptDiagnostic{Variables: nil},
+		Provider: &SafeProviderDiagnostic{
+			RequestMetadata:  nil,
+			ResponseMetadata: map[string]string{},
+		},
+	}); got == nil {
+		t.Fatal("GeneratedSafeWorkDiagnostics returned nil, want non-nil diagnostics shell")
+	} else {
+		assertNilStringMapPtr(t, got.RenderedPrompt.Variables, "rendered prompt variables")
+		assertNilStringMapPtr(t, got.Provider.RequestMetadata, "request metadata")
+		assertNilStringMapPtr(t, got.Provider.ResponseMetadata, "response metadata")
+	}
+}
+
+func assertNilStringMapPtr(t *testing.T, got *factoryapi.StringMap, field string) {
+	t.Helper()
+	if got != nil {
+		t.Fatalf("%s = %#v, want nil", field, got)
 	}
 }
