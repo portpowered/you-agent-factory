@@ -14,6 +14,7 @@ import (
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
@@ -28,6 +29,7 @@ var expandFactoryConfig = configcli.ExpandFactoryConfig
 var initFactory = initcmd.Init
 var submitWork = submitcli.Submit
 var listWork = workcli.List
+var queryFactory = factorycli.Query
 
 const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
@@ -63,6 +65,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(
 		newConfigCommand(),
 		newDocsCommand(),
+		newFactoryCommand(),
 		newInitCommand(),
 		newRunCommand(),
 		newSubmitCommand(),
@@ -70,6 +73,44 @@ func NewRootCommand() *cobra.Command {
 	)
 
 	return root
+}
+
+func newFactoryCommand() *cobra.Command {
+	factoryCmd := &cobra.Command{
+		Use:   "factory",
+		Short: "Inspect factory runtime state",
+		Long: "Inspect factory runtime state from a running infinite-you service.\n\n" +
+			"Use the query subcommand to ask the live API server which factory is currently active " +
+			"instead of inferring runtime state from local factory files.",
+	}
+	factoryCmd.AddCommand(newFactoryQueryCommand())
+	return factoryCmd
+}
+
+func newFactoryQueryCommand() *cobra.Command {
+	cfg := factorycli.QueryConfig{Port: 8080}
+
+	cmd := &cobra.Command{
+		Use:          "query",
+		Short:        "Show the current active factory",
+		Long: "Show the current active factory from a running infinite-you service.\n\n" +
+			"By default the command writes a human-readable table with the current factory name and " +
+			"runtime-identifying fields. Use --json for the API-shaped current-factory payload, and " +
+			"use --port to target the same server-port selection pattern as work list.",
+		Example: "  # Show the current factory from the running service on the default port.\n" +
+			"  " + cliBinaryName + " factory query\n\n" +
+			"  # Query a different service port and emit API-shaped JSON for automation.\n" +
+			"  " + cliBinaryName + " factory query --port 7437 --json",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Output = cmd.OutOrStdout()
+			return queryFactory(cfg)
+		},
+	}
+
+	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API current-factory JSON response")
+	return cmd
 }
 
 func newWorkCommand() *cobra.Command {

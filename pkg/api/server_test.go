@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -31,6 +33,28 @@ import (
 func newTestServer(f *testutil.MockFactory) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServer(f, 8080, logger)
+}
+
+func newTestServerWithCodexRoot(root string) *Server {
+	logger, _ := zap.NewDevelopment()
+	return NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
+}
+
+func writeProviderSessionFixture(t *testing.T, root, id, contents string) {
+	t.Helper()
+
+	dir := filepath.Join(root, "2026", "05", "18")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create provider session fixture directory: %v", err)
+	}
+	path := filepath.Join(dir, "rollout-"+id+".jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write provider session fixture: %v", err)
+	}
 }
 
 func readSSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {
@@ -302,6 +326,182 @@ func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	if streamed.Id != "factory-event/work-request/api-surface-history" {
 		t.Fatalf("streamed event id = %q, want factory-event/work-request/api-surface-history", streamed.Id)
 	}
+}
+
+func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testing.T) {
+	root := t.TempDir()
+	writeProviderSessionFixture(t, root, "sess_123", strings.Join([]string{
+		`{"type":"session_meta","id":"sess_123"}`,
+		`{"type":"response_item","item":{"type":"reasoning"}}`,
+		`{"unexpected":true}`,
+		`not-json`,
+		``,
+	}, "\n"))
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp factoryapi.ProviderSessionDetailResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode provider session response: %v", err)
+	}
+	if stringValue(resp.ProviderSession.Provider) != "codex" ||
+		stringValue(resp.ProviderSession.Kind) != "session_id" ||
+		stringValue(resp.ProviderSession.Id) != "sess_123" {
+		t.Fatalf("provider session = %#v, want codex session_id sess_123", resp.ProviderSession)
+	}
+	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
+		t.Fatalf("relative path = %q, want rooted rollout path", resp.Source.RelativePath)
+	}
+	if resp.Source.SizeBytes == 0 {
+		t.Fatal("sizeBytes = 0, want populated source metadata")
+	}
+	if resp.Parse.LineCount != 4 || resp.Parse.EventCount != 3 ||
+		resp.Parse.MalformedLineCount != 1 || resp.Parse.UnknownEventCount != 1 {
+		t.Fatalf("parse summary = %#v, want line/event/malformed/unknown counts", resp.Parse)
+	}
+	if len(resp.Parse.Turns) != 1 || resp.Parse.Turns[0].ReasoningCount != 1 {
+		t.Fatalf("turn summaries = %#v, want one inferred reasoning turn", resp.Parse.Turns)
+	}
+	if len(resp.Parse.Reasoning) != 1 || resp.Parse.Reasoning[0].SourceType != "reasoning" {
+		t.Fatalf("reasoning summaries = %#v, want response reasoning entry", resp.Parse.Reasoning)
+	}
+	if len(resp.Parse.ParseErrors) != 1 || resp.Parse.ParseErrors[0].LineNumber != 4 {
+		t.Fatalf("parse errors = %#v, want malformed line 4", resp.Parse.ParseErrors)
+	}
+	if len(resp.Parse.UnknownEvents) != 1 || resp.Parse.UnknownEvents[0].LineNumber != 3 {
+		t.Fatalf("unknown events = %#v, want unknown event line 3", resp.Parse.UnknownEvents)
+	}
+}
+
+func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
+	session := strings.Join([]string{
+		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":["checked input"],"encrypted_content":"sealed"}}`,
+		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":{"cmd":"go test ./pkg/api"}}}`,
+		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok"}}`,
+		`{"timestamp":"2026-05-18T10:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":5,"total_tokens":130}}}}`,
+		`{"timestamp":"2026-05-18T10:00:05Z","type":"turn_context"}`,
+		`{"timestamp":"2026-05-18T10:00:06Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-2","name":"apply_patch","input":"patch text","status":"in_progress"}}`,
+		`{"timestamp":"2026-05-18T10:00:07Z","type":"event_msg","payload":{"type":"new_future_event"}}`,
+		`{"timestamp":"2026-05-18T10:00:08Z","type":"unexpected_top_level"}`,
+		`{bad json`,
+	}, "\n")
+
+	summary, err := parseCodexSessionSummary(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session summary: %v", err)
+	}
+
+	if summary.LineCount != 10 || summary.EventCount != 9 || summary.MalformedLineCount != 1 || summary.UnknownEventCount != 2 {
+		t.Fatalf("counts = %#v, want parsed, malformed, and unknown counts", summary)
+	}
+	if len(summary.Turns) != 2 {
+		t.Fatalf("turns = %#v, want two chronological turns", summary.Turns)
+	}
+	if summary.Turns[0].Index != 1 || summary.Turns[0].ResponseItemCount != 3 ||
+		summary.Turns[0].FunctionCallCount != 1 || summary.Turns[0].ReasoningCount != 1 {
+		t.Fatalf("first turn = %#v, want response items, function call, and reasoning", summary.Turns[0])
+	}
+	if summary.Turns[1].Index != 2 || summary.Turns[1].FunctionCallCount != 1 {
+		t.Fatalf("second turn = %#v, want custom tool call", summary.Turns[1])
+	}
+	if len(summary.FunctionCalls) != 2 {
+		t.Fatalf("function calls = %#v, want two calls", summary.FunctionCalls)
+	}
+	firstCall := summary.FunctionCalls[0]
+	if firstCall.Order != 1 || stringValue(firstCall.Name) != "exec_command" ||
+		stringValue(firstCall.Arguments) != `{"cmd":"go test ./pkg/api"}` ||
+		stringValue(firstCall.Output) != "ok" || stringValue(firstCall.Status) != "completed" {
+		t.Fatalf("first function call = %#v, want ordered call with args and completed output", firstCall)
+	}
+	secondCall := summary.FunctionCalls[1]
+	if secondCall.Order != 2 || stringValue(secondCall.Name) != "apply_patch" ||
+		stringValue(secondCall.Status) != "in_progress" || stringValue(secondCall.Output) != "" {
+		t.Fatalf("second function call = %#v, want custom tool call without fabricated output", secondCall)
+	}
+	if len(summary.Reasoning) != 1 ||
+		stringValue(summary.Reasoning[0].Summary) != `["checked input"]` ||
+		summary.Reasoning[0].Encrypted == nil || !*summary.Reasoning[0].Encrypted {
+		t.Fatalf("reasoning = %#v, want summary and encrypted marker", summary.Reasoning)
+	}
+	if summary.TokenUsage == nil ||
+		intValue(summary.TokenUsage.InputTokens) != 100 ||
+		intValue(summary.TokenUsage.CachedInputTokens) != 40 ||
+		intValue(summary.TokenUsage.OutputTokens) != 25 ||
+		intValue(summary.TokenUsage.ReasoningOutputTokens) != 5 ||
+		intValue(summary.TokenUsage.TotalTokens) != 130 {
+		t.Fatalf("token usage = %#v, want total consumed token fields", summary.TokenUsage)
+	}
+	if len(summary.UnknownEvents) != 2 ||
+		summary.UnknownEvents[0].LineNumber != 8 ||
+		stringValue(summary.UnknownEvents[0].Type) != "event_msg" ||
+		stringValue(summary.UnknownEvents[0].PayloadType) != "new_future_event" ||
+		summary.UnknownEvents[1].LineNumber != 9 ||
+		stringValue(summary.UnknownEvents[1].Type) != "unexpected_top_level" {
+		t.Fatalf("unknown events = %#v, want compact line-level unknown records", summary.UnknownEvents)
+	}
+	if len(summary.ParseErrors) != 1 || summary.ParseErrors[0].LineNumber != 10 {
+		t.Fatalf("parse errors = %#v, want malformed line retained", summary.ParseErrors)
+	}
+}
+
+func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
+	srv := newTestServerWithCodexRoot(t.TempDir())
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
+	tests := []string{
+		"/provider-sessions/detail?provider=codex&kind=session_id&id=../secret",
+		"/provider-sessions/detail?provider=codex&kind=session_id&id=/tmp/rollout-session.jsonl",
+		"/provider-sessions/detail?provider=codex&kind=session_id&id=session.with.dot",
+		"/provider-sessions/detail?provider=openai&kind=session_id&id=sess-123",
+		"/provider-sessions/detail?provider=codex&kind=path&id=sess-123",
+	}
+
+	for _, target := range tests {
+		t.Run(target, func(t *testing.T) {
+			srv := newTestServerWithCodexRoot(t.TempDir())
+			req := httptest.NewRequest("GET", target, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+		})
+	}
+}
+
+func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	outsideSessionPath := filepath.Join(outside, "rollout-sess-outside.jsonl")
+	if err := os.WriteFile(outsideSessionPath, []byte(`{"type":"session_meta"}`), 0o600); err != nil {
+		t.Fatalf("write outside session fixture: %v", err)
+	}
+	sessionDir := filepath.Join(root, "2026", "05", "18")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("create session dir: %v", err)
+	}
+	if err := os.Symlink(outsideSessionPath, filepath.Join(sessionDir, "rollout-sess-outside.jsonl")); err != nil {
+		t.Fatalf("create provider session symlink: %v", err)
+	}
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess-outside", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
 }
 
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {
@@ -1935,6 +2135,78 @@ func TestListWork(t *testing.T) {
 	}
 }
 
+func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.T) {
+	now := time.Now()
+	tokens := map[string]*interfaces.Token{
+		"tok-1": listWorkToken("tok-1", "work-review", "task:init", "task", now),
+		"tok-2": listWorkToken("tok-2", "work-draft", "task:init", "task", now),
+		"tok-3": listWorkToken("tok-3", "work-parent", "task:init", "task", now),
+		"tok-4": listWorkToken("tok-4", "work-standalone", "task:init", "task", now),
+		"tok-5": listWorkToken("tok-5", "work-origin", "task:init", "task", now),
+	}
+	tokens["tok-1"].Color.Name = "review"
+	tokens["tok-1"].Color.Relations = []interfaces.Relation{
+		{Type: interfaces.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"},
+		{Type: interfaces.RelationParentChild, TargetWorkID: "work-parent"},
+		{Type: interfaces.RelationSpawnedBy, TargetWorkID: "work-origin"},
+	}
+	tokens["tok-2"].Color.Name = "draft"
+	tokens["tok-3"].Color.Name = "parent"
+	tokens["tok-4"].Color.Name = "standalone"
+	tokens["tok-5"].Color.Name = "origin"
+
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work?state.name=init", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	review := listedWorkByID(t, resp.Results, "work-review")
+	if review.Relations == nil {
+		t.Fatal("review relations are nil, want runtime relations")
+	}
+	relations := *review.Relations
+	if len(relations) != 3 {
+		t.Fatalf("review relations = %d, want 3: %#v", len(relations), relations)
+	}
+	if got := relations[0]; got.Type != factoryapi.RelationTypeDependsOn ||
+		got.SourceWorkName != "review" ||
+		got.TargetWorkName != "draft" ||
+		stringValue(got.TargetWorkId) != "work-draft" ||
+		stringValue(got.RequiredState) != "complete" {
+		t.Fatalf("depends_on relation = %#v, want review -> draft complete", got)
+	}
+	if got := relations[1]; got.Type != factoryapi.RelationTypeParentChild ||
+		got.SourceWorkName != "review" ||
+		got.TargetWorkName != "parent" ||
+		stringValue(got.TargetWorkId) != "work-parent" ||
+		got.RequiredState != nil {
+		t.Fatalf("parent_child relation = %#v, want review -> parent without required state", got)
+	}
+	if got := relations[2]; got.Type != factoryapi.RelationTypeSpawnedBy ||
+		got.SourceWorkName != "review" ||
+		got.TargetWorkName != "origin" ||
+		stringValue(got.TargetWorkId) != "work-origin" ||
+		got.RequiredState != nil {
+		t.Fatalf("spawned_by relation = %#v, want review -> origin without required state", got)
+	}
+	standalone := listedWorkByID(t, resp.Results, "work-standalone")
+	if standalone.Relations != nil {
+		t.Fatalf("standalone relations = %#v, want omitted relations", *standalone.Relations)
+	}
+}
+
 func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 	now := time.Now()
 	tokens := map[string]*interfaces.Token{
@@ -2323,6 +2595,17 @@ func submittedRequestNamed(t *testing.T, requests []interfaces.SubmitRequest, na
 	}
 	t.Fatalf("submit request %q not found in %#v", name, requests)
 	return interfaces.SubmitRequest{}
+}
+
+func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factoryapi.Work {
+	t.Helper()
+	for _, work := range works {
+		if stringValue(work.WorkId) == workID {
+			return work
+		}
+	}
+	t.Fatalf("listed work %q not found in %#v", workID, works)
+	return factoryapi.Work{}
 }
 
 func assertSubmittedChildRelations(t *testing.T, relations []interfaces.Relation) {

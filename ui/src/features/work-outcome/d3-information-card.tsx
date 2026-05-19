@@ -15,7 +15,6 @@ export interface WorkChartCardProps {
   title?: string;
   widgetId?: string;
 }
-export type D3CompletionInformationCardProps = WorkChartCardProps;
 
 const WORK_CHART_BODY_CLASS = "!flex !gap-0 !overflow-hidden !p-0";
 const WORK_CHART_REGION_CLASS = "min-h-0 flex-1 px-4 sm:px-5";

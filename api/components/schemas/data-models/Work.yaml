@@ -40,3 +40,8 @@ properties:
   tags:
     $ref: '../shared/StringMap.yaml'
     description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.
+  relations:
+    type: array
+    description: Current outbound relationships attached to this listed source work item when returned by read APIs.
+    items:
+      $ref: './Relation.yaml'

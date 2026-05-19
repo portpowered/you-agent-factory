@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +16,10 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
@@ -36,12 +41,13 @@ func TestNewRootCommand_HasSubcommands(t *testing.T) {
 	root := NewRootCommand()
 
 	want := map[string]bool{
-		"config": false,
-		"docs":   false,
-		"init":   false,
-		"run":    false,
-		"submit": false,
-		"work":   false,
+		"config":  false,
+		"docs":    false,
+		"factory": false,
+		"init":    false,
+		"run":     false,
+		"submit":  false,
+		"work":    false,
 	}
 
 	for _, sub := range root.Commands() {
@@ -53,6 +59,214 @@ func TestNewRootCommand_HasSubcommands(t *testing.T) {
 	for name, found := range want {
 		if !found {
 			t.Errorf("expected subcommand %q to be registered", name)
+		}
+	}
+}
+
+func TestFactoryQueryCommand_PortFlagMapsToConfig(t *testing.T) {
+	originalQueryFactory := queryFactory
+	defer func() {
+		queryFactory = originalQueryFactory
+	}()
+
+	var got factorycli.QueryConfig
+	queryFactory = func(cfg factorycli.QueryConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query", "--port", "9090", "--json"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query: %v", err)
+	}
+
+	if got.Port != 9090 {
+		t.Fatalf("port = %d, want 9090", got.Port)
+	}
+	if !got.JSON {
+		t.Fatal("expected json output flag")
+	}
+	if got.Output == nil {
+		t.Fatal("expected output writer")
+	}
+}
+
+func TestFactoryQueryCommand_DefaultRootOutput(t *testing.T) {
+	factoryDir := t.TempDir()
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name:             apisurface.DefaultCurrentFactoryName,
+		FactoryDirectory: &factoryDir,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
+		fmt.Sprintf("%s\tdefault-root\t\t%s\n", apisurface.DefaultCurrentFactoryName, factoryDir)
+	if got := string(out); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestFactoryQueryCommand_NamedFactoryOutput(t *testing.T) {
+	factoryID := "customer-factory"
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name: "beta",
+		Id:   &factoryID,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
+		"beta\tnamed\tcustomer-factory\t\n"
+	if got := string(out); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestFactoryQueryCommand_DefaultRootJSONOutput(t *testing.T) {
+	factoryDir := t.TempDir()
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name:             apisurface.DefaultCurrentFactoryName,
+		FactoryDirectory: &factoryDir,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--json", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	if bytes.Contains(out, []byte("NAME\tKIND")) {
+		t.Fatalf("json output included human-readable text: %q", string(out))
+	}
+
+	var got factoryapi.Factory
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("json output is not valid Factory JSON: %v\n%s", err, string(out))
+	}
+	if got.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", got.Name, apisurface.DefaultCurrentFactoryName)
+	}
+	if got.FactoryDirectory == nil || *got.FactoryDirectory != factoryDir {
+		t.Fatalf("factory directory = %#v, want %q", got.FactoryDirectory, factoryDir)
+	}
+}
+
+func TestFactoryQueryCommand_NamedFactoryJSONOutput(t *testing.T) {
+	factoryID := "customer-factory"
+	workers := []factoryapi.Worker{{Name: "executor"}}
+	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
+		Name:    "beta",
+		Id:      &factoryID,
+		Workers: &workers,
+	})
+	defer srv.Close()
+
+	out := executeRootCommand(t, "factory", "query", "--port", strconv.Itoa(rootServerPort(t, srv)), "--json")
+	if bytes.Contains(out, []byte("NAME\tKIND")) {
+		t.Fatalf("json output included human-readable text: %q", string(out))
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("json output is not valid Factory JSON: %v\n%s", err, string(out))
+	}
+	if got["name"] != "beta" || got["id"] != factoryID {
+		t.Fatalf("factory JSON = %#v, want name beta and id %q", got, factoryID)
+	}
+	workerPayloads, ok := got["workers"].([]any)
+	if !ok || len(workerPayloads) != 1 {
+		t.Fatalf("workers = %#v, want one API worker payload", got["workers"])
+	}
+}
+
+func TestFactoryQueryCommand_CurrentFactoryNotFoundFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory/~current" {
+			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Code:    factoryapi.NOTFOUND,
+			Message: "Current named factory not found.",
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	out, err := executeRootCommandErr(t, "factory", "query", "--json", "--port", strconv.Itoa(rootServerPort(t, srv)))
+	if err == nil {
+		t.Fatal("expected missing current factory to fail")
+	}
+	if len(out) != 0 {
+		t.Fatalf("stdout = %q, want no success output", string(out))
+	}
+	want := "running service has no active current factory; start a factory or activate a named factory: current factory not found: Current named factory not found."
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestFactoryQueryCommand_UnreachableServerFails(t *testing.T) {
+	out, err := executeRootCommandErr(t, "factory", "query", "--port", "1")
+	if err == nil {
+		t.Fatal("expected unreachable server to fail")
+	}
+	if len(out) != 0 {
+		t.Fatalf("stdout = %q, want no success output", string(out))
+	}
+	if !strings.Contains(err.Error(), "factory not reachable at http://localhost:1/factory/~current") {
+		t.Fatalf("error = %q, want reachability context", err.Error())
+	}
+}
+
+func TestFactoryCommand_HelpListsQuerySubcommand(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"Inspect factory runtime state from a running infinite-you service.",
+		"query",
+		"Show the current active factory",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("factory help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestFactoryQueryCommand_HelpDocumentsOutputModesAndPort(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"Show the current active factory from a running infinite-you service.",
+		"human-readable table",
+		"Use --json for the API-shaped current-factory payload",
+		"--port",
+		"--json",
+		"infinite-you factory query --port 7437 --json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("factory query help missing %q:\n%s", want, help)
 		}
 	}
 }
@@ -231,6 +445,43 @@ func executeRootCommand(t *testing.T, args ...string) []byte {
 		t.Fatalf("execute root command %v: %v", args, err)
 	}
 	return out.Bytes()
+}
+
+func executeRootCommandErr(t *testing.T, args ...string) ([]byte, error) {
+	t.Helper()
+
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+
+	err := root.Execute()
+	return out.Bytes(), err
+}
+
+func rootCurrentFactoryServer(t *testing.T, current factoryapi.Factory) *httptest.Server {
+	t.Helper()
+
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory/~current" {
+			t.Fatalf("path = %q, want /factory/~current", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(current); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+}
+
+func rootServerPort(t *testing.T, srv *httptest.Server) int {
+	t.Helper()
+
+	var port int
+	if _, err := fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port); err != nil {
+		t.Fatalf("parse test server port: %v", err)
+	}
+	return port
 }
 
 func decodeFlattenPayload(t *testing.T, out []byte) map[string]any {

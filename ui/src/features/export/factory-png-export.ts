@@ -7,7 +7,6 @@ const PNG_INTERNATIONAL_TEXT_CHUNK = "iTXt";
 export const PORT_OS_FACTORY_PNG_METADATA_KEYWORD = "portos.agent-factory";
 export const PORT_OS_FACTORY_PNG_SCHEMA_VERSION = "portos.agent-factory.png.v1";
 
-export type CanonicalFactoryDefinition = FactoryValue;
 export interface FactoryPngMetadata extends FactoryValue {
   schemaVersion: typeof PORT_OS_FACTORY_PNG_SCHEMA_VERSION;
 }
@@ -343,4 +342,3 @@ function buildCrc32Table(): Uint32Array {
 
   return table;
 }
-

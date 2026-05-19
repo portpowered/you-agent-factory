@@ -14,15 +14,20 @@ import {
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import { WORK_SELECTION_BUTTON_CLASS } from "./detail-card-shared";
 import type { WorkItemDetailCardProps } from "./detail-card-types";
+import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 import { SelectedWorkDispatchHistorySection } from "./selected-work-dispatch-history";
 
 export function WorkItemDetailCard({
   activeTraceID,
   dispatchAttempts,
   executionDetails,
+  locale,
+  onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
   selectedNode,
+  selectedProviderSession,
+  selectedProviderSessionKey,
   selection,
   selectedTrace,
   workstationRequests,
@@ -80,12 +85,18 @@ export function WorkItemDetailCard({
         activeTraceID={activeTraceID}
         currentDispatchID={selection.dispatchId}
         fallbackProviderSessions={dispatchAttempts}
+        onSelectProviderSession={onSelectProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
         requests={workstationRequests}
+        selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selection.workItem.work_id}
         traceTargetId={traceTargetId}
         workstationKind={selectedNode?.workstation_kind}
+      />
+      <ProviderSessionDetailPanel
+        locale={locale}
+        selectedProviderSession={selectedProviderSession ?? null}
       />
     </SelectionDetailLayout>
   );

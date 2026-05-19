@@ -19,6 +19,8 @@ tags:
     description: Named factory activation and current-factory inspection.
   - name: Runtime
     description: Runtime state, event stream, and trace inspection.
+  - name: Provider Sessions
+    description: Provider-owned session diagnostics for dashboard inspection.
   - name: Workflows
     description: Stored workflow inspection.
 paths:
@@ -150,6 +152,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /provider-sessions/detail:
+    get:
+      tags:
+        - Provider Sessions
+      operationId: getProviderSessionDetails
+      summary: Get provider session details
+      description: Loads a known Codex provider-session file by provider-session metadata. The browser supplies provider, kind, and identifier values; the server resolves the matching rollout file under the configured Codex sessions root and never accepts a raw filesystem path.
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          description: Provider that emitted the session identifier. Only codex sessions are currently loadable.
+          schema:
+            type: string
+        - name: kind
+          in: query
+          required: true
+          description: Provider-session identifier kind. Only session_id is currently loadable.
+          schema:
+            type: string
+        - name: id
+          in: query
+          required: true
+          description: Provider-session identifier to resolve. This is an identifier, not a filesystem path.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Parsed provider-session details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderSessionDetailResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory:
@@ -594,6 +635,239 @@ components:
             - Current factory runtime is not idle and cannot activate a new named factory.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
+    ProviderSessionDetailResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - providerSession
+        - source
+        - parse
+      properties:
+        providerSession:
+          $ref: '#/components/schemas/ProviderSessionMetadata'
+        source:
+          $ref: '#/components/schemas/ProviderSessionSourceMetadata'
+        parse:
+          $ref: '#/components/schemas/CodexSessionParseSummary'
+    ProviderSessionSourceMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - relativePath
+        - sizeBytes
+      properties:
+        relativePath:
+          type: string
+          description: Path to the loaded session file relative to the configured Codex sessions root.
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Size of the loaded session file in bytes.
+        modifiedAt:
+          type: string
+          format: date-time
+          description: Filesystem modification time when available.
+    CodexSessionParseSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - eventCount
+        - lineCount
+        - malformedLineCount
+        - unknownEventCount
+        - turns
+        - functionCalls
+        - reasoning
+        - parseErrors
+        - unknownEvents
+      properties:
+        eventCount:
+          type: integer
+          minimum: 0
+          description: Number of JSON event records parsed from the session stream.
+        lineCount:
+          type: integer
+          minimum: 0
+          description: Number of non-empty event-stream lines inspected.
+        malformedLineCount:
+          type: integer
+          minimum: 0
+          description: Number of non-empty lines that could not be parsed as JSON objects.
+        unknownEventCount:
+          type: integer
+          minimum: 0
+          description: Number of parsed JSON events without a recognized type field.
+        turns:
+          type: array
+          description: Chronological execution turns inferred from turn boundaries and response activity.
+          items:
+            $ref: '#/components/schemas/CodexSessionTurnSummary'
+        functionCalls:
+          type: array
+          description: Function and tool calls observed in chronological order.
+          items:
+            $ref: '#/components/schemas/CodexSessionFunctionCallSummary'
+        reasoning:
+          type: array
+          description: Reasoning entries or summaries observed in chronological order.
+          items:
+            $ref: '#/components/schemas/CodexSessionReasoningSummary'
+        tokenUsage:
+          $ref: '#/components/schemas/CodexSessionTokenUsage'
+        parseErrors:
+          type: array
+          description: Line-level parse errors for malformed event-stream records.
+          items:
+            $ref: '#/components/schemas/CodexSessionLineError'
+        unknownEvents:
+          type: array
+          description: Compact list of events with unknown or unsupported type fields.
+          items:
+            $ref: '#/components/schemas/CodexSessionUnknownEvent'
+    CodexSessionTurnSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - index
+        - eventCount
+        - responseItemCount
+        - functionCallCount
+        - reasoningCount
+      properties:
+        index:
+          type: integer
+          minimum: 1
+          description: One-based chronological execution turn index.
+        eventCount:
+          type: integer
+          minimum: 0
+          description: Number of parsed events associated with the turn.
+        responseItemCount:
+          type: integer
+          minimum: 0
+          description: Number of response_item records associated with the turn.
+        functionCallCount:
+          type: integer
+          minimum: 0
+          description: Number of function or tool calls associated with the turn.
+        reasoningCount:
+          type: integer
+          minimum: 0
+          description: Number of reasoning entries associated with the turn.
+        startedAt:
+          type: string
+          format: date-time
+          description: First event timestamp associated with the turn when present.
+    CodexSessionFunctionCallSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - order
+        - type
+      properties:
+        order:
+          type: integer
+          minimum: 1
+          description: Chronological order of the function or tool call in the session stream.
+        turnIndex:
+          type: integer
+          minimum: 1
+          description: One-based execution turn index associated with the call when inferable.
+        callId:
+          type: string
+          description: Provider call identifier when present in the session stream.
+        type:
+          type: string
+          description: Raw response item type for the call, such as function_call or custom_tool_call.
+        name:
+          type: string
+          description: Function or tool name when present.
+        arguments:
+          type: string
+          description: Compact argument payload when present.
+        output:
+          type: string
+          description: Compact output payload when present.
+        status:
+          type: string
+          description: Result status inferred from the call output or explicit status fields.
+    CodexSessionReasoningSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - order
+        - sourceType
+      properties:
+        order:
+          type: integer
+          minimum: 1
+          description: Chronological order of the reasoning entry in the session stream.
+        turnIndex:
+          type: integer
+          minimum: 1
+          description: One-based execution turn index associated with the reasoning entry when inferable.
+        sourceType:
+          type: string
+          description: Event or response item type that carried the reasoning entry.
+        text:
+          type: string
+          description: Reasoning text when plaintext content is present.
+        summary:
+          type: string
+          description: Compact reasoning summary when present.
+        encrypted:
+          type: boolean
+          description: Whether the reasoning entry only exposed encrypted content.
+    CodexSessionTokenUsage:
+      type: object
+      additionalProperties: false
+      properties:
+        inputTokens:
+          type: integer
+          minimum: 0
+        cachedInputTokens:
+          type: integer
+          minimum: 0
+        outputTokens:
+          type: integer
+          minimum: 0
+        reasoningOutputTokens:
+          type: integer
+          minimum: 0
+        totalTokens:
+          type: integer
+          minimum: 0
+    CodexSessionLineError:
+      type: object
+      additionalProperties: false
+      required:
+        - lineNumber
+        - message
+      properties:
+        lineNumber:
+          type: integer
+          minimum: 1
+          description: One-based line number of the malformed event-stream record.
+        message:
+          type: string
+          description: Client-safe parse error message for the malformed line.
+    CodexSessionUnknownEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - lineNumber
+      properties:
+        lineNumber:
+          type: integer
+          minimum: 1
+          description: One-based line number of the unknown event.
+        type:
+          type: string
+          description: Raw top-level event type when present.
+        payloadType:
+          type: string
+          description: Raw nested payload type when present.
     StringMap:
       type: object
       additionalProperties:
@@ -2262,6 +2536,11 @@ components:
         tags:
           $ref: '#/components/schemas/StringMap'
           description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.
+        relations:
+          type: array
+          description: Current outbound relationships attached to this listed source work item when returned by read APIs.
+          items:
+            $ref: '#/components/schemas/Relation'
     Relation:
       type: object
       additionalProperties: false

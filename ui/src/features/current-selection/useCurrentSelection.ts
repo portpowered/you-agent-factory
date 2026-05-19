@@ -58,8 +58,6 @@ export interface CurrentSelectionState {
   undoSelection: () => void;
 }
 
-export type UseCurrentSelectionResult = CurrentSelectionState;
-
 function useCurrentSelectionStoreState() {
   return {
     canRedoSelection: useSelectionHistoryStore((state) => state.future.length > 0),
@@ -153,4 +151,3 @@ export function useCurrentSelection({
     undoSelection: store.undoSelection,
   };
 }
-
