@@ -168,9 +168,23 @@ function buildStatus({
   }
 
   if (draft.workTypeName.length === 0) {
+    if (draft.requestName.trim().length === 0) {
+      return {
+        kind: "guidance",
+        message: messages.statusMessages.emptyGuidance,
+      };
+    }
+
     return {
       kind: "guidance",
       message: messages.statusMessages.workTypeOnly,
+    };
+  }
+
+  if (draft.requestName.trim().length === 0) {
+    return {
+      kind: "guidance",
+      message: messages.statusMessages.requestOnly,
     };
   }
 
@@ -185,7 +199,13 @@ function buildValidationSummary(
   messages: SubmitWorkMessages,
 ): string {
   if (validationErrors.workTypeName) {
+    if (validationErrors.requestName) {
+      return messages.validationMessages.bothMissing;
+    }
     return validationErrors.workTypeName;
+  }
+  if (validationErrors.requestName) {
+    return validationErrors.requestName;
   }
   return messages.validationMessages.fallback;
 }
@@ -193,7 +213,7 @@ function buildValidationSummary(
 function hasValidationErrors(
   validationErrors: SubmitWorkValidationErrors,
 ): boolean {
-  return Boolean(validationErrors.workTypeName);
+  return Boolean(validationErrors.requestName || validationErrors.workTypeName);
 }
 
 function submitWorkErrorMessage(
@@ -215,6 +235,10 @@ function validateDraft(
   if (draft.workTypeName.length === 0) {
     validationErrors.workTypeName =
       messages.validationMessages.workTypeRequired;
+  }
+  if (draft.requestName.trim().length === 0) {
+    validationErrors.requestName =
+      messages.validationMessages.requestRequired;
   }
   return validationErrors;
 }

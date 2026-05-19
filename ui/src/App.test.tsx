@@ -3803,7 +3803,7 @@ describe("App dashboard follow-up flows", () => {
     expect(submitButton.disabled).toBe(true);
     expect(
       submitWorkScope.getByText(
-        "Choose a work type to continue. Request details are optional.",
+        "Choose a work type and enter a request name to continue.",
       ),
     ).toBeTruthy();
     expect(
@@ -3813,13 +3813,10 @@ describe("App dashboard follow-up flows", () => {
     ).toBeNull();
 
     fireEvent.change(workType, { target: { value: "story" } });
-    expect(submitButton.disabled).toBe(false);
-    expect(submitWorkScope.getByText("Ready to submit.")).toBeTruthy();
+    expect(submitButton.disabled).toBe(true);
     expect(
-      submitWorkScope.queryByText(
-        "Ready to submit. Request details are optional.",
-      ),
-    ).toBeNull();
+      submitWorkScope.getByText("Enter a request name to continue."),
+    ).toBeTruthy();
     fireEvent.change(requestName, {
       target: { value: "Dashboard smoke request" },
     });
@@ -3844,7 +3841,7 @@ describe("App dashboard follow-up flows", () => {
     expect(workType.value).toBe("story");
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
-    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.disabled).toBe(true);
 
     fireEvent.change(requestName, {
       target: { value: "Retry dashboard request" },
@@ -3943,7 +3940,7 @@ describe("App dashboard follow-up flows", () => {
     expect(requestText.value).toBe("");
   });
 
-  it("submits an empty payload through POST /work from the dashboard shell", async () => {
+  it("submits an empty payload through POST /work from the dashboard shell when request name is present", async () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock.mockImplementation(
       async () =>
@@ -3957,10 +3954,13 @@ describe("App dashboard follow-up flows", () => {
 
     await screen.findByRole("heading", { name: "Infinite You" });
 
-    const { submitButton, submitWorkScope, workType } =
+    const { requestName, submitButton, submitWorkScope, workType } =
       submitWorkCardControls();
 
     fireEvent.change(workType, { target: { value: "story" } });
+    fireEvent.change(requestName, {
+      target: { value: "Dashboard empty payload request" },
+    });
     expect(submitButton.disabled).toBe(false);
     fireEvent.click(submitButton);
 
@@ -3971,7 +3971,7 @@ describe("App dashboard follow-up flows", () => {
     ).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      name: "",
+      name: "Dashboard empty payload request",
       payload: "",
       workTypeName: "story",
     });
