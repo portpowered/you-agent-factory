@@ -23,6 +23,11 @@ import {
 } from "./components/ui/dashboard-typography";
 import { DashboardScreen } from "./features/dashboard";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
+import {
+  buttonVisibleStyle,
+  expectGraphWorkstation,
+  fillSubmitWorkCard,
+} from "./stories/dashboardStoryTestUtils";
 
 const activeStoryTrace: DashboardTrace = {
   trace_id: "trace-active-story",
@@ -219,24 +224,6 @@ const _failedStoryTrace: DashboardTrace = {
   ],
 };
 
-async function expectGraphWorkstation(
-  canvasElement: HTMLElement,
-  workstationName: string,
-): Promise<HTMLElement> {
-  const canvas = within(canvasElement);
-
-  await expect(
-    await canvas.findByRole("region", { name: "Work graph viewport" }),
-  ).toBeVisible();
-
-  const workstation = await canvas.findByRole("button", {
-    name: workstationName,
-  });
-  await expect(workstation).toBeVisible();
-
-  return workstation;
-}
-
 function expectCurrentSelectionCardID(canvasElement: HTMLElement): void {
   const canvas = within(canvasElement);
   const currentSelection = canvas.getByRole("article", {
@@ -272,24 +259,6 @@ function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
   ).toBe(true);
 }
 
-function buttonVisibleStyle(button: HTMLElement): {
-  backgroundColor: string;
-  borderColor: string;
-  color: string;
-} {
-  const view = button.ownerDocument.defaultView;
-  if (!view) {
-    throw new Error("expected a defaultView when reading button styles");
-  }
-
-  const styles = view.getComputedStyle(button);
-  return {
-    backgroundColor: styles.backgroundColor,
-    borderColor: styles.borderTopColor,
-    color: styles.color,
-  };
-}
-
 async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
   requestNameField: HTMLElement;
   requestField: HTMLElement;
@@ -317,35 +286,6 @@ async function submitWorkCardControls(canvasElement: HTMLElement): Promise<{
     requestField,
     scope: submitWorkScope,
     submitButton: submitWorkScope.getByRole("button", { name: "Submit work" }),
-    workTypeField,
-  };
-}
-
-async function fillSubmitWorkCard(
-  canvasElement: HTMLElement,
-  requestName: string,
-  requestText: string,
-): Promise<{
-  requestNameField: HTMLElement;
-  requestField: HTMLElement;
-  scope: ReturnType<typeof within>;
-  submitButton: HTMLElement;
-  workTypeField: HTMLElement;
-}> {
-  const { requestField, requestNameField, scope, submitButton, workTypeField } =
-    await submitWorkCardControls(canvasElement);
-
-  await userEvent.selectOptions(workTypeField, "story");
-  await userEvent.clear(requestNameField);
-  await userEvent.type(requestNameField, requestName);
-  await userEvent.clear(requestField);
-  await userEvent.type(requestField, requestText);
-
-  return {
-    requestNameField,
-    requestField,
-    scope,
-    submitButton,
     workTypeField,
   };
 }
