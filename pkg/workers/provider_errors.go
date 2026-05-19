@@ -36,7 +36,7 @@ func NewProviderErrorWithSession(errorType interfaces.ProviderErrorType, message
 
 func newProviderErrorWithDiagnostics(errorType interfaces.ProviderErrorType, message string, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
 	err := NewProviderErrorWithSession(errorType, message, cause, session)
-	err.Diagnostics = cloneWorkDiagnostics(diagnostics)
+	err.Diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
 	return err
 }
 

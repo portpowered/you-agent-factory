@@ -1,5 +1,60 @@
 package interfaces
 
+// CloneToken returns a detached copy of the canonical runtime token shape.
+func CloneToken(token Token) Token {
+	return Token{
+		ID:        token.ID,
+		PlaceID:   token.PlaceID,
+		Color:     CloneTokenColor(token.Color),
+		CreatedAt: token.CreatedAt,
+		EnteredAt: token.EnteredAt,
+		History:   CloneTokenHistory(token.History),
+	}
+}
+
+// CloneTokens returns detached copies of canonical runtime tokens.
+func CloneTokens(tokens []Token) []Token {
+	if tokens == nil {
+		return nil
+	}
+	clones := make([]Token, len(tokens))
+	for i := range tokens {
+		clones[i] = CloneToken(tokens[i])
+	}
+	return clones
+}
+
+// CloneTokenColor returns a detached copy of the canonical runtime token color.
+func CloneTokenColor(color TokenColor) TokenColor {
+	return TokenColor{
+		Name:                     color.Name,
+		RequestID:                color.RequestID,
+		WorkID:                   color.WorkID,
+		WorkTypeID:               color.WorkTypeID,
+		DataType:                 color.DataType,
+		ChainingTraceDepth:       color.ChainingTraceDepth,
+		CurrentChainingTraceID:   color.CurrentChainingTraceID,
+		PreviousChainingTraceIDs: cloneStringSlice(color.PreviousChainingTraceIDs),
+		TraceID:                  color.TraceID,
+		ParentID:                 color.ParentID,
+		Tags:                     cloneStringMap(color.Tags),
+		Relations:                cloneRelations(color.Relations),
+		Payload:                  cloneBytes(color.Payload),
+	}
+}
+
+// CloneTokenHistory returns a detached copy of canonical runtime token history.
+func CloneTokenHistory(history TokenHistory) TokenHistory {
+	return TokenHistory{
+		TotalVisits:         cloneStringIntMap(history.TotalVisits),
+		ConsecutiveFailures: cloneStringIntMap(history.ConsecutiveFailures),
+		PlaceVisits:         cloneStringIntMap(history.PlaceVisits),
+		TotalDuration:       history.TotalDuration,
+		LastError:           history.LastError,
+		FailureLog:          cloneFailureRecords(history.FailureLog),
+	}
+}
+
 // CloneProviderSessionMetadata returns a detached copy of canonical provider
 // session metadata.
 func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
@@ -179,11 +234,49 @@ func cloneStringMap(values map[string]string) map[string]string {
 }
 
 func cloneStringSlice(values []string) []string {
-	if len(values) == 0 {
+	if values == nil {
 		return nil
 	}
 	clone := make([]string, len(values))
 	copy(clone, values)
+	return clone
+}
+
+func cloneRelations(relations []Relation) []Relation {
+	if relations == nil {
+		return nil
+	}
+	clone := make([]Relation, len(relations))
+	copy(clone, relations)
+	return clone
+}
+
+func cloneBytes(values []byte) []byte {
+	if values == nil {
+		return nil
+	}
+	clone := make([]byte, len(values))
+	copy(clone, values)
+	return clone
+}
+
+func cloneFailureRecords(records []FailureRecord) []FailureRecord {
+	if records == nil {
+		return nil
+	}
+	clone := make([]FailureRecord, len(records))
+	copy(clone, records)
+	return clone
+}
+
+func cloneStringIntMap(values map[string]int) map[string]int {
+	if values == nil {
+		return nil
+	}
+	clone := make(map[string]int, len(values))
+	for key, value := range values {
+		clone[key] = value
+	}
 	return clone
 }
 

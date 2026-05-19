@@ -1,8 +1,6 @@
 package engine
 
 import (
-	"maps"
-
 	"github.com/portpowered/infinite-you/pkg/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -39,12 +37,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 		snap.Dispatches = make(map[string]*interfaces.DispatchEntry, len(rs.Dispatches))
 		for k, v := range rs.Dispatches {
 			cp := *v
-			if v.ConsumedTokens != nil {
-				cp.ConsumedTokens = make([]interfaces.Token, len(v.ConsumedTokens))
-				for i := range v.ConsumedTokens {
-					cp.ConsumedTokens[i] = deepCopyToken(v.ConsumedTokens[i])
-				}
-			}
+			cp.ConsumedTokens = interfaces.CloneTokens(v.ConsumedTokens)
 			if v.HeldMutations != nil {
 				cp.HeldMutations = make([]interfaces.MarkingMutation, len(v.HeldMutations))
 				copy(cp.HeldMutations, v.HeldMutations)
@@ -77,55 +70,10 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 	return snap
 }
 
-// deepCopyTokenHistory creates a deep copy of a petri.TokenHistory.
-func deepCopyTokenHistory(h interfaces.TokenHistory) interfaces.TokenHistory {
-	cp := h
-	if h.TotalVisits != nil {
-		cp.TotalVisits = make(map[string]int, len(h.TotalVisits))
-		maps.Copy(cp.TotalVisits, h.TotalVisits)
-	}
-	if h.ConsecutiveFailures != nil {
-		cp.ConsecutiveFailures = make(map[string]int, len(h.ConsecutiveFailures))
-		maps.Copy(cp.ConsecutiveFailures, h.ConsecutiveFailures)
-	}
-	if h.PlaceVisits != nil {
-		cp.PlaceVisits = make(map[string]int, len(h.PlaceVisits))
-		maps.Copy(cp.PlaceVisits, h.PlaceVisits)
-	}
-	if h.FailureLog != nil {
-		cp.FailureLog = make([]interfaces.FailureRecord, len(h.FailureLog))
-		copy(cp.FailureLog, h.FailureLog)
-	}
-	return cp
-}
-
-func deepCopyToken(t interfaces.Token) interfaces.Token {
-	cp := t
-	if t.Color.Tags != nil {
-		cp.Color.Tags = make(map[string]string, len(t.Color.Tags))
-		maps.Copy(cp.Color.Tags, t.Color.Tags)
-	}
-	if t.Color.Relations != nil {
-		cp.Color.Relations = make([]interfaces.Relation, len(t.Color.Relations))
-		copy(cp.Color.Relations, t.Color.Relations)
-	}
-	if t.Color.Payload != nil {
-		cp.Color.Payload = make([]byte, len(t.Color.Payload))
-		copy(cp.Color.Payload, t.Color.Payload)
-	}
-	cp.History = deepCopyTokenHistory(t.History)
-	return cp
-}
-
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
-	cp.ProviderSession = cloneProviderSession(d.ProviderSession)
-	if d.ConsumedTokens != nil {
-		cp.ConsumedTokens = make([]interfaces.Token, len(d.ConsumedTokens))
-		for i := range d.ConsumedTokens {
-			cp.ConsumedTokens[i] = deepCopyToken(d.ConsumedTokens[i])
-		}
-	}
+	cp.ProviderSession = interfaces.CloneProviderSessionMetadata(d.ProviderSession)
+	cp.ConsumedTokens = interfaces.CloneTokens(d.ConsumedTokens)
 	if d.OutputMutations != nil {
 		cp.OutputMutations = make([]interfaces.TokenMutationRecord, len(d.OutputMutations))
 		for i := range d.OutputMutations {
@@ -137,22 +85,14 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 
 func deepCopyWorkResult(result interfaces.WorkResult) interfaces.WorkResult {
 	cp := result
-	cp.ProviderSession = cloneProviderSession(result.ProviderSession)
+	cp.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
 	return cp
-}
-
-func cloneProviderSession(session *interfaces.ProviderSessionMetadata) *interfaces.ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
 }
 
 func deepCopyTokenMutationRecord(m interfaces.TokenMutationRecord) interfaces.TokenMutationRecord {
 	cp := m
 	if m.Token != nil {
-		tokenCopy := deepCopyToken(*m.Token)
+		tokenCopy := interfaces.CloneToken(*m.Token)
 		cp.Token = &tokenCopy
 	}
 	return cp

@@ -239,9 +239,9 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Outcome:         resolved.outcome,
 		Reason:          completedDispatchReason(resolved),
 		ProviderFailure: cloneProviderFailureMetadata(result.ProviderFailure),
-		ProviderSession: cloneProviderSession(result.ProviderSession),
+		ProviderSession: interfaces.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:         endTime,
-		ConsumedTokens:  cloneTokens(consumedTokens),
+		ConsumedTokens:  interfaces.CloneTokens(consumedTokens),
 		OutputMutations: mutationRecordsForDispatch(
 			result.DispatchID,
 			result.TransitionID,
@@ -302,7 +302,7 @@ func mutationRecordsForDispatch(
 			Reason:       mutation.Reason,
 		}
 		if mutation.NewToken != nil {
-			tokenCopy := cloneToken(*mutation.NewToken)
+			tokenCopy := interfaces.CloneToken(*mutation.NewToken)
 			record.Token = &tokenCopy
 			if record.TokenID == "" {
 				record.TokenID = mutation.NewToken.ID
@@ -314,18 +314,6 @@ func mutationRecordsForDispatch(
 		records = append(records, record)
 	}
 	return records
-}
-
-func cloneTokens(tokens []interfaces.Token) []interfaces.Token {
-	if len(tokens) == 0 {
-		return nil
-	}
-
-	clones := make([]interfaces.Token, len(tokens))
-	for i := range tokens {
-		clones[i] = cloneToken(tokens[i])
-	}
-	return clones
 }
 
 func cloneFactoryWorkItems(items []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
@@ -346,40 +334,6 @@ func cloneFactoryWorkItems(items []interfaces.FactoryWorkItem) []interfaces.Fact
 	return clone
 }
 
-func cloneToken(token interfaces.Token) interfaces.Token {
-	clone := token
-	if token.Color.Tags != nil {
-		clone.Color.Tags = cloneTags(token.Color.Tags)
-	}
-	if token.Color.Relations != nil {
-		clone.Color.Relations = cloneRelations(token.Color.Relations)
-	}
-	if token.Color.Payload != nil {
-		clone.Color.Payload = append([]byte(nil), token.Color.Payload...)
-	}
-	if token.History.TotalVisits != nil {
-		clone.History.TotalVisits = cloneIntMap(token.History.TotalVisits)
-	}
-	if token.History.ConsecutiveFailures != nil {
-		clone.History.ConsecutiveFailures = cloneIntMap(token.History.ConsecutiveFailures)
-	}
-	if token.History.PlaceVisits != nil {
-		clone.History.PlaceVisits = cloneIntMap(token.History.PlaceVisits)
-	}
-	if token.History.FailureLog != nil {
-		clone.History.FailureLog = append([]interfaces.FailureRecord(nil), token.History.FailureLog...)
-	}
-	return clone
-}
-
-func cloneIntMap(input map[string]int) map[string]int {
-	clone := make(map[string]int, len(input))
-	for key, value := range input {
-		clone[key] = value
-	}
-	return clone
-}
-
 func cloneTags(tags map[string]string) map[string]string {
 	if tags == nil {
 		return nil
@@ -390,25 +344,6 @@ func cloneTags(tags map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
-}
-
-func cloneRelations(relations []interfaces.Relation) []interfaces.Relation {
-	if relations == nil {
-		return nil
-	}
-
-	clone := make([]interfaces.Relation, len(relations))
-	copy(clone, relations)
-	return clone
-}
-
-func cloneProviderSession(session *interfaces.ProviderSessionMetadata) *interfaces.ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-
-	clone := *session
-	return &clone
 }
 
 func cloneProviderFailureMetadata(metadata *interfaces.ProviderFailureMetadata) *interfaces.ProviderFailureMetadata {
@@ -755,7 +690,7 @@ func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
 			continue
 		}
 
-		requeued := cloneToken(consumed)
+		requeued := interfaces.CloneToken(consumed)
 		requeued.PlaceID = consumed.PlaceID
 		requeued.EnteredAt = now
 		requeued.History = cloneHistoryForIntermittentFailureRequeue(history, result, now)
@@ -775,16 +710,8 @@ func cloneHistoryForIntermittentFailureRequeue(
 	result resolvedWorkResult,
 	now time.Time,
 ) interfaces.TokenHistory {
-	cloned := interfaces.TokenHistory{
-		TotalDuration:       history.TotalDuration,
-		LastError:           result.err,
-		TotalVisits:         cloneIntMap(history.TotalVisits),
-		ConsecutiveFailures: cloneIntMap(history.ConsecutiveFailures),
-		PlaceVisits:         cloneIntMap(history.PlaceVisits),
-	}
-	if history.FailureLog != nil {
-		cloned.FailureLog = append([]interfaces.FailureRecord(nil), history.FailureLog...)
-	}
+	cloned := interfaces.CloneTokenHistory(history)
+	cloned.LastError = result.err
 	cloned.FailureLog = append(cloned.FailureLog, interfaces.FailureRecord{
 		TransitionID: result.transitionID,
 		Timestamp:    now,
