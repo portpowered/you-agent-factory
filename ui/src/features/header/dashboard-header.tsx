@@ -16,29 +16,29 @@ import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const PANEL_CLASS =
-  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg";
+  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-3 shadow-af-panel backdrop-blur-lg md:px-4 md:py-3";
 const DASHBOARD_TOOLBAR_CLASS = cx(
   PANEL_CLASS,
-  "mb-4 flex flex-wrap items-center gap-4 md:px-5",
+  "mb-4 flex flex-wrap items-center gap-3",
 );
 const DASHBOARD_TITLE_CLASS = cx("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DASHBOARD_CONTROLS_CLASS = cx(
-  "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-4",
+  "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3",
   "max-md:ml-0 max-md:w-full max-md:justify-stretch",
 );
 const LANGUAGE_SWITCHER_SHELL_CLASS = cx(
-  "flex min-w-0 flex-1 flex-col gap-1 md:min-w-44 md:shrink-0 md:flex-none",
+  "flex min-w-0 flex-1 flex-col gap-1 md:min-w-36 md:shrink-0 md:flex-none",
 );
 const LANGUAGE_SWITCHER_LABEL_CLASS = cx(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
-  "text-[0.72rem] uppercase tracking-[0.2em] text-af-ink/62",
+  "text-[0.7rem] uppercase tracking-[0.16em] text-af-ink/62",
 );
 const STREAM_STATUS_SHELL_CLASS = cx(
   "flex shrink-0 items-center justify-end",
   "max-md:justify-start",
 );
 const STREAM_STATUS_CLASS = cx(
-  "inline-flex h-11 w-11 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4",
+  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4",
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
@@ -87,6 +87,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           </span>
           <Select
             aria-label={headerMessages.languageLabel}
+            className="min-h-10 rounded-lg px-3 py-2 text-sm"
             id="dashboard-language-switcher"
             onChange={(event) => {
               setLocale(event.currentTarget.value);
@@ -113,6 +114,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           aria-label={exportMessages.triggerLabel}
           aria-expanded={isExportDialogOpen}
           aria-haspopup="dialog"
+          compact
           onClick={openExportDialog}
         >
           <svg
