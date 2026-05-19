@@ -1,5 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
+import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../current-selection/no-selection-detail-card";
 import { WorkTotalsCard } from "../work-totals/work-totals-card";
 import {
@@ -66,17 +73,32 @@ describe("AgentBentoLayout", () => {
   it("renders card IDs, titles, and body content inside the movable board", () => {
     renderBentoBoard();
 
-    const moveButton = screen.getByRole("button", { name: "Move Current activity" });
-    const activityCard = screen.getByRole("article", { name: "Current activity" });
-    const activityTitle = within(activityCard).getByRole("heading", { name: "Current activity" });
-    const activityBody = screen.getByText("Active workstation graph goes here.").parentElement;
+    const moveButton = screen.getByRole("button", {
+      name: "Move Current activity",
+    });
+    const activityCard = screen.getByRole("article", {
+      name: "Current activity",
+    });
+    const activityTitle = within(activityCard).getByRole("heading", {
+      name: "Current activity",
+    });
+    const activityBody = screen.getByText(
+      "Active workstation graph goes here.",
+    ).parentElement;
 
-    expect(screen.getByRole("region", { name: "Infinite You bento board" })).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Infinite You bento board" }),
+    ).toBeTruthy();
     expect(activityCard).toBeTruthy();
     expect(screen.getByRole("article", { name: "Trace grid" })).toBeTruthy();
-    expect(screen.getByText("Active workstation graph goes here.")).toBeTruthy();
+    expect(
+      screen.getByText("Active workstation graph goes here."),
+    ).toBeTruthy();
     expect(screen.getByText("Trace dispatches stay visible.")).toBeTruthy();
-    expect(getGridItem("Current activity").dataset.bentoCardId).toBe("activity");
+    expect(activityCard.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(getGridItem("Current activity").dataset.bentoCardId).toBe(
+      "activity",
+    );
     expect(getGridItem("Trace grid").dataset.bentoCardId).toBe("trace");
     expect(activityTitle.className).toContain("af-dashboard-section-heading");
     expect(activityBody?.className).toContain("af-dashboard-body-text");
@@ -100,7 +122,9 @@ describe("AgentBentoLayout", () => {
     });
 
     await waitFor(() => {
-      expect(activityItem.classList.contains("react-draggable-dragging")).toBe(true);
+      expect(activityItem.classList.contains("react-draggable-dragging")).toBe(
+        true,
+      );
     });
 
     fireEvent.mouseMove(document, {
@@ -122,7 +146,9 @@ describe("AgentBentoLayout", () => {
     await waitFor(() => {
       expect(onLayoutChange).toHaveBeenCalled();
     });
-    expect(screen.getByText("Active workstation graph goes here.")).toBeTruthy();
+    expect(
+      screen.getByText("Active workstation graph goes here."),
+    ).toBeTruthy();
   });
 
   it("renders right, bottom, and bottom-right resize handles for grid cards", () => {
@@ -199,29 +225,33 @@ describe("AgentBentoLayout", () => {
       />,
     );
 
-    const board = screen.getByRole("region", { name: "Infinite You bento board" });
+    const board = screen.getByRole("region", {
+      name: "Infinite You bento board",
+    });
     const workTotals = screen.getByRole("article", { name: "Work totals" });
-    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
 
     expect(board).toBeTruthy();
     expect(within(workTotals).getByLabelText("work totals")).toBeTruthy();
     expect(within(workTotals).getByText("In progress")).toBeTruthy();
     expect(within(workTotals).getByText("Completed")).toBeTruthy();
-    expect(currentSelection.className).toContain("rounded-2xl");
-    expect(within(currentSelection).getByRole("button", { name: "Undo selection" })).toHaveProperty(
-      "disabled",
-      true,
-    );
-    expect(within(currentSelection).getByRole("button", { name: "Redo selection" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(currentSelection.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(
+      within(currentSelection).getByRole("button", { name: "Undo selection" }),
+    ).toHaveProperty("disabled", true);
+    expect(
+      within(currentSelection).getByRole("button", { name: "Redo selection" }),
+    ).toHaveProperty("disabled", true);
     expect(
       within(currentSelection).getByText(
         "Select a workstation, work item, or state node to inspect live details.",
       ),
     ).toBeTruthy();
     expect(getGridItem("Work totals").dataset.bentoCardId).toBe("work-totals");
-    expect(getGridItem("Current selection").dataset.bentoCardId).toBe("current-selection");
+    expect(getGridItem("Current selection").dataset.bentoCardId).toBe(
+      "current-selection",
+    );
   });
 });
