@@ -1167,6 +1167,113 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeNull();
   });
 
+  it("uses the selected work title as the dispatch heading while keeping the dispatch id secondary", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        dispatchAttempts={[]}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[dashboardWorkstationRequestFixtures.ready]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getByText("Active Story", { selector: "strong" })
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected ready dispatch history card");
+    }
+
+    expect(within(dispatchCard).getByText("Active Story", { selector: "strong" })).toBeTruthy();
+    expect(
+      within(dispatchCard).getByText(
+        dashboardWorkstationRequestFixtures.ready.dispatch_id,
+        { selector: "span" },
+      ),
+    ).toBeTruthy();
+    expect(within(dispatchCard).getByText("Started at")).toBeTruthy();
+    expect(
+      within(getDetailRow(dispatchCard, "Started at")).getByText("2026-04-08T12:00:01Z"),
+    ).toBeTruthy();
+  });
+
+  it("falls back to the dispatch id as the title when no associated work label is available", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        dispatchAttempts={[]}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          {
+            ...dashboardWorkstationRequestFixtures.noResponse,
+            request_view: {
+              ...dashboardWorkstationRequestFixtures.noResponse.request_view,
+              input_work_items: [],
+            },
+            trace_ids: [],
+            work_items: [],
+          },
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getByText(dashboardWorkstationRequestFixtures.noResponse.dispatch_id, {
+        selector: "strong",
+      })
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected fallback-title dispatch history card");
+    }
+
+    expect(
+      within(dispatchCard).getByText(
+        dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
+        { selector: "strong" },
+      ),
+    ).toBeTruthy();
+  });
+
   it("renders localized dispatch-history card copy for a supported non-default locale", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
