@@ -85,9 +85,7 @@ describe("SubmitWorkWidget", () => {
 
     fireEvent.change(workType, { target: { value: "story" } });
     expect(submitButton.disabled).toBe(true);
-    expect(
-      screen.getByText("Enter a request name to continue."),
-    ).toBeTruthy();
+    expect(screen.getByText("Enter a request name to continue.")).toBeTruthy();
 
     fireEvent.change(requestName, { target: { value: "   " } });
     expect(submitButton.disabled).toBe(true);
@@ -185,7 +183,9 @@ describe("SubmitWorkWidget", () => {
     const submittingButton = screen.getByRole("button", {
       name: "Submitting...",
     });
+    const submittingStatus = screen.getByText("Sending your request...");
     expect(submittingButton.getAttribute("aria-busy")).toBe("true");
+    expect(submittingStatus.className).toContain("text-on-foreground");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
@@ -424,9 +424,7 @@ describe("SubmitWorkWidget", () => {
     ).toBeTruthy();
     expect(within(card).getByRole("textbox", { name: "请求" })).toBeTruthy();
     expect(
-      within(card).getByText(
-        "先选择工作类型并填写请求名称，然后即可继续。",
-      ),
+      within(card).getByText("先选择工作类型并填写请求名称，然后即可继续。"),
     ).toBeTruthy();
     expect(within(card).getByRole("button", { name: "提交工作" })).toBeTruthy();
   });
