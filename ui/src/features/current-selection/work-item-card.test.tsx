@@ -1179,7 +1179,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       getSelectedWorkItemFixture();
 
     render(
-        <CurrentSelectionLocaleProvider locale="ja">
+      <CurrentSelectionLocaleProvider locale="ja">
         <WorkItemDetailCard
           activeTraceID="trace-active-story"
           executionDetails={selectWorkItemExecutionDetails({
@@ -1321,16 +1321,13 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(fallbackRequestDetails).getByText("Resolved args"),
     ).toBeTruthy();
-    expect(
-      within(dispatchCard).getByRole("button", {
-        name: "Select work item Active Story",
-      }),
-    ).toBeTruthy();
+    const selectedWorkButton = within(dispatchCard).getByRole("button", {
+      name: "Select work item Active Story",
+    });
+    expect(selectedWorkButton).toBeTruthy();
     expect(within(dispatchCard).getByText("Work selected")).toBeTruthy();
-    expect(
-      within(dispatchCard).getByText("Work selected").closest("button")
-        ?.className,
-    ).toContain("text-on-foreground");
+    expect(selectedWorkButton.textContent).toContain("Work selected");
+    expect(selectedWorkButton.className).toContain("text-on-foreground");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
     const selectedTraceLink = within(dispatchCard).getByRole("link", {
       name: "trace-active-story (selected)",
