@@ -101,6 +101,8 @@ function buildSelectedWorkItemFixture() {
   };
 
   return {
+    dispatchId,
+    execution,
     executionDetails: selectWorkItemExecutionDetails({
       activeExecution: execution,
       dispatchID: dispatchId,
