@@ -1020,8 +1020,8 @@ export const HeaderLocalizationVerification = {
     const englishToolbar = await canvas.findByRole("region", {
       name: "dashboard summary",
     });
-    const switcher = within(englishToolbar).getByRole("combobox", {
-      name: "Language",
+    const languageButton = within(englishToolbar).getByRole("button", {
+      name: "Change language",
     });
 
     await expect(
@@ -1033,14 +1033,19 @@ export const HeaderLocalizationVerification = {
     await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
 
     await userEvent.tab();
-    await expect(switcher).toHaveFocus();
-    await userEvent.selectOptions(switcher, "zh-CN");
+    await expect(languageButton).toHaveFocus();
+    await userEvent.click(languageButton);
+    await userEvent.click(
+      within(canvasElement.ownerDocument.body).getByRole("menuitemradio", {
+        name: "简体中文",
+      }),
+    );
 
     const localizedToolbar = await canvas.findByRole("region", {
       name: "仪表板概览",
     });
     await expect(
-      within(localizedToolbar).getByRole("combobox", { name: "语言" }),
+      within(localizedToolbar).getByRole("button", { name: "切换语言" }),
     ).toBeVisible();
     await expect(
       within(localizedToolbar).getByRole("slider", { name: "时间线刻度" }),
@@ -1073,18 +1078,26 @@ export const HeaderLocalizationVerification = {
     ).toBeVisible();
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
 
-    const localizedSwitcher = within(localizedToolbar).getByRole("combobox", {
-      name: "语言",
-    });
-    localizedSwitcher.focus();
-    await expect(localizedSwitcher).toHaveFocus();
-    await userEvent.selectOptions(localizedSwitcher, "en");
+    const localizedLanguageButton = within(localizedToolbar).getByRole(
+      "button",
+      {
+        name: "切换语言",
+      },
+    );
+    localizedLanguageButton.focus();
+    await expect(localizedLanguageButton).toHaveFocus();
+    await userEvent.click(localizedLanguageButton);
+    await userEvent.click(
+      within(canvasElement.ownerDocument.body).getByRole("menuitemradio", {
+        name: "English",
+      }),
+    );
 
     const restoredToolbar = await canvas.findByRole("region", {
       name: "dashboard summary",
     });
     await expect(
-      within(restoredToolbar).getByRole("combobox", { name: "Language" }),
+      within(restoredToolbar).getByRole("button", { name: "Change language" }),
     ).toBeVisible();
     await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
     await expect(
