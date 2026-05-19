@@ -354,19 +354,16 @@ func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, auth
 	return merged
 }
 
-func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, factory factoryapi.Factory) error {
-	if artifact == nil {
-		return nil
-	}
-	for index := range artifact.Events {
-		event := &artifact.Events[index]
+func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, generated factoryapi.Factory) error {
+	for i := range artifact.Events {
+		event := &artifact.Events[i]
 		switch event.Type {
 		case factoryapi.FactoryEventTypeRunRequest:
-			payload, err := runStartedPayloadFromEvent(*event)
+			payload, err := event.Payload.AsRunRequestEventPayload()
 			if err != nil {
-				return err
+				return fmt.Errorf("decode run request event %q: %w", event.Id, err)
 			}
-			payload.Factory = factory
+			payload.Factory = generated
 			var union factoryapi.FactoryEvent_Payload
 			if err := union.FromRunRequestEventPayload(payload); err != nil {
 				return fmt.Errorf("rewrite run request factory payload: %w", err)
@@ -377,7 +374,7 @@ func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, factory f
 			if err != nil {
 				return fmt.Errorf("decode initial structure event %q: %w", event.Id, err)
 			}
-			payload.Factory = factory
+			payload.Factory = generated
 			var union factoryapi.FactoryEvent_Payload
 			if err := union.FromInitialStructureRequestEventPayload(payload); err != nil {
 				return fmt.Errorf("rewrite initial structure factory payload: %w", err)

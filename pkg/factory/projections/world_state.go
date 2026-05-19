@@ -511,7 +511,7 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		DurationMillis:  int64Value(payload.DurationMillis),
 		Result:          workstationResultFromGenerated(payload),
 		WorkItemIDs:     sortedStrings(workIDs),
-		ConsumedInputs:  cloneWorkstationInputs(dispatch.Inputs),
+		ConsumedInputs:  interfaces.CloneWorkstationInputs(dispatch.Inputs),
 		InputWorkItems:  sortedWorkItems(inputWorkItems),
 		OutputWorkItems: sortedWorkItems(outputWorkItems),
 		CurrentChainingTraceID: completedDispatchCurrentChainingTraceID(
@@ -565,7 +565,7 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 		Outcome:                  string(payload.Outcome),
 		ProviderSession:          *interfaces.CloneProviderSessionMetadata(completion.ProviderSession),
 		WorkItemIDs:              completion.WorkItemIDs,
-		ConsumedInputs:           cloneWorkstationInputs(completion.ConsumedInputs),
+		ConsumedInputs:           interfaces.CloneWorkstationInputs(completion.ConsumedInputs),
 		CurrentChainingTraceID:   completion.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: cloneStringSlice(completion.PreviousChainingTraceIDs),
 		TraceIDs:                 cloneStringSlice(completion.TraceIDs),
@@ -1081,26 +1081,6 @@ func cloneWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWork
 	for i, item := range input {
 		out[i] = item
 		out[i].Tags = cloneStringMap(item.Tags)
-	}
-	return out
-}
-
-func cloneWorkstationInputs(input []interfaces.WorkstationInput) []interfaces.WorkstationInput {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]interfaces.WorkstationInput, len(input))
-	for i, value := range input {
-		out[i] = value
-		if value.WorkItem != nil {
-			item := *value.WorkItem
-			item.Tags = cloneStringMap(item.Tags)
-			out[i].WorkItem = &item
-		}
-		if value.Resource != nil {
-			resource := *value.Resource
-			out[i].Resource = &resource
-		}
 	}
 	return out
 }

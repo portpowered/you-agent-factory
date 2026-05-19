@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -48,16 +47,6 @@ func HasWorkTokenInPlace(marking petri.MarkingSnapshot, placeID, workID string) 
 		}
 	}
 	return false
-}
-
-func CountFactoryEvents(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
-	count := 0
-	for _, event := range events {
-		if event.Type == eventType {
-			count++
-		}
-	}
-	return count
 }
 
 type TokenIdentitySet struct {

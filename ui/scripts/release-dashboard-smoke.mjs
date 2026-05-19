@@ -13,23 +13,15 @@ function assetPath(pathname) {
 }
 
 function livePath(pathname) {
-  return (
-    pathname === "/events" || pathname === "/status" || pathname === "/work"
-  );
+  return pathname === "/events" || pathname === "/status" || pathname === "/work";
 }
 
 async function waitForRenderedDashboard(page) {
   await page.getByRole("heading", { level: 1, name: "Infinite You" }).waitFor();
   await page.getByText("Work totals").waitFor();
-  await page
-    .getByRole("button", { name: "Select step-one workstation" })
-    .waitFor();
-  await page
-    .getByRole("button", { name: "Select step-two workstation" })
-    .waitFor();
-  await page
-    .getByRole("status", { name: "Infinite You event stream live" })
-    .waitFor();
+  await page.getByRole("button", { name: "Select step-one workstation" }).waitFor();
+  await page.getByRole("button", { name: "Select step-two workstation" }).waitFor();
+  await page.getByRole("status", { name: "Infinite You event stream live" }).waitFor();
   await page.waitForFunction(() => {
     const workTotals = document.querySelector('[aria-label="work totals"]');
     if (!(workTotals instanceof HTMLElement)) {
@@ -39,10 +31,7 @@ async function waitForRenderedDashboard(page) {
     const articles = Array.from(workTotals.querySelectorAll("article"));
     return articles.some((article) => {
       const label = article.querySelector("span")?.textContent?.trim();
-      const value = Number.parseInt(
-        article.querySelector("strong")?.textContent?.trim() ?? "",
-        10,
-      );
+      const value = Number.parseInt(article.querySelector("strong")?.textContent?.trim() ?? "", 10);
       return label === "Completed" && Number.isFinite(value) && value > 0;
     });
   });
@@ -84,9 +73,7 @@ async function main() {
       waitUntil: "domcontentloaded",
     });
     if (!response?.ok()) {
-      throw new Error(
-        `dashboard navigation failed with status ${response?.status() ?? "unknown"}`,
-      );
+      throw new Error(`dashboard navigation failed with status ${response?.status() ?? "unknown"}`);
     }
 
     await waitForRenderedDashboard(page);
@@ -101,9 +88,7 @@ async function main() {
     const observedAssetPaths = unique(assetRequests);
     const observedLivePaths = unique(liveRequests);
     if (observedAssetPaths.length === 0) {
-      throw new Error(
-        "dashboard did not request any embedded /dashboard/ui/assets resources",
-      );
+      throw new Error("dashboard did not request any embedded /dashboard/ui/assets resources");
     }
     if (!observedLivePaths.includes("/events")) {
       throw new Error("dashboard did not establish a live /events request");
@@ -118,12 +103,7 @@ async function main() {
       );
     }
 
-    const visibleTexts = unique([
-      "Infinite You",
-      "Work totals",
-      "step-one",
-      "step-two",
-    ]);
+    const visibleTexts = unique(["Infinite You", "Work totals", "step-one", "step-two"]);
     process.stdout.write(
       `${JSON.stringify(
         {

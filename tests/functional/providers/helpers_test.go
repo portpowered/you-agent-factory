@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,9 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -124,17 +121,6 @@ func failureRunner(stderr string) workers.CommandRunner {
 	return &fakeCommandRunner{stderr: stderr, exitCode: 1}
 }
 
-func buildModelWorkerConfig(provider workers.ModelProvider, model string) string {
-	return fmt.Sprintf(`---
-type: MODEL_WORKER
-model: %s
-modelProvider: %s
-stopToken: COMPLETE
----
-Process the input task.
-`, model, provider)
-}
-
 func updateScriptFixtureFactory(t *testing.T, dir string, mutate func(map[string]any)) {
 	t.Helper()
 
@@ -176,12 +162,6 @@ func writeNamedWorkstationPromptTemplate(t *testing.T, dir, workstationName, tem
 	}
 }
 
-func writeNamedWorkerAgents(t *testing.T, dir, workerName, content string) {
-	t.Helper()
-
-	support.WriteAgentConfig(t, dir, workerName, content)
-}
-
 func writeFixtureFile(t *testing.T, dir string, pathParts []string, content string) {
 	t.Helper()
 
@@ -200,25 +180,6 @@ func writeScriptWorkerArgs(t *testing.T, dir string, args []string) {
 	}
 	lines = append(lines, "---", "Execute the script.")
 	writeFixtureFile(t, dir, []string{"workers", "script-worker", "AGENTS.md"}, strings.Join(lines, "\n")+"\n")
-}
-
-func writeExecutionTemplateWorkstationAgents(t *testing.T, dir, workstationName string) {
-	t.Helper()
-
-	agentsMD := strings.Join([]string{
-		"---",
-		"type: MODEL_WORKSTATION",
-		`workingDirectory: '/workspace/{{ (index .Inputs 0).Name }}/{{ index (index .Inputs 0).Tags "branch" }}'`,
-		`worktree: 'worktrees/{{ index (index .Inputs 0).Tags "branch" }}/{{ (index .Inputs 0).WorkID }}'`,
-		"env:",
-		`  TEMPLATE_BRANCH: '{{ index (index .Inputs 0).Tags "branch" }}'`,
-		`  TEMPLATE_NAME: '{{ (index .Inputs 0).Name }}'`,
-		`  TEMPLATE_PAYLOAD: '{{ (index .Inputs 0).Payload }}'`,
-		`  TEMPLATE_WORKID: '{{ (index .Inputs 0).WorkID }}'`,
-		"---",
-		executionTemplatePrompt(),
-	}, "\n") + "\n"
-	writeFixtureFile(t, dir, []string{"workstations", workstationName, "AGENTS.md"}, agentsMD)
 }
 
 func writeRuntimeMergeWorkstationConfig(t *testing.T, dir string) {
@@ -249,153 +210,6 @@ func writeRuntimeMergeWorkstationConfig(t *testing.T, dir string) {
 	writeFixtureFile(t, dir, []string{"workstations", "run-script", "AGENTS.md"}, agentsMD)
 }
 
-func configureResourceGatedTemplateWorkstation(t *testing.T, dir string) {
-	t.Helper()
-
-	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
-		cfg["resources"] = []any{
-			map[string]any{"name": "aaa-slot", "capacity": 1},
-			map[string]any{"name": "zzz-slot", "capacity": 1},
-		}
-
-		workstations := cfg["workstations"].([]any)
-		workstation := workstations[0].(map[string]any)
-		workstation["resources"] = []any{
-			map[string]any{"name": "aaa-slot", "capacity": 1},
-			map[string]any{"name": "zzz-slot", "capacity": 1},
-		}
-	})
-}
-
-func configureExecutionTemplateWorkstation(t *testing.T, dir string) {
-	t.Helper()
-
-	workstationName := ""
-	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
-		cfg["resources"] = []any{
-			map[string]any{"name": "template-slot", "capacity": 1},
-		}
-
-		workstations := cfg["workstations"].([]any)
-		workstation := workstations[0].(map[string]any)
-		workstationName = workstation["name"].(string)
-		workstation["resources"] = []any{
-			map[string]any{"name": "template-slot", "capacity": 1},
-		}
-	})
-	writeExecutionTemplateWorkstationAgents(t, dir, workstationName)
-}
-
-func configureTwoInputResourceGatedTemplateWorkstation(t *testing.T, dir, workstationName, workerName string) {
-	t.Helper()
-
-	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
-		cfg["workTypes"] = []any{
-			map[string]any{
-				"name": "zeta-resource",
-				"states": []any{
-					map[string]any{"name": "init", "type": "INITIAL"},
-					map[string]any{"name": "done", "type": "TERMINAL"},
-					map[string]any{"name": "failed", "type": "FAILED"},
-				},
-			},
-			map[string]any{
-				"name": "alpha-resource",
-				"states": []any{
-					map[string]any{"name": "init", "type": "INITIAL"},
-					map[string]any{"name": "done", "type": "TERMINAL"},
-					map[string]any{"name": "failed", "type": "FAILED"},
-				},
-			},
-		}
-		cfg["resources"] = []any{
-			map[string]any{"name": "repo-slot", "capacity": 1},
-			map[string]any{"name": "gpu-slot", "capacity": 1},
-		}
-		cfg["workers"] = []any{map[string]any{"name": workerName}}
-		cfg["workstations"] = []any{map[string]any{
-			"name":   workstationName,
-			"worker": workerName,
-			"inputs": []any{
-				map[string]any{"workType": "zeta-resource", "state": "init"},
-				map[string]any{"workType": "alpha-resource", "state": "init"},
-			},
-			"outputs": []any{
-				map[string]any{"workType": "zeta-resource", "state": "done"},
-				map[string]any{"workType": "alpha-resource", "state": "done"},
-			},
-			"onFailure": []map[string]any{{"workType": "zeta-resource", "state": "failed"}},
-			"resources": []any{map[string]any{"name": "repo-slot", "capacity": 1}, map[string]any{"name": "gpu-slot", "capacity": 1}},
-		}}
-	})
-}
-
-func writeTwoInputResourceSeeds(t *testing.T, dir string) {
-	t.Helper()
-
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
-		Name:       "zeta-input-name",
-		WorkID:     "zeta-work",
-		WorkTypeID: "zeta-resource",
-		TraceID:    "trace-two-input-resources",
-		Payload:    []byte("zeta-payload"),
-	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
-		Name:       "alpha-input-name",
-		WorkID:     "alpha-work",
-		WorkTypeID: "alpha-resource",
-		TraceID:    "trace-two-input-resources",
-		Payload:    []byte("alpha-payload"),
-	})
-}
-
-func writeExecutionTemplateSeed(t *testing.T, dir string) {
-	t.Helper()
-
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
-		Name:       "execution-template-name",
-		WorkID:     "work-execution-template",
-		WorkTypeID: "task",
-		TraceID:    "trace-execution-template",
-		Payload:    []byte("execution-template-payload"),
-		Tags: map[string]string{
-			"branch": "feature-token-branch",
-		},
-	})
-}
-
-func twoInputTemplateArgs() []string {
-	return []string{
-		`first_name={{ (index .Inputs 0).Name }}`,
-		`first_payload={{ (index .Inputs 0).Payload }}`,
-		`second_name={{ (index .Inputs 1).Name }}`,
-		`second_payload={{ (index .Inputs 1).Payload }}`,
-		`inputs={{ len .Inputs }}`,
-	}
-}
-
-func executionTemplatePrompt() string {
-	return strings.Join([]string{
-		`name={{ (index .Inputs 0).Name }}`,
-		`payload={{ (index .Inputs 0).Payload }}`,
-		`context_workdir={{ .Context.WorkDir }}`,
-		`env_branch={{ index .Context.Env "TEMPLATE_BRANCH" }}`,
-		`env_workid={{ index .Context.Env "TEMPLATE_WORKID" }}`,
-		`inputs={{ len .Inputs }}`,
-	}, "\n")
-}
-
-func executionTemplateWantPrompt(dir string) string {
-	return strings.Join([]string{
-		"name=execution-template-name",
-		"payload=execution-template-payload",
-		"context_workdir=" + support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch"),
-		"env_branch=feature-token-branch",
-		"env_workid=work-execution-template",
-		"inputs=1",
-	}, "\n")
-}
-
 func quoteYAMLString(value string) string {
 	return strconv.Quote(value)
 }
@@ -405,43 +219,6 @@ func assertCommandArgs(t *testing.T, req workers.CommandRequest, want []string) 
 
 	if !reflect.DeepEqual(req.Args, want) {
 		t.Fatalf("command args = %#v, want %#v", req.Args, want)
-	}
-}
-
-func assertProviderArgsPrompt(t *testing.T, req workers.CommandRequest, want string) {
-	t.Helper()
-
-	if len(req.Args) == 0 {
-		t.Fatal("provider args were empty")
-	}
-	if got := req.Args[len(req.Args)-1]; got != want {
-		t.Fatalf("provider prompt arg = %q, want %q", got, want)
-	}
-}
-
-func assertProviderStdin(t *testing.T, req workers.CommandRequest, want string) {
-	t.Helper()
-
-	if got := string(req.Stdin); got != want {
-		t.Fatalf("provider stdin = %q, want %q", got, want)
-	}
-}
-
-func assertProviderExecutionFields(t *testing.T, dir string, req workers.CommandRequest) {
-	t.Helper()
-
-	if req.WorkDir != support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch") {
-		t.Fatalf("provider work dir = %q, want resolved workstation working_directory", req.WorkDir)
-	}
-	for _, want := range []string{
-		"TEMPLATE_BRANCH=feature-token-branch",
-		"TEMPLATE_NAME=execution-template-name",
-		"TEMPLATE_PAYLOAD=execution-template-payload",
-		"TEMPLATE_WORKID=work-execution-template",
-	} {
-		if !containsEnv(req.Env, want) {
-			t.Fatalf("provider env missing %s in %v", want, req.Env)
-		}
 	}
 }
 

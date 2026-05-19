@@ -65,8 +65,6 @@ export type FactoryChangePayload = FactorySchemas["FactoryChangeEventPayload"];
 
 export type FactoryDefinition = FactorySchemas["Factory"];
 
-export type FactoryInputType = FactorySchemas["InputType"];
-
 export type WorkRequestPayload = FactorySchemas["WorkRequestEventPayload"];
 
 export type RelationshipChangeRequestPayload =
@@ -84,10 +82,6 @@ export type ScriptRequestPayload = FactorySchemas["ScriptRequestEventPayload"];
 
 export type ScriptResponsePayload = FactorySchemas["ScriptResponseEventPayload"];
 
-export type ScriptExecutionOutcome = FactorySchemas["ScriptExecutionOutcome"];
-
-export type ScriptFailureType = FactorySchemas["ScriptFailureType"];
-
 export type DispatchResponsePayload = FactorySchemas["DispatchResponseEventPayload"];
 
 export type FactoryStateResponsePayload =
@@ -98,8 +92,6 @@ export type FactoryResource = FactorySchemas["Resource"];
 export type FactoryWorker = FactorySchemas["Worker"];
 
 export type FactoryWorkType = FactorySchemas["WorkType"];
-
-export type FactoryStateDefinition = FactorySchemas["WorkState"];
 
 export type FactoryWorkstation = FactorySchemas["Workstation"];
 
@@ -132,16 +124,9 @@ export type FactoryRelation = FactorySchemas["Relation"] & {
   trace_id?: string;
 };
 
-export type FactoryProviderFailure = FactorySchemas["ProviderFailureMetadata"];
-
 export type FactoryProviderSession = FactorySchemas["ProviderSessionMetadata"];
 
 export type FactoryWorkDiagnostics = FactorySchemas["SafeWorkDiagnostics"];
-
-export type FactoryRenderedPromptDiagnostic =
-  FactorySchemas["RenderedPromptDiagnostic"];
-
-export type FactoryProviderDiagnostic = FactorySchemas["ProviderDiagnostic"];
 
 export interface FactoryTerminalWork {
   status: string;

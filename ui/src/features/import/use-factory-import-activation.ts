@@ -5,11 +5,8 @@ import {
   createFactory,
   type FactoryValue,
   NamedFactoryAPIError,
-  type NamedFactoryAPIErrorCode,
 } from "../../api/named-factory";
 import type { FactoryPngImportValue } from "./factory-png-import";
-
-export type FactoryImportActivationErrorCode = NamedFactoryAPIErrorCode;
 
 export type FactoryImportActivationState =
   | { status: "idle" }
@@ -86,4 +83,3 @@ function normalizeActivationError(error: unknown): NamedFactoryAPIError {
 
   return new NamedFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
 }
-

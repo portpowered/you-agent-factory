@@ -5,11 +5,9 @@ import type {
   DashboardScriptRequest,
   DashboardScriptResponse,
   DashboardTraceToken,
-  DashboardWorkDiagnostics,
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
-import type { FactoryProviderSession, } from "../../../../api/events";
 import { uniqueSorted } from "./shared";
 import type {
   TimelineWorkRequestPayload,
@@ -21,20 +19,6 @@ import type {
 import { workRef } from "./workItemRef";
 
 const DASHBOARD_TIME_WORK_TYPE_ID = "time";
-
-export function latestWorkstationAttempt(
-  attempts: Record<string, DashboardInferenceAttempt> | undefined,
-): DashboardInferenceAttempt | undefined {
-  return Object.values(attempts ?? {}).sort((left, right) => {
-    if (left.attempt !== right.attempt) {
-      return right.attempt - left.attempt;
-    }
-    if ((left.request_time ?? "") !== (right.request_time ?? "")) {
-      return (right.request_time ?? "").localeCompare(left.request_time ?? "");
-    }
-    return right.inference_request_id.localeCompare(left.inference_request_id);
-  })[0];
-}
 
 export function latestWorkstationScriptRequest(
   requests: Record<string, WorldScriptRequest> | undefined,
@@ -113,50 +97,6 @@ export function scriptResponseErrored(response: WorldScriptResponse): boolean {
     response.outcome === "PROCESS_ERROR" ||
     response.outcome === "TIMED_OUT"
   );
-}
-
-export function resolveWorkstationRequestProvider(
-  diagnostics: DashboardWorkDiagnostics | undefined,
-  providerSession?: FactoryProviderSession,
-  dispatch?: WorldDispatch,
-): string | undefined {
-  return (
-    diagnostics?.provider?.provider ??
-    providerSession?.provider ??
-    dispatch?.modelProvider ??
-    dispatch?.provider
-  );
-}
-
-export function resolveWorkingDirectory(
-  attempt: DashboardInferenceAttempt | undefined,
-  diagnostics: DashboardWorkDiagnostics | undefined,
-): string | undefined {
-  return (
-    attempt?.working_directory ??
-    diagnostics?.provider?.request_metadata?.working_directory
-  );
-}
-
-export function resolveWorktree(
-  attempt: DashboardInferenceAttempt | undefined,
-  diagnostics: DashboardWorkDiagnostics | undefined,
-): string | undefined {
-  return attempt?.worktree ?? diagnostics?.provider?.request_metadata?.worktree;
-}
-
-export function workstationRequestMetadata(
-  diagnostics: DashboardWorkDiagnostics | undefined,
-): Record<string, string> | undefined {
-  const requestMetadata = diagnostics?.provider?.request_metadata;
-  return requestMetadata ? { ...requestMetadata } : undefined;
-}
-
-export function workstationResponseMetadata(
-  diagnostics: DashboardWorkDiagnostics | undefined,
-): Record<string, string> | undefined {
-  const responseMetadata = diagnostics?.provider?.response_metadata;
-  return responseMetadata ? { ...responseMetadata } : undefined;
 }
 
 export function workItemsFromTokens(
@@ -356,4 +296,3 @@ export function projectWorkstationDispatchRequest(
 export function dispatchHasCustomerWork(dispatch: WorldDispatch): boolean {
   return !dispatch.systemOnly;
 }
-
