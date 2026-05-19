@@ -1,4 +1,5 @@
 import { Button } from "../../components/ui";
+import { getFactoryGraphEditorMessages } from "./messages/editor";
 
 const DRAFT_ACTIONS_CLASS =
   "flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-af-warning/24 bg-af-warning/8 px-4 py-3";
@@ -8,6 +9,7 @@ export function FactoryGraphEditorDraftActions({
   canSave,
   description,
   isSaving = false,
+  locale,
   onDiscard,
   onSave,
   saveDisabledReason,
@@ -17,6 +19,7 @@ export function FactoryGraphEditorDraftActions({
   canSave: boolean;
   description: string;
   isSaving?: boolean;
+  locale?: string;
   onDiscard: () => void;
   onSave: () => void;
   saveDisabledReason?: string;
@@ -25,15 +28,13 @@ export function FactoryGraphEditorDraftActions({
   if (!visible) {
     return null;
   }
+  const messages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <section
-      aria-label="Pending graph changes"
-      className={DRAFT_ACTIONS_CLASS}
-    >
+    <section aria-label={messages.draftActionsAriaLabel} className={DRAFT_ACTIONS_CLASS}>
       <div className="grid gap-1">
         <p className="m-0 text-sm font-semibold text-af-ink">
-          Pending graph changes
+          {messages.draftActionsTitle}
         </p>
         <p className="m-0 text-sm leading-6 text-af-ink/76">{description}</p>
         {saveDisabledReason ? (
@@ -49,14 +50,14 @@ export function FactoryGraphEditorDraftActions({
           tone="outline"
           type="button"
         >
-          Discard changes
+          {messages.draftActionsDiscard}
         </Button>
         <Button
           disabled={!canSave || isSaving}
           onClick={onSave}
           type="button"
         >
-          {isSaving ? "Saving..." : "Save changes"}
+          {isSaving ? messages.draftActionsSaving : messages.draftActionsSave}
         </Button>
       </div>
     </section>

@@ -5,6 +5,7 @@ import type {
   FactoryGraphAddEntityDraft,
   FactoryGraphAddEntityFieldErrors,
 } from "./factory-graph-editor-additions";
+import { getFactoryGraphEditorMessages } from "./messages/editor";
 
 const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = "text-sm font-semibold text-af-ink";
@@ -17,6 +18,7 @@ export function FactoryGraphEditorAddEntityDialog({
   draft,
   errors,
   isOpen,
+  locale,
   onChange,
   onClose,
   onSubmit,
@@ -25,6 +27,7 @@ export function FactoryGraphEditorAddEntityDialog({
   draft: FactoryGraphAddEntityDraft | null;
   errors: FactoryGraphAddEntityFieldErrors;
   isOpen: boolean;
+  locale?: string;
   onChange: (draft: FactoryGraphAddEntityDraft) => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -32,19 +35,20 @@ export function FactoryGraphEditorAddEntityDialog({
   if (!isOpen || draft === null) {
     return null;
   }
+  const messages = getFactoryGraphEditorMessages(locale);
 
   return (
     <DashboardMutationDialog
-      description={dialogDescription(draft.kind)}
+      description={messages.addDialogDescription(draft.kind)}
       onClose={onClose}
-      title={dialogTitle(draft.kind)}
+      title={messages.addDialogTitle(draft.kind)}
       footer={
         <>
           <Button onClick={onClose} tone="outline" type="button">
-            Cancel
+            {messages.addDialogCancelAction}
           </Button>
           <Button onClick={onSubmit} type="button">
-            Add entity
+            {messages.addDialogAddEntityAction}
           </Button>
         </>
       }
@@ -53,6 +57,7 @@ export function FactoryGraphEditorAddEntityDialog({
         currentFactoryDefinition={currentFactoryDefinition}
         draft={draft}
         errors={errors}
+        locale={locale}
         onChange={onChange}
         onSubmit={onSubmit}
       />
@@ -64,15 +69,18 @@ function FactoryGraphEditorAddEntityFields({
   currentFactoryDefinition,
   draft,
   errors,
+  locale,
   onChange,
   onSubmit,
 }: {
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   draft: FactoryGraphAddEntityDraft;
   errors: FactoryGraphAddEntityFieldErrors;
+  locale?: string;
   onChange: (draft: FactoryGraphAddEntityDraft) => void;
   onSubmit: () => void;
 }) {
+  const messages = getFactoryGraphEditorMessages(locale);
   return (
     <form
       className="grid gap-4"
@@ -83,9 +91,9 @@ function FactoryGraphEditorAddEntityFields({
     >
       <FactoryGraphEditorTextField
         error={errors.name}
-        helpText="Use the authored name the factory definition should save."
+        helpText={messages.addDialogIdentifierHelp}
         inputId="factory-graph-add-name"
-        label="Identifier"
+        label={messages.addDialogIdentifierLabel}
         onChange={(value) => {
           onChange({ ...draft, name: value });
         }}
@@ -96,53 +104,34 @@ function FactoryGraphEditorAddEntityFields({
         currentFactoryDefinition,
         draft,
         errors,
+        locale,
         onChange,
       })}
     </form>
   );
 }
 
-function dialogTitle(kind: FactoryGraphAddEntityDraft["kind"]) {
-  if (kind === "work-type") {
-    return "Add work type";
-  }
-  if (kind === "work-state") {
-    return "Add work state";
-  }
-  return `Add ${kind}`;
-}
-
-function dialogDescription(kind: FactoryGraphAddEntityDraft["kind"]) {
-  if (kind === "workstation") {
-    return "Create a pending workstation in the current graph draft.";
-  }
-  if (kind === "work-type") {
-    return "Define a new work type and its first ordered state.";
-  }
-  if (kind === "work-state") {
-    return "Append a new ordered state to an existing work type.";
-  }
-  return `Create a pending ${kind} in the current graph draft.`;
-}
-
 function renderEntitySpecificFields({
   currentFactoryDefinition,
   draft,
   errors,
+  locale,
   onChange,
 }: {
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   draft: FactoryGraphAddEntityDraft;
   errors: FactoryGraphAddEntityFieldErrors;
+  locale?: string;
   onChange: (draft: FactoryGraphAddEntityDraft) => void;
 }) {
+  const messages = getFactoryGraphEditorMessages(locale);
   if (draft.kind === "resource") {
     return (
       <FactoryGraphEditorTextField
         error={errors.capacity}
         inputId="factory-graph-add-capacity"
         inputMode="numeric"
-        label="Capacity"
+        label={messages.addDialogCapacityLabel}
         onChange={(value) => {
           onChange({ ...draft, capacity: value });
         }}
@@ -155,9 +144,9 @@ function renderEntitySpecificFields({
     return (
       <FactoryGraphEditorTextField
         error={errors.model}
-        helpText="The model identifier saved on the new `MODEL_WORKER`."
+        helpText={messages.addDialogModelHelp}
         inputId="factory-graph-add-model"
-        label="Model"
+        label={messages.addDialogModelLabel}
         onChange={(value) => {
           onChange({ ...draft, model: value });
         }}
@@ -170,9 +159,9 @@ function renderEntitySpecificFields({
     return (
       <FactoryGraphEditorTextField
         error={errors.initialStateName}
-        helpText="New work types start with one required ordered state."
+        helpText={messages.addDialogFirstStateHelp}
         inputId="factory-graph-add-initial-state"
-        label="First state"
+        label={messages.addDialogFirstStateLabel}
         onChange={(value) => {
           onChange({ ...draft, initialStateName: value });
         }}
@@ -187,12 +176,12 @@ function renderEntitySpecificFields({
         <FactoryGraphEditorSelectField
           error={errors.workTypeName}
           inputId="factory-graph-add-work-type"
-          label="Work type"
+          label={messages.addDialogWorkTypeLabel}
           onChange={(value) => {
             onChange({ ...draft, workTypeName: value });
           }}
           options={[
-            { label: "Select a work type", value: "" },
+            { label: messages.addDialogWorkTypePlaceholder, value: "" },
             ...(currentFactoryDefinition?.workTypes ?? []).map((workType) => ({
               label: workType.name,
               value: workType.name,
@@ -202,7 +191,7 @@ function renderEntitySpecificFields({
         />
         <FactoryGraphEditorSelectField
           inputId="factory-graph-add-state-type"
-          label="State type"
+          label={messages.addDialogStateTypeLabel}
           onChange={(value) => {
             onChange({
               ...draft,
@@ -226,12 +215,12 @@ function renderEntitySpecificFields({
       <FactoryGraphEditorSelectField
         error={errors.workerName}
         inputId="factory-graph-add-worker-name"
-        label="Assigned worker"
+        label={messages.addDialogAssignedWorkerLabel}
         onChange={(value) => {
           onChange({ ...draft, workerName: value });
         }}
         options={[
-          { label: "Select a worker", value: "" },
+          { label: messages.addDialogAssignedWorkerPlaceholder, value: "" },
           ...(currentFactoryDefinition?.workers ?? []).map((worker) => ({
             label: worker.name,
             value: worker.name,
@@ -240,9 +229,9 @@ function renderEntitySpecificFields({
         value={draft.workerName}
       />
       <FactoryGraphEditorTextareaField
-        helpText="Optional prompt content for the workstation body."
+        helpText={messages.addDialogPromptBodyHelp}
         inputId="factory-graph-add-workstation-body"
-        label="Prompt body"
+        label={messages.addDialogPromptBodyLabel}
         onChange={(value) => {
           onChange({ ...draft, body: value });
         }}

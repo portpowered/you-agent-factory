@@ -19,19 +19,24 @@ import {
   isValidFactoryGraphConnection,
   type FactoryGraphConnectionEndpoint,
 } from "./factory-graph-editor-connections";
-import {
-  describeFactoryGraphWorkerStatus,
-  type FactoryGraphWorkerRuntimeStatus,
+import type {
+  FactoryGraphWorkerRuntimeStatus,
 } from "./factory-graph-editor-runtime";
+import { getFactoryGraphEditorMessages } from "./messages/editor";
 
 type FactoryGraphEditorNode = Node<
   {
     canEditConnections: boolean;
     connectionAnchors: ActivityGraphNodeHandle[];
+    connectionHint: string;
     draftStatus: "addition" | "none" | "removal";
     kind: FactoryGraphNodeKind;
+    kindLabel: string;
     label: string;
+    pendingLabel: string;
+    removingLabel: string;
     workerStatus?: FactoryGraphWorkerRuntimeStatus;
+    workerStatusLabel?: string;
   },
   "factoryEntity"
 >;
@@ -42,13 +47,6 @@ const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
   workstation: 2,
   "work-type": 3,
   "work-state": 4,
-};
-const KIND_LABEL: Record<FactoryGraphNodeKind, string> = {
-  resource: "Resource",
-  worker: "Worker",
-  workstation: "Workstation",
-  "work-type": "Work type",
-  "work-state": "Work state",
 };
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
   resource: "border-af-success/24 bg-af-success/6",
@@ -83,6 +81,7 @@ export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {
 
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
+  locale?: string;
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
@@ -95,6 +94,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   edges: Edge[];
   nodes: FactoryGraphEditorNode[];
 } {
+  const messages = getFactoryGraphEditorMessages(input.locale);
   const rowCounts = new Map<number, number>();
   const counts = countHandles(input.topology);
 
@@ -117,22 +117,33 @@ export function buildFactoryGraphEditorFlowModel(input: {
           canEditConnections: input.canEditConnections,
           connectionAnchors: buildNodeHandles({
             canEditConnections: input.canEditConnections,
+            locale: input.locale,
             node,
             onConnectionAnchorClick: input.onConnectionAnchorClick,
             pendingConnectionSource: input.pendingConnectionSource,
             pendingRemovalNodeIds: input.pendingRemovalNodeIds,
             topology: input.topology,
           }),
+          connectionHint: messages.flowConnectionHint,
           draftStatus: input.pendingRemovalNodeIds.has(node.id)
             ? "removal"
             : input.pendingAdditionNodeIds.has(node.id)
               ? "addition"
               : "none",
           kind: node.kind,
+          kindLabel: messages.kindLabel(node.kind),
           label: node.label,
+          pendingLabel: messages.flowPendingLabel,
+          removingLabel: messages.flowRemovingLabel,
           workerStatus:
             node.kind === "worker"
               ? input.workerStatusByName?.get(node.label) ?? "idle"
+              : undefined,
+          workerStatusLabel:
+            node.kind === "worker"
+              ? messages.workerStatusLabel(
+                  input.workerStatusByName?.get(node.label) ?? "idle",
+                )
               : undefined,
         },
         draggable: true,
@@ -257,16 +268,16 @@ function FactoryGraphEditorNodeView({
       <div className="grid h-full min-w-0 content-start gap-2">
         <div className="flex items-center justify-between gap-2">
           <span className="rounded-full border border-af-overlay/14 bg-af-overlay/8 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-ink/64">
-            {KIND_LABEL[data.kind]}
+            {data.kindLabel}
           </span>
           {data.draftStatus === "addition" ? (
             <span className="rounded-full border border-af-warning/24 bg-af-warning/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-warning-ink">
-              Pending
+              {data.pendingLabel}
             </span>
           ) : null}
           {data.draftStatus === "removal" ? (
             <span className="rounded-full border border-af-danger/24 bg-af-danger/10 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-af-danger-ink">
-              Removing
+              {data.removingLabel}
             </span>
           ) : null}
           {data.kind === "worker" && data.workerStatus ? (
@@ -276,7 +287,7 @@ function FactoryGraphEditorNodeView({
                 WORKER_STATUS_CLASS[data.workerStatus],
               )}
             >
-              {describeFactoryGraphWorkerStatus(data.workerStatus)}
+              {data.workerStatusLabel}
             </span>
           ) : null}
         </div>
@@ -288,7 +299,7 @@ function FactoryGraphEditorNodeView({
         </p>
         {data.canEditConnections ? (
           <p className="m-0 text-[0.65rem] leading-5 text-af-ink/60">
-            Use labeled anchors for compatible connections.
+            {data.connectionHint}
           </p>
         ) : null}
       </div>
@@ -310,12 +321,14 @@ function countHandles(topology: FactoryGraphTopology) {
 
 function buildNodeHandles(input: {
   canEditConnections: boolean;
+  locale?: string;
   node: FactoryGraphTopology["nodes"][number];
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
   pendingRemovalNodeIds: ReadonlySet<string>;
   topology: FactoryGraphTopology;
 }): ActivityGraphNodeHandle[] {
+  const messages = getFactoryGraphEditorMessages(input.locale);
   const selectedSource =
     input.pendingConnectionSource?.nodeId === input.node.id
       ? input.pendingConnectionSource
@@ -342,8 +355,8 @@ function buildNodeHandles(input: {
     return {
       buttonAriaLabel:
         anchor.role === "source"
-          ? `Choose ${input.node.label} ${anchor.label} connection source`
-          : `Connect to ${input.node.label} ${anchor.label} anchor`,
+          ? `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`
+          : `${messages.toolbarConnectLabel}: ${input.node.label} ${anchor.label}`,
       buttonDisabled: !input.canEditConnections || nodeIsPendingRemoval,
       buttonPressed: selected || undefined,
       buttonTitle: anchor.description,

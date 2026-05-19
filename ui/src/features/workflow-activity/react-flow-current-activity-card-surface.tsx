@@ -3,6 +3,7 @@ import {
   FactoryGraphEditorNotice,
   FactoryGraphEditorVisibilityPanel,
 } from "../factory-graph-editor/factory-graph-editor-controls";
+import { getFactoryGraphEditorMessages } from "../factory-graph-editor/messages/editor";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../flowchart/current-activity-nodes";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import type { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card";
@@ -25,11 +26,12 @@ export function CurrentActivityGraphSurface({
   locale?: string;
   snapshot: DashboardSnapshot;
 }) {
+  const messages = getFactoryGraphEditorMessages(locale);
   if (
     snapshot.topology.workstation_node_ids.length === 0 &&
     !editor.editorMode
   ) {
-    return <EmptyCurrentActivityState />;
+    return <EmptyCurrentActivityState locale={locale} />;
   }
 
   const activeGraph = editor.editorMode ? editorGraph : graph;
@@ -37,43 +39,56 @@ export function CurrentActivityGraphSurface({
   return (
     <div className="grid min-h-0 flex-1 gap-3">
       {editor.blockedRemovalReason ? (
-        <FactoryGraphEditorNotice title="Removal blocked" tone="warning">
+        <FactoryGraphEditorNotice
+          title={messages.noticeRemovalBlockedTitle}
+          tone="warning"
+        >
           {editor.blockedRemovalReason}
         </FactoryGraphEditorNotice>
       ) : null}
       {editor.connectionNotice ? (
-        <FactoryGraphEditorNotice title="Connection blocked" tone="warning">
+        <FactoryGraphEditorNotice
+          title={messages.noticeConnectionBlockedTitle}
+          tone="warning"
+        >
           {editor.connectionNotice}
         </FactoryGraphEditorNotice>
       ) : null}
       {editor.hasActiveWork && editor.draftState.hasChanges ? (
-        <FactoryGraphEditorNotice title="Topology edits are blocked" tone="danger">
-          Save is unavailable while active work is still running in the current
-          factory.
+        <FactoryGraphEditorNotice
+          title={messages.noticeTopologyBlockedTitle}
+          tone="danger"
+        >
+          {messages.noticeTopologyBlockedDescription}
         </FactoryGraphEditorNotice>
       ) : null}
       {editor.isStaleDraft ? (
         <FactoryGraphEditorNotice
-          title="A newer factory definition is available"
+          title={messages.noticeStaleTitle}
           tone="warning"
         >
-          Refresh or discard the current draft before saving so you do not
-          overwrite a newer topology version.
+          {messages.noticeStaleDescription}
         </FactoryGraphEditorNotice>
       ) : null}
       {editor.saveEditableDefinition.error ? (
-        <FactoryGraphEditorNotice title="Topology save failed" tone="danger">
+        <FactoryGraphEditorNotice
+          title={messages.noticeSaveFailedTitle}
+          tone="danger"
+        >
           {editor.saveEditableDefinition.error.message}
         </FactoryGraphEditorNotice>
       ) : null}
       {editor.saveEditableDefinition.status === "success" &&
       !editor.draftState.hasChanges ? (
-        <FactoryGraphEditorNotice title="Topology saved" tone="neutral">
-          The draft has been cleared and the graph is waiting for the latest
-          factory-change event refresh.
+        <FactoryGraphEditorNotice
+          title={messages.noticeSaveSuccessTitle}
+          tone="neutral"
+        >
+          {messages.noticeSaveSuccessDescription}
         </FactoryGraphEditorNotice>
       ) : null}
       <FactoryGraphEditorVisibilityPanel
+        locale={locale}
         onToggle={editorGraph.toggleEntityVisibility}
         options={editorGraph.entityVisibilityOptions}
         visible={editor.editorMode}
@@ -110,11 +125,12 @@ export function CurrentActivityGraphSurface({
   );
 }
 
-function EmptyCurrentActivityState() {
+function EmptyCurrentActivityState({ locale }: { locale?: string }) {
+  const messages = getFactoryGraphEditorMessages(locale);
   return (
     <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
-      <h3>No workflow topology loaded</h3>
-      <p>The factory has not published any workstation graph yet.</p>
+      <h3>{messages.noticeEmptyTitle}</h3>
+      <p>{messages.noticeEmptyMessage}</p>
     </div>
   );
 }

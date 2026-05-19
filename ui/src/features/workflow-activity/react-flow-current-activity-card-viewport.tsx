@@ -26,6 +26,7 @@ import {
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
+import { getFactoryGraphEditorMessages } from "../factory-graph-editor/messages/editor";
 import {
   GraphDropOverlay,
   graphDropStateAttribute,
@@ -108,6 +109,7 @@ export function CurrentActivityGraphViewport({
     position: XYPosition,
   ) => void;
 }) {
+  const editorMessages = getFactoryGraphEditorMessages(locale);
   const isValidConnection: IsValidConnection = (connection) => {
     if (
       !editorMode ||
@@ -150,7 +152,7 @@ export function CurrentActivityGraphViewport({
       />
       <section
         aria-describedby="workflow-graph-heading"
-        aria-label="Work graph viewport"
+        aria-label={editorMessages.viewportLabel}
         className={cx(
           "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
@@ -218,6 +220,7 @@ export function CurrentActivityGraphViewport({
           addMenuActions={addMenuActions}
           canInteract={canInteractWithEditor}
           hasPendingChanges={hasPendingChanges}
+          locale={locale}
           onAddAction={onAddAction}
           onAddMenuOpenChange={onAddMenuOpenChange}
           onSelectTool={onSelectTool}

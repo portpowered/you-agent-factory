@@ -9,6 +9,7 @@ import {
   buttonVariants,
 } from "../../components/ui";
 import { cx } from "../../lib/cx";
+import { getFactoryGraphEditorMessages } from "./messages/editor";
 import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
@@ -39,11 +40,6 @@ const MENU_ACTION_LABEL_CLASS = "text-sm font-semibold text-af-ink";
 const MENU_ACTION_DESCRIPTION_CLASS = "text-xs leading-5 text-af-ink/68";
 const VISIBILITY_PANEL_CLASS =
   "pointer-events-auto absolute right-7 top-24 z-20 grid gap-3 rounded-2xl border border-af-overlay/12 bg-af-surface/94 p-3 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-20";
-const TOOLTIP_COPY = {
-  add: "Add supported graph entities",
-  connect: "Create compatible graph connections",
-  delete: "Remove nodes or edges from the draft",
-} as const;
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
   danger: "border-af-danger/28 bg-af-danger/8 text-af-danger-ink",
   neutral: "border-af-overlay/14 bg-af-overlay/6 text-af-ink/82",
@@ -71,12 +67,17 @@ function EditModeIcon() {
 
 export function FactoryGraphEditorModeToggle({
   editorMode,
+  locale,
   onClick,
 }: {
   editorMode: boolean;
+  locale?: string;
   onClick: () => void;
 }) {
-  const label = editorMode ? "Leave factory graph editor" : "Enter factory graph editor";
+  const messages = getFactoryGraphEditorMessages(locale);
+  const label = editorMode
+    ? messages.modeLeaveEditor
+    : messages.modeEnterEditor;
 
   return (
     <FactoryGraphEditorTooltipButton
@@ -100,13 +101,16 @@ export function FactoryGraphEditorStatus({
   editorMode,
   hasChanges,
   isDefinitionLoading,
+  locale,
   loadErrorMessage,
 }: {
   editorMode: boolean;
   hasChanges: boolean;
   isDefinitionLoading: boolean;
+  locale?: string;
   loadErrorMessage?: string;
 }) {
+  const messages = getFactoryGraphEditorMessages(locale);
   if (!editorMode) {
     return (
       <p
@@ -115,7 +119,7 @@ export function FactoryGraphEditorStatus({
           "border-af-overlay/12 bg-af-overlay/6 text-af-ink/76",
         )}
       >
-        Observe mode
+        {messages.modeObserve}
       </p>
     );
   }
@@ -129,7 +133,7 @@ export function FactoryGraphEditorStatus({
           "border-af-accent/24 bg-af-accent/10 text-af-accent",
         )}
       >
-        Loading editor definition
+        {messages.modeLoadingDefinition}
       </p>
     );
   }
@@ -144,7 +148,7 @@ export function FactoryGraphEditorStatus({
         )}
         role="status"
       >
-        Editor unavailable: {loadErrorMessage}
+        {messages.modeUnavailablePrefix}: {loadErrorMessage}
       </p>
     );
   }
@@ -160,7 +164,7 @@ export function FactoryGraphEditorStatus({
       )}
       role="status"
     >
-      {hasChanges ? "Unsaved graph changes" : "Editor mode active"}
+      {hasChanges ? messages.modeUnsavedChanges : messages.modeActive}
     </p>
   );
 }
@@ -170,6 +174,7 @@ export function FactoryGraphEditorToolbar({
   addMenuActions = [],
   canInteract,
   hasPendingChanges = false,
+  locale,
   onAddAction,
   onAddMenuOpenChange,
   visible,
@@ -180,6 +185,7 @@ export function FactoryGraphEditorToolbar({
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteract: boolean;
   hasPendingChanges?: boolean;
+  locale?: string;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
   visible: boolean;
@@ -189,32 +195,31 @@ export function FactoryGraphEditorToolbar({
   if (!visible) {
     return null;
   }
+  const messages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <section
-      aria-label="Factory graph editor tools"
-      className={TOOLBAR_SHELL_CLASS}
-    >
+    <section aria-label={messages.toolbarAriaLabel} className={TOOLBAR_SHELL_CLASS}>
       <FactoryGraphEditorToolbarButton
         active={activeTool === "add"}
-        description={TOOLTIP_COPY.add}
+        description={messages.toolbarAddDescription}
         disabled={!canInteract}
-        label="Add"
+        label={messages.toolbarAddLabel}
         onClick={() => onSelectTool(activeTool === "add" ? null : "add")}
         tone={activeTool === "add" ? "secondary" : "outline"}
       />
       <FactoryGraphEditorAddMenu
         actions={addMenuActions}
         canInteract={canInteract}
+        locale={locale}
         onAction={onAddAction}
         onOpenChange={onAddMenuOpenChange}
         open={openAddMenu}
       />
       <FactoryGraphEditorToolbarButton
         active={activeTool === "delete"}
-        description={TOOLTIP_COPY.delete}
+        description={messages.toolbarDeleteDescription}
         disabled={!canInteract}
-        label="Delete"
+        label={messages.toolbarDeleteLabel}
         onClick={() =>
           onSelectTool(activeTool === "delete" ? null : "delete")
         }
@@ -222,9 +227,9 @@ export function FactoryGraphEditorToolbar({
       />
       <FactoryGraphEditorToolbarButton
         active={activeTool === "connect"}
-        description={TOOLTIP_COPY.connect}
+        description={messages.toolbarConnectDescription}
         disabled={!canInteract}
-        label="Connect"
+        label={messages.toolbarConnectLabel}
         onClick={() =>
           onSelectTool(activeTool === "connect" ? null : "connect")
         }
@@ -239,17 +244,21 @@ export function FactoryGraphEditorToolbar({
             : "border-af-overlay/12 bg-af-overlay/4 text-af-ink/70",
         )}
       >
-        {hasPendingChanges ? "Draft changes pending" : "No draft changes"}
+        {hasPendingChanges
+          ? messages.toolbarPendingChanges
+          : messages.toolbarNoPendingChanges}
       </p>
     </section>
   );
 }
 
 export function FactoryGraphEditorVisibilityPanel({
+  locale,
   onToggle,
   options,
   visible,
 }: {
+  locale?: string;
   onToggle: (key: FactoryGraphEditorVisibilityOption["key"]) => void;
   options: FactoryGraphEditorVisibilityOption[];
   visible: boolean;
@@ -257,23 +266,23 @@ export function FactoryGraphEditorVisibilityPanel({
   if (!visible || options.length === 0) {
     return null;
   }
+  const messages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <section
-      aria-label="Factory graph density controls"
-      className={VISIBILITY_PANEL_CLASS}
-    >
+    <section aria-label={messages.toolbarVisibilityAriaLabel} className={VISIBILITY_PANEL_CLASS}>
       <div className="grid gap-1">
-        <p className="m-0 text-sm font-semibold text-af-ink">Dense graph</p>
+        <p className="m-0 text-sm font-semibold text-af-ink">{messages.denseGraphTitle}</p>
         <p className="m-0 text-xs leading-5 text-af-ink/68">
-          Collapse worker or resource lanes to focus on the rest of the
-          topology while editing.
+          {messages.toolbarVisibilityDescription}
         </p>
       </div>
       <div className="grid gap-2">
         {options.map((option) => (
           <button
-            aria-label={`${option.visible ? "Hide" : "Show"} ${option.label.toLowerCase()} lane`}
+            aria-label={messages.toolbarVisibilityToggleLabel(
+              option.visible,
+              option.label,
+            )}
             aria-pressed={option.visible}
             className={cx(
               "flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-af-accent",
@@ -288,7 +297,9 @@ export function FactoryGraphEditorVisibilityPanel({
             <span className="grid gap-0.5">
               <span className="text-sm font-semibold">{option.label}</span>
               <span className="text-xs opacity-80">
-                {option.visible ? "Visible" : "Collapsed"}
+                {option.visible
+                  ? messages.stateVisible
+                  : messages.stateCollapsed}
               </span>
             </span>
             <span className="rounded-full border border-current/15 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em]">
@@ -333,12 +344,14 @@ function FactoryGraphEditorToolbarButton({
 function FactoryGraphEditorAddMenu({
   actions,
   canInteract,
+  locale,
   onAction,
   onOpenChange,
   open,
 }: {
   actions: FactoryGraphEditorMenuAction[];
   canInteract: boolean;
+  locale?: string;
   onAction?: (actionID: string) => void;
   onOpenChange?: (open: boolean) => void;
   open: boolean;
@@ -346,11 +359,12 @@ function FactoryGraphEditorAddMenu({
   if (actions.length === 0 || onAction === undefined) {
     return null;
   }
+  const messages = getFactoryGraphEditorMessages(locale);
 
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger
-        aria-label="Open add entity menu"
+        aria-label={messages.toolbarOpenAddMenuLabel}
         className={buttonVariants({ size: "icon", tone: "ghost" })}
         disabled={!canInteract}
         type="button"
@@ -372,15 +386,15 @@ function FactoryGraphEditorAddMenu({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        aria-label="Add graph entity menu"
+        aria-label={messages.toolbarVisibilityMenuAriaLabel}
         className="grid gap-2"
       >
         <div className="grid gap-1">
           <p className="m-0 text-sm font-semibold text-af-ink">
-            Add graph entity
+            {messages.toolbarVisibilityMenuTitle}
           </p>
           <p className="m-0 text-xs leading-5 text-af-ink/68">
-            Choose a supported entity to add to the current draft.
+            {messages.toolbarVisibilityMenuDescription}
           </p>
         </div>
         <div className={MENU_LIST_CLASS}>
@@ -514,67 +528,6 @@ export function FactoryGraphEditorConfirmationDialog({
       }
     >
       <div />
-    </DashboardMutationDialog>
-  );
-}
-
-export function FactoryGraphEditorLeaveDialog({
-  canSave,
-  isOpen,
-  isSaving,
-  onCancel,
-  onDiscard,
-  onSave,
-}: {
-  canSave: boolean;
-  isOpen: boolean;
-  isSaving: boolean;
-  onCancel: () => void;
-  onDiscard: () => void;
-  onSave: () => void;
-}) {
-  if (!isOpen) {
-    return null;
-  }
-
-  return (
-    <DashboardMutationDialog
-      closeDisabled={isSaving}
-      description="This graph editor session still has local topology changes."
-      onClose={onCancel}
-      title="Leave graph editor with unsaved changes?"
-      footer={
-        <>
-          <Button
-            disabled={isSaving}
-            onClick={onCancel}
-            tone="outline"
-            type="button"
-          >
-            Keep editing
-          </Button>
-          <Button
-            disabled={isSaving}
-            onClick={onDiscard}
-            tone="ghost"
-            type="button"
-          >
-            Discard changes
-          </Button>
-          <Button
-            disabled={!canSave || isSaving}
-            onClick={onSave}
-            type="button"
-          >
-            {isSaving ? "Saving..." : "Save changes"}
-          </Button>
-        </>
-      }
-    >
-      <p className="m-0 text-sm text-af-ink/78">
-        Save to keep the pending factory topology, discard to revert to the
-        latest server-backed graph, or keep editing.
-      </p>
     </DashboardMutationDialog>
   );
 }

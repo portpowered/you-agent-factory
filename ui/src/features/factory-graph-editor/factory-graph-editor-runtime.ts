@@ -72,21 +72,6 @@ export function buildFactoryGraphWorkerStatusMap(input: {
   return workerStatus;
 }
 
-export function describeFactoryGraphWorkerStatus(
-  status: FactoryGraphWorkerRuntimeStatus,
-) {
-  switch (status) {
-    case "active":
-      return "Active";
-    case "errored":
-      return "Errored";
-    case "idle":
-      return "Idle";
-    case "unavailable":
-      return "Unavailable";
-  }
-}
-
 function promoteWorkerStatus(
   statusMap: Map<string, FactoryGraphWorkerRuntimeStatus>,
   workerName: string,

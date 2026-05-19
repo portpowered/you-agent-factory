@@ -1,8 +1,9 @@
 import { FactoryGraphEditorAddEntityDialog } from "../factory-graph-editor/factory-graph-editor-add-dialog";
 import {
   FactoryGraphEditorConfirmationDialog,
-  FactoryGraphEditorLeaveDialog,
 } from "../factory-graph-editor/factory-graph-editor-controls";
+import { FactoryGraphEditorLeaveDialog } from "../factory-graph-editor/factory-graph-editor-leave-dialog";
+import { getFactoryGraphEditorMessages } from "../factory-graph-editor/messages/editor";
 import {
   FactoryImportPreviewDialog,
 } from "../import";
@@ -26,6 +27,7 @@ export function CurrentActivityGraphEditorDialogs({
   > | null;
   shouldRenderImportPreviewDialog: boolean;
 }) {
+  const messages = getFactoryGraphEditorMessages(locale);
   return (
     <>
       {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
@@ -54,6 +56,7 @@ export function CurrentActivityGraphEditorDialogs({
         canSave={editor.canSaveDraft}
         isOpen={editor.leaveDialogOpen}
         isSaving={editor.saveEditableDefinition.status === "pending"}
+        locale={locale}
         onCancel={() => {
           if (editor.saveEditableDefinition.status !== "pending") {
             editor.setIsConfirmingLeaveEditor(false);
@@ -65,8 +68,8 @@ export function CurrentActivityGraphEditorDialogs({
         }}
       />
       <FactoryGraphEditorConfirmationDialog
-        cancelLabel="Keep editing"
-        confirmLabel="Save topology"
+        cancelLabel={messages.leaveDialogKeepEditing}
+        confirmLabel={messages.saveConfirmAction}
         description={editor.saveSummary.description}
         isBusy={editor.saveEditableDefinition.status === "pending"}
         isOpen={editor.isConfirmingSave}
@@ -78,7 +81,7 @@ export function CurrentActivityGraphEditorDialogs({
         onConfirm={() => {
           void editor.handleSaveDraft();
         }}
-        title="Save factory graph changes?"
+        title={messages.saveConfirmTitle}
       />
       <FactoryGraphEditorConfirmationDialog
         cancelLabel="Cancel removal"
@@ -101,6 +104,7 @@ export function CurrentActivityGraphEditorDialogs({
         draft={editor.addEntityDraft}
         errors={editor.addEntityErrors}
         isOpen={editor.addEntityDraft !== null}
+        locale={locale}
         onChange={(draft) => {
           editor.setAddEntityDraft(draft);
           editor.setAddEntityErrors({});

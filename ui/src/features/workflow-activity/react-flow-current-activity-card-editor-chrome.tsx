@@ -94,6 +94,7 @@ export function CurrentActivityGraphEditorHeader({
   hasChanges,
   isDefinitionLoading,
   loadErrorMessage,
+  locale,
   onToggle,
   title,
 }: {
@@ -101,6 +102,7 @@ export function CurrentActivityGraphEditorHeader({
   hasChanges: boolean;
   isDefinitionLoading: boolean;
   loadErrorMessage?: string;
+  locale?: string;
   onToggle: () => void;
   title: ReactNode;
 }) {
@@ -113,12 +115,14 @@ export function CurrentActivityGraphEditorHeader({
             editorMode={editorMode}
             hasChanges={hasChanges}
             isDefinitionLoading={isDefinitionLoading}
+            locale={locale}
             loadErrorMessage={loadErrorMessage}
           />
         </div>
       </div>
       <FactoryGraphEditorModeToggle
         editorMode={editorMode}
+        locale={locale}
         onClick={onToggle}
       />
     </div>

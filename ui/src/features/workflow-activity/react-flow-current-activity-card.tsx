@@ -334,7 +334,11 @@ export function ReactFlowCurrentActivityCard(
 ) {
   const editor = useCurrentActivityGraphEditor(props.snapshot);
   const graph = useCurrentActivityGraphViewModel(props);
-  const editorGraph = useFactoryGraphEditorViewModel(editor, props.snapshot);
+  const editorGraph = useFactoryGraphEditorViewModel(
+    editor,
+    props.snapshot,
+    props.locale,
+  );
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
     onFactoryActivated: props.onFactoryActivated,
@@ -361,6 +365,7 @@ export function ReactFlowCurrentActivityCard(
             editor.editableDefinitionQuery.status === "pending"
           }
           loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+          locale={props.locale}
           onToggle={editor.handleEditorModeToggle}
           title={<CurrentActivityCardHeading locale={props.locale} />}
         />
@@ -369,6 +374,7 @@ export function ReactFlowCurrentActivityCard(
         canSave={editor.canSaveDraft}
         description={editor.saveSummary.description}
         isSaving={editor.saveEditableDefinition.status === "pending"}
+        locale={props.locale}
         onDiscard={editor.handleDiscardPendingChanges}
         onSave={() => {
           editor.setIsConfirmingSave(true);

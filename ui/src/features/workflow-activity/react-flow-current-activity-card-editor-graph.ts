@@ -17,6 +17,7 @@ import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "../factory-graph-editor/factory-graph-editor-flow";
+import { getFactoryGraphEditorMessages } from "../factory-graph-editor/messages/editor";
 import { buildFactoryGraphWorkerStatusMap } from "../factory-graph-editor/factory-graph-editor-runtime";
 import type { FactoryGraphTopology } from "../factory-graph-editor/factory-graph-draft-types";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
@@ -26,6 +27,7 @@ import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore"
 export function useFactoryGraphEditorViewModel(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
   snapshot: DashboardSnapshot,
+  locale?: string,
 ) {
   const {
     displayTopology,
@@ -37,10 +39,11 @@ export function useFactoryGraphEditorViewModel(
     entityVisibilityOptions,
     filteredTopology,
     toggleEntityVisibility,
-  } = useFactoryGraphEntityVisibilityState(displayTopology);
+  } = useFactoryGraphEntityVisibilityState(displayTopology, locale);
   const editorGraph = useFactoryGraphEditorFlowGraph({
     editor,
     filteredTopology,
+    locale,
     pendingAdditionEdgeIds,
     pendingRemovalEdgeIds,
     pendingRemovalNodeIds,
@@ -83,7 +86,11 @@ export function useFactoryGraphEditorViewModel(
   };
 }
 
-function useFactoryGraphEntityVisibilityState(displayTopology: FactoryGraphTopology) {
+function useFactoryGraphEntityVisibilityState(
+  displayTopology: FactoryGraphTopology,
+  locale?: string,
+) {
+  const messages = getFactoryGraphEditorMessages(locale);
   const [visibleEntityKinds, setVisibleEntityKinds] = useState({
     resources: true,
     workers: true,
@@ -97,17 +104,23 @@ function useFactoryGraphEntityVisibilityState(displayTopology: FactoryGraphTopol
       {
         count: countNodesByKind(displayTopology, "resource"),
         key: "resources" as const,
-        label: "Resources",
+        label: messages.toolbarVisibilityResourcesLabel,
         visible: visibleEntityKinds.resources,
       },
       {
         count: countNodesByKind(displayTopology, "worker"),
         key: "workers" as const,
-        label: "Workers",
+        label: messages.toolbarVisibilityWorkersLabel,
         visible: visibleEntityKinds.workers,
       },
     ],
-    [displayTopology, visibleEntityKinds.resources, visibleEntityKinds.workers],
+    [
+      displayTopology,
+      messages.toolbarVisibilityResourcesLabel,
+      messages.toolbarVisibilityWorkersLabel,
+      visibleEntityKinds.resources,
+      visibleEntityKinds.workers,
+    ],
   );
   const toggleEntityVisibility = useCallback(
     (key: "resources" | "workers") =>
@@ -128,6 +141,7 @@ function useFactoryGraphEntityVisibilityState(displayTopology: FactoryGraphTopol
 function useFactoryGraphEditorFlowGraph(input: {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   filteredTopology: FactoryGraphTopology;
+  locale?: string;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
@@ -153,6 +167,7 @@ function useFactoryGraphEditorFlowGraph(input: {
     () =>
       buildFactoryGraphEditorFlowModel({
         canEditConnections: input.editor.activeTool === "connect",
+        locale: input.locale,
         onConnectionAnchorClick: input.editor.handleConnectionAnchorClick,
         pendingAdditionEdgeIds: input.pendingAdditionEdgeIds,
         pendingConnectionSource: input.editor.pendingConnectionSource,
@@ -164,6 +179,7 @@ function useFactoryGraphEditorFlowGraph(input: {
       }),
     [
       input.filteredTopology,
+      input.locale,
       input.editor.activeTool,
       input.editor.draftState.draft,
       input.editor.handleConnectionAnchorClick,
