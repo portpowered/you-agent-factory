@@ -32,6 +32,7 @@ import {
   ScriptArgsSection,
   ScriptOutputSection,
 } from "./selected-work-dispatch-history-card-shared";
+import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 
 export function DispatchInferenceAttemptsSection({
   attempts,
@@ -40,12 +41,16 @@ export function DispatchInferenceAttemptsSection({
   attempts: DashboardInferenceAttempt[];
   emptyCopy?: string;
 }) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+
   return (
     <section
-      aria-label="Inference attempts"
+      aria-label={messages.inferenceAttemptsHeading}
       className="mt-3 grid gap-2 border-t border-af-overlay/8 pt-3"
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Inference attempts</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.inferenceAttemptsHeading}
+      </h4>
       <div className="grid gap-2.5">
         {attempts.length > 0
           ? attempts.map((attempt) => (
@@ -72,12 +77,16 @@ export function DispatchScriptAttemptsSection({
   scriptRequest: DashboardScriptRequest | undefined;
   scriptResponse: DashboardScriptResponse | undefined;
 }) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+
   return (
     <section
-      aria-label="Script attempts"
+      aria-label={messages.scriptAttemptsHeading}
       className="mt-3 grid gap-2 border-t border-af-overlay/8 pt-3"
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Script attempts</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.scriptAttemptsHeading}
+      </h4>
       <div className="grid gap-2.5">
         {scriptRequest ? (
           <ScriptRequestAttemptCard request={request} scriptRequest={scriptRequest} />
@@ -91,7 +100,7 @@ export function DispatchScriptAttemptsSection({
             scriptResponse={scriptResponse}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>No script response attempt has been recorded yet.</p>
+          <p className={DETAIL_COPY_CLASS}>{messages.scriptAttemptsEmpty}</p>
         )}
       </div>
     </section>
@@ -105,6 +114,7 @@ function ScriptRequestAttemptCard({
   request: SelectedWorkRequestHistoryItem;
   scriptRequest: DashboardScriptRequest;
 }) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
   const attemptNumber = scriptAttemptNumber(scriptRequest);
   const requestID = scriptRequestID(scriptRequest);
 
@@ -112,28 +122,32 @@ function ScriptRequestAttemptCard({
     <article className={PROVIDER_SESSION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <strong>Request attempt {attemptNumber ?? "pending"}</strong>
-          <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>PENDING</p>
+          <strong>{messages.requestAttemptTitle(attemptNumber)}</strong>
+          <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
+            {messages.pendingOutcome}
+          </p>
         </div>
-        <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-request"}</span>
+        <span className={EXECUTION_PILL_CLASS}>
+          {requestID ?? messages.requestAttemptFallbackId}
+        </span>
       </div>
       <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
-        <InferenceAttemptDetail label="Script request ID" code value={requestID} />
+        <InferenceAttemptDetail label={messages.scriptRequestIdLabel} code value={requestID} />
         <InferenceAttemptDetail
-          label="Script attempt"
+          label={messages.scriptAttemptLabel}
           value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
         />
-        <InferenceAttemptDetail label="Provider" code value={requestProvider(request)} />
-        <InferenceAttemptDetail label="Model" code value={requestModel(request)} />
+        <InferenceAttemptDetail label={messages.providerLabel} code value={requestProvider(request)} />
+        <InferenceAttemptDetail label={messages.modelLabel} code value={requestModel(request)} />
         <InferenceAttemptDetail
-          label="Working directory"
+          label={messages.workingDirectoryLabel}
           code
           value={requestWorkingDirectory(request)}
         />
-        <InferenceAttemptDetail label="Worktree" code value={requestWorktree(request)} />
-        <InferenceAttemptDetail label="Command" code value={scriptRequest.command} />
+        <InferenceAttemptDetail label={messages.worktreeLabel} code value={requestWorktree(request)} />
+        <InferenceAttemptDetail label={messages.commandLabel} code value={scriptRequest.command} />
       </dl>
-      <ScriptArgsSection args={scriptRequest.args} label="Resolved args" />
+      <ScriptArgsSection args={scriptRequest.args} label={messages.resolvedArgsLabel} />
     </article>
   );
 }
@@ -151,6 +165,7 @@ function ScriptResponseAttemptCard({
   request: SelectedWorkRequestHistoryItem;
   scriptResponse: DashboardScriptResponse;
 }) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
   const attemptNumber = scriptAttemptNumber(scriptResponse) ?? fallbackAttemptNumber;
   const requestID = scriptRequestID(scriptResponse);
   const durationMillis = scriptResponseDurationMillis(scriptResponse);
@@ -161,30 +176,32 @@ function ScriptResponseAttemptCard({
     <article className={PROVIDER_SESSION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <strong>Response attempt {attemptNumber ?? "completed"}</strong>
+          <strong>{messages.responseAttemptTitle(attemptNumber)}</strong>
           <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
-            {scriptResponse.outcome ?? "RECORDED"}
+            {scriptResponse.outcome ?? messages.recordedOutcome}
           </p>
         </div>
-        <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-response"}</span>
+        <span className={EXECUTION_PILL_CLASS}>
+          {requestID ?? messages.responseAttemptFallbackId}
+        </span>
       </div>
       <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
-        <InferenceAttemptDetail label="Script request ID" code value={requestID} />
+        <InferenceAttemptDetail label={messages.scriptRequestIdLabel} code value={requestID} />
         <InferenceAttemptDetail
-          label="Script attempt"
+          label={messages.scriptAttemptLabel}
           value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
         />
-        <InferenceAttemptDetail label="Provider" code value={requestProvider(request)} />
-        <InferenceAttemptDetail label="Model" code value={requestModel(request)} />
+        <InferenceAttemptDetail label={messages.providerLabel} code value={requestProvider(request)} />
+        <InferenceAttemptDetail label={messages.modelLabel} code value={requestModel(request)} />
         <InferenceAttemptDetail
-          label="Working directory"
+          label={messages.workingDirectoryLabel}
           code
           value={requestWorkingDirectory(request)}
         />
-        <InferenceAttemptDetail label="Worktree" code value={requestWorktree(request)} />
-        <InferenceAttemptDetail label="Outcome" value={scriptResponse.outcome} />
+        <InferenceAttemptDetail label={messages.worktreeLabel} code value={requestWorktree(request)} />
+        <InferenceAttemptDetail label={messages.outcomeLabel} value={scriptResponse.outcome} />
         <InferenceAttemptDetail
-          label="Duration"
+          label={messages.durationLabel}
           value={
             durationMillis !== undefined
               ? formatDurationMillis(durationMillis)
@@ -192,19 +209,19 @@ function ScriptResponseAttemptCard({
           }
         />
         <InferenceAttemptDetail
-          label="Exit code"
+          label={messages.exitCodeLabel}
           value={exitCode !== undefined ? String(exitCode) : undefined}
         />
-        <InferenceAttemptDetail label="Failure type" code value={failureType} />
+        <InferenceAttemptDetail label={messages.failureTypeLabel} code value={failureType} />
       </dl>
       <ScriptOutputSection
-        emptyMessage="No stdout was recorded for this script response."
-        label="Stdout"
+        emptyMessage={messages.noStdoutRecorded}
+        label={messages.stdoutLabel}
         value={normalizedStdout}
       />
       <ScriptOutputSection
-        emptyMessage="No stderr was recorded for this script response."
-        label="Stderr"
+        emptyMessage={messages.noStderrRecorded}
+        label={messages.stderrLabel}
         value={normalizedStderr}
       />
     </article>
