@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { inferenceAttempt, workstationRequest } from "./detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
@@ -67,7 +68,7 @@ describe("WorkstationRequestDetailCard", () => {
 
     expect(within(currentSelection).getByRole("heading", { name: "Current selection" })).toBeTruthy();
     expect(within(currentSelection).getAllByText("request-ready-story").length).toBeGreaterThan(0);
-    expect(within(currentSelection).getByText("Dispatch ID")).toBeTruthy();
+    expect(within(currentSelection).getAllByText("Dispatch ID").length).toBeGreaterThan(0);
     expect(within(currentSelection).getByRole("heading", { name: "Request counts" })).toBeTruthy();
     expect(
       requestDetails.getByText(
@@ -540,5 +541,42 @@ describe("WorkstationRequestDetailCard", () => {
     expect(responseDetails.getByText("Outcome details are not available yet.")).toBeTruthy();
     expect(responseDetails.getByText("No stdout was recorded for this script response.")).toBeTruthy();
     expect(responseDetails.getByText("No stderr was recorded for this script response.")).toBeTruthy();
+  });
+
+  it("renders zh-CN inference and script detail copy while preserving runtime data values", () => {
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <WorkstationRequestDetailCard
+          request={workstationRequest("dispatch-review-zh", {
+            inference_attempts: [
+              inferenceAttempt("dispatch-review-zh", {
+                attempt: 2,
+                inference_request_id: "dispatch-review-zh/inference-request/2",
+                outcome: "SUCCEEDED",
+                prompt: "Retry with the latest runtime context.",
+                provider_session: {
+                  id: "sess-zh",
+                  kind: "session_id",
+                  provider: "codex",
+                },
+                response: "Ready for handoff.",
+              }),
+            ],
+            request_id: "request-zh-story",
+            trace_ids: ["trace-zh-story"],
+          })}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(screen.getByRole("region", { name: "请求详情" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "响应详情" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "推理尝试" })).toBeTruthy();
+    expect(screen.getByText("推理请求 ID")).toBeTruthy();
+    expect(screen.getByText("Provider session")).toBeTruthy();
+    expect(screen.getByText("响应正文")).toBeTruthy();
+    expect(screen.getByText("dispatch-review-zh/inference-request/2")).toBeTruthy();
+    expect(screen.getByText("codex / session_id / sess-zh")).toBeTruthy();
+    expect(screen.getByText("trace-zh-story")).toBeTruthy();
   });
 });

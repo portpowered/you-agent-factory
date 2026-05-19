@@ -68,7 +68,7 @@ function LoadedProviderSessionDetailPanel({
         </p>
       </div>
       {detailState.status === "loading" ? (
-        <p className={DETAIL_COPY_CLASS}>Loading session details...</p>
+        <p className={DETAIL_COPY_CLASS}>{messages.loadingState}</p>
       ) : null}
       {detailState.status === "not-found" ? (
         <p className={DETAIL_COPY_CLASS}>{messages.missingState}</p>
@@ -159,14 +159,14 @@ function SourceFileSection({
           label={messages.relativePathLabel}
           value={detail.source.relativePath}
         />
-        <DetailMetric label="Dispatch" value={session.dispatchID} />
+        <DetailMetric label={messages.dispatchLabel} value={session.dispatchID} />
         <DetailMetric
           label={messages.sizeBytesLabel}
-          value={`${detail.source.sizeBytes.toLocaleString()} bytes`}
+          value={`${detail.source.sizeBytes.toLocaleString()} ${messages.bytesLabel}`}
         />
         <DetailMetric
           label={messages.modifiedAtLabel}
-          value={detail.source.modifiedAt ?? "Unavailable"}
+          value={detail.source.modifiedAt ?? messages.unavailableValue}
         />
       </div>
     </section>
@@ -192,7 +192,7 @@ function ParseOverview({
           label={messages.eventCountLabel}
           value={detail.parse.eventCount}
         />
-        <DetailMetric label="Lines" value={detail.parse.lineCount} />
+        <DetailMetric label={messages.lineCountLabel} value={detail.parse.lineCount} />
         <DetailMetric
           label={messages.malformedLineCountLabel}
           value={detail.parse.malformedLineCount}
