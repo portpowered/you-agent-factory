@@ -1,19 +1,15 @@
 import { factoryAPIURL } from "../baseUrl";
-import type { components } from "../generated/openapi";
+import type { components, operations } from "../generated/openapi";
 export type ProviderSessionDetailResponse =
   components["schemas"]["ProviderSessionDetailResponse"];
+export type ProviderSessionDetailRef =
+  operations["getProviderSessionDetails"]["parameters"]["query"];
 
 export type ProviderSessionDetailsAPIErrorCode =
   | "BAD_REQUEST"
   | "INTERNAL_ERROR"
   | "NETWORK_ERROR"
   | "NOT_FOUND";
-
-export interface ProviderSessionDetailRef {
-  id: string;
-  kind: string;
-  provider: string;
-}
 
 export interface GetProviderSessionDetailsOptions {
   fetch?: typeof globalThis.fetch;
@@ -25,6 +21,11 @@ interface APIErrorResponse {
 }
 
 const GET_PROVIDER_SESSION_DETAIL_ENDPOINT = "/provider-sessions/detail";
+const LOADABLE_PROVIDER_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const LOADABLE_PROVIDER_SESSION_PROVIDER: ProviderSessionDetailRef["provider"] =
+  "codex";
+const LOADABLE_PROVIDER_SESSION_KIND: ProviderSessionDetailRef["kind"] =
+  "session_id";
 
 export class ProviderSessionDetailsAPIError extends Error {
   public readonly code: ProviderSessionDetailsAPIErrorCode;
@@ -119,6 +120,30 @@ export async function getProviderSessionDetails(
   return responseBody;
 }
 
+export function toProviderSessionDetailRef(session: {
+  id?: string | null;
+  kind?: string | null;
+  provider?: string | null;
+}): ProviderSessionDetailRef | null {
+  const provider = normalizeProviderSessionPart(session.provider);
+  const kind = normalizeProviderSessionPart(session.kind);
+  const id = normalizeProviderSessionID(session.id);
+
+  if (
+    provider !== LOADABLE_PROVIDER_SESSION_PROVIDER ||
+    kind !== LOADABLE_PROVIDER_SESSION_KIND ||
+    id === null
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    kind,
+    provider,
+  };
+}
+
 async function readResponseBody(response: Response): Promise<unknown> {
   const rawBody = await response.text();
   if (rawBody.length === 0) {
@@ -173,4 +198,16 @@ function isProviderSessionDetailResponse(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeProviderSessionID(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed && LOADABLE_PROVIDER_SESSION_ID_PATTERN.test(trimmed)
+    ? trimmed
+    : null;
+}
+
+function normalizeProviderSessionPart(value: string | null | undefined): string | null {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
 }
