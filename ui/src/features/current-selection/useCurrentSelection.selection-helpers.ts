@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: selection derivation helpers are kept colocated to avoid splitting shared runtime-selection rules mid-story.
 import type {
   DashboardActiveExecution,
   DashboardFailedWorkDetail,
@@ -20,6 +21,10 @@ import type {
 } from "../terminal-work/terminal-work-card";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import {
+  getCurrentSelectionDetailMessages,
+  type CurrentSelectionDetailMessages,
+} from "./messages/current-selection-detail";
+import {
   isScriptBackedWorkstationRequest,
   requestDispatchID,
   requestOutcome,
@@ -37,6 +42,10 @@ export function buildTerminalWorkItems(
   attempts: DashboardProviderSessionAttempt[] | undefined,
   failureDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>,
   workstationRequestsByDispatchID?: Record<string, DispatchWorkstationRequest>,
+  messages: Pick<
+    CurrentSelectionDetailMessages,
+    "terminalOutcomeLabel" | "terminalRequestContext"
+  > = getCurrentSelectionDetailMessages(undefined),
 ): TerminalWorkItem[] {
   const failureDetails = Object.values(failureDetailsByWorkID ?? {});
   const requests = sortWorkstationRequests(
@@ -69,7 +78,7 @@ export function buildTerminalWorkItems(
 
     return {
       attempts: matchingAttempts,
-      contextText: terminalRequestContext(latestAttempt, latestRequest),
+      contextText: terminalRequestContext(latestAttempt, latestRequest, messages),
       dispatchID:
         matchedFailureDetail?.dispatch_id ??
         (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
@@ -86,6 +95,10 @@ export function buildTerminalWorkItems(
 function terminalRequestContext(
   attempt: DashboardProviderSessionAttempt | undefined,
   request: DispatchWorkstationRequest | undefined,
+  messages: Pick<
+    CurrentSelectionDetailMessages,
+    "terminalOutcomeLabel" | "terminalRequestContext"
+  >,
 ): string | undefined {
   if (!request && !attempt) {
     return undefined;
@@ -99,27 +112,15 @@ function terminalRequestContext(
     return undefined;
   }
 
-  const providerSession = formatProviderSession(attempt?.provider_session);
-  if (providerSession !== "Unavailable") {
-    return `${formatTerminalOutcome(outcome)} at ${workstation}; ${providerSession}`;
-  }
+  const providerSession = attempt?.provider_session?.id
+    ? formatProviderSession(attempt.provider_session)
+    : undefined;
 
-  return `${formatTerminalOutcome(outcome)} at ${workstation}`;
-}
-
-function formatTerminalOutcome(outcome: string): string {
-  switch (outcome.toUpperCase()) {
-    case "ACCEPTED":
-      return "Accepted";
-    case "CONTINUE":
-      return "Continue";
-    case "FAILED":
-      return "Failed";
-    case "REJECTED":
-      return "Rejected";
-    default:
-      return outcome;
-  }
+  return messages.terminalRequestContext({
+    outcome: messages.terminalOutcomeLabel(outcome),
+    providerSession,
+    workstation,
+  });
 }
 
 export function findStatePlace(snapshot: DashboardSnapshot, placeId: string): DashboardPlaceRef | null {

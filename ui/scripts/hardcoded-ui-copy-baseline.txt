@@ -1,5 +1,20 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
+src/api/named-factory/api.ts|193|14|string-literal|INTERNAL_ERROR
+src/api/provider-session-details/api.ts|179|14|string-literal|INTERNAL_ERROR
+src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
+src/components/ui/dialog.tsx|29|16|string-literal|Close dialog
+src/components/ui/formatters.ts|44|12|string-literal|h m
+src/components/ui/formatters.ts|47|12|string-literal|m s
+src/components/ui/formatters.ts|80|12|string-literal|Unavailable
+src/components/ui/formatters.ts|122|12|string-literal|Unknown
+src/components/ui/formatters.ts|145|14|string-literal|Repeated work
+src/components/ui/formatters.ts|146|24|string-literal|Raw outcome:
+src/components/ui/formatters.ts|157|12|string-literal|Unavailable
+src/components/ui/formatters.ts|202|12|string-literal|None
+src/components/ui/formatters.ts|258|10|string-literal|~/.codex/sessions/ / / /rollout- .jsonl
+src/components/ui/ui-foundation-showcase.tsx|47|65|string-literal|Completed
+src/components/ui/ui-foundation-showcase.tsx|48|59|string-literal|Failed
 src/components/ui/ui-foundation-showcase.tsx|79|72|jsx-text|Shared UI primitives
 src/components/ui/ui-foundation-showcase.tsx|81|13|jsx-text|Shared button, field, dialog, chart, table, skeleton, collapsible, calendar, and resizable building blocks.
 src/components/ui/ui-foundation-showcase.tsx|86|19|jsx-text|Primary action
@@ -7,16 +22,16 @@ src/components/ui/ui-foundation-showcase.tsx|87|36|jsx-text|Secondary
 src/components/ui/ui-foundation-showcase.tsx|88|34|jsx-text|Outline
 src/components/ui/ui-foundation-showcase.tsx|89|28|jsx-text|Disabled action
 src/components/ui/ui-foundation-showcase.tsx|96|13|jsx-text|Request name
-src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-prop|Name this request
 src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-attribute|Name this request
+src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-prop|Name this request
 src/components/ui/ui-foundation-showcase.tsx|103|13|jsx-text|Work type
 src/components/ui/ui-foundation-showcase.tsx|106|35|jsx-text|story
 src/components/ui/ui-foundation-showcase.tsx|107|34|jsx-text|task
 src/components/ui/ui-foundation-showcase.tsx|113|13|jsx-text|Request text
-src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-prop|Describe the work to run
 src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-attribute|Describe the work to run
-src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-prop|Primitive chart showcase
+src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-prop|Describe the work to run
 src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-attribute|Primitive chart showcase
+src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-prop|Primitive chart showcase
 src/components/ui/ui-foundation-showcase.tsx|150|27|jsx-text|Primitive table foundation for trace and detail surfaces.
 src/components/ui/ui-foundation-showcase.tsx|153|28|jsx-text|Dispatch
 src/components/ui/ui-foundation-showcase.tsx|154|28|jsx-text|Status
@@ -43,7 +58,74 @@ src/components/ui/ui-foundation-showcase.tsx|251|13|jsx-text|Resizable panels
 src/components/ui/ui-foundation-showcase.tsx|257|19|jsx-text|Sidebar panel
 src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
 src/features/bento/agent-bento.tsx|155|18|jsx-attribute|Infinite You bento board
+src/features/current-factory-definition/workstation-editable-values.ts|229|12|string-literal|no workstations
+src/features/current-factory-definition/workstation-editable-values.ts|237|12|string-literal|" " and " "
+src/features/current-factory-definition/workstation-editable-values.ts|240|10|string-literal|, and " "
+src/features/current-selection/state/selectionHistoryStore.ts|36|14|string-literal|node:
+src/features/current-selection/state/selectionHistoryStore.ts|38|14|string-literal|state:
+src/features/current-selection/state/selectionHistoryStore.ts|40|14|string-literal|work: : :
+src/features/current-selection/state/selectionHistoryStore.ts|42|14|string-literal|request: :
+src/features/current-selection/use-save-editable-workstation-configuration.ts|153|10|string-literal|The running factory could not be saved.
+src/features/dashboard/state/dashboardStreamStore.ts|7|12|string-literal|Loading factory events...
+src/features/export/factory-png-export.ts|59|18|string-literal|The selected image could not be decoded for PNG export.
+src/features/export/factory-png-export.ts|82|18|string-literal|The exported PNG metadata could not be written.
+src/features/flowchart/current-activity-place-node.tsx|150|14|string-literal|border-af-overlay/22 bg-af-canvas text-af-ink
+src/features/flowchart/current-activity-place-node.tsx|152|12|string-literal|border-dashed border-af-info/36 bg-af-surface/78 text-af-ink
+src/features/flowchart/current-activity-place-node.tsx|167|14|string-literal|Terminal
+src/features/flowchart/current-activity-place-node.tsx|170|14|string-literal|Failed
+src/features/flowchart/current-activity-place-node.tsx|172|12|string-literal|Queue
+src/features/flowchart/current-activity-place-node.tsx|176|12|string-literal|Resource
+src/features/flowchart/current-activity-place-node.tsx|179|35|string-literal|Limit
+src/features/flowchart/current-activity-place-node.tsx|179|45|string-literal|Constraint
+src/features/flowchart/current-activity-place-node.tsx|207|12|string-literal|Processing state
+src/features/flowchart/current-activity-place-node.tsx|280|12|string-literal|resource tokens
 src/features/flowchart/current-activity-workstation-node.tsx|221|19|jsx-attribute|Active
 src/features/flowchart/current-activity-workstation-node.tsx|226|21|jsx-prop|Active
+src/features/flowchart/graph-semantic-icon.tsx|38|12|string-literal|Active work
+src/features/flowchart/graph-semantic-icon.tsx|47|12|string-literal|Constraint
+src/features/flowchart/graph-semantic-icon.tsx|57|12|string-literal|Cron workstation
+src/features/flowchart/graph-semantic-icon.tsx|66|12|string-literal|Exhaustion rule
+src/features/flowchart/graph-semantic-icon.tsx|76|12|string-literal|Failed state
+src/features/flowchart/graph-semantic-icon.tsx|86|12|string-literal|Limit
+src/features/flowchart/graph-semantic-icon.tsx|96|12|string-literal|Processing state
+src/features/flowchart/graph-semantic-icon.tsx|107|12|string-literal|Queue state
+src/features/flowchart/graph-semantic-icon.tsx|118|12|string-literal|Repeater workstation
+src/features/flowchart/graph-semantic-icon.tsx|129|12|string-literal|Resource
+src/features/flowchart/graph-semantic-icon.tsx|139|12|string-literal|Terminal state
+src/features/flowchart/graph-semantic-icon.tsx|148|12|string-literal|Workstation
+src/features/flowchart/layout.ts|114|10|string-literal|workstation:
+src/features/flowchart/layout.ts|118|10|string-literal|place:
+src/features/flowchart/workstation-icon-metadata.ts|31|12|string-literal|Cron workstation
+src/features/flowchart/workstation-icon-metadata.ts|37|12|string-literal|Exhaustion rule
+src/features/flowchart/workstation-icon-metadata.ts|43|12|string-literal|Repeater workstation
+src/features/flowchart/workstation-icon-metadata.ts|49|12|string-literal|Standard workstation
+src/features/import/factory-png-import.ts|95|18|string-literal|The selected image could not be decoded for preview.
+src/features/import/factory-png-import.ts|109|18|string-literal|The browser could not create a preview for the selected image.
+src/features/import/factory-png-import.ts|137|18|string-literal|The selected image could not be read.
+src/features/import/factory-png-import.ts|147|18|string-literal|The selected file is not a PNG image.
+src/features/import/factory-png-import.ts|186|18|string-literal|The selected PNG image is invalid or truncated.
+src/features/import/factory-png-import.ts|195|16|string-literal|The selected PNG does not contain Infinite You factory metadata.
+src/features/import/factory-png-import.ts|210|18|string-literal|The Infinite You factory metadata is not valid JSON.
+src/features/import/factory-png-import.ts|220|18|string-literal|The Infinite You factory metadata must be an object.
+src/features/import/factory-png-import.ts|230|18|string-literal|The Infinite You factory metadata is missing the schema version.
+src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG uses an unsupported Infinite You factory metadata version.
+src/features/import/factory-png-import.ts|270|18|string-literal|The Infinite You factory metadata does not contain a valid factory payload.
+src/features/import/factory-png-import.ts|309|16|string-literal|The Infinite You factory metadata is missing the factory name.
 src/features/terminal-work/terminal-work-card.tsx|288|51|jsx-text|at
+src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
+src/features/trace-drilldown/trace-workstation-path.tsx|452|12|string-literal|border-af-overlay/10 bg-af-canvas
+src/features/trace-drilldown/trace-workstation-path.tsx|456|12|string-literal|border-af-danger/24 bg-af-danger/6
+src/features/trace-drilldown/trace-workstation-path.tsx|459|10|string-literal|border-af-success/20 bg-af-success/6
+src/features/trace-drilldown/useTraceDrilldown.ts|22|20|string-literal|Select active, completed, or failed work to inspect retained trace history.
+src/features/trace-drilldown/useTraceDrilldown.ts|34|28|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/work-outcome/trend-cards.tsx|254|60|jsx-text|retry or rework events
+src/features/work-outcome/trends.ts|118|27|string-literal|Queued
+src/features/work-outcome/trends.ts|119|29|string-literal|In-flight
+src/features/work-outcome/trends.ts|120|30|string-literal|Completed
+src/features/work-outcome/trends.ts|121|27|string-literal|Failed/retried
+src/features/work-outcome/trends.ts|148|27|string-literal|Session
+src/features/work-outcome/trends.ts|212|12|string-literal|Tick
+src/features/work-outcome/trends.ts|299|14|string-literal|Work type:
+src/features/workflow-activity/mutation-dialog.tsx|75|22|string-literal|fixed inset-0 px-5 py-6
+src/features/workflow-activity/react-flow-current-activity-card-graph.ts|59|10|string-literal|workstation:
+src/features/workflow-activity/react-flow-current-activity-card-graph.ts|63|10|string-literal|place:

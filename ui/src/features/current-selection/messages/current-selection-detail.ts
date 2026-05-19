@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: feature-local locale catalogs keep required language coverage in one typed asset set.
 import { type LocalizedMessages, resolveLocalizedMessages } from "../../../i18n";
 
 export interface CurrentSelectionDetailMessages {
@@ -70,6 +71,12 @@ export interface CurrentSelectionDetailMessages {
   stateNodeIdLabel: string;
   totalDurationLabel: string;
   totalDurationUnavailable: string;
+  terminalOutcomeLabel: (outcome: string) => string;
+  terminalRequestContext: (params: {
+    outcome: string;
+    providerSession?: string;
+    workstation: string;
+  }) => string;
   traceIdLabel: string;
   traceIdsLabel: string;
   traceUnavailable: string;
@@ -174,6 +181,24 @@ const currentSelectionDetailMessagesByLocale = {
     totalDurationLabel: "Total duration",
     totalDurationUnavailable:
       "Total duration is not available for this workstation request yet.",
+    terminalOutcomeLabel: (outcome: string) => {
+      switch (outcome.toUpperCase()) {
+        case "ACCEPTED":
+          return "Accepted";
+        case "CONTINUE":
+          return "Continue";
+        case "FAILED":
+          return "Failed";
+        case "REJECTED":
+          return "Rejected";
+        default:
+          return outcome;
+      }
+    },
+    terminalRequestContext: ({ outcome, providerSession, workstation }) =>
+      providerSession
+        ? `${outcome} at ${workstation}; ${providerSession}`
+        : `${outcome} at ${workstation}`,
     traceIdsLabel: "Trace IDs",
     traceUnavailable: "Trace details are not available for this workstation request yet.",
     transitionIdLabel: "Transition ID",
@@ -258,6 +283,24 @@ const currentSelectionDetailMessagesByLocale = {
     totalDurationLabel: "Total duration",
     totalDurationUnavailable:
       "Total duration is not available for this workstation request yet.",
+    terminalOutcomeLabel: (outcome: string) => {
+      switch (outcome.toUpperCase()) {
+        case "ACCEPTED":
+          return "Accepted";
+        case "CONTINUE":
+          return "Continue";
+        case "FAILED":
+          return "Failed";
+        case "REJECTED":
+          return "Rejected";
+        default:
+          return outcome;
+      }
+    },
+    terminalRequestContext: ({ outcome, providerSession, workstation }) =>
+      providerSession
+        ? `${outcome} at ${workstation}; ${providerSession}`
+        : `${outcome} at ${workstation}`,
     traceIdsLabel: "Trace IDs",
     traceUnavailable: "Trace details are not available for this workstation request yet.",
     transitionIdLabel: "Transition ID",
@@ -342,6 +385,24 @@ const currentSelectionDetailMessagesByLocale = {
     totalDurationLabel: "Total duration",
     totalDurationUnavailable:
       "Total duration is not available for this workstation request yet.",
+    terminalOutcomeLabel: (outcome: string) => {
+      switch (outcome.toUpperCase()) {
+        case "ACCEPTED":
+          return "Accepted";
+        case "CONTINUE":
+          return "Continue";
+        case "FAILED":
+          return "Failed";
+        case "REJECTED":
+          return "Rejected";
+        default:
+          return outcome;
+      }
+    },
+    terminalRequestContext: ({ outcome, providerSession, workstation }) =>
+      providerSession
+        ? `${outcome} at ${workstation}; ${providerSession}`
+        : `${outcome} at ${workstation}`,
     traceIdsLabel: "Trace IDs",
     traceUnavailable: "Trace details are not available for this workstation request yet.",
     transitionIdLabel: "Transition ID",
@@ -427,6 +488,24 @@ const currentSelectionDetailMessagesByLocale = {
     stateNodeIdLabel: "状态节点 ID",
     totalDurationLabel: "总耗时",
     totalDurationUnavailable: "此工作站请求的总耗时暂不可用。",
+    terminalOutcomeLabel: (outcome: string) => {
+      switch (outcome.toUpperCase()) {
+        case "ACCEPTED":
+          return "已接受";
+        case "CONTINUE":
+          return "继续";
+        case "FAILED":
+          return "失败";
+        case "REJECTED":
+          return "已拒绝";
+        default:
+          return outcome;
+      }
+    },
+    terminalRequestContext: ({ outcome, providerSession, workstation }) =>
+      providerSession
+        ? `${outcome} 于 ${workstation}; ${providerSession}`
+        : `${outcome} 于 ${workstation}`,
     traceIdLabel: "追踪 ID",
     traceIdsLabel: "追踪 ID",
     traceUnavailable: "此工作站请求的追踪详情暂不可用。",

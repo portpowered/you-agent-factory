@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: scanner rules stay together so guard behavior and failure output remain traceable.
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,7 +50,12 @@ export interface HardcodedCopyFinding {
   file: string;
   line: number;
   column: number;
-  kind: "jsx-attribute" | "jsx-expression" | "jsx-prop" | "jsx-text";
+  kind:
+    | "jsx-attribute"
+    | "jsx-expression"
+    | "jsx-prop"
+    | "jsx-text"
+    | "string-literal";
   text: string;
 }
 
@@ -200,6 +206,23 @@ export function scanSourceTextForHardcodedCopy(
       }
     }
 
+    if (isStandaloneStringCopyNode(node)) {
+      const expressionText = getStandaloneStringCopy(node);
+      if (
+        looksLikeRenderedExpressionCopy(expressionText) &&
+        !hasNonProductDiagnosticException(sourceFile, node)
+      ) {
+        findings.push(
+          createFinding(
+            sourceFile,
+            node.getStart(sourceFile),
+            "string-literal",
+            expressionText,
+          ),
+        );
+      }
+    }
+
     ts.forEachChild(node, visit);
   };
 
@@ -328,6 +351,22 @@ function getRenderedExpressionCopy(
   return "";
 }
 
+function getStandaloneStringCopy(node: ts.Node): string {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return normalizeText(node.text);
+  }
+
+  if (ts.isTemplateExpression(node)) {
+    const parts = [node.head.text];
+    for (const span of node.templateSpans) {
+      parts.push(span.literal.text);
+    }
+    return normalizeText(parts.join(" "));
+  }
+
+  return "";
+}
+
 function hasNonProductDiagnosticException(
   sourceFile: ts.SourceFile,
   node: ts.Node,
@@ -355,6 +394,82 @@ function isComponentProp(attribute: ts.JsxAttribute): boolean {
 
 function isRenderedJsxExpression(node: ts.JsxExpression): boolean {
   return ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent);
+}
+
+function isStandaloneStringCopyNode(
+  node: ts.Node,
+): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression {
+  if (
+    !ts.isStringLiteral(node) &&
+    !ts.isNoSubstitutionTemplateLiteral(node) &&
+    !ts.isTemplateExpression(node)
+  ) {
+    return false;
+  }
+
+  if (isSyntaxOnlyStringNode(node)) {
+    return false;
+  }
+
+  const parent = node.parent;
+  if (ts.isBindingElement(parent) && parent.initializer === node) {
+    return true;
+  }
+
+  if (
+    ts.isPropertyAssignment(parent) &&
+    parent.initializer === node &&
+    isTextualObjectPropertyName(parent.name)
+  ) {
+    return true;
+  }
+
+  if (ts.isReturnStatement(parent) && parent.expression === node) {
+    return true;
+  }
+
+  if (
+    ts.isConditionalExpression(parent) &&
+    (parent.whenTrue === node || parent.whenFalse === node) &&
+    isReturnedOrMessageLikeExpression(parent)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isSyntaxOnlyStringNode(node: ts.Node): boolean {
+  const parent = node.parent;
+  return (
+    ts.isJsxExpression(parent) ||
+    ts.isJsxAttribute(parent) ||
+    ts.isImportDeclaration(parent) ||
+    ts.isExportDeclaration(parent) ||
+    ts.isExternalModuleReference(parent) ||
+    ts.isLiteralTypeNode(parent) ||
+    (ts.isPropertyAssignment(parent) && parent.name === node) ||
+    (ts.isPropertySignature(parent) && parent.name === node) ||
+    (ts.isElementAccessExpression(parent) && parent.argumentExpression === node)
+  );
+}
+
+function isReturnedOrMessageLikeExpression(expression: ts.Expression): boolean {
+  const parent = expression.parent;
+  return (
+    (ts.isReturnStatement(parent) && parent.expression === expression) ||
+    (ts.isPropertyAssignment(parent) &&
+      parent.initializer === expression &&
+      isTextualObjectPropertyName(parent.name))
+  );
+}
+
+function isTextualObjectPropertyName(name: ts.PropertyName): boolean {
+  const text = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : "";
+  return (
+    TEXTUAL_COMPONENT_PROP_NAMES.has(text) ||
+    /(?:Label|Title|Message|Action|Heading|Copy|Description|Placeholder|State|Text|Prefix)$/.test(text)
+  );
 }
 
 function looksLikeUserFacingCopy(value: string): boolean {

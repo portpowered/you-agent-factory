@@ -201,7 +201,10 @@ export interface ProviderSessionAttemptsProps {
   historyItemCountLabel?: (count: number) => string;
   messages?: Pick<
     WorkstationDetailMessages,
+    | "collapseAction"
     | "currentDispatchLabel"
+    | "expandAction"
+    | "historyRunCountLabel"
     | "openNamedWorkItemAction"
     | "openRequestDetailsAction"
     | "providerSessionLogAction"
@@ -211,11 +214,13 @@ export interface ProviderSessionAttemptsProps {
     | "providerSessionSelectionUnavailable"
     | "requestDetailsUnavailable"
     | "requestSelectedAction"
+    | "requestHistoryHeading"
     | "selectProviderSessionLabel"
     | "selectWorkItemLabel"
     | "selectWorkstationRequestLabel"
     | "workDetailsUnavailable"
     | "workSelectedAction"
+    | "runHistoryHeading"
   >;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectWorkID?: (workID: string) => void;
