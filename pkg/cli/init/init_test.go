@@ -468,14 +468,18 @@ func TestInit_RalphScaffoldTemplatesUsePublicContractAndArtifactFlow(t *testing.
 	scaffoldReadmePath := filepath.Join(base, "README.md")
 	scaffoldReadme := readFileString(t, scaffoldReadmePath)
 	requireContainsAll(t, scaffoldReadmePath, scaffoldReadme, []string{
-		"agent-factory init --type ralph --dir ralph-factory",
-		"agent-factory run --dir ralph-factory",
+		"you init --type ralph --dir ralph-factory",
+		"you run --dir ralph-factory",
 		"ralph-factory/inputs/request/default/release-planning-loop.md",
 		"prd.md",
 		"prd.json",
 		"progress.txt",
 		"reviewer, thoughts or ideation, and cron",
 		"<COMPLETE>",
+	})
+	requireOmitsAll(t, scaffoldReadmePath, scaffoldReadme, []string{
+		"agent-factory init --type ralph --dir ralph-factory",
+		"agent-factory run --dir ralph-factory",
 	})
 }
 

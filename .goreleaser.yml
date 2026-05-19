@@ -1,15 +1,15 @@
 version: 2
 
-project_name: infinite-you
+project_name: you
 
 before:
   hooks:
     - make ui-build
 
 builds:
-  - id: infinite-you
+  - id: factory-cli
     main: ./cmd/factory
-    binary: infinite-you
+    binary: you
     env:
       - CGO_ENABLED=0
     goos:
@@ -23,7 +23,7 @@ builds:
 archives:
   - id: cli-archives
     ids:
-      - infinite-you
+      - factory-cli
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz

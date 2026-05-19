@@ -56,6 +56,6 @@ workstations while a dispatch is active.
 
 ## Related
 
-- `infinite-you docs config`
-- `infinite-you docs workstation`
-- `infinite-you docs workers`
+- `you docs config`
+- `you docs workstation`
+- `you docs workers`

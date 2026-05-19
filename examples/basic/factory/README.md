@@ -35,12 +35,12 @@ examples/basic/factory/
 ## Running
 
 ```bash
-agent-factory run -dir examples/basic/factory
+you run -dir examples/basic/factory
 ```
 
 Or submit work programmatically:
 
 ```bash
 cp my-task.md examples/basic/factory/inputs/task/default/
-agent-factory run -dir examples/basic/factory
+you run -dir examples/basic/factory
 ```
