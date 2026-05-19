@@ -21,11 +21,6 @@ import type { FactoryEvent } from "./api/events";
 import { FACTORY_EVENT_TYPES } from "./api/events";
 import type { FactoryValue } from "./api/named-factory";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "./components/ui/dashboard-typography";
-import {
   buildDashboardSnapshotFixture,
   dashboardWorkstationRequestFixtures,
   failureAnalysisTimelineEvents,
@@ -47,9 +42,16 @@ import {
   semanticWorkflowDashboardSnapshot,
   twentyNodeDashboardSnapshot,
 } from "./components/dashboard/test-fixtures";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_PAGE_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+} from "./components/ui/dashboard-typography";
 import { formatDurationMillis } from "./components/ui/formatters";
 import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
 import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
+import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
@@ -58,14 +60,12 @@ import * as factoryPngExportModule from "./features/export/factory-png-export";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "./features/import";
 import * as factoryPngImportModule from "./features/import/factory-png-import";
-import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
 import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   TraceDrilldownWidget,
   useTraceDrilldown,
 } from "./features/trace-drilldown";
-import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
 
 vi.mock("./features/current-factory-definition", async () => {
   const actual = await vi.importActual("./features/current-factory-definition");
@@ -3622,7 +3622,7 @@ describe("App dashboard follow-up flows", () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
           headers: {
             "Content-Type": "application/json",
           },
@@ -3659,17 +3659,30 @@ describe("App dashboard follow-up flows", () => {
       "story",
     );
     expect(submitButton.disabled).toBe(true);
+    expect(
+      submitWorkScope.getByText(
+        "Choose a work type to continue. Request details are optional.",
+      ),
+    ).toBeTruthy();
+    expect(
+      submitWorkScope.getByText(
+        "Optional. Leave this blank to submit an empty request.",
+      ),
+    ).toBeTruthy();
 
+    fireEvent.change(workType, { target: { value: "story" } });
+    expect(submitButton.disabled).toBe(false);
+    expect(
+      submitWorkScope.getByText(
+        "Ready to submit. Request details are optional.",
+      ),
+    ).toBeTruthy();
     fireEvent.change(requestName, {
       target: { value: "Dashboard smoke request" },
     });
-    expect(submitButton.disabled).toBe(true);
     fireEvent.change(requestText, {
       target: { value: "Review the failed dashboard submission smoke." },
     });
-    expect(submitButton.disabled).toBe(true);
-    fireEvent.change(workType, { target: { value: "story" } });
-    expect(submitButton.disabled).toBe(false);
 
     fireEvent.click(submitButton);
 
@@ -3685,21 +3698,20 @@ describe("App dashboard follow-up flows", () => {
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
     });
+    expect(workType.value).toBe("story");
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
 
     fireEvent.change(requestName, {
       target: { value: "Retry dashboard request" },
     });
+    expect(submitButton.disabled).toBe(false);
     fireEvent.change(requestText, {
       target: {
         value: "Retry the broken submission from the dashboard shell.",
       },
     });
-    expect(submitButton.disabled).toBe(true);
-    fireEvent.change(workType, { target: { value: "story" } });
-    expect(submitButton.disabled).toBe(false);
 
     fireEvent.click(submitButton);
 
@@ -3724,7 +3736,7 @@ describe("App dashboard follow-up flows", () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock.mockImplementation(
       async () =>
-        new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
           headers: {
             "Content-Type": "application/json",
           },
@@ -3783,7 +3795,42 @@ describe("App dashboard follow-up flows", () => {
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
     });
+    expect(workType.value).toBe("story");
     expect(requestName.value).toBe("");
+    expect(requestText.value).toBe("");
+  });
+
+  it("submits an empty payload through POST /work from the dashboard shell", async () => {
+    const { fetchMock } = renderApp({ snapshot: activeSnapshot });
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 201,
+        }),
+    );
+
+    await screen.findByRole("heading", { name: "Infinite You" });
+
+    const { submitButton, submitWorkScope, workType } =
+      submitWorkCardControls();
+
+    fireEvent.change(workType, { target: { value: "story" } });
+    expect(submitButton.disabled).toBe(false);
+    fireEvent.click(submitButton);
+
+    expect(
+      await submitWorkScope.findByText(
+        "Your request was submitted. Trace ID: trace-submit-story.",
+      ),
+    ).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      payload: "",
+      workTypeName: "story",
+    });
   });
 
   it("preserves the selected work type and request after a dashboard-shell submit failure", async () => {
