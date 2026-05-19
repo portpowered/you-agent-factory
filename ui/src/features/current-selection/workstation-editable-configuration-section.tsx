@@ -1,6 +1,6 @@
 import { type ReactNode, useId, useState } from "react";
 
-import { Input, Textarea } from "../../components/ui";
+import { Select, Textarea } from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -126,18 +126,8 @@ function EditableConfigurationReadyForm({
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
         <EditableConfigurationField
           fieldId="editable-workstation-worker"
-          input={
-            <Input
-              aria-readonly="true"
-              className={DASHBOARD_BODY_TEXT_CLASS}
-              id="editable-workstation-worker"
-              readOnly
-              value={valueOrFallback(
-                state.initialValues.workerName,
-                messages.notConfiguredValue,
-              )}
-            />
-          }
+          errorMessage={state.validationErrors.workerName}
+          input={<EditableConfigurationWorkerInput messages={messages} state={state} />}
           label={messages.workerFieldLabel}
         />
       </div>
@@ -257,6 +247,58 @@ function EditableConfigurationOverwriteWarning({
         {messages.editableConfigurationOverwriteWarningDetail}
       </p>
     </div>
+  );
+}
+
+function EditableConfigurationWorkerInput({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  if (state.workerOptionsState.status === "empty") {
+    return (
+      <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+        {state.workerOptionsState.message}
+      </p>
+    );
+  }
+
+  if (state.workerOptionsState.status === "error") {
+    return (
+      <p
+        className={cx("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+        role="alert"
+      >
+        {messages.editableConfigurationWorkerUnavailablePrefix}{" "}
+        {state.workerOptionsState.message}
+      </p>
+    );
+  }
+
+  return (
+    <Select
+      aria-describedby={
+        state.validationErrors.workerName
+          ? "editable-workstation-worker-error"
+          : undefined
+      }
+      aria-invalid={state.validationErrors.workerName ? "true" : undefined}
+      className={DASHBOARD_BODY_TEXT_CLASS}
+      id="editable-workstation-worker"
+      onChange={(event) => state.onWorkerChange(event.target.value)}
+      value={state.draft.workerName}
+    >
+      {state.workerOptionsState.options.map((workerName) => (
+        <option key={workerName} value={workerName}>
+          {valueOrFallback(workerName, messages.notConfiguredValue)}
+        </option>
+      ))}
+    </Select>
   );
 }
 

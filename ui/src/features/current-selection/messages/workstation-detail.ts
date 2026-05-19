@@ -14,7 +14,7 @@ const workstationDetailMessagesByLocale = {
     activeWorkHeading: "Active work",
     collapseAction: "Collapse",
     editableConfigurationEmpty:
-      "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
+      "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
     editableConfigurationErrorPrefix: "Editable configuration unavailable.",
     editableConfigurationHeading: "Editable configuration",
     editableConfigurationDirtyStatus:
@@ -32,7 +32,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "Cancel",
     editableConfigurationSaveConfirmationConfirmAction: "Overwrite factory",
     editableConfigurationSaveConfirmationDescription:
-      "Saving will overwrite the running factory definition with the prompt, model, and template values in this workstation draft.",
+      "Saving will overwrite the running factory definition with the worker and prompt values in this workstation draft.",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `Saving will overwrite newer server values for ${fields} with the draft currently shown in the editor.`,
     editableConfigurationSaveConfirmationTitle:
@@ -43,9 +43,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationLoading:
       "Loading the current factory definition for this workstation.",
     editableConfigurationSummary:
-      "Prompt, model, and template values are loaded from the latest editable current-factory definition.",
+      "Worker and prompt values are loaded from the latest editable current-factory definition.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this workstation.",
+    editableConfigurationWorkerUnavailablePrefix:
+      "Worker selection unavailable.",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
     promptFieldLabel: "Prompt",
@@ -115,7 +117,7 @@ const workstationDetailMessagesByLocale = {
     activeWorkHeading: "アクティブな作業",
     collapseAction: "折りたたむ",
     editableConfigurationEmpty:
-      "この選択中ワークステーションでは、実行中ファクトリー定義から編集可能な prompt、model、template の値を取得できません。",
+      "この選択中ワークステーションでは、実行中ファクトリー定義から編集可能な worker と prompt の値を取得できません。",
     editableConfigurationErrorPrefix: "編集可能な構成は利用できません。",
     editableConfigurationHeading: "編集可能な構成",
     editableConfigurationDirtyStatus:
@@ -133,7 +135,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "キャンセル",
     editableConfigurationSaveConfirmationConfirmAction: "ファクトリーを上書き",
     editableConfigurationSaveConfirmationDescription:
-      "保存すると、このワークステーション下書きの prompt、model、template の値で実行中ファクトリー定義を上書きします。",
+      "保存すると、このワークステーション下書きの worker と prompt の値で実行中ファクトリー定義を上書きします。",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `保存すると、エディターに表示中の下書きで ${fields} の新しいサーバー値を上書きします。`,
     editableConfigurationSaveConfirmationTitle:
@@ -144,9 +146,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationLoading:
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationSummary:
-      "Prompt、model、template の値は最新の編集可能な current-factory 定義から読み込まれます。",
+      "Worker と prompt の値は最新の編集可能な current-factory 定義から読み込まれます。",
     editableConfigurationValidationStatus:
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
+    editableConfigurationWorkerUnavailablePrefix:
+      "ワーカー選択は利用できません。",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
     promptFieldLabel: "プロンプト",
@@ -216,7 +220,7 @@ const workstationDetailMessagesByLocale = {
     activeWorkHeading: "활성 작업",
     collapseAction: "접기",
     editableConfigurationEmpty:
-      "선택한 워크스테이션에 대해 실행 중인 팩토리 정의에서 편집 가능한 prompt, model, template 값을 찾을 수 없습니다.",
+      "선택한 워크스테이션에 대해 실행 중인 팩토리 정의에서 편집 가능한 worker 및 prompt 값을 찾을 수 없습니다.",
     editableConfigurationErrorPrefix: "편집 가능한 구성을 사용할 수 없습니다.",
     editableConfigurationHeading: "편집 가능한 구성",
     editableConfigurationDirtyStatus:
@@ -234,7 +238,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "취소",
     editableConfigurationSaveConfirmationConfirmAction: "팩토리 덮어쓰기",
     editableConfigurationSaveConfirmationDescription:
-      "저장하면 이 워크스테이션 초안의 prompt, model, template 값으로 실행 중인 팩토리 정의를 덮어씁니다.",
+      "저장하면 이 워크스테이션 초안의 worker 및 prompt 값으로 실행 중인 팩토리 정의를 덮어씁니다.",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `저장하면 편집기에 표시된 초안으로 ${fields}의 최신 서버 값을 덮어씁니다.`,
     editableConfigurationSaveConfirmationTitle:
@@ -245,9 +249,11 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationLoading:
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationSummary:
-      "Prompt, model, template 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
+      "Worker 및 prompt 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
     editableConfigurationValidationStatus:
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
+    editableConfigurationWorkerUnavailablePrefix:
+      "워커 선택을 사용할 수 없습니다.",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
     promptFieldLabel: "프롬프트",
@@ -315,7 +321,7 @@ const workstationDetailMessagesByLocale = {
     activeWorkHeading: "活动工作",
     collapseAction: "收起",
     editableConfigurationEmpty:
-      "运行中的工厂定义没有为所选工作站公开可编辑的 prompt、model 和 template 值。",
+      "运行中的工厂定义没有为所选工作站公开可编辑的 worker 和 prompt 值。",
     editableConfigurationErrorPrefix: "无法提供可编辑配置。",
     editableConfigurationHeading: "可编辑配置",
     editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
@@ -332,7 +338,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveConfirmationCancelAction: "取消",
     editableConfigurationSaveConfirmationConfirmAction: "覆盖工厂",
     editableConfigurationSaveConfirmationDescription:
-      "保存将使用此工作站草稿中的 prompt、model 和 template 值覆盖运行中的工厂定义。",
+      "保存将使用此工作站草稿中的 worker 和 prompt 值覆盖运行中的工厂定义。",
     editableConfigurationSaveConflictConfirmationDescription: (fields) =>
       `保存将使用编辑器中当前草稿覆盖 ${fields} 的较新服务器值。`,
     editableConfigurationSaveConfirmationTitle: "要覆盖运行中的工厂定义吗？",
@@ -341,8 +347,9 @@ const workstationDetailMessagesByLocale = {
       "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationSummary:
-      "Prompt、model 和 template 值来自最新可编辑的 current-factory 定义。",
+      "Worker 和 prompt 值来自最新可编辑的 current-factory 定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
+    editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",
     promptFieldLabel: "提示词",

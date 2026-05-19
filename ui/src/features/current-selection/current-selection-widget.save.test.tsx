@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { FactoryValue } from "../../api/named-factory";
@@ -50,6 +50,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     renderWorkstationSelection();
+    expandEditableConfiguration();
 
     expect(
       screen
@@ -75,6 +76,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     vi.mocked(createFactory).mockResolvedValue(savedFactory);
 
     renderWorkstationSelection();
+    expandEditableConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Review the diff and verify browser behavior." },
@@ -129,6 +131,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
 
     renderWorkstationSelection();
+    expandEditableConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft while the save fails." },
@@ -158,6 +161,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     vi.mocked(createFactory).mockRejectedValue(new Error("Network dropped"));
 
     renderWorkstationSelection();
+    expandEditableConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep this draft through a generic failure." },
@@ -176,6 +180,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("allows the overwrite confirmation to be cancelled before saving", () => {
     renderWorkstationSelection();
+    expandEditableConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Changed prompt before cancelling save." },
@@ -201,16 +206,17 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     );
   });
 
-  it("saves a unique-worker model edit as part of the workstation draft", async () => {
+  it("saves a worker switch through the existing workstation edit flow", async () => {
     const savedFactory = buildEditableFactoryDefinition({
-      model: "gpt-5.6",
+      workerName: "planner",
     });
     vi.mocked(createFactory).mockResolvedValue(savedFactory);
 
     renderWorkstationSelection();
+    expandEditableConfiguration();
 
-    fireEvent.change(screen.getByLabelText("Model"), {
-      target: { value: "gpt-5.6" },
+    fireEvent.change(screen.getByLabelText("Worker"), {
+      target: { value: "planner" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
@@ -218,10 +224,10 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     await waitFor(() => {
       expect(createFactory).toHaveBeenCalledWith(
         expect.objectContaining({
-          workers: [
+          workstations: [
             expect.objectContaining({
-              model: "gpt-5.6",
-              name: "reviewer",
+              name: "Review",
+              worker: "planner",
             }),
           ],
         }),
@@ -231,9 +237,8 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
   it("warns in the save confirmation when newer server values would be overwritten", () => {
     const refreshedFactory = buildEditableFactoryDefinition({
-      model: "gpt-5.6",
       prompt: "Server changed prompt",
-      promptFile: "prompts/server.md",
+      workerName: "planner",
     });
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -256,8 +261,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
+    expandEditableConfiguration();
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep my local prompt change." },
+    });
+    fireEvent.change(screen.getByLabelText("Worker"), {
+      target: { value: "reviewer" },
     });
 
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
@@ -281,22 +290,23 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     expect(
       screen.getByText(
-        "Saving will overwrite newer server values for prompt, model, template with the draft currently shown in the editor.",
+        "Saving will overwrite newer server values for prompt, worker with the draft currently shown in the editor.",
       ),
     ).toBeTruthy();
   });
 
-  it("keeps shared-worker model edits disabled while saving workstation-only changes", async () => {
+  it("preserves worker models while saving workstation prompt changes against a shared-worker definition", async () => {
     vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
       buildEditableDefinitionResult(buildSharedWorkerFactoryDefinition()),
     );
-    vi.mocked(createFactory).mockResolvedValue(buildSharedWorkerFactoryDefinition({
-      prompt: "Updated only the review workstation prompt.",
-    }));
+    vi.mocked(createFactory).mockResolvedValue(
+      buildSharedWorkerFactoryDefinition({
+        prompt: "Updated only the review workstation prompt.",
+      }),
+    );
 
     renderWorkstationSelection();
-
-    expect(screen.getByLabelText("Model").getAttribute("disabled")).not.toBeNull();
+    expandEditableConfiguration();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Updated only the review workstation prompt." },
@@ -328,6 +338,18 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
   });
 });
+
+function expandEditableConfiguration() {
+  const section = screen
+    .getAllByRole("heading", { name: "Editable configuration" })
+    .at(-1)
+    ?.closest("section");
+  if (!section) {
+    throw new Error("expected editable configuration section");
+  }
+
+  fireEvent.click(within(section).getByRole("button", { name: "Expand" }));
+}
 
 function renderWorkstationSelection() {
   const snapshot = semanticWorkflowDashboardSnapshot;
@@ -412,19 +434,19 @@ function buildEditableDefinitionResult(
 }
 
 function buildEditableFactoryDefinition(overrides?: {
-  model?: string;
   prompt?: string;
-  promptFile?: string;
+  workerName?: string;
+  workerOptions?: string[];
 }): FactoryValue {
   return {
     name: "Current Factory",
-    workers: [
-      {
-        model: overrides?.model ?? "gpt-5.5",
-        name: "reviewer",
+    workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
+      (name, index) => ({
+        model: `gpt-5.${index + 5}`,
+        name,
         type: "MODEL_WORKER",
-      },
-    ],
+      }),
+    ),
     workstations: [
       {
         body:
@@ -434,8 +456,8 @@ function buildEditableFactoryDefinition(overrides?: {
         inputs: [{ state: "queued", workType: "story" }],
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
-        promptFile: overrides?.promptFile ?? "prompts/review.md",
-        worker: "reviewer",
+        promptFile: "prompts/review.md",
+        worker: overrides?.workerName ?? "reviewer",
       },
     ],
     workTypes: [],

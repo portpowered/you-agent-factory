@@ -25,6 +25,7 @@ export interface WorkstationDetailMessages {
   editableConfigurationSaveSuccess: string;
   editableConfigurationSummary: string;
   editableConfigurationValidationStatus: string;
+  editableConfigurationWorkerUnavailablePrefix: string;
   modelFieldLabel: string;
   notConfiguredValue: string;
   promptFieldLabel: string;

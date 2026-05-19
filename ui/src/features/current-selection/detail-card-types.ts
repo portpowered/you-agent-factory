@@ -118,12 +118,16 @@ export interface WorkstationDetailCardProps {
 }
 
 export interface EditableWorkstationValidationErrors {
-  model?: string;
   prompt?: string;
-  promptFile?: string;
+  workerName?: string;
 }
 
-export type EditableWorkstationOverwriteField = "model" | "prompt" | "template";
+export type EditableWorkstationOverwriteField = "prompt" | "worker";
+
+export type EditableWorkstationWorkerOptionsState =
+  | { status: "ready"; options: string[] }
+  | { message: string; status: "empty" }
+  | { message: string; status: "error" };
 
 export type EditableWorkstationConfigurationState =
   | { status: "loading" }
@@ -131,22 +135,20 @@ export type EditableWorkstationConfigurationState =
   | { message: string; status: "empty" }
   | {
       draft: {
-        model: string;
         prompt: string;
-        promptFile: string;
+        workerName: string;
       };
       hasValidationErrors: boolean;
       initialValues: EditableWorkstationValues;
       isDirty: boolean;
-      isModelEditable: boolean;
       markChangesSaved: () => void;
-      onModelChange: (value: string) => void;
       onPromptChange: (value: string) => void;
-      onPromptFileChange: (value: string) => void;
+      onWorkerChange: (value: string) => void;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
       status: "ready";
       validationErrors: EditableWorkstationValidationErrors;
+      workerOptionsState: EditableWorkstationWorkerOptionsState;
     };
 
 export type EditableWorkstationSaveState =
