@@ -41,7 +41,8 @@ You may have more than one item working at a time, so long as they are not overl
 
 ## Step 3 - update progress
 
-you should update the progress.md and meta.md in accordance to the changes you made. 
+you should update `factory/internal/progress.md` and `factory/internal/meta.md`
+in accordance to the changes you made.
 
 ## Step 4 - completion
 
