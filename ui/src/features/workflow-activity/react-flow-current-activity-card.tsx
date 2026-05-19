@@ -54,12 +54,12 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 };
 
 const CURRENT_ACTIVITY_CARD_CLASS =
-  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
+  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5";
 const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
 const CURRENT_ACTIVITY_EYEBROW_CLASS =
-  "mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
+  "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
 const CURRENT_ACTIVITY_LEGEND_CLASS =
-  "absolute left-7 top-7 z-10 max-[720px]:left-4 max-[720px]:right-4 max-[720px]:top-4";
+  "absolute left-4 right-4 top-4 z-10 md:left-7 md:right-auto md:top-7";
 const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 function CurrentActivityCardHeading() {
@@ -82,7 +82,7 @@ function EmptyCurrentActivityCard() {
       <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
         <CurrentActivityCardHeading />
       </div>
-      <div className="grid min-h-60 items-start gap-[0.35rem] rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
+      <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
         <h3>No workflow topology loaded</h3>
         <p>The factory has not published any workstation graph yet.</p>
       </div>
@@ -133,7 +133,7 @@ export function ReactFlowCurrentActivityCard(
           aria-describedby="workflow-graph-heading"
           aria-label="Work graph viewport"
           className={cx(
-            "relative h-full min-h-0 overflow-hidden rounded-[1.4rem] border transition-colors",
+            "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
             (imports.dropState.status === "drag-active" ||
               imports.dropState.status === "reading") &&
               "border-af-accent/35 bg-af-accent/6",

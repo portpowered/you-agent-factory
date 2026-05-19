@@ -61,6 +61,11 @@ describe("ExecutionDetailsSection", () => {
     expect(
       within(section).getByRole("link", { name: "Open trace" }),
     ).toBeTruthy();
+    const traceIdValue = within(section).getByText("trace-alpha (selected)").closest("dd");
+    if (!traceIdValue) {
+      throw new Error("Expected trace ID list container.");
+    }
+    expect(traceIdValue.className).toContain("gap-1.5");
 
     const workstationRequest = within(section).getByRole("region", {
       name: "Workstation request",

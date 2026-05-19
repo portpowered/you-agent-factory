@@ -300,6 +300,13 @@ export const ConstrainedWidth = {
 
     expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
+    await dragWorkChart(chart, 0.1, 0.5);
+    await expect(canvas.getByText("Zoomed to ticks 10-20")).toBeVisible();
+    await expect(
+      canvas.getByRole("button", {
+        name: "Reset work outcome chart zoom",
+      }),
+    ).toBeVisible();
     expectNoOverflowInStoryShell(canvasElement);
   },
 };

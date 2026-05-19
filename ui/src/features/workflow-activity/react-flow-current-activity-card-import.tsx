@@ -1,16 +1,11 @@
-import {
-  Button,
-} from "../../components/ui";
-import {
-  DashboardMessagePanel,
-} from "./mutation-dialog";
+import { Button } from "../../components/ui";
+import type { FactoryPngDropState, ReadFactoryImportPngError } from "../import";
 import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
-import type {
-  FactoryPngDropState,
-  ReadFactoryImportPngError,
-} from "../import";
+import { DashboardMessagePanel } from "./mutation-dialog";
 
-export function graphDropStateAttribute(dropState: FactoryPngDropState): string {
+export function graphDropStateAttribute(
+  dropState: FactoryPngDropState,
+): string {
   return dropState.status;
 }
 
@@ -79,7 +74,7 @@ export function GraphDropOverlay({ dropState, locale }: GraphDropOverlayProps) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-4 z-10 grid place-items-center rounded-2xl border border-dashed border-af-accent/45 bg-af-surface/92 p-5 text-center shadow-af-panel backdrop-blur-[18px]"
+      className="pointer-events-none absolute inset-4 z-10 grid place-items-center rounded-2xl border border-dashed border-af-accent/45 bg-af-surface/92 p-5 text-center shadow-af-panel backdrop-blur-lg"
       data-current-activity-drop-overlay={dropState.status}
     >
       <div className="grid max-w-sm gap-2">
@@ -109,11 +104,11 @@ export function GraphImportErrorPanel({
 
   return (
     <DashboardMessagePanel
-      action={(
+      action={
         <Button onClick={onDismiss} tone="outline" type="button">
           {messages.dismissAction}
         </Button>
-      )}
+      }
       ariaLive="assertive"
       className="mt-4 min-h-0 px-5 py-4"
       compact={true}
@@ -122,8 +117,7 @@ export function GraphImportErrorPanel({
       tone="error"
     >
       <p className="m-0">
-        <span className="font-semibold">{fileName}</span>
-        {" "}
+        <span className="font-semibold">{fileName}</span>{" "}
         {graphImportErrorCopy(error, locale)}
       </p>
     </DashboardMessagePanel>
