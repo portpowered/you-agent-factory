@@ -156,6 +156,53 @@ func TestGeneratedSafeWorkDiagnostics_ClonesMapsAndPreservesNil(t *testing.T) {
 	}
 }
 
+func TestSafeWorkDiagnosticsFromGenerated_ClonesMapsAndPreservesNil(t *testing.T) {
+	diagnostics := &factoryapi.SafeWorkDiagnostics{
+		RenderedPrompt: &factoryapi.RenderedPromptDiagnostic{
+			Variables: &factoryapi.StringMap{"prompt_source": "factory"},
+		},
+		Provider: &factoryapi.ProviderDiagnostic{
+			RequestMetadata:  &factoryapi.StringMap{"session_id": "req-1"},
+			ResponseMetadata: &factoryapi.StringMap{"retry_count": "0"},
+		},
+	}
+
+	got := SafeWorkDiagnosticsFromGenerated(diagnostics)
+	(*diagnostics.RenderedPrompt.Variables)["prompt_source"] = "mutated"
+	(*diagnostics.Provider.RequestMetadata)["session_id"] = "mutated"
+	(*diagnostics.Provider.ResponseMetadata)["retry_count"] = "1"
+
+	if got.RenderedPrompt.Variables["prompt_source"] != "factory" {
+		t.Fatalf("rendered prompt variables = %#v, want detached copy", got.RenderedPrompt.Variables)
+	}
+	if got.Provider.RequestMetadata["session_id"] != "req-1" {
+		t.Fatalf("request metadata = %#v, want detached copy", got.Provider.RequestMetadata)
+	}
+	if got.Provider.ResponseMetadata["retry_count"] != "0" {
+		t.Fatalf("response metadata = %#v, want detached copy", got.Provider.ResponseMetadata)
+	}
+
+	if got := SafeWorkDiagnosticsFromGenerated(&factoryapi.SafeWorkDiagnostics{
+		RenderedPrompt: &factoryapi.RenderedPromptDiagnostic{Variables: nil},
+		Provider: &factoryapi.ProviderDiagnostic{
+			RequestMetadata:  nil,
+			ResponseMetadata: &factoryapi.StringMap{},
+		},
+	}); got == nil {
+		t.Fatal("SafeWorkDiagnosticsFromGenerated returned nil, want non-nil diagnostics shell")
+	} else {
+		if got.RenderedPrompt.Variables != nil {
+			t.Fatalf("rendered prompt variables = %#v, want nil", got.RenderedPrompt.Variables)
+		}
+		if got.Provider.RequestMetadata != nil {
+			t.Fatalf("request metadata = %#v, want nil", got.Provider.RequestMetadata)
+		}
+		if got.Provider.ResponseMetadata != nil {
+			t.Fatalf("response metadata = %#v, want nil", got.Provider.ResponseMetadata)
+		}
+	}
+}
+
 func assertNilStringMapPtr(t *testing.T, got *factoryapi.StringMap, field string) {
 	t.Helper()
 	if got != nil {
