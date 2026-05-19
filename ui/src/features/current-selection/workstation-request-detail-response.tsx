@@ -3,6 +3,7 @@ import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-t
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import {
+  INFERENCE_ATTEMPT_DETAIL_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
@@ -28,7 +29,7 @@ export function ResponseDetailsSection({
       {view.isScriptBackedRequest ? (
         <ScriptResponseDetails request={request} view={view} />
       ) : (
-        <InferenceResponseDetails request={request} view={view} />
+        <InferenceResponseDetails request={request} />
       )}
     </section>
   );
@@ -49,7 +50,7 @@ export function ErrorDetailsSection({
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Error details</h4>
-      <dl>
+      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>Failure reason</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
@@ -80,7 +81,7 @@ function ScriptResponseDetails({
 
   return (
     <>
-      <dl>
+      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <TraceIDField traceIDs={request.trace_ids} />
         {scriptResponse ? (
           <>
@@ -156,18 +157,13 @@ function ScriptResponseDetails({
 
 function InferenceResponseDetails({
   request,
-  view,
 }: {
   request: WorkstationRequestDetailCardProps["request"];
-  view: WorkstationRequestDetailView;
 }) {
   return (
-    <>
-      <dl>
-        <TraceIDField traceIDs={request.trace_ids} />
-      </dl>
-      <p className={DETAIL_COPY_CLASS}>{view.inferenceResponseDetailsCopy}</p>
-    </>
+    <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+      <TraceIDField traceIDs={request.trace_ids} />
+    </dl>
   );
 }
 

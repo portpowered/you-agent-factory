@@ -626,6 +626,8 @@ export const SemanticGraphComposition = {
     const canvas = within(canvasElement);
 
     await expectGraphWorkstation(canvasElement, "Select Review workstation");
+    expect(canvas.queryByText("Operator View")).toBeNull();
+    expect(canvas.queryByText("Current activity")).toBeNull();
     expect(
       (await canvas.findAllByText("dispatch-review-active")).length,
     ).toBeGreaterThan(0);
@@ -647,7 +649,13 @@ export const SemanticGraphComposition = {
     await expect(
       within(resolvedRunHistorySection).getByText("Retry Story"),
     ).toBeVisible();
-    await expect(await canvas.findByText("Failed Story")).toBeVisible();
+    const failedStoryButton = await canvas.findByRole("button", {
+      name: "Failed Story",
+    });
+    await expect(failedStoryButton).toBeVisible();
+    await expect(within(failedStoryButton).getByText("Failed at Repair")).toBeVisible();
+    expect(within(failedStoryButton).queryByText(/session_id/i)).toBeNull();
+    expect(within(failedStoryButton).queryByText(/codex/i)).toBeNull();
   },
 };
 
@@ -763,6 +771,8 @@ export const DashboardImprovementsSmoke = {
     });
     await expect(graphCard).toBeVisible();
     await expect(submitWorkCard).toBeVisible();
+    expect(within(graphCard).queryByText("Operator View")).toBeNull();
+    expect(within(graphCard).queryByText("Current activity")).toBeNull();
     await expect(
       within(submitWorkCard).getByRole("combobox", { name: "Work type" }),
     ).toBeVisible();
@@ -775,6 +785,16 @@ export const DashboardImprovementsSmoke = {
     await expect(
       within(submitWorkCard).getByRole("button", { name: "Submit work" }),
     ).toBeDisabled();
+    expect(
+      within(submitWorkCard).queryByText(
+        "Ready to submit. Request details are optional.",
+      ),
+    ).toBeNull();
+    expect(
+      within(submitWorkCard).queryByText(
+        "Optional. Leave this blank to submit an empty request.",
+      ),
+    ).toBeNull();
     await expect(
       await canvas.findByRole("button", { name: "Move Work totals" }),
     ).toBeVisible();
@@ -829,6 +849,14 @@ export const DashboardImprovementsSmoke = {
         "work-active-story",
       ),
     ).toBeVisible();
+    const traceDrilldownCard = await canvas.findByRole("article", {
+      name: "Trace drill-down",
+    });
+    expect(
+      within(traceDrilldownCard).queryByText(
+        "Resolves from selected-tick factory event history.",
+      ),
+    ).toBeNull();
     await userEvent.click(
       await canvas.findByRole("button", { name: "Select story:blocked state" }),
     );

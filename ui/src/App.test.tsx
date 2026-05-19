@@ -2763,11 +2763,6 @@ describe("App timeline reconstruction flows", () => {
       verify: (currentSelection: HTMLElement) => {
         expect(
           within(currentSelection).getByText(
-            "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-          ),
-        ).toBeTruthy();
-        expect(
-          within(currentSelection).getByText(
             "No inference events are available for this selected work item.",
           ),
         ).toBeTruthy();
@@ -2940,8 +2935,7 @@ describe("App streamed replay smoke flows", () => {
         screen.getByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeTruthy();
       expect(
-        screen.getAllByText(/codex \/ session_id \/ sess-blocked-analysis/)
-          .length,
+        screen.getAllByText("Failed at Review").length,
       ).toBeGreaterThan(0);
     });
 
@@ -3813,18 +3807,19 @@ describe("App dashboard follow-up flows", () => {
       ),
     ).toBeTruthy();
     expect(
-      submitWorkScope.getByText(
+      submitWorkScope.queryByText(
         "Optional. Leave this blank to submit an empty request.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
 
     fireEvent.change(workType, { target: { value: "story" } });
     expect(submitButton.disabled).toBe(false);
+    expect(submitWorkScope.getByText("Ready to submit.")).toBeTruthy();
     expect(
-      submitWorkScope.getByText(
+      submitWorkScope.queryByText(
         "Ready to submit. Request details are optional.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     fireEvent.change(requestName, {
       target: { value: "Dashboard smoke request" },
     });
