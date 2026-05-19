@@ -1,33 +1,48 @@
 import "@xyflow/react/dist/style.css";
-
-import { Background, Controls, ReactFlow } from "@xyflow/react";
+import {
+  Background,
+  Controls,
+  ReactFlow,
+} from "@xyflow/react";
 import type { CSSProperties } from "react";
-
+import type {
+  DashboardActiveExecution,
+  DashboardSnapshot,
+  DashboardWorkItemRef,
+} from "../../api/dashboard/types";
+import type { FactoryValue } from "../../api/named-factory";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
-import { FactoryImportPreviewDialog } from "../import";
-import { useCurrentActivityImportController } from "./current-activity-import-controller";
+import {
+  CURRENT_ACTIVITY_NODE_TYPES,
+} from "../flowchart/current-activity-nodes";
+import {
+  FactoryImportPreviewDialog,
+  type FactoryPngImportValue,
+  type ReadFactoryImportFile,
+} from "../import";
+import {
+  type CurrentActivityImportController,
+  useCurrentActivityImportController,
+} from "./current-activity-import-controller";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
   getDefaultDashboardFlowAxisLegendIconItems,
 } from "./dashboard-flow-axis-legend";
-import { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card-view-model";
+import { EmptyCurrentActivityCard } from "./empty-current-activity-card";
+import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
 import {
   GraphDropOverlay,
   GraphImportErrorPanel,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
-import type { ReactFlowCurrentActivityCardProps } from "./react-flow-current-activity-card-types";
+import { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card-view-model";
 
 export {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "./react-flow-current-activity-card-keys";
-export type {
-  CurrentActivitySelection,
-  ReactFlowCurrentActivityCardProps,
-} from "./react-flow-current-activity-card-types";
 
 const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
 const GRAPH_BACKGROUND_GAP = 24;
@@ -62,32 +77,42 @@ const CURRENT_ACTIVITY_LEGEND_CLASS =
   "absolute left-4 right-4 top-4 z-10 md:left-7 md:right-auto md:top-7";
 const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
-function CurrentActivityCardHeading() {
+export type CurrentActivitySelection =
+  | { kind: "node"; nodeId: string }
+  | { kind: "state-node"; placeId: string }
+  | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
+
+function CurrentActivityCardHeading({ locale }: { locale?: string }) {
+  const messages = getWorkflowActivityShellMessages(locale);
+
   return (
     <div>
-      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>Operator View</p>
+      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>{messages.eyebrow}</p>
       <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
-        Current activity
+        {messages.title}
       </h2>
     </div>
   );
 }
 
-function EmptyCurrentActivityCard() {
-  return (
-    <section
-      aria-labelledby="workflow-graph-heading"
-      className={CURRENT_ACTIVITY_CARD_CLASS}
-    >
-      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityCardHeading />
-      </div>
-      <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-overlay/15 bg-af-overlay/4 p-5 [&_h3]:m-0">
-        <h3>No workflow topology loaded</h3>
-        <p>The factory has not published any workstation graph yet.</p>
-      </div>
-    </section>
-  );
+interface ReactFlowCurrentActivityCardProps {
+  activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
+  importController?: CurrentActivityImportController;
+  locale?: string;
+  now: number;
+  onFactoryActivated?: () => void;
+  onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
+  onSelectStateNode: (placeId: string) => void;
+  onSelectWorkItem: (
+    dispatchId: string,
+    nodeId: string,
+    execution: DashboardActiveExecution,
+    workItem: DashboardWorkItemRef,
+  ) => void;
+  onSelectWorkstation: (nodeId: string) => void;
+  readFactoryImportFile?: ReadFactoryImportFile;
+  selection: CurrentActivitySelection | null;
+  snapshot: DashboardSnapshot;
 }
 
 export function ReactFlowCurrentActivityCard(
@@ -103,9 +128,9 @@ export function ReactFlowCurrentActivityCard(
   const imports = props.importController ?? fallbackImportController;
   const shouldRenderImportPreviewDialog = props.importController === undefined;
 
-  if (props.snapshot.topology.workstation_node_ids.length === 0) {
-    return <EmptyCurrentActivityCard />;
-  }
+  if (props.snapshot.topology.workstation_node_ids.length === 0)
+    return <EmptyCurrentActivityCard locale={props.locale} />;
+  const shellMessages = getWorkflowActivityShellMessages(props.locale);
 
   const readyImportPreviewState =
     imports.importPreviewState.status === "ready"
@@ -118,7 +143,7 @@ export function ReactFlowCurrentActivityCard(
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
       <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityCardHeading />
+        <CurrentActivityCardHeading locale={props.locale} />
       </div>
 
       <div className="relative min-h-0 flex-1">
@@ -131,7 +156,7 @@ export function ReactFlowCurrentActivityCard(
         />
         <section
           aria-describedby="workflow-graph-heading"
-          aria-label="Work graph viewport"
+          aria-label={shellMessages.viewportLabel}
           className={cx(
             "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
             (imports.dropState.status === "drag-active" ||
@@ -156,7 +181,7 @@ export function ReactFlowCurrentActivityCard(
             key={graph.initialFitViewKey}
             maxZoom={2}
             minZoom={0.25}
-            nodeTypes={graph.nodeTypes}
+            nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
             nodes={graph.nodes}
             nodesDraggable={true}
             onNodeDragStop={(_, node) => {

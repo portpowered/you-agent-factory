@@ -7,6 +7,7 @@ import type {
   SubmitWorkStatus,
   SubmitWorkValidationErrors,
 } from "./submit-work-card";
+import type { SubmitWorkMessages } from "./messages/submit-work";
 
 const EMPTY_DRAFT: SubmitWorkDraft = {
   requestName: "",
@@ -16,6 +17,7 @@ const EMPTY_DRAFT: SubmitWorkDraft = {
 
 export function useSubmitWorkWidget(
   submitWorkTypes: DashboardSubmitWorkType[],
+  messages: SubmitWorkMessages,
 ) {
   const [draft, setDraft] = useState<SubmitWorkDraft>(EMPTY_DRAFT);
   const [showValidation, setShowValidation] = useState(false);
@@ -46,7 +48,7 @@ export function useSubmitWorkWidget(
     }
   }, [draft.workTypeName, submitWorkTypeNames]);
 
-  const validationErrors = showValidation ? validateDraft(draft) : {};
+  const validationErrors = showValidation ? validateDraft(draft, messages) : {};
 
   return {
     draft,
@@ -73,7 +75,7 @@ export function useSubmitWorkWidget(
       setShowValidation(true);
       mutation.reset();
 
-      const nextValidationErrors = validateDraft(draft);
+      const nextValidationErrors = validateDraft(draft, messages);
       if (hasValidationErrors(nextValidationErrors)) {
         return;
       }
@@ -100,7 +102,10 @@ export function useSubmitWorkWidget(
       error: mutation.error,
       isSubmitting: mutation.isPending,
       isSuccess: mutation.isSuccess,
-      resultTraceID: mutation.data?.traceId,
+      messages,
+      resultTraceID:
+        mutation.data?.traceId ??
+        (mutation.data as { trace_id?: string } | undefined)?.trace_id,
       showValidation,
       submitWorkTypeNames,
     }),
@@ -114,6 +119,7 @@ function buildStatus({
   error,
   isSubmitting,
   isSuccess,
+  messages,
   resultTraceID,
   showValidation,
   submitWorkTypeNames,
@@ -122,6 +128,7 @@ function buildStatus({
   error: unknown;
   isSubmitting: boolean;
   isSuccess: boolean;
+  messages: SubmitWorkMessages;
   resultTraceID?: string;
   showValidation: boolean;
   submitWorkTypeNames: string[];
@@ -129,59 +136,60 @@ function buildStatus({
   if (isSubmitting) {
     return {
       kind: "submitting",
-      message: "Sending your request...",
+      message: messages.statusMessages.submitting,
     };
   }
 
   if (error) {
     return {
       kind: "error",
-      message: submitWorkErrorMessage(error),
+      message: submitWorkErrorMessage(error, messages),
     };
   }
 
   if (isSuccess) {
     return {
       kind: "success",
-      message: `Your request was submitted. Trace ID: ${resultTraceID ?? "unavailable"}.`,
+      message: messages.statusMessages.success(resultTraceID ?? "unavailable"),
     };
   }
 
   if (submitWorkTypeNames.length === 0) {
     return {
       kind: "guidance",
-      message: "No work types are available to submit right now.",
+      message: messages.statusMessages.noWorkTypes,
     };
   }
 
-  const validationErrors = validateDraft(draft);
+  const validationErrors = validateDraft(draft, messages);
   if (showValidation && hasValidationErrors(validationErrors)) {
     return {
       kind: "validation-error",
-      message: buildValidationSummary(validationErrors),
+      message: buildValidationSummary(validationErrors, messages),
     };
   }
 
   if (draft.workTypeName.length === 0) {
     return {
       kind: "guidance",
-      message: "Choose a work type to continue. Request details are optional.",
+      message: messages.statusMessages.workTypeOnly,
     };
   }
 
   return {
     kind: "guidance",
-    message: "Ready to submit. Request details are optional.",
+    message: messages.statusMessages.ready,
   };
 }
 
 function buildValidationSummary(
   validationErrors: SubmitWorkValidationErrors,
+  messages: SubmitWorkMessages,
 ): string {
   if (validationErrors.workTypeName) {
     return validationErrors.workTypeName;
   }
-  return "Fix the highlighted fields before submitting.";
+  return messages.validationMessages.fallback;
 }
 
 function hasValidationErrors(
@@ -190,19 +198,24 @@ function hasValidationErrors(
   return Boolean(validationErrors.workTypeName);
 }
 
-function submitWorkErrorMessage(error: unknown): string {
+function submitWorkErrorMessage(
+  error: unknown,
+  messages: SubmitWorkMessages,
+): string {
   if (isSubmitWorkAPIError(error) && error.message.length > 0) {
     return error.message;
   }
-  return "We couldn't submit your request. Try again in a moment.";
+  return messages.statusMessages.errorFallback;
 }
 
-function validateDraft(draft: SubmitWorkDraft): SubmitWorkValidationErrors {
+function validateDraft(
+  draft: SubmitWorkDraft,
+  messages: SubmitWorkMessages,
+): SubmitWorkValidationErrors {
   const validationErrors: SubmitWorkValidationErrors = {};
 
   if (draft.workTypeName.length === 0) {
-    validationErrors.workTypeName = "Choose a work type before submitting.";
+    validationErrors.workTypeName = messages.validationMessages.workTypeRequired;
   }
-
   return validationErrors;
 }

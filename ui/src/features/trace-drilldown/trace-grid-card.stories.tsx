@@ -1,5 +1,5 @@
-import { TraceGridBentoCard } from "./trace-grid-card";
 import type { DashboardTrace } from "../../api/dashboard/types";
+import { TraceGridBentoCard } from "./trace-grid-card";
 
 const populatedTrace: DashboardTrace = {
   dispatches: [
@@ -119,8 +119,18 @@ export const LoadingTrace = {
 
 export const TraceError = {
   args: {
-    state: { status: "error", message: "dashboard event history is unavailable" },
+    state: {
+      status: "error",
+      message: "dashboard event history is unavailable",
+    },
     widgetId: "trace-error-story",
   },
 };
 
+export const LocalizedZhCN = {
+  args: {
+    locale: "zh-CN",
+    state: { status: "ready", trace: populatedTrace },
+    widgetId: "trace-zh-cn-story",
+  },
+};

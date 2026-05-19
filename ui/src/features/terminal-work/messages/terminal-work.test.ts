@@ -13,7 +13,7 @@ describe("getTerminalWorkMessages", () => {
 
   it.each([
     ["en", "Completed and failed work"],
-    ["zh", "已完成和失败的工作"],
+    ["zh-CN", "已完成和失败的工作"],
     ["ko", "완료 및 실패한 작업"],
     ["ja", "完了済みおよび失敗した作業"],
   ] as const)("resolves %s catalog copy", (locale, expectedTitle) => {
@@ -52,17 +52,14 @@ describe("getTerminalWorkMessages", () => {
 
   it.each([
     ["ko", "completed", "3개 항목"],
-    ["zh", "failed", "5 个项目"],
-  ] as const)(
-    "keeps %s count and empty-state helpers available for coverage-sensitive locales",
-    (locale, status, expectedCountLabel) => {
-      const messages = getTerminalWorkMessages(locale);
+    ["zh-CN", "failed", "5 个项目"],
+  ] as const)("keeps %s count and empty-state helpers available for coverage-sensitive locales", (locale, status, expectedCountLabel) => {
+    const messages = getTerminalWorkMessages(locale);
 
-      expect(messages.itemCountLabel(Number.parseInt(expectedCountLabel, 10))).toBe(
-        expectedCountLabel,
-      );
-      expect(messages.emptyState(status)).not.toHaveLength(0);
-      expect(messages.sessionSummaryFallback(status)).not.toHaveLength(0);
-    },
-  );
+    expect(
+      messages.itemCountLabel(Number.parseInt(expectedCountLabel, 10)),
+    ).toBe(expectedCountLabel);
+    expect(messages.emptyState(status)).not.toHaveLength(0);
+    expect(messages.sessionSummaryFallback(status)).not.toHaveLength(0);
+  });
 });

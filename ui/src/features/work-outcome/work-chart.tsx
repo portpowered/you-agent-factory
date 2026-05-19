@@ -8,11 +8,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
 import {
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../components/dashboard/widget-board";
-import { Button } from "../../components/ui/button";
+  DASHBOARD_CHART_AXIS_LABEL_CLASS,
+} from "./chart-contract";
 import {
   ChartContainer,
   ChartLegend,
@@ -20,9 +19,14 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "../../components/ui/chart";
+import { Button } from "../../components/ui/button";
 import { Skeleton } from "../../components/ui/skeleton";
 import { cn } from "../../lib/cn";
-import { DASHBOARD_CHART_AXIS_LABEL_CLASS } from "./chart-contract";
+import {
+  EMPTY_STATE_CLASS,
+  EMPTY_STATE_COMPACT_CLASS,
+} from "../../components/dashboard/widget-board";
+import { getWorkOutcomeMessages } from "./messages/work-outcome";
 import type { WorkChartModel } from "./trends";
 import {
   buildWorkChartData,
@@ -35,25 +39,16 @@ import {
 export type { WorkChartSeriesDefinition } from "./work-chart-data";
 
 export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
-export const WORK_CHART_EMPTY_TITLE = "No work outcome samples";
-export const WORK_CHART_EMPTY_MESSAGE =
-  "Work outcome data appears after the event stream receives work history.";
-export const WORK_CHART_LOADING_TITLE = "Loading work outcome samples";
-export const WORK_CHART_LOADING_MESSAGE =
-  "Waiting for dashboard timeline data.";
-export const WORK_CHART_ERROR_TITLE = "Work outcome chart unavailable";
-export const WORK_CHART_ERROR_MESSAGE =
-  "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.";
 const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =
-  "h-64 min-h-56 px-5 pb-5 pt-4 sm:h-72 sm:px-6 sm:pb-6 sm:pt-5";
+  "h-[16rem] min-h-[14rem] px-5 pb-5 pt-4 sm:h-[18rem] sm:px-6 sm:pb-6 sm:pt-5";
 const WORK_CHART_OVERLAY_CLASS =
-  "grid h-full grid-rows-[auto_1fr_auto] gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
+  "flex h-full flex-col gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
 const WORK_CHART_TOP_OVERLAY_CLASS = "flex items-start justify-between gap-3";
 const WORK_CHART_ZOOM_CONTEXT_CLASS =
-  "pointer-events-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 text-right";
-const WORK_CHART_X_AXIS_OVERLAY_CLASS = "justify-self-end";
+  "ml-auto flex flex-wrap items-center justify-end gap-2 text-right";
+const WORK_CHART_X_AXIS_OVERLAY_CLASS = "mt-auto self-end";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
 export type WorkChartState =
@@ -66,6 +61,7 @@ export interface WorkChartProps {
   className?: string;
   emptyMessage?: string;
   emptyTitle?: string;
+  locale?: string;
   model?: WorkChartModel;
   series: readonly WorkChartSeriesDefinition[];
   state?: WorkChartState;
@@ -78,14 +74,20 @@ const READY_WORK_CHART_STATE: WorkChartState = { status: "ready" };
 export function WorkChart({
   ariaLabel,
   className = "",
-  emptyMessage = WORK_CHART_EMPTY_MESSAGE,
-  emptyTitle = WORK_CHART_EMPTY_TITLE,
+  emptyMessage,
+  emptyTitle,
+  locale,
   model,
   series,
   state = READY_WORK_CHART_STATE,
-  xAxisLabel = "Ticks",
-  yAxisLabel = "Work count",
+  xAxisLabel,
+  yAxisLabel,
 }: WorkChartProps) {
+  const messages = getWorkOutcomeMessages(locale).chart;
+  const resolvedEmptyMessage = emptyMessage ?? messages.emptyMessage;
+  const resolvedEmptyTitle = emptyTitle ?? messages.emptyTitle;
+  const resolvedXAxisLabel = xAxisLabel ?? messages.xAxisLabel;
+  const resolvedYAxisLabel = yAxisLabel ?? messages.yAxisLabel;
   const chartData = useMemo(() => {
     if (state.status !== "ready") {
       return { status: state.status };
@@ -99,9 +101,9 @@ export function WorkChart({
       <WorkChartStatusPanel
         ariaBusy={true}
         loading={true}
-        message={state.message ?? WORK_CHART_LOADING_MESSAGE}
+        message={state.message ?? messages.loadingMessage}
         role="status"
-        title={state.title ?? WORK_CHART_LOADING_TITLE}
+        title={state.title ?? messages.loadingTitle}
       />
     );
   }
@@ -111,14 +113,14 @@ export function WorkChart({
       <WorkChartStatusPanel
         message={
           state.status === "error"
-            ? (state.message ?? WORK_CHART_ERROR_MESSAGE)
-            : WORK_CHART_ERROR_MESSAGE
+            ? (state.message ?? messages.errorMessage)
+            : messages.errorMessage
         }
         role="alert"
         title={
           state.status === "error"
-            ? (state.title ?? WORK_CHART_ERROR_TITLE)
-            : WORK_CHART_ERROR_TITLE
+            ? (state.title ?? messages.errorTitle)
+            : messages.errorTitle
         }
       />
     );
@@ -127,9 +129,9 @@ export function WorkChart({
   if (chartData.status === "empty") {
     return (
       <WorkChartStatusPanel
-        message={emptyMessage}
+        message={resolvedEmptyMessage}
         role="status"
-        title={emptyTitle}
+        title={resolvedEmptyTitle}
       />
     );
   }
@@ -137,9 +139,9 @@ export function WorkChart({
   if (chartData.status !== "ready") {
     return (
       <WorkChartStatusPanel
-        message={WORK_CHART_ERROR_MESSAGE}
+        message={messages.errorMessage}
         role="alert"
-        title={WORK_CHART_ERROR_TITLE}
+        title={messages.errorTitle}
       />
     );
   }
@@ -149,8 +151,9 @@ export function WorkChart({
       ariaLabel={ariaLabel}
       chartData={chartData.data}
       className={className}
-      xAxisLabel={xAxisLabel}
-      yAxisLabel={yAxisLabel}
+      locale={locale}
+      xAxisLabel={resolvedXAxisLabel}
+      yAxisLabel={resolvedYAxisLabel}
     />
   );
 }
@@ -159,6 +162,7 @@ interface ReadyWorkChartProps {
   ariaLabel: string;
   chartData: WorkChartData;
   className: string;
+  locale?: string;
   xAxisLabel: string;
   yAxisLabel: string;
 }
@@ -167,15 +171,16 @@ function ReadyWorkChart({
   ariaLabel,
   chartData,
   className,
+  locale,
   xAxisLabel,
   yAxisLabel,
 }: ReadyWorkChartProps) {
+  const chartMessages = getWorkOutcomeMessages(locale).chart;
   const [zoomRange, setZoomRange] = useState<WorkChartZoomRange | null>(null);
   const [selectionStartTick, setSelectionStartTick] = useState<number | null>(
     null,
   );
   const [selectionEndTick, setSelectionEndTick] = useState<number | null>(null);
-
   const visibleRows = useMemo(
     () => filterRowsForZoomRange(chartData.rows, zoomRange),
     [chartData.rows, zoomRange],
@@ -187,7 +192,7 @@ function ReadyWorkChart({
   const zoomContext =
     zoomRange === null
       ? null
-      : `Zoomed to ticks ${formatAxisNumber(zoomRange.startTick)}-${formatAxisNumber(zoomRange.endTick)}`;
+      : chartMessages.tickRangeLabel(zoomRange.startTick, zoomRange.endTick);
 
   const beginSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
     const tick = readPointerTick(event, visibleRows);
@@ -229,10 +234,7 @@ function ReadyWorkChart({
         onMouseUp: commitSelection,
       }}
       overlay={
-        <div
-          className={WORK_CHART_OVERLAY_CLASS}
-          data-work-chart-overlay="true"
-        >
+        <div className={WORK_CHART_OVERLAY_CLASS} data-work-chart-overlay="true">
           <div className={WORK_CHART_TOP_OVERLAY_CLASS}>
             <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>
               {yAxisLabel}
@@ -243,13 +245,13 @@ function ReadyWorkChart({
                   {zoomContext}
                 </p>
                 <Button
-                  aria-label="Reset work outcome chart zoom"
+                  aria-label={chartMessages.resetZoomLabel}
                   className="min-h-8 rounded-lg px-2.5 py-1.5 text-xs"
                   onClick={() => setZoomRange(null)}
                   size="sm"
                   tone="outline"
                 >
-                  Reset zoom
+                  {chartMessages.resetZoomAction}
                 </Button>
               </div>
             )}
@@ -285,7 +287,7 @@ function ReadyWorkChart({
           dataKey="tick"
           minTickGap={24}
           tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
-          tickFormatter={formatAxisNumber}
+          tickFormatter={(value) => formatAxisNumber(value)}
           tickLine={false}
         />
         <YAxis
@@ -293,13 +295,17 @@ function ReadyWorkChart({
           axisLine={false}
           tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
           tickCount={5}
-          tickFormatter={formatAxisNumber}
+          tickFormatter={(value) => formatAxisNumber(value)}
           tickLine={false}
           width={WORK_CHART_Y_AXIS_WIDTH}
         />
         <ChartTooltip
           content={(props) => {
-            const label = props.payload?.[0]?.payload?.label ?? props.label;
+            const tickValue = props.payload?.[0]?.payload?.tick;
+            const label =
+              typeof tickValue === "number"
+                ? chartMessages.tickLabel(tickValue)
+                : (props.payload?.[0]?.payload?.label ?? props.label);
             return <ChartTooltipContent {...props} label={label} />;
           }}
           cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}

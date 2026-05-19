@@ -13,7 +13,7 @@ describe("getDashboardFlowAxisLegendMessages", () => {
 
   it.each([
     ["en", "Graph legend"],
-    ["zh", "图表图例"],
+    ["zh-CN", "图表图例"],
     ["ko", "그래프 범례"],
     ["ja", "グラフの凡例"],
   ] as const)("resolves %s legend copy", (locale, expectedTitle) => {
@@ -30,7 +30,7 @@ describe("getDashboardFlowAxisLegendMessages", () => {
       "Collapse Graph legend",
       "Queue legend icon",
     ],
-    ["zh", "图表图例", "展开图表图例", "收起图表图例", "队列图例图标"],
+    ["zh-CN", "图表图例", "展开图表图例", "收起图表图例", "队列图例图标"],
     [
       "ko",
       "그래프 범례",
@@ -67,7 +67,7 @@ describe("getDashboardFlowAxisLegendMessages", () => {
   });
 
   it("keeps accessible label helpers and icon labels available through the resolved locale catalog", () => {
-    const messages = getDashboardFlowAxisLegendMessages("zh");
+    const messages = getDashboardFlowAxisLegendMessages("zh-CN");
 
     expect(messages.minimizedLabel).toBe("图例");
     expect(messages.edgeLabels.failurePath).toBe("失败路径");

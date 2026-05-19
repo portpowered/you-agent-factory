@@ -52,6 +52,18 @@ function ImportPreviewStory() {
   );
 }
 
+function LocalizedImportPreviewStory({ locale }: { locale: string }) {
+  return (
+    <DashboardImportPreviewDialog
+      activationState={{ status: "idle" }}
+      importPreviewState={createReadyImportPreviewState()}
+      locale={locale}
+      onCancel={() => {}}
+      onConfirm={async () => {}}
+    />
+  );
+}
+
 export default {
   title: "Infinite You/Dashboard/Import Preview Dialog",
   component: DashboardImportPreviewDialog,
@@ -81,5 +93,30 @@ export const Ready = {
     await expect(activateButton).toHaveFocus();
     await userEvent.tab();
     await expect(closeButton).toHaveFocus();
+  },
+};
+
+export const LocalizedZhCn = {
+  render: () => <LocalizedImportPreviewStory locale="zh-CN" />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    const messages = getImportPreviewDialogMessages("zh-CN");
+    const dialog = await page.findByRole("dialog", { name: messages.title });
+    const scope = within(dialog);
+
+    await expect(
+      scope.getByRole("img", { name: messages.previewImageAlt("Dropped Factory") }),
+    ).toBeVisible();
+    await expect(scope.getByText("factory-import.png")).toBeVisible();
+    await expect(scope.getByText(messages.hint)).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: messages.cancelAction }),
+    ).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: messages.activateAction }),
+    ).toBeVisible();
+    await expect(
+      scope.getByRole("button", { name: messages.closeLabel }),
+    ).toBeVisible();
   },
 };

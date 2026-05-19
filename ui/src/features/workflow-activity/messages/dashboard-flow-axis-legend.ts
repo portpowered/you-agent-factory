@@ -97,7 +97,7 @@ const dashboardFlowAxisLegendMessagesByLocale = {
     minimizedLabel: "범례",
     title: "그래프 범례",
   },
-  zh: {
+  "zh-CN": {
     collapseLabel: "收起",
     collapseToggleLabel: (targetLabel) => `收起${targetLabel}`,
     edgeLabels: {
