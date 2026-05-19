@@ -133,6 +133,12 @@ describe("DashboardHeader", () => {
     expect(slider.closest("div")?.parentElement?.className).toContain(
       "justify-end",
     );
+    expect(exportButton.className).toContain("h-10");
+    expect(exportButton.className).toContain("w-10");
+    expect(currentButton.className).toContain("h-10");
+    expect(currentButton.className).toContain("w-10");
+    expect(streamStatus.className).toContain("h-10");
+    expect(streamStatus.className).toContain("w-10");
     expect(streamStatus).toBeTruthy();
     expect(useExportDialogStore.getState().isExportDialogOpen).toBe(false);
 
@@ -250,6 +256,8 @@ describe("DashboardHeader", () => {
         name: englishExportMessages.triggerLabel,
       }),
     ).toBeTruthy();
+    expect(switcher.className).toContain("min-h-10");
+    expect(switcher.className).toContain("rounded-lg");
 
     fireEvent.change(switcher, { target: { value: "zh-CN" } });
 
