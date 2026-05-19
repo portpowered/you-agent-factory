@@ -39,8 +39,8 @@ src/components/ui/ui-foundation-showcase.tsx|251|13|jsx-text|Resizable panels
 src/components/ui/ui-foundation-showcase.tsx|257|19|jsx-text|Sidebar panel
 src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
 src/features/bento/agent-bento.tsx|155|18|jsx-attribute|Infinite You bento board
-src/features/current-selection/detail-card-shared.tsx|141|25|jsx-attribute|Request counts
-src/features/current-selection/detail-card-shared.tsx|142|55|jsx-text|Request counts
+src/features/current-selection/detail-card-shared.tsx|140|25|jsx-attribute|Request counts
+src/features/current-selection/detail-card-shared.tsx|141|55|jsx-text|Request counts
 src/features/current-selection/provider-session-detail-panel.tsx|71|42|jsx-text|Loading session details...
 src/features/current-selection/provider-session-detail-panel.tsx|262|25|jsx-text|Turn
 src/features/current-selection/provider-session-detail-panel.tsx|415|19|jsx-text|Encrypted reasoning content only.
