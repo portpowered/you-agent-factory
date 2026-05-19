@@ -21,6 +21,7 @@ import {
   resolveTrackedWorkSelection,
   terminalHistoryItemsForPlace,
 } from "./useCurrentSelection.selection-helpers";
+import { getCurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 
 const reviewInputPlace: DashboardPlaceRef = {
   kind: "work_state",
@@ -493,6 +494,38 @@ describe("useCurrentSelection.selection-helpers", () => {
       expect.objectContaining({
         contextText: "Failed at setup-workspace",
         dispatchID: "dispatch-failed",
+      }),
+    ]);
+  });
+
+  it("builds terminal work context with localized templates while preserving data values", () => {
+    const attempt: DashboardProviderSessionAttempt = {
+      dispatch_id: "dispatch-review",
+      inference_attempts: [],
+      outcome: "FAILED",
+      provider_session: {
+        id: "sess_review",
+        kind: "session_id",
+        provider: "codex",
+      },
+      transition_id: "review",
+      work_items: [workAlpha],
+      workstation_name: "Review",
+    };
+
+    expect(
+      buildTerminalWorkItems(
+        ["Alpha Story"],
+        [attempt],
+        undefined,
+        undefined,
+        getCurrentSelectionDetailMessages("zh-CN"),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        contextText: "失败 于 Review; codex / session_id / sess_review",
+        label: "Alpha Story",
+        traceWorkID: workAlpha.work_id,
       }),
     ]);
   });

@@ -75,7 +75,7 @@ function LoadedProviderSessionDetailPanel({
       ) : null}
       {detailState.status === "error" ? (
         <p className={DETAIL_COPY_CLASS}>
-          {messages.errorPrefix} {detailState.message}
+          {messages.errorPrefix} {detailState.message ?? messages.unavailableState}
         </p>
       ) : null}
       {detailState.status === "empty" ? (

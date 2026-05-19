@@ -7,6 +7,7 @@ import type {
 } from "../../api/dashboard/types";
 import { resolveDashboardSelection } from "./state/dashboardSelection";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
+import { getCurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 import {
   activeExecutionsForSelectedWorkstation,
   buildTerminalWorkItems,
@@ -138,16 +139,19 @@ function useSelectedWorkData({
 }
 
 export function useCurrentSelectionDerivedState({
+  locale,
   projectedWorkstationRequestsByDispatchID,
   selection,
   snapshot,
   terminalWorkDetail,
 }: {
+  locale?: string | null;
   projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
   terminalWorkDetail: TerminalWorkDetail | null;
 }) {
+  const messages = useMemo(() => getCurrentSelectionDetailMessages(locale), [locale]);
   const selectedNode = useSelectedNode(selection, snapshot);
   const selectedWorkstationRequest =
     selection?.kind === "workstation-request" ? selection.request : null;
@@ -207,8 +211,9 @@ export function useCurrentSelectionDerivedState({
         snapshot?.runtime.session.provider_sessions,
         undefined,
         projectedWorkstationRequestsByDispatchID,
+        messages,
       ),
-    [completedWorkLabels, projectedWorkstationRequestsByDispatchID, snapshot],
+    [completedWorkLabels, messages, projectedWorkstationRequestsByDispatchID, snapshot],
   );
   const failedWorkItems = useMemo(
     () =>
@@ -217,8 +222,9 @@ export function useCurrentSelectionDerivedState({
         snapshot?.runtime.session.provider_sessions,
         snapshot?.runtime.session.failed_work_details_by_work_id,
         projectedWorkstationRequestsByDispatchID,
+        messages,
       ),
-    [failedWorkLabels, projectedWorkstationRequestsByDispatchID, snapshot],
+    [failedWorkLabels, messages, projectedWorkstationRequestsByDispatchID, snapshot],
   );
 
   return {

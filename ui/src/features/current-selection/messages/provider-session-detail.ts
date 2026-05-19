@@ -56,6 +56,7 @@ const providerSessionDetailMessagesByLocale = {
     unknownEventCountLabel: "Unknown events",
     unknownEventOnLineLabel: ({ lineNumber }) =>
       `Unknown event on line ${lineNumber}`,
+    unavailableState: "Provider-session details are unavailable.",
   },
   ja: {
     argumentsLabel: "引数",
@@ -111,6 +112,7 @@ const providerSessionDetailMessagesByLocale = {
     unknownEventCountLabel: "不明なイベント数",
     unknownEventOnLineLabel: ({ lineNumber }) =>
       `行 ${lineNumber} の不明なイベント`,
+    unavailableState: "Provider-session の詳細は利用できません。",
   },
   ko: {
     argumentsLabel: "인수",
@@ -165,6 +167,7 @@ const providerSessionDetailMessagesByLocale = {
     unknownEventCountLabel: "알 수 없는 이벤트",
     unknownEventOnLineLabel: ({ lineNumber }) =>
       `${lineNumber}행의 알 수 없는 이벤트`,
+    unavailableState: "Provider-session 세부 정보를 사용할 수 없습니다.",
   },
   "zh-CN": {
     argumentsLabel: "参数",
@@ -215,6 +218,7 @@ const providerSessionDetailMessagesByLocale = {
     typeLabel: "类型",
     unknownEventCountLabel: "未知事件数",
     unknownEventOnLineLabel: ({ lineNumber }) => `第 ${lineNumber} 行的未知事件`,
+    unavailableState: "Provider-session 详情不可用。",
   },
 } satisfies LocalizedMessages<ProviderSessionDetailMessages>;
 

@@ -44,4 +44,5 @@ export interface ProviderSessionDetailMessages {
   typeLabel: string;
   unknownEventCountLabel: string;
   unknownEventOnLineLabel: (params: { lineNumber: number }) => string;
+  unavailableState: string;
 }

@@ -38,10 +38,10 @@ const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(u
 
 export function CollapsibleProviderSessionAttempts({
   attempts,
-  collapseActionLabel = "Collapse",
+  collapseActionLabel,
   currentDispatchID,
   emptyMessage,
-  expandActionLabel = "Expand",
+  expandActionLabel,
   historyItemCountLabel,
   messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
   onSelectProviderSession,
@@ -52,7 +52,7 @@ export function CollapsibleProviderSessionAttempts({
   selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
-  title = "Run history",
+  title,
   workstationKind,
   workstationRequestsByDispatchID,
 }: CollapsibleProviderSessionAttemptsProps) {
@@ -60,7 +60,11 @@ export function CollapsibleProviderSessionAttempts({
   const historyID = `workstation-run-history-${resetKey}`;
   const itemCountLabel = historyItemCountLabel
     ? historyItemCountLabel(attempts.length)
-    : `${attempts.length} ${attempts.length === 1 ? "run" : "runs"}`;
+    : messages.historyRunCountLabel(attempts.length);
+  const resolvedCollapseActionLabel =
+    collapseActionLabel ?? messages.collapseAction;
+  const resolvedExpandActionLabel = expandActionLabel ?? messages.expandAction;
+  const resolvedTitle = title ?? messages.runHistoryHeading;
 
   useEffect(() => {
     setExpanded(false);
@@ -71,7 +75,7 @@ export function CollapsibleProviderSessionAttempts({
       <div className={HISTORY_HEADER_CLASS}>
         <div className="grid min-w-0 gap-1">
           <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${historyID}-heading`}>
-            {title}
+            {resolvedTitle}
           </h4>
           <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
             {itemCountLabel}
@@ -84,7 +88,7 @@ export function CollapsibleProviderSessionAttempts({
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
-          {expanded ? collapseActionLabel : expandActionLabel}
+          {expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel}
         </button>
       </div>
       {expanded ? (
@@ -122,13 +126,15 @@ export function ProviderSessionAttempts({
   selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
-  title = "Workstation dispatches",
+  title,
   workstationKind,
   workstationRequestsByDispatchID,
 }: ProviderSessionAttemptsProps) {
+  const resolvedTitle = title ?? messages.requestHistoryHeading;
+
   return (
     <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{title}</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{resolvedTitle}</h4>
       <ProviderSessionAttemptList
         attempts={attempts}
         currentDispatchID={currentDispatchID}

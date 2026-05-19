@@ -37,6 +37,47 @@ test("scanSourceTextForHardcodedCopy catches rendered string expressions and vis
   ]);
 });
 
+test("scanSourceTextForHardcodedCopy catches non-JSX rendered string literals", () => {
+  const findings = scanSourceTextForHardcodedCopy(
+    "src/features/current-selection/provider-session-attempts.tsx",
+    `
+      export function History({
+        collapseActionLabel = "Collapse",
+        title = "Run history",
+      }: {
+        collapseActionLabel?: string;
+        title?: string;
+      }) {
+        return title;
+      }
+
+      export function errorState() {
+        return {
+          message: "Provider-session details are unavailable.",
+        };
+      }
+
+      export function outcomeLabel(outcome: string) {
+        if (outcome === "FAILED") {
+          return "Failed";
+        }
+        return \`Raw outcome: \${outcome}\`;
+      }
+    `,
+  );
+
+  expect(findings).toEqual([
+    expect.objectContaining({ kind: "string-literal", text: "Collapse" }),
+    expect.objectContaining({ kind: "string-literal", text: "Run history" }),
+    expect.objectContaining({
+      kind: "string-literal",
+      text: "Provider-session details are unavailable.",
+    }),
+    expect.objectContaining({ kind: "string-literal", text: "Failed" }),
+    expect.objectContaining({ kind: "string-literal", text: "Raw outcome:" }),
+  ]);
+});
+
 test("scanSourceTextForHardcodedCopy ignores documented non-product diagnostic exceptions", () => {
   const findings = scanSourceTextForHardcodedCopy(
     "src/features/current-selection/provider-session-detail-panel.tsx",
