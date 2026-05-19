@@ -3,8 +3,6 @@ import { normalizeDetailText } from "./detail-card-shared";
 
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
-  inferenceRequestDetailsCopy: string;
-  inferenceResponseDetailsCopy: string;
   isScriptBackedRequest: boolean;
   normalizedFailureMessage: string | undefined;
   normalizedFailureReason: string | undefined;
@@ -32,10 +30,6 @@ export function buildWorkstationRequestDetailView(
 
   return {
     hasFailureDetails,
-    inferenceRequestDetailsCopy:
-      "Prompt, request payload, working-directory, and worktree details are shown under Inference attempts when available.",
-    inferenceResponseDetailsCopy:
-      "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
     isScriptBackedRequest,
     normalizedFailureMessage,
     normalizedFailureReason,
