@@ -273,7 +273,7 @@ Return REJECTED with concrete feedback when another pass is needed.
 Use mock workers for the first routing check:
 
 ```bash
-agent-factory run --dir ./factory --with-mock-workers
+you run --dir ./factory --with-mock-workers
 ```
 
 The command loads `factory.json`, resolves the split `AGENTS.md` files, starts
@@ -302,7 +302,7 @@ Create a startup or watched-file request:
 Run it at startup:
 
 ```bash
-agent-factory run --dir ./factory --with-mock-workers --work ./fixtures/story-001.json
+you run --dir ./factory --with-mock-workers --work ./fixtures/story-001.json
 ```
 
 Or drop the file under `factory/inputs/story/default/` while the factory is
@@ -335,7 +335,7 @@ paths, and script side effects without making live provider calls.
 For the simplest validation run, omit the config path:
 
 ```bash
-agent-factory run --dir ./factory --with-mock-workers
+you run --dir ./factory --with-mock-workers
 ```
 
 That is equivalent to this config:
@@ -349,7 +349,7 @@ That is equivalent to this config:
 To target specific dispatches, pass a config path:
 
 ```bash
-agent-factory run --dir ./factory --with-mock-workers ./mock-workers.json
+you run --dir ./factory --with-mock-workers ./mock-workers.json
 ```
 
 Example:
