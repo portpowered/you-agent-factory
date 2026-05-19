@@ -1005,6 +1005,72 @@ describe("WorkItemDetailCard summary", () => {
   });
 });
 
+describe("WorkItemDetailCard localization", () => {
+  it("renders inference-attempt provider-session controls from the localized workstation-detail catalog", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="ja">
+        <WorkItemDetailCard
+          dispatchAttempts={[]}
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[
+            workstationRequest(dispatchID, {
+              inference_attempts: [
+                inferenceAttempt(dispatchID, {
+                  attempt: 1,
+                  inference_request_id: `${dispatchID}/inference-request/1`,
+                  outcome: "FAILED",
+                  prompt: "Review the active story and return a concise result.",
+                  provider_session: {
+                    id: "sess-ja-unsupported",
+                    kind: "path",
+                    provider: "codex",
+                  },
+                }),
+              ],
+              outcome: "FAILED",
+              response_view: {
+                outcome: "FAILED",
+                output_work_items: [workItem],
+              },
+              trace_ids: ["trace-active-story"],
+              work_items: [workItem],
+            }),
+          ]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const inferenceAttempts = screen.getByRole("region", {
+      name: "Inference attempts",
+    });
+
+    expect(
+      within(inferenceAttempts).queryByRole("button", {
+        name: `ディスパッチ ${dispatchID} の provider session codex / path / sess-ja-unsupported を選択`,
+      }),
+    ).toBeNull();
+    expect(
+      within(inferenceAttempts).getByText("セッション詳細は利用できません"),
+    ).toBeTruthy();
+  });
+});
+
 describe("WorkItemDetailCard dispatch diagnostics", () => {
   it("renders nested inference attempts in order and preserves dispatch drilldowns", () => {
     const { dispatchID, execution, selectedNode, workItem } =

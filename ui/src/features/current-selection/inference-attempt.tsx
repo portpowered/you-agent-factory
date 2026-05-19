@@ -20,6 +20,10 @@ import {
 } from "./detail-card-shared";
 import type { InferenceAttemptCardProps } from "./detail-card-types";
 import {
+  useCurrentSelectionDispatchHistoryMessages,
+  useCurrentSelectionWorkstationDetailMessages,
+} from "./current-selection-locale";
+import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "./provider-session-details";
@@ -29,6 +33,8 @@ export function InferenceAttemptCard({
   onSelectProviderSession,
   selectedProviderSessionKey,
 }: InferenceAttemptCardProps) {
+  const dispatchHistoryMessages = useCurrentSelectionDispatchHistoryMessages();
+  const messages = useCurrentSelectionWorkstationDetailMessages();
   const provider = attempt.diagnostics?.provider?.provider ?? attempt.provider_session?.provider;
   const model = attempt.diagnostics?.provider?.model;
   const providerSessionLogTarget = getProviderSessionLogTarget(
@@ -49,11 +55,11 @@ export function InferenceAttemptCard({
 
   return (
     <article
-      aria-label={`Inference attempt ${attempt.attempt}`}
+      aria-label={dispatchHistoryMessages.inferenceAttemptLabel(attempt.attempt)}
       className={INFERENCE_ATTEMPT_CARD_CLASS}
     >
       <div className="flex items-start justify-between gap-3">
-        <strong>Attempt {attempt.attempt}</strong>
+        <strong>{dispatchHistoryMessages.inferenceAttemptLabel(attempt.attempt)}</strong>
         <span className={EXECUTION_PILL_CLASS}>{attempt.outcome ?? "PENDING"}</span>
       </div>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
@@ -85,9 +91,12 @@ export function InferenceAttemptCard({
       {providerSessionLabel ? (
         loadableProviderSession && onSelectProviderSession ? (
           <div className="grid gap-1">
-            <span>providerSession</span>
+            <span>{dispatchHistoryMessages.providerSessionLabel}</span>
             <button
-              aria-label={`Select provider session ${providerSessionLabel} for dispatch ${attempt.dispatch_id}`}
+              aria-label={messages.selectProviderSessionLabel(
+                providerSessionLabel,
+                attempt.dispatch_id,
+              )}
               aria-pressed={providerSessionSelected}
               className={cx(
                 PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
@@ -98,16 +107,20 @@ export function InferenceAttemptCard({
               type="button"
             >
               <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
-                {providerSessionSelected ? "Session selected" : "Inspect session details"}
+                {providerSessionSelected
+                  ? messages.providerSessionSelectedAction
+                  : messages.providerSessionSelectAction}
               </span>
               <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
             </button>
           </div>
         ) : (
           <div className="grid gap-1">
-            <span>providerSession</span>
+            <span>{dispatchHistoryMessages.providerSessionLabel}</span>
             <code>{providerSessionLabel}</code>
-            <p className={REQUEST_SELECTION_STATUS_CLASS}>Session details unavailable</p>
+            <p className={REQUEST_SELECTION_STATUS_CLASS}>
+              {messages.providerSessionSelectionUnavailable}
+            </p>
           </div>
         )
       ) : (
@@ -121,11 +134,9 @@ export function InferenceAttemptCard({
       {attempt.response !== undefined ? (
         <InferenceAttemptTextSection label="Response body" value={attempt.response} />
       ) : attempt.outcome ? (
-        <p className={DETAIL_COPY_CLASS}>
-          Provider response text is not available for this inference attempt.
-        </p>
+        <p className={DETAIL_COPY_CLASS}>{dispatchHistoryMessages.providerResponseUnavailable}</p>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>Awaiting provider response.</p>
+        <p className={DETAIL_COPY_CLASS}>{dispatchHistoryMessages.awaitingProviderResponse}</p>
       )}
     </article>
   );
