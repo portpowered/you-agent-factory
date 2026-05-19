@@ -99,12 +99,8 @@ export async function verifyLocalizedWorkflowActivity({
   viewport,
 }) {
   await expectVisible(
-    page.getByRole("heading", { name: "当前活动" }),
-    "Localized workflow activity heading",
-  );
-  await expectVisible(
-    page.getByText("操作员视图"),
-    "Localized workflow activity eyebrow",
+    page.getByRole("region", { name: "当前活动" }),
+    "Localized workflow activity region",
   );
   await expectVisible(
     page.getByRole("region", { name: "工作图视口" }),
