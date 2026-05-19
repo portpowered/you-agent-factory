@@ -60,6 +60,34 @@ and submitted `PARENT_CHILD` example, use
 [Batch Inputs](batch-inputs.md). The overview below is intentionally
 summary-only.
 
+## Single-Work API Submission
+
+`POST /work` accepts one submitted work item at a time. Unlike watched-folder
+batch inputs, it does not infer or synthesize a request name for accepted work.
+Send an explicit authored `name` on every single-work submission.
+
+```json
+{
+  "name": "driver-incident-review",
+  "work_type_name": "task",
+  "trace_id": "optional caller trace id",
+  "payload": {},
+  "tags": {
+    "priority": "high"
+  },
+  "relations": []
+}
+```
+
+Required fields for `POST /work`:
+
+- `name`
+- `work_type_name`
+
+`name` is required for single-work API submission and remains independently
+required as `works[].name` for batch requests. This change does not alter the
+existing batch naming rule.
+
 ### Field Reference for structured schema
 
 | Field | Type | Required | Description |

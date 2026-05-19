@@ -1,10 +1,12 @@
 type: object
 additionalProperties: false
 required:
+  - name
   - workTypeName
 properties:
   name:
     type: string
+    description: Required authored name for this single-work submission.
   workTypeName:
     type: string
     description: Configured work type name from factory.json to submit to.
@@ -23,4 +25,3 @@ properties:
     description: Optional token-level runtime relations preserved on the submitted work item.
     items:
       $ref: './SubmitRelation.yaml'
-

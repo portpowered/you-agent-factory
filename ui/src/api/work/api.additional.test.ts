@@ -28,6 +28,7 @@ describe("submitWork error handling", () => {
 
     await expect(
       submitWork({
+        name: "Structured error review",
         payload: "Review the runtime failure.",
         workTypeName: "story",
       }),
@@ -45,18 +46,25 @@ describe("submitWork error handling", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ code: "INTERNAL_ERROR", family: "INTERNAL_SERVER_ERROR" }), {
-          headers: {
-            "Content-Type": "application/json",
+        new Response(
+          JSON.stringify({
+            code: "INTERNAL_ERROR",
+            family: "INTERNAL_SERVER_ERROR",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 500,
+            statusText: "Internal Server Error",
           },
-          status: 500,
-          statusText: "Internal Server Error",
-        }),
+        ),
       ),
     );
 
     await expect(
       submitWork({
+        name: "Missing message review",
         payload: "Review the runtime failure.",
         workTypeName: "story",
       }),
@@ -85,6 +93,7 @@ describe("submitWork error handling", () => {
 
     await expect(
       submitWork({
+        name: "Malformed JSON review",
         payload: "Review the runtime failure.",
         workTypeName: "story",
       }),
@@ -119,6 +128,7 @@ describe("submitWork error handling", () => {
 
     await expect(
       submitWork({
+        name: "Missing code review",
         payload: "Review the runtime failure.",
         workTypeName: "story",
       }),
@@ -147,6 +157,7 @@ describe("submitWork error handling", () => {
 
     await expect(
       submitWork({
+        name: "Missing content type review",
         payload: "Review the runtime failure.",
         workTypeName: "story",
       }),

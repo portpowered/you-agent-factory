@@ -48,7 +48,7 @@ Request body:
 
 ```json
 {
-  "name": "optional display name",
+  "name": "required authored request name",
   "work_type_name": "task",
   "trace_id": "optional caller trace id",
   "payload": {},
@@ -61,6 +61,7 @@ Request body:
 
 Required fields:
 
+- `name`
 - `work_type_name`
 
 Success:
@@ -83,6 +84,7 @@ Behavior notes:
 Errors:
 
 - `400 BAD_REQUEST` when the JSON body cannot be decoded.
+- `400 BAD_REQUEST` when `name` is missing, empty, or whitespace-only.
 - `400 BAD_REQUEST` when `work_type_name` is empty.
 - `500 INTERNAL_ERROR` when factory submission fails.
 

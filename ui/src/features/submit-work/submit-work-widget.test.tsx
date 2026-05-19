@@ -127,7 +127,7 @@ describe("SubmitWorkWidget", () => {
     ).toHaveLength(2);
   });
 
-  it("submits work with an optional request name, clears only request fields on success, and shows the returned trace", async () => {
+  it("submits work with a request name, clears only request fields on success, and shows the returned trace", async () => {
     const pendingResponse = {
       resolve: null as ((value: Response) => void) | null,
     };
@@ -236,7 +236,7 @@ describe("SubmitWorkWidget", () => {
     ).toBe("");
   });
 
-  it("omits the request name when the field is blank", async () => {
+  it("submits an explicit blank request name when the field is blank", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
@@ -267,6 +267,7 @@ describe("SubmitWorkWidget", () => {
       "Your request was submitted. Trace ID: trace-submit-story.",
     );
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      name: "",
       payload: "Review the queue and summarize the failure.",
       workTypeName: "story",
     });
@@ -299,6 +300,7 @@ describe("SubmitWorkWidget", () => {
       ),
     ).toBeTruthy();
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      name: "",
       payload: "",
       workTypeName: "story",
     });
@@ -385,11 +387,17 @@ describe("SubmitWorkWidget", () => {
 
     const card = screen.getByRole("article", { name: "提交工作" });
 
-    expect(within(card).getByRole("combobox", { name: "工作类型" })).toBeTruthy();
-    expect(within(card).getByRole("textbox", { name: "请求名称" })).toBeTruthy();
+    expect(
+      within(card).getByRole("combobox", { name: "工作类型" }),
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("textbox", { name: "请求名称" }),
+    ).toBeTruthy();
     expect(within(card).getByRole("textbox", { name: "请求" })).toBeTruthy();
     expect(
-      within(card).getByText("先选择一个工作类型，然后即可继续。请求详情为可选。"),
+      within(card).getByText(
+        "先选择一个工作类型，然后即可继续。请求详情为可选。",
+      ),
     ).toBeTruthy();
     expect(within(card).getByRole("button", { name: "提交工作" })).toBeTruthy();
   });

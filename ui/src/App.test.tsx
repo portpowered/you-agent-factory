@@ -3971,6 +3971,7 @@ describe("App dashboard follow-up flows", () => {
     ).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      name: "",
       payload: "",
       workTypeName: "story",
     });

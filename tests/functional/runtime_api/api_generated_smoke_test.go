@@ -154,8 +154,8 @@ func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string
 
 func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
 	t.Helper()
-	if req.Name == nil || *req.Name == "" {
-		req.Name = stringPointer("generated-api-submit")
+	if req.Name == "" {
+		req.Name = "generated-api-submit"
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
