@@ -6,7 +6,7 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
 import { cx } from "../../components/ui/classnames";
-import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
+import { DashboardPanelShell } from "../../components/ui/dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -57,10 +57,7 @@ const BENTO_DRAG_CANCEL_SELECTOR =
 const BENTO_LAYOUT_CLASS = "min-w-0 w-full";
 const BENTO_GRID_CLASS = "min-h-px";
 const BENTO_ITEM_CLASS = "min-w-0";
-const BENTO_CARD_CLASS = cx(
-  DASHBOARD_PANEL_SHELL_CLASS,
-  "flex h-full min-w-0 flex-col overflow-hidden",
-);
+const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "flex min-h-13 cursor-move items-center justify-between gap-3 border-af-overlay/10 px-3.5 py-3";
 const BENTO_CARD_TITLE_CLASS = cx(
@@ -212,7 +209,12 @@ export function AgentBentoCard({
   const cardBodyClassName = cx(BENTO_CARD_BODY_CLASS, bodyClassName);
 
   return (
-    <article aria-label={title} className={cardClassName}>
+    <DashboardPanelShell
+      aria-label={title}
+      as="article"
+      className={cardClassName}
+      shellKind="grid-card"
+    >
       <header className={BENTO_CARD_HEADER_CLASS}>
         <h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>
         <div className={BENTO_CARD_HEADER_TOOLS_CLASS}>
@@ -243,6 +245,6 @@ export function AgentBentoCard({
         </div>
       </header>
       <div className={cardBodyClassName}>{children}</div>
-    </article>
+    </DashboardPanelShell>
   );
 }
