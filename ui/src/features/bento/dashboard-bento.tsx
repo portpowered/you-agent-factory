@@ -81,7 +81,6 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const snapshot = selectedSnapshot ?? EMPTY_DASHBOARD_SNAPSHOT;
 
   const currentSelection = useCurrentSelection({
-    locale: resolvedLocale,
     snapshot,
     workstationRequestsByDispatchID,
   });

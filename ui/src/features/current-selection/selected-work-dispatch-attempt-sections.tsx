@@ -17,6 +17,7 @@ import {
 } from "./detail-card-shared";
 import { InferenceAttemptCard } from "./inference-attempt";
 import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
+import type { LoadableProviderSessionRef } from "./provider-session-details";
 import {
   requestModel,
   requestProvider,
@@ -37,9 +38,13 @@ import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-
 export function DispatchInferenceAttemptsSection({
   attempts,
   emptyCopy,
+  onSelectProviderSession,
+  selectedProviderSessionKey,
 }: {
   attempts: DashboardInferenceAttempt[];
   emptyCopy?: string;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+  selectedProviderSessionKey?: string | null;
 }) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
 
@@ -54,7 +59,12 @@ export function DispatchInferenceAttemptsSection({
       <div className="grid gap-2.5">
         {attempts.length > 0
           ? attempts.map((attempt) => (
-              <InferenceAttemptCard attempt={attempt} key={attempt.inference_request_id} />
+              <InferenceAttemptCard
+                attempt={attempt}
+                key={attempt.inference_request_id}
+                onSelectProviderSession={onSelectProviderSession}
+                selectedProviderSessionKey={selectedProviderSessionKey}
+              />
             ))
           : emptyCopy
             ? <p className={DETAIL_COPY_CLASS}>{emptyCopy}</p>

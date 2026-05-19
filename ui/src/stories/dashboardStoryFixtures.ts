@@ -58,16 +58,34 @@ export const inferenceDetailsSnapshot = withInferenceDetails(
 );
 export const markdownReadyWorkstationRequest: DashboardWorkstationRequest = {
   ...dashboardWorkstationRequestFixtures.ready,
-  prompt: [
-    "## Review checklist",
-    "",
-    "- Check the latest diff",
-    "- Run `bun test` before approval",
-    "",
-    "```text",
-    "bun test",
-    "```",
-  ].join("\n"),
+  inference_attempts: dashboardWorkstationRequestFixtures.ready.inference_attempts.map(
+    (attempt) =>
+      attempt.attempt === 2
+        ? {
+            ...attempt,
+            prompt: [
+              "## Review checklist",
+              "",
+              "- Check the latest diff",
+              "- Run `bun test` before approval",
+              "",
+              "```text",
+              "bun test",
+              "```",
+            ].join("\n"),
+            response: [
+              "### Reviewer response",
+              "",
+              "1. Run `bun run lint`",
+              "2. Confirm the diff is limited",
+              "",
+              "```text",
+              "bun run lint",
+              "```",
+            ].join("\n"),
+          }
+        : attempt,
+  ),
 };
 export interface WorkOutcomeCounts {
   completed: number;

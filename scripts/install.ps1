@@ -5,7 +5,7 @@ param()
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$BinaryName = "infinite-you"
+$BinaryName = "you"
 $ReleaseBaseUrl = if ($env:INFINITE_YOU_INSTALL_BASE_URL) { $env:INFINITE_YOU_INSTALL_BASE_URL } else { "https://github.com/portpowered/infinite-you/releases" }
 $InstallDir = if ($env:INFINITE_YOU_INSTALL_DIR) { $env:INFINITE_YOU_INSTALL_DIR } else { Join-Path $HOME ".local/bin" }
 $VersionOverride = $env:INFINITE_YOU_VERSION
@@ -19,7 +19,7 @@ function Write-InstallMessage {
 
 function Fail-Install {
     param([string]$Message)
-    throw "infinite-you install: $Message"
+    throw "you install: $Message"
 }
 
 function Normalize-Os {
@@ -78,7 +78,7 @@ function Resolve-Tag {
         $response.EnsureSuccessStatusCode() | Out-Null
         $effectiveUrl = $response.RequestMessage.RequestUri.AbsoluteUri
     } catch {
-        Fail-Install "failed to resolve the latest infinite-you release from $ReleaseBaseUrl/latest"
+        Fail-Install "failed to resolve the latest you release from $ReleaseBaseUrl/latest"
     } finally {
         if ($client) {
             $client.Dispose()

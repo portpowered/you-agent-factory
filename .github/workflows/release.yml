@@ -204,37 +204,37 @@ jobs:
             goos: linux
             goarch: amd64
             archive_extension: .tar.gz
-            binary_name: infinite-you
+            binary_name: you
           - asset_id: linux-arm64
             runner: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
             archive_extension: .tar.gz
-            binary_name: infinite-you
+            binary_name: you
           - asset_id: darwin-amd64
             runner: macos-15-intel
             goos: darwin
             goarch: amd64
             archive_extension: .tar.gz
-            binary_name: infinite-you
+            binary_name: you
           - asset_id: darwin-arm64
             runner: macos-latest
             goos: darwin
             goarch: arm64
             archive_extension: .tar.gz
-            binary_name: infinite-you
+            binary_name: you
           - asset_id: windows-amd64
             runner: windows-latest
             goos: windows
             goarch: amd64
             archive_extension: .zip
-            binary_name: infinite-you.exe
+            binary_name: you.exe
           - asset_id: windows-arm64
             runner: windows-11-arm
             goos: windows
             goarch: arm64
             archive_extension: .zip
-            binary_name: infinite-you.exe
+            binary_name: you.exe
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -268,7 +268,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist smoke-output
-          asset_name="infinite-you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          asset_name="you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           printf '%s\n' "$asset_name" > "smoke-output/${{ matrix.asset_id }}-asset.txt"
           gh release download "${{ needs.resolve-release-tag.outputs.release_tag }}" \
             --repo "${{ github.event.workflow_run.repository.full_name }}" \
@@ -283,7 +283,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           New-Item -ItemType Directory -Path smoke-output -Force | Out-Null
-          $assetName = "infinite-you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          $assetName = "you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           $assetName | Out-File -FilePath "smoke-output/${{ matrix.asset_id }}-asset.txt" -Encoding utf8
           gh release download "${{ needs.resolve-release-tag.outputs.release_tag }}" `
             --repo "${{ github.event.workflow_run.repository.full_name }}" `
@@ -296,7 +296,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          archive="dist/infinite-you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          archive="dist/you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           if [ ! -f "$archive" ]; then
             echo "released archive not found: $archive" >&2
             exit 1
@@ -312,7 +312,7 @@ jobs:
         id: extract-windows
         shell: pwsh
         run: |
-          $archive = "dist/infinite-you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
+          $archive = "dist/you_${{ needs.resolve-release-tag.outputs.release_version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.archive_extension }}"
           if (-not (Test-Path -LiteralPath $archive)) {
             Write-Error "released archive not found: $archive"
           }

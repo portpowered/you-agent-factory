@@ -2,12 +2,12 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { DashboardSubmitWorkType } from "../../api/dashboard/types";
 import { isSubmitWorkAPIError, submitWork } from "../../api/work";
+import type { SubmitWorkMessages } from "./messages/submit-work";
 import type {
   SubmitWorkDraft,
   SubmitWorkStatus,
   SubmitWorkValidationErrors,
 } from "./submit-work-card";
-import type { SubmitWorkMessages } from "./messages/submit-work";
 
 const EMPTY_DRAFT: SubmitWorkDraft = {
   requestName: "",
@@ -81,9 +81,7 @@ export function useSubmitWorkWidget(
       }
 
       mutation.mutate({
-        ...(draft.requestName.trim().length > 0
-          ? { name: draft.requestName }
-          : {}),
+        name: draft.requestName,
         payload: draft.requestText.trim().length === 0 ? "" : draft.requestText,
         workTypeName: draft.workTypeName,
       });
@@ -170,9 +168,23 @@ function buildStatus({
   }
 
   if (draft.workTypeName.length === 0) {
+    if (draft.requestName.trim().length === 0) {
+      return {
+        kind: "guidance",
+        message: messages.statusMessages.emptyGuidance,
+      };
+    }
+
     return {
       kind: "guidance",
       message: messages.statusMessages.workTypeOnly,
+    };
+  }
+
+  if (draft.requestName.trim().length === 0) {
+    return {
+      kind: "guidance",
+      message: messages.statusMessages.requestOnly,
     };
   }
 
@@ -187,7 +199,13 @@ function buildValidationSummary(
   messages: SubmitWorkMessages,
 ): string {
   if (validationErrors.workTypeName) {
+    if (validationErrors.requestName) {
+      return messages.validationMessages.bothMissing;
+    }
     return validationErrors.workTypeName;
+  }
+  if (validationErrors.requestName) {
+    return validationErrors.requestName;
   }
   return messages.validationMessages.fallback;
 }
@@ -195,7 +213,7 @@ function buildValidationSummary(
 function hasValidationErrors(
   validationErrors: SubmitWorkValidationErrors,
 ): boolean {
-  return Boolean(validationErrors.workTypeName);
+  return Boolean(validationErrors.requestName || validationErrors.workTypeName);
 }
 
 function submitWorkErrorMessage(
@@ -215,7 +233,12 @@ function validateDraft(
   const validationErrors: SubmitWorkValidationErrors = {};
 
   if (draft.workTypeName.length === 0) {
-    validationErrors.workTypeName = messages.validationMessages.workTypeRequired;
+    validationErrors.workTypeName =
+      messages.validationMessages.workTypeRequired;
+  }
+  if (draft.requestName.trim().length === 0) {
+    validationErrors.requestName =
+      messages.validationMessages.requestRequired;
   }
   return validationErrors;
 }

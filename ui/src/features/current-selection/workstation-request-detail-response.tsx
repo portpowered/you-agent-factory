@@ -4,6 +4,7 @@ import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 import {
+  INFERENCE_ATTEMPT_DETAIL_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
@@ -31,7 +32,7 @@ export function ResponseDetailsSection({
       {view.isScriptBackedRequest ? (
         <ScriptResponseDetails request={request} view={view} />
       ) : (
-        <InferenceResponseDetails request={request} view={view} />
+        <InferenceResponseDetails request={request} />
       )}
     </section>
   );
@@ -54,7 +55,7 @@ export function ErrorDetailsSection({
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.errorDetailsTitle}</h4>
-      <dl>
+      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>{messages.failureReasonLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
@@ -84,7 +85,7 @@ function ScriptResponseDetails({
 
   return (
     <>
-      <dl>
+      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <TraceIDField traceIDs={request.trace_ids} />
         {scriptResponse ? (
           <>
@@ -158,20 +159,13 @@ function ScriptResponseDetails({
 
 function InferenceResponseDetails({
   request,
-  view: _view,
 }: {
   request: WorkstationRequestDetailCardProps["request"];
-  view: WorkstationRequestDetailView;
 }) {
-  const messages = useCurrentSelectionDetailMessages();
-
   return (
-    <>
-      <dl>
-        <TraceIDField traceIDs={request.trace_ids} />
-      </dl>
-      <p className={DETAIL_COPY_CLASS}>{messages.inferenceResponseDetailsCopy}</p>
-    </>
+    <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+      <TraceIDField traceIDs={request.trace_ids} />
+    </dl>
   );
 }
 

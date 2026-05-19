@@ -73,11 +73,9 @@ function useCurrentSelectionStoreState() {
 }
 
 export function useCurrentSelection({
-  locale,
   snapshot,
   workstationRequestsByDispatchID,
 }: {
-  locale?: string | null;
   snapshot: DashboardSnapshot | null | undefined;
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }): CurrentSelectionState {
@@ -97,7 +95,6 @@ export function useCurrentSelection({
   });
 
   const derived = useCurrentSelectionDerivedState({
-    locale,
     projectedWorkstationRequestsByDispatchID,
     selection: store.selection,
     snapshot,

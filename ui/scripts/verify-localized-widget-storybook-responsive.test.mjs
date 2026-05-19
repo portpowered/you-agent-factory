@@ -228,7 +228,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
       name: "提交工作",
     });
     expect(card.getByText).toHaveBeenCalledWith(
-      "先选择一个工作类型，然后即可继续。请求详情为可选。",
+      "先选择工作类型并填写请求名称，然后即可继续。",
     );
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
@@ -297,8 +297,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("heading", { name: "当前活动" });
-    expect(page.getByText).toHaveBeenCalledWith("操作员视图");
+    expect(page.getByRole).toHaveBeenCalledWith("region", { name: "当前活动" });
     expect(page.getByRole).toHaveBeenCalledWith("region", {
       name: "工作图视口",
     });

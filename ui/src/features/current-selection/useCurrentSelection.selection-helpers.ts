@@ -10,7 +10,6 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
-import { formatProviderSession } from "../../components/ui/formatters";
 import {
   findWorkItemReference,
   findWorkstationNodeIDForPlace,
@@ -21,13 +20,8 @@ import type {
 } from "../terminal-work/terminal-work-card";
 import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import {
-  getCurrentSelectionDetailMessages,
-  type CurrentSelectionDetailMessages,
-} from "./messages/current-selection-detail";
-import {
   isScriptBackedWorkstationRequest,
   requestDispatchID,
-  requestOutcome,
   requestTransitionID,
   requestWorkstationNodeID,
   requestWorkstationName,
@@ -42,10 +36,6 @@ export function buildTerminalWorkItems(
   attempts: DashboardProviderSessionAttempt[] | undefined,
   failureDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>,
   workstationRequestsByDispatchID?: Record<string, DispatchWorkstationRequest>,
-  messages: Pick<
-    CurrentSelectionDetailMessages,
-    "terminalOutcomeLabel" | "terminalRequestContext"
-  > = getCurrentSelectionDetailMessages(undefined),
 ): TerminalWorkItem[] {
   const failureDetails = Object.values(failureDetailsByWorkID ?? {});
   const requests = sortWorkstationRequests(
@@ -78,7 +68,6 @@ export function buildTerminalWorkItems(
 
     return {
       attempts: matchingAttempts,
-      contextText: terminalRequestContext(latestAttempt, latestRequest, messages),
       dispatchID:
         matchedFailureDetail?.dispatch_id ??
         (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
@@ -88,39 +77,28 @@ export function buildTerminalWorkItems(
       label,
       traceWorkID: matchedWorkItem?.work_id ?? matchedFailureDetail?.work_item.work_id ?? label,
       workItem: matchedWorkItem ?? matchedFailureDetail?.work_item,
+      workstationName: terminalWorkstationName(
+        matchedFailureDetail,
+        latestAttempt,
+        latestRequest,
+      ),
     };
   });
 }
 
-function terminalRequestContext(
+function terminalWorkstationName(
+  failureDetail: DashboardFailedWorkDetail | undefined,
   attempt: DashboardProviderSessionAttempt | undefined,
   request: DispatchWorkstationRequest | undefined,
-  messages: Pick<
-    CurrentSelectionDetailMessages,
-    "terminalOutcomeLabel" | "terminalRequestContext"
-  >,
 ): string | undefined {
-  if (!request && !attempt) {
-    return undefined;
-  }
-
-  const outcome = request ? requestOutcome(request) : attempt?.outcome;
-  const workstation = request
-    ? requestWorkstationName(request) ?? requestTransitionID(request)
-    : attempt?.workstation_name ?? attempt?.transition_id;
-  if (!outcome || !workstation) {
-    return undefined;
-  }
-
-  const providerSession = attempt?.provider_session?.id
-    ? formatProviderSession(attempt.provider_session)
-    : undefined;
-
-  return messages.terminalRequestContext({
-    outcome: messages.terminalOutcomeLabel(outcome),
-    providerSession,
-    workstation,
-  });
+  return (
+    (request ? requestWorkstationName(request) : undefined) ??
+    (request ? requestTransitionID(request) : undefined) ??
+    failureDetail?.workstation_name ??
+    failureDetail?.transition_id ??
+    attempt?.workstation_name ??
+    attempt?.transition_id
+  );
 }
 
 export function findStatePlace(snapshot: DashboardSnapshot, placeId: string): DashboardPlaceRef | null {

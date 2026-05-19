@@ -6,7 +6,7 @@ import {
 export interface SubmitWorkMessages {
   cardTitle: string;
   requestLabel: string;
-  requestHint: string;
+  requestHint?: string;
   requestNameLabel: string;
   requestNamePlaceholder: string;
   requestPlaceholder: string;
@@ -36,9 +36,8 @@ const submitWorkMessagesByLocale = {
   en: {
     cardTitle: "Submit work",
     requestLabel: "Request",
-    requestHint: "Optional. Leave this blank to submit an empty request.",
     requestNameLabel: "Request name",
-    requestNamePlaceholder: "Add an optional label for this request.",
+    requestNamePlaceholder: "Add a name for this request.",
     requestPlaceholder:
       "Optional: describe what you want this request to accomplish.",
     selectWorkTypePlaceholder: "Select a work type",
@@ -47,48 +46,47 @@ const submitWorkMessagesByLocale = {
     workTypeLabel: "Work type",
     statusMessages: {
       emptyGuidance:
-        "Choose a work type to continue. Request details are optional.",
+        "Choose a work type and enter a request name to continue.",
       errorFallback: "We couldn't submit your request. Try again in a moment.",
       noWorkTypes: "No work types are available to submit right now.",
-      ready: "Ready to submit. Request details are optional.",
-      requestOnly: "Ready to submit. Request details are optional.",
+      ready: "Ready to submit.",
+      requestOnly: "Enter a request name to continue.",
       submitting: "Sending your request...",
       success: (traceId) => `Your request was submitted. Trace ID: ${traceId}.`,
-      workTypeOnly:
-        "Choose a work type to continue. Request details are optional.",
+      workTypeOnly: "Choose a work type to continue.",
     },
     validationMessages: {
-      bothMissing: "Choose a work type before submitting.",
+      bothMissing:
+        "Choose a work type and enter a request name before submitting.",
       fallback: "Fix the highlighted fields before submitting.",
-      requestRequired: "Request details are optional.",
+      requestRequired: "Enter a request name before submitting.",
       workTypeRequired: "Choose a work type before submitting.",
     },
   },
   "zh-CN": {
     cardTitle: "提交工作",
     requestLabel: "请求",
-    requestHint: "可选。留空也可以提交空请求。",
     requestNameLabel: "请求名称",
-    requestNamePlaceholder: "为此请求添加一个可选标签。",
+    requestNamePlaceholder: "为此请求添加名称。",
     requestPlaceholder: "可选：描述你希望这个请求完成什么。",
     selectWorkTypePlaceholder: "选择工作类型",
     submitAction: "提交工作",
     submittingAction: "正在提交...",
     workTypeLabel: "工作类型",
     statusMessages: {
-      emptyGuidance: "先选择工作类型，然后即可继续。请求详情为可选。",
+      emptyGuidance: "先选择工作类型并填写请求名称，然后即可继续。",
       errorFallback: "无法提交你的请求。请稍后再试。",
       noWorkTypes: "当前没有可用于提交的工作类型。",
-      ready: "可以提交了。请求详情为可选。",
-      requestOnly: "可以提交了。请求详情为可选。",
+      ready: "可以提交了。",
+      requestOnly: "请先填写请求名称。",
       submitting: "正在发送你的请求...",
       success: (traceId) => `你的请求已提交。追踪 ID：${traceId}。`,
-      workTypeOnly: "先选择一个工作类型，然后即可继续。请求详情为可选。",
+      workTypeOnly: "先选择一个工作类型，然后即可继续。",
     },
     validationMessages: {
-      bothMissing: "提交前请选择工作类型。",
+      bothMissing: "提交前请选择工作类型并填写请求名称。",
       fallback: "提交前请先修正高亮字段。",
-      requestRequired: "请求详情为可选。",
+      requestRequired: "提交前请填写请求名称。",
       workTypeRequired: "提交前请选择工作类型。",
     },
   },

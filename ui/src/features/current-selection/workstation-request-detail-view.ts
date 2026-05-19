@@ -3,6 +3,7 @@ import { normalizeDetailText } from "./detail-card-shared";
 
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
+  hasFailedOutcome: boolean;
   isScriptBackedRequest: boolean;
   normalizedFailureMessage: string | undefined;
   normalizedFailureReason: string | undefined;
@@ -23,9 +24,18 @@ export function buildWorkstationRequestDetailView(
   const hasFailureDetails =
     normalizedFailureReason !== undefined ||
     normalizedFailureMessage !== undefined;
-
+  const normalizedOutcome = (request.outcome ?? request.script_response?.outcome)
+    ?.trim()
+    .toUpperCase();
+  const hasFailedOutcome =
+    hasFailureDetails ||
+    normalizedOutcome === "FAILED" ||
+    normalizedOutcome === "FAILED_EXIT_CODE" ||
+    normalizedOutcome === "TIMED_OUT" ||
+    normalizedOutcome === "REJECTED";
   return {
     hasFailureDetails,
+    hasFailedOutcome,
     isScriptBackedRequest,
     normalizedFailureMessage,
     normalizedFailureReason,

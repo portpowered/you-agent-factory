@@ -53,6 +53,15 @@ func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *
 					t.Fatalf("agent-factory docs %s missing marker %q", topic.name, marker)
 				}
 			}
+			for _, oldInvocation := range []string{
+				"infinite-you docs",
+				"agent-factory run",
+				"agent-factory config",
+			} {
+				if strings.Contains(output, oldInvocation) {
+					t.Fatalf("agent-factory docs %s still contains old executable invocation %q:\n%s", topic.name, oldInvocation, output)
+				}
+			}
 		})
 	}
 }
