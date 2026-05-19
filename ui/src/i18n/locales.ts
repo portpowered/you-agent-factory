@@ -35,12 +35,21 @@ export function resolveSupportedLocale(
     return DEFAULT_LOCALE;
   }
 
-  const supportedLocale = SUPPORTED_LOCALE_LOOKUP.get(normalizedLocale);
-  if (supportedLocale) {
-    return supportedLocale;
+  return (
+    resolveNormalizedLocale(normalizedLocale) ??
+    resolveNormalizedLocale(normalizedLocale.split("-")[0]) ??
+    DEFAULT_LOCALE
+  );
+}
+
+function resolveNormalizedLocale(
+  locale: string | undefined,
+): SupportedLocale | undefined {
+  if (!locale) {
+    return undefined;
   }
 
-  return LOCALE_ALIASES[normalizedLocale] ?? DEFAULT_LOCALE;
+  return SUPPORTED_LOCALE_LOOKUP.get(locale) ?? LOCALE_ALIASES[locale];
 }
 
 function normalizeLocaleInput(

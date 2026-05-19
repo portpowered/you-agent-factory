@@ -29,4 +29,24 @@ describe("TerminalWorkWidget", () => {
     ).toBeTruthy();
     expect(screen.getByText(messages.emptyState("failed"))).toBeTruthy();
   });
+
+  it("renders zh-CN terminal-work copy when the widget locale is canonical Mandarin", () => {
+    const messages = getTerminalWorkMessages("zh-CN");
+
+    render(
+      <TerminalWorkWidget
+        completedItems={[{ label: "Done Story", traceWorkID: "work-done-story" }]}
+        failedItems={[]}
+        locale="zh-CN"
+        onSelectItem={vi.fn()}
+        selectedItem={null}
+      />,
+    );
+
+    expect(screen.getByLabelText(messages.cardTitle)).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: messages.rowTitle("completed") }),
+    ).toBeTruthy();
+    expect(screen.getByText(messages.emptyState("failed"))).toBeTruthy();
+  });
 });
