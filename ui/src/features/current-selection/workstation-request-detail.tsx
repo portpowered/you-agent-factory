@@ -14,6 +14,7 @@ import {
 } from "./detail-card-shared";
 import type { WorkstationRequestDetailCardProps } from "./detail-card-types";
 import { InferenceAttemptsSection } from "./execution-details";
+import { useCurrentSelectionShellMessages } from "./current-selection-locale";
 import {
   ErrorDetailsSection,
   ResponseDetailsSection,
@@ -72,6 +73,8 @@ function WorkstationRequestSummary({
   request: WorkstationRequestDetailCardProps["request"];
   view: WorkstationRequestDetailView;
 }) {
+  const messages = useCurrentSelectionShellMessages();
+
   return (
     <>
       <p className={WIDGET_SUBTITLE_CLASS}>
@@ -106,9 +109,24 @@ function WorkstationRequestSummary({
         <div>
           <dt>Outcome</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.outcome
-              ? view.outcome
-              : "Outcome details are not available yet."}
+            {view.outcome ? (
+              <span className="flex flex-wrap gap-x-2 gap-y-1">
+                <span>{view.outcome}</span>
+                {view.hasFailedOutcome && view.normalizedFailureReason ? (
+                  <span>
+                    {messages.failureReasonLabel}: {view.normalizedFailureReason}
+                  </span>
+                ) : null}
+                {view.hasFailedOutcome && view.normalizedFailureMessage ? (
+                  <span>
+                    {messages.failureMessageLabel}:{" "}
+                    {view.normalizedFailureMessage}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              "Outcome details are not available yet."
+            )}
           </dd>
         </div>
         <div>
