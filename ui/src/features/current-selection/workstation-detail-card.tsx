@@ -27,8 +27,8 @@ import type {
   WorkstationDetailCardProps,
 } from "./detail-card-types";
 import { getWorkstationDetailMessages } from "./messages";
-import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 import { CollapsibleProviderSessionAttempts } from "./provider-session-attempts";
+import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 import {
   EditableConfigurationSection,
   WorkstationSummary,
@@ -63,6 +63,7 @@ export function WorkstationDetailCard({
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       <p className={WIDGET_SUBTITLE_CLASS}>{selectedNode.workstation_name}</p>
       <EditableConfigurationSection
+        key={selectedNode.node_id}
         messages={messages}
         saveState={saveState}
         state={editableConfigurationState}
