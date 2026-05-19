@@ -309,7 +309,7 @@ func safeDiagnosticsStringMapPtr(values map[string]string) *factoryapi.StringMap
 	if len(values) == 0 {
 		return nil
 	}
-	converted := factoryapi.StringMap(cloneSafeDiagnosticsStringMap(values))
+	converted := factoryapi.StringMap(cloneStringMap(values))
 	return &converted
 }
 
@@ -336,15 +336,4 @@ func safeDiagnosticsStringValue(value *string) string {
 		return ""
 	}
 	return *value
-}
-
-func cloneSafeDiagnosticsStringMap(input map[string]string) map[string]string {
-	if input == nil {
-		return nil
-	}
-	clone := make(map[string]string, len(input))
-	for key, value := range input {
-		clone[key] = value
-	}
-	return clone
 }
