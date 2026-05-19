@@ -41,6 +41,7 @@ paths:
               textOnlyContent:
                 summary: Submit one work item with ordered text content parts.
                 value:
+                  name: summary-draft
                   workTypeName: task
                   content:
                     - type: text
@@ -50,6 +51,7 @@ paths:
               textPlusImageContent:
                 summary: Submit one work item with ordered text and image content parts.
                 value:
+                  name: screenshot-review
                   workTypeName: task
                   content:
                     - type: text

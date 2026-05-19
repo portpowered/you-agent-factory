@@ -79,8 +79,8 @@ limits, and executor settings.
 
 ## Related
 
-- `infinite-you docs workstation`
-- `infinite-you docs workers`
-- `infinite-you docs resources`
-- `infinite-you docs batch-work`
-- `infinite-you docs templates`
+- `you docs workstation`
+- `you docs workers`
+- `you docs resources`
+- `you docs batch-work`
+- `you docs templates`

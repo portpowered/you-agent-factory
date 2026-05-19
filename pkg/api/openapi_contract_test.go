@@ -241,12 +241,18 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.required is missing")
 	}
+	if !containsString(submitWorkRequestRequired, "name") {
+		t.Fatalf("components.schemas.SubmitWorkRequest.required is missing name")
+	}
 	if !containsString(submitWorkRequestRequired, "workTypeName") {
 		t.Fatalf("components.schemas.SubmitWorkRequest.required is missing workTypeName")
 	}
 	submitWorkRequestProperties, ok := submitWorkRequestSchema["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties is missing")
+	}
+	if _, ok := submitWorkRequestProperties["name"].(map[string]any); !ok {
+		t.Fatalf("components.schemas.SubmitWorkRequest.properties.name is missing")
 	}
 	if _, ok := submitWorkRequestProperties["workTypeName"].(map[string]any); !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.properties.workTypeName is missing")

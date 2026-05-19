@@ -63,9 +63,11 @@ export function SelectedWorkDispatchHistorySection({
               activeTraceID={activeTraceID}
               currentDispatchID={currentDispatchID}
               key={request.dispatch_id}
+              onSelectProviderSession={onSelectProviderSession}
               onSelectTraceID={onSelectTraceID}
               onSelectWorkID={onSelectWorkID}
               request={request}
+              selectedProviderSessionKey={selectedProviderSessionKey}
               selectedWorkID={selectedWorkID}
               traceTargetId={traceTargetId}
             />

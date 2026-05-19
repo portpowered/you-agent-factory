@@ -6,7 +6,6 @@ describe("getWorkOutcomeMessages", () => {
 
     expect(messages.chart.ariaLabel("15m")).toBe("Work outcome chart for 15m");
     expect(messages.chart.tickLabel(20)).toBe("Tick 20");
-    expect(messages.chart.tickRangeLabel(10, 20)).toBe("Zoomed to ticks 10-20");
     expect(messages.chart.resetZoomAction).toBe("Reset zoom");
     expect(messages.trends.failureChartAriaLabel("15m")).toBe(
       "Failed work trend for 15m",
@@ -27,7 +26,6 @@ describe("getWorkOutcomeMessages", () => {
 
     expect(messages.chart.ariaLabel("15m")).toBe("15m 的工作结果图表");
     expect(messages.chart.tickLabel(20)).toBe("刻度 20");
-    expect(messages.chart.tickRangeLabel(10, 20)).toBe("已缩放到刻度 10-20");
     expect(messages.chart.resetZoomLabel).toBe("重置工作结果图表缩放");
     expect(messages.trends.failureChartAriaLabel("15m")).toBe("15m 的失败工作趋势");
     expect(messages.trends.reworkChartAriaLabel("故事 A")).toBe(

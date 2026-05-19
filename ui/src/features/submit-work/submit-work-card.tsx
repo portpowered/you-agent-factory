@@ -20,6 +20,7 @@ export interface SubmitWorkDraft {
 }
 
 export interface SubmitWorkValidationErrors {
+  requestName?: string;
   workTypeName?: string;
 }
 
@@ -73,10 +74,16 @@ export function SubmitWorkCard({
   const messages = getSubmitWorkMessages(locale);
   const hasConfiguredWorkTypes = submitWorkTypeNames.length > 0;
   const hasSelectedWorkType = draft.workTypeName.length > 0;
+  const hasValidRequestName = draft.requestName.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
   const canSubmit =
-    hasConfiguredWorkTypes && hasSelectedWorkType && !isSubmitting;
+    hasConfiguredWorkTypes &&
+    hasSelectedWorkType &&
+    hasValidRequestName &&
+    !isSubmitting;
+  const requestHint = messages.requestHint?.trim();
   const requestNameID = `${widgetId}-request-name`;
+  const requestNameErrorID = `${widgetId}-request-name-error`;
   const requestTextID = `${widgetId}-request-text`;
   const requestTextHintID = `${widgetId}-request-text-hint`;
   const workTypeID = `${widgetId}-work-type`;
@@ -126,6 +133,10 @@ export function SubmitWorkCard({
             {messages.requestNameLabel}
           </label>
           <Input
+            aria-describedby={
+              validationErrors?.requestName ? requestNameErrorID : undefined
+            }
+            aria-invalid={validationErrors?.requestName ? "true" : undefined}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             id={requestNameID}
@@ -134,6 +145,11 @@ export function SubmitWorkCard({
             type="text"
             value={draft.requestName}
           />
+          {validationErrors?.requestName ? (
+            <p className={VALIDATION_TEXT_CLASS} id={requestNameErrorID}>
+              {validationErrors.requestName}
+            </p>
+          ) : null}
         </div>
 
         <div className={FIELD_GROUP_CLASS}>
@@ -141,7 +157,7 @@ export function SubmitWorkCard({
             {messages.requestLabel}
           </label>
           <Textarea
-            aria-describedby={requestTextHintID}
+            aria-describedby={requestHint ? requestTextHintID : undefined}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             id={requestTextID}
@@ -149,9 +165,11 @@ export function SubmitWorkCard({
             placeholder={messages.requestPlaceholder}
             value={draft.requestText}
           />
-          <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
-            {messages.requestHint}
-          </p>
+          {requestHint ? (
+            <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
+              {requestHint}
+            </p>
+          ) : null}
         </div>
 
         <div className={ACTION_ROW_CLASS}>

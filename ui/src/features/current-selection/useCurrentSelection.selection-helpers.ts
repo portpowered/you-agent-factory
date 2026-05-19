@@ -9,7 +9,6 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
-import { formatProviderSession } from "../../components/ui/formatters";
 import {
   findWorkItemReference,
   findWorkstationNodeIDForPlace,
@@ -22,7 +21,6 @@ import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import {
   isScriptBackedWorkstationRequest,
   requestDispatchID,
-  requestOutcome,
   requestTransitionID,
   requestWorkstationNodeID,
   requestWorkstationName,
@@ -69,7 +67,6 @@ export function buildTerminalWorkItems(
 
     return {
       attempts: matchingAttempts,
-      contextText: terminalRequestContext(latestAttempt, latestRequest),
       dispatchID:
         matchedFailureDetail?.dispatch_id ??
         (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
@@ -79,47 +76,28 @@ export function buildTerminalWorkItems(
       label,
       traceWorkID: matchedWorkItem?.work_id ?? matchedFailureDetail?.work_item.work_id ?? label,
       workItem: matchedWorkItem ?? matchedFailureDetail?.work_item,
+      workstationName: terminalWorkstationName(
+        matchedFailureDetail,
+        latestAttempt,
+        latestRequest,
+      ),
     };
   });
 }
 
-function terminalRequestContext(
+function terminalWorkstationName(
+  failureDetail: DashboardFailedWorkDetail | undefined,
   attempt: DashboardProviderSessionAttempt | undefined,
   request: DispatchWorkstationRequest | undefined,
 ): string | undefined {
-  if (!request && !attempt) {
-    return undefined;
-  }
-
-  const outcome = request ? requestOutcome(request) : attempt?.outcome;
-  const workstation = request
-    ? requestWorkstationName(request) ?? requestTransitionID(request)
-    : attempt?.workstation_name ?? attempt?.transition_id;
-  if (!outcome || !workstation) {
-    return undefined;
-  }
-
-  const providerSession = formatProviderSession(attempt?.provider_session);
-  if (providerSession !== "Unavailable") {
-    return `${formatTerminalOutcome(outcome)} at ${workstation}; ${providerSession}`;
-  }
-
-  return `${formatTerminalOutcome(outcome)} at ${workstation}`;
-}
-
-function formatTerminalOutcome(outcome: string): string {
-  switch (outcome.toUpperCase()) {
-    case "ACCEPTED":
-      return "Accepted";
-    case "CONTINUE":
-      return "Continue";
-    case "FAILED":
-      return "Failed";
-    case "REJECTED":
-      return "Rejected";
-    default:
-      return outcome;
-  }
+  return (
+    (request ? requestWorkstationName(request) : undefined) ??
+    (request ? requestTransitionID(request) : undefined) ??
+    failureDetail?.workstation_name ??
+    failureDetail?.transition_id ??
+    attempt?.workstation_name ??
+    attempt?.transition_id
+  );
 }
 
 export function findStatePlace(snapshot: DashboardSnapshot, placeId: string): DashboardPlaceRef | null {

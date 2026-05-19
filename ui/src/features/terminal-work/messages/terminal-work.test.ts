@@ -47,6 +47,7 @@ describe("getTerminalWorkMessages", () => {
     expect(messages.sessionSummaryFallback("failed")).toBe(
       "セッション概要で失敗ステータスが記録されました。",
     );
+    expect(messages.summary("failed", "Review")).toBe("失敗: Review");
     expect(messages.itemCountLabel(2)).toContain("2");
   });
 
@@ -61,5 +62,6 @@ describe("getTerminalWorkMessages", () => {
     ).toBe(expectedCountLabel);
     expect(messages.emptyState(status)).not.toHaveLength(0);
     expect(messages.sessionSummaryFallback(status)).not.toHaveLength(0);
+    expect(messages.summary(status, "Workstation")).not.toHaveLength(0);
   });
 });

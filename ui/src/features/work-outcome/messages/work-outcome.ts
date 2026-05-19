@@ -24,7 +24,6 @@ export interface WorkOutcomeMessages {
       queued: string;
     };
     tickLabel: (tick: number) => string;
-    tickRangeLabel: (startTick: number, endTick: number) => string;
     xAxisLabel: string;
     yAxisLabel: string;
   };
@@ -84,8 +83,6 @@ const workOutcomeMessagesByLocale = {
         queued: "Queued",
       },
       tickLabel: (tick) => `Tick ${formatNumber(tick, "en")}`,
-      tickRangeLabel: (startTick, endTick) =>
-        `Zoomed to ticks ${formatNumber(startTick, "en")}-${formatNumber(endTick, "en")}`,
       xAxisLabel: "Ticks",
       yAxisLabel: "Work count",
     },
@@ -144,8 +141,6 @@ const workOutcomeMessagesByLocale = {
         queued: "排队中",
       },
       tickLabel: (tick) => `刻度 ${formatNumber(tick, "zh-CN")}`,
-      tickRangeLabel: (startTick, endTick) =>
-        `已缩放到刻度 ${formatNumber(startTick, "zh-CN")}-${formatNumber(endTick, "zh-CN")}`,
       xAxisLabel: "刻度",
       yAxisLabel: "工作计数",
     },

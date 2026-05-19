@@ -111,9 +111,11 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
     render(<ReactFlowCurrentActivityCard {...createProps({ snapshot })} />);
 
+    expect(screen.getByLabelText("Current activity")).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: "Current activity" }),
-    ).toBeTruthy();
+      screen.queryByRole("heading", { name: "Current activity" }),
+    ).toBeNull();
+    expect(screen.queryByText("Operator View")).toBeNull();
     expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(
       screen.getByText("The factory has not published any workstation graph yet."),

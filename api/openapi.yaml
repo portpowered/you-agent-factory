@@ -41,6 +41,7 @@ paths:
               textOnlyContent:
                 summary: Submit one work item with ordered text content parts.
                 value:
+                  name: summary-draft
                   workTypeName: task
                   content:
                     - type: text
@@ -50,6 +51,7 @@ paths:
               textPlusImageContent:
                 summary: Submit one work item with ordered text and image content parts.
                 value:
+                  name: screenshot-review
                   workTypeName: task
                   content:
                     - type: text
@@ -408,10 +410,12 @@ components:
       type: object
       additionalProperties: false
       required:
+        - name
         - workTypeName
       properties:
         name:
           type: string
+          description: Required authored name for this single-work submission.
         workTypeName:
           type: string
           description: Configured work type name from factory.json to submit to.

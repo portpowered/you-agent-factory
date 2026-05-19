@@ -1,7 +1,7 @@
 # Batch Work Reference
 
 Use this page when you need the current `FACTORY_REQUEST_BATCH` authoring
-surface for watched files, `agent-factory run --work`, or
+surface for watched files, `you run --work`, or
 `PUT /work-requests/{request_id}`.
 
 ## Current Contract
@@ -25,7 +25,7 @@ surface for watched files, `agent-factory run --work`, or
 | `factory/inputs/BATCH/default/<request_id>.json` | Mixed work types or submitted parent-child batches |
 | `factory/inputs/<work_type>/default/<request_id>.json` | Single-work-type batches |
 | `factory/inputs/<work_type>/<execution_id>/<request_id>.json` | Generated or routed work tied to one execution |
-| Any readable `.json` path passed to `agent-factory run --work` | Startup batch submission before the run begins |
+| Any readable `.json` path passed to `you run --work` | Startup batch submission before the run begins |
 
 Use a `.json` filename for explicit batch input. Markdown and non-batch JSON
 files are wrapped as one raw-payload work item instead of being parsed as a
@@ -105,7 +105,7 @@ child and `targetWorkName` is the parent.
 
 ## Reading Runtime Work Relations
 
-`GET /work` and `infinite-you work list` return `results[].relations` on each
+`GET /work` and `you work list` return `results[].relations` on each
 listed work item when that source work currently has outbound runtime
 relationships. Read every relation from the listed work item outward:
 
