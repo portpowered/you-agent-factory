@@ -82,4 +82,22 @@ describe("resolveAppLocale", () => {
       }),
     ).toBe("en");
   });
+
+  it("walks the ordered browser language list until it finds a supported locale", () => {
+    expect(
+      resolveAppLocale({
+        browserLanguage: "fr-FR",
+        browserLanguages: ["fr-FR", "zh-Hans", "en-US"],
+      }),
+    ).toBe("zh-CN");
+  });
+
+  it("falls back to the standalone browser language when the preference list has no supported locale", () => {
+    expect(
+      resolveAppLocale({
+        browserLanguage: "zh-CN",
+        browserLanguages: ["fr-FR", "de-DE"],
+      }),
+    ).toBe("zh-CN");
+  });
 });

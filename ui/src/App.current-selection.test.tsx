@@ -576,7 +576,7 @@ describe("App current selection", () => {
       (await screen.findAllByText("dispatch-review-active")).length,
     ).toBeGreaterThan(0);
     fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
+      await screen.findByRole("button", { name: "Select work item Active Story" }),
     );
 
     const currentSelection = await screen.findByRole("article", {

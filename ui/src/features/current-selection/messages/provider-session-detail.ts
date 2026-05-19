@@ -94,7 +94,7 @@ const providerSessionDetailMessagesByLocale = {
       "이 세션에서 추론할 수 있는 실행 턴이 없습니다.",
     unknownEventCountLabel: "알 수 없는 이벤트",
   },
-  zh: {
+  "zh-CN": {
     emptyState: "所选会话文件不包含任何 Codex 事件记录。",
     errorPrefix: "无法加载会话详情。",
     eventCountLabel: "已解析事件数",
