@@ -438,6 +438,15 @@ func TestOutputToken_Resource_PreservesConsumedTokenIdentity(t *testing.T) {
 	if token.History.PlaceVisits["slot:available"] != 1 {
 		t.Fatalf("PlaceVisits = %#v, want original history", token.History.PlaceVisits)
 	}
+
+	consumed.Color.Tags["pool"] = "mutated"
+	consumed.History.PlaceVisits["slot:available"] = 9
+	if token.Color.Tags["pool"] != "executor" {
+		t.Fatalf("tag pool after source mutation = %q, want detached original", token.Color.Tags["pool"])
+	}
+	if token.History.PlaceVisits["slot:available"] != 1 {
+		t.Fatalf("PlaceVisits after source mutation = %#v, want detached original", token.History.PlaceVisits)
+	}
 }
 
 func TestOutputToken_Resource_DoesNotInventWorkChainingLineage(t *testing.T) {
@@ -536,5 +545,10 @@ func TestReleasedResourceToken_PreservesConsumedTokenIdentity(t *testing.T) {
 	}
 	if released.History.PlaceVisits["executor-slot:available"] != 2 {
 		t.Fatalf("PlaceVisits = %#v, want preserved history", released.History.PlaceVisits)
+	}
+
+	consumed.History.PlaceVisits["executor-slot:available"] = 7
+	if released.History.PlaceVisits["executor-slot:available"] != 2 {
+		t.Fatalf("PlaceVisits after source mutation = %#v, want detached original", released.History.PlaceVisits)
 	}
 }

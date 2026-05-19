@@ -118,7 +118,7 @@ func (t *Transformer) InitialTokenFromColor(color interfaces.TokenColor, tokenID
 	return &interfaces.Token{
 		ID:        tokenID,
 		PlaceID:   initialPlaceID,
-		Color:     cloneColor(color),
+		Color:     interfaces.CloneTokenColor(color),
 		CreatedAt: now,
 		EnteredAt: now,
 		History:   newTokenHistory(),
@@ -151,7 +151,7 @@ func (t *Transformer) FanoutCountToken(countPlaceID, transitionID, parentWorkID 
 // ReleasedResourceToken recreates a consumed resource token in its release place
 // while preserving the token's identity and metadata.
 func (t *Transformer) ReleasedResourceToken(consumed interfaces.Token, placeID string, now time.Time) *interfaces.Token {
-	released := cloneToken(consumed)
+	released := interfaces.CloneToken(consumed)
 	released.PlaceID = placeID
 	released.EnteredAt = now
 	return &released
@@ -176,7 +176,7 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 
 	if color.DataType == interfaces.DataTypeResource {
 		if consumed := matchingConsumedResourceToken(in.ConsumedTokens, color.WorkTypeID); consumed != nil {
-			token := cloneToken(*consumed)
+			token := interfaces.CloneToken(*consumed)
 			token.PlaceID = arc.PlaceID
 			token.EnteredAt = in.Now
 			return &token, nil
@@ -189,7 +189,7 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 		Color:     color,
 		CreatedAt: createdAtForOutputToken(in.ConsumedTokens, color, in.Now),
 		EnteredAt: in.Now,
-		History:   cloneHistory(in.History),
+		History:   interfaces.CloneTokenHistory(in.History),
 	}
 
 	switch in.Outcome {
@@ -281,20 +281,7 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 	}
 
 	if matched := findMatchingInput(inputColors, targetTypeID); matched != nil {
-		return interfaces.TokenColor{
-			WorkTypeID:               targetTypeID,
-			WorkID:                   matched.WorkID,
-			Name:                     matched.Name,
-			RequestID:                matched.RequestID,
-			ChainingTraceDepth:       matched.ChainingTraceDepth,
-			CurrentChainingTraceID:   firstNonEmpty(matched.CurrentChainingTraceID, matched.TraceID),
-			PreviousChainingTraceIDs: cloneStringSlice(matched.PreviousChainingTraceIDs),
-			TraceID:                  matched.TraceID,
-			ParentID:                 matched.ParentID,
-			Tags:                     cloneTags(matched.Tags),
-			Relations:                cloneRelations(matched.Relations),
-			Payload:                  clonePayload(matched.Payload),
-		}, nil
+		return interfaces.CloneTokenColor(*matched), nil
 	}
 
 	first := firstNonResourceInput(inputColors)
@@ -385,24 +372,6 @@ func newTokenHistory() interfaces.TokenHistory {
 	}
 }
 
-func cloneColor(color interfaces.TokenColor) interfaces.TokenColor {
-	return interfaces.TokenColor{
-		Name:                     color.Name,
-		RequestID:                color.RequestID,
-		WorkID:                   color.WorkID,
-		WorkTypeID:               color.WorkTypeID,
-		DataType:                 color.DataType,
-		ChainingTraceDepth:       color.ChainingTraceDepth,
-		CurrentChainingTraceID:   color.CurrentChainingTraceID,
-		PreviousChainingTraceIDs: cloneStringSlice(color.PreviousChainingTraceIDs),
-		TraceID:                  color.TraceID,
-		ParentID:                 color.ParentID,
-		Tags:                     cloneTags(color.Tags),
-		Relations:                cloneRelations(color.Relations),
-		Payload:                  clonePayload(color.Payload),
-	}
-}
-
 func cloneStringSlice(values []string) []string {
 	if values == nil {
 		return nil
@@ -438,34 +407,6 @@ func submitParentID(relations []interfaces.Relation) string {
 	return ""
 }
 
-func cloneHistory(history interfaces.TokenHistory) interfaces.TokenHistory {
-	cloned := interfaces.TokenHistory{
-		TotalDuration: history.TotalDuration,
-		LastError:     history.LastError,
-	}
-	if history.TotalVisits != nil {
-		cloned.TotalVisits = cloneIntMap(history.TotalVisits)
-	}
-	if history.ConsecutiveFailures != nil {
-		cloned.ConsecutiveFailures = cloneIntMap(history.ConsecutiveFailures)
-	}
-	if history.PlaceVisits != nil {
-		cloned.PlaceVisits = cloneIntMap(history.PlaceVisits)
-	}
-	if history.FailureLog != nil {
-		cloned.FailureLog = append([]interfaces.FailureRecord(nil), history.FailureLog...)
-	}
-	return cloned
-}
-
-func cloneIntMap(input map[string]int) map[string]int {
-	out := make(map[string]int, len(input))
-	for key, value := range input {
-		out[key] = value
-	}
-	return out
-}
-
 func cloneTags(tags map[string]string) map[string]string {
 	if tags == nil {
 		return nil
@@ -491,15 +432,4 @@ func clonePayload(payload []byte) []byte {
 		return nil
 	}
 	return append([]byte(nil), payload...)
-}
-
-func cloneToken(token interfaces.Token) interfaces.Token {
-	return interfaces.Token{
-		ID:        token.ID,
-		PlaceID:   token.PlaceID,
-		Color:     cloneColor(token.Color),
-		CreatedAt: token.CreatedAt,
-		EnteredAt: token.EnteredAt,
-		History:   cloneHistory(token.History),
-	}
 }
