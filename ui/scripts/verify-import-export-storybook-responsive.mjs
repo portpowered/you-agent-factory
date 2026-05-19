@@ -1,5 +1,6 @@
 import process from "node:process";
 import { chromium } from "playwright";
+import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import {
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
@@ -48,6 +49,11 @@ const storyChecks = [
     assertions: verifyDashboardHeader,
     id: "infinite-you-workflow-dashboard--header-timeline-alignment-verification",
     label: "dashboard header",
+  },
+  {
+    assertions: verifyDashboardShellConsolidation,
+    id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
+    label: "dashboard shared shell",
   },
   {
     assertions: (page, _dialog, viewport) =>
