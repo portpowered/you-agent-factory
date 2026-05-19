@@ -25,6 +25,9 @@ export interface ChartConfigEntry {
 export type ChartConfig = Record<string, ChartConfigEntry>;
 
 const ChartContext = createContext<ChartConfig | null>(null);
+// tailwind-exception: intrinsic-sizing
+const CHART_CONTAINER_CLASS =
+  "relative h-[18rem] rounded-2xl border border-af-overlay/10 bg-af-surface/56 p-4 text-af-ink";
 
 function useChartConfig() {
   const context = useContext(ChartContext);
@@ -59,10 +62,7 @@ export function ChartContainer({
     <ChartContext.Provider value={config}>
       <div
         aria-label={title}
-        className={cn(
-          "relative h-[18rem] rounded-2xl border border-af-overlay/10 bg-af-surface/56 p-4 text-af-ink",
-          className,
-        )}
+        className={cn(CHART_CONTAINER_CLASS, className)}
         data-chart-container=""
         role="img"
         {...interactionAttributes}

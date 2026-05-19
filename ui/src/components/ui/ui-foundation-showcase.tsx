@@ -73,7 +73,7 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
   const workTypeID = "ui-foundation-showcase-work-type";
 
   return (
-    <div className="grid gap-6 rounded-[1.8rem] border border-af-overlay/10 bg-af-surface/52 p-6 text-af-ink">
+    <div className="grid gap-6 rounded-2xl border border-af-overlay/10 bg-af-surface/52 p-6 text-af-ink">
       <section className="grid gap-3">
         <div>
           <h2 className="m-0 font-display text-3xl tracking-[-0.03em]">Shared UI primitives</h2>
@@ -270,4 +270,3 @@ export function UIFoundationShowcase({ includeResizable = true }: UIFoundationSh
     </div>
   );
 }
-

@@ -21,7 +21,7 @@ const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
     "border-af-accent/24 bg-af-accent/10 text-af-accent hover:bg-af-accent/16 hover:text-af-accent-glow",
 };
 const BUTTON_SIZE_CLASS: Record<NonNullable<ButtonProps["size"]>, string> = {
-  default: "px-4 py-[0.65rem] text-sm",
+  default: "px-4 py-2.5 text-sm",
   icon: "h-11 w-11 px-0 py-0",
   lg: "px-5 py-3 text-base",
   sm: "min-h-9 rounded-lg px-3 py-2 text-xs",

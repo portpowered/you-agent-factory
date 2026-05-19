@@ -39,7 +39,7 @@ export function StateNodeDetailCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <div className="mt-0 grid gap-[0.18rem]" title={placeLabel}>
+      <div className="mt-0 grid gap-1" title={placeLabel}>
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{placeLabelParts.workType}</span>
         <span className={WIDGET_SUBTITLE_CLASS}>{placeLabelParts.stateValue}</span>
       </div>
@@ -61,7 +61,7 @@ export function StateNodeDetailCard({
           <dd>{tokenCount}</dd>
         </div>
       </dl>
-      <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
+      <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{STATE_PLACE_CURRENT_WORK_HEADING}</h4>
         {visibleWorkItems.length > 0 ? (
           <StatePositionWorkList
@@ -85,7 +85,7 @@ function StatePositionWorkList({
   workItems,
 }: StatePositionWorkListProps) {
   return (
-    <ul className="m-0 grid list-none gap-[0.65rem] p-0">
+    <ul className="m-0 grid list-none gap-2.5 p-0">
       {workItems.map((workItem) => (
         <StatePositionWorkListItem
           failureDetail={failedWorkDetailsByWorkID?.[workItem.work_id]}
@@ -108,7 +108,7 @@ function StatePositionWorkListItem({
     <>
       <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
       <dl
-        className={`m-0 grid gap-[0.35rem] [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5rem_minmax(0,1fr)] [&_div]:gap-2 ${DASHBOARD_BODY_TEXT_CLASS}`}
+        className={`m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5rem_minmax(0,1fr)] [&_div]:gap-2 ${DASHBOARD_BODY_TEXT_CLASS}`}
       >
         <div>
           <dt>Work ID</dt>
@@ -145,7 +145,7 @@ function StatePositionWorkListItem({
       <li>
         <button
           aria-label={`Select work item ${workLabel}`}
-          className="grid w-full min-w-0 cursor-pointer gap-[0.45rem] rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 text-left outline-af-accent transition hover:bg-af-overlay/8 focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="grid w-full min-w-0 cursor-pointer gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 text-left outline-af-accent transition hover:bg-af-overlay/8 focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={() => onSelectWorkItem(workItem)}
           type="button"
         >
@@ -156,7 +156,7 @@ function StatePositionWorkListItem({
   }
 
   return (
-    <li className="grid min-w-0 gap-[0.45rem] rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 text-sm">
+    <li className="grid min-w-0 gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2 text-sm">
       {content}
     </li>
   );

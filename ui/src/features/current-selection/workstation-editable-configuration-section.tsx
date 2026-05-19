@@ -30,8 +30,8 @@ export function EditableConfigurationSection({
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
   return (
-    <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
-      <div className="grid gap-[0.18rem]">
+    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
+      <div className="grid gap-1">
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
           {messages.editableConfigurationHeading}
         </h4>
@@ -300,7 +300,7 @@ export function WorkstationSummary({
   selectedNode,
 }: WorkstationSummaryProps) {
   return (
-    <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
+    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.summaryHeading}
       </h4>
@@ -380,7 +380,7 @@ function EditableConfigurationItem({
   return (
     <div
       className={cx(
-        "grid gap-[0.3rem] rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3",
+        "grid gap-1 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-3",
         className,
       )}
     >

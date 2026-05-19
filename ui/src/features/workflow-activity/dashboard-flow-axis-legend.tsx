@@ -108,17 +108,17 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
 }
 
 const DEFAULT_CONTAINER_CLASS =
-  "pointer-events-none z-10 flex flex-col items-start gap-2 max-[720px]:items-stretch";
+  "pointer-events-none z-10 flex flex-col items-stretch gap-2 md:items-start";
 const TOGGLE_BUTTON_CLASS =
-  "dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/92 px-[0.8rem] py-[0.55rem] text-af-ink/78 shadow-af-card backdrop-blur-[14px] transition-colors hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
+  "dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-overlay/12 bg-af-surface/92 px-3 py-2 text-af-ink/78 shadow-af-card backdrop-blur-md transition-colors hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
 const PANEL_CLASS =
-  "dashboard-body-sm pointer-events-auto max-w-[28rem] rounded-lg border border-af-overlay/8 bg-af-surface/88 px-3 py-3 text-af-ink/78 shadow-af-card backdrop-blur-[14px] max-[720px]:w-full max-[720px]:max-w-none";
+  "dashboard-body-sm pointer-events-auto w-full rounded-lg border border-af-overlay/8 bg-af-surface/88 px-3 py-3 text-af-ink/78 shadow-af-card backdrop-blur-md md:max-w-md";
 const PANEL_HEADER_CLASS = "mb-2 flex items-center justify-between gap-3";
 const PANEL_TITLE_CLASS = "dashboard-eyebrow m-0 text-af-accent";
 const COLLAPSE_BUTTON_CLASS =
-  "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-overlay/12 bg-af-overlay/6 px-[0.7rem] py-[0.45rem] text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
+  "dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-overlay/12 bg-af-overlay/6 px-3 py-2 text-af-ink/78 transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/45";
 const ITEMS_LIST_CLASS =
-  "m-0 grid list-none grid-cols-2 gap-x-3 gap-y-2 p-0 max-[520px]:grid-cols-1";
+  "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2";
 
 function normalizeLabelForAction(ariaLabel: string): string {
   return ariaLabel.charAt(0).toLowerCase() + ariaLabel.slice(1);
@@ -173,7 +173,7 @@ function DashboardFlowAxisLegendItems({
         >
           <span
             className={cx(
-              "h-[0.18rem] w-7 rounded-full",
+              "h-1 w-7 rounded-full",
               edgeSwatchClassName(item.tone),
             )}
             data-legend-flow={item.tone === "active" ? "" : undefined}

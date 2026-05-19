@@ -1,5 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: dashboard story smoke states are intentionally consolidated in one runtime-backed file.
-import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { App } from "./App";
 import type {
@@ -9,8 +8,6 @@ import type {
 } from "./api/dashboard";
 import {
   dashboardWorkstationRequestFixtures,
-  failureAnalysisTimelineEvents,
-  resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
 import {
   semanticWorkflowDashboardSnapshot,
@@ -25,7 +22,6 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "./components/ui/dashboard-typography";
 import { DashboardScreen } from "./features/dashboard";
-import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 
 const activeStoryTrace: DashboardTrace = {
@@ -76,10 +72,10 @@ const liveWorkOutcomeSnapshot = workOutcomeSnapshot(
     queued: 3,
   },
 );
-const inferenceDetailsSnapshot = withInferenceDetails(
+const _inferenceDetailsSnapshot = withInferenceDetails(
   semanticWorkflowDashboardSnapshot,
 );
-const markdownReadyWorkstationRequest: DashboardWorkstationRequest = {
+const _markdownReadyWorkstationRequest: DashboardWorkstationRequest = {
   ...dashboardWorkstationRequestFixtures.ready,
   prompt: [
     "## Review checklist",
@@ -200,7 +196,7 @@ function withInferenceDetails(source: DashboardSnapshot): DashboardSnapshot {
   };
 }
 
-const failedStoryTrace: DashboardTrace = {
+const _failedStoryTrace: DashboardTrace = {
   trace_id: "trace-failed-story",
   work_ids: ["work-failed-story"],
   transition_ids: ["repair"],
@@ -354,7 +350,7 @@ async function fillSubmitWorkCard(
   };
 }
 
-async function expectTypographyRegressionSurface(
+async function _expectTypographyRegressionSurface(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
@@ -410,7 +406,7 @@ async function expectTypographyRegressionSurface(
   );
 }
 
-async function expectTimelineToolbarAlignment(
+async function _expectTimelineToolbarAlignment(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
@@ -445,7 +441,7 @@ async function expectTimelineToolbarAlignment(
   );
 }
 
-async function selectWorkstationRequest(
+async function _selectWorkstationRequest(
   canvasElement: HTMLElement,
   request: DashboardWorkstationRequest,
 ): Promise<void> {
@@ -527,7 +523,7 @@ async function selectWorkstationRequestByDispatchID(
   );
 }
 
-function workstationRequestStoryParameters(
+function _workstationRequestStoryParameters(
   request: DashboardWorkstationRequest,
 ) {
   return {
@@ -560,7 +556,7 @@ function workstationRequestWithStartedAt(
   };
 }
 
-function selectedWorkDispatchHistoryStoryParameters() {
+function _selectedWorkDispatchHistoryStoryParameters() {
   const active = workstationRequestWithStartedAt(
     {
       ...dashboardWorkstationRequestFixtures.noResponse,
@@ -614,7 +610,7 @@ function selectedWorkDispatchHistoryStoryParameters() {
   };
 }
 
-function dispatchHistoryCard(
+function _dispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
 ): HTMLElement {

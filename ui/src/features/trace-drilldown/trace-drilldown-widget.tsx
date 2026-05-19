@@ -1,6 +1,9 @@
 import { TraceGridBentoCard } from "./trace-grid-card";
 import type { TraceGridState } from "./trace-grid-card";
 
+// tailwind-exception: intrinsic-sizing
+const TRACE_DRILLDOWN_WIDGET_CLASS = "h-full min-h-[34rem]";
+
 export interface TraceDrilldownWidgetProps {
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
@@ -16,7 +19,7 @@ export function TraceDrilldownWidget({
 }: TraceDrilldownWidgetProps) {
   return (
     <TraceGridBentoCard
-      className="h-full min-h-[34rem]"
+      className={TRACE_DRILLDOWN_WIDGET_CLASS}
       locale={locale}
       onSelectWorkID={onSelectWorkID}
       state={state}

@@ -56,9 +56,9 @@ export type CurrentActivityPlaceNode =
 
 const STATE_NODE_DOT_LIMIT = 10;
 const STATE_POSITION_CONTENT_CONTAINER_CLASSNAME =
-  "grid min-w-0 w-full grid-rows-[1.5rem_auto] gap-[0.1rem] overflow-hidden";
+  "flex min-w-0 w-full flex-col gap-0.5 overflow-hidden";
 const RESOURCE_CONTENT_CONTAINER_CLASSNAME =
-  "grid min-w-0 w-full grid-rows-[1.5rem_auto] overflow-hidden";
+  "flex min-w-0 w-full flex-col overflow-hidden";
 
 export function StatePositionNodeView(
   props: NodeProps<CurrentActivityStatePositionNode>,
@@ -291,7 +291,7 @@ function placeTokenCountDisplay(
   return (
     <span
       aria-label={tokenCountLabel(place, count)}
-      className="inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/8 px-2 py-[0.1rem] font-mono text-[0.68rem] text-af-ink/64"
+      className="inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/8 px-2 py-0.5 font-mono text-[0.68rem] text-af-ink/64"
       data-place-token-count
       role="status"
     >
@@ -327,7 +327,7 @@ function PlaceLabelText({
   const labelParts = getDashboardPlaceLabelParts(place);
 
   return (
-    <span className="grid min-w-0 gap-[0.06rem] overflow-hidden" title={label}>
+    <span className="grid min-w-0 gap-px overflow-hidden" title={label}>
       <span
         className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-ink/52"
         data-place-work-type={dataPrefix === "place" ? true : undefined}
@@ -361,14 +361,14 @@ function StatePositionNodeContent({
   return (
     <>
       <span
-        className="grid h-[1.5rem] max-h-[1.5rem] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
         data-state-label-zone
       >
         <PlaceSemanticIcon place={place} />
         <PlaceLabelText dataPrefix="state" place={place} />
       </span>
       <span
-        className="flex min-h-[1.25rem] w-full shrink-0 items-center justify-center overflow-hidden"
+        className="flex min-h-5 w-full shrink-0 items-center justify-center overflow-hidden"
         data-state-marker-zone
         title={label}
       >
@@ -392,7 +392,7 @@ function StaticPlaceNodeContent({
   if (place.kind !== "resource") {
     return (
       <div
-        className="grid min-w-0 gap-[0.1rem] overflow-hidden"
+        className="grid min-w-0 gap-0.5 overflow-hidden"
         data-place-label-container
       >
         <span
@@ -406,7 +406,7 @@ function StaticPlaceNodeContent({
           </strong>
         </span>
         <span
-          className="flex min-h-[1rem] w-full shrink-0 items-center justify-start overflow-hidden"
+        className="flex min-h-4 w-full shrink-0 items-center justify-start overflow-hidden"
           data-place-marker-zone
           title={label}
         >
@@ -423,7 +423,7 @@ function StaticPlaceNodeContent({
     >
       <span
         aria-label={label}
-        className="grid h-[1.5rem] max-h-[1.5rem] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
         data-place-label-zone
         role="img"
       >
@@ -431,7 +431,7 @@ function StaticPlaceNodeContent({
         <PlaceLabelText dataPrefix="place" place={place} />
       </span>
       <span
-        className="flex min-h-[1.25rem] w-full shrink-0 items-center justify-start overflow-hidden"
+        className="flex min-h-5 w-full shrink-0 items-center justify-start overflow-hidden"
         data-place-marker-zone
         title={label}
       >

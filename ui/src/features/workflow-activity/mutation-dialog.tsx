@@ -1,19 +1,21 @@
-import { useId, type ReactNode } from "react";
-
-import { cx } from "../../lib/cx";
+import { type ReactNode, useId } from "react";
+import {
+  EMPTY_STATE_CLASS,
+  EMPTY_STATE_COMPACT_CLASS,
+} from "../../components/dashboard/widget-board";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS } from "../../components/dashboard/widget-board";
+import { cx } from "../../lib/cx";
 import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 
 const DIALOG_OVERLAY_CLASS =
   "z-50 flex items-center justify-center bg-af-canvas/78 p-4 backdrop-blur-sm";
 const DIALOG_PANEL_CLASS =
-  "pointer-events-auto relative z-10 w-full overflow-hidden rounded-[1.6rem] border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
+  "pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
 const DIALOG_HEADER_CLASS = "flex items-start justify-between gap-4";
 const DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const DIALOG_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_BODY_TEXT_CLASS);
@@ -21,9 +23,9 @@ const DIALOG_EYEBROW_CLASS = cx(
   "mb-0 text-xs font-bold uppercase tracking-[0.16em] text-af-accent",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
-const DIALOG_CONTENT_CLASS = "grid gap-5 p-5 max-[900px]:p-4";
+const DIALOG_CONTENT_CLASS = "grid gap-5 p-4 md:p-5";
 const DIALOG_CONTENT_WITH_MEDIA_CLASS =
-  "min-[901px]:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
+  "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
 const DIALOG_MAIN_CLASS = "grid content-start gap-4";
 const DIALOG_CLOSE_BUTTON_CLASS =
   "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4 text-af-ink/72 outline-af-accent transition hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
@@ -82,7 +84,13 @@ export function DashboardMutationDialog({
   const descriptionId = useId();
 
   return (
-    <div className={cx(DIALOG_OVERLAY_CLASS, "pointer-events-none relative", overlayClassName)}>
+    <div
+      className={cx(
+        DIALOG_OVERLAY_CLASS,
+        "pointer-events-none relative",
+        overlayClassName,
+      )}
+    >
       {canClose ? (
         <button
           aria-label={resolvedCloseLabel}
@@ -99,7 +107,10 @@ export function DashboardMutationDialog({
         role="dialog"
       >
         <div
-          className={cx(DIALOG_CONTENT_CLASS, media ? DIALOG_CONTENT_WITH_MEDIA_CLASS : undefined)}
+          className={cx(
+            DIALOG_CONTENT_CLASS,
+            media ? DIALOG_CONTENT_WITH_MEDIA_CLASS : undefined,
+          )}
         >
           {media ? <div>{media}</div> : null}
 
@@ -144,7 +155,9 @@ export function DashboardMutationDialog({
             </header>
 
             {children}
-            {footer ? <div className={DIALOG_FOOTER_CLASS}>{footer}</div> : null}
+            {footer ? (
+              <div className={DIALOG_FOOTER_CLASS}>{footer}</div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -176,7 +189,9 @@ export function DashboardMessagePanel({
       <div className="flex items-start justify-between gap-4">
         <div className="grid gap-1">
           <h3>{title}</h3>
-          <div className={cx("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>{children}</div>
+          <div className={cx("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+            {children}
+          </div>
         </div>
         {action}
       </div>

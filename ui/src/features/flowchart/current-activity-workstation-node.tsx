@@ -216,7 +216,7 @@ function ActiveWorkstationNodeContent({
         </span>
         {data.active ? (
           <span
-            className="inline-flex min-h-5 shrink-0 items-center justify-center rounded-full bg-af-success/15 px-1.5 py-[0.12rem] text-af-success-ink"
+            className="inline-flex min-h-5 shrink-0 items-center justify-center rounded-full bg-af-success/15 px-1.5 py-0.5 text-af-success-ink"
             data-workstation-active-icon
             title="Active"
           >
@@ -229,7 +229,7 @@ function ActiveWorkstationNodeContent({
         ) : null}
       </button>
 
-      <ul className="mt-[0.55rem] grid min-w-0 list-none content-start gap-[0.3rem] p-0">
+      <ul className="mt-2 grid min-w-0 list-none content-start gap-1 p-0">
         {visibleWorkItemEntries.map(({ execution, workItem }) => {
           const workItemSelected = data.selectedWorkID === workItem.work_id;
           const workItemLabel = formatWorkItemLabel(workItem);
@@ -243,7 +243,7 @@ function ActiveWorkstationNodeContent({
               <button
                 aria-pressed={workItemSelected}
                 className={cx(
-                  "nodrag nopan grid min-w-0 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-overlay/8 bg-af-surface px-2 py-[0.4rem] text-left text-[0.74rem] text-inherit",
+                  "nodrag nopan grid min-w-0 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-overlay/8 bg-af-surface px-2 py-1.5 text-left text-[0.74rem] text-inherit",
                   workItemSelected &&
                     "border-af-info/60 bg-af-info/15 shadow-af-info-chip",
                 )}
@@ -295,7 +295,7 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
     return (
       <span
         aria-label={`${totalCount} active items`}
-        className="mt-[0.45rem] flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success/25 bg-af-success/12 px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-af-success-ink"
+        className="mt-2 flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success/25 bg-af-success/12 px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-af-success-ink"
         data-workstation-work-progress="numeric"
         role="status"
       >
@@ -307,7 +307,7 @@ function workstationOverflowMarkers(totalCount: number, visibleCount: number) {
   return (
     <span
       aria-label={`${totalCount} active items`}
-      className="mt-[0.45rem] flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success/18 bg-af-success/10 px-2"
+      className="mt-2 flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success/18 bg-af-success/10 px-2"
       data-workstation-work-progress="dots"
       role="status"
     >

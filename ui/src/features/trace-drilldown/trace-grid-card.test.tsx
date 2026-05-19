@@ -159,6 +159,7 @@ describe("TraceGridBentoCard", () => {
       throw new Error("Expected dispatch pill to render in the trace grid table.");
     }
     expect(dispatchPill.className).toContain(DASHBOARD_SUPPORTING_CODE_CLASS);
+    expect(dispatchPill.className).toContain("py-0.5");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
     const workItemsSection = within(card)
@@ -173,6 +174,8 @@ describe("TraceGridBentoCard", () => {
 
     fireEvent.click(expandButton);
 
+    expect(expandButton.className).toContain("px-2.5");
+    expect(expandButton.className).toContain("py-2");
     expect(expandButton.getAttribute("aria-expanded")).toBe("true");
     expect(within(card).getAllByText('story:"Active Story"').length).toBeGreaterThan(0);
     expect(within(card).getAllByText('story:"Reviewed Story"').length).toBeGreaterThan(0);

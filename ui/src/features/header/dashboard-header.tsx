@@ -16,19 +16,18 @@ import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
 const PANEL_CLASS =
-  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
+  "rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg";
 const DASHBOARD_TOOLBAR_CLASS = cx(
   PANEL_CLASS,
-  "mb-4 flex flex-wrap items-center gap-4 p-4 px-5",
+  "mb-4 flex flex-wrap items-center gap-4 md:px-5",
 );
 const DASHBOARD_TITLE_CLASS = cx("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
 const DASHBOARD_CONTROLS_CLASS = cx(
   "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-4",
-  "max-[720px]:ml-0 max-[720px]:w-full max-[720px]:justify-stretch",
+  "max-md:ml-0 max-md:w-full max-md:justify-stretch",
 );
 const LANGUAGE_SWITCHER_SHELL_CLASS = cx(
-  "flex min-w-[11rem] shrink-0 flex-col gap-1",
-  "max-[720px]:min-w-0 max-[720px]:flex-1",
+  "flex min-w-0 flex-1 flex-col gap-1 md:min-w-44 md:shrink-0 md:flex-none",
 );
 const LANGUAGE_SWITCHER_LABEL_CLASS = cx(
   DASHBOARD_SUPPORTING_LABELS_CLASS,
@@ -36,7 +35,7 @@ const LANGUAGE_SWITCHER_LABEL_CLASS = cx(
 );
 const STREAM_STATUS_SHELL_CLASS = cx(
   "flex shrink-0 items-center justify-end",
-  "max-[720px]:justify-start",
+  "max-md:justify-start",
 );
 const STREAM_STATUS_CLASS = cx(
   "inline-flex h-11 w-11 items-center justify-center rounded-full border border-af-overlay/12 bg-af-overlay/4",
