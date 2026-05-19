@@ -95,6 +95,7 @@ describe("AgentBentoLayout", () => {
       screen.getByText("Active workstation graph goes here."),
     ).toBeTruthy();
     expect(screen.getByText("Trace dispatches stay visible.")).toBeTruthy();
+    expect(activityCard.dataset.dashboardPanelShell).toBe("grid-card");
     expect(activityCard.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
     expect(getGridItem("Current activity").dataset.bentoCardId).toBe(
       "activity",
@@ -234,6 +235,9 @@ describe("AgentBentoLayout", () => {
     });
 
     expect(board).toBeTruthy();
+    expect(workTotals.dataset.dashboardPanelShell).toBe("grid-card");
+    expect(currentSelection.dataset.dashboardPanelShell).toBe("grid-card");
+    expect(workTotals.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
     expect(within(workTotals).getByLabelText("work totals")).toBeTruthy();
     expect(within(workTotals).getByText("In progress")).toBeTruthy();
     expect(within(workTotals).getByText("Completed")).toBeTruthy();
