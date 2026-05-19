@@ -14,6 +14,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
 import type { EditableWorkstationValues } from "../current-factory-definition/workstation-editable-values";
+import type { CurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 import type { WorkstationDetailMessages } from "./messages";
 import type { LoadableProviderSessionRef } from "./provider-session-details";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
@@ -31,12 +32,22 @@ export interface NoSelectionDetailCardProps {
 
 export interface StatePositionWorkListProps {
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
+  messages: Pick<
+    CurrentSelectionDetailMessages,
+    | "failureMessageLabel"
+    | "failureReasonLabel"
+    | "selectWorkItemLabel"
+    | "traceIdLabel"
+    | "workIdLabel"
+    | "workTypeLabel"
+  >;
   onSelectWorkItem?: (workItem: DashboardWorkItemRef) => void;
   workItems: DashboardWorkItemRef[];
 }
 
 export interface StatePositionWorkListItemProps {
   failureDetail?: DashboardFailedWorkDetail;
+  messages: StatePositionWorkListProps["messages"];
   onSelectWorkItem?: (workItem: DashboardWorkItemRef) => void;
   workItem: DashboardWorkItemRef;
 }
