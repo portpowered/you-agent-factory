@@ -16,6 +16,7 @@ func (fs *functionalAPIServer) SubmitWork(t *testing.T, workTypeID string, paylo
 	t.Helper()
 
 	req := factoryapi.SubmitWorkRequest{
+		Name:         "bootstrap-portability-submit",
 		WorkTypeName: workTypeID,
 		Payload:      payload,
 	}

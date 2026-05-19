@@ -52,6 +52,7 @@ describe("submitWork", () => {
 
     await expect(
       submitWork({
+        name: "Driver review",
         payload: "Review the runtime failure.",
         workTypeName: "story",
       }),
@@ -77,6 +78,7 @@ describe("submitWork", () => {
 
     await expect(
       submitWork({
+        name: "Empty payload review",
         payload: "",
         workTypeName: "story",
       }),
@@ -85,6 +87,7 @@ describe("submitWork", () => {
       "/work",
       expect.objectContaining({
         body: JSON.stringify({
+          name: "Empty payload review",
           payload: "",
           workTypeName: "story",
         }),

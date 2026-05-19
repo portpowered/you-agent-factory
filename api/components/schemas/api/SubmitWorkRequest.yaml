@@ -1,10 +1,12 @@
 type: object
 additionalProperties: false
 required:
+  - name
   - workTypeName
 properties:
   name:
     type: string
+    description: Required authored name for this single-work submission.
   workTypeName:
     type: string
     description: Configured work type name from factory.json to submit to.
@@ -14,6 +16,9 @@ properties:
   traceId:
     type: string
     description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Optional canonical ordered work content parts for this submission.
   payload:
     description: Opaque work payload forwarded as raw JSON.
   tags:
@@ -23,4 +28,3 @@ properties:
     description: Optional token-level runtime relations preserved on the submitted work item.
     items:
       $ref: './SubmitRelation.yaml'
-

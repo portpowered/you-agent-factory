@@ -10,7 +10,7 @@ items together. A batch can describe independent work, `DEPENDS_ON`
 prerequisites, or parent-child membership for parent-aware fan-in.
 
 This guide covers the public batch input shape used by watched input files,
-`agent-factory run --work`, and `PUT /work-requests/{request_id}`.
+`you run --work`, and `PUT /work-requests/{request_id}`.
 
 ## Quick Start
 
@@ -111,7 +111,7 @@ Use these paths:
 | `factory/inputs/BATCH/default/<request_id>.json` | Manual mixed-work-type batches and canonical parent-child file input. |
 | `factory/inputs/<work_type>/default/<request_id>.json` | Manual single-work-type batches. The watched folder can infer `work_type_name` when omitted. |
 | `factory/inputs/<work_type>/<execution_id>/<request_id>.json` | Generated work tied to a parent execution. The channel name becomes the execution ID. |
-| Any readable path passed to `agent-factory run --work <path>` | Startup work submitted before the run begins. |
+| Any readable path passed to `you run --work <path>` | Startup work submitted before the run begins. |
 
 Filename rules:
 

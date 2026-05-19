@@ -6,9 +6,8 @@ import type {
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "./api/dashboard";
-import {
-  dashboardWorkstationRequestFixtures,
-} from "./components/dashboard/fixtures";
+import type { FactoryValue } from "./api/named-factory";
+import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
 import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
@@ -93,6 +92,9 @@ const _markdownReadyWorkstationRequest: DashboardWorkstationRequest = {
     "```",
   ].join("\n"),
 };
+const editableConfigurationFactoryDefinition =
+  buildEditableConfigurationFactoryDefinition();
+
 interface WorkOutcomeCounts {
   completed: number;
   failed: number;
@@ -247,6 +249,135 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   }
 
   return value;
+}
+
+function buildEditableConfigurationFactoryDefinition(
+  overrides: { prompt?: string; workerName?: string } = {},
+): FactoryValue {
+  return {
+    name: "Current Factory",
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5.6",
+        name: "planner",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [],
+    workstations: [
+      {
+        body:
+          overrides.prompt ??
+          "Review the latest story changes before approval.",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        promptFile: "prompts/review.md",
+        worker: overrides.workerName ?? "reviewer",
+      },
+    ],
+  };
+}
+
+function submittedFactoryBody(init?: RequestInit): FactoryValue {
+  if (typeof init?.body !== "string") {
+    return buildEditableConfigurationFactoryDefinition({
+      prompt: "Browser verified prompt update.",
+      workerName: "planner",
+    });
+  }
+
+  return JSON.parse(init.body) as FactoryValue;
+}
+
+function editableConfigurationSection(
+  currentSelection: HTMLElement,
+): HTMLElement {
+  const section = within(currentSelection)
+    .getByRole("heading", { name: "Editable configuration" })
+    .closest("section");
+
+  if (!(section instanceof HTMLElement)) {
+    throw new Error("expected editable configuration section");
+  }
+
+  return section;
+}
+
+async function expectEditableConfigurationBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+
+  await userEvent.click(
+    await canvas.findByRole("button", { name: "Select Review workstation" }),
+  );
+
+  const currentSelection = currentSelectionCard(canvasElement);
+  const section = editableConfigurationSection(currentSelection);
+  const sectionScope = within(section);
+  const expandButton = sectionScope.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+
+  await expect(expandButton).toHaveAttribute("aria-expanded", "false");
+  expect(sectionScope.queryByLabelText("Worker")).toBeNull();
+  expect(sectionScope.queryByLabelText("Prompt")).toBeNull();
+
+  await userEvent.click(expandButton);
+
+  const workerField = await sectionScope.findByRole("combobox", {
+    name: "Worker",
+  });
+  const promptField = await sectionScope.findByRole("textbox", {
+    name: "Prompt",
+  });
+
+  await expect(expandButton).toHaveAttribute("aria-expanded", "true");
+  await expect(workerField).toHaveValue("reviewer");
+  await expect(promptField).toHaveValue(
+    "Review the latest story changes before approval.",
+  );
+  expect(sectionScope.queryByLabelText("Model")).toBeNull();
+  expect(sectionScope.queryByLabelText("Template")).toBeNull();
+
+  await userEvent.selectOptions(workerField, "planner");
+  await userEvent.clear(promptField);
+  await userEvent.type(promptField, "Browser verified prompt update.");
+
+  await expect(workerField).toHaveValue("planner");
+  await expect(promptField).toHaveValue("Browser verified prompt update.");
+
+  const currentSelectionScope = within(currentSelection);
+  await userEvent.click(
+    currentSelectionScope.getByRole("button", { name: "Save changes" }),
+  );
+
+  await expect(
+    await canvas.findByRole("heading", {
+      name: "Overwrite the running factory definition?",
+    }),
+  ).toBeVisible();
+  await userEvent.click(
+    canvas.getByRole("button", { name: "Overwrite factory" }),
+  );
+
+  await expect(
+    await sectionScope.findByText(
+      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    ),
+  ).toBeVisible();
+  await expect(workerField).toHaveValue("planner");
+  await expect(promptField).toHaveValue("Browser verified prompt update.");
+  await expect(
+    currentSelectionScope.getByRole("button", { name: "Save changes" }),
+  ).toBeDisabled();
 }
 
 function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
@@ -928,6 +1059,75 @@ export const DashboardImprovementsSmokeNarrow = {
   },
 };
 
+export const CurrentSelectionEditableConfigurationDesktopVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory/~current",
+          response: {
+            body: editableConfigurationFactoryDefinition,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: submittedFactoryBody(init),
+            status: 201,
+          }),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "1280px" }}>
+      <App />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationBrowserFlow(canvasElement);
+  },
+};
+
+export const CurrentSelectionEditableConfigurationNarrowVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory/~current",
+          response: {
+            body: editableConfigurationFactoryDefinition,
+          },
+        },
+        {
+          method: "POST",
+          path: "/factory",
+          response: (_input: RequestInfo | URL, init?: RequestInit) => ({
+            body: submittedFactoryBody(init),
+            status: 201,
+          }),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "360px" }}>
+      <App />
+    </div>
+  ),
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectEditableConfigurationBrowserFlow(canvasElement);
+    expectNoPageHorizontalOverflow(canvasElement);
+  },
+};
+
 export const DashboardSubmitWorkIntegrationSmoke = {
   parameters: {
     dashboardApi: {
@@ -986,7 +1186,10 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     await expect(requestNameField).toHaveValue("");
     await expect(requestField).toHaveValue("");
     await expect(workTypeField).toHaveValue("story");
-    await expect(submitButton).toBeEnabled();
+    await expect(submitButton).toBeDisabled();
+    await waitFor(() => {
+      expect(buttonVisibleStyle(submitButton)).toEqual(disabledSubmitStyle);
+    });
   },
 };
 

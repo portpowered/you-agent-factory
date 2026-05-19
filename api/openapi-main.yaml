@@ -37,6 +37,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SubmitWorkRequest'
+            examples:
+              textOnlyContent:
+                summary: Submit one work item with ordered text content parts.
+                value:
+                  name: summary-draft
+                  workTypeName: task
+                  content:
+                    - type: text
+                      text: Draft a short project summary.
+                    - type: text
+                      text: Keep it under 120 words.
+              textPlusImageContent:
+                summary: Submit one work item with ordered text and image content parts.
+                value:
+                  name: screenshot-review
+                  workTypeName: task
+                  content:
+                    - type: text
+                      text: Review this screenshot and list the highest-risk UI issues.
+                    - type: image
+                      file: fixtures/ui/dashboard-error-state.png
       responses:
         '201':
           description: Work was accepted for processing.
@@ -600,6 +621,16 @@ components:
       $ref: './components/schemas/api/WorkRequestType.yaml'
     Work:
       $ref: './components/schemas/data-models/Work.yaml'
+    WorkContent:
+      $ref: './components/schemas/data-models/WorkContent.yaml'
+    WorkContentPart:
+      $ref: './components/schemas/data-models/WorkContentPart.yaml'
+    WorkContentPartType:
+      $ref: './components/schemas/data-models/WorkContentPartType.yaml'
+    WorkTextContentPart:
+      $ref: './components/schemas/data-models/WorkTextContentPart.yaml'
+    WorkImageContentPart:
+      $ref: './components/schemas/data-models/WorkImageContentPart.yaml'
     Relation:
       $ref: './components/schemas/data-models/Relation.yaml'
     RelationType:

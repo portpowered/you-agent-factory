@@ -1,13 +1,17 @@
 # Config Reference
 
-Use this page when you need the canonical factory layout and where each authored
-file lives.
+Use this page when you need the canonical factory directory layout and where
+each authored file lives. Use
+[Factory JSON and work configuration](work.md) for the field-by-field
+`factory.json` contract.
 
 ## Current Contract
 
 - `factory.json` is the canonical root file. It owns factory-level workflow
   topology such as `id`, `workTypes`, `workers`, `workstations`, routes,
-  optional runtime `resources`, and the optional portability `supportingFiles`.
+  optional runtime `resources`, and the optional portability
+  `supportingFiles`; the normative field contract lives in
+  [Factory JSON and work configuration](work.md).
 - Keep worker runtime instructions in `workers/<name>/AGENTS.md`.
 - Keep workstation runtime instructions in `workstations/<name>/AGENTS.md`.
 - Keep watched work inputs under `inputs/<work-type-or-BATCH>/<channel>/`.
@@ -33,39 +37,7 @@ factory/
     task/default/request.json
 ```
 
-## Minimal Factory
-
-`factory.json`:
-
-```json
-{
-  "id": "sample-service",
-  "workTypes": [
-    {
-      "name": "task",
-      "states": [
-        { "name": "init", "type": "INITIAL" },
-        { "name": "complete", "type": "TERMINAL" },
-        { "name": "failed", "type": "FAILED" }
-      ]
-    }
-  ],
-  "workers": [
-    { "name": "processor" }
-  ],
-  "workstations": [
-    {
-      "name": "process",
-      "worker": "processor",
-      "inputs": [{ "workType": "task", "state": "init" }],
-      "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" }
-    }
-  ]
-}
-```
-
-For that minimal factory:
+## Minimal Layout
 
 - Put the topology in `factory.json`.
 - Put the worker instructions in `workers/processor/AGENTS.md`.
@@ -75,70 +47,17 @@ For that minimal factory:
 - Drop mixed-work-type or relation-heavy batch files under
   `inputs/BATCH/default/`.
 
-## Portability Manifest
+For a minimal `factory.json` example, use
+[Factory JSON and work configuration](work.md#minimal-factory).
 
-Use `supportingFiles` when the portable factory must declare external tools or
-carry bundled helper files beyond workflow topology.
+## Portability Manifest Placement
 
-```json
-{
-  "supportingFiles": {
-    "requiredTools": [
-      {
-        "name": "python",
-        "command": "python3",
-        "purpose": "Runs bundled helper scripts",
-        "versionArgs": ["--version"]
-      }
-    ],
-    "bundledFiles": [
-      {
-        "type": "ROOT_HELPER",
-        "targetPath": "Makefile",
-        "content": {
-          "encoding": "utf-8",
-          "inline": "test:\n\tgo test ./...\n"
-        }
-      },
-      {
-        "type": "SCRIPT",
-        "targetPath": "factory/scripts/setup-workspace.py",
-        "content": {
-          "encoding": "utf-8",
-          "inline": "print('portable')\n"
-        }
-      },
-      {
-        "type": "DOC",
-        "targetPath": "factory/docs/usage.md",
-        "content": {
-          "encoding": "utf-8",
-          "inline": "# Usage\n"
-        }
-      }
-    ]
-  }
-}
-```
-
-- `requiredTools` are declarative only. They describe host tools that later
-  load or preflight validation can check on `PATH`; they are not embedded or
-  installed by the portability contract.
-- `bundledFiles` are distinct from runtime-capacity `resources`. They carry
-  portable file content plus a canonical factory-relative `targetPath`.
-- The default collected bundle paths for this slice are `factory/scripts/**`,
-  `factory/docs/**`, and supported root helper files such as `Makefile`.
-- `config flatten` collects those supported files automatically from a checked-in
-  `factory/` layout and writes them into `supportingFiles.bundledFiles` in
-  deterministic `targetPath` order.
-- `type: "SCRIPT"` entries must target `factory/scripts/...`; `type: "DOC"`
-  entries must target `factory/docs/...`; `type: "ROOT_HELPER"` entries must
-  target a supported project-root helper path such as `Makefile`.
-- `targetPath` must use forward slashes and must already be canonical. Absolute
-  paths, backslash-separated paths, and paths with `.` or `..` segments are
-  rejected instead of being normalized silently.
-- `content.encoding` is `utf-8` in this v1 slice, so bundled file payloads are
-  inline UTF-8 text.
+Use `supportingFiles` in `factory.json` when the portable factory must declare
+external tools or carry bundled helper files beyond workflow topology. The
+manifest field contract belongs in
+[Factory JSON and work configuration](work.md#portability-resource-manifest);
+this page only records that bundled files are restored beside the expanded
+factory layout.
 
 ## Bootstrap Checklist
 
