@@ -1,6 +1,15 @@
+import {
+  type RefObject,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+
 import type { DashboardStreamState } from "../../api/dashboard/types";
 import { TickSliderControl } from "../../components/dashboard";
-import { cx, Select } from "../../components/ui";
+import { cx } from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
@@ -26,13 +35,6 @@ const DASHBOARD_CONTROLS_CLASS = cx(
   "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3",
   "max-md:ml-0 max-md:w-full max-md:justify-stretch",
 );
-const LANGUAGE_SWITCHER_SHELL_CLASS = cx(
-  "flex min-w-0 flex-1 flex-col gap-1 md:min-w-36 md:shrink-0 md:flex-none",
-);
-const LANGUAGE_SWITCHER_LABEL_CLASS = cx(
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  "text-[0.7rem] uppercase tracking-[0.16em] text-af-ink/62",
-);
 const STREAM_STATUS_SHELL_CLASS = cx(
   "flex shrink-0 items-center justify-end",
   "max-md:justify-start",
@@ -42,6 +44,19 @@ const STREAM_STATUS_CLASS = cx(
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
+const LOCALE_MENU_PANEL_CLASS =
+  "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-overlay/12 bg-af-surface/96 p-1 shadow-af-panel backdrop-blur-lg";
+const LOCALE_MENU_ITEM_CLASS = cx(
+  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-af-ink/82 outline-none transition-colors",
+  "focus-visible:bg-af-overlay/8 focus-visible:ring-2 focus-visible:ring-af-accent/25",
+);
+
+type HeaderLocaleMenuValue = "en" | "zh-CN";
+
+interface HeaderLocaleOption {
+  label: string;
+  value: HeaderLocaleMenuValue;
+}
 
 export interface DashboardHeaderProps {
   locale?: string;
@@ -78,28 +93,10 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
         />
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
-        <label
-          className={LANGUAGE_SWITCHER_SHELL_CLASS}
-          htmlFor="dashboard-language-switcher"
-        >
-          <span className={LANGUAGE_SWITCHER_LABEL_CLASS}>
-            {headerMessages.languageLabel}
-          </span>
-          <Select
-            aria-label={headerMessages.languageLabel}
-            className="min-h-10 rounded-lg px-3 py-2 text-sm"
-            id="dashboard-language-switcher"
-            onChange={(event) => {
-              setLocale(event.currentTarget.value);
-            }}
-            value={resolveLanguageSwitcherValue(resolvedLocale)}
-          >
-            <option value="en">{headerMessages.languageEnglishLabel}</option>
-            <option value="zh-CN">
-              {headerMessages.languageMandarinLabel}
-            </option>
-          </Select>
-        </label>
+        <DashboardLocaleMenu
+          locale={resolvedLocale}
+          onChangeLocale={setLocale}
+        />
         <TickSliderControl locale={resolvedLocale} />
         <div className={STREAM_STATUS_SHELL_CLASS}>
           <div
@@ -140,6 +137,293 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
 
 function resolveLanguageSwitcherValue(locale: string): "en" | "zh-CN" {
   return locale === "zh-CN" ? "zh-CN" : "en";
+}
+
+function DashboardLocaleMenu({
+  locale,
+  onChangeLocale,
+}: {
+  locale: string;
+  onChangeLocale: (locale: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
+  const headerMessages = getHeaderControlsMessages(locale);
+  const localeOptions = createHeaderLocaleOptions(headerMessages);
+  const resolvedValue = resolveLanguageSwitcherValue(locale);
+  useLocaleMenuDismissal({
+    buttonRef,
+    isOpen,
+    menuRef,
+    onDismiss: () => {
+      setIsOpen(false);
+      buttonRef.current?.focus();
+    },
+  });
+  useLocaleMenuSelectionFocus({
+    isOpen,
+    menuRef,
+  });
+
+  return (
+    <div className="relative shrink-0">
+      <DashboardHeaderActionButton
+        ref={buttonRef}
+        aria-controls={menuId}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        aria-label={headerMessages.languageMenuButtonLabel}
+        compact
+        onKeyDown={(event) => {
+          if (shouldOpenLocaleMenuFromKey(event.key)) {
+            event.preventDefault();
+            setIsOpen(true);
+          }
+        }}
+        onClick={() => {
+          setIsOpen((current) => !current);
+        }}
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <path d="M4 6h16" />
+          <path d="M8.5 6c.9 3.8 3.2 7.3 6.5 10" />
+          <path d="M11 13c-1.7 1.8-3.9 3.3-6.5 4" />
+          <path d="M15 4v2" />
+          <path d="M17.5 14 21 22" />
+          <path d="m14 22 3.5-8 3.5 8" />
+        </svg>
+      </DashboardHeaderActionButton>
+      {isOpen ? (
+        <DashboardLocaleMenuList
+          buttonRef={buttonRef}
+          currentValue={resolvedValue}
+          id={menuId}
+          label={headerMessages.languageLabel}
+          menuRef={menuRef}
+          onChangeLocale={onChangeLocale}
+          onClose={() => {
+            setIsOpen(false);
+            buttonRef.current?.focus();
+          }}
+          options={localeOptions}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DashboardLocaleMenuList({
+  buttonRef,
+  currentValue,
+  id,
+  label,
+  menuRef,
+  onChangeLocale,
+  onClose,
+  options,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  currentValue: HeaderLocaleMenuValue;
+  id: string;
+  label: string;
+  menuRef: RefObject<HTMLDivElement | null>;
+  onChangeLocale: (locale: string) => void;
+  onClose: () => void;
+  options: readonly HeaderLocaleOption[];
+}) {
+  return (
+    <div
+      aria-label={label}
+      className={LOCALE_MENU_PANEL_CLASS}
+      id={id}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+          return;
+        }
+
+        moveLocaleMenuFocus(event, menuRef);
+      }}
+      ref={menuRef}
+      role="menu"
+    >
+      {options.map((option) => {
+        const isSelected = option.value === currentValue;
+
+        return (
+          <button
+            aria-checked={isSelected}
+            className={cx(
+              LOCALE_MENU_ITEM_CLASS,
+              isSelected && "bg-af-accent/10 text-af-accent",
+            )}
+            key={option.value}
+            onClick={() => {
+              onChangeLocale(option.value);
+              onClose();
+              buttonRef.current?.focus();
+            }}
+            role="menuitemradio"
+            type="button"
+          >
+            <span>{option.label}</span>
+            {isSelected ? <LocaleMenuCheckIcon /> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function LocaleMenuCheckIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="16"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 16 16"
+      width="16"
+    >
+      <path d="m3.5 8.5 2.5 2.5 6-6" />
+    </svg>
+  );
+}
+
+function createHeaderLocaleOptions(
+  headerMessages: ReturnType<typeof getHeaderControlsMessages>,
+): readonly HeaderLocaleOption[] {
+  return [
+    {
+      label: headerMessages.languageEnglishLabel,
+      value: "en",
+    },
+    {
+      label: headerMessages.languageMandarinLabel,
+      value: "zh-CN",
+    },
+  ];
+}
+
+function useLocaleMenuDismissal({
+  buttonRef,
+  isOpen,
+  menuRef,
+  onDismiss,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  isOpen: boolean;
+  menuRef: RefObject<HTMLDivElement | null>;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (
+        buttonRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      onDismiss();
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onDismiss();
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [buttonRef, isOpen, menuRef, onDismiss]);
+}
+
+function useLocaleMenuSelectionFocus({
+  isOpen,
+  menuRef,
+}: {
+  isOpen: boolean;
+  menuRef: RefObject<HTMLDivElement | null>;
+}) {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const selectedItem = menuRef.current?.querySelector<HTMLButtonElement>(
+      '[role="menuitemradio"][aria-checked="true"]',
+    );
+    selectedItem?.focus();
+  }, [isOpen, menuRef]);
+}
+
+function shouldOpenLocaleMenuFromKey(key: string): boolean {
+  return (
+    key === "ArrowDown" ||
+    key === "ArrowUp" ||
+    key === "Enter" ||
+    key === " "
+  );
+}
+
+function moveLocaleMenuFocus(
+  event: ReactKeyboardEvent<HTMLDivElement>,
+  menuRef: RefObject<HTMLDivElement | null>,
+) {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+    return;
+  }
+
+  const items = Array.from(
+    menuRef.current?.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitemradio"]',
+    ) ?? [],
+  );
+  if (items.length === 0) {
+    return;
+  }
+
+  const currentIndex = items.indexOf(
+    document.activeElement as HTMLButtonElement,
+  );
+  const direction = event.key === "ArrowDown" ? 1 : -1;
+  const nextIndex =
+    currentIndex === -1
+      ? 0
+      : (currentIndex + direction + items.length) % items.length;
+
+  event.preventDefault();
+  items[nextIndex]?.focus();
 }
 
 function streamStatusClassName(status: DashboardStreamState["status"]): string {
