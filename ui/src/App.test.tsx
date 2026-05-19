@@ -3622,7 +3622,7 @@ describe("App dashboard follow-up flows", () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
           headers: {
             "Content-Type": "application/json",
           },
@@ -3736,7 +3736,7 @@ describe("App dashboard follow-up flows", () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock.mockImplementation(
       async () =>
-        new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
           headers: {
             "Content-Type": "application/json",
           },
@@ -3804,7 +3804,7 @@ describe("App dashboard follow-up flows", () => {
     const { fetchMock } = renderApp({ snapshot: activeSnapshot });
     fetchMock.mockImplementation(
       async () =>
-        new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+        new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
           headers: {
             "Content-Type": "application/json",
           },
