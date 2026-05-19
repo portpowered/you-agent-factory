@@ -77,6 +77,9 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 
 func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
+	if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
+		return nil, err
+	}
 	args := []string{"-p"}
 	if skipPermissions {
 		logger.Info("inferencer: enabling skip permissions flag for claude dispatcher")

@@ -609,6 +609,44 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 	}
 }
 
+func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testing.T) {
+	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("claude output")}}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderClaude),
+		Model:         "claude-sonnet",
+		UserMessage:   "inspect",
+		InputTokens: InputTokens(interfaces.Token{
+			ID: "token-1",
+			Color: interfaces.TokenColor{
+				Content: []interfaces.WorkContentPart{
+					{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
+					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+				},
+			},
+		}),
+	})
+	if err == nil {
+		t.Fatal("expected claude image content to fail")
+	}
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T: %v", err, err)
+	}
+	if providerErr.Type != interfaces.ProviderErrorTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypePermanentBadRequest)
+	}
+	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[1].file`) ||
+		!strings.Contains(providerErr.Message, `model provider claude`) ||
+		!strings.Contains(providerErr.Message, `configure modelProvider codex`) {
+		t.Fatalf("provider error message = %q", providerErr.Message)
+	}
+	if fakeExec.calls != 0 {
+		t.Fatalf("expected runner not to be called, got %d calls", fakeExec.calls)
+	}
+}
+
 func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *testing.T) {
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{
