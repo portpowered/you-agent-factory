@@ -151,6 +151,7 @@ export const WorkstationRequestSelectionErrored = {
     const errorDetails = within(
       currentSelection.getByRole("region", { name: "Error details" }),
     );
+    const outcomeRow = currentSelection.getByText("Outcome").closest("div");
 
     expect(
       currentSelection.getAllByText("request-error-story").length,
@@ -166,6 +167,14 @@ export const WorkstationRequestSelectionErrored = {
     expect(
       currentSelection.getAllByText("provider_rate_limit").length,
     ).toBeGreaterThan(0);
+    expect(outcomeRow?.textContent).toContain("FAILED");
+    expect(outcomeRow?.textContent).toContain(
+      "Failure reason: provider_rate_limit",
+    );
+    expect(outcomeRow?.textContent).toContain(
+      "Failure message: Provider rate limit exceeded while reviewing the story.",
+    );
+    expect(currentSelection.queryByText("Transition ID")).toBeNull();
     await expect(
       errorDetails.getByText(
         "Provider rate limit exceeded while reviewing the story.",
