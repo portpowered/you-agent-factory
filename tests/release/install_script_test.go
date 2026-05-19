@@ -26,9 +26,9 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 
 	skipIfInstallScriptUnsupported(t)
 
-	archiveName := "infinite-you_1.2.3_linux_amd64.tar.gz"
-	checksumName := "infinite-you_1.2.3_checksums.txt"
-	archiveBytes := buildTarGzArchive(t, "infinite-you", []byte("#!/usr/bin/env sh\necho installed-from-test\n"))
+	archiveName := "you_1.2.3_linux_amd64.tar.gz"
+	checksumName := "you_1.2.3_checksums.txt"
+	archiveBytes := buildTarGzArchive(t, "you", []byte("#!/usr/bin/env sh\necho installed-from-test\n"))
 	checksumContents := fmt.Sprintf("%s  %s\n", sha256Hex(archiveBytes), archiveName)
 	requests := make([]string, 0, 3)
 
@@ -65,7 +65,7 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 		t.Fatalf("installer requests = %#v, want latest release resolution", requests)
 	}
 
-	installedBinary := filepath.Join(installDir, "infinite-you")
+	installedBinary := filepath.Join(installDir, "you")
 	info, statErr := os.Stat(installedBinary)
 	if statErr != nil {
 		t.Fatalf("stat installed binary: %v", statErr)
@@ -73,7 +73,7 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 	if info.Mode()&0o111 == 0 {
 		t.Fatalf("installed binary mode = %v, want executable bit set", info.Mode())
 	}
-	if !strings.Contains(output, "Installed infinite-you v1.2.3 to "+installedBinary) {
+	if !strings.Contains(output, "Installed you v1.2.3 to "+installedBinary) {
 		t.Fatalf("install output = %q, want installed path message", output)
 	}
 	if !strings.Contains(output, "Add it to your PATH with:") {
@@ -96,14 +96,14 @@ func TestInstallScript_FailsOnChecksumMismatch(t *testing.T) {
 
 	skipIfInstallScriptUnsupported(t)
 
-	archiveName := "infinite-you_1.2.3_linux_amd64.tar.gz"
-	archiveBytes := buildTarGzArchive(t, "infinite-you", []byte("#!/usr/bin/env sh\necho installed-from-test\n"))
+	archiveName := "you_1.2.3_linux_amd64.tar.gz"
+	archiveBytes := buildTarGzArchive(t, "you", []byte("#!/usr/bin/env sh\necho installed-from-test\n"))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/download/v1.2.3/" + archiveName:
 			w.Write(archiveBytes)
-		case "/releases/download/v1.2.3/infinite-you_1.2.3_checksums.txt":
+		case "/releases/download/v1.2.3/you_1.2.3_checksums.txt":
 			w.Write([]byte("deadbeef  " + archiveName + "\n"))
 		default:
 			http.NotFound(w, r)
@@ -126,7 +126,7 @@ func TestInstallScript_FailsOnChecksumMismatch(t *testing.T) {
 	if !strings.Contains(output, "checksum mismatch for "+archiveName) {
 		t.Fatalf("install output = %q, want checksum mismatch message", output)
 	}
-	if _, statErr := os.Stat(filepath.Join(installDir, "infinite-you")); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(installDir, "you")); !os.IsNotExist(statErr) {
 		t.Fatalf("installed binary stat err = %v, want not exists after checksum failure", statErr)
 	}
 }
@@ -154,9 +154,9 @@ func TestSmokeInstallScript_InstallsHostedScriptAndSmokesBinary(t *testing.T) {
 
 	skipIfInstallScriptUnsupported(t)
 
-	archiveName := "infinite-you_1.2.3_linux_amd64.tar.gz"
-	checksumName := "infinite-you_1.2.3_checksums.txt"
-	archiveBytes := buildTarGzArchive(t, "infinite-you", []byte("#!/usr/bin/env sh\nif [ \"${1:-}\" = \"--help\" ]; then\n  exit 0\nfi\necho installed-from-smoke\n"))
+	archiveName := "you_1.2.3_linux_amd64.tar.gz"
+	checksumName := "you_1.2.3_checksums.txt"
+	archiveBytes := buildTarGzArchive(t, "you", []byte("#!/usr/bin/env sh\nif [ \"${1:-}\" = \"--help\" ]; then\n  exit 0\nfi\necho installed-from-smoke\n"))
 	checksumContents := fmt.Sprintf("%s  %s\n", sha256Hex(archiveBytes), archiveName)
 	installScript := readInstallScript(t)
 
@@ -188,7 +188,7 @@ func TestSmokeInstallScript_InstallsHostedScriptAndSmokesBinary(t *testing.T) {
 		t.Fatalf("run smoke-install.sh: %v\n%s", err, output)
 	}
 
-	installedBinary := filepath.Join(installDir, "infinite-you")
+	installedBinary := filepath.Join(installDir, "you")
 	info, statErr := os.Stat(installedBinary)
 	if statErr != nil {
 		t.Fatalf("stat installed binary: %v", statErr)

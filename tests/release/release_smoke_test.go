@@ -130,7 +130,7 @@ func buildReleaseSmokeBinary(t *testing.T) string {
 }
 
 func releaseSmokeBinaryName() string {
-	binaryName := "infinite-you"
+	binaryName := "you"
 	if runtime.GOOS == "windows" {
 		binaryName += ".exe"
 	}

@@ -48,7 +48,7 @@ func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
 func postWorkViaAPI(t *testing.T, srv *api.Server) {
 	t.Helper()
 
-	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(`{"workTypeName": "task", "payload": {"title": "REST submit"}}`))
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(`{"name":"rest-submit","workTypeName": "task", "payload": {"title": "REST submit"}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

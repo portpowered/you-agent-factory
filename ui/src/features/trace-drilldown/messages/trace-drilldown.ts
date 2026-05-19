@@ -29,7 +29,6 @@ export interface TraceDrilldownMessages {
   noTraceHistoryMessage: string;
   noTraceHistoryTitle: string;
   requestIdsLabel: string;
-  summary: string;
   tableCaption: string;
   title: string;
   traceIdLabel: string;
@@ -73,7 +72,6 @@ const traceDrilldownMessagesByLocale = {
       "No retained dispatch history is currently available for this work item.",
     noTraceHistoryTitle: "Trace history unavailable",
     requestIdsLabel: "Request IDs",
-    summary: "Resolves from selected-tick factory event history.",
     tableCaption: "Trace dispatch grid",
     title: "Trace drill-down",
     traceIdLabel: "Trace ID",
@@ -112,7 +110,6 @@ const traceDrilldownMessagesByLocale = {
     noTraceHistoryMessage: "当前这个工作项暂时没有可保留的分派历史。",
     noTraceHistoryTitle: "追踪历史不可用",
     requestIdsLabel: "请求 ID",
-    summary: "根据所选刻度的工厂事件历史解析。",
     tableCaption: "追踪分派表",
     title: "追踪下钻",
     traceIdLabel: "追踪 ID",

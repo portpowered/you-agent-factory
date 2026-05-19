@@ -14,6 +14,7 @@ export interface TerminalWorkMessages {
   legendLabel: string;
   rowTitle: (status: TerminalWorkMessageStatus) => string;
   sessionSummaryFallback: (status: TerminalWorkMessageStatus) => string;
+  summary: (status: TerminalWorkMessageStatus, workstation: string) => string;
 }
 
 const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
@@ -33,6 +34,8 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
       status === "failed"
         ? "Failed status recorded by session summary."
         : "Completed by session summary.",
+    summary: (status, workstation) =>
+      `${status === "failed" ? "Failed" : "Completed"} at ${workstation}`,
   },
   ja: {
     cardTitle: "完了済みおよび失敗した作業",
@@ -50,6 +53,8 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
       status === "failed"
         ? "セッション概要で失敗ステータスが記録されました。"
         : "セッション概要で完了として記録されました。",
+    summary: (status, workstation) =>
+      `${status === "failed" ? "失敗" : "完了"}: ${workstation}`,
   },
   ko: {
     cardTitle: "완료 및 실패한 작업",
@@ -67,6 +72,8 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
       status === "failed"
         ? "세션 요약에서 실패 상태가 기록되었습니다."
         : "세션 요약에서 완료 상태로 기록되었습니다.",
+    summary: (status, workstation) =>
+      `${status === "failed" ? "실패" : "완료"}: ${workstation}`,
   },
   "zh-CN": {
     cardTitle: "已完成和失败的工作",
@@ -82,6 +89,8 @@ const terminalWorkMessagesByLocale: LocalizedMessages<TerminalWorkMessages> = {
       status === "failed"
         ? "会话摘要已记录失败状态。"
         : "会话摘要已记录完成状态。",
+    summary: (status, workstation) =>
+      `${status === "failed" ? "失败" : "已完成"}：${workstation}`,
   },
 };
 

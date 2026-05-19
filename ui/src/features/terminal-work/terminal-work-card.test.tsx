@@ -34,9 +34,9 @@ describe("CompletedFailedWorkstationCard", () => {
         failedItems={[
           {
             attempts: [failedAttempt],
-            contextText: "Failed at setup-workspace",
             label: "Failed Story",
             traceWorkID: "work-failed-story",
+            workstationName: "setup-workspace",
           },
         ]}
         onSelectItem={onSelectItem}
@@ -102,6 +102,26 @@ describe("CompletedFailedWorkstationCard", () => {
         traceWorkID: "work-failed-story",
       }),
     );
+  });
+
+  it("formats fallback terminal summaries as state plus workstation without provider-session text", () => {
+    render(
+      <CompletedFailedWorkstationCard
+        completedItems={[]}
+        failedItems={[
+          {
+            attempts: [failedAttempt],
+            label: "Failed Story",
+            traceWorkID: "work-failed-story",
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Failed at Repair")).toBeTruthy();
+    expect(screen.queryByText(/session_id/i)).toBeNull();
+    expect(screen.queryByText(/codex/i)).toBeNull();
   });
 
   it("collapses each row independently without hiding the other row heading", () => {

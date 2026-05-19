@@ -1,8 +1,8 @@
 This is the table of contents for the Agent Factory documentation.
 
 The installed CLI also packages a fixed reference surface under
-`infinite-you docs`. Run `infinite-you docs` to list the packaged topics, or
-run `infinite-you docs <topic>` for one of `config`, `workstation`, `workers`,
+`you docs`. Run `you docs` to list the packaged topics, or
+run `you docs <topic>` for one of `config`, `workstation`, `workers`,
 `resources`, `batch-work`, or `templates`.
 
 ## Packaged CLI Reference Topics

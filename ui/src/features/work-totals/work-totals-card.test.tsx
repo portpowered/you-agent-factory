@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { WorkTotalsCard } from "./work-totals-card";
 
 describe("WorkTotalsCard", () => {
-  it("renders work totals as a reusable bento card", () => {
+  it("renders localized totals with semantic status borders and a neutral dispatched card", () => {
     render(
       <WorkTotalsCard
         completedCount={3}
@@ -12,9 +12,31 @@ describe("WorkTotalsCard", () => {
       />,
     );
 
+    const workTotals = screen.getByLabelText("work totals");
+    const inProgressCard = within(workTotals)
+      .getByText("In progress")
+      .closest("article");
+    const completedCard = within(workTotals)
+      .getByText("Completed")
+      .closest("article");
+    const failedCard = within(workTotals).getByText("Failed").closest("article");
+    const dispatchedCard = within(workTotals)
+      .getByText("Dispatched")
+      .closest("article");
+
     expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
-    expect(screen.getByText("In progress")).toBeTruthy();
-    expect(screen.getByText("Dispatched")).toBeTruthy();
+    expect(workTotals.className).toContain("md:grid-cols-4");
+    expect(screen.getByLabelText("In progress: 2")).toBeTruthy();
+    expect(screen.getByLabelText("Completed: 3")).toBeTruthy();
+    expect(screen.getByLabelText("Failed: 1")).toBeTruthy();
+    expect(screen.getByLabelText("Dispatched: 5")).toBeTruthy();
+    expect(inProgressCard?.className).toContain("border-af-info/30");
+    expect(completedCard?.className).toContain("border-af-success/30");
+    expect(failedCard?.className).toContain("border-af-danger/30");
+    expect(dispatchedCard?.className).toContain("border-af-overlay/10");
+    expect(dispatchedCard?.className).not.toContain("border-af-info/30");
+    expect(dispatchedCard?.className).not.toContain("border-af-success/30");
+    expect(dispatchedCard?.className).not.toContain("border-af-danger/30");
   });
 
   it("renders zh-CN widget labels and accessible stat values", () => {
@@ -32,5 +54,8 @@ describe("WorkTotalsCard", () => {
     expect(screen.getByText("进行中")).toBeTruthy();
     expect(screen.getByText("已分派")).toBeTruthy();
     expect(screen.getByLabelText("已完成：3")).toBeTruthy();
+    expect(screen.getByLabelText("进行中：2")).toBeTruthy();
+    expect(screen.getByLabelText("失败：1")).toBeTruthy();
+    expect(screen.getByLabelText("已分派：5")).toBeTruthy();
   });
 });

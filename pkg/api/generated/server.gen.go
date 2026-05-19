@@ -1073,7 +1073,9 @@ type SubmitWorkRequest struct {
 
 	// CurrentChainingTraceId Explicit chaining-trace identifier for the submitted work.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
-	Name                   *string `json:"name,omitempty"`
+
+	// Name Required authored name for this single-work submission.
+	Name string `json:"name"`
 
 	// Payload Opaque work payload forwarded as raw JSON.
 	Payload interface{} `json:"payload,omitempty"`
