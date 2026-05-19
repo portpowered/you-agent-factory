@@ -50,6 +50,10 @@ const exportCoverImagePath = path.resolve(
 const replayCurrentFactoryDefinition = {
   name: "Browser Replay Factory",
 };
+const initialEditableFactoryDefinitionVersion = {
+  logical: 1,
+  physical: "2026-05-19T00:00:00Z",
+};
 const exportFactoryDefinition = {
   inputTypes: [
     {
@@ -314,12 +318,29 @@ async function startReplayServer(lines, options = {}) {
       : new Promise((resolve) => {
           resumeReplayStream = resolve;
         });
+  let currentFactoryDefinition = currentFactory;
+  let currentEditableFactoryDefinitionVersion =
+    initialEditableFactoryDefinitionVersion;
+
+  function buildEditableFactoryDefinitionDocument() {
+    return {
+      factoryDefinition: currentFactoryDefinition,
+      version: currentEditableFactoryDefinitionVersion,
+    };
+  }
+
+  function bumpEditableFactoryDefinitionVersion() {
+    currentEditableFactoryDefinitionVersion = {
+      logical: currentEditableFactoryDefinitionVersion.logical + 1,
+      physical: new Date().toISOString(),
+    };
+  }
 
   apiServer = http.createServer((request, response) => {
     if (request.method === "OPTIONS") {
       response.writeHead(204, {
         "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
         "Access-Control-Allow-Origin": "*",
       });
       response.end();
@@ -327,7 +348,7 @@ async function startReplayServer(lines, options = {}) {
     }
 
     if (request.url === "/factory/~current" && request.method === "GET") {
-      if (currentFactory === null) {
+      if (currentFactoryDefinition === null) {
         response.writeHead(404, {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
@@ -345,7 +366,69 @@ async function startReplayServer(lines, options = {}) {
         "Access-Control-Allow-Origin": "*",
         "Content-Type": "application/json",
       });
-      response.end(JSON.stringify(currentFactory));
+      response.end(JSON.stringify(currentFactoryDefinition));
+      return;
+    }
+
+    if (
+      request.url === "/factory/~current/editable-definition" &&
+      request.method === "GET"
+    ) {
+      if (currentFactoryDefinition === null) {
+        response.writeHead(404, {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        });
+        response.end(
+          JSON.stringify({
+            code: "NOT_FOUND",
+            message: "The current editable factory definition is not available.",
+          }),
+        );
+        return;
+      }
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(buildEditableFactoryDefinitionDocument()));
+      return;
+    }
+
+    if (
+      request.url === "/factory/~current/editable-definition" &&
+      request.method === "PUT"
+    ) {
+      let requestBody = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        requestBody += chunk;
+      });
+      request.on("end", () => {
+        const body = requestBody.length === 0 ? null : JSON.parse(requestBody);
+        if (!body || typeof body !== "object" || body.factoryDefinition == null) {
+          response.writeHead(400, {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          });
+          response.end(
+            JSON.stringify({
+              code: "BAD_REQUEST",
+              message: "The editable factory definition payload is required.",
+            }),
+          );
+          return;
+        }
+
+        currentFactoryDefinition = body.factoryDefinition;
+        bumpEditableFactoryDefinitionVersion();
+        response.writeHead(200, {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        });
+        response.end(JSON.stringify(buildEditableFactoryDefinitionDocument()));
+      });
       return;
     }
 
@@ -361,17 +444,22 @@ async function startReplayServer(lines, options = {}) {
           await activateFactory(body);
         }
 
+        currentFactoryDefinition = activationResponseFactory ?? body;
+        bumpEditableFactoryDefinitionVersion();
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
         });
-        response.end(JSON.stringify(activationResponseFactory ?? body));
+        response.end(JSON.stringify(currentFactoryDefinition));
       });
       return;
     }
 
     if (request.url !== "/events") {
-      response.statusCode = 404;
+      response.writeHead(404, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "text/plain; charset=utf-8",
+      });
       response.end("not found");
       return;
     }

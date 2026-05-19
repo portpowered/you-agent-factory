@@ -1842,9 +1842,9 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(legend?.className).toContain("absolute");
     expect(legend?.className).toContain("left-7");
     expect(legend?.className).toContain("top-7");
-    expect(legend?.className).toContain("right-4");
-    expect(legend?.className).toContain("md:left-7");
-    expect(legend?.className).toContain("md:right-auto");
+    expect(legend?.className).toContain("max-md:left-4");
+    expect(legend?.className).toContain("max-md:right-4");
+    expect(legend?.className).toContain("max-md:top-4");
     expect(legend?.className).not.toContain("right-0");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
