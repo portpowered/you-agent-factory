@@ -16,7 +16,15 @@ export function validateFactoryGraphDraft(
   draft: FactoryGraphDraft,
 ): FactoryGraphDraftValidationError[] {
   const errors: FactoryGraphDraftValidationError[] = [];
-  const nodeIndex = indexFactoryGraphNodes(baseFactoryDefinition, draft);
+  const pendingFactoryDefinition = buildPendingFactoryDefinition(
+    baseFactoryDefinition,
+    draft,
+  );
+  const nodeIndex = new Map(
+    buildFactoryGraphTopologyFromDefinition(pendingFactoryDefinition).nodes.map(
+      (node) => [node.id, node],
+    ),
+  );
 
   for (const resource of draft.additions.resources) {
     validateRequiredName(resource.name, "resource", errors);
@@ -38,7 +46,7 @@ export function validateFactoryGraphDraft(
     validateRequiredName(workState.workTypeName, "work-type", errors);
   }
 
-  validateDuplicateIdentifiers(nodeIndex, errors);
+  validateDuplicateIdentifiers(pendingFactoryDefinition, errors);
   validateEdgeChanges(draft, nodeIndex, errors);
   validateFinalWorkerAssignments(baseFactoryDefinition, draft, errors);
 
@@ -46,12 +54,17 @@ export function validateFactoryGraphDraft(
 }
 
 function validateDuplicateIdentifiers(
-  nodeIndex: Map<string, FactoryGraphNode>,
+  factoryDefinition: CanonicalFactoryDefinition,
   errors: FactoryGraphDraftValidationError[],
 ) {
-  const seenById = new Set<string>();
-  for (const nodeId of nodeIndex.keys()) {
-    if (seenById.has(nodeId)) {
+  const countsById = new Map<string, number>();
+
+  for (const nodeId of collectFactoryGraphNodeIds(factoryDefinition)) {
+    countsById.set(nodeId, (countsById.get(nodeId) ?? 0) + 1);
+  }
+
+  for (const [nodeId, count] of countsById) {
+    if (count > 1) {
       errors.push({
         code: "DUPLICATE_IDENTIFIER",
         message: `Duplicate graph identifier "${nodeId}" is not allowed.`,
@@ -60,9 +73,7 @@ function validateDuplicateIdentifiers(
           id: nodeId,
         },
       });
-      continue;
     }
-    seenById.add(nodeId);
   }
 }
 
@@ -248,10 +259,10 @@ function dedupeValidationErrors(
   });
 }
 
-function indexFactoryGraphNodes(
+function buildPendingFactoryDefinition(
   baseFactoryDefinition: CanonicalFactoryDefinition,
   draft: FactoryGraphDraft,
-): Map<string, FactoryGraphNode> {
+): CanonicalFactoryDefinition {
   const pendingFactoryDefinition = structuredClone(baseFactoryDefinition);
   pendingFactoryDefinition.resources = applyNamedEntityChanges(
     baseFactoryDefinition.resources,
@@ -277,11 +288,57 @@ function indexFactoryGraphNodes(
     states: applyWorkStateChanges(workType.states, draft, workType.name),
   }));
 
-  return new Map(
-    buildFactoryGraphTopologyFromDefinition(pendingFactoryDefinition).nodes.map(
-      (node) => [node.id, node],
-    ),
-  );
+  return pendingFactoryDefinition;
+}
+
+function collectFactoryGraphNodeIds(
+  factoryDefinition: CanonicalFactoryDefinition,
+): string[] {
+  const nodeIds: string[] = [];
+
+  for (const resource of factoryDefinition.resources ?? []) {
+    nodeIds.push(
+      nodeKeyId({
+        kind: "resource",
+        name: resource.name,
+      }),
+    );
+  }
+  for (const worker of factoryDefinition.workers ?? []) {
+    nodeIds.push(
+      nodeKeyId({
+        kind: "worker",
+        name: worker.name,
+      }),
+    );
+  }
+  for (const workType of factoryDefinition.workTypes ?? []) {
+    nodeIds.push(
+      nodeKeyId({
+        kind: "work-type",
+        name: workType.name,
+      }),
+    );
+    for (const state of workType.states) {
+      nodeIds.push(
+        nodeKeyId({
+          kind: "work-state",
+          stateName: state.name,
+          workTypeName: workType.name,
+        }),
+      );
+    }
+  }
+  for (const workstation of factoryDefinition.workstations ?? []) {
+    nodeIds.push(
+      nodeKeyId({
+        kind: "workstation",
+        name: workstation.name,
+      }),
+    );
+  }
+
+  return nodeIds;
 }
 
 function missingWorkerError(

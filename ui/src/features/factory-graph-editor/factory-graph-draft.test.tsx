@@ -258,6 +258,13 @@ describe("factory graph draft state", () => {
     expect(validationErrors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          code: "DUPLICATE_IDENTIFIER",
+          target: {
+            kind: "node",
+            id: "worker:writer",
+          },
+        }),
+        expect.objectContaining({
           code: "MISSING_REQUIRED_FIELD",
           field: "worker",
         }),
