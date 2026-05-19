@@ -1972,7 +1972,7 @@ describe("App shell import and export flows", () => {
     fireEvent.click(languageButton);
     fireEvent.click(
       screen.getByRole("menuitemradio", {
-        name: "Mandarin Chinese (zh-CN)",
+        name: "简体中文",
       }),
     );
 

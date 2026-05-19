@@ -9,7 +9,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../api/events";
-import { AppLocaleProvider } from "../../i18n";
+import { AppLocaleProvider, NATIVE_LANGUAGE_LABELS } from "../../i18n";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../export/messages/export-dialog";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
@@ -262,9 +262,24 @@ describe("DashboardHeader", () => {
     expect(languageButton.getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(
       screen.getByRole("menuitemradio", {
-        name: messages.languageEnglishLabel,
+        name: NATIVE_LANGUAGE_LABELS.en,
       }),
     );
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: NATIVE_LANGUAGE_LABELS["zh-CN"],
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: NATIVE_LANGUAGE_LABELS.ko,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: NATIVE_LANGUAGE_LABELS.ja,
+      }),
+    ).toBeTruthy();
 
     act(() => {
       fireEvent.keyDown(
@@ -284,7 +299,7 @@ describe("DashboardHeader", () => {
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("switches the header locale between English and Mandarin through session state", async () => {
+  it("switches the header locale across the supported languages through session state", async () => {
     seedDashboardHeaderSnapshot();
 
     render(
@@ -295,8 +310,8 @@ describe("DashboardHeader", () => {
 
     const englishMessages = getHeaderControlsMessages("en");
     const englishExportMessages = getExportDialogMessages("en");
-    const mandarinMessages = getHeaderControlsMessages("zh-CN");
-    const mandarinExportMessages = getExportDialogMessages("zh-CN");
+    const koreanMessages = getHeaderControlsMessages("ko");
+    const koreanExportMessages = getExportDialogMessages("ko");
     const languageButton = screen.getByRole("button", {
       name: englishMessages.languageMenuButtonLabel,
     });
@@ -313,51 +328,61 @@ describe("DashboardHeader", () => {
     fireEvent.click(languageButton);
     fireEvent.click(
       screen.getByRole("menuitemradio", {
-        name: englishMessages.languageMandarinLabel,
+        name: NATIVE_LANGUAGE_LABELS.ko,
       }),
     );
 
     await waitFor(() => {
       expect(
         screen.getByRole("button", {
-          name: mandarinMessages.languageMenuButtonLabel,
+          name: koreanMessages.languageMenuButtonLabel,
         }),
       ).toBeTruthy();
     });
-    expect(screen.getByText("第 1 个刻度，共 2 个")).toBeTruthy();
+    expect(screen.getByText("틱 1 / 2")).toBeTruthy();
     expect(
       screen.getByRole("region", {
-        name: mandarinMessages.dashboardSummaryLabel,
+        name: koreanMessages.dashboardSummaryLabel,
       }),
     ).toBeTruthy();
     expect(
       screen.getByRole("status", {
-        name: mandarinMessages.streamStatusConnectingLabel,
+        name: koreanMessages.streamStatusConnectingLabel,
       }),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", {
-        name: mandarinExportMessages.triggerLabel,
+        name: koreanExportMessages.triggerLabel,
       }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("menu", { name: mandarinMessages.languageLabel }),
+      screen.queryByRole("menu", { name: koreanMessages.languageLabel }),
     ).toBeNull();
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: mandarinMessages.languageMenuButtonLabel,
+        name: koreanMessages.languageMenuButtonLabel,
       }),
     );
     expect(
       screen.getByRole("menuitemradio", {
-        name: mandarinMessages.languageMandarinLabel,
+        name: NATIVE_LANGUAGE_LABELS.ko,
       }).getAttribute("aria-checked"),
     ).toBe("true");
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: NATIVE_LANGUAGE_LABELS["zh-CN"],
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: NATIVE_LANGUAGE_LABELS.ja,
+      }),
+    ).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("menuitemradio", {
-        name: mandarinMessages.languageEnglishLabel,
+        name: NATIVE_LANGUAGE_LABELS.en,
       }),
     );
 

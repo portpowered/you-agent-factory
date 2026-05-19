@@ -12,6 +12,13 @@ export const REQUIRED_LOCALES = ["en", "zh-CN"] as const;
 
 export type RequiredLocale = (typeof REQUIRED_LOCALES)[number];
 
+export const NATIVE_LANGUAGE_LABELS = {
+  en: "English",
+  "zh-CN": "简体中文",
+  ko: "한국어",
+  ja: "日本語",
+} as const satisfies Record<SupportedLocale, string>;
+
 const SUPPORTED_LOCALE_LOOKUP: ReadonlyMap<string, SupportedLocale> = new Map(
   SUPPORTED_LOCALES.map((locale) => [locale.toLowerCase(), locale]),
 );
@@ -40,6 +47,12 @@ export function resolveSupportedLocale(
     resolveNormalizedLocale(normalizedLocale.split("-")[0]) ??
     DEFAULT_LOCALE
   );
+}
+
+export function getNativeLanguageLabel(
+  locale: string | undefined | null,
+): string {
+  return NATIVE_LANGUAGE_LABELS[resolveSupportedLocale(locale)];
 }
 
 function resolveNormalizedLocale(

@@ -15,7 +15,12 @@ import {
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { useAppLocale } from "../../i18n";
+import {
+  getNativeLanguageLabel,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+  useAppLocale,
+} from "../../i18n";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../export/messages/export-dialog";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
@@ -51,11 +56,9 @@ const LOCALE_MENU_ITEM_CLASS = cx(
   "focus-visible:bg-af-overlay/8 focus-visible:ring-2 focus-visible:ring-af-accent/25",
 );
 
-type HeaderLocaleMenuValue = "en" | "zh-CN";
-
 interface HeaderLocaleOption {
   label: string;
-  value: HeaderLocaleMenuValue;
+  value: SupportedLocale;
 }
 
 export interface DashboardHeaderProps {
@@ -135,8 +138,10 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
   );
 }
 
-function resolveLanguageSwitcherValue(locale: string): "en" | "zh-CN" {
-  return locale === "zh-CN" ? "zh-CN" : "en";
+function resolveLanguageSwitcherValue(locale: string): SupportedLocale {
+  return SUPPORTED_LOCALES.includes(locale as SupportedLocale)
+    ? (locale as SupportedLocale)
+    : "en";
 }
 
 function DashboardLocaleMenu({
@@ -151,7 +156,7 @@ function DashboardLocaleMenu({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
   const headerMessages = getHeaderControlsMessages(locale);
-  const localeOptions = createHeaderLocaleOptions(headerMessages);
+  const localeOptions = createHeaderLocaleOptions();
   const resolvedValue = resolveLanguageSwitcherValue(locale);
   useLocaleMenuDismissal({
     buttonRef,
@@ -235,7 +240,7 @@ function DashboardLocaleMenuList({
   options,
 }: {
   buttonRef: RefObject<HTMLButtonElement | null>;
-  currentValue: HeaderLocaleMenuValue;
+  currentValue: SupportedLocale;
   id: string;
   label: string;
   menuRef: RefObject<HTMLDivElement | null>;
@@ -306,19 +311,11 @@ function LocaleMenuCheckIcon() {
   );
 }
 
-function createHeaderLocaleOptions(
-  headerMessages: ReturnType<typeof getHeaderControlsMessages>,
-): readonly HeaderLocaleOption[] {
-  return [
-    {
-      label: headerMessages.languageEnglishLabel,
-      value: "en",
-    },
-    {
-      label: headerMessages.languageMandarinLabel,
-      value: "zh-CN",
-    },
-  ];
+function createHeaderLocaleOptions(): readonly HeaderLocaleOption[] {
+  return SUPPORTED_LOCALES.map((locale) => ({
+    label: getNativeLanguageLabel(locale),
+    value: locale,
+  }));
 }
 
 function useLocaleMenuDismissal({
