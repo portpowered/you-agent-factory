@@ -40,7 +40,9 @@ type DashboardStream struct {
 
 func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload json.RawMessage) string {
 	t.Helper()
+	name := "functional-server-submit"
 	req := factoryapi.SubmitWorkRequest{
+		Name:         &name,
 		WorkTypeName: workTypeID,
 		Payload:      payload,
 	}

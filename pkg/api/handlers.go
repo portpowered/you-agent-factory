@@ -878,6 +878,9 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
+	if req.Name == nil || strings.TrimSpace(stringValue(req.Name)) == "" {
+		return factoryapi.SubmitWorkJSONRequestBody{}, requestFieldValidationError{message: "name is required"}
+	}
 	return req, nil
 }
 
