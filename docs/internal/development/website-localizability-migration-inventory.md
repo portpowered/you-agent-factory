@@ -54,3 +54,4 @@ Data values are out of scope for translation. API-provided IDs, dispatch IDs, tr
 - Use `ui/src/i18n/formatters.ts` for date, time, number, count, percent, list, and relative-time formatting.
 - Use full localized message functions or templates for dynamic labels instead of concatenating translated fragments around data values.
 - Add rendered component or functional coverage for non-default locale behavior when migrating a user-facing surface.
+- The hardcoded-copy guard under `ui/scripts/check-hardcoded-ui-copy.ts` now scans rendered JSX string expressions and common visible-label component props in addition to raw JSX text and accessibility attributes; if a rendered diagnostic string is intentionally non-product, mark it inline with `hardcoded-ui-copy-exception: non-product-diagnostic` instead of silently bypassing the guard.

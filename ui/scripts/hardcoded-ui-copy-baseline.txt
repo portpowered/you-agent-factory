@@ -7,12 +7,15 @@ src/components/ui/ui-foundation-showcase.tsx|87|36|jsx-text|Secondary
 src/components/ui/ui-foundation-showcase.tsx|88|34|jsx-text|Outline
 src/components/ui/ui-foundation-showcase.tsx|89|28|jsx-text|Disabled action
 src/components/ui/ui-foundation-showcase.tsx|96|13|jsx-text|Request name
+src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-prop|Name this request
 src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-attribute|Name this request
 src/components/ui/ui-foundation-showcase.tsx|103|13|jsx-text|Work type
 src/components/ui/ui-foundation-showcase.tsx|106|35|jsx-text|story
 src/components/ui/ui-foundation-showcase.tsx|107|34|jsx-text|task
 src/components/ui/ui-foundation-showcase.tsx|113|13|jsx-text|Request text
+src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-prop|Describe the work to run
 src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-attribute|Describe the work to run
+src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-prop|Primitive chart showcase
 src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-attribute|Primitive chart showcase
 src/components/ui/ui-foundation-showcase.tsx|150|27|jsx-text|Primitive table foundation for trace and detail surfaces.
 src/components/ui/ui-foundation-showcase.tsx|153|28|jsx-text|Dispatch
@@ -24,6 +27,7 @@ src/components/ui/ui-foundation-showcase.tsx|162|28|jsx-text|420ms
 src/components/ui/ui-foundation-showcase.tsx|165|28|jsx-text|dispatch-review-2
 src/components/ui/ui-foundation-showcase.tsx|166|28|jsx-text|FAILED
 src/components/ui/ui-foundation-showcase.tsx|167|28|jsx-text|1.2s
+src/components/ui/ui-foundation-showcase.tsx|173|23|jsx-prop|Primitive data table showcase
 src/components/ui/ui-foundation-showcase.tsx|190|17|jsx-text|Loading
 src/components/ui/ui-foundation-showcase.tsx|198|58|jsx-text|Collapsible section
 src/components/ui/ui-foundation-showcase.tsx|207|19|jsx-text|Shared disclosure state is ready for section toggles and drill-down controls.
@@ -39,8 +43,7 @@ src/components/ui/ui-foundation-showcase.tsx|251|13|jsx-text|Resizable panels
 src/components/ui/ui-foundation-showcase.tsx|257|19|jsx-text|Sidebar panel
 src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
 src/features/bento/agent-bento.tsx|155|18|jsx-attribute|Infinite You bento board
-src/features/current-selection/provider-session-detail-panel.tsx|262|25|jsx-text|Turn
-src/features/current-selection/provider-session-detail-panel.tsx|415|19|jsx-text|Encrypted reasoning content only.
 src/features/flowchart/current-activity-workstation-node.tsx|221|19|jsx-attribute|Active
+src/features/flowchart/current-activity-workstation-node.tsx|226|21|jsx-prop|Active
 src/features/terminal-work/terminal-work-card.tsx|288|51|jsx-text|at
 src/features/work-outcome/trend-cards.tsx|254|60|jsx-text|retry or rework events

@@ -4,12 +4,13 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const UI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE_ROOT = path.join(UI_DIR, "src");
-const BASELINE_PATH = path.join(
-  UI_DIR,
-  "scripts",
-  "hardcoded-ui-copy-baseline.txt",
-);
+const SOURCE_ROOT =
+  process.env.AGENT_FACTORY_UI_SRC_DIR ?? path.join(UI_DIR, "src");
+const BASELINE_PATH =
+  process.env.AGENT_FACTORY_UI_COPY_BASELINE_PATH ??
+  path.join(UI_DIR, "scripts", "hardcoded-ui-copy-baseline.txt");
+const NON_PRODUCT_DIAGNOSTIC_EXCEPTION_MARKER =
+  "hardcoded-ui-copy-exception: non-product-diagnostic";
 
 const TEXTUAL_JSX_ATTRIBUTE_NAMES = new Set([
   "alt",
@@ -17,6 +18,20 @@ const TEXTUAL_JSX_ATTRIBUTE_NAMES = new Set([
   "aria-label",
   "aria-placeholder",
   "aria-roledescription",
+  "placeholder",
+  "title",
+]);
+
+const TEXTUAL_COMPONENT_PROP_NAMES = new Set([
+  "ariaLabel",
+  "description",
+  "emptyMessage",
+  "emptyStateLabel",
+  "emptyTitle",
+  "helperText",
+  "label",
+  "loadingLabel",
+  "message",
   "placeholder",
   "title",
 ]);
@@ -34,7 +49,7 @@ export interface HardcodedCopyFinding {
   file: string;
   line: number;
   column: number;
-  kind: "jsx-attribute" | "jsx-text";
+  kind: "jsx-attribute" | "jsx-expression" | "jsx-prop" | "jsx-text";
   text: string;
 }
 
@@ -110,7 +125,10 @@ export function scanSourceTextForHardcodedCopy(
   const visit = (node: ts.Node) => {
     if (ts.isJsxText(node)) {
       const normalizedText = normalizeText(node.getText(sourceFile));
-      if (looksLikeUserFacingCopy(normalizedText)) {
+      if (
+        looksLikeUserFacingCopy(normalizedText) &&
+        !hasNonProductDiagnosticException(sourceFile, node)
+      ) {
         findings.push(
           createFinding(
             sourceFile,
@@ -126,7 +144,10 @@ export function scanSourceTextForHardcodedCopy(
       const attributeName = node.name.text;
       if (TEXTUAL_JSX_ATTRIBUTE_NAMES.has(attributeName)) {
         const attributeValue = getJsxAttributeLiteralValue(node.initializer);
-        if (looksLikeUserFacingCopy(attributeValue)) {
+        if (
+          looksLikePropCopy(attributeValue) &&
+          !hasNonProductDiagnosticException(sourceFile, node)
+        ) {
           findings.push(
             createFinding(
               sourceFile,
@@ -137,6 +158,45 @@ export function scanSourceTextForHardcodedCopy(
             ),
           );
         }
+      }
+
+      if (
+        TEXTUAL_COMPONENT_PROP_NAMES.has(attributeName) &&
+        ts.isJsxAttribute(node) &&
+        isComponentProp(node)
+      ) {
+        const attributeValue = getJsxAttributeLiteralValue(node.initializer);
+        if (
+          looksLikePropCopy(attributeValue) &&
+          !hasNonProductDiagnosticException(sourceFile, node)
+        ) {
+          findings.push(
+            createFinding(
+              sourceFile,
+              node.initializer?.getStart(sourceFile) ??
+                node.getStart(sourceFile),
+              "jsx-prop",
+              attributeValue,
+            ),
+          );
+        }
+      }
+    }
+
+    if (ts.isJsxExpression(node) && isRenderedJsxExpression(node)) {
+      const expressionText = getRenderedExpressionCopy(node.expression);
+      if (
+        looksLikeRenderedExpressionCopy(expressionText) &&
+        !hasNonProductDiagnosticException(sourceFile, node)
+      ) {
+        findings.push(
+          createFinding(
+            sourceFile,
+            node.expression?.getStart(sourceFile) ?? node.getStart(sourceFile),
+            "jsx-expression",
+            expressionText,
+          ),
+        );
       }
     }
 
@@ -243,6 +303,60 @@ function getJsxAttributeLiteralValue(
   return "";
 }
 
+function getRenderedExpressionCopy(
+  expression: ts.Expression | undefined,
+): string {
+  if (!expression) {
+    return "";
+  }
+
+  if (
+    ts.isStringLiteral(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression)
+  ) {
+    return normalizeText(expression.text);
+  }
+
+  if (ts.isTemplateExpression(expression)) {
+    const parts = [expression.head.text];
+    for (const span of expression.templateSpans) {
+      parts.push(span.literal.text);
+    }
+    return normalizeText(parts.join(" "));
+  }
+
+  return "";
+}
+
+function hasNonProductDiagnosticException(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+): boolean {
+  const fullText = sourceFile.getFullText();
+  const start = node.getFullStart();
+  const end = node.getStart(sourceFile);
+  const leadingText = fullText.slice(start, end);
+  if (leadingText.includes(NON_PRODUCT_DIAGNOSTIC_EXCEPTION_MARKER)) {
+    return true;
+  }
+
+  const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+  const lineStarts = sourceFile.getLineStarts();
+  const previousLineStart = line > 0 ? lineStarts[line - 1] : 0;
+  const currentLineStart = lineStarts[line];
+  const previousLineText = fullText.slice(previousLineStart, currentLineStart);
+  return previousLineText.includes(NON_PRODUCT_DIAGNOSTIC_EXCEPTION_MARKER);
+}
+
+function isComponentProp(attribute: ts.JsxAttribute): boolean {
+  const tagName = attribute.parent.parent.tagName;
+  return ts.isIdentifier(tagName) && /^[A-Z]/.test(tagName.text);
+}
+
+function isRenderedJsxExpression(node: ts.JsxExpression): boolean {
+  return ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent);
+}
+
 function looksLikeUserFacingCopy(value: string): boolean {
   if (value.length < 2) {
     return false;
@@ -254,6 +368,30 @@ function looksLikeUserFacingCopy(value: string): boolean {
     return false;
   }
   return true;
+}
+
+function looksLikePropCopy(value: string): boolean {
+  if (!looksLikeUserFacingCopy(value)) {
+    return false;
+  }
+  return !isIdentifierLikeText(value);
+}
+
+function looksLikeRenderedExpressionCopy(value: string): boolean {
+  if (!looksLikeUserFacingCopy(value)) {
+    return false;
+  }
+  if (/^[A-Z]/.test(value) || /\s/.test(value) || /[.?!:]$/.test(value)) {
+    return true;
+  }
+  return false;
+}
+
+function isIdentifierLikeText(value: string): boolean {
+  return (
+    /^[a-z][a-zA-Z0-9]*$/.test(value) ||
+    /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/.test(value)
+  );
 }
 
 function normalizeText(value: string): string {
