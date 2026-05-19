@@ -1037,7 +1037,7 @@ export const HeaderLocalizationVerification = {
     await userEvent.click(languageButton);
     await userEvent.click(
       within(canvasElement.ownerDocument.body).getByRole("menuitemradio", {
-        name: "Mandarin Chinese (zh-CN)",
+        name: "简体中文",
       }),
     );
 
@@ -1089,7 +1089,7 @@ export const HeaderLocalizationVerification = {
     await userEvent.click(localizedLanguageButton);
     await userEvent.click(
       within(canvasElement.ownerDocument.body).getByRole("menuitemradio", {
-        name: "英语",
+        name: "English",
       }),
     );
 

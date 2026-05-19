@@ -1,5 +1,7 @@
 import {
   DEFAULT_LOCALE,
+  getNativeLanguageLabel,
+  NATIVE_LANGUAGE_LABELS,
   isSupportedLocale,
   resolveSupportedLocale,
   SUPPORTED_LOCALES,
@@ -15,6 +17,15 @@ describe("website locale policy", () => {
   it("recognizes canonical supported locales", () => {
     expect(isSupportedLocale("en")).toBe(true);
     expect(isSupportedLocale("zh-CN")).toBe(true);
+  });
+
+  it("keeps native-language labels for every supported locale", () => {
+    expect(NATIVE_LANGUAGE_LABELS).toEqual({
+      en: "English",
+      "zh-CN": "简体中文",
+      ko: "한국어",
+      ja: "日本語",
+    });
   });
 
   it.each([
@@ -50,4 +61,19 @@ describe("website locale policy", () => {
   ] as const)("resolves Mandarin alias %s to zh-CN", (locale, expected) => {
     expect(resolveSupportedLocale(locale)).toBe(expected);
   });
+
+  it.each([
+    ["en", "English"],
+    ["en-US", "English"],
+    ["zh-CN", "简体中文"],
+    ["zh-Hans", "简体中文"],
+    ["ko-KR", "한국어"],
+    ["ja-JP", "日本語"],
+    ["fr", "English"],
+  ] as const)(
+    "resolves native-language display labels for %s",
+    (locale, expected) => {
+      expect(getNativeLanguageLabel(locale)).toBe(expected);
+    },
+  );
 });
