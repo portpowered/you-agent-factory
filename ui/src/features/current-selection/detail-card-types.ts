@@ -40,6 +40,7 @@ export interface StatePositionWorkListProps {
     | "traceIdLabel"
     | "workIdLabel"
     | "workTypeLabel"
+    | "workTypeUnavailable"
   >;
   onSelectWorkItem?: (workItem: DashboardWorkItemRef) => void;
   workItems: DashboardWorkItemRef[];

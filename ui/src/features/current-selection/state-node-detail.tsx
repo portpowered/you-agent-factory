@@ -8,7 +8,10 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS, WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
+import {
+  DETAIL_COPY_CLASS,
+  WIDGET_SUBTITLE_CLASS,
+} from "../../components/dashboard/widget-board";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   emptyStatePlaceMessage,
@@ -33,14 +36,20 @@ export function StateNodeDetailCard({
   const placeLabel = formatDashboardPlaceLabel(place);
   const placeLabelParts = getDashboardPlaceLabelParts(place);
   const usesRetainedWorkItems = isTerminalOrFailedPlace(place);
-  const visibleWorkItems = usesRetainedWorkItems ? terminalHistoryWorkItems : currentWorkItems;
+  const visibleWorkItems = usesRetainedWorkItems
+    ? terminalHistoryWorkItems
+    : currentWorkItems;
   const messages = useCurrentSelectionDetailMessages();
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <div className="mt-0 grid gap-1" title={placeLabel}>
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{placeLabelParts.workType}</span>
-        <span className={WIDGET_SUBTITLE_CLASS}>{placeLabelParts.stateValue}</span>
+        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+          {placeLabelParts.workType}
+        </span>
+        <span className={WIDGET_SUBTITLE_CLASS}>
+          {placeLabelParts.stateValue}
+        </span>
       </div>
       <dl>
         <div>
@@ -61,7 +70,9 @@ export function StateNodeDetailCard({
         </div>
       </dl>
       <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.currentWorkHeading}</h4>
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+          {messages.currentWorkHeading}
+        </h4>
         {visibleWorkItems.length > 0 ? (
           <StatePositionWorkList
             failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
@@ -71,7 +82,11 @@ export function StateNodeDetailCard({
           />
         ) : (
           <p className={DETAIL_COPY_CLASS}>
-            {emptyStatePlaceMessage(messages, usesRetainedWorkItems, tokenCount)}
+            {emptyStatePlaceMessage(
+              messages,
+              usesRetainedWorkItems,
+              tokenCount,
+            )}
           </p>
         )}
       </section>
@@ -119,7 +134,9 @@ function StatePositionWorkListItem({
         </div>
         <div>
           <dt>{messages.workTypeLabel}</dt>
-          <dd className="[overflow-wrap:anywhere]">{workItem.work_type_id || "Unknown"}</dd>
+          <dd className="[overflow-wrap:anywhere]">
+            {workItem.work_type_id || messages.workTypeUnavailable}
+          </dd>
         </div>
         {workItem.trace_id ? (
           <div>
@@ -130,13 +147,17 @@ function StatePositionWorkListItem({
         {failureDetail?.failure_reason ? (
           <div>
             <dt>{messages.failureReasonLabel}</dt>
-            <dd className="[overflow-wrap:anywhere]">{failureDetail.failure_reason}</dd>
+            <dd className="[overflow-wrap:anywhere]">
+              {failureDetail.failure_reason}
+            </dd>
           </div>
         ) : null}
         {failureDetail?.failure_message ? (
           <div>
             <dt>{messages.failureMessageLabel}</dt>
-            <dd className="[overflow-wrap:anywhere]">{failureDetail.failure_message}</dd>
+            <dd className="[overflow-wrap:anywhere]">
+              {failureDetail.failure_message}
+            </dd>
           </div>
         ) : null}
       </dl>

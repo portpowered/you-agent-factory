@@ -13,10 +13,11 @@ import type {
   EditableWorkstationValidationErrors,
 } from "./detail-card-types";
 import { resolveEditableWorkstationOverwriteFields } from "./editable-workstation-overwrite-fields";
+import {
+  getWorkstationDetailMessages,
+  type WorkstationDetailMessages,
+} from "./messages";
 import type { DashboardSelection } from "./types";
-
-const EMPTY_EDITABLE_CONFIGURATION_MESSAGE =
-  "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -28,7 +29,9 @@ interface EditableWorkstationSessionState {
 export function useEditableWorkstationConfigurationState(
   selection: DashboardSelection | null,
   selectedNode: DashboardWorkstationNode | null,
+  locale?: string | null,
 ): EditableWorkstationConfigurationState | undefined {
+  const messages = getWorkstationDetailMessages(locale);
   const editableDefinitionEnabled = useEditableDefinitionGate(
     selection,
     selectedNode,
@@ -62,7 +65,7 @@ export function useEditableWorkstationConfigurationState(
 
   if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
     return {
-      message: EMPTY_EDITABLE_CONFIGURATION_MESSAGE,
+      message: messages.editableConfigurationEmpty,
       status: "empty",
     };
   }
@@ -70,6 +73,7 @@ export function useEditableWorkstationConfigurationState(
   const resolvedValidationErrors = validateEditableWorkstationDraft(
     sessionState.draft,
     selectedEditableValues,
+    messages,
   );
   const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
     resolvedValidationErrors,
@@ -83,8 +87,9 @@ export function useEditableWorkstationConfigurationState(
 
   return {
     draft: sessionState.draft,
-    hasValidationErrors:
-      hasEditableWorkstationValidationErrors(resolvedValidationErrors),
+    hasValidationErrors: hasEditableWorkstationValidationErrors(
+      resolvedValidationErrors,
+    ),
     initialValues: selectedEditableValues,
     isDirty: !areEditableDraftsEqual(
       sessionState.draft,
@@ -191,11 +196,18 @@ function useEditableWorkstationSession(
 export function validateEditableWorkstationDraft(
   draft: EditableWorkstationDraft,
   selectedEditableValues?: ReturnType<typeof resolveEditableWorkstationValues>,
+  messages: Pick<
+    WorkstationDetailMessages,
+    | "editableConfigurationModelEditBlocked"
+    | "editableConfigurationModelRequired"
+    | "editableConfigurationPromptFileWhitespace"
+    | "editableConfigurationPromptRequired"
+  > = getWorkstationDetailMessages(undefined),
 ): EditableWorkstationValidationErrors {
   const validationErrors: EditableWorkstationValidationErrors = {};
 
   if (draft.model.trim().length === 0) {
-    validationErrors.model = "Enter a model before saving this workstation.";
+    validationErrors.model = messages.editableConfigurationModelRequired;
   } else if (
     selectedEditableValues &&
     !selectedEditableValues.isModelEditable &&
@@ -203,16 +215,16 @@ export function validateEditableWorkstationDraft(
   ) {
     validationErrors.model =
       selectedEditableValues.modelEditBlockedReason ??
-      "Model edits are disabled for this workstation.";
+      messages.editableConfigurationModelEditBlocked;
   }
 
   if (draft.prompt.trim().length === 0) {
-    validationErrors.prompt = "Enter a prompt before saving this workstation.";
+    validationErrors.prompt = messages.editableConfigurationPromptRequired;
   }
 
   if (draft.promptFile.length > 0 && draft.promptFile.trim().length === 0) {
     validationErrors.promptFile =
-      "Template paths cannot be only whitespace. Clear the field to remove the template.";
+      messages.editableConfigurationPromptFileWhitespace;
   }
 
   return validationErrors;

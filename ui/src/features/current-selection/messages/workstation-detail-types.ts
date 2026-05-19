@@ -25,6 +25,11 @@ export interface WorkstationDetailMessages {
   editableConfigurationSaveSuccess: string;
   editableConfigurationSummary: string;
   editableConfigurationValidationStatus: string;
+  editableConfigurationModelRequired: string;
+  editableConfigurationModelEditBlocked: string;
+  editableConfigurationPromptRequired: string;
+  editableConfigurationPromptFileWhitespace: string;
+  editableConfigurationSaveFallbackError: string;
   modelFieldLabel: string;
   notConfiguredValue: string;
   promptFieldLabel: string;
@@ -61,7 +66,10 @@ export interface WorkstationDetailMessages {
   providerSessionSelectAction: string;
   providerSessionSelectionUnavailable: string;
   scriptCommandSummary: (command: string) => string;
-  selectProviderSessionLabel: (sessionLabel: string, dispatchId: string) => string;
+  selectProviderSessionLabel: (
+    sessionLabel: string,
+    dispatchId: string,
+  ) => string;
   selectRequestLabel: (requestLabel: string, dispatchId: string) => string;
   selectWorkItemLabel: (workItemLabel: string) => string;
   selectWorkstationRequestLabel: (dispatchId: string) => string;
