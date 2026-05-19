@@ -26,7 +26,7 @@ For example:
 2. install on macOS/Linux: `curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh`
 3. install on Windows PowerShell: `irm https://github.com/portpowered/infinite-you/releases/latest/download/install.ps1 | iex`
 4. go `cd your-project-directory`
-5. run `infinite-you`
+5. run `you`
 6. submit a work task on the website interface, like "go write a report on my codebase at TEST.md", 
 7. wait till complete
 8. finished
@@ -34,8 +34,8 @@ For example:
 
 ### claude variant
 ```
-infinite-you init --executor claude --dir my-factory
-infinite-you docs workstation
+you init --executor claude --dir my-factory
+you docs workstation
 ```
 
 ## Inspect Runtime State
@@ -43,8 +43,8 @@ infinite-you docs workstation
 With the service running, ask the live API which factory is currently active:
 
 ```sh
-infinite-you factory query
-infinite-you factory query --port 7437 --json
+you factory query
+you factory query --port 7437 --json
 ```
 
 `factory query` reads the running service's current-factory API. It does not infer

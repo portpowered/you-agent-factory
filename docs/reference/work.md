@@ -301,7 +301,7 @@ A workstation is the step that connects topology to execution:
 | `onRejection` | No | Place produced when the worker rejects. |
 | `onFailure` | Recommended | Place produced when the worker fails or times out. |
 | `resources` | No | Resource capacity consumed while this workstation runs. |
-| `copyReferencedScripts` | No | When `true`, `agent-factory config expand` copies supported referenced script files for this workstation's bound `SCRIPT_WORKER`. Omit it or set `false` to keep script references external. |
+| `copyReferencedScripts` | No | When `true`, `you config expand` copies supported referenced script files for this workstation's bound `SCRIPT_WORKER`. Omit it or set `false` to keep script references external. |
 | `guards` | No | Workstation-level `VISIT_COUNT` guards. Parent fan-in belongs on per-input guards. |
 | `CRON` | Cron only | Trigger timing for `behavior: "CRON"`. |
 
@@ -313,13 +313,13 @@ workstation entry or in `workstations/<name>/AGENTS.md`. See
 
 ## Config Portability For Script-Backed Layouts
 
-`agent-factory config flatten` supports script-backed workstations without a
+`you config flatten` supports script-backed workstations without a
 split `workstations/<name>/AGENTS.md` file when the workstation already
 declares inline runtime fields in `factory.json`. Keep at least one runtime
 field inline, such as `type: "MODEL_WORKSTATION"`, so the flattened config
 still carries a complete standalone workstation definition.
 
-Use `copyReferencedScripts` on the workstation when `agent-factory config
+Use `copyReferencedScripts` on the workstation when `you config
 expand` should materialize supported relative script files into the expanded
 layout. When the field is omitted or `false`, expand leaves those script files
 external and only writes the split config files.
@@ -351,11 +351,11 @@ Portable script-backed example:
 
 With that shape:
 
-1. `agent-factory config flatten ./factory` succeeds even if
+1. `you config flatten ./factory` succeeds even if
    `workstations/setup-workspace/AGENTS.md` does not exist.
 2. The flattened JSON keeps the inline workstation runtime fields and the
    script-worker command metadata needed for a later expand.
-3. `agent-factory config expand ./factory.json` copies
+3. `you config expand ./factory.json` copies
    `scripts/setup-workspace.py` into the expanded layout only because
    `copyReferencedScripts` is explicitly `true`.
 

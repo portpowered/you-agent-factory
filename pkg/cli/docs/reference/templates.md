@@ -63,6 +63,6 @@ Task:
 
 ## Related
 
-- `infinite-you docs workstation`
-- `infinite-you docs workers`
-- `infinite-you docs batch-work`
+- `you docs workstation`
+- `you docs workers`
+- `you docs batch-work`
