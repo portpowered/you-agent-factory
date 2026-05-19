@@ -6,7 +6,7 @@ required:
   - parse
 properties:
   providerSession:
-    $ref: '../events/ProviderSessionMetadata.yaml'
+    $ref: './LoadableProviderSessionRef.yaml'
   source:
     $ref: './ProviderSessionSourceMetadata.yaml'
   parse:
