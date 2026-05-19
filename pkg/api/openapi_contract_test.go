@@ -140,6 +140,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		"/work/{id}":                  {"get"},
 		"/events":                     {"get"},
 		"/status":                     {"get"},
+		"/provider-sessions/detail":   {"get"},
 		"/factory":                    {"post"},
 		"/factory/~current":           {"get"},
 	}
@@ -496,6 +497,94 @@ func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t 
 	assertOpenAPI3Description(t, "Guard", workstationGuard.Description)
 	for _, propertyName := range []string{"type", "workstation", "maxVisits", "matchConfig", "parentInput", "matchInput", "spawnedBy"} {
 		assertOpenAPI3PropertyDescription(t, workstationGuard, "Guard", propertyName)
+	}
+}
+
+func TestOpenAPIContract_ProviderSessionDetailRouteUsesCanonicalLoadableShape(t *testing.T) {
+	data, err := os.ReadFile("../../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read openapi contract: %v", err)
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse openapi contract: %v", err)
+	}
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+	pathItem, ok := paths["/provider-sessions/detail"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths./provider-sessions/detail is missing")
+	}
+	operation, ok := pathItem["get"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths./provider-sessions/detail.get is missing")
+	}
+	parameters, ok := operation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./provider-sessions/detail.get.parameters is missing")
+	}
+
+	var providerSchema, kindSchema map[string]any
+	for _, raw := range parameters {
+		parameter, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := parameter["name"].(string)
+		schema, _ := parameter["schema"].(map[string]any)
+		switch name {
+		case "provider":
+			providerSchema = schema
+		case "kind":
+			kindSchema = schema
+		}
+	}
+
+	if providerSchema == nil {
+		t.Fatalf("provider-sessions/detail provider query schema is missing")
+	}
+	if kindSchema == nil {
+		t.Fatalf("provider-sessions/detail kind query schema is missing")
+	}
+	if providerSchema["$ref"] != "#/components/schemas/LoadableProviderSessionProvider" {
+		t.Fatalf("provider query schema ref = %v, want canonical loadable provider schema", providerSchema["$ref"])
+	}
+	if kindSchema["$ref"] != "#/components/schemas/LoadableProviderSessionKind" {
+		t.Fatalf("kind query schema ref = %v, want canonical loadable kind schema", kindSchema["$ref"])
+	}
+
+	schemas := componentSchemas(t, doc)
+	assertEnumValues(
+		t,
+		schemaObject(t, schemas, "LoadableProviderSessionProvider"),
+		"components.schemas.LoadableProviderSessionProvider",
+		[]string{"codex"},
+	)
+	assertEnumValues(
+		t,
+		schemaObject(t, schemas, "LoadableProviderSessionKind"),
+		"components.schemas.LoadableProviderSessionKind",
+		[]string{"session_id"},
+	)
+
+	loadableRefSchema := schemaObject(t, schemas, "LoadableProviderSessionRef")
+	assertRequiredFields(t, loadableRefSchema, "provider", "kind", "id")
+	loadableRefProperties := schemaProperties(t, loadableRefSchema, "components.schemas.LoadableProviderSessionRef")
+	if providerProperty, ok := loadableRefProperties["provider"].(map[string]any); !ok || providerProperty["$ref"] != "#/components/schemas/LoadableProviderSessionProvider" {
+		t.Fatalf("LoadableProviderSessionRef.provider must reference the canonical loadable provider schema")
+	}
+	if kindProperty, ok := loadableRefProperties["kind"].(map[string]any); !ok || kindProperty["$ref"] != "#/components/schemas/LoadableProviderSessionKind" {
+		t.Fatalf("LoadableProviderSessionRef.kind must reference the canonical loadable kind schema")
+	}
+
+	providerSessionDetailResponse := schemaObject(t, schemas, "ProviderSessionDetailResponse")
+	providerSessionDetailProperties := schemaProperties(t, providerSessionDetailResponse, "components.schemas.ProviderSessionDetailResponse")
+	if providerSessionProperty, ok := providerSessionDetailProperties["providerSession"].(map[string]any); !ok || providerSessionProperty["$ref"] != "#/components/schemas/LoadableProviderSessionRef" {
+		t.Fatalf("ProviderSessionDetailResponse.providerSession must reference the canonical loadable provider-session shape")
 	}
 }
 

@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - provider
+  - kind
+  - id
+properties:
+  provider:
+    $ref: './LoadableProviderSessionProvider.yaml'
+  kind:
+    $ref: './LoadableProviderSessionKind.yaml'
+  id:
+    type: string
+    description: Provider-session identifier to resolve. This is an identifier, not a filesystem path.

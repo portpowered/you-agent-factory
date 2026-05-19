@@ -350,9 +350,9 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode provider session response: %v", err)
 	}
-	if stringValue(resp.ProviderSession.Provider) != "codex" ||
-		stringValue(resp.ProviderSession.Kind) != "session_id" ||
-		stringValue(resp.ProviderSession.Id) != "sess_123" {
+	if string(resp.ProviderSession.Provider) != "codex" ||
+		string(resp.ProviderSession.Kind) != "session_id" ||
+		resp.ProviderSession.Id != "sess_123" {
 		t.Fatalf("provider session = %#v, want codex session_id sess_123", resp.ProviderSession)
 	}
 	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
