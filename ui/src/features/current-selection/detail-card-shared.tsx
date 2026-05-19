@@ -17,6 +17,7 @@ import type {
   MetadataSectionProps,
   RequestCountSectionProps,
 } from "./detail-card-types";
+import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 
 export const EXECUTION_PILL_CLASS = cx(
   "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
@@ -137,9 +138,14 @@ export function InferenceAttemptDetail({
 }
 
 export function RequestCountSection({ request }: RequestCountSectionProps) {
+  const messages = useCurrentSelectionDetailMessages();
+
   return (
-    <section aria-label="Request counts" className={RUNTIME_DETAILS_SECTION_CLASS}>
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request counts</h4>
+    <section
+      aria-label={messages.requestCountsRegionLabel}
+      className={RUNTIME_DETAILS_SECTION_CLASS}
+    >
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestCountsHeading}</h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <InferenceAttemptDetail label="dispatchedCount" value={request.dispatched_request_count} />
         <InferenceAttemptDetail label="respondedCount" value={request.responded_request_count} />

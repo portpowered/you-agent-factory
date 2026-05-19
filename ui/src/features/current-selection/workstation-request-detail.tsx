@@ -24,6 +24,7 @@ import {
   buildWorkstationRequestDetailView,
   type WorkstationRequestDetailView,
 } from "./workstation-request-detail-view";
+import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 
 export function WorkstationRequestDetailCard({
   onSelectWorkID,
@@ -31,6 +32,7 @@ export function WorkstationRequestDetailCard({
   selectedWorkID,
   widgetId = "current-selection",
 }: WorkstationRequestDetailCardProps) {
+  const messages = useCurrentSelectionDetailMessages();
   const view = buildWorkstationRequestDetailView(request);
   const showInferenceAttempts = !view.isScriptBackedRequest;
 
@@ -46,17 +48,21 @@ export function WorkstationRequestDetailCard({
       />
       {view.isScriptBackedRequest ? (
         <MetadataSection
-          emptyMessage="Request metadata is not available for this workstation request."
+          emptyMessage={messages.metadataEmpty}
           metadata={request.request_metadata}
-          title="Request metadata"
+          title={messages.requestMetadataTitle}
         />
       ) : null}
       <ResponseDetailsSection request={request} view={view} />
       {view.isScriptBackedRequest ? (
         <MetadataSection
-          emptyMessage={view.responseMetadataUnavailableCopy}
+          emptyMessage={
+            request.errored_request_count > 0 || view.hasFailureDetails
+              ? messages.responseMetadataUnavailableErrored
+              : messages.responseMetadataUnavailableScript
+          }
           metadata={request.response_metadata}
-          title="Response metadata"
+          title={messages.responseMetadataTitle}
         />
       ) : null}
       <ErrorDetailsSection view={view} />
@@ -74,6 +80,8 @@ function WorkstationRequestSummary({
   request: WorkstationRequestDetailCardProps["request"];
   view: WorkstationRequestDetailView;
 }) {
+  const messages = useCurrentSelectionDetailMessages();
+
   return (
     <>
       <p className={WIDGET_SUBTITLE_CLASS}>
@@ -81,7 +89,7 @@ function WorkstationRequestSummary({
       </p>
       <dl>
         <div>
-          <dt>Dispatch ID</dt>
+          <dt>{messages.dispatchIdLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             <code className={RUNTIME_DETAIL_CODE_CLASS}>
               {request.dispatch_id}
@@ -89,26 +97,25 @@ function WorkstationRequestSummary({
           </dd>
         </div>
         <div>
-          <dt>Request ID</dt>
+          <dt>{messages.requestIdLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {request.request_id ? (
               <code className={RUNTIME_DETAIL_CODE_CLASS}>
                 {request.request_id}
               </code>
             ) : (
-              "Request ID is not available for this workstation request."
+              messages.requestIdUnavailable
             )}
           </dd>
         </div>
         <div>
-          <dt>Workstation</dt>
+          <dt>{messages.workstationLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {request.workstation_name ||
-              "Workstation details are not available for this request."}
+            {request.workstation_name || messages.workstationUnavailable}
           </dd>
         </div>
         <div>
-          <dt>Transition ID</dt>
+          <dt>{messages.transitionIdLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             <code className={RUNTIME_DETAIL_CODE_CLASS}>
               {request.transition_id}
@@ -116,19 +123,17 @@ function WorkstationRequestSummary({
           </dd>
         </div>
         <div>
-          <dt>Outcome</dt>
+          <dt>{messages.outcomeLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.outcome
-              ? view.outcome
-              : "Outcome details are not available yet."}
+            {view.outcome ? view.outcome : messages.outcomeUnavailable}
           </dd>
         </div>
         <div>
-          <dt>Total duration</dt>
+          <dt>{messages.totalDurationLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {view.totalDurationMillis !== undefined
               ? formatDurationMillis(view.totalDurationMillis)
-              : "Total duration is not available for this workstation request yet."}
+              : messages.totalDurationUnavailable}
           </dd>
         </div>
       </dl>
@@ -147,31 +152,32 @@ function RequestDetailsSection({
   selectedWorkID?: WorkstationRequestDetailCardProps["selectedWorkID"];
   view: WorkstationRequestDetailView;
 }) {
+  const messages = useCurrentSelectionDetailMessages();
   const consumedWorkItems = request.request_view?.input_work_items ?? [];
 
   if (!view.isScriptBackedRequest) {
     return (
       <section
-        aria-label="Request details"
+        aria-label={messages.requestDetailsTitle}
         className={RUNTIME_DETAILS_SECTION_CLASS}
       >
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request details</h4>
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestDetailsTitle}</h4>
         <ConsumedWorkItemsSection
           onSelectWorkID={onSelectWorkID}
           selectedWorkID={selectedWorkID}
           workItems={consumedWorkItems}
         />
-        <p className={DETAIL_COPY_CLASS}>{view.inferenceRequestDetailsCopy}</p>
+        <p className={DETAIL_COPY_CLASS}>{messages.inferenceRequestDetailsCopy}</p>
       </section>
     );
   }
 
   return (
     <section
-      aria-label="Request details"
+      aria-label={messages.requestDetailsTitle}
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request details</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestDetailsTitle}</h4>
       <dl>
         <ScriptRequestFields request={request} />
       </dl>
@@ -197,13 +203,15 @@ function ConsumedWorkItemsSection({
     >["input_work_items"]
   >;
 }) {
+  const messages = useCurrentSelectionDetailMessages();
+
   if (workItems.length === 0) {
     return null;
   }
 
   return (
     <div className="grid gap-1">
-      <span>Consumed work items</span>
+      <span>{messages.consumedWorkItemsLabel}</span>
       <div className="flex flex-wrap gap-2">
         {workItems.map((workItem) => {
           const workLabel = formatWorkItemLabel(workItem);
@@ -211,14 +219,16 @@ function ConsumedWorkItemsSection({
 
           return (
             <button
-              aria-label={`Select work item ${workLabel}`}
+              aria-label={messages.selectWorkItemLabel(workLabel)}
               aria-pressed={isSelected}
               className={WORK_SELECTION_BUTTON_CLASS}
               key={workItem.work_id}
               onClick={() => onSelectWorkID?.(workItem.work_id)}
               type="button"
             >
-              {isSelected ? "Work item selected" : `Open ${workLabel}`}
+              {isSelected
+                ? messages.selectedWorkItemAction
+                : messages.openWorkItemAction(workLabel)}
             </button>
           );
         })}
@@ -232,6 +242,7 @@ function ScriptRequestFields({
 }: {
   request: WorkstationRequestDetailCardProps["request"];
 }) {
+  const messages = useCurrentSelectionDetailMessages();
   const scriptRequest = request.script_request;
   if (!scriptRequest) {
     return null;
@@ -240,37 +251,37 @@ function ScriptRequestFields({
   return (
     <>
       <div>
-        <dt>Script request ID</dt>
+        <dt>{messages.scriptRequestIdLabel}</dt>
         <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
           {scriptRequest.script_request_id ? (
             <code className={RUNTIME_DETAIL_CODE_CLASS}>
               {scriptRequest.script_request_id}
             </code>
           ) : (
-            "Script request details are not available for this workstation request."
+            messages.scriptRequestUnavailable
           )}
         </dd>
       </div>
       <div>
-        <dt>Script attempt</dt>
+        <dt>{messages.scriptAttemptLabel}</dt>
         <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-          {scriptRequest.attempt ?? "Script attempt is not available yet."}
+          {scriptRequest.attempt ?? messages.scriptAttemptUnavailable}
         </dd>
       </div>
       <div>
-        <dt>Command</dt>
+        <dt>{messages.commandLabel}</dt>
         <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
           {scriptRequest.command ? (
             <code className={RUNTIME_DETAIL_CODE_CLASS}>
               {scriptRequest.command}
             </code>
           ) : (
-            "Script command details are not available for this workstation request."
+            messages.commandUnavailable
           )}
         </dd>
       </div>
       <div>
-        <dt>Resolved args</dt>
+        <dt>{messages.resolvedArgsLabel}</dt>
         <dd className="grid gap-1">
           {scriptRequest.args && scriptRequest.args.length > 0 ? (
             scriptRequest.args.map((arg: string) => (
@@ -280,7 +291,7 @@ function ScriptRequestFields({
             ))
           ) : (
             <span className={RUNTIME_DETAIL_VALUE_CLASS}>
-              Script arguments are not available for this workstation request.
+              {messages.scriptArgumentsUnavailable}
             </span>
           )}
         </dd>

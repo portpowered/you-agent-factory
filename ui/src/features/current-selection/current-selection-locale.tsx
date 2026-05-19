@@ -6,11 +6,16 @@ import {
   getCurrentSelectionDispatchHistoryMessages,
 } from "./messages/current-selection-dispatch-history";
 import {
+  type CurrentSelectionDetailMessages,
+  getCurrentSelectionDetailMessages,
+} from "./messages/current-selection-detail";
+import {
   type CurrentSelectionShellMessages,
   getCurrentSelectionShellMessages,
 } from "./messages/current-selection-shell";
 
 interface CurrentSelectionLocaleMessages {
+  detail: CurrentSelectionDetailMessages;
   dispatchHistory: CurrentSelectionDispatchHistoryMessages;
   shell: CurrentSelectionShellMessages;
 }
@@ -30,6 +35,7 @@ export function CurrentSelectionLocaleProvider({
   return (
     <CurrentSelectionLocaleContext.Provider
       value={{
+        detail: getCurrentSelectionDetailMessages(locale),
         dispatchHistory: getCurrentSelectionDispatchHistoryMessages(locale),
         shell: getCurrentSelectionShellMessages(locale),
       }}
@@ -50,5 +56,12 @@ export function useCurrentSelectionDispatchHistoryMessages(): CurrentSelectionDi
   return (
     useContext(CurrentSelectionLocaleContext)?.dispatchHistory ??
     getCurrentSelectionDispatchHistoryMessages(undefined)
+  );
+}
+
+export function useCurrentSelectionDetailMessages(): CurrentSelectionDetailMessages {
+  return (
+    useContext(CurrentSelectionLocaleContext)?.detail ??
+    getCurrentSelectionDetailMessages(undefined)
   );
 }

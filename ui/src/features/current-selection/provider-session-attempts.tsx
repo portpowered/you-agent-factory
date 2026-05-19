@@ -32,29 +32,9 @@ import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "./provider-session-details";
+import { getWorkstationDetailMessages } from "./messages";
 
-const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = {
-  currentDispatchLabel: "Current dispatch",
-  openNamedWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
-  openRequestDetailsAction: "Open request details",
-  providerSessionLogAction: "Codex session log",
-  providerSessionLogUnavailable: "Session log unavailable",
-  providerSessionSelectedAction: "Session selected",
-  providerSessionSelectAction: "Inspect session details",
-  providerSessionSelectionUnavailable: "Session details unavailable",
-  requestDetailsUnavailable: (dispatchId: string) =>
-    `Request details unavailable for dispatch ${dispatchId}.`,
-  requestSelectedAction: "Request selected",
-  selectProviderSessionLabel: (sessionLabel: string, dispatchId: string) =>
-    `Select provider session ${sessionLabel} for dispatch ${dispatchId}`,
-  selectWorkItemLabel: (workItemLabel: string) =>
-    `Select work item ${workItemLabel}`,
-  selectWorkstationRequestLabel: (dispatchId: string) =>
-    `Select workstation request ${dispatchId}`,
-  workDetailsUnavailable: (dispatchId: string) =>
-    `Work details unavailable for dispatch ${dispatchId}.`,
-  workSelectedAction: "Work selected",
-} satisfies NonNullable<ProviderSessionAttemptsProps["messages"]>;
+const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);
 
 export function CollapsibleProviderSessionAttempts({
   attempts,

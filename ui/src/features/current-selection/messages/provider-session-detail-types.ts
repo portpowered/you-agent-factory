@@ -1,9 +1,13 @@
 export interface ProviderSessionDetailMessages {
+  bytesLabel: string;
+  dispatchLabel: string;
   emptyState: string;
   errorPrefix: string;
   eventCountLabel: string;
   functionCallsHeading: string;
   functionCallsUnavailable: string;
+  lineCountLabel: string;
+  loadingState: string;
   malformedLineCountLabel: string;
   missingState: string;
   modifiedAtLabel: string;
@@ -19,6 +23,7 @@ export interface ProviderSessionDetailMessages {
   sourceHeading: string;
   tokenUsageHeading: string;
   tokenUsageUnavailable: string;
+  unavailableValue: string;
   turnsHeading: string;
   turnsUnavailable: string;
   unknownEventCountLabel: string;

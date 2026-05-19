@@ -6,12 +6,16 @@ import type { ProviderSessionDetailMessages } from "./provider-session-detail-ty
 
 const providerSessionDetailMessagesByLocale = {
   en: {
+    bytesLabel: "bytes",
+    dispatchLabel: "Dispatch",
     emptyState:
       "The selected session file did not contain any Codex event records.",
     errorPrefix: "Session details could not be loaded.",
     eventCountLabel: "Parsed events",
     functionCallsHeading: "Function calls",
     functionCallsUnavailable: "No function or tool calls were recorded.",
+    lineCountLabel: "Lines",
+    loadingState: "Loading session details...",
     malformedLineCountLabel: "Malformed lines",
     missingState:
       "The selected provider-session file could not be found under the configured Codex sessions directory.",
@@ -29,11 +33,14 @@ const providerSessionDetailMessagesByLocale = {
     sourceHeading: "Source file",
     tokenUsageHeading: "Token usage",
     tokenUsageUnavailable: "Token usage was not reported for this session.",
+    unavailableValue: "Unavailable",
     turnsHeading: "Execution turns",
     turnsUnavailable: "No execution turns were inferred from this session.",
     unknownEventCountLabel: "Unknown events",
   },
   ja: {
+    bytesLabel: "bytes",
+    dispatchLabel: "ディスパッチ",
     emptyState:
       "選択したセッションファイルには Codex のイベント記録が含まれていませんでした。",
     errorPrefix: "セッション詳細を読み込めませんでした。",
@@ -41,6 +48,8 @@ const providerSessionDetailMessagesByLocale = {
     functionCallsHeading: "関数呼び出し",
     functionCallsUnavailable:
       "関数またはツールの呼び出しは記録されていません。",
+    lineCountLabel: "行数",
+    loadingState: "セッション詳細を読み込み中...",
     malformedLineCountLabel: "不正な行数",
     missingState:
       "選択した provider-session ファイルは、設定済み Codex sessions ディレクトリ配下に見つかりませんでした。",
@@ -59,12 +68,15 @@ const providerSessionDetailMessagesByLocale = {
     tokenUsageHeading: "トークン使用量",
     tokenUsageUnavailable:
       "このセッションではトークン使用量が報告されていません。",
+    unavailableValue: "利用不可",
     turnsHeading: "実行ターン",
     turnsUnavailable:
       "このセッションから推定できる実行ターンはありませんでした。",
     unknownEventCountLabel: "不明なイベント数",
   },
   ko: {
+    bytesLabel: "bytes",
+    dispatchLabel: "디스패치",
     emptyState:
       "선택한 세션 파일에 Codex 이벤트 레코드가 포함되어 있지 않습니다.",
     errorPrefix: "세션 세부 정보를 불러올 수 없습니다.",
@@ -72,6 +84,8 @@ const providerSessionDetailMessagesByLocale = {
     functionCallsHeading: "함수 호출",
     functionCallsUnavailable:
       "함수 또는 도구 호출이 기록되지 않았습니다.",
+    lineCountLabel: "줄 수",
+    loadingState: "세션 세부 정보를 불러오는 중...",
     malformedLineCountLabel: "잘못된 줄 수",
     missingState:
       "선택한 provider-session 파일을 구성된 Codex sessions 디렉터리 아래에서 찾을 수 없습니다.",
@@ -89,17 +103,22 @@ const providerSessionDetailMessagesByLocale = {
     sourceHeading: "소스 파일",
     tokenUsageHeading: "토큰 사용량",
     tokenUsageUnavailable: "이 세션에는 토큰 사용량이 보고되지 않았습니다.",
+    unavailableValue: "사용 불가",
     turnsHeading: "실행 턴",
     turnsUnavailable:
       "이 세션에서 추론할 수 있는 실행 턴이 없습니다.",
     unknownEventCountLabel: "알 수 없는 이벤트",
   },
   "zh-CN": {
+    bytesLabel: "字节",
+    dispatchLabel: "分派",
     emptyState: "所选会话文件不包含任何 Codex 事件记录。",
     errorPrefix: "无法加载会话详情。",
     eventCountLabel: "已解析事件数",
     functionCallsHeading: "函数调用",
     functionCallsUnavailable: "没有记录任何函数或工具调用。",
+    lineCountLabel: "行数",
+    loadingState: "正在加载会话详情...",
     malformedLineCountLabel: "损坏行数",
     missingState:
       "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
@@ -117,6 +136,7 @@ const providerSessionDetailMessagesByLocale = {
     sourceHeading: "源文件",
     tokenUsageHeading: "Token 用量",
     tokenUsageUnavailable: "该会话没有报告 token 用量。",
+    unavailableValue: "不可用",
     turnsHeading: "执行轮次",
     turnsUnavailable: "无法从该会话推断出任何执行轮次。",
     unknownEventCountLabel: "未知事件数",

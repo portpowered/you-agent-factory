@@ -31,6 +31,41 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("Loading session details...")).toBeTruthy();
   });
 
+  it("renders zh-CN provider-session loading and missing states", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "NOT_FOUND",
+          message: "Missing provider session.",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 404,
+          statusText: "Not Found",
+        },
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={SELECTED_SESSION}
+      />,
+    );
+
+    expect(screen.getByText("正在加载会话详情...")).toBeTruthy();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
+        ),
+      ).toBeTruthy();
+    });
+  });
+
   it("shows a not-found state when the session file is missing", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       new Response(
