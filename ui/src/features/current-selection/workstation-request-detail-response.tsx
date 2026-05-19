@@ -29,7 +29,7 @@ export function ResponseDetailsSection({
       {view.isScriptBackedRequest ? (
         <ScriptResponseDetails request={request} view={view} />
       ) : (
-        <InferenceResponseDetails request={request} view={view} />
+        <InferenceResponseDetails request={request} />
       )}
     </section>
   );

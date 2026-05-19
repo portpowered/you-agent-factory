@@ -143,6 +143,49 @@ describe("WorkstationRequestDetailCard", () => {
     ).toBeTruthy();
   });
 
+  it("surfaces failed outcome reason and message in the top-level outcome row", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-failed", {
+          failure_message:
+            "Provider rate limit exceeded while generating the analysis.",
+          failure_reason: "provider_rate_limit",
+          outcome: "FAILED",
+          request_id: "request-failed-story",
+        })}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    const outcomeRow = within(currentSelection).getByText("Outcome").closest("div");
+
+    expect(outcomeRow?.textContent).toContain("FAILED");
+    expect(outcomeRow?.textContent).toContain(
+      "Failure reason: provider_rate_limit",
+    );
+    expect(outcomeRow?.textContent).toContain(
+      "Failure message: Provider rate limit exceeded while generating the analysis.",
+    );
+  });
+
+  it("keeps failed outcome summary stable when no failure details are available", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-failed-no-details", {
+          outcome: "FAILED",
+          request_id: "request-failed-no-details",
+        })}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    const outcomeRow = within(currentSelection).getByText("Outcome").closest("div");
+
+    expect(outcomeRow?.textContent).toContain("FAILED");
+    expect(outcomeRow?.textContent).not.toContain("Failure reason:");
+    expect(outcomeRow?.textContent).not.toContain("Failure message:");
+  });
+
   it("lets consumed work items become the current selection from request details", () => {
     const onSelectWorkID = vi.fn();
 
