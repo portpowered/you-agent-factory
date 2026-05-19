@@ -13,6 +13,13 @@ behavior that the runtime turns into a Petri-net execution model.
 Use this guide when writing or reviewing `factory.json`. For the JSON file you
 drop into `inputs/<workType>/...`, see [Batch Inputs](batch-inputs.md).
 
+This is the canonical customer-facing guide for work and top-level
+`factory.json` configuration. Keep work types, work states, routing behavior,
+runtime resource pools, and portability fields here. Keep workstation-specific
+runtime step behavior in [Workstations](workstations.md), worker backend fields
+in [Workers](workers.md), and submitted request payload details in
+[Batch Inputs](batch-inputs.md).
+
 ## Minimal Factory
 
 A minimal factory needs one work type, one worker, and one workstation that

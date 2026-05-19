@@ -11,8 +11,13 @@ executors that workstations invoke. This guide explains how to configure
 workstation topology, scheduling kinds, prompt/runtime fields, worker
 definitions, cron triggers, and parent-aware fan-in.
 
-Use [Factory JSON And Work Configuration](work.md) for the top-level
-`factory.json` guide.
+Use this page as a combined authoring overview when you need to see how
+workstations and workers cooperate in one workflow. The canonical contract
+owners are [Workstations](workstations.md) for workstation kinds, route fields,
+and step runtime behavior; [Workers](workers.md) for worker backend fields and
+`workers/<name>/AGENTS.md` placement; and
+[Factory JSON And Work Configuration](work.md) for the top-level `factory.json`
+work model.
 
 ## Recommended Layout
 
