@@ -39,21 +39,21 @@ describe("SelectionDetailLayout", () => {
 
   it("renders localized history control labels and accessible names from the requested locale", () => {
     render(
-      <CurrentSelectionLocaleProvider locale="ja">
+      <CurrentSelectionLocaleProvider locale="zh-CN">
         <SelectionDetailLayout>
           <p>Body</p>
         </SelectionDetailLayout>
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.getByRole("article", { name: "現在の選択" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "現在の選択" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "当前选择" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "当前选择" })).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "選択を元に戻す" }).textContent,
-    ).toBe("元に戻す");
+      screen.getByRole("button", { name: "撤销所选内容" }).textContent,
+    ).toBe("撤销");
     expect(
-      screen.getByRole("button", { name: "選択をやり直す" }).textContent,
-    ).toBe("やり直す");
+      screen.getByRole("button", { name: "重做所选内容" }).textContent,
+    ).toBe("重做");
   });
 
   it("keeps undo and redo history behavior unchanged apart from the localized copy source", () => {
@@ -71,15 +71,15 @@ describe("SelectionDetailLayout", () => {
     });
 
     render(
-      <CurrentSelectionLocaleProvider locale="ja">
+      <CurrentSelectionLocaleProvider locale="zh-CN">
         <SelectionDetailLayout>
           <p>Body</p>
         </SelectionDetailLayout>
       </CurrentSelectionLocaleProvider>,
     );
 
-    const undoButton = screen.getByRole("button", { name: "選択を元に戻す" });
-    const redoButton = screen.getByRole("button", { name: "選択をやり直す" });
+    const undoButton = screen.getByRole("button", { name: "撤销所选内容" });
+    const redoButton = screen.getByRole("button", { name: "重做所选内容" });
 
     expect(undoButton.hasAttribute("disabled")).toBe(false);
     expect(redoButton.hasAttribute("disabled")).toBe(true);
@@ -94,12 +94,12 @@ describe("SelectionDetailLayout", () => {
     });
     expect(
       screen
-        .getByRole("button", { name: "選択をやり直す" })
+        .getByRole("button", { name: "重做所选内容" })
         .hasAttribute("disabled"),
     ).toBe(false);
 
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "選択をやり直す" }));
+      fireEvent.click(screen.getByRole("button", { name: "重做所选内容" }));
     });
 
     expect(useSelectionHistoryStore.getState().present.selection).toEqual({
@@ -108,7 +108,7 @@ describe("SelectionDetailLayout", () => {
     });
     expect(
       screen
-        .getByRole("button", { name: "選択をやり直す" })
+        .getByRole("button", { name: "重做所选内容" })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
