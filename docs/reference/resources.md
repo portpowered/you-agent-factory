@@ -3,6 +3,10 @@
 Use this page when you need the current Agent Factory resource contract for
 bounded concurrency.
 
+Use [Factory JSON and work configuration](work.md) for the overall
+`factory.json` topology and field ownership. This page owns the bounded
+concurrency behavior of `resources` pools and resource requirements.
+
 ## Current Contract
 
 - Declare shared pools at the top level of `factory.json` under `resources`.

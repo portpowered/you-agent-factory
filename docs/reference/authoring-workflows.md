@@ -11,10 +11,11 @@ public `factory.json` contract. Keep topology in `factory.json`, worker runtime
 instructions in `workers/<name>/AGENTS.md`, and workstation prompts in
 `workstations/<name>/AGENTS.md`.
 
+Use this guide for workflow sequencing, runnable examples, and command order.
 Use [Factory JSON And Work Configuration](work.md) for the field-by-field
-reference, [Workstations And Workers](workstations-and-workers.md) for prompt and cron
-fields, and [Batch Inputs](batch-inputs.md) for the watched-file and API
-request shape.
+`factory.json` reference, [Workstations](workstations.md) for workstation
+runtime fields, [Workers](workers.md) for worker backend fields, and
+[Batch Inputs](batch-inputs.md) for the watched-file and API request shape.
 
 ## Recommended Layout
 
@@ -142,60 +143,9 @@ guarded loop breaker so a rejected story cannot cycle forever.
 
 Add `supportingFiles` only when the workflow also needs declarative host-tool
 checks or bundled helper files that should travel with the factory contract.
-
-```json
-{
-  "supportingFiles": {
-    "requiredTools": [
-      {
-        "name": "python",
-        "command": "python3",
-        "purpose": "Runs bundled helper scripts",
-        "versionArgs": ["--version"]
-      }
-    ],
-    "bundledFiles": [
-      {
-        "type": "ROOT_HELPER",
-        "targetPath": "Makefile",
-        "content": {
-          "encoding": "utf-8",
-          "inline": "test:\n\tgo test ./...\n"
-        }
-      },
-      {
-        "type": "SCRIPT",
-        "targetPath": "factory/scripts/setup-workspace.py",
-        "content": {
-          "encoding": "utf-8",
-          "inline": "print('portable setup')\n"
-        }
-      },
-      {
-        "type": "DOC",
-        "targetPath": "factory/docs/usage.md",
-        "content": {
-          "encoding": "utf-8",
-          "inline": "# Usage\nRun the setup script before starting the workflow.\n"
-        }
-      }
-    ]
-  }
-}
-```
-
-- `requiredTools` are declarative only. Load or preflight validation can check
-  whether `command` resolves on `PATH`, but the factory does not install or
-  embed those tools.
-- `config flatten` collects the supported allowlist from `factory/scripts/**`,
-  `factory/docs/**`, and supported root helper files such as `Makefile` when
-  you flatten a checked-in `factory/` layout.
-- `SCRIPT` entries must target `factory/scripts/...`, `DOC` entries must
-  target `factory/docs/...`, `ROOT_HELPER` entries must target a supported
-  project-root helper file such as `Makefile`, and `content.encoding` is
-  `utf-8` in this v1 portability slice.
-- `targetPath` must already be canonical: use forward slashes, keep it
-  factory-relative, and do not use absolute paths or `.` / `..` segments.
+Use
+[Factory JSON And Work Configuration](work.md#portability-resource-manifest)
+for the manifest fields and validation rules.
 
 ### 2. Create the split runtime definitions
 
@@ -401,13 +351,15 @@ If no entry matches, mock-worker mode returns the default accepted result.
 - Add a guarded `LOGICAL_MOVE` workstation for repeater or review loops.
 - Use [Batch Inputs](batch-inputs.md) for `FACTORY_REQUEST_BATCH`
   request files.
-- Use [Workstations And Workers](workstations-and-workers.md) for cron, prompt templates,
-  timeouts, and runtime field details.
+- Use [Workstations](workstations.md) for cron, prompt templates, timeouts, and
+  workstation runtime field details.
+- Use [Workers](workers.md) for worker backend field details.
 
 ## Related
 
 - [Factory JSON And Work Configuration](work.md)
-- [Workstations And Workers](workstations-and-workers.md)
+- [Workstations](workstations.md)
+- [Workers](workers.md)
 - [Batch Inputs](batch-inputs.md)
 - [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
 - [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
