@@ -98,6 +98,17 @@ func TestCountTokenStates(t *testing.T) {
 			},
 			wantFail: 3,
 		},
+		{
+			name: "work type prefix stays local to suffix classification",
+			tokens: map[string]*interfaces.Token{
+				"t1": {ID: "t1", PlaceID: "story:phase:completed"},
+				"t2": {ID: "t2", PlaceID: "story:phase:failed"},
+				"t3": {ID: "t3", PlaceID: "story:phase:queued"},
+			},
+			wantWIP:  1,
+			wantDone: 1,
+			wantFail: 1,
+		},
 	}
 
 	for _, tt := range tests {
