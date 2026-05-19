@@ -29,6 +29,16 @@ export const WorkstationRequestSelection = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
+    const inferenceAttempts = within(
+      currentSelection.getByRole("region", { name: "Inference attempts" }),
+    );
+    const requestBody = within(
+      inferenceAttempts.getByRole("region", { name: "Request body" }),
+    );
+    const responseBody = within(
+      inferenceAttempts.getByRole("region", { name: "Response body" }),
+    );
+
     await expect(
       currentSelection.getByRole("heading", { name: "Request counts" }),
     ).toBeVisible();
@@ -42,6 +52,25 @@ export const WorkstationRequestSelection = {
     await expect(
       currentSelection.getAllByText("request-ready-story").length,
     ).toBeGreaterThan(0);
+    await expect(
+      requestBody.getByRole("heading", { level: 2, name: "Review checklist" }),
+    ).toBeVisible();
+    await expect(requestBody.getByRole("list")).toBeVisible();
+    await expect(requestBody.getByText("Check the latest diff")).toBeVisible();
+    expect(requestBody.queryByText("## Review checklist")).toBeNull();
+    expect(requestBody.queryByText("```text")).toBeNull();
+    await expect(
+      responseBody.getByRole("heading", {
+        level: 3,
+        name: "Reviewer response",
+      }),
+    ).toBeVisible();
+    await expect(responseBody.getByRole("list")).toBeVisible();
+    await expect(
+      responseBody.getByText("Confirm the diff is limited"),
+    ).toBeVisible();
+    expect(responseBody.queryByText("### Reviewer response")).toBeNull();
+    expect(responseBody.queryByText("```text")).toBeNull();
     expect(
       currentSelection.queryByRole("heading", { name: "Active work" }),
     ).toBeNull();
@@ -390,4 +419,3 @@ export const WorkstationRequestSelectionScriptFailed = {
     expectCurrentSelectionCardID(canvasElement);
   },
 };
-
