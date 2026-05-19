@@ -42,7 +42,7 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	t.Helper()
 	name := "functional-server-submit"
 	req := factoryapi.SubmitWorkRequest{
-		Name:         &name,
+		Name:         name,
 		WorkTypeName: workTypeID,
 		Payload:      payload,
 	}

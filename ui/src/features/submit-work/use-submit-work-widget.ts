@@ -2,12 +2,12 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { DashboardSubmitWorkType } from "../../api/dashboard/types";
 import { isSubmitWorkAPIError, submitWork } from "../../api/work";
+import type { SubmitWorkMessages } from "./messages/submit-work";
 import type {
   SubmitWorkDraft,
   SubmitWorkStatus,
   SubmitWorkValidationErrors,
 } from "./submit-work-card";
-import type { SubmitWorkMessages } from "./messages/submit-work";
 
 const EMPTY_DRAFT: SubmitWorkDraft = {
   requestName: "",
@@ -81,9 +81,7 @@ export function useSubmitWorkWidget(
       }
 
       mutation.mutate({
-        ...(draft.requestName.trim().length > 0
-          ? { name: draft.requestName }
-          : {}),
+        name: draft.requestName,
         payload: draft.requestText.trim().length === 0 ? "" : draft.requestText,
         workTypeName: draft.workTypeName,
       });
@@ -215,7 +213,8 @@ function validateDraft(
   const validationErrors: SubmitWorkValidationErrors = {};
 
   if (draft.workTypeName.length === 0) {
-    validationErrors.workTypeName = messages.validationMessages.workTypeRequired;
+    validationErrors.workTypeName =
+      messages.validationMessages.workTypeRequired;
   }
   return validationErrors;
 }

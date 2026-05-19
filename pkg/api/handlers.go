@@ -59,7 +59,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 	}
 
 	submitReq := interfaces.SubmitRequest{
-		Name:                   stringValue(req.Name),
+		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
 		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
@@ -878,7 +878,7 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
-	if req.Name == nil || strings.TrimSpace(stringValue(req.Name)) == "" {
+	if strings.TrimSpace(req.Name) == "" {
 		return factoryapi.SubmitWorkJSONRequestBody{}, requestFieldValidationError{message: "name is required"}
 	}
 	return req, nil
