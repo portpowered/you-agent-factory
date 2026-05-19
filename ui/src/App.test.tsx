@@ -3808,18 +3808,19 @@ describe("App dashboard follow-up flows", () => {
       ),
     ).toBeTruthy();
     expect(
-      submitWorkScope.getByText(
+      submitWorkScope.queryByText(
         "Optional. Leave this blank to submit an empty request.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
 
     fireEvent.change(workType, { target: { value: "story" } });
     expect(submitButton.disabled).toBe(false);
+    expect(submitWorkScope.getByText("Ready to submit.")).toBeTruthy();
     expect(
-      submitWorkScope.getByText(
+      submitWorkScope.queryByText(
         "Ready to submit. Request details are optional.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     fireEvent.change(requestName, {
       target: { value: "Dashboard smoke request" },
     });

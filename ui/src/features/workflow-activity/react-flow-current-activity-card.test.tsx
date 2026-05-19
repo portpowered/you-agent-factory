@@ -695,16 +695,14 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     ).toBeTruthy();
   });
 
-  it("keeps only the outer card padding while preserving the current activity heading semantics", () => {
+  it("keeps only the outer card padding while preserving the current activity region semantics", () => {
     const legendMessages = getDashboardFlowAxisLegendMessages("en");
 
     renderCurrentActivity({
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    const heading = screen.getByRole("heading", { name: "Current activity" });
-    const card = heading.closest("section");
-    const header = heading.parentElement?.parentElement as HTMLElement | null;
+    const card = screen.getByLabelText("Current activity");
     const legendToggle = screen.getByRole("button", {
       name: legendMessages.expandToggleLabel("graph legend"),
     });
@@ -717,7 +715,10 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
 
     expect(card?.className).toContain("p-4");
     expect(card?.className).toContain("md:p-5");
-    expect(header?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(
+      screen.queryByRole("heading", { name: "Current activity" }),
+    ).toBeNull();
+    expect(screen.queryByText("Operator View")).toBeNull();
     expect(legend?.className).toContain("absolute");
     expect(legend?.className).toContain("left-7");
     expect(legend?.className).toContain("top-7");
@@ -727,9 +728,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(legend?.className).not.toContain("right-0");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
-    expect(viewport.getAttribute("aria-describedby")).toBe(
-      "workflow-graph-heading",
-    );
+    expect(viewport.getAttribute("aria-describedby")).toBeNull();
   });
 
   it("renders a clear local alert when dropped PNG validation fails", async () => {
