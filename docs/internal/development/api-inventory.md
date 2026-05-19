@@ -48,9 +48,9 @@ Request body:
 
 ```json
 {
-  "name": "optional display name",
-  "work_type_name": "task",
-  "trace_id": "optional caller trace id",
+  "name": "required authored request name",
+  "workTypeName": "task",
+  "traceId": "optional caller trace id",
   "payload": {},
   "tags": {
     "key": "value"
@@ -61,7 +61,8 @@ Request body:
 
 Required fields:
 
-- `work_type_name`
+- `name`
+- `workTypeName`
 
 Success:
 
@@ -70,20 +71,21 @@ Success:
 
 ```json
 {
-  "trace_id": "trace-..."
+  "traceId": "trace-..."
 }
 ```
 
 Behavior notes:
 
-- If `trace_id` is omitted, the handler normalizes the submission and returns a generated trace ID.
+- If `traceId` is omitted, the handler normalizes the submission and returns a generated trace ID.
 - `payload` is accepted as raw JSON and forwarded to the factory submission request.
 - `relations` uses the Petri net relation shape currently defined by `petri.Relation`.
 
 Errors:
 
 - `400 BAD_REQUEST` when the JSON body cannot be decoded.
-- `400 BAD_REQUEST` when `work_type_name` is empty.
+- `400 BAD_REQUEST` when `name` is missing, empty, or whitespace-only.
+- `400 BAD_REQUEST` when `workTypeName` is empty.
 - `500 INTERNAL_ERROR` when factory submission fails.
 
 ### PUT /work-requests/{request_id}

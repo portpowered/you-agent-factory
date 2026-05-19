@@ -24,7 +24,7 @@ export async function verifyLocalizedSubmitWorkCard({
     "Localized submit work button",
   );
   await expectVisible(
-    card.getByText("先选择一个工作类型，然后即可继续。请求详情为可选。"),
+    card.getByText("先选择工作类型并填写请求名称，然后即可继续。"),
     "Localized submit work guidance",
   );
   await expectNoHorizontalOverflow(
