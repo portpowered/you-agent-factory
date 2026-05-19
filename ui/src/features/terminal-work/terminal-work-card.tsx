@@ -20,10 +20,6 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import {
-  formatProviderSession,
-  formatTraceOutcome,
-} from "../../components/ui/formatters";
 import { cx } from "../../lib/cx";
 import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
 import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
@@ -33,13 +29,13 @@ export type TerminalWorkStatus = "completed" | "failed";
 
 export interface TerminalWorkItem {
   attempts?: DashboardProviderSessionAttempt[];
-  contextText?: string;
   dispatchID?: string;
   failureMessage?: string;
   failureReason?: string;
   label: string;
   traceWorkID: string;
   workItem?: DashboardWorkItemRef;
+  workstationName?: string;
 }
 
 export interface CompletedFailedWorkstationCardProps {
@@ -66,6 +62,7 @@ interface TerminalWorkRowProps {
   onSelectItem: (item: TerminalWorkItem) => void;
   selectedLabel?: string;
   status: TerminalWorkStatus;
+  summary: (status: TerminalWorkStatus, workstation: string) => string;
   title: string;
   toggleLabel: string;
 }
@@ -146,6 +143,7 @@ export function CompletedFailedWorkstationCard({
           }
           toggleLabel={messages.disclosureLabel(completedExpanded)}
           status="completed"
+          summary={messages.summary}
           title={messages.rowTitle("completed")}
         />
         <TerminalWorkRow
@@ -162,6 +160,7 @@ export function CompletedFailedWorkstationCard({
           }
           toggleLabel={messages.disclosureLabel(failedExpanded)}
           status="failed"
+          summary={messages.summary}
           title={messages.rowTitle("failed")}
         />
       </fieldset>
@@ -180,6 +179,7 @@ function TerminalWorkRow({
   onSelectItem,
   selectedLabel,
   status,
+  summary,
   title,
   toggleLabel,
 }: TerminalWorkRowProps) {
@@ -250,7 +250,12 @@ function TerminalWorkRow({
                 <span className={TERMINAL_BUTTON_LABEL_CLASS}>
                   {item.label}
                 </span>
-                {renderTerminalWorkContext(item, fallbackMessage)}
+                {renderTerminalWorkContext(
+                  item,
+                  fallbackMessage,
+                  summary,
+                  status,
+                )}
               </Button>
             ))
           ) : (
@@ -265,28 +270,23 @@ function TerminalWorkRow({
 function renderTerminalWorkContext(
   item: TerminalWorkItem,
   fallbackMessage: string,
+  summary: (status: TerminalWorkStatus, workstation: string) => string,
+  status: TerminalWorkStatus,
 ) {
-  if (item.contextText) {
-    return (
-      <span className={TERMINAL_BUTTON_META_CLASS}>{item.contextText}</span>
-    );
-  }
-
   const latestAttempt = item.attempts?.[item.attempts.length - 1];
-  if (!latestAttempt) {
+  const workstation =
+    item.workstationName ??
+    latestAttempt?.workstation_name ??
+    latestAttempt?.transition_id;
+  if (!workstation) {
     return (
       <span className={TERMINAL_BUTTON_META_CLASS}>{fallbackMessage}</span>
     );
   }
 
-  const workstation =
-    latestAttempt.workstation_name || latestAttempt.transition_id;
-  const providerSession = formatProviderSession(latestAttempt.provider_session);
-
   return (
     <span className={TERMINAL_BUTTON_META_CLASS}>
-      {formatTraceOutcome(latestAttempt.outcome)} at {workstation};{" "}
-      {providerSession}
+      {summary(status, workstation)}
     </span>
   );
 }

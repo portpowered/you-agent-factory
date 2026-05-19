@@ -129,19 +129,23 @@ describe("useCurrentSelection.selection-helpers", () => {
     };
 
     expect(
-      buildTerminalWorkItems(["Alpha Story"], [attempt], {
-        [workAlpha.work_id]: failureDetail,
-      }),
+      buildTerminalWorkItems(
+        ["Alpha Story"],
+        [attempt],
+        {
+          [workAlpha.work_id]: failureDetail,
+        },
+      ),
     ).toEqual([
       {
         attempts: [attempt],
-        contextText: "Failed at Review",
         dispatchID: "dispatch-review",
         failureMessage: "Failed after dispatch",
         failureReason: "dispatch_failed",
         label: "Alpha Story",
         traceWorkID: workAlpha.work_id,
         workItem: workAlpha,
+        workstationName: "Review",
       },
     ]);
     expect(findStatePlace(snapshot, reviewInputPlace.place_id)).toEqual(reviewInputPlace);
@@ -491,8 +495,31 @@ describe("useCurrentSelection.selection-helpers", () => {
       ),
     ).toEqual([
       expect.objectContaining({
-        contextText: "Failed at setup-workspace",
         dispatchID: "dispatch-failed",
+        workstationName: "setup-workspace",
+      }),
+    ]);
+  });
+
+  it("renders completed terminal context as completed plus workstation without provider-session text", () => {
+    const completedAttempt: DashboardProviderSessionAttempt = {
+      dispatch_id: "dispatch-review",
+      outcome: "ACCEPTED",
+      provider_session: {
+        id: "sess-review",
+        kind: "session_id",
+        provider: "codex",
+      },
+      transition_id: "review",
+      work_items: [workAlpha],
+      workstation_name: "Review",
+    };
+
+    expect(
+      buildTerminalWorkItems(["Alpha Story"], [completedAttempt]),
+    ).toEqual([
+      expect.objectContaining({
+        workstationName: "Review",
       }),
     ]);
   });

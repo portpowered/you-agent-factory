@@ -14,7 +14,7 @@ describe("SubmitWorkWidget", () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps the submit-work card focused on the form without the redundant subtitle", () => {
+  it("keeps the submit-work card focused on the form without redundant helper copy", () => {
     renderSubmitWorkWidget(
       <SubmitWorkWidget
         submitWorkTypes={[
@@ -44,10 +44,10 @@ describe("SubmitWorkWidget", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(card).getByText(
+      within(card).queryByText(
         "Optional. Leave this blank to submit an empty request.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(card).getByRole("button", { name: "Submit work" }),
     ).toBeTruthy();
@@ -94,9 +94,10 @@ describe("SubmitWorkWidget", () => {
     });
 
     expect(submitButton.disabled).toBe(false);
+    expect(screen.getByText("Ready to submit.")).toBeTruthy();
     expect(
-      screen.getByText("Ready to submit. Request details are optional."),
-    ).toBeTruthy();
+      screen.queryByText("Ready to submit. Request details are optional."),
+    ).toBeNull();
     expect(submitButton.className).toContain("bg-af-accent");
   });
 

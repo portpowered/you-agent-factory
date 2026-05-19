@@ -16,7 +16,6 @@ import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
   DETAIL_CARD_WIDE_CLASS,
-  DETAIL_COPY_CLASS,
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
 } from "../../components/dashboard/widget-board";
@@ -90,9 +89,6 @@ export function TraceGridBentoCard({
 
   return (
     <AgentBentoCard className={cardClassName} title={title ?? messages.title}>
-      <p className={DETAIL_COPY_CLASS}>
-        {messages.summary}
-      </p>
       {renderTraceState(state, locale, onSelectWorkID)}
     </AgentBentoCard>
   );
