@@ -10,6 +10,7 @@ import { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph
 import type { DashboardSelection } from "../current-selection";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
+import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
 
 vi.mock("../current-factory-definition", async () => {
   const actual = await vi.importActual("../current-factory-definition");
@@ -98,6 +99,8 @@ describe("WorkflowActivityBentoCard", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const selection: DashboardSelection = { kind: "node", nodeId: selectedNode.node_id };
+    const locale = "zh-CN";
+    const messages = getWorkflowActivityShellMessages(locale);
     const importController = {
       activateImport: vi.fn().mockResolvedValue(undefined),
       activationState: { status: "idle" } as const,
@@ -127,7 +130,7 @@ describe("WorkflowActivityBentoCard", () => {
       <QueryClientProvider client={queryClient}>
         <WorkflowActivityBentoCard
           importController={importController}
-          locale="zh-CN"
+          locale={locale}
           now={Date.parse("2026-04-08T12:00:04Z")}
           selection={selection}
           snapshot={snapshot}
@@ -139,10 +142,10 @@ describe("WorkflowActivityBentoCard", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "工厂图" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Work graph viewport" })).toBeTruthy();
     expect(
-      screen.queryByRole("complementary", { name: "Workstation Info" }),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Collapse inspector" })).toBeNull();
+      screen.getByRole("region", { name: messages.viewportLabel }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(screen.queryByRole("button", { name: /collapse inspector/i })).toBeNull();
   });
 });
