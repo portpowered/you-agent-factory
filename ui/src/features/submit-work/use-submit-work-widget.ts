@@ -100,9 +100,7 @@ export function useSubmitWorkWidget(
       error: mutation.error,
       isSubmitting: mutation.isPending,
       isSuccess: mutation.isSuccess,
-      resultTraceID:
-        mutation.data?.traceId ??
-        (mutation.data as { trace_id?: string } | undefined)?.trace_id,
+      resultTraceID: mutation.data?.traceId,
       showValidation,
       submitWorkTypeNames,
     }),

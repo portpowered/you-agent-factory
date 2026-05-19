@@ -187,7 +187,7 @@ describe("SubmitWorkWidget", () => {
     }
 
     pendingResponse.resolve(
-      new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -237,7 +237,7 @@ describe("SubmitWorkWidget", () => {
 
   it("omits the request name when the field is blank", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -273,7 +273,7 @@ describe("SubmitWorkWidget", () => {
 
   it("submits a blank request as an explicit empty payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
           "Content-Type": "application/json",
         },

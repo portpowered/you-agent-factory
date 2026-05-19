@@ -29,7 +29,7 @@ describe("submitWork error handling", () => {
     await expect(
       submitWork({
         payload: "Review the runtime failure.",
-        work_type_name: "story",
+        workTypeName: "story",
       }),
     ).rejects.toEqual(
       new SubmitWorkAPIError({
@@ -58,7 +58,7 @@ describe("submitWork error handling", () => {
     await expect(
       submitWork({
         payload: "Review the runtime failure.",
-        work_type_name: "story",
+        workTypeName: "story",
       }),
     ).rejects.toEqual(
       new SubmitWorkAPIError({
@@ -86,7 +86,7 @@ describe("submitWork error handling", () => {
     await expect(
       submitWork({
         payload: "Review the runtime failure.",
-        work_type_name: "story",
+        workTypeName: "story",
       }),
     ).rejects.toEqual(
       new SubmitWorkAPIError({
@@ -120,7 +120,7 @@ describe("submitWork error handling", () => {
     await expect(
       submitWork({
         payload: "Review the runtime failure.",
-        work_type_name: "story",
+        workTypeName: "story",
       }),
     ).rejects.toEqual(
       new SubmitWorkAPIError({
@@ -148,7 +148,7 @@ describe("submitWork error handling", () => {
     await expect(
       submitWork({
         payload: "Review the runtime failure.",
-        work_type_name: "story",
+        workTypeName: "story",
       }),
     ).rejects.toEqual(
       new SubmitWorkAPIError({
