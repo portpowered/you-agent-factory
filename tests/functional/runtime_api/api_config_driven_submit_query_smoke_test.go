@@ -34,8 +34,11 @@ func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
 	h.RunUntilComplete(t, 10*time.Second)
 	h.Assert().HasTokenInPlace("task:complete").TokenCount(1)
 
-	snap := h.Marking()
-	mockFactory := &testutil.MockFactory{Marking: snap}
+	snapshot, err := h.GetEngineStateSnapshot()
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	mockFactory := &testutil.MockFactory{EngineState: snapshot}
 	srv := api.NewServer(mockFactory, 0, zap.NewNop())
 
 	postWorkViaAPI(t, srv)

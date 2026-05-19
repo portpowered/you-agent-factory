@@ -156,7 +156,6 @@ func WriteWorkRequestFile(t *testing.T, path string, request interfaces.SubmitRe
 		t.Fatalf("write work request file: %v", err)
 	}
 }
-
 func UpdateFactoryConfig(t *testing.T, dir string, mutate func(map[string]any)) {
 	t.Helper()
 

@@ -124,7 +124,6 @@ export function requestProviderSession(request: SelectedWorkRequestHistoryItem) 
 
   return undefined;
 }
-
 export function requestResponseText(request: SelectedWorkRequestHistoryItem) {
   if (isProjectedWorkstationRequest(request)) {
     return request.response;
