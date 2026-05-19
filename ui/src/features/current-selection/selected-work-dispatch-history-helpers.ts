@@ -15,24 +15,6 @@ export function isProjectedWorkstationRequest(
   return "workstation_node_id" in request;
 }
 
-export function requestCounts(request: SelectedWorkRequestHistoryItem) {
-  if (isProjectedWorkstationRequest(request)) {
-    return {
-      dispatchedCount:
-        request.counts?.dispatched_count ?? request.dispatched_request_count ?? 0,
-      erroredCount: request.counts?.errored_count ?? request.errored_request_count ?? 0,
-      respondedCount:
-        request.counts?.responded_count ?? request.responded_request_count ?? 0,
-    };
-  }
-
-  return {
-    dispatchedCount: request.counts.dispatched_count,
-    erroredCount: request.counts.errored_count,
-    respondedCount: request.counts.responded_count,
-  };
-}
-
 export function requestInputWorkItems(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
     ? request.request_view?.input_work_items ?? []

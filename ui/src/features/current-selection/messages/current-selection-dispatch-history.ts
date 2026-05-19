@@ -7,9 +7,8 @@ export interface CurrentSelectionDispatchHistoryMessages {
   collapseAction: string;
   commandLabel: string;
   currentDispatchBadge: string;
-  dispatchedCountLabel: string;
+  completedAttemptLabel: string;
   durationLabel: string;
-  erroredCountLabel: string;
   exitCodeLabel: string;
   expandAction: string;
   failureDetailsTitle: string;
@@ -27,20 +26,24 @@ export interface CurrentSelectionDispatchHistoryMessages {
   noStdoutRecorded: string;
   outputWorkLabel: string;
   outcomeLabel: string;
+  pendingAttemptLabel: string;
   pendingOutcome: string;
+  providerLabel: string;
   recordedAttemptStatus: string;
   promptDetailsNotApplicable: string;
   requestDetailsTitle: string;
   requestAttemptLabel: (attemptLabel: string) => string;
   resolvedArgsLabel: string;
-  respondedCountLabel: string;
   selectedTraceSuffix: string;
   selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
+  modelLabel: string;
   responseDetailsTitle: string;
   responseAttemptLabel: (attemptLabel: string) => string;
   scriptAttemptLabel: string;
   scriptAttemptsTitle: string;
   scriptRequestIdLabel: string;
+  scriptRequestPlaceholderId: string;
+  scriptResponsePlaceholderId: string;
   startedAtLabel: string;
   stderrLabel: string;
   stdoutLabel: string;
@@ -51,17 +54,18 @@ export interface CurrentSelectionDispatchHistoryMessages {
   unknownDispatchTitle: string;
   openWorkItemActionLabel: (workItemLabel: string) => string;
   workstationLabel: string;
+  workingDirectoryLabel: string;
   workSelectedActionLabel: string;
+  worktreeLabel: string;
 }
 
 const currentSelectionDispatchHistoryMessagesByLocale = {
   en: {
     collapseAction: "Collapse",
     commandLabel: "Command",
+    completedAttemptLabel: "completed",
     currentDispatchBadge: "Current dispatch",
-    dispatchedCountLabel: "dispatchedCount",
     durationLabel: "Duration",
-    erroredCountLabel: "erroredCount",
     exitCodeLabel: "Exit code",
     expandAction: "Expand",
     failureDetailsTitle: "Failure details",
@@ -82,7 +86,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     noStdoutRecorded: "No stdout was recorded for this script response.",
     outputWorkLabel: "Output work",
     outcomeLabel: "Outcome",
+    pendingAttemptLabel: "pending",
     pendingOutcome: "PENDING",
+    providerLabel: "Provider",
     recordedAttemptStatus: "RECORDED",
     promptDetailsNotApplicable:
       "Prompt details are not applicable to this script-backed dispatch.",
@@ -90,16 +96,18 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     requestAttemptLabel: (attemptLabel: string) =>
       `Request attempt ${attemptLabel}`,
     resolvedArgsLabel: "Resolved args",
-    respondedCountLabel: "respondedCount",
     selectedTraceSuffix: " (selected)",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
+    modelLabel: "Model",
     responseDetailsTitle: "Response details",
     responseAttemptLabel: (attemptLabel: string) =>
       `Response attempt ${attemptLabel}`,
     scriptAttemptLabel: "Script attempt",
     scriptAttemptsTitle: "Script attempts",
     scriptRequestIdLabel: "Script request ID",
+    scriptRequestPlaceholderId: "script-request",
+    scriptResponsePlaceholderId: "script-response",
     startedAtLabel: "Started at",
     stderrLabel: "Stderr",
     stdoutLabel: "Stdout",
@@ -110,15 +118,16 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     unknownDispatchTitle: "Unknown dispatch",
     openWorkItemActionLabel: (workItemLabel: string) => `Open ${workItemLabel}`,
     workstationLabel: "Workstation",
+    workingDirectoryLabel: "Working directory",
     workSelectedActionLabel: "Work selected",
+    worktreeLabel: "Worktree",
   },
   ja: {
     collapseAction: "折りたたむ",
     commandLabel: "コマンド",
+    completedAttemptLabel: "完了済み",
     currentDispatchBadge: "現在のディスパッチ",
-    dispatchedCountLabel: "ディスパッチ数",
     durationLabel: "所要時間",
-    erroredCountLabel: "エラー数",
     exitCodeLabel: "終了コード",
     expandAction: "展開",
     failureDetailsTitle: "失敗の詳細",
@@ -140,7 +149,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     noStdoutRecorded: "このスクリプト応答では stdout は記録されませんでした。",
     outputWorkLabel: "出力作業",
     outcomeLabel: "結果",
+    pendingAttemptLabel: "保留中",
     pendingOutcome: "保留中",
+    providerLabel: "プロバイダー",
     recordedAttemptStatus: "記録済み",
     promptDetailsNotApplicable:
       "このスクリプトベースのディスパッチではプロンプトの詳細は適用されません。",
@@ -148,16 +159,18 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     requestAttemptLabel: (attemptLabel: string) =>
       `リクエスト試行 ${attemptLabel}`,
     resolvedArgsLabel: "解決済み引数",
-    respondedCountLabel: "応答数",
     selectedTraceSuffix: "（選択中）",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `作業項目 ${workItemLabel} を選択`,
+    modelLabel: "モデル",
     responseDetailsTitle: "応答の詳細",
     responseAttemptLabel: (attemptLabel: string) =>
       `応答試行 ${attemptLabel}`,
     scriptAttemptLabel: "スクリプト試行",
     scriptAttemptsTitle: "スクリプト試行",
     scriptRequestIdLabel: "スクリプトリクエスト ID",
+    scriptRequestPlaceholderId: "script-request",
+    scriptResponsePlaceholderId: "script-response",
     startedAtLabel: "開始時刻",
     stderrLabel: "標準エラー",
     stdoutLabel: "標準出力",
@@ -169,15 +182,16 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     openWorkItemActionLabel: (workItemLabel: string) =>
       `${workItemLabel} を開く`,
     workstationLabel: "ワークステーション",
+    workingDirectoryLabel: "作業ディレクトリ",
     workSelectedActionLabel: "作業を選択中",
+    worktreeLabel: "ワークツリー",
   },
   ko: {
     collapseAction: "접기",
     commandLabel: "명령",
+    completedAttemptLabel: "완료됨",
     currentDispatchBadge: "현재 디스패치",
-    dispatchedCountLabel: "디스패치 수",
     durationLabel: "소요 시간",
-    erroredCountLabel: "오류 수",
     exitCodeLabel: "종료 코드",
     expandAction: "펼치기",
     failureDetailsTitle: "실패 세부 정보",
@@ -198,22 +212,26 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     noStdoutRecorded: "이 스크립트 응답에는 stdout이 기록되지 않았습니다.",
     outputWorkLabel: "출력 작업",
     outcomeLabel: "결과",
+    pendingAttemptLabel: "대기 중",
     pendingOutcome: "대기 중",
+    providerLabel: "공급자",
     recordedAttemptStatus: "기록됨",
     promptDetailsNotApplicable:
       "이 스크립트 기반 디스패치에는 프롬프트 세부 정보를 적용할 수 없습니다.",
     requestDetailsTitle: "요청 세부 정보",
     requestAttemptLabel: (attemptLabel: string) => `요청 시도 ${attemptLabel}`,
     resolvedArgsLabel: "해결된 인수",
-    respondedCountLabel: "응답 수",
     selectedTraceSuffix: " (선택됨)",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `작업 항목 ${workItemLabel} 선택`,
+    modelLabel: "모델",
     responseDetailsTitle: "응답 세부 정보",
     responseAttemptLabel: (attemptLabel: string) => `응답 시도 ${attemptLabel}`,
     scriptAttemptLabel: "스크립트 시도",
     scriptAttemptsTitle: "스크립트 시도",
     scriptRequestIdLabel: "스크립트 요청 ID",
+    scriptRequestPlaceholderId: "script-request",
+    scriptResponsePlaceholderId: "script-response",
     startedAtLabel: "시작 시각",
     stderrLabel: "표준 오류",
     stdoutLabel: "표준 출력",
@@ -224,15 +242,16 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     unknownDispatchTitle: "알 수 없는 디스패치",
     openWorkItemActionLabel: (workItemLabel: string) => `${workItemLabel} 열기`,
     workstationLabel: "워크스테이션",
+    workingDirectoryLabel: "작업 디렉터리",
     workSelectedActionLabel: "작업 선택됨",
+    worktreeLabel: "워크트리",
   },
   "zh-CN": {
     collapseAction: "收起",
     commandLabel: "命令",
+    completedAttemptLabel: "已完成",
     currentDispatchBadge: "当前分派",
-    dispatchedCountLabel: "分派次数",
     durationLabel: "耗时",
-    erroredCountLabel: "错误次数",
     exitCodeLabel: "退出码",
     expandAction: "展开",
     failureDetailsTitle: "失败详情",
@@ -250,21 +269,25 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     noStdoutRecorded: "这个脚本响应没有记录 stdout。",
     outputWorkLabel: "输出工作",
     outcomeLabel: "结果",
+    pendingAttemptLabel: "等待中",
     pendingOutcome: "等待中",
+    providerLabel: "提供方",
     recordedAttemptStatus: "已记录",
     promptDetailsNotApplicable: "这个脚本分派不适用提示词详情。",
     requestDetailsTitle: "请求详情",
     requestAttemptLabel: (attemptLabel: string) => `请求尝试 ${attemptLabel}`,
     resolvedArgsLabel: "已解析参数",
-    respondedCountLabel: "响应次数",
     selectedTraceSuffix: "（已选中）",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `选择工作项 ${workItemLabel}`,
+    modelLabel: "模型",
     responseDetailsTitle: "响应详情",
     responseAttemptLabel: (attemptLabel: string) => `响应尝试 ${attemptLabel}`,
     scriptAttemptLabel: "脚本尝试",
     scriptAttemptsTitle: "脚本尝试",
     scriptRequestIdLabel: "脚本请求 ID",
+    scriptRequestPlaceholderId: "script-request",
+    scriptResponsePlaceholderId: "script-response",
     startedAtLabel: "开始时间",
     stderrLabel: "标准错误",
     stdoutLabel: "标准输出",
@@ -275,7 +298,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     unknownDispatchTitle: "未知分派",
     openWorkItemActionLabel: (workItemLabel: string) => `打开 ${workItemLabel}`,
     workstationLabel: "工作站",
+    workingDirectoryLabel: "工作目录",
     workSelectedActionLabel: "已选中工作项",
+    worktreeLabel: "工作树",
   },
 } satisfies LocalizedMessages<CurrentSelectionDispatchHistoryMessages>;
 

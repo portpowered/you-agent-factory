@@ -10,7 +10,6 @@ import {
   dedupeWorkItems,
   hasResponseDetails,
   isProjectedWorkstationRequest,
-  requestCounts,
   requestDurationMillis,
   requestFailureMessage,
   requestFailureReason,
@@ -120,22 +119,11 @@ describe("selected-work-dispatch-history-helpers", () => {
     expect(isProjectedWorkstationRequest(buildRuntimeRequest())).toBe(false);
   });
 
-  it("reads counts, work items, trace ids, and timestamps from the correct owner surface", () => {
+  it("reads work items, trace ids, and timestamps from the correct owner surface", () => {
     const projected = buildProjectedRequest({
       trace_ids: ["trace-top-level", "", "trace-request-view"],
     });
     const runtime = buildRuntimeRequest();
-
-    expect(requestCounts(projected)).toEqual({
-      dispatchedCount: 2,
-      erroredCount: 1,
-      respondedCount: 1,
-    });
-    expect(requestCounts(runtime)).toEqual({
-      dispatchedCount: 1,
-      erroredCount: 0,
-      respondedCount: 1,
-    });
 
     expect(requestInputWorkItems(projected)).toEqual([inputWorkItem]);
     expect(requestInputWorkItems(runtime)).toEqual([inputWorkItem]);

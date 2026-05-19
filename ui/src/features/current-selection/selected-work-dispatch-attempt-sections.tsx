@@ -148,30 +148,56 @@ function ScriptRequestAttemptCard({
     <article className={PROVIDER_SESSION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <strong>{messages.requestAttemptLabel(String(attemptNumber ?? "pending"))}</strong>
+          <strong>
+            {messages.requestAttemptLabel(
+              String(attemptNumber ?? messages.pendingAttemptLabel),
+            )}
+          </strong>
           <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
             {messages.pendingOutcome}
           </p>
         </div>
-        <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-request"}</span>
+        <span className={EXECUTION_PILL_CLASS}>
+          {requestID ?? messages.scriptRequestPlaceholderId}
+        </span>
       </div>
       <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
-        <InferenceAttemptDetail label="Script request ID" code value={requestID} />
         <InferenceAttemptDetail
-          label="Script attempt"
+          label={messages.scriptRequestIdLabel}
+          code
+          value={requestID}
+        />
+        <InferenceAttemptDetail
+          label={messages.scriptAttemptLabel}
           value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
         />
-        <InferenceAttemptDetail label="Provider" code value={requestProvider(request)} />
-        <InferenceAttemptDetail label="Model" code value={requestModel(request)} />
         <InferenceAttemptDetail
-          label="Working directory"
+          label={messages.providerLabel}
+          code
+          value={requestProvider(request)}
+        />
+        <InferenceAttemptDetail
+          label={messages.modelLabel}
+          code
+          value={requestModel(request)}
+        />
+        <InferenceAttemptDetail
+          label={messages.workingDirectoryLabel}
           code
           value={requestWorkingDirectory(request)}
         />
-        <InferenceAttemptDetail label="Worktree" code value={requestWorktree(request)} />
-        <InferenceAttemptDetail label="Command" code value={scriptRequest.command} />
+        <InferenceAttemptDetail
+          label={messages.worktreeLabel}
+          code
+          value={requestWorktree(request)}
+        />
+        <InferenceAttemptDetail
+          label={messages.commandLabel}
+          code
+          value={scriptRequest.command}
+        />
       </dl>
-      <ScriptArgsSection args={scriptRequest.args} label="Resolved args" />
+      <ScriptArgsSection args={scriptRequest.args} label={messages.resolvedArgsLabel} />
     </article>
   );
 }
@@ -200,30 +226,52 @@ function ScriptResponseAttemptCard({
     <article className={PROVIDER_SESSION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <strong>{messages.responseAttemptLabel(String(attemptNumber ?? "completed"))}</strong>
+          <strong>
+            {messages.responseAttemptLabel(
+              String(attemptNumber ?? messages.completedAttemptLabel),
+            )}
+          </strong>
           <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
             {scriptResponse.outcome ?? messages.recordedAttemptStatus}
           </p>
         </div>
-        <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-response"}</span>
+        <span className={EXECUTION_PILL_CLASS}>
+          {requestID ?? messages.scriptResponsePlaceholderId}
+        </span>
       </div>
       <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
-        <InferenceAttemptDetail label="Script request ID" code value={requestID} />
         <InferenceAttemptDetail
-          label="Script attempt"
+          label={messages.scriptRequestIdLabel}
+          code
+          value={requestID}
+        />
+        <InferenceAttemptDetail
+          label={messages.scriptAttemptLabel}
           value={attemptNumber !== undefined ? String(attemptNumber) : undefined}
         />
-        <InferenceAttemptDetail label="Provider" code value={requestProvider(request)} />
-        <InferenceAttemptDetail label="Model" code value={requestModel(request)} />
         <InferenceAttemptDetail
-          label="Working directory"
+          label={messages.providerLabel}
+          code
+          value={requestProvider(request)}
+        />
+        <InferenceAttemptDetail
+          label={messages.modelLabel}
+          code
+          value={requestModel(request)}
+        />
+        <InferenceAttemptDetail
+          label={messages.workingDirectoryLabel}
           code
           value={requestWorkingDirectory(request)}
         />
-        <InferenceAttemptDetail label="Worktree" code value={requestWorktree(request)} />
-        <InferenceAttemptDetail label="Outcome" value={scriptResponse.outcome} />
         <InferenceAttemptDetail
-          label="Duration"
+          label={messages.worktreeLabel}
+          code
+          value={requestWorktree(request)}
+        />
+        <InferenceAttemptDetail label={messages.outcomeLabel} value={scriptResponse.outcome} />
+        <InferenceAttemptDetail
+          label={messages.durationLabel}
           value={
             durationMillis !== undefined
               ? formatDurationMillis(durationMillis)
@@ -231,19 +279,23 @@ function ScriptResponseAttemptCard({
           }
         />
         <InferenceAttemptDetail
-          label="Exit code"
+          label={messages.exitCodeLabel}
           value={exitCode !== undefined ? String(exitCode) : undefined}
         />
-        <InferenceAttemptDetail label="Failure type" code value={failureType} />
+        <InferenceAttemptDetail
+          label={messages.failureTypeLabel}
+          code
+          value={failureType}
+        />
       </dl>
       <ScriptOutputSection
-        emptyMessage="No stdout was recorded for this script response."
-        label="Stdout"
+        emptyMessage={messages.noStdoutRecorded}
+        label={messages.stdoutLabel}
         value={normalizedStdout}
       />
       <ScriptOutputSection
-        emptyMessage="No stderr was recorded for this script response."
-        label="Stderr"
+        emptyMessage={messages.noStderrRecorded}
+        label={messages.stderrLabel}
         value={normalizedStderr}
       />
     </article>
