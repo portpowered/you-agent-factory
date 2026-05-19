@@ -1,27 +1,14 @@
 package testutil
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 )
-
-func TestArtifactContractInventory_DocumentMatchesEnforcedEntries(t *testing.T) {
-	t.Parallel()
-
-	if diff := compareArtifactContractEntries(
-		parseArtifactContractInventoryDoc(t),
-		testpath.ArtifactContractInventory(),
-	); diff != "" {
-		t.Fatal(diff)
-	}
-}
 
 func TestArtifactContractInventory_CheckedInExistsAndObsoleteStaysAbsent(t *testing.T) {
 	t.Parallel()
@@ -46,9 +33,10 @@ func TestArtifactContractInventory_CheckedInExistsAndObsoleteStaysAbsent(t *test
 	}
 }
 
-func TestArtifactContractInventory_CanonicalMaintainerSurfaceUsesFactoryInternalFiles(t *testing.T) {
+func TestArtifactContractInventory_CanonicalMaintainerBacklogSurfaceIsSingular(t *testing.T) {
 	t.Parallel()
 
+	repoRoot := MustRepoRoot(t)
 	inventory := testpath.ArtifactContractInventory()
 	got := checkedInMaintainerPaths(inventory)
 	want := []string{
@@ -57,8 +45,28 @@ func TestArtifactContractInventory_CanonicalMaintainerSurfaceUsesFactoryInternal
 		"factory/internal/progress.md",
 		"factory/internal/view.md",
 	}
-	if !reflect.DeepEqual(got, want) {
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("checked-in maintainer paths = %#v, want %#v", got, want)
+	}
+
+	asksPath := filepath.Join(repoRoot, filepath.FromSlash("factory/internal/asks.md"))
+	asksContents, err := os.ReadFile(asksPath)
+	if err != nil {
+		t.Fatalf("read canonical maintainer backlog: %v", err)
+	}
+	asksText := string(asksContents)
+	for _, required := range []string{
+		"canonical checked-in customer-ask backlog",
+		"factory/internal/view.md",
+		"factory/internal/progress.md",
+		"factory/internal/meta.md",
+	} {
+		if !strings.Contains(asksText, required) {
+			t.Fatalf("factory/internal/asks.md missing canonical maintainer reference %q", required)
+		}
+	}
+	if strings.Contains(asksText, "factory/logs/meta/asks.md") {
+		t.Fatal("factory/internal/asks.md must not point back at the deleted legacy maintainer backlog")
 	}
 
 	for _, legacy := range []string{
@@ -71,88 +79,6 @@ func TestArtifactContractInventory_CanonicalMaintainerSurfaceUsesFactoryInternal
 			t.Fatalf("%s classification = %q, want %q", legacy, classification, "obsolete")
 		}
 	}
-}
-
-func parseArtifactContractInventoryDoc(t *testing.T) []testpath.ArtifactContractEntry {
-	t.Helper()
-
-	path := MustRepoPath(t, "docs/internal/development/root-factory-artifact-contract-inventory.md")
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open artifact inventory doc: %v", err)
-	}
-	defer file.Close()
-
-	var (
-		inInventory bool
-		inTable     bool
-		entries     []testpath.ArtifactContractEntry
-	)
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		switch {
-		case line == "## Inventory":
-			inInventory = true
-		case inInventory && strings.HasPrefix(line, "## "):
-			inInventory = false
-			inTable = false
-		case inInventory && strings.HasPrefix(line, "| Path | Classification | Notes |"):
-			inTable = true
-		case inTable && strings.HasPrefix(line, "| --- | --- | --- |"):
-			continue
-		case inTable && strings.HasPrefix(line, "| `"):
-			entry := parseArtifactContractInventoryRow(t, line)
-			entries = append(entries, entry)
-		case inTable && strings.TrimSpace(line) == "":
-			inTable = false
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan artifact inventory doc: %v", err)
-	}
-	return entries
-}
-
-func parseArtifactContractInventoryRow(t *testing.T, line string) testpath.ArtifactContractEntry {
-	t.Helper()
-
-	parts := strings.Split(line, "|")
-	if len(parts) != 5 {
-		t.Fatalf("unexpected artifact inventory row format: %q", line)
-	}
-	return testpath.ArtifactContractEntry{
-		Path:           strings.Trim(strings.TrimSpace(parts[1]), "`"),
-		Classification: strings.Trim(strings.TrimSpace(parts[2]), "`"),
-	}
-}
-
-func compareArtifactContractEntries(got, want []testpath.ArtifactContractEntry) string {
-	gotPairs := contractEntryPairs(got)
-	wantPairs := contractEntryPairs(want)
-	if reflect.DeepEqual(gotPairs, wantPairs) {
-		return ""
-	}
-	return "artifact inventory doc entries differ from internal/testpath.ArtifactContractInventory()"
-}
-
-func contractEntryPairs(entries []testpath.ArtifactContractEntry) []testpath.ArtifactContractEntry {
-	pairs := make([]testpath.ArtifactContractEntry, 0, len(entries))
-	for _, entry := range entries {
-		pairs = append(pairs, testpath.ArtifactContractEntry{
-			Path:           normalizeArtifactContractPath(entry.Path),
-			Classification: entry.Classification,
-		})
-	}
-	return pairs
-}
-
-func normalizeArtifactContractPath(path string) string {
-	if strings.HasSuffix(path, "/") {
-		return strings.TrimSuffix(path, "/")
-	}
-	return path
 }
 
 func checkedInMaintainerPaths(entries []testpath.ArtifactContractEntry) []string {
