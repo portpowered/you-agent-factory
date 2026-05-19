@@ -1,7 +1,7 @@
 # Agent Factory CLI Reference
 
 This directory is the package-owned reference surface for a future
-`agent-factory docs <topic>` command. Each page stays short, focuses on the
+`you docs <topic>` command. Each page stays short, focuses on the
 current supported contract, and links to the deeper package guide for the same
 topic.
 

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type {
   DashboardTrace,
@@ -14,6 +15,7 @@ import {
 } from "./detail-card-test-helpers";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import { selectWorkItemExecutionDetails } from "./state/executionDetails";
+import { providerSessionSelectionKey } from "./provider-session-details";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {
@@ -81,6 +83,167 @@ function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
 }
 
 describe("WorkItemDetailCard summary", () => {
+  it("renders loadable inference-attempt provider sessions as selectable controls", async () => {
+    const user = userEvent.setup();
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const onSelectProviderSession = vi.fn();
+    const selectedSession = {
+      dispatchID,
+      id: "sess-ready-request",
+      kind: "session_id",
+      provider: "codex",
+    } as const;
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        onSelectProviderSession={onSelectProviderSession}
+        selectedNode={selectedNode}
+        selectedProviderSessionKey={providerSessionSelectionKey(selectedSession)}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(dispatchID, {
+            inference_attempts: [
+              inferenceAttempt(dispatchID, {
+                attempt: 1,
+                diagnostics: {
+                  provider: {
+                    model: "gpt-5.4",
+                    provider: "codex",
+                  },
+                },
+                inference_request_id: `${dispatchID}/inference-request/1`,
+                outcome: "SUCCEEDED",
+                prompt: "Review the active story and return a concise result.",
+                provider_session: {
+                  id: selectedSession.id,
+                  kind: selectedSession.kind,
+                  provider: selectedSession.provider,
+                },
+                response: "Ready for the next workstation.",
+              }),
+            ],
+            outcome: "ACCEPTED",
+            response_view: {
+              outcome: "ACCEPTED",
+              output_work_items: [workItem],
+            },
+            trace_ids: ["trace-active-story"],
+            work_items: [workItem],
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory).getAllByRole("article")[0];
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected dispatch history card with inference attempts");
+    }
+
+    const inferenceAttempts = within(
+      expandDispatchSection(dispatchCard, "Inference attempts"),
+    );
+    const selectSessionButton = inferenceAttempts.getByRole("button", {
+      name: "Select provider session codex / session_id / sess-ready-request for dispatch dispatch-review-active",
+    });
+
+    expect(selectSessionButton.getAttribute("aria-pressed")).toBe("true");
+    expect(inferenceAttempts.getByText("Session selected")).toBeTruthy();
+
+    selectSessionButton.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+
+    expect(onSelectProviderSession).toHaveBeenNthCalledWith(1, selectedSession);
+    expect(onSelectProviderSession).toHaveBeenNthCalledWith(2, selectedSession);
+  });
+
+  it("shows an explicit unavailable state for unsupported inference-attempt provider sessions", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(dispatchID, {
+            inference_attempts: [
+              inferenceAttempt(dispatchID, {
+                attempt: 1,
+                inference_request_id: `${dispatchID}/inference-request/1`,
+                outcome: "FAILED",
+                prompt: "Review the active story and return a concise result.",
+                provider_session: {
+                  id: "sess-unsupported",
+                  kind: "path",
+                  provider: "codex",
+                },
+              }),
+            ],
+            outcome: "FAILED",
+            response_view: {
+              outcome: "FAILED",
+              output_work_items: [workItem],
+            },
+            trace_ids: ["trace-active-story"],
+            work_items: [workItem],
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchCard = within(
+      screen.getByRole("region", { name: "Workstation dispatches" }),
+    ).getAllByRole("article")[0];
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected dispatch history card with inference attempts");
+    }
+
+    const inferenceAttempts = within(
+      expandDispatchSection(dispatchCard, "Inference attempts"),
+    );
+
+    expect(
+      inferenceAttempts.queryByRole("button", {
+        name: "Select provider session codex / path / sess-unsupported for dispatch dispatch-review-active",
+      }),
+    ).toBeNull();
+    expect(inferenceAttempts.getByText("Session details unavailable")).toBeTruthy();
+    expect(inferenceAttempts.getByText("codex / path / sess-unsupported")).toBeTruthy();
+  });
+
   it("renders selected work item detail with safe execution details", () => {
     const { dispatchID, execution, selectedNode, workItem, snapshot } =
       getSelectedWorkItemFixture();
@@ -865,6 +1028,80 @@ describe("WorkItemDetailCard summary", () => {
   });
 });
 
+describe("WorkItemDetailCard localization", () => {
+  it("renders inference-attempt provider-session controls from the localized workstation-detail catalog", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="ja">
+        <WorkItemDetailCard
+          dispatchAttempts={[]}
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[
+            workstationRequest(dispatchID, {
+              inference_attempts: [
+                inferenceAttempt(dispatchID, {
+                  attempt: 1,
+                  inference_request_id: `${dispatchID}/inference-request/1`,
+                  outcome: "FAILED",
+                  prompt: "Review the active story and return a concise result.",
+                  provider_session: {
+                    id: "sess-ja-unsupported",
+                    kind: "path",
+                    provider: "codex",
+                  },
+                }),
+              ],
+              outcome: "FAILED",
+              response_view: {
+                outcome: "FAILED",
+                output_work_items: [workItem],
+              },
+              trace_ids: ["trace-active-story"],
+              work_items: [workItem],
+            }),
+          ]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const dispatchCard = within(
+      screen.getByRole("region", { name: "Workstation dispatches" }),
+    ).getAllByRole("article")[0];
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected localized dispatch history card with inference attempts");
+    }
+
+    const inferenceAttempts = within(
+      expandDispatchSection(dispatchCard, "推論試行", "展開"),
+    );
+
+    expect(
+      inferenceAttempts.queryByRole("button", {
+        name: `ディスパッチ ${dispatchID} の provider session codex / path / sess-ja-unsupported を選択`,
+      }),
+    ).toBeNull();
+    expect(
+      inferenceAttempts.getByText("セッション詳細は利用できません"),
+    ).toBeTruthy();
+  });
+});
+
 describe("WorkItemDetailCard dispatch diagnostics", () => {
   it("starts attempt sections collapsed and keeps expansion scoped to each dispatch card", () => {
     const { dispatchID, execution, selectedNode, workItem } =
@@ -1077,6 +1314,16 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       expandDispatchSection(dispatchCard, "Inference attempts"),
     );
     const attemptCards = inferenceAttempts.getAllByRole("article");
+    expect(
+      inferenceAttempts.getByRole("article", {
+        name: "Inference attempt 1",
+      }),
+    ).toBe(attemptCards[0]);
+    expect(
+      inferenceAttempts.getByRole("article", {
+        name: "Inference attempt 2",
+      }),
+    ).toBe(attemptCards[1]);
 
     expect(attemptCards).toHaveLength(2);
     expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();

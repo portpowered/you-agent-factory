@@ -69,7 +69,7 @@ Use a guarded `LOGICAL_MOVE` workstation to cap repeater or review loops.
 
 ## Related
 
-- `infinite-you docs config`
-- `infinite-you docs workers`
-- `infinite-you docs resources`
-- `infinite-you docs templates`
+- `you docs config`
+- `you docs workers`
+- `you docs resources`
+- `you docs templates`

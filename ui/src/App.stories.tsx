@@ -986,7 +986,10 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     await expect(requestNameField).toHaveValue("");
     await expect(requestField).toHaveValue("");
     await expect(workTypeField).toHaveValue("story");
-    await expect(submitButton).toBeEnabled();
+    await expect(submitButton).toBeDisabled();
+    await waitFor(() => {
+      expect(buttonVisibleStyle(submitButton)).toEqual(disabledSubmitStyle);
+    });
   },
 };
 

@@ -99,7 +99,7 @@ The sample input defines `US-002 DEPENDS_ON US-001` and `US-003 DEPENDS_ON US-00
 
 ```bash
 # Submit a FACTORY_REQUEST_BATCH input
-agent-factory run -dir examples/dispatcher-parity -input examples/dispatcher-parity/inputs/sample-prd.json -input-type prd
+you run -dir examples/dispatcher-parity -input examples/dispatcher-parity/inputs/sample-prd.json -input-type prd
 ```
 
 Or programmatically via the Go API:
