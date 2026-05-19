@@ -33,12 +33,16 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 | `factory/inputs/task/default/.gitkeep` | `checked_in` | Tracked sentinel that keeps the canonical task inbox present in clean checkouts. |
 | `factory/inputs/thoughts/default/` | `checked_in` | Checked-in repository workflow thought inbox backed by a tracked `.gitkeep` sentinel. |
 | `factory/inputs/thoughts/default/.gitkeep` | `checked_in` | Tracked sentinel that keeps the canonical thought inbox present in clean checkouts. |
-| `factory/logs/meta/asks.md` | `checked_in` | Canonical checked-in customer-ask backlog for the meta and cleaner workflow. |
-| `factory/logs/meta/view.md` | `checked_in` | Checked-in meta world-state view consumed by the cleaner workflow. |
-| `factory/logs/meta/progress.txt` | `checked_in` | Checked-in meta progress surface consumed by the cleaner workflow. |
+| `factory/internal/asks.md` | `checked_in` | Canonical checked-in repository-maintainer ask backlog. |
+| `factory/internal/view.md` | `checked_in` | Canonical checked-in repository-maintainer view surface. |
+| `factory/internal/progress.md` | `checked_in` | Canonical checked-in repository-maintainer progress surface. |
+| `factory/internal/meta.md` | `checked_in` | Canonical checked-in repository-maintainer theory-of-mind surface. |
 | `factory/logs/agent-fails.json` | `checked_in` | Event-stream sample for replay artifact conversion coverage. |
 | `factory/logs/agent-fails.replay.json` | `checked_in` | Replay artifact sample paired with `agent-fails.json`. |
-| `factory/meta/asks.md` | `checked_in` | Redirect-only legacy stub that points maintainers back to `factory/logs/meta/asks.md` so a second live ask backlog cannot drift. |
+| `factory/logs/meta/asks.md` | `obsolete` | Deleted legacy maintainer ask backlog path must not return as a checked-in canonical surface. |
+| `factory/logs/meta/view.md` | `obsolete` | Deleted legacy maintainer view path must not return as a checked-in canonical surface. |
+| `factory/logs/meta/progress.txt` | `obsolete` | Deleted legacy maintainer progress path must not return as a checked-in canonical surface. |
+| `factory/meta/asks.md` | `obsolete` | Legacy redirect-only ask stub must stay absent so the canonical maintainer backlog remains singular. |
 | `tests/adhoc/factory-recording-04-11-02.json` | `checked_in` | Canonical replay fixture used by adhoc and replay package tests. |
 | `tests/adhoc/factory/README.md` | `checked_in` | Checked-in adhoc fixture doc. |
 | `tests/adhoc/factory/factory.json` | `checked_in` | Checked-in adhoc fixture config. |
@@ -63,13 +67,16 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 
 ## Guardrail
 
-`pkg/testutil/artifact_contract_test.go` is the focused regression guard for
+`pkg/testutil/artifact_contract_inventory_test.go` is the focused regression
+guard for
 this inventory:
 
 - every targeted root artifact dependency must be classified here
 - every `checked_in` path must exist
 - every `obsolete` path must stay absent
-- the inventory doc table and the enforced classifications must stay in sync
+- the live checked-in maintainer backlog must keep pointing at the canonical
+  `factory/internal/{asks,view,progress,meta}.md` surface without reviving a
+  second canonical ask path
 
 That keeps root artifact drift explicit instead of letting missing files or
 legacy starter assumptions re-enter the targeted package tests silently.
