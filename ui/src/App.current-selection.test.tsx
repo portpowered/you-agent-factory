@@ -736,11 +736,25 @@ describe("App current selection", () => {
     expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
     expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
     expect(within(readyAttempt).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
-    expect(within(readyCard).queryByText("Provider", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Model", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Provider session", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Working directory", { selector: "dt" })).toBeNull();
-    expect(within(readyCard).queryByText("Worktree", { selector: "dt" })).toBeNull();
+    expect(
+      within(readyRequestDetails).queryByText("Provider", { selector: "dt" }),
+    ).toBeNull();
+    expect(
+      within(readyRequestDetails).queryByText("Model", { selector: "dt" }),
+    ).toBeNull();
+    expect(
+      within(readyRequestDetails).queryByText("Provider session", {
+        selector: "dt",
+      }),
+    ).toBeNull();
+    expect(
+      within(readyRequestDetails).queryByText("Working directory", {
+        selector: "dt",
+      }),
+    ).toBeNull();
+    expect(
+      within(readyRequestDetails).queryByText("Worktree", { selector: "dt" }),
+    ).toBeNull();
 
     const rejectedCard = getDispatchHistoryCard(
       dispatchHistory,

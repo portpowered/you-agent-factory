@@ -443,3 +443,5 @@ const currentSelectionDetailMessagesByLocale = {
 
 export const getCurrentSelectionDetailMessages = (locale?: string | null) =>
   resolveLocalizedMessages(currentSelectionDetailMessagesByLocale, locale);
+
+export { currentSelectionDetailMessagesByLocale };

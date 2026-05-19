@@ -4,6 +4,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../components/dashboard/widget-board";
+import { getWorkstationDetailMessages } from "./messages";
 import type {
   SelectedWorkDispatchHistorySectionProps,
 } from "./detail-card-types";
@@ -15,6 +16,7 @@ export function SelectedWorkDispatchHistorySection({
   activeTraceID,
   currentDispatchID,
   fallbackProviderSessions,
+  locale,
   onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
@@ -25,6 +27,7 @@ export function SelectedWorkDispatchHistorySection({
   workstationKind,
 }: SelectedWorkDispatchHistorySectionProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
+  const providerSessionMessages = getWorkstationDetailMessages(locale);
 
   if (requests.length === 0 && fallbackProviderSessions.length > 0) {
     return (
@@ -32,6 +35,7 @@ export function SelectedWorkDispatchHistorySection({
         attempts={fallbackProviderSessions}
         currentDispatchID={currentDispatchID}
         emptyMessage={messages.dispatchHistoryEmpty}
+        messages={providerSessionMessages}
         onSelectProviderSession={onSelectProviderSession}
         onSelectWorkID={onSelectWorkID}
         renderHeading={(attempt) => attempt.workstation_name || attempt.transition_id}
