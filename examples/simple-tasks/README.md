@@ -39,12 +39,12 @@ examples/simple-tasks/
 ## Running
 
 ```bash
-agent-factory run -dir examples/simple-tasks
+you run -dir examples/simple-tasks
 ```
 
 Or submit work programmatically:
 
 ```bash
 cp my-story.md examples/simple-tasks/inputs/story/default/
-agent-factory run -dir examples/simple-tasks
+you run -dir examples/simple-tasks
 ```

@@ -35,7 +35,7 @@ const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
 )
 
-const cliBinaryName = "infinite-you"
+const cliBinaryName = "you"
 
 // NewRootCommand creates the top-level Cobra command for the infinite-you CLI.
 func NewRootCommand() *cobra.Command {
