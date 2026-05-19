@@ -221,3 +221,5 @@ const providerSessionDetailMessagesByLocale = {
 export function getProviderSessionDetailMessages(locale?: string | null) {
   return resolveLocalizedMessages(providerSessionDetailMessagesByLocale, locale);
 }
+
+export { providerSessionDetailMessagesByLocale };

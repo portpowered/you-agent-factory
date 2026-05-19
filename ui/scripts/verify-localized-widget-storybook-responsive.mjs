@@ -123,3 +123,52 @@ export async function verifyLocalizedWorkflowActivity({
     `Localized workflow activity card at ${viewport.label}`,
   );
 }
+
+export async function verifyLocalizedCurrentSelection({
+  expectNoHorizontalOverflow,
+  expectVisible,
+  page,
+  viewport,
+}) {
+  const controls = page.getByRole("group", {
+    name: "Locale verification controls",
+  });
+  await controls.waitFor({ state: "visible" });
+  await controls.getByRole("button", { name: "Switch to zh-CN" }).click();
+
+  const currentSelection = page.getByRole("article", { name: "当前选择" });
+  await currentSelection.waitFor({ state: "visible" });
+  await expectVisible(currentSelection, "Localized current-selection card");
+  await expectVisible(
+    currentSelection.getByRole("button", { name: "撤销所选内容" }),
+    "Localized current-selection undo control",
+  );
+  await expectVisible(
+    currentSelection.getByRole("heading", { name: "活动工作" }),
+    "Localized current-selection active-work heading",
+  );
+  await expectVisible(
+    currentSelection.getByRole("heading", { name: "运行历史" }),
+    "Localized current-selection run-history heading",
+  );
+  await expectVisible(
+    currentSelection.getByText("Review", { exact: true }).first(),
+    "Current-selection initial workstation data value",
+  );
+
+  const implementWorkstation = page.getByRole("button", {
+    name: "选择 Implement 工作站",
+  });
+  await implementWorkstation.focus();
+  await page.keyboard.press("Enter");
+
+  const selectedWorkstation = page.getByRole("article", { name: "当前选择" });
+  await expectVisible(
+    selectedWorkstation.getByText("Implement", { exact: true }).first(),
+    "Keyboard-selected workstation data value",
+  );
+  await expectNoHorizontalOverflow(
+    page,
+    `Localized current-selection card at ${viewport.label}`,
+  );
+}

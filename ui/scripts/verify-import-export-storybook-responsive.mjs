@@ -1,6 +1,7 @@
 import process from "node:process";
 import { chromium } from "playwright";
 import {
+  verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
   verifyLocalizedWorkflowActivity,
@@ -92,6 +93,17 @@ const storyChecks = [
       }),
     id: "agent-factory-dashboard-react-flow-current-activity-card--localized-zh-cn",
     label: "workflow activity widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedCurrentSelection({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "infinite-you-workflow-dashboard--locale-propagation-verification",
+    label: "current selection widget (zh-CN)",
   },
 ];
 

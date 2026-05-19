@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import {
+  verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
   verifyLocalizedWorkOutcomeChart,
@@ -148,6 +149,60 @@ function createWorkflowActivityHarness() {
   };
 }
 
+function createCurrentSelectionHarness() {
+  const controls = {
+    ...createVisibleLocator(),
+    getByRole: vi.fn().mockReturnValue({
+      click: vi.fn().mockResolvedValue(undefined),
+    }),
+  };
+  const undoButton = createVisibleLocator();
+  const activeWorkHeading = createVisibleLocator();
+  const runHistoryHeading = createVisibleLocator();
+  const workstationData = createVisibleLocator();
+  const workstationDataQuery = {
+    first: vi.fn().mockReturnValue(workstationData),
+  };
+  const selectionCard = {
+    ...createVisibleLocator(),
+    getByRole: vi.fn((_role, options) => {
+      if (options?.name === "撤销所选内容") {
+        return undoButton;
+      }
+      if (options?.name === "活动工作") {
+        return activeWorkHeading;
+      }
+      return runHistoryHeading;
+    }),
+    getByText: vi.fn().mockReturnValue(workstationDataQuery),
+  };
+  const workstationButton = {
+    focus: vi.fn().mockResolvedValue(undefined),
+  };
+
+  return {
+    controls,
+    expectNoHorizontalOverflow: vi.fn().mockResolvedValue(undefined),
+    expectVisible: vi.fn().mockResolvedValue(undefined),
+    page: {
+      getByRole: vi.fn((role, options) => {
+        if (role === "group") {
+          return controls;
+        }
+        if (role === "button" && options?.name === "选择 Implement 工作站") {
+          return workstationButton;
+        }
+        return selectionCard;
+      }),
+      keyboard: {
+        press: vi.fn().mockResolvedValue(undefined),
+      },
+    },
+    selectionCard,
+    workstationButton,
+  };
+}
+
 describe("verify-localized-widget-storybook-responsive", () => {
   test("verifyLocalizedSubmitWorkCard checks the localized submit-work controls", async () => {
     const { card, expectNoHorizontalOverflow, expectVisible, page } =
@@ -254,6 +309,60 @@ describe("verify-localized-widget-storybook-responsive", () => {
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Localized workflow activity card at mobile",
+    );
+  });
+});
+
+describe("verifyLocalizedCurrentSelection", () => {
+  test("verifyLocalizedCurrentSelection checks localized card copy and keyboard selection", async () => {
+    const {
+      controls,
+      expectNoHorizontalOverflow,
+      expectVisible,
+      page,
+      selectionCard,
+      workstationButton,
+    } = createCurrentSelectionHarness();
+
+    await verifyLocalizedCurrentSelection({
+      expectNoHorizontalOverflow,
+      expectVisible,
+      page,
+      viewport: createViewport(),
+    });
+
+    expect(page.getByRole).toHaveBeenCalledWith("group", {
+      name: "Locale verification controls",
+    });
+    expect(controls.getByRole).toHaveBeenCalledWith("button", {
+      name: "Switch to zh-CN",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("article", {
+      name: "当前选择",
+    });
+    expect(selectionCard.getByRole).toHaveBeenCalledWith("button", {
+      name: "撤销所选内容",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("button", {
+      name: "选择 Implement 工作站",
+    });
+    expect(workstationButton.focus).toHaveBeenCalled();
+    expect(page.keyboard.press).toHaveBeenCalledWith("Enter");
+    expect(selectionCard.getByRole).toHaveBeenCalledWith("heading", {
+      name: "活动工作",
+    });
+    expect(selectionCard.getByRole).toHaveBeenCalledWith("heading", {
+      name: "运行历史",
+    });
+    expect(selectionCard.getByText).toHaveBeenCalledWith("Review", {
+      exact: true,
+    });
+    expect(selectionCard.getByText).toHaveBeenCalledWith("Implement", {
+      exact: true,
+    });
+    expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
+      page,
+      "Localized current-selection card at mobile",
     );
   });
 });

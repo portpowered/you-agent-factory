@@ -92,6 +92,7 @@ export function WorkItemDetailCard({
         activeTraceID={activeTraceID}
         currentDispatchID={selection.dispatchId}
         fallbackProviderSessions={dispatchAttempts}
+        locale={locale}
         onSelectProviderSession={onSelectProviderSession}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}

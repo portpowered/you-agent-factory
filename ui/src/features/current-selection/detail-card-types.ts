@@ -248,6 +248,7 @@ export interface SelectedWorkDispatchHistorySectionProps {
   activeTraceID?: string | null;
   currentDispatchID?: string | null;
   fallbackProviderSessions: DashboardProviderSessionAttempt[];
+  locale?: string;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
