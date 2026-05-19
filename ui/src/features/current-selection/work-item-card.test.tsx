@@ -1167,12 +1167,12 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeNull();
   });
 
-  it("renders localized dispatch-history card copy for a supported non-default locale", () => {
+  it("renders localized selected-work and dispatch copy for zh-CN while keeping dispatch data values unchanged", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
 
     render(
-        <CurrentSelectionLocaleProvider locale="ja">
+      <CurrentSelectionLocaleProvider locale="zh-CN">
         <WorkItemDetailCard
           activeTraceID="trace-active-story"
           executionDetails={selectWorkItemExecutionDetails({
@@ -1199,7 +1199,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     );
 
     const dispatchHistory = screen.getByRole("region", {
-      name: "Workstation dispatches",
+      name: "工作站分派",
     });
     const dispatchCard = within(dispatchHistory)
       .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
@@ -1211,43 +1211,52 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     expect(
       within(dispatchCard).getByRole("region", {
-        name: "リクエストの詳細",
+        name: "请求详情",
       }),
     ).toBeTruthy();
     const localizedRequestDetails = within(dispatchCard).getByRole("region", {
-      name: "リクエストの詳細",
+      name: "请求详情",
     });
     expect(
       within(dispatchCard).getByRole("region", {
-        name: "応答の詳細",
+        name: "响应详情",
       }),
     ).toBeTruthy();
     expect(
       within(dispatchCard).getByText(
-        "このディスパッチにはまだスクリプト応答がありません。",
+        "这个分派暂时还没有脚本响应。",
       ),
     ).toBeTruthy();
-    expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
-    expect(within(dispatchCard).getByText("遷移 ID")).toBeTruthy();
-    expect(within(dispatchCard).getByText("ディスパッチ数")).toBeTruthy();
-    expect(within(dispatchCard).getByText("応答数")).toBeTruthy();
-    expect(within(dispatchCard).getByText("エラー数")).toBeTruthy();
-    expect(within(dispatchCard).getByText("保留中")).toBeTruthy();
+    expect(screen.getByText("工作 ID")).toBeTruthy();
+    expect(screen.getByText("工作类型")).toBeTruthy();
+    expect(screen.getByText("运行时标签")).toBeTruthy();
+    expect(within(dispatchCard).getByText("工作站")).toBeTruthy();
+    expect(within(dispatchCard).getByText("转换 ID")).toBeTruthy();
+    expect(within(dispatchCard).getByText("分派次数")).toBeTruthy();
+    expect(within(dispatchCard).getByText("响应次数")).toBeTruthy();
+    expect(within(dispatchCard).getByText("错误次数")).toBeTruthy();
+    expect(within(dispatchCard).getAllByText("等待中").length).toBeGreaterThan(
+      0,
+    );
     expect(
-      within(localizedRequestDetails).getByText("解決済み引数"),
+      within(localizedRequestDetails).getByText("已解析参数"),
     ).toBeTruthy();
     expect(
       within(dispatchCard).getByRole("button", {
-        name: "作業項目 Active Story を選択",
+        name: "选择工作项 Active Story",
       }),
     ).toBeTruthy();
-    expect(within(dispatchCard).getByText("作業を選択中")).toBeTruthy();
-    expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
+    expect(within(dispatchCard).getByText("已选中工作项")).toBeTruthy();
+    expect(within(dispatchCard).getByText("追踪 ID")).toBeTruthy();
     expect(
       within(dispatchCard).getByRole("link", {
-        name: "trace-active-story（選択中）",
+        name: "trace-active-story（已选中）",
       }),
     ).toBeTruthy();
+    expect(
+      screen.getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id),
+    ).toBeTruthy();
+    expect(screen.getAllByText(workItem.work_id).length).toBeGreaterThan(0);
   });
 
   it("falls back to default dispatch-history copy for an unsupported locale", () => {
@@ -1310,6 +1319,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         "No script response yet for this dispatch.",
       ),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Workstation dispatches" }),
+    ).toBeTruthy();
     expect(within(dispatchCard).getByText("Workstation")).toBeTruthy();
     expect(
       within(fallbackRequestDetails).getByText("Resolved args"),
@@ -1325,6 +1337,42 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       within(dispatchCard).getByRole("link", {
         name: "trace-active-story (selected)",
       }),
+    ).toBeTruthy();
+  });
+
+  it("renders the zh-CN empty dispatch state for selected work", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <WorkItemDetailCard
+          dispatchAttempts={[]}
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "工作站分派" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("这个工作项暂时还没有记录任何工作站分派。"),
     ).toBeTruthy();
   });
 

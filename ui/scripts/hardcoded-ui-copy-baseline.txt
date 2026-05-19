@@ -47,17 +47,6 @@ src/features/current-selection/inference-attempt.tsx|74|42|jsx-text|Awaiting pro
 src/features/current-selection/provider-session-detail-panel.tsx|71|42|jsx-text|Loading session details...
 src/features/current-selection/provider-session-detail-panel.tsx|262|25|jsx-text|Turn
 src/features/current-selection/provider-session-detail-panel.tsx|415|19|jsx-text|Encrypted reasoning content only.
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|45|18|jsx-attribute|Inference attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|48|55|jsx-text|Inference attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|77|18|jsx-attribute|Script attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|80|55|jsx-text|Script attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|94|44|jsx-text|No script response attempt has been recorded yet.
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|115|19|jsx-text|Request attempt
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|116|76|jsx-text|PENDING
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|164|19|jsx-text|Response attempt
-src/features/current-selection/selected-work-dispatch-history.tsx|37|15|jsx-attribute|Workstation dispatches
-src/features/current-selection/selected-work-dispatch-history.tsx|53|11|jsx-text|Workstation dispatches
-src/features/current-selection/selected-work-dispatch-history.tsx|76|11|jsx-text|No workstation dispatch has been recorded yet for this work item.
 src/features/current-selection/state-node-detail.tsx|48|15|jsx-text|Work type
 src/features/current-selection/state-node-detail.tsx|52|15|jsx-text|State
 src/features/current-selection/state-node-detail.tsx|56|15|jsx-text|State node ID
@@ -66,15 +55,6 @@ src/features/current-selection/state-node-detail.tsx|118|15|jsx-text|Work type
 src/features/current-selection/state-node-detail.tsx|123|17|jsx-text|Trace ID
 src/features/current-selection/state-node-detail.tsx|129|17|jsx-text|Failure reason
 src/features/current-selection/state-node-detail.tsx|135|17|jsx-text|Failure message
-src/features/current-selection/work-item-card.tsx|49|15|jsx-text|Work ID
-src/features/current-selection/work-item-card.tsx|53|15|jsx-text|Work type
-src/features/current-selection/work-item-card.tsx|57|15|jsx-text|Workstation
-src/features/current-selection/work-item-card.tsx|66|15|jsx-text|Runtime labels
-src/features/current-selection/work-item-card.tsx|75|15|jsx-text|Workstation dispatches
-src/features/current-selection/work-item-card.tsx|139|18|jsx-attribute|Work relationships
-src/features/current-selection/work-item-card.tsx|142|55|jsx-text|Work relationships
-src/features/current-selection/work-item-card.tsx|160|17|jsx-text|Selected work
-src/features/current-selection/work-item-card.tsx|185|11|jsx-text|No parent, child, or dependency relationships are available for this work item.
 src/features/current-selection/workstation-request-detail-response.tsx|24|18|jsx-attribute|Response details
 src/features/current-selection/workstation-request-detail-response.tsx|27|55|jsx-text|Response details
 src/features/current-selection/workstation-request-detail-response.tsx|48|18|jsx-attribute|Error details
