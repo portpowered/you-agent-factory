@@ -131,6 +131,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
       <AgentBentoLayout
         cards={cards}
         layout={dashboardLayout}
+        locale={resolvedLocale}
         onLayoutChange={persistDashboardLayout}
       />
       <DashboardImportPreviewDialog
