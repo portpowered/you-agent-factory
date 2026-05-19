@@ -103,17 +103,18 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 	if overlay == nil {
 		return base
 	}
+	overlay = interfaces.CloneWorkDiagnostics(overlay)
 	if overlay.RenderedPrompt != nil {
-		base.RenderedPrompt = cloneRenderedPromptDiagnostic(overlay.RenderedPrompt)
+		base.RenderedPrompt = overlay.RenderedPrompt
 	}
 	if overlay.Provider != nil {
 		base.Provider = mergeProviderDiagnostic(base.Provider, overlay.Provider)
 	}
 	if overlay.Command != nil {
-		base.Command = cloneCommandDiagnostic(overlay.Command)
+		base.Command = overlay.Command
 	}
 	if overlay.Panic != nil {
-		base.Panic = &interfaces.PanicDiagnostic{Message: overlay.Panic.Message, Stack: overlay.Panic.Stack}
+		base.Panic = overlay.Panic
 	}
 	if len(overlay.Metadata) > 0 {
 		if base.Metadata == nil {
@@ -126,20 +127,9 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 	return base
 }
 
-func cloneRenderedPromptDiagnostic(in *interfaces.RenderedPromptDiagnostic) *interfaces.RenderedPromptDiagnostic {
-	if in == nil {
-		return nil
-	}
-	return &interfaces.RenderedPromptDiagnostic{
-		SystemPromptHash: in.SystemPromptHash,
-		UserMessageHash:  in.UserMessageHash,
-		Variables:        cloneStringMap(in.Variables),
-	}
-}
-
 func mergeProviderDiagnostic(base, overlay *interfaces.ProviderDiagnostic) *interfaces.ProviderDiagnostic {
 	if base == nil {
-		return cloneProviderDiagnostic(overlay)
+		return overlay
 	}
 	if overlay.Provider != "" {
 		base.Provider = overlay.Provider
@@ -164,47 +154,6 @@ func mergeProviderDiagnostic(base, overlay *interfaces.ProviderDiagnostic) *inte
 		}
 	}
 	return base
-}
-
-func cloneProviderDiagnostic(in *interfaces.ProviderDiagnostic) *interfaces.ProviderDiagnostic {
-	if in == nil {
-		return nil
-	}
-	return &interfaces.ProviderDiagnostic{
-		Provider:         in.Provider,
-		Model:            in.Model,
-		RequestMetadata:  cloneStringMap(in.RequestMetadata),
-		ResponseMetadata: cloneStringMap(in.ResponseMetadata),
-	}
-}
-
-func cloneCommandDiagnostic(in *interfaces.CommandDiagnostic) *interfaces.CommandDiagnostic {
-	if in == nil {
-		return nil
-	}
-	return &interfaces.CommandDiagnostic{
-		Command:    in.Command,
-		Args:       append([]string(nil), in.Args...),
-		Stdin:      in.Stdin,
-		Env:        cloneStringMap(in.Env),
-		Stdout:     in.Stdout,
-		Stderr:     in.Stderr,
-		ExitCode:   in.ExitCode,
-		TimedOut:   in.TimedOut,
-		Duration:   in.Duration,
-		WorkingDir: in.WorkingDir,
-	}
-}
-
-func cloneStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
 }
 
 func hashText(value string) string {
