@@ -73,11 +73,6 @@ export const WorkstationRequestSelectionNoResponse = {
       currentSelection.getByRole("heading", { name: "Request counts" }),
     ).toBeVisible();
     await expect(
-      currentSelection.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeVisible();
-    await expect(
       currentSelection.getByText("No inference events are available for this selected work item."),
     ).toBeVisible();
     await expect(
@@ -122,11 +117,9 @@ export const WorkstationRequestSelectionRejected = {
         "The active story needs revision before it can continue.",
       ),
     ).toBeVisible();
-    await expect(
-      responseDetails.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeVisible();
+    expect(
+      responseDetails.queryByText(/Inference attempts when available/),
+    ).toBeNull();
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
     ).toBeVisible();
@@ -168,11 +161,6 @@ export const WorkstationRequestSelectionErrored = {
     await expect(
       currentSelection.getByText(
         "Review the blocked story and explain the failure.",
-      ),
-    ).toBeVisible();
-    await expect(
-      currentSelection.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
       ),
     ).toBeVisible();
     expect(
@@ -390,4 +378,3 @@ export const WorkstationRequestSelectionScriptFailed = {
     expectCurrentSelectionCardID(canvasElement);
   },
 };
-

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 import { inferenceAttempt, workstationRequest } from "./detail-card-test-helpers";
+import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "./detail-card-shared";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 describe("WorkstationRequestDetailCard", () => {
@@ -69,20 +70,15 @@ describe("WorkstationRequestDetailCard", () => {
     expect(within(currentSelection).getAllByText("request-ready-story").length).toBeGreaterThan(0);
     expect(within(currentSelection).getByText("Dispatch ID")).toBeTruthy();
     expect(within(currentSelection).getByRole("heading", { name: "Request counts" })).toBeTruthy();
-    expect(
-      requestDetails.getByText(
-        "Prompt, request payload, working-directory, and worktree details are shown under Inference attempts when available.",
-      ),
-    ).toBeTruthy();
     expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
-    expect(
-      responseDetails.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeTruthy();
     expect(inferenceAttempts.getByText("Retry the review with the latest context.")).toBeTruthy();
     expect(inferenceAttempts.getByText("Ready for the next workstation.")).toBeTruthy();
     expect(inferenceAttempts.getByText("codex / session_id / sess-ready-request")).toBeTruthy();
+    expect(requestDetails.queryByText(/Inference attempts when available/)).toBeNull();
+    expect(responseDetails.queryByText(/Inference attempts when available/)).toBeNull();
+    expect(
+      within(currentSelection).getByText("Dispatch ID").closest("dl")?.className,
+    ).toContain(INFERENCE_ATTEMPT_DETAIL_CLASS);
     expect(within(currentSelection).getByText("1m 3s")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Request metadata" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Response metadata" })).toBeNull();
@@ -106,11 +102,6 @@ describe("WorkstationRequestDetailCard", () => {
     );
 
     expect(screen.getAllByText("request-pending-story").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeTruthy();
     expect(
       screen.getByText("Total duration is not available for this workstation request yet."),
     ).toBeTruthy();
@@ -138,11 +129,8 @@ describe("WorkstationRequestDetailCard", () => {
     const responseDetails = within(screen.getByRole("region", { name: "Response details" }));
 
     expect(within(currentSelection).getAllByText("dispatch-review-sparse").length).toBeGreaterThan(0);
-    expect(
-      within(currentSelection).getByText(
-        "Request ID is not available for this workstation request.",
-      ),
-    ).toBeTruthy();
+    expect(within(currentSelection).queryByText("Request ID")).toBeNull();
+    expect(within(currentSelection).queryByText("Transition ID")).toBeNull();
     expect(
       within(currentSelection).getByText(
         "Workstation details are not available for this request.",
@@ -332,11 +320,6 @@ describe("WorkstationRequestDetailCard", () => {
     expect(screen.getByRole("heading", { name: "Error details" })).toBeTruthy();
     expect(errorDetails.getByText("provider_rate_limit")).toBeTruthy();
     expect(errorDetails.getByText("Provider rate limit exceeded while reviewing the story.")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeTruthy();
     expect(screen.getAllByText("FAILED").length).toBeGreaterThan(0);
   });
 

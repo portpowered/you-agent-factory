@@ -1093,9 +1093,9 @@ export const LocalizedZhCN = {
     const canvas = within(canvasElement);
 
     await expect(
-      await canvas.findByRole("heading", { name: "当前活动" }),
+      await canvas.findByRole("region", { name: "当前活动" }),
     ).toBeVisible();
-    await expect(await canvas.findByText("操作员视图")).toBeVisible();
+    expect(canvas.queryByText("操作员视图")).toBeNull();
     await expect(
       canvas.getByRole("region", { name: "工作图视口" }),
     ).toBeVisible();

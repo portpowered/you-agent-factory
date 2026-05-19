@@ -162,7 +162,7 @@ export function MetadataSection({
     <section aria-label={title} className={RUNTIME_DETAILS_SECTION_CLASS}>
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{title}</h4>
       {entries.length > 0 ? (
-        <dl>
+        <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
           {entries.map(([key, value]) => (
             <div key={key}>
               <dt>{key}</dt>

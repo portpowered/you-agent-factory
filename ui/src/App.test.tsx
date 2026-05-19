@@ -2758,11 +2758,6 @@ describe("App timeline reconstruction flows", () => {
       verify: (currentSelection: HTMLElement) => {
         expect(
           within(currentSelection).getByText(
-            "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-          ),
-        ).toBeTruthy();
-        expect(
-          within(currentSelection).getByText(
             "No inference events are available for this selected work item.",
           ),
         ).toBeTruthy();

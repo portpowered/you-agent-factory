@@ -1,12 +1,10 @@
 import { formatWorkItemLabel } from "../../components/ui/formatters";
 import { formatDurationMillis } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
-import {
-  DETAIL_COPY_CLASS,
-  WIDGET_SUBTITLE_CLASS,
-} from "../../components/dashboard/widget-board";
+import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
+  INFERENCE_ATTEMPT_DETAIL_CLASS,
   MetadataSection,
   RequestCountSection,
   RUNTIME_DETAIL_CODE_CLASS,
@@ -79,7 +77,7 @@ function WorkstationRequestSummary({
       <p className={WIDGET_SUBTITLE_CLASS}>
         {request.request_id || request.dispatch_id}
       </p>
-      <dl>
+      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>Dispatch ID</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
@@ -88,31 +86,21 @@ function WorkstationRequestSummary({
             </code>
           </dd>
         </div>
-        <div>
-          <dt>Request ID</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {request.request_id ? (
+        {request.request_id ? (
+          <div>
+            <dt>Request ID</dt>
+            <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
               <code className={RUNTIME_DETAIL_CODE_CLASS}>
                 {request.request_id}
               </code>
-            ) : (
-              "Request ID is not available for this workstation request."
-            )}
-          </dd>
-        </div>
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt>Workstation</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
             {request.workstation_name ||
               "Workstation details are not available for this request."}
-          </dd>
-        </div>
-        <div>
-          <dt>Transition ID</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            <code className={RUNTIME_DETAIL_CODE_CLASS}>
-              {request.transition_id}
-            </code>
           </dd>
         </div>
         <div>
@@ -161,7 +149,6 @@ function RequestDetailsSection({
           selectedWorkID={selectedWorkID}
           workItems={consumedWorkItems}
         />
-        <p className={DETAIL_COPY_CLASS}>{view.inferenceRequestDetailsCopy}</p>
       </section>
     );
   }
@@ -172,7 +159,7 @@ function RequestDetailsSection({
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request details</h4>
-      <dl>
+      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <ScriptRequestFields request={request} />
       </dl>
       <ConsumedWorkItemsSection
