@@ -257,20 +257,29 @@ export async function waitForStorybookReady({
   await waitForStableIframe();
 }
 
-export async function main() {
-  await assertPortAvailable(HOST, PORT);
+export async function runStorybookCI({
+  assertAvailable = () => assertPortAvailable(HOST, PORT),
+  runCommand = runBun,
+  settle = delay,
+  spawnServer = () =>
+    spawnBun([
+      "x",
+      "--no-install",
+      "http-server",
+      "storybook-static",
+      "-p",
+      PORT,
+      "-a",
+      HOST,
+      "-s",
+    ]),
+  stop = stopServer,
+  waitForReady = waitForStorybookReady,
+  waitForStableIndex = waitForStableStorybookIndex,
+} = {}) {
+  await assertAvailable();
 
-  const server = spawnBun([
-    "x",
-    "--no-install",
-    "http-server",
-    "storybook-static",
-    "-p",
-    PORT,
-    "-a",
-    HOST,
-    "-s",
-  ]);
+  const server = spawnServer();
   let shuttingDown = false;
 
   const serverExit = new Promise((_, reject) => {
@@ -289,15 +298,19 @@ export async function main() {
   });
 
   try {
-    await waitForStorybookReady({ serverExit });
-    await Promise.race([runBun(["run", "storybook:test-runner:ci"]), serverExit]);
-    await delay(POST_TEST_RUNNER_SETTLE_MS);
-    await waitForStableStorybookIndex();
-    await Promise.race([runBun(["run", "storybook:responsive-check"]), serverExit]);
+    await waitForReady({ serverExit });
+    await Promise.race([runCommand(["run", "storybook:test-runner:ci"]), serverExit]);
+    await settle(POST_TEST_RUNNER_SETTLE_MS);
+    await waitForStableIndex();
+    await Promise.race([runCommand(["run", "storybook:responsive-check"]), serverExit]);
   } finally {
     shuttingDown = true;
-    await stopServer(server);
+    await stop(server);
   }
+}
+
+export async function main() {
+  await runStorybookCI();
 }
 
 if (import.meta.main) {
