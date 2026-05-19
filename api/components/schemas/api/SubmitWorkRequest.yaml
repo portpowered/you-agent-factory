@@ -16,6 +16,9 @@ properties:
   traceId:
     type: string
     description: Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Optional canonical ordered work content parts for this submission.
   payload:
     description: Opaque work payload forwarded as raw JSON.
   tags:

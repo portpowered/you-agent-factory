@@ -575,6 +575,7 @@ func workFromGeneratedWork(work factoryapi.Work, requestID string) interfaces.Wo
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
 		TraceID:                  traceID,
+		Content:                  generatedWorkContentToDomain(work.Content),
 		Payload:                  payloadBytesFromGenerated(work.Payload),
 		Tags:                     stringMapValue(work.Tags),
 	}
@@ -590,8 +591,34 @@ func factoryWorkItemFromGeneratedWork(work factoryapi.Work) interfaces.FactoryWo
 		CurrentChainingTraceID:   item.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
 		TraceID:                  item.TraceID,
+		Content:                  append([]interfaces.WorkContentPart(nil), item.Content...),
 		Tags:                     cloneStringMap(item.Tags),
 	}
+}
+
+func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
+	if content == nil || len(*content) == 0 {
+		return nil
+	}
+	parts := make([]interfaces.WorkContentPart, 0, len(*content))
+	for _, part := range *content {
+		textPart, textErr := part.AsWorkTextContentPart()
+		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: textPart.Text,
+			})
+			continue
+		}
+		imagePart, imageErr := part.AsWorkImageContentPart()
+		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeImage,
+				File: imagePart.File,
+			})
+		}
+	}
+	return parts
 }
 
 func payloadBytesFromGenerated(payload any) []byte {

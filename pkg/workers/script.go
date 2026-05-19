@@ -135,6 +135,9 @@ func (se *ScriptExecutor) Execute(ctx context.Context, request interfaces.Workst
 }
 
 func (se *ScriptExecutor) commandRequest(request interfaces.WorkstationExecutionRequest) (CommandRequest, error) {
+	if err := unsupportedImageContentError(request.InputTokens, "script executor"); err != nil {
+		return CommandRequest{}, err
+	}
 	data := buildPromptData(executionRequestInputTokens(request), executionRequestContext(request))
 	resolvedArgs, err := resolveArgs(se.Args, data)
 	if err != nil {

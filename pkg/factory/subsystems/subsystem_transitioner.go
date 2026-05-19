@@ -327,6 +327,9 @@ func cloneFactoryWorkItems(items []interfaces.FactoryWorkItem) []interfaces.Fact
 		if items[i].PreviousChainingTraceIDs != nil {
 			clone[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
 		}
+		if items[i].Content != nil {
+			clone[i].Content = append([]interfaces.WorkContentPart(nil), items[i].Content...)
+		}
 		if items[i].Tags != nil {
 			clone[i].Tags = cloneTags(items[i].Tags)
 		}

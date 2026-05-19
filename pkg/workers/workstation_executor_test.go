@@ -161,6 +161,84 @@ func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFiel
 	}
 }
 
+func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonicalContent(t *testing.T) {
+	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {
+					Type: interfaces.WorkstationTypeModel,
+					PromptTemplate: `{{ (index .Inputs 0).WorkID }}:{{ range (index .Inputs 0).Content }} [{{ .Type }}={{ .Text }}{{ .File }}]{{ end }}
+{{ (index .Inputs 1).WorkID }}:{{ range (index .Inputs 1).Content }} [{{ .Type }}={{ .Text }}{{ .File }}]{{ end }}`,
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-multi-content",
+		TransitionID:    "t-multi-content",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+		InputTokens: InputTokens(
+			interfaces.Token{
+				ID: "tok-text",
+				Color: interfaces.TokenColor{
+					WorkID: "work-text",
+					Content: []interfaces.WorkContentPart{
+						{Type: interfaces.WorkContentPartTypeText, Text: "plan"},
+					},
+					Payload: []byte("plan"),
+				},
+			},
+			interfaces.Token{
+				ID: "tok-mixed",
+				Color: interfaces.TokenColor{
+					WorkID: "work-mixed",
+					Content: []interfaces.WorkContentPart{
+						{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
+						{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+					},
+					Payload: []byte("caption"),
+				},
+			},
+		),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if !mock.called {
+		t.Fatal("executor was not called")
+	}
+	if !strings.Contains(mock.dispatch.UserMessage, "work-text: [text=plan]") {
+		t.Fatalf("rendered prompt = %q, want first input content preserved", mock.dispatch.UserMessage)
+	}
+	if !strings.Contains(mock.dispatch.UserMessage, "work-mixed: [text=caption] [image=fixtures/mockup.png]") {
+		t.Fatalf("rendered prompt = %q, want second input mixed content preserved", mock.dispatch.UserMessage)
+	}
+
+	inputTokens := executionRequestInputTokens(mock.dispatch)
+	if len(inputTokens) != 2 {
+		t.Fatalf("forwarded input token count = %d, want 2", len(inputTokens))
+	}
+	if inputTokens[0].Color.WorkID != "work-text" || len(inputTokens[0].Color.Content) != 1 {
+		t.Fatalf("first forwarded input = %#v, want text input preserved", inputTokens[0].Color)
+	}
+	if inputTokens[1].Color.WorkID != "work-mixed" || len(inputTokens[1].Color.Content) != 2 {
+		t.Fatalf("second forwarded input = %#v, want mixed-content input preserved", inputTokens[1].Color)
+	}
+	if inputTokens[1].Color.Content[1].Type != interfaces.WorkContentPartTypeImage || inputTokens[1].Color.Content[1].File != "fixtures/mockup.png" {
+		t.Fatalf("second forwarded input content = %#v, want ordered image part", inputTokens[1].Color.Content)
+	}
+}
+
 func TestWorkstationExecutor_ResolveWorkstationExecutionContext_AppliesResolvedRuntimeFields(t *testing.T) {
 	projectRoot := t.TempDir()
 	we := newTestWorkstationExecutor(canonicalWorkstationRuntimeConfig(projectRoot), &wsMockExecutor{})

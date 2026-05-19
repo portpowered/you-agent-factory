@@ -142,7 +142,20 @@ func (p *ScriptWrapProvider) Infer(ctx context.Context, req interfaces.ProviderI
 			"model", req.Model)...)
 
 	behavior := providerBehaviorFor(req.ModelProvider, logger)
-	args := behavior.BuildArgs(req, p.SkipPermissions)
+	args, err := behavior.BuildArgs(req, p.SkipPermissions)
+	if err != nil {
+		logger.Error("inferencer: request argument validation failed",
+			WorkLogFields(req.Dispatch.Execution,
+				"dispatcher", string(req.ModelProvider),
+				"error", err.Error())...)
+		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
+			interfaces.ProviderErrorTypePermanentBadRequest,
+			err.Error(),
+			err,
+			nil,
+			workDiagnosticsForInferenceRequest(req),
+		)
+	}
 	logger.Info("inferencer: request arguments",
 		WorkLogFields(req.Dispatch.Execution, "arguments", args)...)
 	execReq := behavior.BuildCommandRequest(req, args)
