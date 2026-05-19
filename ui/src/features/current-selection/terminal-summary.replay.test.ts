@@ -29,9 +29,7 @@ describe("terminal summary replay regression", () => {
       ),
     ).toEqual(
       expect.objectContaining({
-        contextText: expect.stringContaining(
-          "Accepted at executor-loop-breaker; codex / session_id /",
-        ),
+        workstationName: "executor-loop-breaker",
       }),
     );
 
@@ -43,12 +41,10 @@ describe("terminal summary replay regression", () => {
       ),
     ).toEqual(
       expect.objectContaining({
-        contextText: expect.stringContaining(
-          "Failed at setup-workspace; codex / session_id /",
-        ),
         failureMessage:
           'execution cancelled: exec: "python3": executable file not found in $PATH',
         failureReason: "worker_error",
+        workstationName: "setup-workspace",
       }),
     );
 

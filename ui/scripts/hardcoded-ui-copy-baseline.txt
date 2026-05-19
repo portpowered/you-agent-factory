@@ -110,5 +110,4 @@ src/features/current-selection/workstation-request-detail.tsx|261|13|jsx-text|Co
 src/features/current-selection/workstation-request-detail.tsx|273|13|jsx-text|Resolved args
 src/features/current-selection/workstation-request-detail.tsx|283|15|jsx-text|Script arguments are not available for this workstation request.
 src/features/flowchart/current-activity-workstation-node.tsx|221|19|jsx-attribute|Active
-src/features/terminal-work/terminal-work-card.tsx|288|51|jsx-text|at
 src/features/work-outcome/trend-cards.tsx|254|60|jsx-text|retry or rework events

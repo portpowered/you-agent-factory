@@ -2935,8 +2935,7 @@ describe("App streamed replay smoke flows", () => {
         screen.getByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeTruthy();
       expect(
-        screen.getAllByText(/codex \/ session_id \/ sess-blocked-analysis/)
-          .length,
+        screen.getAllByText("Failed at Review").length,
       ).toBeGreaterThan(0);
     });
 
