@@ -189,10 +189,6 @@ function ReadyWorkChart({
     selectionStartTick,
     selectionEndTick,
   );
-  const zoomContext =
-    zoomRange === null
-      ? null
-      : chartMessages.tickRangeLabel(zoomRange.startTick, zoomRange.endTick);
 
   const beginSelection = (event: ReactMouseEvent<HTMLDivElement>) => {
     const tick = readPointerTick(event, visibleRows);
@@ -226,14 +222,11 @@ function ReadyWorkChart({
 
   return (
     <div className={cn(WORK_CHART_SHELL_CLASS, className)}>
-      {zoomContext === null ? null : (
+      {zoomRange === null ? null : (
         <div
           className={WORK_CHART_TOOLBAR_CLASS}
           data-work-chart-toolbar="true"
         >
-          <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS, "text-right")}>
-            {zoomContext}
-          </p>
           <Button
             aria-label={chartMessages.resetZoomLabel}
             className="min-h-8 rounded-lg px-2.5 py-1.5 text-xs"

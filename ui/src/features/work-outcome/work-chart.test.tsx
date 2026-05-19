@@ -268,7 +268,7 @@ describe("WorkChart", () => {
     fireEvent.mouseUp(chart, { clientX: 200, clientY: 168 });
 
     expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
-    expect(screen.getByText("已缩放到刻度 10-20")).toBeTruthy();
+    expect(screen.queryByText("已缩放到刻度 10-20")).toBeNull();
 
     const resetZoom = screen.getByRole("button", {
       name: "重置工作结果图表缩放",
