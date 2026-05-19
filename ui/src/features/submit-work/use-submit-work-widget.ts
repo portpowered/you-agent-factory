@@ -26,7 +26,10 @@ export function useSubmitWorkWidget(
   const mutation = useMutation({
     mutationFn: submitWork,
     onSuccess: () => {
-      setDraft(EMPTY_DRAFT);
+      setDraft((currentDraft) => ({
+        ...EMPTY_DRAFT,
+        workTypeName: currentDraft.workTypeName,
+      }));
       setShowValidation(false);
     },
   });
