@@ -18,6 +18,7 @@ import {
   providerSessionSelectionKey,
   type LoadableProviderSessionRef,
 } from "./provider-session-details";
+import { requestInferenceAttempts } from "./selected-work-dispatch-history-helpers";
 import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 import type { CurrentSelectionState } from "./useCurrentSelection";
@@ -42,10 +43,14 @@ function useSelectedProviderSessionState({
   selectedNode,
   selectedNodeProviderSessions,
   selectedWorkDispatchAttempts,
+  selectedWorkRequestHistory,
   selectionKind,
 }: Pick<
   CurrentSelectionState,
-  "selectedNode" | "selectedNodeProviderSessions" | "selectedWorkDispatchAttempts"
+  | "selectedNode"
+  | "selectedNodeProviderSessions"
+  | "selectedWorkDispatchAttempts"
+  | "selectedWorkRequestHistory"
 > & {
   selectionKind: CurrentSelectionState["selection"] extends { kind: infer T }
     ? T | null | undefined
@@ -58,7 +63,12 @@ function useSelectedProviderSessionState({
       new Set(
         (
           selectionKind === "work-item"
-            ? selectedWorkDispatchAttempts
+            ? [
+                ...selectedWorkDispatchAttempts,
+                ...selectedWorkRequestHistory.flatMap((request) =>
+                  requestInferenceAttempts(request),
+                ),
+              ]
             : selectedNode
               ? selectedNodeProviderSessions
               : []
@@ -71,6 +81,7 @@ function useSelectedProviderSessionState({
       selectedNode,
       selectedNodeProviderSessions,
       selectedWorkDispatchAttempts,
+      selectedWorkRequestHistory,
       selectionKind,
     ],
   );
@@ -238,6 +249,7 @@ export function CurrentSelectionWidget({
     selectedNode,
     selectedNodeProviderSessions,
     selectedWorkDispatchAttempts,
+    selectedWorkRequestHistory,
     selection,
   } = currentSelection;
   const editableConfigurationState = useEditableWorkstationConfigurationState(
@@ -261,6 +273,7 @@ export function CurrentSelectionWidget({
       selectedNode,
       selectedNodeProviderSessions,
       selectedWorkDispatchAttempts,
+      selectedWorkRequestHistory,
       selectionKind: selection?.kind,
     });
   const headerAction = (

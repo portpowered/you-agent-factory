@@ -197,13 +197,16 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         SubmitWorkRequest: {
-            name?: string;
+            /** @description Required authored name for this single-work submission. */
+            name: string;
             /** @description Configured work type name from factory.json to submit to. */
             workTypeName: string;
             /** @description Explicit chaining-trace identifier for the submitted work. */
             currentChainingTraceId?: string;
             /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
             traceId?: string;
+            /** @description Optional canonical ordered work content parts for this submission. */
+            content?: components["schemas"]["WorkContent"];
             /** @description Opaque work payload forwarded as raw JSON. */
             payload?: unknown;
             tags?: components["schemas"]["StringMap"];
@@ -242,6 +245,8 @@ export interface components {
             currentChainingTraceId?: string;
             previousChainingTraceIds?: string[];
             traceId: string;
+            /** @description Ordered canonical content parts preserved on this work token. */
+            content?: components["schemas"]["WorkContent"];
             tags?: components["schemas"]["StringMap"];
             /** Format: date-time */
             createdAt: string;
@@ -1324,12 +1329,37 @@ export interface components {
             previousChainingTraceIds?: string[];
             /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
             traceId?: string;
+            /** @description Optional canonical ordered work content parts for this work item. */
+            content?: components["schemas"]["WorkContent"];
             /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
             payload?: unknown;
             /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
             tags?: components["schemas"]["StringMap"];
             /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
             relations?: components["schemas"]["Relation"][];
+        };
+        /** @description Ordered canonical content parts for one work item. */
+        WorkContent: components["schemas"]["WorkContentPart"][];
+        /** @description One ordered canonical content part on a work item. */
+        WorkContentPart: components["schemas"]["WorkTextContentPart"] | components["schemas"]["WorkImageContentPart"];
+        /**
+         * @description Supported first-slice canonical work content part types.
+         * @enum {string}
+         */
+        WorkContentPartType: "text" | "image";
+        /** @description Ordered inline text content for one work item. */
+        WorkTextContentPart: {
+            /** @enum {unknown} */
+            type: "text";
+            /** @description Inline text content preserved in canonical part order. */
+            text: string;
+        };
+        /** @description Ordered image content for one work item. */
+        WorkImageContentPart: {
+            /** @enum {unknown} */
+            type: "image";
+            /** @description Image file reference preserved for later runtime materialization. */
+            file: string;
         };
         Relation: {
             type: components["schemas"]["RelationType"];

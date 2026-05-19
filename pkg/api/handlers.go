@@ -59,10 +59,11 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 	}
 
 	submitReq := interfaces.SubmitRequest{
-		Name:                   stringValue(req.Name),
+		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
 		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
+		Content:                generatedWorkContentToDomain(req.Content),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
@@ -107,7 +108,15 @@ func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, reque
 		return
 	}
 
-	workRequest := generatedWorkRequestToDomain(req)
+	workRequest, err := generatedWorkRequestToDomain(req)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
 	applyStableTraceToWorkRequest(&workRequest)
 	result, err := s.runtime.SubmitWorkRequest(r.Context(), workRequest)
 	if err != nil {
@@ -515,6 +524,7 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  t.Color.TraceID,
+		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
 		CreatedAt:                t.CreatedAt,
 		EnteredAt:                t.EnteredAt,
@@ -547,6 +557,7 @@ func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
 		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
+		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
 		Tags:                     stringMapPtr(t.Color.Tags),
 	}
 }
@@ -886,7 +897,7 @@ func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []interfaces.
 	return relations
 }
 
-func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkRequest {
+func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRequest, error) {
 	workRequest := interfaces.WorkRequest{
 		RequestID:              req.RequestId,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
@@ -894,7 +905,11 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkReq
 	}
 	if req.Works != nil {
 		workRequest.Works = make([]interfaces.Work, 0, len(*req.Works))
-		for _, work := range *req.Works {
+		for i, work := range *req.Works {
+			content, err := generatedWorkContentToDomainAtPath(work.Content, fmt.Sprintf("works[%d].content", i))
+			if err != nil {
+				return interfaces.WorkRequest{}, err
+			}
 			workRequest.Works = append(workRequest.Works, interfaces.Work{
 				Name:                     work.Name,
 				WorkID:                   stringValue(work.WorkId),
@@ -905,6 +920,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkReq
 				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
 				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
 				TraceID:                  stringValue(work.TraceId),
+				Content:                  content,
 				Payload:                  work.Payload,
 				Tags:                     generatedStringMap(work.Tags),
 			})
@@ -921,7 +937,79 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) interfaces.WorkReq
 			})
 		}
 	}
-	return workRequest
+	return workRequest, nil
+}
+
+func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
+	parts, err := generatedWorkContentToDomainAtPath(content, "content")
+	if err != nil {
+		return nil
+	}
+	return parts
+}
+
+func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+	if len(parts) == 0 {
+		return nil
+	}
+	content := make(factoryapi.WorkContent, 0, len(parts))
+	for _, part := range parts {
+		var generated factoryapi.WorkContentPart
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: part.Text,
+			}); err != nil {
+				continue
+			}
+		case interfaces.WorkContentPartTypeImage:
+			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+				Type: factoryapi.WorkContentPartTypeImage,
+				File: part.File,
+			}); err != nil {
+				continue
+			}
+		default:
+			continue
+		}
+		content = append(content, generated)
+	}
+	if len(content) == 0 {
+		return nil
+	}
+	return &content
+}
+
+func generatedWorkContentToDomainAtPath(content *factoryapi.WorkContent, fieldPath string) ([]interfaces.WorkContentPart, error) {
+	if content == nil || len(*content) == 0 {
+		return nil, nil
+	}
+
+	parts := make([]interfaces.WorkContentPart, 0, len(*content))
+	for i, part := range *content {
+		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
+		textPart, textErr := part.AsWorkTextContentPart()
+		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: textPart.Text,
+			})
+			continue
+		}
+
+		imagePart, imageErr := part.AsWorkImageContentPart()
+		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
+			parts = append(parts, interfaces.WorkContentPart{
+				Type: interfaces.WorkContentPartTypeImage,
+				File: imagePart.File,
+			})
+			continue
+		}
+
+		return nil, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
+	}
+	return parts, nil
 }
 
 type requestFieldValidationError struct {
@@ -960,6 +1048,12 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	}
 	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
+	}
+	if err := validateWorkContentField(fields, ""); err != nil {
+		return factoryapi.SubmitWorkJSONRequestBody{}, err
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		return factoryapi.SubmitWorkJSONRequestBody{}, requestFieldValidationError{message: "name is required"}
 	}
 	return req, nil
 }
@@ -1005,6 +1099,9 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 		}
 		if err := rejectConflictingChainingTraceFields(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
+			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
+		}
+		if err := validateWorkContentField(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
 			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 		}
 	}
@@ -1073,6 +1170,85 @@ func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, pre
 		fields[legacyTraceIDField],
 	); err != nil {
 		return requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+	}
+	return nil
+}
+
+func validateWorkContentField(fields map[string]json.RawMessage, prefix string) error {
+	contentRaw, ok := fields["content"]
+	if !ok {
+		return nil
+	}
+
+	var partPayloads []json.RawMessage
+	if err := json.Unmarshal(contentRaw, &partPayloads); err != nil {
+		return requestFieldValidationError{message: fmt.Sprintf("%scontent must be an array", prefix)}
+	}
+	for i, payload := range partPayloads {
+		var partFields map[string]json.RawMessage
+		if err := json.Unmarshal(payload, &partFields); err != nil {
+			return requestFieldValidationError{message: fmt.Sprintf("%scontent[%d] must be an object", prefix, i)}
+		}
+		if _, err := validatedRawWorkContentPart(partFields, fmt.Sprintf("%scontent[%d].", prefix, i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {
+	typeRaw, ok := fields["type"]
+	if !ok {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype is required", prefix)}
+	}
+
+	var partType string
+	if err := json.Unmarshal(typeRaw, &partType); err != nil || partType == "" {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be a non-empty string", prefix)}
+	}
+
+	switch interfaces.WorkContentPartType(partType) {
+	case interfaces.WorkContentPartTypeText:
+		if err := requireOnlyFields(fields, prefix, "type", "text"); err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		textRaw, ok := fields["text"]
+		if !ok {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stext is required for text content parts", prefix)}
+		}
+		var text string
+		if err := json.Unmarshal(textRaw, &text); err != nil {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stext must be a string", prefix)}
+		}
+		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeText, Text: text}, nil
+	case interfaces.WorkContentPartTypeImage:
+		if err := requireOnlyFields(fields, prefix, "type", "file"); err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		fileRaw, ok := fields["file"]
+		if !ok {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile is required for image content parts", prefix)}
+		}
+		var file string
+		if err := json.Unmarshal(fileRaw, &file); err != nil || file == "" {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile must be a non-empty string", prefix)}
+		}
+		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeImage, File: file}, nil
+	default:
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", prefix)}
+	}
+}
+
+func requireOnlyFields(fields map[string]json.RawMessage, prefix string, allowed ...string) error {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, field := range allowed {
+		allowedSet[field] = struct{}{}
+	}
+	for field := range fields {
+		if _, ok := allowedSet[field]; ok {
+			continue
+		}
+		return requestFieldValidationError{message: fmt.Sprintf("%s%s is not supported", prefix, field)}
 	}
 	return nil
 }

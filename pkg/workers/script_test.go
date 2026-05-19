@@ -189,6 +189,45 @@ func TestScriptExecutor_TemplateSubstitutionAndEnvMerging(t *testing.T) {
 	}
 }
 
+func TestScriptExecutor_RejectsImageContentBeforeRunner(t *testing.T) {
+	runner := &capturingCommandRunner{}
+	executor := &ScriptExecutor{
+		Command:       "ignored",
+		Args:          []string{"{{ (index .Inputs 0).WorkID }}"},
+		CommandRunner: runner,
+	}
+
+	result, err := executor.Execute(context.Background(), testScriptRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-image-script",
+			TransitionID: "t-image-script",
+			InputTokens: InputTokens(interfaces.Token{
+				ID: "token-image",
+				Color: interfaces.TokenColor{
+					WorkID: "work-image",
+					Content: []interfaces.WorkContentPart{
+						{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+					},
+				},
+			}),
+		},
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	}
+	if !strings.Contains(result.Error, `input_tokens[0].color.content[0].file`) ||
+		!strings.Contains(result.Error, `script executor`) ||
+		!strings.Contains(result.Error, `configure modelProvider codex`) {
+		t.Fatalf("Error = %q", result.Error)
+	}
+	if runner.request.Command != "" {
+		t.Fatalf("expected runner not to be called, got command %q", runner.request.Command)
+	}
+}
+
 func TestScriptExecutor_ExecutionWorkDirPrefersWorkingDirectory(t *testing.T) {
 	runner := &capturingCommandRunner{}
 	executor := &ScriptExecutor{

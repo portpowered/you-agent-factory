@@ -170,7 +170,7 @@ func TestSubmitWork(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd", "traceId": "test-trace-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"name":"draft-prd","workTypeName": "prd", "traceId": "test-trace-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -206,6 +206,104 @@ func TestSubmitWork(t *testing.T) {
 		t.Errorf("payload = %s, want JSON object payload", string(mf.Submitted[0].Payload))
 	}
 
+}
+
+func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"name":"ui-review","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","file":"fixtures/ui.png"}]}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if string(mf.Submitted[0].Payload) != "Review this UI." {
+		t.Fatalf("payload = %q, want legacy text fallback", mf.Submitted[0].Payload)
+	}
+	if len(mf.Submitted[0].Content) != 2 {
+		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
+	}
+}
+
+func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"name":"conflicting-content","workTypeName":"prd","content":[{"type":"text","text":"canonical"}],"payload":"different"}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("conflicting-content") has invalid content/payload: payload conflicts with explicit content`)
+}
+
+func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","payload":"legacy text"}]}`
+	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 {
+		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	}
+	if len(mf.Submitted[0].Content) != 1 {
+		t.Fatalf("content count = %d, want 1", len(mf.Submitted[0].Content))
+	}
+	if mf.Submitted[0].Content[0].Text != "legacy text" {
+		t.Fatalf("content text = %q, want legacy text", mf.Submitted[0].Content[0].Text)
+	}
+}
+
+func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"workTypeName":"prd","content":[{"type":"image","text":"wrong-field"}]}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].text is not supported")
+}
+
+func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","file":"wrong"}]}]}`
+	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].file is not supported")
 }
 
 func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
@@ -251,7 +349,7 @@ func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	server := httptest.NewServer(newTestServer(mf).Handler())
 	defer server.Close()
 
-	submitResp, err := http.Post(server.URL+"/work", "application/json", bytes.NewBufferString(`{"workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
+	submitResp, err := http.Post(server.URL+"/work", "application/json", bytes.NewBufferString(`{"name":"api-surface-smoke","workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -528,7 +626,7 @@ func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T)
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"name":"chain-submit","workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -565,7 +663,7 @@ func TestSubmitWork_MatchingTraceAliasesNormalizeAtBoundary(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "traceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"name":"chain-submit","workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "traceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -642,7 +740,7 @@ func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`
+	body := `{"name":"runtime-relations","workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1019,12 +1117,50 @@ func TestSubmitWorkMissingWorkType(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"traceId": "test-trace-1"}`
+	body := `{"name":"missing-work-type","traceId": "test-trace-1"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "workTypeName is required")
+}
+
+func TestSubmitWorkMissingName(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"workTypeName":"task","traceId":"test-trace-1","payload":{"title":"unnamed"}}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
+}
+
+func TestSubmitWorkBlankName(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"name":"   \t\n ","workTypeName":"task","traceId":"test-trace-1","payload":{"title":"blank"}}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
 }
 
 func TestSubmitWorkMarkdownPayload(t *testing.T) {
@@ -1035,7 +1171,7 @@ func TestSubmitWorkMarkdownPayload(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "tasks", "traceId": "trace-markdown", "payload": "# Fix lint\n\nRun gofmt."}`
+	body := `{"name":"markdown-fix","workTypeName": "tasks", "traceId": "trace-markdown", "payload": "# Fix lint\n\nRun gofmt."}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1096,7 +1232,7 @@ func TestSubmitWorkAutoTraceID(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd"}`
+	body := `{"name":"auto-trace","workTypeName": "prd"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1605,7 +1741,11 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 			WorkID:     "work-inventory-1",
 			WorkTypeID: submitted.WorkTypeID,
 			TraceID:    submitted.TraceID,
-			Tags:       submitted.Tags,
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/inventory.png"},
+			},
+			Tags: submitted.Tags,
 		},
 		CreatedAt: now,
 		EnteredAt: now,
@@ -1656,6 +1796,10 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 	if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypeINITIAL {
 		t.Fatalf("state = %#v, want init/INITIAL", work.State)
 	}
+	assertGeneratedWorkContentParts(t, work.Content, []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/inventory.png"},
+	})
 	if work.Tags == nil || (*work.Tags)["branch"] != "api-standardization" {
 		t.Fatalf("tags = %#v, want branch api-standardization", work.Tags)
 	}
@@ -1676,6 +1820,10 @@ func TestGetWork(t *testing.T) {
 						CurrentChainingTraceID:   "chain-1",
 						PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 						TraceID:                  "trace-1",
+						Content: []interfaces.WorkContentPart{
+							{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
+							{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+						},
 					},
 					CreatedAt: now,
 					EnteredAt: now,
@@ -1715,11 +1863,47 @@ func TestGetWork(t *testing.T) {
 	if resp.PreviousChainingTraceIds == nil || len(*resp.PreviousChainingTraceIds) != 2 {
 		t.Errorf("expected previousChainingTraceIds [chain-a chain-b], got %#v", resp.PreviousChainingTraceIds)
 	}
+	assertGeneratedWorkContentParts(t, resp.Content, []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/review.png"},
+	})
 	if resp.History == nil {
 		t.Error("expected history in single token response")
 	}
 	if resp.History.TotalVisits == nil || (*resp.History.TotalVisits)["execute"] != 1 {
 		t.Error("expected execute visit count of 1")
+	}
+}
+
+func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+	t.Helper()
+	if content == nil {
+		t.Fatalf("content = nil, want %#v", want)
+	}
+	if len(*content) != len(want) {
+		t.Fatalf("content count = %d, want %d", len(*content), len(want))
+	}
+	for i, wantPart := range want {
+		switch wantPart.Type {
+		case interfaces.WorkContentPartTypeText:
+			part, err := (*content)[i].AsWorkTextContentPart()
+			if err != nil {
+				t.Fatalf("content[%d] decode text: %v", i, err)
+			}
+			if part.Type != factoryapi.WorkContentPartTypeText || part.Text != wantPart.Text {
+				t.Fatalf("content[%d] = %#v, want text %q", i, part, wantPart.Text)
+			}
+		case interfaces.WorkContentPartTypeImage:
+			part, err := (*content)[i].AsWorkImageContentPart()
+			if err != nil {
+				t.Fatalf("content[%d] decode image: %v", i, err)
+			}
+			if part.Type != factoryapi.WorkContentPartTypeImage || part.File != wantPart.File {
+				t.Fatalf("content[%d] = %#v, want image %q", i, part, wantPart.File)
+			}
+		default:
+			t.Fatalf("unsupported expected content type %q", wantPart.Type)
+		}
 	}
 }
 

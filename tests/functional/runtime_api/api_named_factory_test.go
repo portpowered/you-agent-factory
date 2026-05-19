@@ -232,7 +232,7 @@ func saveEditableCurrentFactoryDefinition(t *testing.T, serverURL, body string) 
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
 	t.Helper()
-	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
+	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"name":"named-factory-submit","workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
 	if err != nil {
 		t.Fatalf("POST /work %s: %v", workType, err)
 	}

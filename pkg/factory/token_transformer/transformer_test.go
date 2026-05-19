@@ -90,6 +90,46 @@ func TestInitialTokenFromSubmit_PreservesExplicitChainingLineage(t *testing.T) {
 	}
 }
 
+func TestInitialTokenFromSubmit_PreservesCanonicalContentOrdering(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+		},
+		map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+				},
+			},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+
+	token, err := transformer.InitialTokenFromSubmit(interfaces.SubmitRequest{
+		WorkTypeID: "task",
+		TraceID:    "trace-content",
+		Content: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
+			{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/diagram.png"},
+		},
+		Payload: []byte("caption"),
+	}, time.Date(2026, time.May, 20, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("InitialTokenFromSubmit() error = %v", err)
+	}
+
+	if len(token.Color.Content) != 2 {
+		t.Fatalf("content count = %d, want 2", len(token.Color.Content))
+	}
+	if token.Color.Content[0].Type != interfaces.WorkContentPartTypeText || token.Color.Content[0].Text != "caption" {
+		t.Fatalf("first content part = %#v, want ordered text part", token.Color.Content[0])
+	}
+	if token.Color.Content[1].Type != interfaces.WorkContentPartTypeImage || token.Color.Content[1].File != "fixtures/diagram.png" {
+		t.Fatalf("second content part = %#v, want ordered image part", token.Color.Content[1])
+	}
+}
+
 func TestInitialTokenFromSubmit_TargetStateUsesConfiguredPlace(t *testing.T) {
 	transformer := New(
 		map[string]*petri.Place{

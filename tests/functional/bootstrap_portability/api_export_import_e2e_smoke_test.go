@@ -70,6 +70,7 @@ func submitWorkAndExpectStatus(
 	t.Helper()
 
 	request := factoryapi.SubmitWorkRequest{
+		Name:         "export-import-smoke",
 		WorkTypeName: workTypeName,
 		Payload:      []byte(`{"title":"` + title + `"}`),
 	}

@@ -5,7 +5,7 @@ param(
     [string]$InstallVersion,
     [Parameter(Mandatory = $true)]
     [string]$InstallDir,
-    [string]$BinaryName = "infinite-you.exe"
+    [string]$BinaryName = "you.exe"
 )
 
 $ErrorActionPreference = "Stop"
