@@ -203,7 +203,7 @@ export function normalizeDetailText(value: string | undefined): string | undefin
   return trimmed ? trimmed : undefined;
 }
 
-export function RequestAuthoredText({ value }: { value: string }) {
+export function AuthoredBodyText({ value }: { value: string }) {
   const blocks = parseRequestAuthoredBlocks(value);
 
   return (
@@ -211,6 +211,10 @@ export function RequestAuthoredText({ value }: { value: string }) {
       {blocks.map((block, index) => renderRequestAuthoredBlock(block, index))}
     </div>
   );
+}
+
+export function RequestAuthoredText({ value }: { value: string }) {
+  return <AuthoredBodyText value={value} />;
 }
 
 function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
