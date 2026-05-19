@@ -46,6 +46,16 @@ const workstationDetailMessagesByLocale = {
       "Prompt, model, and template values are loaded from the latest editable current-factory definition.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this workstation.",
+    editableConfigurationModelRequired:
+      "Enter a model before saving this workstation.",
+    editableConfigurationModelEditBlocked:
+      "Model edits are disabled for this workstation.",
+    editableConfigurationPromptRequired:
+      "Enter a prompt before saving this workstation.",
+    editableConfigurationPromptFileWhitespace:
+      "Template paths cannot be only whitespace. Clear the field to remove the template.",
+    editableConfigurationSaveFallbackError:
+      "The running factory could not be saved.",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
     promptFieldLabel: "Prompt",
@@ -147,6 +157,16 @@ const workstationDetailMessagesByLocale = {
       "Prompt、model、template の値は最新の編集可能な current-factory 定義から読み込まれます。",
     editableConfigurationValidationStatus:
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
+    editableConfigurationModelRequired:
+      "このワークステーションを保存する前にモデルを入力してください。",
+    editableConfigurationModelEditBlocked:
+      "このワークステーションではモデル編集が無効です。",
+    editableConfigurationPromptRequired:
+      "このワークステーションを保存する前にプロンプトを入力してください。",
+    editableConfigurationPromptFileWhitespace:
+      "テンプレートパスを空白だけにすることはできません。テンプレートを削除するにはフィールドをクリアしてください。",
+    editableConfigurationSaveFallbackError:
+      "実行中ファクトリーを保存できませんでした。",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
     promptFieldLabel: "プロンプト",
@@ -248,6 +268,16 @@ const workstationDetailMessagesByLocale = {
       "Prompt, model, template 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
     editableConfigurationValidationStatus:
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
+    editableConfigurationModelRequired:
+      "이 워크스테이션을 저장하기 전에 모델을 입력하세요.",
+    editableConfigurationModelEditBlocked:
+      "이 워크스테이션에서는 모델 편집이 비활성화되어 있습니다.",
+    editableConfigurationPromptRequired:
+      "이 워크스테이션을 저장하기 전에 프롬프트를 입력하세요.",
+    editableConfigurationPromptFileWhitespace:
+      "템플릿 경로는 공백만 포함할 수 없습니다. 템플릿을 제거하려면 필드를 비우세요.",
+    editableConfigurationSaveFallbackError:
+      "실행 중인 팩토리를 저장할 수 없습니다.",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
     promptFieldLabel: "프롬프트",
@@ -343,6 +373,12 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSummary:
       "Prompt、model 和 template 值来自最新可编辑的 current-factory 定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
+    editableConfigurationModelRequired: "保存此工作站前请输入模型。",
+    editableConfigurationModelEditBlocked: "此工作站已禁用模型编辑。",
+    editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
+    editableConfigurationPromptFileWhitespace:
+      "模板路径不能只包含空白。请清空该字段以移除模板。",
+    editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",
     promptFieldLabel: "提示词",

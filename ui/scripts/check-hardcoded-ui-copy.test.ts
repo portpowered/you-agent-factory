@@ -11,7 +11,9 @@ import { expect, test } from "vitest";
 import { scanSourceTextForHardcodedCopy } from "./check-hardcoded-ui-copy";
 
 const execFileAsync = promisify(execFile);
-const scriptPath = fileURLToPath(new URL("./check-hardcoded-ui-copy.ts", import.meta.url));
+const scriptPath = fileURLToPath(
+  new URL("./check-hardcoded-ui-copy.ts", import.meta.url),
+);
 
 test("scanSourceTextForHardcodedCopy catches rendered string expressions and visible component prop copy", () => {
   const findings = scanSourceTextForHardcodedCopy(
@@ -78,6 +80,28 @@ test("scanSourceTextForHardcodedCopy catches non-JSX rendered string literals", 
   ]);
 });
 
+test("scanSourceTextForHardcodedCopy catches rendered fallback and validation assignment strings", () => {
+  const findings = scanSourceTextForHardcodedCopy(
+    "src/features/current-selection/state-node-detail.tsx",
+    `
+      export function StateNodeDetail({ value }: { value?: string }) {
+        const validationErrors: { model?: string } = {};
+        validationErrors.model = "Enter a model before saving this workstation.";
+
+        return <dd>{value || "Unknown"}</dd>;
+      }
+    `,
+  );
+
+  expect(findings).toEqual([
+    expect.objectContaining({
+      kind: "string-literal",
+      text: "Enter a model before saving this workstation.",
+    }),
+    expect.objectContaining({ kind: "string-literal", text: "Unknown" }),
+  ]);
+});
+
 test("scanSourceTextForHardcodedCopy ignores documented non-product diagnostic exceptions", () => {
   const findings = scanSourceTextForHardcodedCopy(
     "src/features/current-selection/provider-session-detail-panel.tsx",
@@ -97,7 +121,9 @@ test("scanSourceTextForHardcodedCopy ignores documented non-product diagnostic e
 });
 
 test("CLI output reports actionable hardcoded-copy failures", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "hardcoded-copy-guard-"));
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "hardcoded-copy-guard-"),
+  );
   const srcDir = path.join(tempRoot, "src");
   const baselinePath = path.join(tempRoot, "hardcoded-ui-copy-baseline.txt");
 

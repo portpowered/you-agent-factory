@@ -105,7 +105,9 @@ export const WorkstationRequestSelectionNoResponse = {
       currentSelection.getByRole("heading", { name: "Request counts" }),
     ).toBeVisible();
     await expect(
-      currentSelection.getByText("No inference events are available for this selected work item."),
+      currentSelection.getByText(
+        "No inference events are available for this selected work item.",
+      ),
     ).toBeVisible();
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
@@ -183,7 +185,10 @@ export const WorkstationRequestSelectionErrored = {
     const errorDetails = within(
       currentSelection.getByRole("region", { name: "Error details" }),
     );
-    const outcomeRow = currentSelection.getByText("Outcome").closest("div");
+    const outcomeRow = currentSelection
+      .getAllByText("Outcome")
+      .map((label) => label.closest("div"))
+      .find((row) => row?.textContent?.includes("provider_rate_limit"));
 
     expect(
       currentSelection.getAllByText("request-error-story").length,

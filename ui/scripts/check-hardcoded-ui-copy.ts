@@ -379,7 +379,9 @@ function hasNonProductDiagnosticException(
     return true;
   }
 
-  const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+  const { line } = sourceFile.getLineAndCharacterOfPosition(
+    node.getStart(sourceFile),
+  );
   const lineStarts = sourceFile.getLineStarts();
   const previousLineStart = line > 0 ? lineStarts[line - 1] : 0;
   const currentLineStart = lineStarts[line];
@@ -398,7 +400,10 @@ function isRenderedJsxExpression(node: ts.JsxExpression): boolean {
 
 function isStandaloneStringCopyNode(
   node: ts.Node,
-): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression {
+): node is
+  | ts.StringLiteral
+  | ts.NoSubstitutionTemplateLiteral
+  | ts.TemplateExpression {
   if (
     !ts.isStringLiteral(node) &&
     !ts.isNoSubstitutionTemplateLiteral(node) &&
@@ -436,6 +441,14 @@ function isStandaloneStringCopyNode(
     return true;
   }
 
+  if (
+    ts.isBinaryExpression(parent) &&
+    parent.right === node &&
+    isUserFacingStringBinaryExpression(parent)
+  ) {
+    return true;
+  }
+
   return false;
 }
 
@@ -464,11 +477,59 @@ function isReturnedOrMessageLikeExpression(expression: ts.Expression): boolean {
   );
 }
 
+function isUserFacingStringBinaryExpression(
+  expression: ts.BinaryExpression,
+): boolean {
+  if (
+    (expression.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+      expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
+    isRenderedOrMessageLikeExpression(expression)
+  ) {
+    return true;
+  }
+
+  return (
+    expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    isUserFacingStringAssignmentTarget(expression.left)
+  );
+}
+
+function isRenderedOrMessageLikeExpression(expression: ts.Expression): boolean {
+  const parent = expression.parent;
+  return (
+    (ts.isJsxExpression(parent) && isRenderedJsxExpression(parent)) ||
+    isReturnedOrMessageLikeExpression(expression)
+  );
+}
+
+function isUserFacingStringAssignmentTarget(left: ts.Expression): boolean {
+  if (
+    !ts.isPropertyAccessExpression(left) &&
+    !ts.isElementAccessExpression(left)
+  ) {
+    return false;
+  }
+
+  const targetText = left.getText();
+  if (
+    /(?:message|label|title|description|placeholder|copy|text)$/i.test(
+      targetText,
+    )
+  ) {
+    return true;
+  }
+
+  return /(?:validationErrors|fieldErrors|formErrors)\b/.test(targetText);
+}
+
 function isTextualObjectPropertyName(name: ts.PropertyName): boolean {
-  const text = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : "";
+  const text =
+    ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : "";
   return (
     TEXTUAL_COMPONENT_PROP_NAMES.has(text) ||
-    /(?:Label|Title|Message|Action|Heading|Copy|Description|Placeholder|State|Text|Prefix)$/.test(text)
+    /(?:Label|Title|Message|Action|Heading|Copy|Description|Placeholder|State|Text|Prefix)$/.test(
+      text,
+    )
   );
 }
 
