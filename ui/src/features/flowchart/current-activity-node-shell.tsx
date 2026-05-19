@@ -44,7 +44,7 @@ export function ActivityGraphNodeShell({
   return (
     <article
       className={cx(
-        "flex h-full min-w-0 w-full flex-col gap-[0.35rem] overflow-visible rounded-lg border border-af-overlay/9 bg-af-canvas p-[0.75rem] text-af-ink",
+        "flex h-full min-w-0 w-full flex-col gap-1 overflow-visible rounded-lg border border-af-overlay/9 bg-af-canvas p-3 text-af-ink",
         className,
       )}
       data-current-activity-node-type={nodeType}
@@ -112,10 +112,10 @@ function NodeHandleBadge({
   const position = handle.side === "left" ? Position.Left : Position.Right;
   const wrapperClassName =
     handle.side === "left"
-      ? "-translate-x-[0.3rem] flex-row"
-      : "translate-x-[0.3rem] flex-row-reverse";
+      ? "-translate-x-1 flex-row"
+      : "translate-x-1 flex-row-reverse";
   const buttonClassName = cx(
-    "nodrag nopan inline-flex min-h-6 items-center rounded-full border px-2 py-1 text-[0.58rem] font-semibold uppercase tracking-[0.08em] shadow-sm transition focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed",
+    "nodrag nopan inline-flex min-h-6 items-center rounded-full border px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.08em] shadow-sm transition focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed",
     handle.variant === "selected" &&
       "border-af-accent/40 bg-af-accent/14 text-af-accent",
     handle.variant === "valid-target" &&

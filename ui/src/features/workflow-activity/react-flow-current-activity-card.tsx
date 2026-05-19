@@ -55,10 +55,10 @@ export {
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
 const CURRENT_ACTIVITY_CARD_CLASS =
-  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-[1.2rem] shadow-af-panel backdrop-blur-[18px] max-[720px]:p-4";
+  "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5";
 const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
 const CURRENT_ACTIVITY_EYEBROW_CLASS =
-  "mb-[0.65rem] text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
+  "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
 const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const CURRENT_ACTIVITY_HEADER_TEXT_CLASS = "grid gap-2";
 

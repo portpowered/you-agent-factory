@@ -45,13 +45,14 @@ export const WORK_CHART_ERROR_TITLE = "Work outcome chart unavailable";
 export const WORK_CHART_ERROR_MESSAGE =
   "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.";
 const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
+// tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =
   "h-64 min-h-56 px-5 pb-5 pt-4 sm:h-72 sm:px-6 sm:pb-6 sm:pt-5";
 const WORK_CHART_OVERLAY_CLASS =
   "grid h-full grid-rows-[auto_1fr_auto] gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
 const WORK_CHART_TOP_OVERLAY_CLASS = "flex items-start justify-between gap-3";
 const WORK_CHART_ZOOM_CONTEXT_CLASS =
-  "pointer-events-auto flex max-w-[70%] flex-wrap items-center justify-end gap-2 text-right sm:max-w-none";
+  "pointer-events-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 text-right";
 const WORK_CHART_X_AXIS_OVERLAY_CLASS = "justify-self-end";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 

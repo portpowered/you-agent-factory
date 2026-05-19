@@ -640,6 +640,95 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 	}
 }
 
+func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t *testing.T) {
+	t0 := time.Date(2026, 5, 19, 9, 0, 0, 0, time.UTC)
+	input := interfaces.FactoryWorkItem{
+		ID:                       "work-1",
+		WorkTypeID:               "task",
+		DisplayName:              "Draft",
+		TraceID:                  "trace-1",
+		PlaceID:                  "task:init",
+		PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
+		Tags:                     map[string]string{"priority": "high"},
+	}
+	request := workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+		DispatchID:   "dispatch-1",
+		TransitionID: "t-review",
+		Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+		Inputs: []interfaces.WorkstationInput{{
+			TokenID:  "tok-task-1",
+			PlaceID:  "task:init",
+			WorkItem: &input,
+		}},
+	})
+	response := workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+		DispatchID:      "dispatch-1",
+		TransitionID:    "t-review",
+		Workstation:     interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+		Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
+		DurationMillis:  800,
+		TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
+		ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
+	})
+	inference := inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
+		InferenceRequestId: "dispatch-1/inference-request/1",
+		Attempt:            1,
+		Outcome:            factoryapi.InferenceOutcomeSucceeded,
+		DurationMillis:     700,
+		ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
+	})
+
+	reducer := newFactoryWorldReducer(3)
+	for _, event := range []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", input),
+		request,
+	} {
+		if err := reducer.apply(event); err != nil {
+			t.Fatalf("apply pre-completion event %q: %v", event.Type, err)
+		}
+	}
+
+	dispatchSource := reducer.stateValue.ActiveDispatches["dispatch-1"]
+	if len(dispatchSource.Inputs) != 1 || dispatchSource.Inputs[0].WorkItem == nil {
+		t.Fatalf("dispatch source inputs = %#v, want one traced work item", dispatchSource.Inputs)
+	}
+
+	if err := reducer.apply(inference); err != nil {
+		t.Fatalf("apply inference event: %v", err)
+	}
+	if err := reducer.apply(response); err != nil {
+		t.Fatalf("apply response event: %v", err)
+	}
+
+	dispatchSource.Inputs[0].WorkItem.PreviousChainingTraceIDs[0] = "chain-z"
+	dispatchSource.Inputs[0].WorkItem.Tags["priority"] = "low"
+
+	state := reducer.state()
+	if len(state.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want one completion", state.CompletedDispatches)
+	}
+	if len(state.ProviderSessions) != 1 {
+		t.Fatalf("provider sessions = %#v, want one provider session", state.ProviderSessions)
+	}
+
+	completionInput := state.CompletedDispatches[0].ConsumedInputs[0].WorkItem
+	if len(completionInput.PreviousChainingTraceIDs) != 2 || completionInput.PreviousChainingTraceIDs[0] != "chain-a" {
+		t.Fatalf("completed consumed input previous chaining trace IDs = %#v, want [chain-a chain-b]", completionInput.PreviousChainingTraceIDs)
+	}
+	if completionInput.Tags["priority"] != "high" {
+		t.Fatalf("completed consumed input tags = %#v, want priority high", completionInput.Tags)
+	}
+
+	providerInput := state.ProviderSessions[0].ConsumedInputs[0].WorkItem
+	if len(providerInput.PreviousChainingTraceIDs) != 2 || providerInput.PreviousChainingTraceIDs[0] != "chain-a" {
+		t.Fatalf("provider-session consumed input previous chaining trace IDs = %#v, want [chain-a chain-b]", providerInput.PreviousChainingTraceIDs)
+	}
+	if providerInput.Tags["priority"] != "high" {
+		t.Fatalf("provider-session consumed input tags = %#v, want priority high", providerInput.Tags)
+	}
+}
+
 func TestReconstructFactoryWorldState_WorkInputTokenIDMatchesRequestConsumption(t *testing.T) {
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	item := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}

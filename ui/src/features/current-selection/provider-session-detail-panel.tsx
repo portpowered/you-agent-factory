@@ -54,9 +54,9 @@ function LoadedProviderSessionDetailPanel({
   return (
     <section
       aria-label={messages.selectedSessionHeading}
-      className="mt-4 grid gap-[0.75rem] border-t border-af-overlay/8 pt-4"
+      className="mt-4 grid gap-3 border-t border-af-overlay/8 pt-4"
     >
-      <div className="grid gap-[0.18rem]">
+      <div className="grid gap-1">
         <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
           {messages.selectedSessionHeading}
         </h4>
@@ -152,7 +152,7 @@ function SourceFileSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-[0.65rem]">
+    <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.sourceHeading}</h5>
       <div className="grid gap-3 md:grid-cols-2">
         <DetailMetric
@@ -183,7 +183,7 @@ function ParseOverview({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-[0.65rem]">
+    <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.parseDiagnosticsHeading}
       </h5>
@@ -217,7 +217,7 @@ function TokenUsageSection({
   const tokenUsage = detail.parse.tokenUsage;
 
   return (
-    <section className="grid gap-[0.65rem]">
+    <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.tokenUsageHeading}
       </h5>
@@ -252,13 +252,13 @@ function TurnsSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-[0.65rem]">
+    <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.turnsHeading}</h5>
       {detail.parse.turns.length > 0 ? (
         <div className="grid gap-3 md:grid-cols-2">
           {detail.parse.turns.map((turn) => (
             <article className={PROVIDER_SESSION_CARD_CLASS} key={turn.index}>
-              <div className="grid gap-[0.18rem]">
+              <div className="grid gap-1">
                 <strong>Turn {turn.index}</strong>
                 <p
                   className={cx(
@@ -269,7 +269,7 @@ function TurnsSection({
                   {turn.startedAt ?? "No timestamp"}
                 </p>
               </div>
-              <div className="mt-[0.55rem] grid gap-3 sm:grid-cols-2">
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <DetailMetric label="Events" value={turn.eventCount} />
                 <DetailMetric
                   label="Response items"
@@ -304,7 +304,7 @@ function FunctionCallsSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-[0.65rem]">
+    <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.functionCallsHeading}
       </h5>
@@ -315,8 +315,8 @@ function FunctionCallsSection({
               className={PROVIDER_SESSION_CARD_CLASS}
               key={`${call.order}-${call.callId ?? call.name ?? call.type}`}
             >
-              <div className="grid gap-[0.18rem] md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-                <div className="grid gap-[0.18rem]">
+              <div className="grid gap-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                <div className="grid gap-1">
                   <strong>{call.name ?? call.type}</strong>
                   <p
                     className={cx(
@@ -330,7 +330,7 @@ function FunctionCallsSection({
                 {call.status ? (
                   <span
                     className={cx(
-                      "inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-[0.18rem]",
+                      "inline-flex w-fit rounded-full border border-af-overlay/12 bg-af-overlay/6 px-2 py-0.5",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -338,7 +338,7 @@ function FunctionCallsSection({
                   </span>
                 ) : null}
               </div>
-              <div className="mt-[0.55rem] grid gap-3 md:grid-cols-2">
+              <div className="mt-2 grid gap-3 md:grid-cols-2">
                 <DetailMetric label="Type" value={call.type} />
                 <DetailMetric label="Call ID" value={call.callId ?? "Unavailable"} />
                 {call.arguments ? (
@@ -368,7 +368,7 @@ function ReasoningSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-[0.65rem]">
+    <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.reasoningHeading}
       </h5>
@@ -379,7 +379,7 @@ function ReasoningSection({
               className={PROVIDER_SESSION_CARD_CLASS}
               key={`${entry.order}-${entry.sourceType}`}
             >
-              <div className="grid gap-[0.18rem]">
+              <div className="grid gap-1">
                 <strong>{entry.sourceType}</strong>
                 <p
                   className={cx(
@@ -391,14 +391,14 @@ function ReasoningSection({
                 </p>
               </div>
               {entry.summary ? (
-                <p className={cx("m-0 mt-[0.55rem]", DASHBOARD_BODY_TEXT_CLASS)}>
+                <p className={cx("m-0 mt-2", DASHBOARD_BODY_TEXT_CLASS)}>
                   {entry.summary}
                 </p>
               ) : null}
               {entry.text ? (
                 <pre
                   className={cx(
-                    "m-0 mt-[0.55rem] whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
+                    "m-0 mt-2 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere]",
                     DASHBOARD_BODY_CODE_CLASS,
                   )}
                 >
@@ -408,7 +408,7 @@ function ReasoningSection({
               {entry.encrypted ? (
                 <p
                   className={cx(
-                    "m-0 mt-[0.55rem] text-af-ink/62",
+                    "m-0 mt-2 text-af-ink/62",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
@@ -442,7 +442,7 @@ function ParseDiagnosticsSection({
   }
 
   return (
-    <section className="grid gap-[0.65rem]">
+    <section className="grid gap-2.5">
       <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.parseErrorsHeading}
       </h5>
@@ -453,7 +453,7 @@ function ParseDiagnosticsSection({
             key={`parse-error-${error.lineNumber}`}
           >
             <strong>{`Line ${error.lineNumber}`}</strong>
-            <p className={cx("m-0 mt-[0.45rem]", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cx("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
               {error.message}
             </p>
           </article>
@@ -466,7 +466,7 @@ function ParseDiagnosticsSection({
             <strong>{`Unknown event on line ${event.lineNumber}`}</strong>
             <p
               className={cx(
-                "m-0 mt-[0.45rem] text-af-ink/62",
+                "m-0 mt-1.5 text-af-ink/62",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
             >
@@ -494,7 +494,7 @@ function DetailMetric({
   return (
     <div className={PROVIDER_SESSION_CARD_CLASS}>
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <p className={cx("m-0 mt-[0.3rem]", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cx("m-0 mt-1", DASHBOARD_BODY_TEXT_CLASS)}>
         {value}
       </p>
     </div>
@@ -509,7 +509,7 @@ function CodeBlockMetric({
   value: string;
 }) {
   return (
-    <div className="grid gap-[0.3rem]">
+    <div className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <pre
         className={cx(

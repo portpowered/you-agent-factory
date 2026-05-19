@@ -17,7 +17,7 @@ export default {
 
 function LegendStoryFrame({
   children,
-  className = "relative min-h-[320px] rounded-3xl bg-af-bg p-8",
+  className = "relative min-h-80 rounded-3xl bg-af-bg p-8",
 }: {
   children: ReactNode;
   className?: string;
@@ -119,7 +119,7 @@ export const Expanded = {
 
 export const Narrow = {
   render: () => (
-    <LegendStoryFrame className="relative w-[320px] min-h-[320px] rounded-3xl bg-af-bg p-4">
+    <LegendStoryFrame className="relative min-h-80 w-80 rounded-3xl bg-af-bg p-4">
       <DashboardFlowAxisLegend
         className="relative left-0 top-0"
         edgeItems={getDefaultDashboardFlowAxisLegendEdgeItems("en")}

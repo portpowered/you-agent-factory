@@ -87,9 +87,9 @@ export function CollapsibleProviderSessionAttempts({
   }, []);
 
   return (
-    <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-[0.65rem]">
+    <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-2.5">
       <div className={HISTORY_HEADER_CLASS}>
-        <div className="grid min-w-0 gap-[0.18rem]">
+        <div className="grid min-w-0 gap-1">
           <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={`${historyID}-heading`}>
             {title}
           </h4>
@@ -147,7 +147,7 @@ export function ProviderSessionAttempts({
   workstationRequestsByDispatchID,
 }: ProviderSessionAttemptsProps) {
   return (
-    <section className="mt-4 grid gap-[0.65rem] [&_h4]:m-0">
+    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{title}</h4>
       <ProviderSessionAttemptList
         attempts={attempts}
@@ -188,7 +188,7 @@ function ProviderSessionAttemptList({
   }
 
   return (
-    <div className="grid gap-[0.8rem]">
+    <div className="grid gap-3">
       {attempts.map((attempt) => {
         const outcome = formatWorkstationRunOutcome(attempt.outcome, { workstationKind });
         const isCurrentDispatch = currentDispatchID === attempt.dispatch_id;
@@ -209,19 +209,19 @@ function ProviderSessionAttemptList({
             )}
             key={`${attempt.dispatch_id}-${attempt.provider_session?.id}`}
           >
-            <div className="flex items-start justify-between gap-[0.8rem]">
+            <div className="flex items-start justify-between gap-3">
               <strong>{renderHeading(attempt)}</strong>
               <span className={EXECUTION_PILL_CLASS}>{attempt.dispatch_id}</span>
             </div>
-            <div className="mt-[0.45rem] grid gap-[0.18rem]">
-              <div className="flex flex-wrap items-center gap-[0.45rem]">
+            <div className="mt-2 grid gap-1">
+              <div className="flex flex-wrap items-center gap-2">
                 <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
                   {outcome.label}
                 </p>
                 {isCurrentDispatch ? (
                   <span
                     className={cx(
-                      "inline-flex rounded-full border border-af-accent/35 bg-af-accent/10 px-2 py-[0.18rem] text-af-accent",
+                      "inline-flex rounded-full border border-af-accent/35 bg-af-accent/10 px-2 py-0.5 text-af-accent",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -243,7 +243,7 @@ function ProviderSessionAttemptList({
                 )}
                 aria-pressed={providerSessionSelected}
                 className={cx(
-                  "mt-[0.55rem]",
+                  "mt-2",
                   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
                   providerSessionSelected &&
                     "border-af-accent/35 bg-af-accent/10 text-af-accent",
@@ -259,7 +259,7 @@ function ProviderSessionAttemptList({
                 <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
               </button>
             ) : (
-              <div className="mt-[0.55rem] grid gap-[0.2rem]">
+              <div className="mt-2 grid gap-1">
                 <code className={cx("text-af-code-ink/72", DASHBOARD_BODY_CODE_CLASS)}>
                   {providerSessionLabel}
                 </code>
@@ -273,7 +273,7 @@ function ProviderSessionAttemptList({
               session={attempt.provider_session}
               startedAt={attempt.diagnostics?.provider?.request_metadata?.request_time}
             />
-            <div className="mt-[0.55rem] grid gap-[0.45rem]">
+            <div className="mt-2 grid gap-2">
               {attempt.work_items && attempt.work_items.length > 0 ? (
                 onSelectWorkID ? (
                   attempt.work_items.map((workItem) => {
@@ -341,7 +341,7 @@ function ProviderSessionLogAccess({
   const logTarget = getProviderSessionLogTarget(session, startedAt);
 
   return (
-    <div className="mt-[0.45rem] grid min-w-0 gap-[0.3rem]">
+    <div className="mt-2 grid min-w-0 gap-1">
       {logTarget ? (
         <a
           className={cx(

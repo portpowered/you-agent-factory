@@ -35,10 +35,11 @@ import {
   traceGraphLayoutKey,
 } from "./trace-elk-layout";
 
+// tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
   "h-[36rem] min-h-[36rem] overflow-hidden rounded-xl border border-af-overlay/8 bg-af-overlay/4";
 const PATH_NODE_CLASS =
-  "flex h-full min-w-0 w-full flex-col gap-[0.35rem] overflow-hidden rounded-lg border px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)]";
+  "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)]";
 const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
 const GRAPH_BACKGROUND_GAP = 24;
 const GRAPH_BACKGROUND_SIZE = 1;
@@ -210,7 +211,7 @@ function WorkstationPathGraphNode({
       <div className="flex items-center justify-between gap-3">
         <span
           className={cx(
-            "inline-flex rounded-full px-2 py-[0.2rem] text-[0.68rem] font-semibold uppercase tracking-[0.12em]",
+            "inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em]",
             DASHBOARD_SUPPORTING_LABEL_CLASS,
           )}
         >
@@ -218,7 +219,7 @@ function WorkstationPathGraphNode({
         </span>
         <span
           className={cx(
-            "inline-flex rounded-full px-2 py-[0.2rem] text-[0.68rem] font-semibold uppercase tracking-[0.08em]",
+            "inline-flex rounded-full px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em]",
             DASHBOARD_SUPPORTING_LABEL_CLASS,
           )}
         >
