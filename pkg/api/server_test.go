@@ -208,6 +208,53 @@ func TestSubmitWork(t *testing.T) {
 
 }
 
+func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","file":"fixtures/ui.png"}]}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"workTypeName":"prd","content":[{"type":"image","text":"wrong-field"}]}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].text is not supported")
+}
+
+func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+	})
+
+	body := `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","file":"wrong"}]}]}`
+	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].file is not supported")
+}
+
 func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	eventTime := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	currentFactoryID := "beta"
