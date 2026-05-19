@@ -314,14 +314,14 @@ func safeDiagnosticsStringMapPtr(values map[string]string) *factoryapi.StringMap
 }
 
 func safeDiagnosticsStringMapValue(values *factoryapi.StringMap) map[string]string {
-	if values == nil || len(*values) == 0 {
+	if values == nil {
 		return nil
 	}
-	out := make(map[string]string, len(*values))
-	for key, value := range *values {
-		out[key] = value
+	cloned := cloneStringMap(map[string]string(*values))
+	if len(cloned) == 0 {
+		return nil
 	}
-	return out
+	return cloned
 }
 
 func safeDiagnosticsStringPtrIfNotEmpty(value string) *string {

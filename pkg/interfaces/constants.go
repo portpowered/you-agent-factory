@@ -1,14 +1,5 @@
 package interfaces
 
-// State classifies a work-type state at the compatibility edges that still
-// read terminal or failed values as strings.
-type State string
-
-const (
-	StateCompleted State = "completed"
-	StateFailed    State = "failed"
-)
-
 // File directories
 
 const (

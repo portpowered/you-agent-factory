@@ -318,11 +318,6 @@ export const FailureAnalysisEventReplaySmoke = {
     await expect(
       failedSelection.getByText("No inference events are available for this selected work item."),
     ).toBeVisible();
-    await expect(
-      failedSelection.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeVisible();
     expect(
       failedSelection.getAllByText(
         "Provider rate limit exceeded while generating the analysis.",

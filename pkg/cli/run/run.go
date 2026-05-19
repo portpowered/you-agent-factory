@@ -79,6 +79,11 @@ var buildFactoryService = func(
 	return service.BuildFactoryService(ctx, cfg)
 }
 
+const (
+	completedPlaceIDSuffix = "completed"
+	failedPlaceIDSuffix    = "failed"
+)
+
 var bootstrapFactory = func(dir string) error {
 	resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(dir)
 	if err != nil {
@@ -444,11 +449,11 @@ func CountTokenStates(snap *petri.MarkingSnapshot) (wip, completed, failed int) 
 }
 
 func isTerminalState(state string) bool {
-	return state == string(interfaces.StateCompleted)
+	return state == completedPlaceIDSuffix
 }
 
 func isFailedState(state string) bool {
-	return state == string(interfaces.StateFailed)
+	return state == failedPlaceIDSuffix
 }
 
 // FormatDuration formats a duration as "Xm" or "Xh Ym".

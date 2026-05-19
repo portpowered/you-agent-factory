@@ -13,10 +13,6 @@ ui/dist_stamp.go
 
 tasks/todo
 factory/internal/**
-!factory/internal/asks.md
-!factory/internal/meta.md
-!factory/internal/progress.md
-!factory/internal/view.md
 factory/inputs/**
 !factory/inputs/BATCH/
 !factory/inputs/BATCH/default/

@@ -1958,8 +1958,8 @@ describe("App shell import and export flows", () => {
     const englishToolbar = await screen.findByRole("region", {
       name: "dashboard summary",
     });
-    const languageSwitcher = within(englishToolbar).getByRole("combobox", {
-      name: "Language",
+    const languageButton = within(englishToolbar).getByRole("button", {
+      name: "Change language",
     });
 
     expect(
@@ -1969,14 +1969,19 @@ describe("App shell import and export flows", () => {
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
 
-    fireEvent.change(languageSwitcher, { target: { value: "zh-CN" } });
+    fireEvent.click(languageButton);
+    fireEvent.click(
+      screen.getByRole("menuitemradio", {
+        name: "简体中文",
+      }),
+    );
 
     const localizedToolbar = await screen.findByRole("region", {
       name: "仪表板概览",
     });
 
     expect(
-      within(localizedToolbar).getByRole("combobox", { name: "语言" }),
+      within(localizedToolbar).getByRole("button", { name: "切换语言" }),
     ).toBeTruthy();
     expect(
       within(localizedToolbar).getByRole("slider", { name: "时间线刻度" }),
@@ -2052,10 +2057,10 @@ describe("App shell import and export flows", () => {
     expect(
       await screen.findByRole("region", { name: "dashboard summary" }),
     ).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Language" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change language" })).toBeTruthy();
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Work totals" })).toBeTruthy();
-    expect(screen.queryByRole("combobox", { name: "语言" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "切换语言" })).toBeNull();
   });
 
   it("applies the shared typography helpers to the dashboard toolbar summary shell", async () => {
@@ -2758,11 +2763,6 @@ describe("App timeline reconstruction flows", () => {
       verify: (currentSelection: HTMLElement) => {
         expect(
           within(currentSelection).getByText(
-            "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-          ),
-        ).toBeTruthy();
-        expect(
-          within(currentSelection).getByText(
             "No inference events are available for this selected work item.",
           ),
         ).toBeTruthy();
@@ -2935,8 +2935,7 @@ describe("App streamed replay smoke flows", () => {
         screen.getByRole("button", { name: "Blocked Analysis Story" }),
       ).toBeTruthy();
       expect(
-        screen.getAllByText(/codex \/ session_id \/ sess-blocked-analysis/)
-          .length,
+        screen.getAllByText("Failed at Review").length,
       ).toBeGreaterThan(0);
     });
 
@@ -3808,18 +3807,19 @@ describe("App dashboard follow-up flows", () => {
       ),
     ).toBeTruthy();
     expect(
-      submitWorkScope.getByText(
+      submitWorkScope.queryByText(
         "Optional. Leave this blank to submit an empty request.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
 
     fireEvent.change(workType, { target: { value: "story" } });
     expect(submitButton.disabled).toBe(false);
+    expect(submitWorkScope.getByText("Ready to submit.")).toBeTruthy();
     expect(
-      submitWorkScope.getByText(
+      submitWorkScope.queryByText(
         "Ready to submit. Request details are optional.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     fireEvent.change(requestName, {
       target: { value: "Dashboard smoke request" },
     });

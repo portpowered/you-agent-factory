@@ -242,8 +242,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("heading", { name: "当前活动" });
-    expect(page.getByText).toHaveBeenCalledWith("操作员视图");
+    expect(page.getByRole).toHaveBeenCalledWith("region", { name: "当前活动" });
     expect(page.getByRole).toHaveBeenCalledWith("region", {
       name: "工作图视口",
     });

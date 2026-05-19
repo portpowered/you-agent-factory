@@ -29,6 +29,19 @@ export const WorkstationRequestSelection = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
+    const inferenceAttempts = within(
+      currentSelection.getByRole("region", { name: "Inference attempts" }),
+    );
+    const formattedAttempt = within(
+      inferenceAttempts.getByRole("article", { name: "Inference attempt 2" }),
+    );
+    const requestBody = within(
+      formattedAttempt.getByRole("region", { name: "Request body" }),
+    );
+    const responseBody = within(
+      formattedAttempt.getByRole("region", { name: "Response body" }),
+    );
+
     await expect(
       currentSelection.getByRole("heading", { name: "Request counts" }),
     ).toBeVisible();
@@ -42,6 +55,25 @@ export const WorkstationRequestSelection = {
     await expect(
       currentSelection.getAllByText("request-ready-story").length,
     ).toBeGreaterThan(0);
+    await expect(
+      requestBody.getByRole("heading", { level: 2, name: "Review checklist" }),
+    ).toBeVisible();
+    await expect(requestBody.getByRole("list")).toBeVisible();
+    await expect(requestBody.getByText("Check the latest diff")).toBeVisible();
+    expect(requestBody.queryByText("## Review checklist")).toBeNull();
+    expect(requestBody.queryByText("```text")).toBeNull();
+    await expect(
+      responseBody.getByRole("heading", {
+        level: 3,
+        name: "Reviewer response",
+      }),
+    ).toBeVisible();
+    await expect(responseBody.getByRole("list")).toBeVisible();
+    await expect(
+      responseBody.getByText("Confirm the diff is limited"),
+    ).toBeVisible();
+    expect(responseBody.queryByText("### Reviewer response")).toBeNull();
+    expect(responseBody.queryByText("```text")).toBeNull();
     expect(
       currentSelection.queryByRole("heading", { name: "Active work" }),
     ).toBeNull();
@@ -71,11 +103,6 @@ export const WorkstationRequestSelectionNoResponse = {
     const currentSelection = within(currentSelectionCard(canvasElement));
     await expect(
       currentSelection.getByRole("heading", { name: "Request counts" }),
-    ).toBeVisible();
-    await expect(
-      currentSelection.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
     ).toBeVisible();
     await expect(
       currentSelection.getByText("No inference events are available for this selected work item."),
@@ -122,11 +149,9 @@ export const WorkstationRequestSelectionRejected = {
         "The active story needs revision before it can continue.",
       ),
     ).toBeVisible();
-    await expect(
-      responseDetails.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeVisible();
+    expect(
+      responseDetails.queryByText(/Inference attempts when available/),
+    ).toBeNull();
     await expect(
       currentSelection.getByRole("heading", { name: "Response details" }),
     ).toBeVisible();
@@ -158,6 +183,7 @@ export const WorkstationRequestSelectionErrored = {
     const errorDetails = within(
       currentSelection.getByRole("region", { name: "Error details" }),
     );
+    const outcomeRow = currentSelection.getByText("Outcome").closest("div");
 
     expect(
       currentSelection.getAllByText("request-error-story").length,
@@ -170,14 +196,17 @@ export const WorkstationRequestSelectionErrored = {
         "Review the blocked story and explain the failure.",
       ),
     ).toBeVisible();
-    await expect(
-      currentSelection.getByText(
-        "Response, provider-session, and inference metadata details are shown under Inference attempts when available.",
-      ),
-    ).toBeVisible();
     expect(
       currentSelection.getAllByText("provider_rate_limit").length,
     ).toBeGreaterThan(0);
+    expect(outcomeRow?.textContent).toContain("FAILED");
+    expect(outcomeRow?.textContent).toContain(
+      "Failure reason: provider_rate_limit",
+    );
+    expect(outcomeRow?.textContent).toContain(
+      "Failure message: Provider rate limit exceeded while reviewing the story.",
+    );
+    expect(currentSelection.queryByText("Transition ID")).toBeNull();
     await expect(
       errorDetails.getByText(
         "Provider rate limit exceeded while reviewing the story.",
