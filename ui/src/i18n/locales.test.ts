@@ -31,6 +31,9 @@ describe("website locale policy", () => {
   it.each([
     ["en", "en"],
     ["EN", "en"],
+    ["en-US", "en"],
+    ["ja-JP", "ja"],
+    ["ko-KR", "ko"],
     ["zh-CN", "zh-CN"],
     ["zh_CN", "zh-CN"],
     ["ZH-cn", "zh-CN"],
