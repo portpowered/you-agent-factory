@@ -140,6 +140,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		"/work/{id}":                  {"get"},
 		"/events":                     {"get"},
 		"/status":                     {"get"},
+		"/provider-sessions/detail":   {"get"},
 		"/factory":                    {"post"},
 		"/factory/~current":           {"get"},
 	}

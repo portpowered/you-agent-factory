@@ -5,4 +5,5 @@ export {
   type ProviderSessionDetailRef,
   type ProviderSessionDetailResponse,
   type ProviderSessionDetailsAPIErrorCode,
+  toProviderSessionDetailRef,
 } from "./api";
