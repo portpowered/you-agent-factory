@@ -11,6 +11,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -166,4 +167,116 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("factory run error: %v", err)
 	}
+}
+
+func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "same_name_guard_later_match",
+		"workTypes": []map[string]any{
+			{
+				"name": "idea",
+				"states": []map[string]any{
+					{"name": "to-complete", "type": "INITIAL"},
+				},
+			},
+			{
+				"name": "task",
+				"states": []map[string]any{
+					{"name": "to-complete", "type": "INITIAL"},
+					{"name": "matched", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{"name": "matcher"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   "consume",
+				"worker": "matcher",
+				"inputs": []map[string]any{
+					{"workType": "task", "state": "to-complete"},
+					{
+						"workType": "idea",
+						"state":    "to-complete",
+						"guards": []map[string]any{
+							{"type": "SAME_NAME", "matchInput": "task"},
+						},
+					},
+				},
+				"outputs": []map[string]any{
+					{"workType": "task", "state": "matched"},
+				},
+			},
+		},
+	})
+	support.WriteAgentConfig(t, dir, "matcher", `---
+type: MODEL_WORKER
+model: gpt-5-codex
+modelProvider: CODEX
+stopToken: COMPLETE
+---
+Match the later token.
+`)
+
+	h := testutil.NewServiceTestHarness(t, dir)
+	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        "zeta",
+		WorkTypeID:  "idea",
+		TargetState: "to-complete",
+		TraceID:     "trace-same-name-idea-zeta",
+	}})
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        "alpha",
+		WorkTypeID:  "task",
+		TargetState: "to-complete",
+		TraceID:     "trace-same-name-task-alpha",
+	}})
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        "zeta",
+		WorkTypeID:  "task",
+		TargetState: "to-complete",
+		TraceID:     "trace-same-name-task-zeta",
+	}})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
+
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 0, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+
+	h.Assert().
+		PlaceTokenCount("task:matched", 1).
+		PlaceTokenCount("task:to-complete", 1).
+		HasNoTokenInPlace("idea:to-complete")
+
+	snapshot, err := h.GetEngineStateSnapshot()
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !hasNamedTokenInPlace(snapshot.Marking, "task:to-complete", "alpha") {
+		t.Fatalf("expected unmatched task-alpha token to remain queued, marking=%#v", snapshot.Marking.PlaceTokens)
+	}
+
+	if matcher.CallCount() != 1 {
+		t.Fatalf("expected matcher provider call once for the later matching pair, got %d", matcher.CallCount())
+	}
+
+	cancel()
+	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("factory run error: %v", err)
+	}
+}
+
+func hasNamedTokenInPlace(marking petri.MarkingSnapshot, placeID string, name string) bool {
+	for _, token := range marking.Tokens {
+		if token.PlaceID == placeID && token.Color.Name == name {
+			return true
+		}
+	}
+	return false
 }
