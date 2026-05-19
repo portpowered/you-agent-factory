@@ -43,11 +43,11 @@ const WORK_CHART_MARGIN = { bottom: 40, left: 18, right: 28, top: 28 };
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =
   "h-[16rem] min-h-[14rem] px-5 pb-5 pt-4 sm:h-[18rem] sm:px-6 sm:pb-6 sm:pt-5";
+const WORK_CHART_SHELL_CLASS = "flex flex-col gap-3";
+const WORK_CHART_TOOLBAR_CLASS =
+  "flex flex-wrap items-center justify-end gap-2";
 const WORK_CHART_OVERLAY_CLASS =
   "flex h-full flex-col gap-2 px-5 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5";
-const WORK_CHART_TOP_OVERLAY_CLASS = "flex items-start justify-between gap-3";
-const WORK_CHART_ZOOM_CONTEXT_CLASS =
-  "ml-auto flex flex-wrap items-center justify-end gap-2 text-right";
 const WORK_CHART_X_AXIS_OVERLAY_CLASS = "mt-auto self-end";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
@@ -225,96 +225,99 @@ function ReadyWorkChart({
   };
 
   return (
-    <ChartContainer
-      className={cn(WORK_CHART_READY_CLASS, className)}
-      config={chartData.config}
-      interactionAttributes={{
-        onMouseDown: beginSelection,
-        onMouseMove: updateSelection,
-        onMouseUp: commitSelection,
-      }}
-      overlay={
-        <div className={WORK_CHART_OVERLAY_CLASS} data-work-chart-overlay="true">
-          <div className={WORK_CHART_TOP_OVERLAY_CLASS}>
+    <div className={cn(WORK_CHART_SHELL_CLASS, className)}>
+      {zoomContext === null ? null : (
+        <div
+          className={WORK_CHART_TOOLBAR_CLASS}
+          data-work-chart-toolbar="true"
+        >
+          <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS, "text-right")}>
+            {zoomContext}
+          </p>
+          <Button
+            aria-label={chartMessages.resetZoomLabel}
+            className="min-h-8 rounded-lg px-2.5 py-1.5 text-xs"
+            onClick={() => setZoomRange(null)}
+            size="sm"
+            tone="outline"
+          >
+            {chartMessages.resetZoomAction}
+          </Button>
+        </div>
+      )}
+      <ChartContainer
+        className={WORK_CHART_READY_CLASS}
+        config={chartData.config}
+        interactionAttributes={{
+          onMouseDown: beginSelection,
+          onMouseMove: updateSelection,
+          onMouseUp: commitSelection,
+        }}
+        overlay={
+          <div className={WORK_CHART_OVERLAY_CLASS} data-work-chart-overlay="true">
             <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>
               {yAxisLabel}
             </p>
-            {zoomContext === null ? null : (
-              <div className={WORK_CHART_ZOOM_CONTEXT_CLASS}>
-                <p className={cn("m-0", WORK_CHART_AXIS_LABEL_CLASS)}>
-                  {zoomContext}
-                </p>
-                <Button
-                  aria-label={chartMessages.resetZoomLabel}
-                  className="min-h-8 rounded-lg px-2.5 py-1.5 text-xs"
-                  onClick={() => setZoomRange(null)}
-                  size="sm"
-                  tone="outline"
-                >
-                  {chartMessages.resetZoomAction}
-                </Button>
-              </div>
-            )}
+            <p
+              className={cn(
+                "m-0",
+                WORK_CHART_AXIS_LABEL_CLASS,
+                WORK_CHART_X_AXIS_OVERLAY_CLASS,
+              )}
+            >
+              {xAxisLabel}
+            </p>
           </div>
-          <p
-            className={cn(
-              "m-0",
-              WORK_CHART_AXIS_LABEL_CLASS,
-              WORK_CHART_X_AXIS_OVERLAY_CLASS,
-            )}
-          >
-            {xAxisLabel}
-          </p>
-        </div>
-      }
-      rootAttributes={{
-        "data-work-chart-ready": "true",
-        "data-work-chart-visible-ticks": visibleRows
-          .map((row) => row.tick)
-          .join(","),
-      }}
-      style={{ height: "16rem", minHeight: "14rem" }}
-      title={ariaLabel}
-    >
-      <LineChart
-        accessibilityLayer
-        data={visibleRows}
-        margin={WORK_CHART_MARGIN}
+        }
+        rootAttributes={{
+          "data-work-chart-ready": "true",
+          "data-work-chart-visible-ticks": visibleRows
+            .map((row) => row.tick)
+            .join(","),
+        }}
+        style={{ height: "16rem", minHeight: "14rem" }}
+        title={ariaLabel}
       >
-        <CartesianGrid vertical={false} />
-        <XAxis
-          axisLine={false}
-          dataKey="tick"
-          minTickGap={24}
-          tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
-          tickFormatter={(value) => formatAxisNumber(value)}
-          tickLine={false}
-        />
-        <YAxis
-          allowDecimals={false}
-          axisLine={false}
-          tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
-          tickCount={5}
-          tickFormatter={(value) => formatAxisNumber(value)}
-          tickLine={false}
-          width={WORK_CHART_Y_AXIS_WIDTH}
-        />
-        <ChartTooltip
-          content={(props) => {
-            const tickValue = props.payload?.[0]?.payload?.tick;
-            const label =
-              typeof tickValue === "number"
-                ? chartMessages.tickLabel(tickValue)
-                : (props.payload?.[0]?.payload?.label ?? props.label);
-            return <ChartTooltipContent {...props} label={label} />;
-          }}
-          cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}
-        />
-        <ChartLegend content={<ChartLegendContent />} />
-        <WorkChartSelectionArea selectionRange={selectionRange} />
-        <WorkChartLines series={chartData.series} />
-      </LineChart>
-    </ChartContainer>
+        <LineChart
+          accessibilityLayer
+          data={visibleRows}
+          margin={WORK_CHART_MARGIN}
+        >
+          <CartesianGrid vertical={false} />
+          <XAxis
+            axisLine={false}
+            dataKey="tick"
+            minTickGap={24}
+            tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
+            tickFormatter={(value) => formatAxisNumber(value)}
+            tickLine={false}
+          />
+          <YAxis
+            allowDecimals={false}
+            axisLine={false}
+            tick={{ className: WORK_CHART_AXIS_LABEL_CLASS }}
+            tickCount={5}
+            tickFormatter={(value) => formatAxisNumber(value)}
+            tickLine={false}
+            width={WORK_CHART_Y_AXIS_WIDTH}
+          />
+          <ChartTooltip
+            content={(props) => {
+              const tickValue = props.payload?.[0]?.payload?.tick;
+              const label =
+                typeof tickValue === "number"
+                  ? chartMessages.tickLabel(tickValue)
+                  : (props.payload?.[0]?.payload?.label ?? props.label);
+              return <ChartTooltipContent {...props} label={label} />;
+            }}
+            cursor={{ stroke: "rgb(from var(--color-af-overlay) r g b / 0.16)" }}
+          />
+          <ChartLegend content={<ChartLegendContent />} />
+          <WorkChartSelectionArea selectionRange={selectionRange} />
+          <WorkChartLines series={chartData.series} />
+        </LineChart>
+      </ChartContainer>
+    </div>
   );
 }
 
