@@ -167,13 +167,13 @@ paths:
           required: true
           description: Provider that emitted the session identifier. Only codex sessions are currently loadable.
           schema:
-            type: string
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
         - name: kind
           in: query
           required: true
           description: Provider-session identifier kind. Only session_id is currently loadable.
           schema:
-            type: string
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
         - name: id
           in: query
           required: true
@@ -415,6 +415,12 @@ components:
       $ref: './components/schemas/api/ErrorResponse.yaml'
     ProviderSessionDetailResponse:
       $ref: './components/schemas/api/ProviderSessionDetailResponse.yaml'
+    LoadableProviderSessionRef:
+      $ref: './components/schemas/api/LoadableProviderSessionRef.yaml'
+    LoadableProviderSessionProvider:
+      $ref: './components/schemas/api/LoadableProviderSessionProvider.yaml'
+    LoadableProviderSessionKind:
+      $ref: './components/schemas/api/LoadableProviderSessionKind.yaml'
     ProviderSessionSourceMetadata:
       $ref: './components/schemas/api/ProviderSessionSourceMetadata.yaml'
     CodexSessionParseSummary:

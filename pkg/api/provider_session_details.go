@@ -90,10 +90,10 @@ func loadProviderSessionDetails(root, provider, kind, id string) (factoryapi.Pro
 	}
 
 	return factoryapi.ProviderSessionDetailResponse{
-		ProviderSession: factoryapi.ProviderSessionMetadata{
-			Provider: &normalizedProvider,
-			Kind:     &normalizedKind,
-			Id:       &normalizedID,
+		ProviderSession: factoryapi.LoadableProviderSessionRef{
+			Provider: factoryapi.LoadableProviderSessionProvider(normalizedProvider),
+			Kind:     factoryapi.LoadableProviderSessionKind(normalizedKind),
+			Id:       normalizedID,
 		},
 		Source: factoryapi.ProviderSessionSourceMetadata{
 			RelativePath: resolved.relativePath,
