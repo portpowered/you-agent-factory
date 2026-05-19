@@ -23,7 +23,6 @@ export interface CurrentSelectionDispatchHistoryMessages {
   inferenceAttemptLabel: (attemptNumber: number) => string;
   inferenceRequestGuidance: string;
   inputWorkLabel: string;
-  noScriptResponseYet: string;
   noScriptAttemptRecordedYet: string;
   noStderrRecorded: string;
   noStdoutRecorded: string;
@@ -89,7 +88,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     inferenceRequestGuidance:
       "Inference request details are shown under Inference attempts.",
     inputWorkLabel: "Input work",
-    noScriptResponseYet: "No script response yet for this dispatch.",
     noScriptAttemptRecordedYet: "No script response attempt has been recorded yet.",
     noStderrRecorded: "No stderr was recorded for this script response.",
     noStdoutRecorded: "No stdout was recorded for this script response.",
@@ -158,7 +156,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     inferenceRequestGuidance:
       "推論リクエストの詳細は推論試行の下に表示されます。",
     inputWorkLabel: "入力作業",
-    noScriptResponseYet: "このディスパッチにはまだスクリプト応答がありません。",
     noScriptAttemptRecordedYet:
       "スクリプト応答の試行はまだ記録されていません。",
     noStderrRecorded: "このスクリプト応答では stderr は記録されませんでした。",
@@ -229,7 +226,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     inferenceRequestGuidance:
       "추론 요청 세부 정보는 추론 시도 아래에 표시됩니다.",
     inputWorkLabel: "입력 작업",
-    noScriptResponseYet: "이 디스패치에는 아직 스크립트 응답이 없습니다.",
     noScriptAttemptRecordedYet: "아직 기록된 스크립트 응답 시도가 없습니다.",
     noStderrRecorded: "이 스크립트 응답에는 stderr가 기록되지 않았습니다.",
     noStdoutRecorded: "이 스크립트 응답에는 stdout이 기록되지 않았습니다.",
@@ -293,7 +289,6 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     inferenceAttemptLabel: (attemptNumber: number) => `尝试 ${attemptNumber}`,
     inferenceRequestGuidance: "推理请求详情显示在推理尝试下方。",
     inputWorkLabel: "输入工作",
-    noScriptResponseYet: "这个分派暂时还没有脚本响应。",
     noScriptAttemptRecordedYet: "这个分派暂时还没有记录脚本响应尝试。",
     noStderrRecorded: "这个脚本响应没有记录 stderr。",
     noStdoutRecorded: "这个脚本响应没有记录 stdout。",
