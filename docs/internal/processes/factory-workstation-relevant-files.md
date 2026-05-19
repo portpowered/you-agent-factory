@@ -9,7 +9,7 @@ work inputs.
 | Surface | Role in the workflow | Current contract |
 | --- | --- | --- |
 | `factory/README.md` | Checked-in workflow overview | Describes the repository-local workflow and canonical inbox directories under `factory/inputs/`. |
-| `factory/logs/meta/asks.md` | Canonical customer-ask backlog | The only checked-in maintainer backlog that owns customer asks; meta and cleaner prompts should read asks here, and `factory/meta/asks.md` remains a redirect-only legacy stub rather than a peer source of truth. |
+| `factory/internal/{asks,view,progress,meta}.md` | Canonical repository-maintainer control surface | The checked-in maintainer workflow reads and updates these four files as one control surface; `asks.md` owns customer asks, `view.md` owns the current repository view, `progress.md` owns maintainer progress, and `meta.md` owns theory of mind. |
 | `docs/internal/development/process-review-loop-contract.md` | Checked-in process/review contract note | Defines the canonical meaning of `<CONTINUE>`, `<COMPLETE>`, and true rejection for the repository-maintainer workflow, records that the old rejection-overload mismatch is historical rather than current, and names the runtime, prompt, config, and replay surfaces that must stay aligned. |
 | `docs/internal/development/root-factory-artifact-contract-inventory.md` | Checked-in artifact inventory | Documents which root-level factory artifacts are checked in, generated, or obsolete. |
 | `docs/reference/batch-inputs.md` | Canonical batch request guide | Defines when to author `FACTORY_REQUEST_BATCH` JSON and where those files belong. |
@@ -26,11 +26,9 @@ work inputs.
 
 - Treat `factory/inputs/idea/default/` as the live standalone idea inbox, not as a checked-in template catalog; clean checkouts may only contain `.gitkeep`.
 - Treat `factory/inputs/task/default/` as the live standalone task inbox, not as a checked-in template catalog; clean checkouts may only contain `.gitkeep`.
-- Treat `factory/logs/meta/asks.md` as the only checked-in customer-ask backlog; if another path mentions asks, use this file as the ownership source of truth.
+- Treat `factory/internal/{asks,view,progress,meta}.md` as one control surface; if maintainer guidance mentions one of these files, keep the other three aligned in the same `factory/internal/` family.
 - Before redispatching a checked-in workflow-input markdown file, verify that the lane is not already landed on `main`; stale inbox residue should be treated as cleanup, not as a fresh request.
-- When a legacy maintainer path must remain for compatibility, reduce it to a redirect-only stub that names the canonical checked-in surface and carries no duplicated backlog content.
-- If a legacy checked-in path remains as a redirect-only stub, classify that stub explicitly in `docs/internal/development/root-factory-artifact-contract-inventory.md` and `internal/testpath/artifact_contract.go` so the redirect contract stays test-enforced.
-- If a redirect-only stub protects a canonical maintainer surface, add a content-level regression test for the stub text in `pkg/testutil/artifact_contract_test.go`; inventory classification alone does not prevent drift back into a live duplicate surface.
+- Do not introduce a second checked-in maintainer backlog path or a redirect-only parallel surface; the canonical maintainer control plane lives only under `factory/internal/`.
 - When prompt instructions need ordered or multi-item follow-up work, point them to `docs/reference/batch-inputs.md` and `factory/inputs/BATCH/default/` instead of overloading the markdown idea inbox.
 - Treat watched file-input directories as a strict three-segment contract: `factory/inputs/<work-type-or-BATCH>/<channel>/<file>`. Direct drops at `factory/inputs/<work-type>/<file>` are invalid and watcher regressions in this area should be proved through submitted or skipped runtime outcomes, not helper-only assertions.
 - Keep workstation prompts repository-local and public-surface neutral: cite checked-in docs or `factory/` paths in this repo, never absolute paths to a different checkout or merge-conflict marker text.
@@ -69,7 +67,7 @@ work inputs.
 - When the default starter inbox contract changes, keep `pkg/cli/run/run_test.go` aligned too; the OOTB bootstrap smoke should prove the seeded file lands in `inputs/<default-work-type>/default` and completes through the canonical starter flow at runtime.
 - When the checked-in maintainer process/review contract changes, add or update focused functional coverage against `tests/adhoc/factory`; synthetic repeater fixtures alone do not prove the live workflow routes `process`, `review`, and loop-breaker outcomes correctly.
 - When a workstation prompt can emit either ideas or batch requests, state the default as one standalone idea file and name the exact condition that permits `FACTORY_REQUEST_BATCH` output.
-- When maintainer prompts need the customer backlog, point them to `factory/logs/meta/asks.md` explicitly and keep any legacy duplicate path as a redirect-only stub rather than a peer control-plane surface.
+- When maintainer prompts need the checked-in control plane, point them to `factory/internal/{asks,view,progress,meta}.md` explicitly and keep asks, view, progress, and meta in that same file family.
 - Treat slash-rooted workstation `working_directory` values as portable runtime paths only when they are repo-authored logical locations such as `/repo/...` or `/worktrees/...`; preserve real existing Unix absolute paths as host-absolute instead of rebasing them under the runtime base.
 - Keep workstation testing guidance behavioral. Prompt instructions should reject source scans, docs-topology checks, asset-bundle string inspections, and command or route inventory assertions unless those surfaces are the product behavior being validated.
 - Normalize retired workstation config aliases at load boundaries and clear the legacy field there; runtime execution helpers should read only the canonical post-normalization field instead of keeping a second live fallback path.

@@ -14,6 +14,12 @@ type artifactContractEntry struct {
 	Reason         string
 }
 
+type ArtifactContractEntry struct {
+	Path           string
+	Classification string
+	Reason         string
+}
+
 var artifactContractEntries = []artifactContractEntry{
 	{
 		Path:           "factory",
@@ -91,19 +97,24 @@ var artifactContractEntries = []artifactContractEntry{
 		Reason:         "Tracked sentinel that keeps the canonical thought inbox present in clean checkouts.",
 	},
 	{
-		Path:           "factory/logs/meta/asks.md",
+		Path:           "factory/internal/asks.md",
 		Classification: artifactCheckedIn,
-		Reason:         "Canonical checked-in customer-ask backlog for the meta and cleaner workflow.",
+		Reason:         "Canonical checked-in repository-maintainer ask backlog.",
 	},
 	{
-		Path:           "factory/logs/meta/view.md",
+		Path:           "factory/internal/view.md",
 		Classification: artifactCheckedIn,
-		Reason:         "Checked-in meta world-state view consumed by the cleaner workflow.",
+		Reason:         "Canonical checked-in repository-maintainer view surface.",
 	},
 	{
-		Path:           "factory/logs/meta/progress.txt",
+		Path:           "factory/internal/progress.md",
 		Classification: artifactCheckedIn,
-		Reason:         "Checked-in meta progress surface consumed by the cleaner workflow.",
+		Reason:         "Canonical checked-in repository-maintainer progress surface.",
+	},
+	{
+		Path:           "factory/internal/meta.md",
+		Classification: artifactCheckedIn,
+		Reason:         "Canonical checked-in repository-maintainer theory-of-mind surface.",
 	},
 	{
 		Path:           "factory/logs/agent-fails.json",
@@ -116,9 +127,24 @@ var artifactContractEntries = []artifactContractEntry{
 		Reason:         "Checked-in replay artifact sample paired with the event-stream conversion smoke.",
 	},
 	{
+		Path:           "factory/logs/meta/asks.md",
+		Classification: artifactObsolete,
+		Reason:         "Deleted legacy maintainer ask backlog path must not return as a checked-in canonical surface.",
+	},
+	{
+		Path:           "factory/logs/meta/view.md",
+		Classification: artifactObsolete,
+		Reason:         "Deleted legacy maintainer view path must not return as a checked-in canonical surface.",
+	},
+	{
+		Path:           "factory/logs/meta/progress.txt",
+		Classification: artifactObsolete,
+		Reason:         "Deleted legacy maintainer progress path must not return as a checked-in canonical surface.",
+	},
+	{
 		Path:           "factory/meta/asks.md",
-		Classification: artifactCheckedIn,
-		Reason:         "Redirect-only legacy stub that points maintainers back to the canonical checked-in meta ask surface.",
+		Classification: artifactObsolete,
+		Reason:         "Legacy redirect-only ask stub must stay absent so the canonical maintainer backlog remains singular.",
 	},
 	{
 		Path:           "tests/adhoc/factory-recording-04-11-02.json",
@@ -225,4 +251,16 @@ var artifactContractEntries = []artifactContractEntry{
 		Classification: artifactObsolete,
 		Reason:         "Legacy historical starter tree is not part of the canonical root factory surface.",
 	},
+}
+
+func ArtifactContractInventory() []ArtifactContractEntry {
+	out := make([]ArtifactContractEntry, 0, len(artifactContractEntries))
+	for _, entry := range artifactContractEntries {
+		out = append(out, ArtifactContractEntry{
+			Path:           entry.Path,
+			Classification: string(entry.Classification),
+			Reason:         entry.Reason,
+		})
+	}
+	return out
 }
