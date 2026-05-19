@@ -223,17 +223,17 @@ function TokenUsageSection({
       </h5>
       {tokenUsage ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <DetailMetric label="Input" value={tokenUsage.inputTokens ?? 0} />
+          <DetailMetric label={messages.inputLabel} value={tokenUsage.inputTokens ?? 0} />
           <DetailMetric
-            label="Cached input"
+            label={messages.cachedInputLabel}
             value={tokenUsage.cachedInputTokens ?? 0}
           />
-          <DetailMetric label="Output" value={tokenUsage.outputTokens ?? 0} />
+          <DetailMetric label={messages.outputLabel} value={tokenUsage.outputTokens ?? 0} />
           <DetailMetric
-            label="Reasoning"
+            label={messages.reasoningCountLabel}
             value={tokenUsage.reasoningOutputTokens ?? 0}
           />
-          <DetailMetric label="Total" value={tokenUsage.totalTokens ?? 0} />
+          <DetailMetric label={messages.totalLabel} value={tokenUsage.totalTokens ?? 0} />
         </div>
       ) : (
         <p className={DETAIL_COPY_CLASS}>{messages.tokenUsageUnavailable}</p>
@@ -259,28 +259,28 @@ function TurnsSection({
           {detail.parse.turns.map((turn) => (
             <article className={PROVIDER_SESSION_CARD_CLASS} key={turn.index}>
               <div className="grid gap-1">
-                <strong>Turn {turn.index}</strong>
+                <strong>{messages.turnLabel({ index: turn.index })}</strong>
                 <p
                   className={cx(
                     "m-0 text-af-ink/62",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
-                  {turn.startedAt ?? "No timestamp"}
+                  {turn.startedAt ?? messages.noTimestamp}
                 </p>
               </div>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                <DetailMetric label="Events" value={turn.eventCount} />
+                <DetailMetric label={messages.eventsLabel} value={turn.eventCount} />
                 <DetailMetric
-                  label="Response items"
+                  label={messages.responseItemsLabel}
                   value={turn.responseItemCount}
                 />
                 <DetailMetric
-                  label="Function calls"
+                  label={messages.functionCallCountLabel}
                   value={turn.functionCallCount}
                 />
                 <DetailMetric
-                  label="Reasoning"
+                  label={messages.reasoningCountLabel}
                   value={turn.reasoningCount}
                 />
               </div>
@@ -324,7 +324,10 @@ function FunctionCallsSection({
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
-                    {`Order ${call.order}${call.turnIndex ? ` / Turn ${call.turnIndex}` : ""}`}
+                    {messages.orderLabel({
+                      order: call.order,
+                      turnIndex: call.turnIndex,
+                    })}
                   </p>
                 </div>
                 {call.status ? (
@@ -339,13 +342,16 @@ function FunctionCallsSection({
                 ) : null}
               </div>
               <div className="mt-2 grid gap-3 md:grid-cols-2">
-                <DetailMetric label="Type" value={call.type} />
-                <DetailMetric label="Call ID" value={call.callId ?? "Unavailable"} />
+                <DetailMetric label={messages.typeLabel} value={call.type} />
+                <DetailMetric
+                  label={messages.callIdLabel}
+                  value={call.callId ?? messages.unavailableValue}
+                />
                 {call.arguments ? (
-                  <CodeBlockMetric label="Arguments" value={call.arguments} />
+                  <CodeBlockMetric label={messages.argumentsLabel} value={call.arguments} />
                 ) : null}
                 {call.output ? (
-                  <CodeBlockMetric label="Output" value={call.output} />
+                  <CodeBlockMetric label={messages.outputLabel} value={call.output} />
                 ) : null}
               </div>
             </article>
@@ -387,7 +393,10 @@ function ReasoningSection({
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
-                  {`Order ${entry.order}${entry.turnIndex ? ` / Turn ${entry.turnIndex}` : ""}`}
+                  {messages.orderLabel({
+                    order: entry.order,
+                    turnIndex: entry.turnIndex,
+                  })}
                 </p>
               </div>
               {entry.summary ? (
@@ -412,7 +421,7 @@ function ReasoningSection({
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
-                  Encrypted reasoning content only.
+                  {messages.encryptedReasoningOnly}
                 </p>
               ) : null}
             </article>
@@ -452,7 +461,7 @@ function ParseDiagnosticsSection({
             className={PROVIDER_SESSION_CARD_CLASS}
             key={`parse-error-${error.lineNumber}`}
           >
-            <strong>{`Line ${error.lineNumber}`}</strong>
+            <strong>{messages.lineLabel({ lineNumber: error.lineNumber })}</strong>
             <p className={cx("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
               {error.message}
             </p>
@@ -463,7 +472,9 @@ function ParseDiagnosticsSection({
             className={PROVIDER_SESSION_CARD_CLASS}
             key={`unknown-event-${event.lineNumber}`}
           >
-            <strong>{`Unknown event on line ${event.lineNumber}`}</strong>
+            <strong>
+              {messages.unknownEventOnLineLabel({ lineNumber: event.lineNumber })}
+            </strong>
             <p
               className={cx(
                 "m-0 mt-1.5 text-af-ink/62",

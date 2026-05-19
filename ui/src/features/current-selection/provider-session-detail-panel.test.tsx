@@ -252,6 +252,93 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
     expect(screen.getByText("Unknown event on line 6")).toBeTruthy();
   });
+
+  it("renders provider-session detail labels and templates from the zh-CN catalog", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            eventCount: 2,
+            functionCalls: [
+              {
+                arguments: "{\"path\":\"pkg/api\"}",
+                callId: null,
+                name: "list_dir",
+                order: 3,
+                output: "{\"entries\":3}",
+                status: "completed",
+                turnIndex: 2,
+                type: "function_call",
+              },
+            ],
+            lineCount: 3,
+            malformedLineCount: 1,
+            parseErrors: [
+              {
+                lineNumber: 3,
+                message: "unexpected end of JSON input",
+              },
+            ],
+            reasoning: [
+              {
+                encrypted: true,
+                order: 4,
+                sourceType: "reasoning",
+                turnIndex: 2,
+              },
+            ],
+            tokenUsage: {
+              cachedInputTokens: 5,
+              inputTokens: 120,
+              outputTokens: 45,
+              reasoningOutputTokens: 17,
+              totalTokens: 182,
+            },
+            turns: [
+              {
+                eventCount: 4,
+                functionCallCount: 1,
+                index: 2,
+                reasoningCount: 1,
+                responseItemCount: 3,
+                startedAt: null,
+              },
+            ],
+            unknownEventCount: 1,
+            unknownEvents: [
+              {
+                lineNumber: 2,
+                payloadType: "mystery_payload",
+                type: "mystery_event",
+              },
+            ],
+          },
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        locale="zh-CN"
+        selectedProviderSession={SELECTED_SESSION}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Token 用量" })).toBeTruthy();
+    });
+
+    expect(screen.getByText("输入")).toBeTruthy();
+    expect(screen.getByText("缓存输入")).toBeTruthy();
+    expect(screen.getByText("轮次 2")).toBeTruthy();
+    expect(screen.getByText("无时间戳")).toBeTruthy();
+    expect(screen.getAllByText("顺序 3 / 轮次 2").length).toBeGreaterThan(0);
+    expect(screen.getByText("调用 ID")).toBeTruthy();
+    expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
+    expect(screen.getByText("仅包含加密的推理内容。")).toBeTruthy();
+    expect(screen.getByText("第 3 行")).toBeTruthy();
+    expect(screen.getByText("第 2 行的未知事件")).toBeTruthy();
+  });
 });
 
 function buildProviderSessionDetailResponse(
