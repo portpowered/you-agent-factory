@@ -4,6 +4,8 @@ import {
 } from "../../../i18n";
 
 export interface CurrentSelectionDispatchHistoryMessages {
+  inferenceAttemptAccessibleLabel: (attemptNumber: number) => string;
+  awaitingProviderResponse: string;
   commandLabel: string;
   currentDispatchBadge: string;
   dispatchedCountLabel: string;
@@ -16,6 +18,7 @@ export interface CurrentSelectionDispatchHistoryMessages {
   failureTypeLabel: string;
   inferenceAttemptsEmptyEnded: string;
   inferenceAttemptsEmptyPending: string;
+  inferenceAttemptLabel: (attemptNumber: number) => string;
   inferenceRequestGuidance: string;
   inputWorkLabel: string;
   noScriptResponseYet: string;
@@ -24,6 +27,8 @@ export interface CurrentSelectionDispatchHistoryMessages {
   outputWorkLabel: string;
   outcomeLabel: string;
   pendingOutcome: string;
+  providerResponseUnavailable: string;
+  providerSessionLabel: string;
   promptDetailsNotApplicable: string;
   requestDetailsTitle: string;
   resolvedArgsLabel: string;
@@ -48,6 +53,9 @@ export interface CurrentSelectionDispatchHistoryMessages {
 
 const currentSelectionDispatchHistoryMessagesByLocale = {
   en: {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `Inference attempt ${attemptNumber}`,
+    awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     currentDispatchBadge: "Current dispatch",
     dispatchedCountLabel: "dispatchedCount",
@@ -62,6 +70,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       "No inference attempt details were recorded before this dispatch ended.",
     inferenceAttemptsEmptyPending:
       "No inference attempt details have been recorded for this dispatch yet.",
+    inferenceAttemptLabel: (attemptNumber: number) => `Attempt ${attemptNumber}`,
     inferenceRequestGuidance:
       "Inference request details are shown under Inference attempts.",
     inputWorkLabel: "Input work",
@@ -71,6 +80,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     outputWorkLabel: "Output work",
     outcomeLabel: "Outcome",
     pendingOutcome: "PENDING",
+    providerResponseUnavailable:
+      "Provider response text is not available for this inference attempt.",
+    providerSessionLabel: "providerSession",
     promptDetailsNotApplicable:
       "Prompt details are not applicable to this script-backed dispatch.",
     requestDetailsTitle: "Request details",
@@ -95,6 +107,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "Work selected",
   },
   ja: {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `推論試行 ${attemptNumber}`,
+    awaitingProviderResponse: "プロバイダー応答を待機しています。",
     commandLabel: "コマンド",
     currentDispatchBadge: "現在のディスパッチ",
     dispatchedCountLabel: "ディスパッチ数",
@@ -109,6 +124,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       "このディスパッチが終了するまでに推論試行の詳細は記録されませんでした。",
     inferenceAttemptsEmptyPending:
       "このディスパッチの推論試行の詳細はまだ記録されていません。",
+    inferenceAttemptLabel: (attemptNumber: number) => `試行 ${attemptNumber}`,
     inferenceRequestGuidance:
       "推論リクエストの詳細は推論試行の下に表示されます。",
     inputWorkLabel: "入力作業",
@@ -118,6 +134,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     outputWorkLabel: "出力作業",
     outcomeLabel: "結果",
     pendingOutcome: "保留中",
+    providerResponseUnavailable:
+      "この推論試行ではプロバイダー応答テキストを利用できません。",
+    providerSessionLabel: "providerSession",
     promptDetailsNotApplicable:
       "このスクリプトベースのディスパッチではプロンプトの詳細は適用されません。",
     requestDetailsTitle: "リクエストの詳細",
@@ -143,6 +162,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "作業を選択中",
   },
   ko: {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `추론 시도 ${attemptNumber}`,
+    awaitingProviderResponse: "공급자 응답을 기다리는 중입니다.",
     commandLabel: "명령",
     currentDispatchBadge: "현재 디스패치",
     dispatchedCountLabel: "디스패치 수",
@@ -157,6 +179,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       "이 디스패치가 끝나기 전까지 추론 시도 세부 정보가 기록되지 않았습니다.",
     inferenceAttemptsEmptyPending:
       "이 디스패치의 추론 시도 세부 정보가 아직 기록되지 않았습니다.",
+    inferenceAttemptLabel: (attemptNumber: number) => `시도 ${attemptNumber}`,
     inferenceRequestGuidance:
       "추론 요청 세부 정보는 추론 시도 아래에 표시됩니다.",
     inputWorkLabel: "입력 작업",
@@ -166,6 +189,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     outputWorkLabel: "출력 작업",
     outcomeLabel: "결과",
     pendingOutcome: "대기 중",
+    providerResponseUnavailable:
+      "이 추론 시도에 대한 공급자 응답 텍스트를 사용할 수 없습니다.",
+    providerSessionLabel: "providerSession",
     promptDetailsNotApplicable:
       "이 스크립트 기반 디스패치에는 프롬프트 세부 정보를 적용할 수 없습니다.",
     requestDetailsTitle: "요청 세부 정보",
@@ -190,6 +216,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "작업 선택됨",
   },
   "zh-CN": {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `推理尝试 ${attemptNumber}`,
+    awaitingProviderResponse: "正在等待提供方响应。",
     commandLabel: "命令",
     currentDispatchBadge: "当前分派",
     dispatchedCountLabel: "分派次数",
@@ -202,6 +231,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     failureTypeLabel: "失败类型",
     inferenceAttemptsEmptyEnded: "该分派结束前没有记录任何推理尝试详情。",
     inferenceAttemptsEmptyPending: "该分派暂时还没有记录推理尝试详情。",
+    inferenceAttemptLabel: (attemptNumber: number) => `尝试 ${attemptNumber}`,
     inferenceRequestGuidance: "推理请求详情显示在推理尝试下方。",
     inputWorkLabel: "输入工作",
     noScriptResponseYet: "这个分派暂时还没有脚本响应。",
@@ -210,6 +240,8 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     outputWorkLabel: "输出工作",
     outcomeLabel: "结果",
     pendingOutcome: "等待中",
+    providerResponseUnavailable: "此推理尝试的提供方响应文本不可用。",
+    providerSessionLabel: "providerSession",
     promptDetailsNotApplicable: "这个脚本分派不适用提示词详情。",
     requestDetailsTitle: "请求详情",
     resolvedArgsLabel: "已解析参数",

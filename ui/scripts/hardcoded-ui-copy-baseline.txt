@@ -41,23 +41,20 @@ src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
 src/features/bento/agent-bento.tsx|155|18|jsx-attribute|Infinite You bento board
 src/features/current-selection/detail-card-shared.tsx|140|25|jsx-attribute|Request counts
 src/features/current-selection/detail-card-shared.tsx|141|55|jsx-text|Request counts
-src/features/current-selection/inference-attempt.tsx|30|17|jsx-text|Attempt
-src/features/current-selection/inference-attempt.tsx|71|11|jsx-text|Provider response text is not available for this inference attempt.
-src/features/current-selection/inference-attempt.tsx|74|42|jsx-text|Awaiting provider response.
 src/features/current-selection/provider-session-detail-panel.tsx|71|42|jsx-text|Loading session details...
 src/features/current-selection/provider-session-detail-panel.tsx|262|25|jsx-text|Turn
 src/features/current-selection/provider-session-detail-panel.tsx|415|19|jsx-text|Encrypted reasoning content only.
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|45|18|jsx-attribute|Inference attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|48|55|jsx-text|Inference attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|77|18|jsx-attribute|Script attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|80|55|jsx-text|Script attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|94|44|jsx-text|No script response attempt has been recorded yet.
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|115|19|jsx-text|Request attempt
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|116|76|jsx-text|PENDING
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|164|19|jsx-text|Response attempt
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|50|18|jsx-attribute|Inference attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|53|55|jsx-text|Inference attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|87|18|jsx-attribute|Script attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|90|55|jsx-text|Script attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|104|44|jsx-text|No script response attempt has been recorded yet.
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|125|19|jsx-text|Request attempt
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|126|76|jsx-text|PENDING
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|174|19|jsx-text|Response attempt
 src/features/current-selection/selected-work-dispatch-history.tsx|37|15|jsx-attribute|Workstation dispatches
 src/features/current-selection/selected-work-dispatch-history.tsx|53|11|jsx-text|Workstation dispatches
-src/features/current-selection/selected-work-dispatch-history.tsx|76|11|jsx-text|No workstation dispatch has been recorded yet for this work item.
+src/features/current-selection/selected-work-dispatch-history.tsx|78|11|jsx-text|No workstation dispatch has been recorded yet for this work item.
 src/features/current-selection/state-node-detail.tsx|48|15|jsx-text|Work type
 src/features/current-selection/state-node-detail.tsx|52|15|jsx-text|State
 src/features/current-selection/state-node-detail.tsx|56|15|jsx-text|State node ID
