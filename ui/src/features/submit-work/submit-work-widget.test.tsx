@@ -113,7 +113,7 @@ describe("SubmitWorkWidget", () => {
     ).toHaveLength(2);
   });
 
-  it("submits work with an optional request name, clears the form on success, and shows the returned trace", async () => {
+  it("submits work with an optional request name, clears only request fields on success, and shows the returned trace", async () => {
     const pendingResponse = {
       resolve: null as ((value: Response) => void) | null,
     };
@@ -187,9 +187,39 @@ describe("SubmitWorkWidget", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(workType.value).toBe("");
+    expect(workType.value).toBe("story");
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
+  });
+
+  it("clears a preserved work type when the configured options no longer include it", async () => {
+    const { rerender } = renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        submitWorkTypes={[
+          { work_type_name: "story" },
+          { work_type_name: "task" },
+        ]}
+      />,
+    );
+
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+
+    fireEvent.change(workType, { target: { value: "story" } });
+    expect(workType.value).toBe("story");
+
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "task" }]} />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole<HTMLSelectElement>("combobox", {
+        name: "Work type",
+      }).value,
+    ).toBe("");
   });
 
   it("omits the request name when the field is blank", async () => {

@@ -3683,14 +3683,14 @@ describe("App dashboard follow-up flows", () => {
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
     });
+    expect(workType.value).toBe("story");
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
 
     fireEvent.change(requestName, {
       target: { value: "Retry dashboard request" },
     });
-    fireEvent.change(workType, { target: { value: "story" } });
     expect(submitButton.disabled).toBe(false);
     fireEvent.change(requestText, {
       target: {
@@ -3780,7 +3780,9 @@ describe("App dashboard follow-up flows", () => {
       payload: "Review the failed dashboard submission smoke.",
       workTypeName: "story",
     });
+    expect(workType.value).toBe("story");
     expect(requestName.value).toBe("");
+    expect(requestText.value).toBe("");
   });
 
   it("submits an empty payload through POST /work from the dashboard shell", async () => {
