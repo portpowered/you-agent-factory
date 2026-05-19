@@ -127,6 +127,7 @@ describe("WorkflowActivityBentoCard", () => {
       <QueryClientProvider client={queryClient}>
         <WorkflowActivityBentoCard
           importController={importController}
+          locale="zh-CN"
           now={Date.parse("2026-04-08T12:00:04Z")}
           selection={selection}
           snapshot={snapshot}
@@ -136,9 +137,12 @@ describe("WorkflowActivityBentoCard", () => {
         />
       </QueryClientProvider>,
     );
-    expect(await screen.findByRole("heading", { name: "Factory graph" })).toBeTruthy();
+
+    expect(await screen.findByRole("heading", { name: "工厂图" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Work graph viewport" })).toBeTruthy();
-    expect(screen.queryByRole("complementary", { name: "Workstation Info" })).toBeNull();
+    expect(
+      screen.queryByRole("complementary", { name: "Workstation Info" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Collapse inspector" })).toBeNull();
   });
 });

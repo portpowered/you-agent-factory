@@ -3,6 +3,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
 } from "../../components/ui/dashboard-typography";
+import { useAppLocale } from "../../i18n";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
 const PANEL_CLASS =
@@ -15,15 +16,18 @@ const DETAIL_COPY_CLASS = cx("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
 
 interface DashboardStatusPanelProps {
   detail?: string;
+  locale?: string;
   title: string;
   tone?: "default" | "error";
 }
 
 export function DashboardStatusPanel({
   detail,
+  locale,
   title,
   tone = "default",
 }: DashboardStatusPanelProps) {
+  const { locale: resolvedLocale } = useAppLocale(locale);
   const panelClassName =
     tone === "error"
       ? cx(STATUS_PANEL_CLASS, "border-af-danger/45")
@@ -32,7 +36,11 @@ export function DashboardStatusPanel({
   return (
     <section className={panelClassName}>
       <p className={EYEBROW_CLASS}>
-        <DashboardBrandLockup className="gap-2" wordmarkClassName="truncate" />
+        <DashboardBrandLockup
+          className="gap-2"
+          locale={resolvedLocale}
+          wordmarkClassName="truncate"
+        />
       </p>
       <h1 className={DASHBOARD_TITLE_CLASS}>{title}</h1>
       {detail ? <p className={DETAIL_COPY_CLASS}>{detail}</p> : null}

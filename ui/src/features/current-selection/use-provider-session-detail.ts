@@ -34,12 +34,13 @@ export function useProviderSessionDetail(
       session?.kind ?? "",
       session?.id ?? "",
     ],
-    queryFn: () =>
-      getProviderSessionDetails({
-        id: session?.id ?? "",
-        kind: session?.kind ?? "",
-        provider: session?.provider ?? "",
-      }),
+    queryFn: () => {
+      if (session === null) {
+        throw new Error("Provider-session detail query requires a selected session.");
+      }
+
+      return getProviderSessionDetails(session);
+    },
     enabled: session !== null,
     gcTime: 0,
     refetchOnWindowFocus: false,

@@ -350,9 +350,9 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode provider session response: %v", err)
 	}
-	if stringValue(resp.ProviderSession.Provider) != "codex" ||
-		stringValue(resp.ProviderSession.Kind) != "session_id" ||
-		stringValue(resp.ProviderSession.Id) != "sess_123" {
+	if string(resp.ProviderSession.Provider) != "codex" ||
+		string(resp.ProviderSession.Kind) != "session_id" ||
+		resp.ProviderSession.Id != "sess_123" {
 		t.Fatalf("provider session = %#v, want codex session_id sess_123", resp.ProviderSession)
 	}
 	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
@@ -465,6 +465,22 @@ func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *tes
 		"/provider-sessions/detail?provider=codex&kind=session_id&id=../secret",
 		"/provider-sessions/detail?provider=codex&kind=session_id&id=/tmp/rollout-session.jsonl",
 		"/provider-sessions/detail?provider=codex&kind=session_id&id=session.with.dot",
+	}
+
+	for _, target := range tests {
+		t.Run(target, func(t *testing.T) {
+			srv := newTestServerWithCodexRoot(t.TempDir())
+			req := httptest.NewRequest("GET", target, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+		})
+	}
+}
+
+func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t *testing.T) {
+	tests := []string{
 		"/provider-sessions/detail?provider=openai&kind=session_id&id=sess-123",
 		"/provider-sessions/detail?provider=codex&kind=path&id=sess-123",
 	}
@@ -476,7 +492,7 @@ func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *tes
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 
-			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request parameter")
 		})
 	}
 }

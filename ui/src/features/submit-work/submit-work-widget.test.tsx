@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 import { SubmitWorkWidget } from "./submit-work-widget";
 
@@ -20,17 +26,34 @@ describe("SubmitWorkWidget", () => {
 
     const card = screen.getByRole("article", { name: "Submit work" });
 
-    expect(screen.queryByText("Send a new request to the current factory from the dashboard.")).toBeNull();
-    expect(within(card).getByRole("combobox", { name: "Work type" })).toBeTruthy();
-    expect(within(card).getByRole("textbox", { name: "Request name" })).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Send a new request to the current factory from the dashboard.",
+      ),
+    ).toBeNull();
+    expect(
+      within(card).getByRole("combobox", { name: "Work type" }),
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("textbox", { name: "Request name" }),
+    ).toBeTruthy();
     expect(within(card).getByRole("textbox", { name: "Request" })).toBeTruthy();
     expect(
-      within(card).getByText("Choose a work type and describe what you need to get started."),
+      within(card).getByText(
+        "Choose a work type to continue. Request details are optional.",
+      ),
     ).toBeTruthy();
-    expect(within(card).getByRole("button", { name: "Submit work" })).toBeTruthy();
+    expect(
+      within(card).getByText(
+        "Optional. Leave this blank to submit an empty request.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("button", { name: "Submit work" }),
+    ).toBeTruthy();
   });
 
-  it("disables submission until a configured work type and request text are present", () => {
+  it("enables submission once a configured work type is selected even if the request is blank", () => {
     renderSubmitWorkWidget(
       <SubmitWorkWidget
         submitWorkTypes={[
@@ -40,27 +63,40 @@ describe("SubmitWorkWidget", () => {
       />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
-    const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
-    const submitButton = screen.getByRole<HTMLButtonElement>("button", { name: "Submit work" });
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Request",
+    });
+    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Submit work",
+    });
 
     expect(submitButton.disabled).toBe(true);
     expect(
-      screen.getByText("Choose a work type and describe what you need to get started."),
+      screen.getByText(
+        "Choose a work type to continue. Request details are optional.",
+      ),
     ).toBeTruthy();
 
     fireEvent.change(workType, { target: { value: "story" } });
-    expect(submitButton.disabled).toBe(true);
-    expect(screen.getByText("Describe what you need to continue.")).toBeTruthy();
+    expect(submitButton.disabled).toBe(false);
 
     fireEvent.change(requestName, { target: { value: "Driver review" } });
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
 
-    fireEvent.change(requestText, { target: { value: "Review the failed driver trace." } });
+    fireEvent.change(requestText, {
+      target: { value: "Review the failed driver trace." },
+    });
 
     expect(submitButton.disabled).toBe(false);
-    expect(screen.queryByText("Your request is ready to submit.")).toBeNull();
+    expect(
+      screen.getByText("Ready to submit. Request details are optional."),
+    ).toBeTruthy();
     expect(submitButton.className).toContain("bg-af-accent");
   });
 
@@ -71,24 +107,26 @@ describe("SubmitWorkWidget", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const submitButton = screen.getByRole<HTMLButtonElement>("button", { name: "Submit work" });
+    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Submit work",
+    });
     const form = submitButton.closest("form");
 
     if (!(form instanceof HTMLFormElement)) {
-      throw new Error("expected the submit button to be rendered inside a form");
+      throw new Error(
+        "expected the submit button to be rendered inside a form",
+      );
     }
 
     fireEvent.submit(form);
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      await screen.findByText("Choose a work type and describe your request before submitting."),
-    ).toBeTruthy();
-    expect(screen.getByText("Choose a work type before submitting.")).toBeTruthy();
-    expect(screen.getByText("Describe your request before submitting.")).toBeTruthy();
+      await screen.findAllByText("Choose a work type before submitting."),
+    ).toHaveLength(2);
   });
 
-  it("submits work with an optional request name, clears the form on success, and shows the returned trace", async () => {
+  it("submits work with an optional request name, clears only request fields on success, and shows the returned trace", async () => {
     const pendingResponse = {
       resolve: null as ((value: Response) => void) | null,
     };
@@ -103,19 +141,35 @@ describe("SubmitWorkWidget", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
-    const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Request",
+    });
 
     fireEvent.change(workType, { target: { value: "story" } });
-    fireEvent.change(requestName, { target: { value: "Driver incident review" } });
-    fireEvent.change(requestText, { target: { value: "Review the queue and summarize the failure." } });
+    fireEvent.change(requestName, {
+      target: { value: "Driver incident review" },
+    });
+    fireEvent.change(requestText, {
+      target: { value: "Review the queue and summarize the failure." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
     await waitFor(() => {
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Submitting..." })).toBeTruthy();
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", {
+          name: "Submitting...",
+        }),
+      ).toBeTruthy();
     });
-    const submittingButton = screen.getByRole("button", { name: "Submitting..." });
+    const submittingButton = screen.getByRole("button", {
+      name: "Submitting...",
+    });
     expect(submittingButton.getAttribute("aria-busy")).toBe("true");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/work");
@@ -133,7 +187,7 @@ describe("SubmitWorkWidget", () => {
     }
 
     pendingResponse.resolve(
-      new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -142,16 +196,48 @@ describe("SubmitWorkWidget", () => {
     );
 
     expect(
-      await screen.findByText("Your request was submitted. Trace ID: trace-submit-story."),
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-submit-story.",
+      ),
     ).toBeTruthy();
-    expect(workType.value).toBe("");
+    expect(workType.value).toBe("story");
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
   });
 
+  it("clears a preserved work type when the configured options no longer include it", async () => {
+    const { rerender } = renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        submitWorkTypes={[
+          { work_type_name: "story" },
+          { work_type_name: "task" },
+        ]}
+      />,
+    );
+
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+
+    fireEvent.change(workType, { target: { value: "story" } });
+    expect(workType.value).toBe("story");
+
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "task" }]} />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole<HTMLSelectElement>("combobox", {
+        name: "Work type",
+      }).value,
+    ).toBe("");
+  });
+
   it("omits the request name when the field is blank", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ trace_id: "trace-submit-story" }), {
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -163,28 +249,35 @@ describe("SubmitWorkWidget", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Request",
+    });
 
     fireEvent.change(workType, { target: { value: "story" } });
-    fireEvent.change(requestText, { target: { value: "Review the queue and summarize the failure." } });
+    fireEvent.change(requestText, {
+      target: { value: "Review the queue and summarize the failure." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
-    await screen.findByText("Your request was submitted. Trace ID: trace-submit-story.");
+    await screen.findByText(
+      "Your request was submitted. Trace ID: trace-submit-story.",
+    );
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       payload: "Review the queue and summarize the failure.",
       workTypeName: "story",
     });
   });
 
-  it("shows the server error inline and preserves the draft after a failed submission", async () => {
+  it("submits a blank request as an explicit empty payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ code: "BAD_REQUEST", message: "work_type_name is required" }), {
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
         headers: {
           "Content-Type": "application/json",
         },
-        status: 400,
-        statusText: "Bad Request",
+        status: 201,
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -192,13 +285,62 @@ describe("SubmitWorkWidget", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
-    const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
 
     fireEvent.change(workType, { target: { value: "story" } });
-    fireEvent.change(requestName, { target: { value: "Retry dashboard request" } });
-    fireEvent.change(requestText, { target: { value: "Retry the broken submission." } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    expect(
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-submit-story.",
+      ),
+    ).toBeTruthy();
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      payload: "",
+      workTypeName: "story",
+    });
+  });
+
+  it("shows the server error inline and preserves the draft after a failed submission", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "BAD_REQUEST",
+          message: "work_type_name is required",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 400,
+          statusText: "Bad Request",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Request",
+    });
+
+    fireEvent.change(workType, { target: { value: "story" } });
+    fireEvent.change(requestName, {
+      target: { value: "Retry dashboard request" },
+    });
+    fireEvent.change(requestText, {
+      target: { value: "Retry the broken submission." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
     expect(await screen.findByText("work_type_name is required")).toBeTruthy();
@@ -210,10 +352,18 @@ describe("SubmitWorkWidget", () => {
   it("renders an explained disabled state when no submit work types are configured", () => {
     renderSubmitWorkWidget(<SubmitWorkWidget submitWorkTypes={[]} />);
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", { name: "Work type" });
-    const requestName = screen.getByRole<HTMLInputElement>("textbox", { name: "Request name" });
-    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Request" });
-    const submitButton = screen.getByRole<HTMLButtonElement>("button", { name: "Submit work" });
+    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Work type",
+    });
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Request name",
+    });
+    const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Request",
+    });
+    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Submit work",
+    });
 
     expect(workType.disabled).toBe(true);
     expect(requestName.disabled).toBe(true);
@@ -222,6 +372,25 @@ describe("SubmitWorkWidget", () => {
     expect(
       screen.getByText("No work types are available to submit right now."),
     ).toBeTruthy();
+  });
+
+  it("renders zh-CN copy for the submit-work form shell", () => {
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        locale="zh-CN"
+        submitWorkTypes={[{ work_type_name: "story" }]}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "提交工作" });
+
+    expect(within(card).getByRole("combobox", { name: "工作类型" })).toBeTruthy();
+    expect(within(card).getByRole("textbox", { name: "请求名称" })).toBeTruthy();
+    expect(within(card).getByRole("textbox", { name: "请求" })).toBeTruthy();
+    expect(
+      within(card).getByText("先选择一个工作类型，然后即可继续。请求详情为可选。"),
+    ).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "提交工作" })).toBeTruthy();
   });
 });
 
@@ -238,5 +407,7 @@ function renderSubmitWorkWidget(element: React.ReactElement) {
     },
   });
 
-  return render(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+  );
 }

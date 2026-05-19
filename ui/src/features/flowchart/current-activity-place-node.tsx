@@ -7,6 +7,7 @@ import {
   getDashboardPlaceLabelParts,
 } from "../../components/ui/place-labels";
 import { cx } from "../../lib/cx";
+import { getWorkflowActivityShellMessages } from "../workflow-activity/messages/activity-shell";
 import {
   ActivityGraphNodeShell,
   type PlaceNodeType,
@@ -18,6 +19,7 @@ export interface BasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
   incomingHandleCount: number;
+  locale?: string;
   muted: boolean;
   onSelectStateNode?: (placeId: string) => void;
   outgoingHandleCount: number;
@@ -77,6 +79,7 @@ export function ConstraintNodeView(
 }
 
 function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
+  const messages = getWorkflowActivityShellMessages(data.locale);
   const placeLabel = formatDashboardPlaceLabel(data.place);
   const selectable =
     data.place.kind === "work_state" && data.onSelectStateNode !== undefined;
@@ -105,7 +108,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
     >
       {selectable ? (
         <button
-          aria-label={`Select ${placeLabel} state`}
+          aria-label={messages.selectStateLabel(placeLabel)}
           aria-pressed={data.selectedStateNode}
           className={cx(
             "nodrag nopan cursor-pointer border-0 bg-transparent p-0 text-left text-inherit",
@@ -403,7 +406,7 @@ function StaticPlaceNodeContent({
           </strong>
         </span>
         <span
-          className="flex min-h-4 w-full shrink-0 items-center justify-start overflow-hidden"
+        className="flex min-h-4 w-full shrink-0 items-center justify-start overflow-hidden"
           data-place-marker-zone
           title={label}
         >

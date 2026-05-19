@@ -1,5 +1,11 @@
 import process from "node:process";
 import { chromium } from "playwright";
+import {
+  verifyLocalizedSubmitWorkCard,
+  verifyLocalizedTraceGrid,
+  verifyLocalizedWorkflowActivity,
+  verifyLocalizedWorkOutcomeChart,
+} from "./verify-localized-widget-storybook-responsive.mjs";
 
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
@@ -18,18 +24,74 @@ const storyChecks = [
     assertions: verifyExportDialog,
     dialogName: "Export factory",
     id: "infinite-you-dashboard-export-factory-dialog--ready",
-    label: "export dialog",
+    label: "export dialog (en)",
+  },
+  {
+    assertions: verifyLocalizedExportDialog,
+    dialogName: "导出工厂",
+    id: "infinite-you-dashboard-export-factory-dialog--localized-zh-cn",
+    label: "export dialog (zh-CN)",
   },
   {
     assertions: verifyImportDialog,
     dialogName: "Review factory import",
     id: "infinite-you-dashboard-import-preview-dialog--ready",
-    label: "import preview dialog",
+    label: "import preview dialog (en)",
+  },
+  {
+    assertions: verifyLocalizedImportDialog,
+    dialogName: "检查工厂导入",
+    id: "infinite-you-dashboard-import-preview-dialog--localized-zh-cn",
+    label: "import preview dialog (zh-CN)",
   },
   {
     assertions: verifyDashboardHeader,
     id: "infinite-you-dashboard-dashboard-header--responsive-verification",
     label: "dashboard header",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedSubmitWorkCard({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-submit-work-card--localized-zh-cn",
+    label: "submit work widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedTraceGrid({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-trace-grid-bento-card--localized-zh-cn",
+    label: "trace drilldown widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedWorkOutcomeChart({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-work-outcome-chart-card--localized-zh-cn",
+    label: "work outcome widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyLocalizedWorkflowActivity({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "agent-factory-dashboard-react-flow-current-activity-card--localized-zh-cn",
+    label: "workflow activity widget (zh-CN)",
   },
 ];
 
@@ -120,6 +182,13 @@ export async function expectDialogWithinViewport(dialog, viewport, label) {
 }
 
 export async function expectVisible(locator, label) {
+  if (typeof locator.waitFor === "function") {
+    await locator.waitFor({
+      state: "visible",
+      timeout: STORY_RENDER_TIMEOUT_MS,
+    });
+  }
+
   if (!(await locator.isVisible())) {
     throw new Error(`${label} was not visible.`);
   }
@@ -174,6 +243,66 @@ export async function verifyImportDialog(page, dialog, viewport) {
   await expectNoHorizontalOverflow(
     page,
     `Import preview dialog at ${viewport.label}`,
+  );
+}
+
+async function verifyLocalizedExportDialog(page, dialog, viewport) {
+  await expectVisible(
+    dialog.getByRole("textbox", { name: "工厂名称" }),
+    "Localized factory name input",
+  );
+  await expectVisible(
+    dialog.getByLabel("封面图片"),
+    "Localized cover image input",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "取消" }),
+    "Localized export cancel button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "导出 PNG" }),
+    "Localized export action button",
+  );
+  await expectVisible(
+    dialog.getByText("确认导出不会更改当前仪表板状态"),
+    "Localized export helper copy",
+  );
+  await expectDialogWithinViewport(dialog, viewport, "Localized export");
+  await expectNoHorizontalOverflow(
+    page,
+    `Localized export dialog at ${viewport.label}`,
+  );
+}
+
+async function verifyLocalizedImportDialog(page, dialog, viewport) {
+  await expectVisible(
+    dialog.getByRole("img", { name: "Dropped Factory 预览图" }),
+    "Localized import preview image",
+  );
+  await expectVisible(
+    dialog.getByText("factory-import.png"),
+    "Localized dropped file name",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "取消导入" }),
+    "Localized import cancel button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "启用工厂" }),
+    "Localized import activate button",
+  );
+  await expectVisible(
+    dialog.getByRole("button", { name: "关闭导入预览" }),
+    "Localized import close button",
+  );
+  await expectDialogWithinViewport(
+    dialog,
+    viewport,
+    "Localized import preview",
+  );
+  await expectNoHorizontalOverflow(
+    page,
+    `Localized import preview dialog at ${viewport.label}`,
   );
 }
 
@@ -270,7 +399,7 @@ export async function verifyStory(browser, storyCheck, viewport) {
   }
 }
 
-export async function main() {
+async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {

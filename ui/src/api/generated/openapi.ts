@@ -322,10 +322,26 @@ export interface components {
             baseVersion?: components["schemas"]["HybridLogicalTimestamp"];
         };
         ProviderSessionDetailResponse: {
-            providerSession: components["schemas"]["ProviderSessionMetadata"];
+            providerSession: components["schemas"]["LoadableProviderSessionRef"];
             source: components["schemas"]["ProviderSessionSourceMetadata"];
             parse: components["schemas"]["CodexSessionParseSummary"];
         };
+        LoadableProviderSessionRef: {
+            provider: components["schemas"]["LoadableProviderSessionProvider"];
+            kind: components["schemas"]["LoadableProviderSessionKind"];
+            /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
+            id: string;
+        };
+        /**
+         * @description Canonical provider value for provider-session detail requests that can be loaded by the API.
+         * @enum {string}
+         */
+        LoadableProviderSessionProvider: "codex";
+        /**
+         * @description Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
+         * @enum {string}
+         */
+        LoadableProviderSessionKind: "session_id";
         ProviderSessionSourceMetadata: {
             /** @description Path to the loaded session file relative to the configured Codex sessions root. */
             relativePath: string;
@@ -1580,9 +1596,9 @@ export interface operations {
         parameters: {
             query: {
                 /** @description Provider that emitted the session identifier. Only codex sessions are currently loadable. */
-                provider: string;
+                provider: components["schemas"]["LoadableProviderSessionProvider"];
                 /** @description Provider-session identifier kind. Only session_id is currently loadable. */
-                kind: string;
+                kind: components["schemas"]["LoadableProviderSessionKind"];
                 /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
                 id: string;
             };

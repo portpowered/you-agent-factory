@@ -10,6 +10,7 @@ import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCard,
 } from "./react-flow-current-activity-card";
+import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
 
 interface WorkflowActivityBentoCardProps {
   importController: CurrentActivityImportController;
@@ -39,8 +40,10 @@ export function WorkflowActivityBentoCard({
   onSelectStateNode,
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
+  const messages = getWorkflowActivityShellMessages(locale);
+
   return (
-    <AgentBentoCard title="Factory graph">
+    <AgentBentoCard title={messages.widgetTitle}>
       <section className={GRAPH_PANEL_SHELL_CLASS}>
         <ReactFlowCurrentActivityCard
           importController={importController}

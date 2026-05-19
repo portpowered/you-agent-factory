@@ -1,15 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { DashboardSubmitWorkType } from "../../api/dashboard/types";
-import {
-  isSubmitWorkAPIError,
-  submitWork,
-} from "../../api/work";
+import { isSubmitWorkAPIError, submitWork } from "../../api/work";
 import type {
   SubmitWorkDraft,
   SubmitWorkStatus,
   SubmitWorkValidationErrors,
 } from "./submit-work-card";
+import type { SubmitWorkMessages } from "./messages/submit-work";
 
 const EMPTY_DRAFT: SubmitWorkDraft = {
   requestName: "",
@@ -17,15 +15,23 @@ const EMPTY_DRAFT: SubmitWorkDraft = {
   workTypeName: "",
 };
 
-export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) {
+export function useSubmitWorkWidget(
+  submitWorkTypes: DashboardSubmitWorkType[],
+  messages: SubmitWorkMessages,
+) {
   const [draft, setDraft] = useState<SubmitWorkDraft>(EMPTY_DRAFT);
   const [showValidation, setShowValidation] = useState(false);
-  const submitWorkTypeNames = submitWorkTypes.map((workType) => workType.work_type_name);
+  const submitWorkTypeNames = submitWorkTypes.map(
+    (workType) => workType.work_type_name,
+  );
 
   const mutation = useMutation({
     mutationFn: submitWork,
     onSuccess: () => {
-      setDraft(EMPTY_DRAFT);
+      setDraft((currentDraft) => ({
+        ...EMPTY_DRAFT,
+        workTypeName: currentDraft.workTypeName,
+      }));
       setShowValidation(false);
     },
   });
@@ -42,7 +48,7 @@ export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) 
     }
   }, [draft.workTypeName, submitWorkTypeNames]);
 
-  const validationErrors = showValidation ? validateDraft(draft) : {};
+  const validationErrors = showValidation ? validateDraft(draft, messages) : {};
 
   return {
     draft,
@@ -69,14 +75,16 @@ export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) 
       setShowValidation(true);
       mutation.reset();
 
-      const nextValidationErrors = validateDraft(draft);
+      const nextValidationErrors = validateDraft(draft, messages);
       if (hasValidationErrors(nextValidationErrors)) {
         return;
       }
 
       mutation.mutate({
-        ...(draft.requestName.trim().length > 0 ? { name: draft.requestName } : {}),
-        payload: draft.requestText,
+        ...(draft.requestName.trim().length > 0
+          ? { name: draft.requestName }
+          : {}),
+        payload: draft.requestText.trim().length === 0 ? "" : draft.requestText,
         workTypeName: draft.workTypeName,
       });
     },
@@ -94,6 +102,7 @@ export function useSubmitWorkWidget(submitWorkTypes: DashboardSubmitWorkType[]) 
       error: mutation.error,
       isSubmitting: mutation.isPending,
       isSuccess: mutation.isSuccess,
+      messages,
       resultTraceID:
         mutation.data?.traceId ??
         (mutation.data as { trace_id?: string } | undefined)?.trace_id,
@@ -110,6 +119,7 @@ function buildStatus({
   error,
   isSubmitting,
   isSuccess,
+  messages,
   resultTraceID,
   showValidation,
   submitWorkTypeNames,
@@ -118,6 +128,7 @@ function buildStatus({
   error: unknown;
   isSubmitting: boolean;
   isSuccess: boolean;
+  messages: SubmitWorkMessages;
   resultTraceID?: string;
   showValidation: boolean;
   submitWorkTypeNames: string[];
@@ -125,98 +136,86 @@ function buildStatus({
   if (isSubmitting) {
     return {
       kind: "submitting",
-      message: "Sending your request...",
+      message: messages.statusMessages.submitting,
     };
   }
 
   if (error) {
     return {
       kind: "error",
-      message: submitWorkErrorMessage(error),
+      message: submitWorkErrorMessage(error, messages),
     };
   }
 
   if (isSuccess) {
     return {
       kind: "success",
-      message: `Your request was submitted. Trace ID: ${resultTraceID ?? "unavailable"}.`,
+      message: messages.statusMessages.success(resultTraceID ?? "unavailable"),
     };
   }
 
   if (submitWorkTypeNames.length === 0) {
     return {
       kind: "guidance",
-      message: "No work types are available to submit right now.",
+      message: messages.statusMessages.noWorkTypes,
     };
   }
 
-  const validationErrors = validateDraft(draft);
+  const validationErrors = validateDraft(draft, messages);
   if (showValidation && hasValidationErrors(validationErrors)) {
     return {
       kind: "validation-error",
-      message: buildValidationSummary(validationErrors),
-    };
-  }
-
-  if (draft.workTypeName.length === 0 && draft.requestText.length === 0) {
-    return {
-      kind: "guidance",
-      message: "Choose a work type and describe what you need to get started.",
+      message: buildValidationSummary(validationErrors, messages),
     };
   }
 
   if (draft.workTypeName.length === 0) {
     return {
       kind: "guidance",
-      message: "Choose a work type to continue.",
-    };
-  }
-
-  if (draft.requestText.trim().length === 0) {
-    return {
-      kind: "guidance",
-      message: "Describe what you need to continue.",
+      message: messages.statusMessages.workTypeOnly,
     };
   }
 
   return {
     kind: "guidance",
-    message: "Your request is ready to submit.",
+    message: messages.statusMessages.ready,
   };
 }
 
-function buildValidationSummary(validationErrors: SubmitWorkValidationErrors): string {
-  if (validationErrors.workTypeName && validationErrors.requestText) {
-    return "Choose a work type and describe your request before submitting.";
-  }
+function buildValidationSummary(
+  validationErrors: SubmitWorkValidationErrors,
+  messages: SubmitWorkMessages,
+): string {
   if (validationErrors.workTypeName) {
     return validationErrors.workTypeName;
   }
-  return validationErrors.requestText ?? "Fix the highlighted fields before submitting.";
+  return messages.validationMessages.fallback;
 }
 
-function hasValidationErrors(validationErrors: SubmitWorkValidationErrors): boolean {
-  return Boolean(validationErrors.requestText || validationErrors.workTypeName);
+function hasValidationErrors(
+  validationErrors: SubmitWorkValidationErrors,
+): boolean {
+  return Boolean(validationErrors.workTypeName);
 }
 
-function submitWorkErrorMessage(error: unknown): string {
+function submitWorkErrorMessage(
+  error: unknown,
+  messages: SubmitWorkMessages,
+): string {
   if (isSubmitWorkAPIError(error) && error.message.length > 0) {
     return error.message;
   }
-  return "We couldn't submit your request. Try again in a moment.";
+  return messages.statusMessages.errorFallback;
 }
 
-function validateDraft(draft: SubmitWorkDraft): SubmitWorkValidationErrors {
+function validateDraft(
+  draft: SubmitWorkDraft,
+  messages: SubmitWorkMessages,
+): SubmitWorkValidationErrors {
   const validationErrors: SubmitWorkValidationErrors = {};
 
   if (draft.workTypeName.length === 0) {
-    validationErrors.workTypeName = "Choose a work type before submitting.";
+    validationErrors.workTypeName = messages.validationMessages.workTypeRequired;
   }
-
-  if (draft.requestText.trim().length === 0) {
-    validationErrors.requestText = "Describe your request before submitting.";
-  }
-
   return validationErrors;
 }
-

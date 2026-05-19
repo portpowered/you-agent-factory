@@ -29,22 +29,25 @@ import {
 import { CurrentActivityGraphEditorHeader } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { useFactoryGraphEditorViewModel } from "./react-flow-current-activity-card-editor-graph";
+import {
+  buildGraphEdges,
+  initialFocusNodes,
+} from "./react-flow-current-activity-card-edges";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
-  buildGraphEdges,
   buildHandleAssignments,
   buildVisibleGraphEdges,
   EMPTY_GRAPH_LAYOUT,
   EMPTY_NODE_POSITIONS,
-  initialFocusNodes,
 } from "./react-flow-current-activity-card-graph";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
 } from "./react-flow-current-activity-card-keys";
+import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
 import { useCurrentActivityGraphStore } from "./state/currentActivityGraphStore";
 
 export {
@@ -67,12 +70,14 @@ export type CurrentActivitySelection =
   | { kind: "state-node"; placeId: string }
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
 
-function CurrentActivityCardHeading() {
+function CurrentActivityCardHeading({ locale }: { locale?: string }) {
+  const messages = getWorkflowActivityShellMessages(locale);
+
   return (
     <div className={CURRENT_ACTIVITY_HEADER_TEXT_CLASS}>
-      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>Operator View</p>
+      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>{messages.eyebrow}</p>
       <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
-        Current activity
+        {messages.title}
       </h2>
     </div>
   );
@@ -357,7 +362,7 @@ export function ReactFlowCurrentActivityCard(
           }
           loadErrorMessage={editor.editableDefinitionQuery.error?.message}
           onToggle={editor.handleEditorModeToggle}
-          title={<CurrentActivityCardHeading />}
+          title={<CurrentActivityCardHeading locale={props.locale} />}
         />
       </div>
       <FactoryGraphEditorDraftActions

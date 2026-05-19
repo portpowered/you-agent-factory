@@ -94,16 +94,16 @@ export const Preparing = {
   },
 };
 
-export const LocalizedJa = {
+export const LocalizedZhCn = {
   args: {
     factory,
     initialFactoryName: "Factory Aurora",
     isOpen: true,
-    locale: "ja",
+    locale: "zh-CN",
     onClose: () => {},
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const messages = getExportDialogMessages("ja");
+    const messages = getExportDialogMessages("zh-CN");
     const canvas = within(canvasElement.ownerDocument.body);
     const dialog = await canvas.findByRole("dialog", { name: messages.title });
     const scope = within(dialog);

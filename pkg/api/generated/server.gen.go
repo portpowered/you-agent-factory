@@ -98,6 +98,16 @@ const (
 	InputKindDefault InputKind = "DEFAULT"
 )
 
+// Defines values for LoadableProviderSessionKind.
+const (
+	SessionID LoadableProviderSessionKind = "session_id"
+)
+
+// Defines values for LoadableProviderSessionProvider.
+const (
+	Codex LoadableProviderSessionProvider = "codex"
+)
+
 // Defines values for RelationType.
 const (
 	RelationTypeDependsOn   RelationType = "DEPENDS_ON"
@@ -830,6 +840,24 @@ type ListWorkResponse struct {
 	Results           []Work             `json:"results"`
 }
 
+// LoadableProviderSessionKind Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
+type LoadableProviderSessionKind string
+
+// LoadableProviderSessionProvider Canonical provider value for provider-session detail requests that can be loaded by the API.
+type LoadableProviderSessionProvider string
+
+// LoadableProviderSessionRef defines model for LoadableProviderSessionRef.
+type LoadableProviderSessionRef struct {
+	// Id Provider-session identifier to resolve. This is an identifier, not a filesystem path.
+	Id string `json:"id"`
+
+	// Kind Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
+	Kind LoadableProviderSessionKind `json:"kind"`
+
+	// Provider Canonical provider value for provider-session detail requests that can be loaded by the API.
+	Provider LoadableProviderSessionProvider `json:"provider"`
+}
+
 // PaginationContext defines model for PaginationContext.
 type PaginationContext struct {
 	MaxResults int     `json:"maxResults"`
@@ -859,7 +887,7 @@ type ProviderFailureMetadata struct {
 // ProviderSessionDetailResponse defines model for ProviderSessionDetailResponse.
 type ProviderSessionDetailResponse struct {
 	Parse           CodexSessionParseSummary      `json:"parse"`
-	ProviderSession ProviderSessionMetadata       `json:"providerSession"`
+	ProviderSession LoadableProviderSessionRef    `json:"providerSession"`
 	Source          ProviderSessionSourceMetadata `json:"source"`
 }
 
@@ -1454,10 +1482,10 @@ type SaveEditableFactoryDefinitionConflict = ErrorResponse
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
 type GetProviderSessionDetailsParams struct {
 	// Provider Provider that emitted the session identifier. Only codex sessions are currently loadable.
-	Provider string `form:"provider" json:"provider"`
+	Provider LoadableProviderSessionProvider `form:"provider" json:"provider"`
 
 	// Kind Provider-session identifier kind. Only session_id is currently loadable.
-	Kind string `form:"kind" json:"kind"`
+	Kind LoadableProviderSessionKind `form:"kind" json:"kind"`
 
 	// Id Provider-session identifier to resolve. This is an identifier, not a filesystem path.
 	Id string `form:"id" json:"id"`

@@ -2,8 +2,10 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { vi } from "vitest";
 
 vi.mock("./trace-workstation-path", () => ({
-  TraceWorkstationPath: () => (
-    <section aria-label="Dispatch relationship graph">Dispatch relationship graph</section>
+  TraceWorkstationPath: ({ locale }: { locale?: string }) => (
+    <section aria-label={locale === "zh-CN" ? "分派关系图" : "Dispatch relationship graph"}>
+      {locale === "zh-CN" ? "分派关系图" : "Dispatch relationship graph"}
+    </section>
   ),
 }));
 
@@ -161,8 +163,8 @@ describe("TraceGridBentoCard", () => {
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
     const workItemsSection = within(card)
-      .getByText("Work items")
-      .closest("div");
+      .getAllByText("Work items")[0]
+      ?.closest("div");
     const resolvedWorkItemsSection = requireValue(workItemsSection, "expected work items section");
     const expandButton = within(resolvedWorkItemsSection).getByRole("button", { name: "Expand" });
     expect(expandButton.getAttribute("aria-expanded")).toBe("false");
@@ -210,5 +212,19 @@ describe("TraceGridBentoCard", () => {
     rerender(<TraceGridBentoCard state={{ status: "error", message: "network failed" }} />);
     expect(screen.getByText("Trace lookup failed")).toBeTruthy();
     expect(screen.getByText("network failed")).toBeTruthy();
+  });
+
+  it("renders zh-CN trace shell labels and graph regions", () => {
+    render(
+      <TraceGridBentoCard
+        locale="zh-CN"
+        state={{ status: "ready", trace: populatedTrace }}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "追踪下钻" });
+    expect(within(card).getByText("追踪分派表")).toBeTruthy();
+    expect(within(card).getByText("分派流")).toBeTruthy();
+    expect(within(card).getByRole("region", { name: "分派关系图" })).toBeTruthy();
   });
 });

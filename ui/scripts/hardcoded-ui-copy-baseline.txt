@@ -1,0 +1,114 @@
+# Baseline for the hardcoded UI copy check.
+# Entries are path|line|column|kind|text.
+src/components/ui/ui-foundation-showcase.tsx|79|72|jsx-text|Shared UI primitives
+src/components/ui/ui-foundation-showcase.tsx|81|13|jsx-text|Shared button, field, dialog, chart, table, skeleton, collapsible, calendar, and resizable building blocks.
+src/components/ui/ui-foundation-showcase.tsx|86|19|jsx-text|Primary action
+src/components/ui/ui-foundation-showcase.tsx|87|36|jsx-text|Secondary
+src/components/ui/ui-foundation-showcase.tsx|88|34|jsx-text|Outline
+src/components/ui/ui-foundation-showcase.tsx|89|28|jsx-text|Disabled action
+src/components/ui/ui-foundation-showcase.tsx|96|13|jsx-text|Request name
+src/components/ui/ui-foundation-showcase.tsx|98|49|jsx-attribute|Name this request
+src/components/ui/ui-foundation-showcase.tsx|103|13|jsx-text|Work type
+src/components/ui/ui-foundation-showcase.tsx|106|35|jsx-text|story
+src/components/ui/ui-foundation-showcase.tsx|107|34|jsx-text|task
+src/components/ui/ui-foundation-showcase.tsx|113|13|jsx-text|Request text
+src/components/ui/ui-foundation-showcase.tsx|115|52|jsx-attribute|Describe the work to run
+src/components/ui/ui-foundation-showcase.tsx|121|54|jsx-attribute|Primitive chart showcase
+src/components/ui/ui-foundation-showcase.tsx|150|27|jsx-text|Primitive table foundation for trace and detail surfaces.
+src/components/ui/ui-foundation-showcase.tsx|153|28|jsx-text|Dispatch
+src/components/ui/ui-foundation-showcase.tsx|154|28|jsx-text|Status
+src/components/ui/ui-foundation-showcase.tsx|155|28|jsx-text|Duration
+src/components/ui/ui-foundation-showcase.tsx|160|28|jsx-text|dispatch-review-1
+src/components/ui/ui-foundation-showcase.tsx|161|28|jsx-text|ACCEPTED
+src/components/ui/ui-foundation-showcase.tsx|162|28|jsx-text|420ms
+src/components/ui/ui-foundation-showcase.tsx|165|28|jsx-text|dispatch-review-2
+src/components/ui/ui-foundation-showcase.tsx|166|28|jsx-text|FAILED
+src/components/ui/ui-foundation-showcase.tsx|167|28|jsx-text|1.2s
+src/components/ui/ui-foundation-showcase.tsx|190|17|jsx-text|Loading
+src/components/ui/ui-foundation-showcase.tsx|198|58|jsx-text|Collapsible section
+src/components/ui/ui-foundation-showcase.tsx|207|19|jsx-text|Shared disclosure state is ready for section toggles and drill-down controls.
+src/components/ui/ui-foundation-showcase.tsx|214|17|jsx-text|Open dialog
+src/components/ui/ui-foundation-showcase.tsx|219|34|jsx-text|Export factory
+src/components/ui/ui-foundation-showcase.tsx|221|23|jsx-text|Shared dialog chrome for export and confirmation flows.
+src/components/ui/ui-foundation-showcase.tsx|225|39|jsx-attribute|Factory name
+src/components/ui/ui-foundation-showcase.tsx|226|42|jsx-attribute|Export notes
+src/components/ui/ui-foundation-showcase.tsx|230|23|jsx-text|Cancel
+src/components/ui/ui-foundation-showcase.tsx|232|29|jsx-text|Confirm export
+src/components/ui/ui-foundation-showcase.tsx|240|24|jsx-attribute|Primitive calendar showcase
+src/components/ui/ui-foundation-showcase.tsx|251|13|jsx-text|Resizable panels
+src/components/ui/ui-foundation-showcase.tsx|257|19|jsx-text|Sidebar panel
+src/components/ui/ui-foundation-showcase.tsx|263|19|jsx-text|Detail panel
+src/features/bento/agent-bento.tsx|155|18|jsx-attribute|Infinite You bento board
+src/features/current-selection/detail-card-shared.tsx|141|25|jsx-attribute|Request counts
+src/features/current-selection/detail-card-shared.tsx|142|55|jsx-text|Request counts
+src/features/current-selection/inference-attempt.tsx|30|17|jsx-text|Attempt
+src/features/current-selection/inference-attempt.tsx|71|11|jsx-text|Provider response text is not available for this inference attempt.
+src/features/current-selection/inference-attempt.tsx|74|42|jsx-text|Awaiting provider response.
+src/features/current-selection/provider-session-detail-panel.tsx|71|42|jsx-text|Loading session details...
+src/features/current-selection/provider-session-detail-panel.tsx|262|25|jsx-text|Turn
+src/features/current-selection/provider-session-detail-panel.tsx|415|19|jsx-text|Encrypted reasoning content only.
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|45|18|jsx-attribute|Inference attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|48|55|jsx-text|Inference attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|77|18|jsx-attribute|Script attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|80|55|jsx-text|Script attempts
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|94|44|jsx-text|No script response attempt has been recorded yet.
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|115|19|jsx-text|Request attempt
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|116|76|jsx-text|PENDING
+src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|164|19|jsx-text|Response attempt
+src/features/current-selection/selected-work-dispatch-history.tsx|37|15|jsx-attribute|Workstation dispatches
+src/features/current-selection/selected-work-dispatch-history.tsx|53|11|jsx-text|Workstation dispatches
+src/features/current-selection/selected-work-dispatch-history.tsx|76|11|jsx-text|No workstation dispatch has been recorded yet for this work item.
+src/features/current-selection/state-node-detail.tsx|48|15|jsx-text|Work type
+src/features/current-selection/state-node-detail.tsx|52|15|jsx-text|State
+src/features/current-selection/state-node-detail.tsx|56|15|jsx-text|State node ID
+src/features/current-selection/state-node-detail.tsx|114|15|jsx-text|Work ID
+src/features/current-selection/state-node-detail.tsx|118|15|jsx-text|Work type
+src/features/current-selection/state-node-detail.tsx|123|17|jsx-text|Trace ID
+src/features/current-selection/state-node-detail.tsx|129|17|jsx-text|Failure reason
+src/features/current-selection/state-node-detail.tsx|135|17|jsx-text|Failure message
+src/features/current-selection/work-item-card.tsx|49|15|jsx-text|Work ID
+src/features/current-selection/work-item-card.tsx|53|15|jsx-text|Work type
+src/features/current-selection/work-item-card.tsx|57|15|jsx-text|Workstation
+src/features/current-selection/work-item-card.tsx|66|15|jsx-text|Runtime labels
+src/features/current-selection/work-item-card.tsx|75|15|jsx-text|Workstation dispatches
+src/features/current-selection/work-item-card.tsx|139|18|jsx-attribute|Work relationships
+src/features/current-selection/work-item-card.tsx|142|55|jsx-text|Work relationships
+src/features/current-selection/work-item-card.tsx|160|17|jsx-text|Selected work
+src/features/current-selection/work-item-card.tsx|185|11|jsx-text|No parent, child, or dependency relationships are available for this work item.
+src/features/current-selection/workstation-request-detail-response.tsx|24|18|jsx-attribute|Response details
+src/features/current-selection/workstation-request-detail-response.tsx|27|55|jsx-text|Response details
+src/features/current-selection/workstation-request-detail-response.tsx|48|18|jsx-attribute|Error details
+src/features/current-selection/workstation-request-detail-response.tsx|51|55|jsx-text|Error details
+src/features/current-selection/workstation-request-detail-response.tsx|54|15|jsx-text|Failure reason
+src/features/current-selection/workstation-request-detail-response.tsx|61|15|jsx-text|Failure message
+src/features/current-selection/workstation-request-detail-response.tsx|88|19|jsx-text|Script request ID
+src/features/current-selection/workstation-request-detail-response.tsx|100|19|jsx-text|Script attempt
+src/features/current-selection/workstation-request-detail-response.tsx|107|19|jsx-text|Outcome
+src/features/current-selection/workstation-request-detail-response.tsx|114|19|jsx-text|Duration
+src/features/current-selection/workstation-request-detail-response.tsx|122|19|jsx-text|Exit code
+src/features/current-selection/workstation-request-detail-response.tsx|129|19|jsx-text|Failure type
+src/features/current-selection/workstation-request-detail-response.tsx|137|21|jsx-attribute|Stdout
+src/features/current-selection/workstation-request-detail-response.tsx|142|21|jsx-attribute|Stderr
+src/features/current-selection/workstation-request-detail-response.tsx|181|11|jsx-text|Trace IDs
+src/features/current-selection/workstation-request-detail-response.tsx|191|13|jsx-text|Trace details are not available for this workstation request yet.
+src/features/current-selection/workstation-request-detail.tsx|51|17|jsx-attribute|Request metadata
+src/features/current-selection/workstation-request-detail.tsx|59|17|jsx-attribute|Response metadata
+src/features/current-selection/workstation-request-detail.tsx|84|15|jsx-text|Dispatch ID
+src/features/current-selection/workstation-request-detail.tsx|92|15|jsx-text|Request ID
+src/features/current-selection/workstation-request-detail.tsx|104|15|jsx-text|Workstation
+src/features/current-selection/workstation-request-detail.tsx|111|15|jsx-text|Transition ID
+src/features/current-selection/workstation-request-detail.tsx|119|15|jsx-text|Outcome
+src/features/current-selection/workstation-request-detail.tsx|127|15|jsx-text|Total duration
+src/features/current-selection/workstation-request-detail.tsx|155|20|jsx-attribute|Request details
+src/features/current-selection/workstation-request-detail.tsx|158|57|jsx-text|Request details
+src/features/current-selection/workstation-request-detail.tsx|171|18|jsx-attribute|Request details
+src/features/current-selection/workstation-request-detail.tsx|174|55|jsx-text|Request details
+src/features/current-selection/workstation-request-detail.tsx|206|13|jsx-text|Consumed work items
+src/features/current-selection/workstation-request-detail.tsx|243|13|jsx-text|Script request ID
+src/features/current-selection/workstation-request-detail.tsx|255|13|jsx-text|Script attempt
+src/features/current-selection/workstation-request-detail.tsx|261|13|jsx-text|Command
+src/features/current-selection/workstation-request-detail.tsx|273|13|jsx-text|Resolved args
+src/features/current-selection/workstation-request-detail.tsx|283|15|jsx-text|Script arguments are not available for this workstation request.
+src/features/flowchart/current-activity-workstation-node.tsx|221|19|jsx-attribute|Active
+src/features/terminal-work/terminal-work-card.tsx|288|51|jsx-text|at
+src/features/work-outcome/trend-cards.tsx|254|60|jsx-text|retry or rework events

@@ -1,11 +1,12 @@
 import type { DashboardStreamState } from "../../api/dashboard/types";
 import { TickSliderControl } from "../../components/dashboard";
-import { cx } from "../../components/ui";
+import { cx, Select } from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../components/ui/dashboard-typography";
+import { useAppLocale } from "../../i18n";
 import { useDashboardStreamStore } from "../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../export/messages/export-dialog";
 import { useExportDialogStore } from "../export/state/exportDialogStore";
@@ -25,6 +26,13 @@ const DASHBOARD_CONTROLS_CLASS = cx(
   "ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-4",
   "max-md:ml-0 max-md:w-full max-md:justify-stretch",
 );
+const LANGUAGE_SWITCHER_SHELL_CLASS = cx(
+  "flex min-w-0 flex-1 flex-col gap-1 md:min-w-44 md:shrink-0 md:flex-none",
+);
+const LANGUAGE_SWITCHER_LABEL_CLASS = cx(
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  "text-[0.72rem] uppercase tracking-[0.2em] text-af-ink/62",
+);
 const STREAM_STATUS_SHELL_CLASS = cx(
   "flex shrink-0 items-center justify-end",
   "max-md:justify-start",
@@ -40,6 +48,7 @@ export interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ locale }: DashboardHeaderProps) {
+  const { locale: resolvedLocale, setLocale } = useAppLocale(locale);
   const snapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
   );
@@ -50,8 +59,8 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
   const openExportDialog = useExportDialogStore(
     (state) => state.openExportDialog,
   );
-  const exportMessages = getExportDialogMessages(locale);
-  const headerMessages = getHeaderControlsMessages(locale);
+  const exportMessages = getExportDialogMessages(resolvedLocale);
+  const headerMessages = getHeaderControlsMessages(resolvedLocale);
 
   if (!snapshot) {
     return null;
@@ -63,13 +72,37 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       aria-label={headerMessages.dashboardSummaryLabel}
     >
       <h1 className={DASHBOARD_TITLE_CLASS}>
-        <DashboardBrandLockup wordmarkClassName="truncate" />
+        <DashboardBrandLockup
+          locale={resolvedLocale}
+          wordmarkClassName="truncate"
+        />
       </h1>
       <div className={DASHBOARD_CONTROLS_CLASS}>
-        <TickSliderControl locale={locale} />
+        <label
+          className={LANGUAGE_SWITCHER_SHELL_CLASS}
+          htmlFor="dashboard-language-switcher"
+        >
+          <span className={LANGUAGE_SWITCHER_LABEL_CLASS}>
+            {headerMessages.languageLabel}
+          </span>
+          <Select
+            aria-label={headerMessages.languageLabel}
+            id="dashboard-language-switcher"
+            onChange={(event) => {
+              setLocale(event.currentTarget.value);
+            }}
+            value={resolveLanguageSwitcherValue(resolvedLocale)}
+          >
+            <option value="en">{headerMessages.languageEnglishLabel}</option>
+            <option value="zh-CN">
+              {headerMessages.languageMandarinLabel}
+            </option>
+          </Select>
+        </label>
+        <TickSliderControl locale={resolvedLocale} />
         <div className={STREAM_STATUS_SHELL_CLASS}>
           <div
-            aria-label={streamStatusLabel(streamState.status, locale)}
+            aria-label={streamStatusLabel(streamState.status, resolvedLocale)}
             className={streamStatusClassName(streamState.status)}
             role="status"
           >
@@ -101,6 +134,10 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
       </div>
     </section>
   );
+}
+
+function resolveLanguageSwitcherValue(locale: string): "en" | "zh-CN" {
+  return locale === "zh-CN" ? "zh-CN" : "en";
 }
 
 function streamStatusClassName(status: DashboardStreamState["status"]): string {

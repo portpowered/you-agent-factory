@@ -1,10 +1,17 @@
-import { cx } from "../../lib/cx";
+import {
+  Button,
+  DashboardWidgetFrame,
+  Input,
+  Select,
+  Textarea,
+} from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { Button, DashboardWidgetFrame, Input, Select, Textarea } from "../../components/ui";
+import { cx } from "../../lib/cx";
+import { getSubmitWorkMessages } from "./messages/submit-work";
 
 export interface SubmitWorkDraft {
   requestName: string;
@@ -13,7 +20,6 @@ export interface SubmitWorkDraft {
 }
 
 export interface SubmitWorkValidationErrors {
-  requestText?: string;
   workTypeName?: string;
 }
 
@@ -25,6 +31,7 @@ export interface SubmitWorkStatus {
 export interface SubmitWorkCardProps {
   draft: SubmitWorkDraft;
   isSubmitting?: boolean;
+  locale?: string;
   onRequestNameChange: (value: string) => void;
   onRequestTextChange: (value: string) => void;
   onSubmit: () => void;
@@ -53,6 +60,7 @@ const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
 export function SubmitWorkCard({
   draft,
   isSubmitting = false,
+  locale,
   onRequestNameChange,
   onRequestTextChange,
   onSubmit,
@@ -62,21 +70,21 @@ export function SubmitWorkCard({
   validationErrors,
   widgetId = "submit-work",
 }: SubmitWorkCardProps) {
+  const messages = getSubmitWorkMessages(locale);
   const hasConfiguredWorkTypes = submitWorkTypeNames.length > 0;
   const hasSelectedWorkType = draft.workTypeName.length > 0;
-  const hasRequestText = draft.requestText.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
-  const canSubmit = hasConfiguredWorkTypes && hasSelectedWorkType && hasRequestText && !isSubmitting;
-  const showStatusMessage = !(status.kind === "guidance" && canSubmit);
+  const canSubmit =
+    hasConfiguredWorkTypes && hasSelectedWorkType && !isSubmitting;
   const requestNameID = `${widgetId}-request-name`;
   const requestTextID = `${widgetId}-request-text`;
+  const requestTextHintID = `${widgetId}-request-text-hint`;
   const workTypeID = `${widgetId}-work-type`;
   const workTypeErrorID = `${widgetId}-work-type-error`;
-  const requestTextErrorID = `${widgetId}-request-text-error`;
   const statusID = `${widgetId}-status`;
 
   return (
-    <DashboardWidgetFrame title="Submit work" widgetId={widgetId}>
+    <DashboardWidgetFrame title={messages.cardTitle} widgetId={widgetId}>
       <form
         className={FORM_CLASS}
         onSubmit={(event) => {
@@ -86,10 +94,12 @@ export function SubmitWorkCard({
       >
         <div className={FIELD_GROUP_CLASS}>
           <label className={FIELD_LABEL_CLASS} htmlFor={workTypeID}>
-            Work type
+            {messages.workTypeLabel}
           </label>
           <Select
-            aria-describedby={validationErrors?.workTypeName ? workTypeErrorID : undefined}
+            aria-describedby={
+              validationErrors?.workTypeName ? workTypeErrorID : undefined
+            }
             aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
@@ -97,7 +107,7 @@ export function SubmitWorkCard({
             onChange={(event) => onWorkTypeNameChange(event.target.value)}
             value={draft.workTypeName}
           >
-            <option value="">Select a work type</option>
+            <option value="">{messages.selectWorkTypePlaceholder}</option>
             {submitWorkTypeNames.map((workTypeName) => (
               <option key={workTypeName} value={workTypeName}>
                 {workTypeName}
@@ -113,14 +123,14 @@ export function SubmitWorkCard({
 
         <div className={FIELD_GROUP_CLASS}>
           <label className={FIELD_LABEL_CLASS} htmlFor={requestNameID}>
-            Request name
+            {messages.requestNameLabel}
           </label>
           <Input
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             id={requestNameID}
             onChange={(event) => onRequestNameChange(event.target.value)}
-            placeholder="Add an optional label for this request."
+            placeholder={messages.requestNamePlaceholder}
             type="text"
             value={draft.requestName}
           />
@@ -128,37 +138,37 @@ export function SubmitWorkCard({
 
         <div className={FIELD_GROUP_CLASS}>
           <label className={FIELD_LABEL_CLASS} htmlFor={requestTextID}>
-            Request
+            {messages.requestLabel}
           </label>
           <Textarea
-            aria-describedby={validationErrors?.requestText ? requestTextErrorID : undefined}
-            aria-invalid={validationErrors?.requestText ? "true" : undefined}
+            aria-describedby={requestTextHintID}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             id={requestTextID}
             onChange={(event) => onRequestTextChange(event.target.value)}
-            placeholder="Describe what you want this request to accomplish."
+            placeholder={messages.requestPlaceholder}
             value={draft.requestText}
           />
-          {validationErrors?.requestText ? (
-            <p className={VALIDATION_TEXT_CLASS} id={requestTextErrorID}>
-              {validationErrors.requestText}
-            </p>
-          ) : null}
+          <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
+            {messages.requestHint}
+          </p>
         </div>
 
         <div className={ACTION_ROW_CLASS}>
-          {showStatusMessage ? (
-            <p
-              className={cx(HELP_TEXT_CLASS, STATUS_TONE_CLASS_BY_KIND[status.kind])}
-              id={statusID}
-              role={status.kind === "error" || status.kind === "validation-error" ? "alert" : "status"}
-            >
-              {status.message}
-            </p>
-          ) : (
-            <div />
-          )}
+          <p
+            className={cx(
+              HELP_TEXT_CLASS,
+              STATUS_TONE_CLASS_BY_KIND[status.kind],
+            )}
+            id={statusID}
+            role={
+              status.kind === "error" || status.kind === "validation-error"
+                ? "alert"
+                : "status"
+            }
+          >
+            {status.message}
+          </p>
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
             className="shrink-0"
@@ -166,7 +176,7 @@ export function SubmitWorkCard({
             tone={canSubmit ? "default" : "outline"}
             type="submit"
           >
-            {isSubmitting ? "Submitting..." : "Submit work"}
+            {isSubmitting ? messages.submittingAction : messages.submitAction}
           </Button>
         </div>
       </form>

@@ -167,13 +167,13 @@ paths:
           required: true
           description: Provider that emitted the session identifier. Only codex sessions are currently loadable.
           schema:
-            type: string
+            $ref: '#/components/schemas/LoadableProviderSessionProvider'
         - name: kind
           in: query
           required: true
           description: Provider-session identifier kind. Only session_id is currently loadable.
           schema:
-            type: string
+            $ref: '#/components/schemas/LoadableProviderSessionKind'
         - name: id
           in: query
           required: true
@@ -780,11 +780,40 @@ components:
         - parse
       properties:
         providerSession:
-          $ref: '#/components/schemas/ProviderSessionMetadata'
+          $ref: '#/components/schemas/LoadableProviderSessionRef'
         source:
           $ref: '#/components/schemas/ProviderSessionSourceMetadata'
         parse:
           $ref: '#/components/schemas/CodexSessionParseSummary'
+    LoadableProviderSessionRef:
+      type: object
+      additionalProperties: false
+      required:
+        - provider
+        - kind
+        - id
+      properties:
+        provider:
+          $ref: '#/components/schemas/LoadableProviderSessionProvider'
+        kind:
+          $ref: '#/components/schemas/LoadableProviderSessionKind'
+        id:
+          type: string
+          description: Provider-session identifier to resolve. This is an identifier, not a filesystem path.
+    LoadableProviderSessionProvider:
+      type: string
+      description: Canonical provider value for provider-session detail requests that can be loaded by the API.
+      x-enum-varnames:
+        - Codex
+      enum:
+        - codex
+    LoadableProviderSessionKind:
+      type: string
+      description: Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
+      x-enum-varnames:
+        - SessionID
+      enum:
+        - session_id
     ProviderSessionSourceMetadata:
       type: object
       additionalProperties: false
