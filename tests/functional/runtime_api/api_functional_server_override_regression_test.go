@@ -91,6 +91,7 @@ func submitFunctionalServerWork(t *testing.T, server *functionalAPIServer, workT
 	t.Helper()
 
 	reqBody, err := json.Marshal(factoryapi.SubmitWorkRequest{
+		Name:         "override-regression-submit",
 		WorkTypeName: workTypeID,
 		Payload:      payload,
 	})

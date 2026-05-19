@@ -39,6 +39,7 @@ var retiredFactoryEventTypeStrings = []string{
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	var submitRequest factoryapi.SubmitWorkRequest
+	submitRequest.Name = "task-1"
 	submitRequest.WorkTypeName = "task"
 	submitRequest.CurrentChainingTraceId = stringPtr("chain-submit-1")
 	submitRelationState := "complete"
@@ -119,7 +120,7 @@ func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 		Schedule:       "*/5 * * * *",
 		TriggerAtStart: &triggerAtStart,
 	}
-	if submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
 	if submitRequest.CurrentChainingTraceId == nil || *submitRequest.CurrentChainingTraceId != "chain-submit-1" {

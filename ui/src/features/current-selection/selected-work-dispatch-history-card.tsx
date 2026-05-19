@@ -44,13 +44,16 @@ import {
   requestTraceIDs,
   scriptResponseFailureType,
 } from "./selected-work-dispatch-history-helpers";
+import type { LoadableProviderSessionRef } from "./provider-session-details";
 
 interface DispatchHistoryCardProps {
   activeTraceID?: string | null;
   currentDispatchID?: string | null;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   request: SelectedWorkRequestHistoryItem;
+  selectedProviderSessionKey?: string | null;
   selectedWorkID: string;
   traceTargetId: string;
 }
@@ -58,9 +61,11 @@ interface DispatchHistoryCardProps {
 export function DispatchHistoryCard({
   activeTraceID,
   currentDispatchID,
+  onSelectProviderSession,
   onSelectTraceID,
   onSelectWorkID,
   request,
+  selectedProviderSessionKey,
   selectedWorkID,
   traceTargetId,
 }: DispatchHistoryCardProps) {
@@ -126,6 +131,8 @@ export function DispatchHistoryCard({
                 ? messages.inferenceAttemptsEmptyEnded
                 : messages.inferenceAttemptsEmptyPending
             }
+            onSelectProviderSession={onSelectProviderSession}
+            selectedProviderSessionKey={selectedProviderSessionKey}
           />
         </>
       )}

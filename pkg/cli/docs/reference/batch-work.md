@@ -45,7 +45,7 @@ prerequisites, and `PARENT_CHILD` relations for parent-aware fan-in.
 |------|-----|
 | `factory/inputs/BATCH/default/<requestId>.json` | Mixed-work-type batches and canonical parent-child file input. |
 | `factory/inputs/<work_type>/default/<requestId>.json` | Single-work-type watched batches. |
-| Any readable JSON path passed to `agent-factory run --work <path>` | Startup batch submission before runtime start. |
+| Any readable JSON path passed to `you run --work <path>` | Startup batch submission before runtime start. |
 
 ## Request Fields
 
@@ -68,6 +68,6 @@ Use `workTypeName` in public batch payloads. Do not use the retired
 
 ## Related
 
-- `infinite-you docs config`
-- `infinite-you docs workstation`
-- `infinite-you docs templates`
+- `you docs config`
+- `you docs workstation`
+- `you docs templates`

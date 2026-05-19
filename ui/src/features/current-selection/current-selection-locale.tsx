@@ -9,10 +9,15 @@ import {
   type CurrentSelectionShellMessages,
   getCurrentSelectionShellMessages,
 } from "./messages/current-selection-shell";
+import {
+  type WorkstationDetailMessages,
+  getWorkstationDetailMessages,
+} from "./messages";
 
 interface CurrentSelectionLocaleMessages {
   dispatchHistory: CurrentSelectionDispatchHistoryMessages;
   shell: CurrentSelectionShellMessages;
+  workstationDetail: WorkstationDetailMessages;
 }
 
 const CurrentSelectionLocaleContext =
@@ -32,6 +37,7 @@ export function CurrentSelectionLocaleProvider({
       value={{
         dispatchHistory: getCurrentSelectionDispatchHistoryMessages(locale),
         shell: getCurrentSelectionShellMessages(locale),
+        workstationDetail: getWorkstationDetailMessages(locale),
       }}
     >
       {children}
@@ -50,5 +56,12 @@ export function useCurrentSelectionDispatchHistoryMessages(): CurrentSelectionDi
   return (
     useContext(CurrentSelectionLocaleContext)?.dispatchHistory ??
     getCurrentSelectionDispatchHistoryMessages(undefined)
+  );
+}
+
+export function useCurrentSelectionWorkstationDetailMessages(): WorkstationDetailMessages {
+  return (
+    useContext(CurrentSelectionLocaleContext)?.workstationDetail ??
+    getWorkstationDetailMessages(undefined)
   );
 }

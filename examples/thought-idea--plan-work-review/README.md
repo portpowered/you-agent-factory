@@ -43,14 +43,14 @@ examples/thought-idea--plan-work-review/
 ## Running
 
 ```bash
-agent-factory run -dir examples/thought-idea--plan-work-review
+you run -dir examples/thought-idea--plan-work-review
 ```
 
 Or submit work programmatically:
 
 ```bash
 cp my-task.md examples/thought-idea--plan-work-review/inputs/task/default/
-agent-factory run -dir examples/thought-idea--plan-work-review
+you run -dir examples/thought-idea--plan-work-review
 ```
 
 ## Retained Sample Input

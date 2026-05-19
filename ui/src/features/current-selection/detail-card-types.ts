@@ -62,10 +62,14 @@ export interface ExecutionDetailsSectionProps {
 
 export interface InferenceAttemptsSectionProps {
   attempts: DashboardInferenceAttempt[];
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+  selectedProviderSessionKey?: string | null;
 }
 
 export interface InferenceAttemptCardProps {
   attempt: DashboardInferenceAttempt;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+  selectedProviderSessionKey?: string | null;
 }
 
 export interface InferenceAttemptDetailProps {
