@@ -41,9 +41,9 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 		if workTypeID == "" {
 			workTypeID = opts.DefaultWorkTypeID
 		}
-		payload, err := rawWorkPayload(work.Payload)
+		content, payload, err := normalizeWorkContent(work.Content, work.Payload)
 		if err != nil {
-			return nil, fmt.Errorf("work_request: works[%d] (%q) has invalid payload: %w", i, work.Name, err)
+			return nil, fmt.Errorf("work_request: works[%d] (%q) has invalid content/payload: %w", i, work.Name, err)
 		}
 
 		itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
@@ -73,7 +73,7 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			CurrentChainingTraceID:   itemCurrentChainingTraceID,
 			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
 			TraceID:                  itemTraceID,
-			Content:                  append([]interfaces.WorkContentPart(nil), work.Content...),
+			Content:                  content,
 			Payload:                  payload,
 			Tags:                     tags,
 			TargetState:              work.State,
@@ -530,6 +530,84 @@ func rawWorkPayload(payload any) ([]byte, error) {
 	default:
 		return json.Marshal(value)
 	}
+}
+
+func normalizeWorkContent(content []interfaces.WorkContentPart, payload any) ([]interfaces.WorkContentPart, []byte, error) {
+	rawPayload, err := rawWorkPayload(payload)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(content) == 0 {
+		return canonicalContentFromLegacyPayload(rawPayload), rawPayload, nil
+	}
+
+	canonical := append([]interfaces.WorkContentPart(nil), content...)
+	legacyText, hasTextProjection, err := legacyTextPayloadFromCanonicalContent(canonical)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(rawPayload) == 0 {
+		if hasTextProjection {
+			return canonical, []byte(legacyText), nil
+		}
+		return canonical, nil, nil
+	}
+
+	payloadText, ok := legacyPayloadAsText(rawPayload)
+	if !ok {
+		return nil, nil, fmt.Errorf("payload conflicts with explicit content")
+	}
+	if !hasTextProjection {
+		return nil, nil, fmt.Errorf("payload cannot be combined with image-only canonical content")
+	}
+	if payloadText != legacyText {
+		return nil, nil, fmt.Errorf("payload conflicts with explicit content")
+	}
+	return canonical, []byte(legacyText), nil
+}
+
+func canonicalContentFromLegacyPayload(rawPayload []byte) []interfaces.WorkContentPart {
+	payloadText, ok := legacyPayloadAsText(rawPayload)
+	if !ok {
+		return nil
+	}
+	return []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: payloadText,
+	}}
+}
+
+func legacyTextPayloadFromCanonicalContent(content []interfaces.WorkContentPart) (string, bool, error) {
+	var builder strings.Builder
+	hasText := false
+	for _, part := range content {
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			hasText = true
+			builder.WriteString(part.Text)
+		case interfaces.WorkContentPartTypeImage:
+			continue
+		default:
+			return "", false, fmt.Errorf("unsupported content type %q", part.Type)
+		}
+	}
+	return builder.String(), hasText, nil
+}
+
+func legacyPayloadAsText(rawPayload []byte) (string, bool) {
+	if len(rawPayload) == 0 {
+		return "", false
+	}
+
+	var text string
+	if err := json.Unmarshal(rawPayload, &text); err == nil {
+		return text, true
+	}
+	if json.Valid(rawPayload) {
+		return "", false
+	}
+	return string(rawPayload), true
 }
 
 func normalizeSubmitChainingTraceDepth(depth int, currentChainingTraceID string, traceID string) int {
