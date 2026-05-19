@@ -69,8 +69,8 @@ Send an explicit authored `name` on every single-work submission.
 ```json
 {
   "name": "driver-incident-review",
-  "work_type_name": "task",
-  "trace_id": "optional caller trace id",
+  "workTypeName": "task",
+  "traceId": "optional caller trace id",
   "payload": {},
   "tags": {
     "priority": "high"
@@ -82,11 +82,13 @@ Send an explicit authored `name` on every single-work submission.
 Required fields for `POST /work`:
 
 - `name`
-- `work_type_name`
+- `workTypeName`
 
 `name` is required for single-work API submission and remains independently
-required as `works[].name` for batch requests. This change does not alter the
-existing batch naming rule.
+required as `works[].name` for batch requests. Single-work `POST /work` bodies
+use the OpenAPI camelCase fields such as `workTypeName` and `traceId`; batch
+request bodies continue to use `works[].work_type_name` and `trace_id`. This
+change does not alter the existing batch naming rule.
 
 ### Field Reference for structured schema
 
