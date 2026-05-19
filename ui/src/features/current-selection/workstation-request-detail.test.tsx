@@ -186,7 +186,7 @@ describe("WorkstationRequestDetailCard", () => {
     expect(onSelectWorkID).toHaveBeenCalledWith("work-blocked-story");
   });
 
-  it("renders request-authored prompt bodies inside inference attempts", () => {
+  it("renders markdown-authored request and response bodies inside inference attempts", () => {
     render(
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-markdown", {
@@ -204,6 +204,16 @@ describe("WorkstationRequestDetailCard", () => {
                 "bun test",
                 "```",
               ].join("\n"),
+              response: [
+                "### Reviewer response",
+                "",
+                "1. Run `bun run lint`",
+                "2. Confirm the diff is limited",
+                "",
+                "```text",
+                "bun run lint",
+                "```",
+              ].join("\n"),
             }),
           ],
           request_id: "request-markdown-story",
@@ -214,14 +224,23 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
 
     const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
+    const responseBody = within(inferenceAttempts.getByRole("region", { name: "Response body" }));
+    const requestListItems = requestBody.getAllByRole("listitem");
+    const responseListItems = responseBody.getAllByRole("listitem");
 
-    expect(requestBody.getByText(/## Review checklist/)).toBeTruthy();
-    expect(requestBody.getByText(/- Check the latest diff/)).toBeTruthy();
-    expect(requestBody.getByText(/```text/)).toBeTruthy();
-    expect(requestBody.getByText(/bun test/)).toBeTruthy();
+    expect(requestBody.getByRole("heading", { level: 2, name: "Review checklist" })).toBeTruthy();
+    expect(requestBody.getByRole("list")).toBeTruthy();
+    expect(requestBody.getByText("Check the latest diff")).toBeTruthy();
+    expect(requestListItems[1]?.textContent).toBe("Run bun test before approval");
+    expect(requestBody.getAllByText(/bun test/)).toHaveLength(2);
+    expect(responseBody.getByRole("heading", { level: 3, name: "Reviewer response" })).toBeTruthy();
+    expect(responseBody.getByRole("list")).toBeTruthy();
+    expect(responseListItems[0]?.textContent).toBe("Run bun run lint");
+    expect(responseBody.getByText("Confirm the diff is limited")).toBeTruthy();
+    expect(responseBody.getAllByText(/bun run lint/)).toHaveLength(2);
   });
 
-  it("renders ordered-list prompt bodies verbatim inside inference attempts", () => {
+  it("renders ordered-list prompt bodies as structured lists inside inference attempts", () => {
     render(
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-ordered", {
@@ -242,9 +261,11 @@ describe("WorkstationRequestDetailCard", () => {
 
     const inferenceAttempts = within(screen.getByRole("region", { name: "Inference attempts" }));
     const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
+    const requestListItems = requestBody.getAllByRole("listitem");
 
-    expect(requestBody.getByText(/1\. Run `bun run lint`/)).toBeTruthy();
-    expect(requestBody.getByText(/2\. `bun run test:unit`/)).toBeTruthy();
+    expect(requestBody.getByRole("list")).toBeTruthy();
+    expect(requestListItems[0]?.textContent).toBe("Run bun run lint");
+    expect(requestListItems[1]?.textContent).toBe("bun run test:unit");
   });
 
   it("renders plain-text prompts as readable request bodies inside inference attempts", () => {
@@ -269,11 +290,16 @@ describe("WorkstationRequestDetailCard", () => {
     const inferenceAttemptsRegion = screen.getByRole("region", { name: "Inference attempts" });
     const inferenceAttempts = within(inferenceAttemptsRegion);
 
-    expect(inferenceAttempts.queryByRole("heading", { level: 1 })).toBeNull();
-    expect(inferenceAttempts.queryByRole("heading", { level: 2 })).toBeNull();
-    expect(inferenceAttempts.queryByRole("heading", { level: 3 })).toBeNull();
-    expect(inferenceAttempts.queryByRole("list")).toBeNull();
-    expect(inferenceAttemptsRegion.querySelectorAll("pre")).toHaveLength(1);
+    const requestBody = within(inferenceAttempts.getByRole("region", { name: "Request body" }));
+
+    expect(requestBody.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(requestBody.queryByRole("heading", { level: 2 })).toBeNull();
+    expect(requestBody.queryByRole("heading", { level: 3 })).toBeNull();
+    expect(requestBody.queryByRole("list")).toBeNull();
+    expect(
+      requestBody.getByText(/Review the current story before approval\./).closest("p"),
+    ).not.toBeNull();
+    expect(inferenceAttemptsRegion.querySelectorAll("pre")).toHaveLength(0);
     expect(inferenceAttempts.getByText(/Review the current story before approval\./)).toBeTruthy();
     expect(
       inferenceAttempts.getByText(/Keep the existing response rendering unchanged\./),
@@ -302,6 +328,39 @@ describe("WorkstationRequestDetailCard", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(inferenceAttempts.getByText(/<button>danger<\/button>/)).toBeTruthy();
     expect(inferenceAttempts.getByText(/<script>alert\("xss"\)<\/script>/)).toBeTruthy();
+  });
+
+  it("keeps explicit pending and unavailable inference response states readable", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-response-states", {
+          inference_attempts: [
+            inferenceAttempt("dispatch-review-response-states", {
+              attempt: 1,
+              inference_request_id: "dispatch-review-response-states/inference-request/1",
+              outcome: "FAILED",
+              prompt: "Summarize the review findings.",
+              response_time: "2026-04-08T12:00:02Z",
+            }),
+            inferenceAttempt("dispatch-review-response-states", {
+              attempt: 2,
+              inference_request_id: "dispatch-review-response-states/inference-request/2",
+              prompt: "Retry after the failure.",
+            }),
+          ],
+          request_id: "request-response-states",
+        })}
+      />,
+    );
+
+    const inferenceAttemptsRegion = screen.getByRole("region", { name: "Inference attempts" });
+
+    expect(
+      within(inferenceAttemptsRegion).getByText(
+        "Provider response text is not available for this inference attempt.",
+      ),
+    ).toBeTruthy();
+    expect(within(inferenceAttemptsRegion).getByText("Awaiting provider response.")).toBeTruthy();
   });
 
   it("renders errored workstation-request details from projected failure fields", () => {

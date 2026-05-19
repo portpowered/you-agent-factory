@@ -40,8 +40,7 @@ export const INFERENCE_ATTEMPT_DETAIL_CLASS = cx(
 );
 // tailwind-exception: intrinsic-sizing
 export const INFERENCE_ATTEMPT_TEXT_CLASS = cx(
-  "m-0 min-h-[20rem] whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 md:min-h-[26rem] lg:min-h-[min(70vh,36rem)] [overflow-wrap:anywhere]",
-  DASHBOARD_BODY_CODE_CLASS,
+  "min-h-[20rem] md:min-h-[26rem] lg:min-h-[min(70vh,36rem)]",
 );
 export const REQUEST_AUTHORED_TEXT_CLASS = cx(
   "grid gap-3 rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-3 [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-af-overlay/12 [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-af-overlay/8 [&_pre]:bg-af-overlay/12 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5",
@@ -112,7 +111,7 @@ export function InferenceAttemptTextSection({
   return (
     <section aria-label={label} className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <pre className={INFERENCE_ATTEMPT_TEXT_CLASS}>{value}</pre>
+      <AuthoredBodyText className={INFERENCE_ATTEMPT_TEXT_CLASS} value={value} />
     </section>
   );
 }
@@ -203,11 +202,17 @@ export function normalizeDetailText(value: string | undefined): string | undefin
   return trimmed ? trimmed : undefined;
 }
 
-export function AuthoredBodyText({ value }: { value: string }) {
+export function AuthoredBodyText({
+  className,
+  value,
+}: {
+  className?: string;
+  value: string;
+}) {
   const blocks = parseRequestAuthoredBlocks(value);
 
   return (
-    <div className={REQUEST_AUTHORED_TEXT_CLASS}>
+    <div className={cx(REQUEST_AUTHORED_TEXT_CLASS, className)}>
       {blocks.map((block, index) => renderRequestAuthoredBlock(block, index))}
     </div>
   );
