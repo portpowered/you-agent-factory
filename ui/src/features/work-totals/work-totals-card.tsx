@@ -20,7 +20,7 @@ interface StatCardProps {
 }
 
 const STAT_CARD_CLASS =
-  "min-h-0 rounded-lg border border-af-overlay/10 bg-af-surface/72 p-2 px-3 backdrop-blur-lg";
+  "min-h-0 rounded-lg border bg-af-surface/72 p-2 px-3 backdrop-blur-lg";
 
 export function WorkTotalsCard({
   completedCount,
@@ -88,6 +88,7 @@ function StatCard({ label, locale, value, valueLabel, tone }: StatCardProps) {
       aria-label={valueLabel}
       className={cx(
         STAT_CARD_CLASS,
+        tone === "neutral" && "border-af-overlay/10",
         tone === "live" && "border-af-info/30",
         tone === "success" && "border-af-success/30",
         tone === "danger" && "border-af-danger/30",

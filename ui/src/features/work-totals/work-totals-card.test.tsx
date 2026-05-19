@@ -33,6 +33,7 @@ describe("WorkTotalsCard", () => {
     expect(inProgressCard?.className).toContain("border-af-info/30");
     expect(completedCard?.className).toContain("border-af-success/30");
     expect(failedCard?.className).toContain("border-af-danger/30");
+    expect(dispatchedCard?.className).toContain("border-af-overlay/10");
     expect(dispatchedCard?.className).not.toContain("border-af-info/30");
     expect(dispatchedCard?.className).not.toContain("border-af-success/30");
     expect(dispatchedCard?.className).not.toContain("border-af-danger/30");
