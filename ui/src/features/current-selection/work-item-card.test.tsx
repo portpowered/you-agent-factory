@@ -1184,6 +1184,16 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       name: "Inference attempts",
     });
     const attemptCards = within(inferenceAttempts).getAllByRole("article");
+    expect(
+      within(inferenceAttempts).getByRole("article", {
+        name: "Inference attempt 1",
+      }),
+    ).toBe(attemptCards[0]);
+    expect(
+      within(inferenceAttempts).getByRole("article", {
+        name: "Inference attempt 2",
+      }),
+    ).toBe(attemptCards[1]);
 
     expect(attemptCards).toHaveLength(2);
     expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();

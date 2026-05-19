@@ -4,6 +4,7 @@ import {
 } from "../../../i18n";
 
 export interface CurrentSelectionDispatchHistoryMessages {
+  inferenceAttemptAccessibleLabel: (attemptNumber: number) => string;
   awaitingProviderResponse: string;
   commandLabel: string;
   currentDispatchBadge: string;
@@ -52,6 +53,8 @@ export interface CurrentSelectionDispatchHistoryMessages {
 
 const currentSelectionDispatchHistoryMessagesByLocale = {
   en: {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `Inference attempt ${attemptNumber}`,
     awaitingProviderResponse: "Awaiting provider response.",
     commandLabel: "Command",
     currentDispatchBadge: "Current dispatch",
@@ -104,6 +107,8 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "Work selected",
   },
   ja: {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `推論試行 ${attemptNumber}`,
     awaitingProviderResponse: "プロバイダー応答を待機しています。",
     commandLabel: "コマンド",
     currentDispatchBadge: "現在のディスパッチ",
@@ -157,6 +162,8 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "作業を選択中",
   },
   ko: {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `추론 시도 ${attemptNumber}`,
     awaitingProviderResponse: "공급자 응답을 기다리는 중입니다.",
     commandLabel: "명령",
     currentDispatchBadge: "현재 디스패치",
@@ -209,6 +216,8 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "작업 선택됨",
   },
   "zh-CN": {
+    inferenceAttemptAccessibleLabel: (attemptNumber: number) =>
+      `推理尝试 ${attemptNumber}`,
     awaitingProviderResponse: "正在等待提供方响应。",
     commandLabel: "命令",
     currentDispatchBadge: "当前分派",

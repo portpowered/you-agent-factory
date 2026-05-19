@@ -55,7 +55,9 @@ export function InferenceAttemptCard({
 
   return (
     <article
-      aria-label={dispatchHistoryMessages.inferenceAttemptLabel(attempt.attempt)}
+      aria-label={dispatchHistoryMessages.inferenceAttemptAccessibleLabel(
+        attempt.attempt,
+      )}
       className={INFERENCE_ATTEMPT_CARD_CLASS}
     >
       <div className="flex items-start justify-between gap-3">
