@@ -156,13 +156,13 @@ This scaffold intentionally excludes reviewer, thoughts or ideation, and cron st
 Create the scaffold from your project root:
 
 ` + "```bash" + `
-agent-factory init --type ralph --dir ralph-factory
+you init --type ralph --dir ralph-factory
 ` + "```" + `
 
 Run it from your project root:
 
 ` + "```bash" + `
-agent-factory run --dir ralph-factory
+you run --dir ralph-factory
 ` + "```" + `
 
 Seed an initial request without moving any generated files:

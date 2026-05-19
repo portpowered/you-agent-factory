@@ -11,7 +11,6 @@ import type {
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cx } from "../../lib/cx";
 import {
   CURRENT_ACTIVITY_NODE_TYPES,
@@ -70,30 +69,13 @@ const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
 
 const CURRENT_ACTIVITY_CARD_CLASS =
   "relative flex h-full min-h-0 min-w-0 flex-col rounded-3xl border border-af-overlay/10 bg-af-surface/72 p-4 shadow-af-panel backdrop-blur-lg md:p-5";
-const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
-const CURRENT_ACTIVITY_EYEBROW_CLASS =
-  "mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent";
 const CURRENT_ACTIVITY_LEGEND_CLASS =
   "absolute left-4 right-4 top-4 z-10 md:left-7 md:right-auto md:top-7";
-const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
   | { kind: "state-node"; placeId: string }
   | { kind: "work-item"; dispatchId: string; nodeId: string; workID: string };
-
-function CurrentActivityCardHeading({ locale }: { locale?: string }) {
-  const messages = getWorkflowActivityShellMessages(locale);
-
-  return (
-    <div>
-      <p className={CURRENT_ACTIVITY_EYEBROW_CLASS}>{messages.eyebrow}</p>
-      <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
-        {messages.title}
-      </h2>
-    </div>
-  );
-}
 
 interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (value: FactoryValue) => Promise<FactoryValue>;
@@ -139,13 +121,9 @@ export function ReactFlowCurrentActivityCard(
 
   return (
     <section
-      aria-labelledby="workflow-graph-heading"
+      aria-label={shellMessages.title}
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
-      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityCardHeading locale={props.locale} />
-      </div>
-
       <div className="relative min-h-0 flex-1">
         <DashboardFlowAxisLegend
           className={CURRENT_ACTIVITY_LEGEND_CLASS}
@@ -155,7 +133,6 @@ export function ReactFlowCurrentActivityCard(
           locale={props.locale}
         />
         <section
-          aria-describedby="workflow-graph-heading"
           aria-label={shellMessages.viewportLabel}
           className={cx(
             "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",

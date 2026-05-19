@@ -66,6 +66,6 @@ changes scoped to the current work item.
 
 ## Related
 
-- `infinite-you docs config`
-- `infinite-you docs workstation`
-- `infinite-you docs templates`
+- `you docs config`
+- `you docs workstation`
+- `you docs templates`

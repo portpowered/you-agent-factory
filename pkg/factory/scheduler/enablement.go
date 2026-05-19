@@ -102,6 +102,10 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		return interfaces.EnabledTransition{}, false
 	}
 
+	if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
+		return et, true
+	}
+
 	// Separate unguarded and guarded arcs.
 	var unguarded, guarded []int
 	for i := range tr.InputArcs {
@@ -171,6 +175,114 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		if len(matched) > 0 {
 			guardBindings[key] = &matched[0]
 		}
+	}
+
+	return interfaces.EnabledTransition{
+		TransitionID: tr.ID,
+		WorkerType:   tr.WorkerType,
+		Bindings:     result,
+		ArcModes:     arcModes,
+	}, true
+}
+
+func (e *EnablementEvaluator) findSingleTokenBindingTransition(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) (interfaces.EnabledTransition, bool) {
+	if tr == nil || snapshot == nil || len(tr.InputArcs) == 0 {
+		return interfaces.EnabledTransition{}, false
+	}
+
+	hasGuard := false
+	for i := range tr.InputArcs {
+		if !isSingleTokenCardinality(tr.InputArcs[i].Cardinality) {
+			return interfaces.EnabledTransition{}, false
+		}
+		if tr.InputArcs[i].Guard != nil {
+			hasGuard = true
+		}
+	}
+	if !hasGuard {
+		return interfaces.EnabledTransition{}, false
+	}
+
+	order := make([]int, 0, len(tr.InputArcs))
+	for i := range tr.InputArcs {
+		if tr.InputArcs[i].Guard == nil {
+			order = append(order, i)
+		}
+	}
+	for i := range tr.InputArcs {
+		if tr.InputArcs[i].Guard != nil {
+			order = append(order, i)
+		}
+	}
+
+	runtime := petri.RuntimeGuardContext{
+		Now:                 e.now(),
+		CurrentTransitionID: tr.ID,
+		DispatchHistory:     snapshot.DispatchHistory,
+		RuntimeConfig:       e.runtimeConfig,
+		TransitionWorkers:   transitionWorkerTypes(snapshot.Topology, tr),
+	}
+
+	bindings := make(map[string]*interfaces.Token, len(tr.InputArcs))
+	result := make(map[string][]interfaces.Token, len(tr.InputArcs))
+	arcModes := make(map[string]interfaces.ArcMode, len(tr.InputArcs))
+	usedConsumeTokenIDs := make(map[string]bool)
+
+	var search func(position int) bool
+	search = func(position int) bool {
+		if position >= len(order) {
+			return true
+		}
+
+		arc := &tr.InputArcs[order[position]]
+		key := arcKey(arc)
+		candidates := stableTokens(snapshot.Marking.TokensInPlace(arc.PlaceID))
+		if len(candidates) == 0 {
+			return false
+		}
+
+		matched := candidates
+		if arc.Guard != nil {
+			guardMatched, ok := e.evaluateGuard(arc.Guard, runtime, candidates, bindings, &snapshot.Marking)
+			if !ok || len(guardMatched) == 0 {
+				return false
+			}
+			matched = stableTokens(guardMatched)
+		}
+
+		for _, candidate := range matched {
+			if arc.Mode != interfaces.ArcModeObserve && usedConsumeTokenIDs[candidate.ID] {
+				continue
+			}
+
+			candidateCopy := candidate
+			bindings[key] = &candidateCopy
+			result[key] = []interfaces.Token{candidateCopy}
+			arcModes[key] = arc.Mode
+			if arc.Mode != interfaces.ArcModeObserve {
+				usedConsumeTokenIDs[candidate.ID] = true
+			}
+
+			if search(position + 1) {
+				return true
+			}
+
+			delete(bindings, key)
+			delete(result, key)
+			delete(arcModes, key)
+			if arc.Mode != interfaces.ArcModeObserve {
+				delete(usedConsumeTokenIDs, candidate.ID)
+			}
+		}
+
+		return false
+	}
+
+	if !search(0) {
+		return interfaces.EnabledTransition{}, false
 	}
 
 	return interfaces.EnabledTransition{

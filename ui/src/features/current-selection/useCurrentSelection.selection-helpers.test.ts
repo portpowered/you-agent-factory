@@ -21,7 +21,6 @@ import {
   resolveTrackedWorkSelection,
   terminalHistoryItemsForPlace,
 } from "./useCurrentSelection.selection-helpers";
-import { getCurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 
 const reviewInputPlace: DashboardPlaceRef = {
   kind: "work_state",
@@ -130,19 +129,23 @@ describe("useCurrentSelection.selection-helpers", () => {
     };
 
     expect(
-      buildTerminalWorkItems(["Alpha Story"], [attempt], {
-        [workAlpha.work_id]: failureDetail,
-      }),
+      buildTerminalWorkItems(
+        ["Alpha Story"],
+        [attempt],
+        {
+          [workAlpha.work_id]: failureDetail,
+        },
+      ),
     ).toEqual([
       {
         attempts: [attempt],
-        contextText: "Failed at Review",
         dispatchID: "dispatch-review",
         failureMessage: "Failed after dispatch",
         failureReason: "dispatch_failed",
         label: "Alpha Story",
         traceWorkID: workAlpha.work_id,
         workItem: workAlpha,
+        workstationName: "Review",
       },
     ]);
     expect(findStatePlace(snapshot, reviewInputPlace.place_id)).toEqual(reviewInputPlace);
@@ -492,19 +495,18 @@ describe("useCurrentSelection.selection-helpers", () => {
       ),
     ).toEqual([
       expect.objectContaining({
-        contextText: "Failed at setup-workspace",
         dispatchID: "dispatch-failed",
+        workstationName: "setup-workspace",
       }),
     ]);
   });
 
-  it("builds terminal work context with localized templates while preserving data values", () => {
-    const attempt: DashboardProviderSessionAttempt = {
+  it("renders completed terminal context as completed plus workstation without provider-session text", () => {
+    const completedAttempt: DashboardProviderSessionAttempt = {
       dispatch_id: "dispatch-review",
-      inference_attempts: [],
-      outcome: "FAILED",
+      outcome: "ACCEPTED",
       provider_session: {
-        id: "sess_review",
+        id: "sess-review",
         kind: "session_id",
         provider: "codex",
       },
@@ -514,19 +516,12 @@ describe("useCurrentSelection.selection-helpers", () => {
     };
 
     expect(
-      buildTerminalWorkItems(
-        ["Alpha Story"],
-        [attempt],
-        undefined,
-        undefined,
-        getCurrentSelectionDetailMessages("zh-CN"),
-      ),
+      buildTerminalWorkItems(["Alpha Story"], [completedAttempt]),
     ).toEqual([
       expect.objectContaining({
-        contextText: "失败 于 Review; codex / session_id / sess_review",
-        label: "Alpha Story",
-        traceWorkID: workAlpha.work_id,
+        workstationName: "Review",
       }),
     ]);
   });
+
 });

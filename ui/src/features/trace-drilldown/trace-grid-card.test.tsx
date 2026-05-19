@@ -139,6 +139,9 @@ describe("TraceGridBentoCard", () => {
     );
 
     const card = screen.getByRole("article", { name: "Trace drill-down" });
+    expect(
+      within(card).queryByText("Resolves from selected-tick factory event history."),
+    ).toBeNull();
     expect(within(card).getByText("Trace dispatch grid")).toBeTruthy();
     expect(within(card).getByText("Dispatch flow")).toBeTruthy();
     expect(

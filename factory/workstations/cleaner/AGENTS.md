@@ -44,6 +44,7 @@ You may have more than one item working at a time, so long as they are not overl
 you should update `factory/internal/progress.md` and `factory/internal/meta.md`
 in accordance to the changes you made.
 
+Please ensure that these files are not kept in git history and any file under internal is not kept in git history as the intent is to keep those running at all times.
 ## Step 4 - completion
 
 after you are done, you MUST respond with <COMPLETE>.

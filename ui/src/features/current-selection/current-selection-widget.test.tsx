@@ -101,6 +101,8 @@ function buildSelectedWorkItemFixture() {
   };
 
   return {
+    dispatchId,
+    execution,
     executionDetails: selectWorkItemExecutionDetails({
       activeExecution: execution,
       dispatchID: dispatchId,
@@ -968,13 +970,26 @@ describe("CurrentSelectionWidget", () => {
         name: "Inference attempts",
       }),
     ).toBeTruthy();
+    const inferenceAttempts = within(
+      within(currentSelection).getByRole("region", { name: "Inference attempts" }),
+    );
+    const requestBody = within(
+      inferenceAttempts.getByRole("region", { name: "Request body" }),
+    );
+
     expect(
-      within(currentSelection).getByText(/## Review checklist/),
+      requestBody.getByRole("heading", {
+        level: 2,
+        name: "Review checklist",
+      }),
     ).toBeTruthy();
+    expect(requestBody.getByRole("list")).toBeTruthy();
+    expect(requestBody.getByText("Check the latest diff")).toBeTruthy();
     expect(
-      within(currentSelection).getByText(/- Check the latest diff/),
-    ).toBeTruthy();
-    expect(within(currentSelection).getByText(/```text/)).toBeTruthy();
+      requestBody.queryByText("## Review checklist"),
+    ).toBeNull();
+    expect(requestBody.queryByText("```text")).toBeNull();
+    expect(requestBody.getAllByText(/bun test/)).toHaveLength(2);
     expect(
       within(currentSelection).queryByRole("heading", { name: "Active work" }),
     ).toBeNull();

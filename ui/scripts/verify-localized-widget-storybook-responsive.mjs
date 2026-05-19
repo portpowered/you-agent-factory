@@ -24,7 +24,7 @@ export async function verifyLocalizedSubmitWorkCard({
     "Localized submit work button",
   );
   await expectVisible(
-    card.getByText("先选择一个工作类型，然后即可继续。请求详情为可选。"),
+    card.getByText("先选择工作类型并填写请求名称，然后即可继续。"),
     "Localized submit work guidance",
   );
   await expectNoHorizontalOverflow(
@@ -99,12 +99,8 @@ export async function verifyLocalizedWorkflowActivity({
   viewport,
 }) {
   await expectVisible(
-    page.getByRole("heading", { name: "当前活动" }),
-    "Localized workflow activity heading",
-  );
-  await expectVisible(
-    page.getByText("操作员视图"),
-    "Localized workflow activity eyebrow",
+    page.getByRole("region", { name: "当前活动" }),
+    "Localized workflow activity region",
   );
   await expectVisible(
     page.getByRole("region", { name: "工作图视口" }),
