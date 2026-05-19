@@ -878,6 +878,9 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONReque
 	if err := rejectConflictingChainingTraceFields(fields, ""); err != nil {
 		return factoryapi.SubmitWorkJSONRequestBody{}, err
 	}
+	if err := validateWorkContentField(fields, ""); err != nil {
+		return factoryapi.SubmitWorkJSONRequestBody{}, err
+	}
 	return req, nil
 }
 
@@ -924,6 +927,9 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 		if err := rejectConflictingChainingTraceFields(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
 			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
 		}
+		if err := validateWorkContentField(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
+			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
+		}
 	}
 	return req, nil
 }
@@ -968,6 +974,85 @@ func rejectConflictingChainingTraceFields(fields map[string]json.RawMessage, pre
 		fields[legacyTraceIDField],
 	); err != nil {
 		return requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+	}
+	return nil
+}
+
+func validateWorkContentField(fields map[string]json.RawMessage, prefix string) error {
+	contentRaw, ok := fields["content"]
+	if !ok {
+		return nil
+	}
+
+	var partPayloads []json.RawMessage
+	if err := json.Unmarshal(contentRaw, &partPayloads); err != nil {
+		return requestFieldValidationError{message: fmt.Sprintf("%scontent must be an array", prefix)}
+	}
+	for i, payload := range partPayloads {
+		var partFields map[string]json.RawMessage
+		if err := json.Unmarshal(payload, &partFields); err != nil {
+			return requestFieldValidationError{message: fmt.Sprintf("%scontent[%d] must be an object", prefix, i)}
+		}
+		if _, err := validatedRawWorkContentPart(partFields, fmt.Sprintf("%scontent[%d].", prefix, i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix string) (interfaces.WorkContentPart, error) {
+	typeRaw, ok := fields["type"]
+	if !ok {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype is required", prefix)}
+	}
+
+	var partType string
+	if err := json.Unmarshal(typeRaw, &partType); err != nil || partType == "" {
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be a non-empty string", prefix)}
+	}
+
+	switch interfaces.WorkContentPartType(partType) {
+	case interfaces.WorkContentPartTypeText:
+		if err := requireOnlyFields(fields, prefix, "type", "text"); err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		textRaw, ok := fields["text"]
+		if !ok {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stext is required for text content parts", prefix)}
+		}
+		var text string
+		if err := json.Unmarshal(textRaw, &text); err != nil {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stext must be a string", prefix)}
+		}
+		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeText, Text: text}, nil
+	case interfaces.WorkContentPartTypeImage:
+		if err := requireOnlyFields(fields, prefix, "type", "file"); err != nil {
+			return interfaces.WorkContentPart{}, err
+		}
+		fileRaw, ok := fields["file"]
+		if !ok {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile is required for image content parts", prefix)}
+		}
+		var file string
+		if err := json.Unmarshal(fileRaw, &file); err != nil || file == "" {
+			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile must be a non-empty string", prefix)}
+		}
+		return interfaces.WorkContentPart{Type: interfaces.WorkContentPartTypeImage, File: file}, nil
+	default:
+		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", prefix)}
+	}
+}
+
+func requireOnlyFields(fields map[string]json.RawMessage, prefix string, allowed ...string) error {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, field := range allowed {
+		allowedSet[field] = struct{}{}
+	}
+	for field := range fields {
+		if _, ok := allowedSet[field]; ok {
+			continue
+		}
+		return requestFieldValidationError{message: fmt.Sprintf("%s%s is not supported", prefix, field)}
 	}
 	return nil
 }
