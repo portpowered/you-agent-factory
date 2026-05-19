@@ -15,6 +15,7 @@ import (
 
 // SubmitConfig holds parameters for the submit command.
 type SubmitConfig struct {
+	Name         string
 	WorkTypeName string
 	Payload      string
 	Port         int
@@ -22,6 +23,10 @@ type SubmitConfig struct {
 
 // Submit posts work to a running factory via HTTP.
 func Submit(cfg SubmitConfig) error {
+	name := strings.TrimSpace(cfg.Name)
+	if name == "" {
+		return fmt.Errorf("--name is required")
+	}
 	if cfg.WorkTypeName == "" {
 		return fmt.Errorf("--work-type-name is required")
 	}
@@ -53,6 +58,7 @@ func Submit(cfg SubmitConfig) error {
 	}
 
 	reqBody := factoryapi.SubmitWorkRequest{
+		Name:         name,
 		WorkTypeName: cfg.WorkTypeName,
 		Payload:      payload,
 	}

@@ -170,7 +170,7 @@ func TestSubmitWork(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd", "traceId": "test-trace-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"name":"draft-prd","workTypeName": "prd", "traceId": "test-trace-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -251,7 +251,7 @@ func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	server := httptest.NewServer(newTestServer(mf).Handler())
 	defer server.Close()
 
-	submitResp, err := http.Post(server.URL+"/work", "application/json", bytes.NewBufferString(`{"workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
+	submitResp, err := http.Post(server.URL+"/work", "application/json", bytes.NewBufferString(`{"name":"api-surface-smoke","workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -528,7 +528,7 @@ func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T)
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"name":"chain-submit","workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -565,7 +565,7 @@ func TestSubmitWork_MatchingTraceAliasesNormalizeAtBoundary(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "traceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
+	body := `{"name":"chain-submit","workTypeName": "prd", "currentChainingTraceId": "chain-submit-1", "traceId": "chain-submit-1", "payload": {"title": "Draft PRD"}}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -642,7 +642,7 @@ func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`
+	body := `{"name":"runtime-relations","workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -858,12 +858,50 @@ func TestSubmitWorkMissingWorkType(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"traceId": "test-trace-1"}`
+	body := `{"name":"missing-work-type","traceId": "test-trace-1"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "workTypeName is required")
+}
+
+func TestSubmitWorkMissingName(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"workTypeName":"task","traceId":"test-trace-1","payload":{"title":"unnamed"}}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
+}
+
+func TestSubmitWorkBlankName(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"name":"   \t\n ","workTypeName":"task","traceId":"test-trace-1","payload":{"title":"blank"}}`
+	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	}
 }
 
 func TestSubmitWorkMarkdownPayload(t *testing.T) {
@@ -874,7 +912,7 @@ func TestSubmitWorkMarkdownPayload(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "tasks", "traceId": "trace-markdown", "payload": "# Fix lint\n\nRun gofmt."}`
+	body := `{"name":"markdown-fix","workTypeName": "tasks", "traceId": "trace-markdown", "payload": "# Fix lint\n\nRun gofmt."}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -935,7 +973,7 @@ func TestSubmitWorkAutoTraceID(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	body := `{"workTypeName": "prd"}`
+	body := `{"name":"auto-trace","workTypeName": "prd"}`
 	req := httptest.NewRequest("POST", "/work", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

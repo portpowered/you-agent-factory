@@ -51,6 +51,16 @@ infinite-you factory query --port 7437 --json
 the answer from local `factory.json` files, so the output reflects the active
 default-root runtime or the currently activated named factory on that server.
 
+## Submit Work From The CLI
+
+Use `submit` for single-work API submission when the factory service is already running:
+
+```sh
+infinite-you submit --name "driver-incident-review" --work-type-name task --payload request.md
+```
+
+`--name`, `--work-type-name`, and `--payload` are required for unary CLI submission.
+
 
 ## Example
 Here's an example of the factory for infinite-you dispatching roughly 5-10 agents. 
