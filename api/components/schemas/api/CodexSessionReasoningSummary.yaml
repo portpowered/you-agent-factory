@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required:
+  - order
+  - sourceType
+properties:
+  order:
+    type: integer
+    minimum: 1
+    description: Chronological order of the reasoning entry in the session stream.
+  turnIndex:
+    type: integer
+    minimum: 1
+    description: One-based execution turn index associated with the reasoning entry when inferable.
+  sourceType:
+    type: string
+    description: Event or response item type that carried the reasoning entry.
+  text:
+    type: string
+    description: Reasoning text when plaintext content is present.
+  summary:
+    type: string
+    description: Compact reasoning summary when present.
+  encrypted:
+    type: boolean
+    description: Whether the reasoning entry only exposed encrypted content.

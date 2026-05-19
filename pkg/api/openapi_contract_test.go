@@ -303,11 +303,12 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	if !ok {
 		t.Fatalf("components.schemas.Work.properties is missing")
 	}
-	for _, field := range []string{"name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "payload", "tags"} {
+	for _, field := range []string{"name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "payload", "tags", "relations"} {
 		if _, ok := workProperties[field].(map[string]any); !ok {
 			t.Fatalf("components.schemas.Work.properties.%s is missing", field)
 		}
 	}
+	assertArrayItemRef(t, workProperties, "relations", "#/components/schemas/Relation")
 	if _, ok := workProperties["work_type_id"]; ok {
 		t.Fatalf("components.schemas.Work.properties.work_type_id must not be advertised for submitted work items")
 	}

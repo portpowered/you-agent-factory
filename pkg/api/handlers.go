@@ -197,12 +197,14 @@ func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factory
 	}
 
 	// Collect, filter, and sort public work for deterministic pagination.
+	workNamesByID := publicWorkNamesByID(snapshot.Marking.Tokens)
 	items := make([]listWorkItem, 0, len(snapshot.Marking.Tokens))
 	for _, t := range snapshot.Marking.Tokens {
 		if !publicWorkToken(t) {
 			continue
 		}
 		work := tokenToWork(t, snapshot.Topology)
+		work.Relations = generatedWorkRelations(t, work.Name, workNamesByID)
 		if !workMatchesListFilters(work, params) {
 			continue
 		}
@@ -484,6 +486,36 @@ func tokenToWork(t *interfaces.Token, net *state.Net) factoryapi.Work {
 		TraceId:                  stringPtrIfNotEmpty(t.Color.TraceID),
 		Tags:                     stringMapPtr(t.Color.Tags),
 	}
+}
+
+func publicWorkNamesByID(tokens map[string]*interfaces.Token) map[string]string {
+	names := make(map[string]string, len(tokens))
+	for _, token := range tokens {
+		if !publicWorkToken(token) || token.Color.WorkID == "" {
+			continue
+		}
+		names[token.Color.WorkID] = firstNonEmptyString(token.Color.Name, token.Color.WorkID, token.ID)
+	}
+	return names
+}
+
+func generatedWorkRelations(token *interfaces.Token, sourceWorkName string, workNamesByID map[string]string) *[]factoryapi.Relation {
+	if token == nil || len(token.Color.Relations) == 0 {
+		return nil
+	}
+
+	relations := make([]factoryapi.Relation, 0, len(token.Color.Relations))
+	for _, relation := range token.Color.Relations {
+		targetWorkName := firstNonEmptyString(workNamesByID[relation.TargetWorkID], relation.TargetWorkID)
+		relations = append(relations, factoryapi.Relation{
+			Type:           factoryapi.RelationType(relation.Type),
+			SourceWorkName: sourceWorkName,
+			TargetWorkName: targetWorkName,
+			TargetWorkId:   stringPtrIfNotEmpty(relation.TargetWorkID),
+			RequiredState:  stringPtrIfNotEmpty(relation.RequiredState),
+		})
+	}
+	return &relations
 }
 
 func workStateForToken(t *interfaces.Token, net *state.Net) *factoryapi.WorkState {

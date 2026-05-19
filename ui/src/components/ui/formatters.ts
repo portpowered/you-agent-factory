@@ -1,7 +1,5 @@
 import type {
   DashboardProviderSession,
-  DashboardTraceMutation,
-  DashboardTraceToken,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
 
@@ -154,26 +152,6 @@ export function formatWorkstationRunOutcome(
   };
 }
 
-export function formatTraceToken(token: DashboardTraceToken): string {
-  return `${token.work_id || token.token_id} · ${token.place_id}`;
-}
-
-export function formatTraceMutation(mutation: DashboardTraceMutation): string {
-  const movement =
-    mutation.from_place && mutation.to_place
-      ? `${mutation.from_place} -> ${mutation.to_place}`
-      : mutation.to_place || mutation.from_place || "place unchanged";
-
-  const tokenLabel =
-    mutation.resulting_token?.work_id || mutation.resulting_token?.token_id || mutation.token_id;
-
-  if (mutation.reason) {
-    return `${mutation.type} ${tokenLabel} (${movement}) · ${mutation.reason}`;
-  }
-
-  return `${mutation.type} ${tokenLabel} (${movement})`;
-}
-
 export function formatProviderSession(session: DashboardProviderSession | undefined): string {
   if (!session?.id) {
     return "Unavailable";
@@ -279,4 +257,3 @@ function inferCodexSessionLogPath(
   const day = `${timestamp.getDate()}`.padStart(2, "0");
   return `~/.codex/sessions/${year}/${month}/${day}/rollout-${normalizedSessionID}.jsonl`;
 }
-

@@ -103,6 +103,52 @@ parent lineage:
 Read those directions literally: for `PARENT_CHILD`, `sourceWorkName` is the
 child and `targetWorkName` is the parent.
 
+## Reading Runtime Work Relations
+
+`GET /work` and `infinite-you work list` return `results[].relations` on each
+listed work item when that source work currently has outbound runtime
+relationships. Read every relation from the listed work item outward:
+
+- `sourceWorkName` is the listed work item that owns the `relations` entry.
+- `targetWorkName` is the other work item this source points at.
+- `targetWorkId`, when present, is the stable runtime ID for that target work.
+- `requiredState`, when present, is the target state the source is waiting on.
+  This is normally set on `DEPENDS_ON` relations and omitted for lineage-only
+  relation types.
+
+In enumeration output, the relation types mean:
+
+| Relation type | Read it as |
+|---------------|------------|
+| `DEPENDS_ON` | This listed work item is blocked until the target work item reaches `requiredState` (or `complete` when no explicit state is shown). |
+| `PARENT_CHILD` | This listed work item is the child and the target work item is its parent. |
+| `SPAWNED_BY` | This listed work item was created or fanned out from the target work item. |
+
+Example runtime relation entries:
+
+```json
+{
+  "type": "DEPENDS_ON",
+  "sourceWorkName": "review",
+  "targetWorkName": "draft",
+  "targetWorkId": "work-draft",
+  "requiredState": "complete"
+}
+```
+
+Read that as: the listed `review` work depends on `draft` completing.
+
+```json
+{
+  "type": "PARENT_CHILD",
+  "sourceWorkName": "story-auth",
+  "targetWorkName": "story-set",
+  "targetWorkId": "work-story-set"
+}
+```
+
+Read that as: the listed `story-auth` work is a child of `story-set`.
+
 ## Related
 
 - [CLI reference landing page](README.md)

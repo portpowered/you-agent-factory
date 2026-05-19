@@ -1,9 +1,9 @@
 import type { ComponentProps } from "react";
-import { expect, within } from "storybook/test";
+import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { getDashboardWorkChartSeriesStyle } from "./chart-contract";
-import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 import type { WorkChartModel } from "./trends";
+import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const populatedModel = {
   delta: {
@@ -146,7 +146,9 @@ function expectWorkChartPaddingContract(chart: HTMLElement): void {
   expect(chart.className).toContain("sm:pb-6");
   expect(chart.className).toContain("sm:pt-5");
 
-  const overlay = chart.querySelector<HTMLElement>("[data-work-chart-overlay='true']");
+  const overlay = chart.querySelector<HTMLElement>(
+    "[data-work-chart-overlay='true']",
+  );
 
   expect(overlay).not.toBeNull();
   expect(overlay?.className).toContain("px-5");
@@ -172,10 +174,28 @@ function renderWorkChartStoryShell(
   maxWidth: string,
 ) {
   return (
-    <div data-story-shell="work-chart" style={{ maxWidth, padding: "1rem", width: "100%" }}>
+    <div
+      data-story-shell="work-chart"
+      style={{ maxWidth, padding: "1rem", width: "100%" }}
+    >
       <WorkChart {...args} />
     </div>
   );
+}
+
+async function dragWorkChart(
+  chart: HTMLElement,
+  startFraction: number,
+  endFraction: number,
+) {
+  const rect = chart.getBoundingClientRect();
+  const startX = rect.left + rect.width * startFraction;
+  const endX = rect.left + rect.width * endFraction;
+  const y = rect.top + rect.height * 0.7;
+
+  fireEvent.mouseDown(chart, { clientX: startX, clientY: y });
+  fireEvent.mouseMove(chart, { clientX: endX, clientY: y });
+  fireEvent.mouseUp(chart, { clientX: endX, clientY: y });
 }
 
 export default {
@@ -196,10 +216,48 @@ export const Populated = {
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const chart = await canvas.findByRole("img", { name: "Work outcome chart" });
+    const chart = await canvas.findByRole("img", {
+      name: "Work outcome chart",
+    });
 
     expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
+  },
+};
+
+export const ZoomInteraction = {
+  render: (args: ComponentProps<typeof WorkChart>) =>
+    renderWorkChartStoryShell(args, "640px"),
+  args: {
+    model: populatedModel,
+    series: WORK_CHART_SERIES,
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const chart = await canvas.findByRole("img", {
+      name: "Work outcome chart",
+    });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
+
+    await dragWorkChart(chart, 0.1, 0.5);
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20");
+    await expect(canvas.getByText("Zoomed to ticks 10-20")).toBeVisible();
+
+    const reset = canvas.getByRole("button", {
+      name: "Reset work outcome chart zoom",
+    });
+    await expect(reset).toBeVisible();
+
+    await userEvent.click(reset);
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
+    expect(canvas.queryByText("Zoomed to ticks 10-20")).toBeNull();
   },
 };
 
@@ -236,7 +294,9 @@ export const ConstrainedWidth = {
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const chart = await canvas.findByRole("img", { name: "Work outcome chart" });
+    const chart = await canvas.findByRole("img", {
+      name: "Work outcome chart",
+    });
 
     expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);

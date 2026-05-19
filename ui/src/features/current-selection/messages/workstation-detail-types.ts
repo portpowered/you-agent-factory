@@ -57,7 +57,11 @@ export interface WorkstationDetailMessages {
   runHistoryHeading: string;
   providerSessionLogAction: string;
   providerSessionLogUnavailable: string;
+  providerSessionSelectedAction: string;
+  providerSessionSelectAction: string;
+  providerSessionSelectionUnavailable: string;
   scriptCommandSummary: (command: string) => string;
+  selectProviderSessionLabel: (sessionLabel: string, dispatchId: string) => string;
   selectRequestLabel: (requestLabel: string, dispatchId: string) => string;
   selectWorkItemLabel: (workItemLabel: string) => string;
   selectWorkstationRequestLabel: (dispatchId: string) => string;

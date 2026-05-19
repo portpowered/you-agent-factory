@@ -19,6 +19,7 @@ import {
   HISTORY_HEADER_CLASS,
   HISTORY_TOGGLE_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
+  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
 } from "./detail-card-shared";
@@ -27,6 +28,10 @@ import type {
   ProviderSessionAttemptsProps,
   ProviderSessionLogAccessProps,
 } from "./detail-card-types";
+import {
+  getLoadableProviderSessionRef,
+  providerSessionSelectionKey,
+} from "./provider-session-details";
 
 const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = {
   currentDispatchLabel: "Current dispatch",
@@ -34,9 +39,14 @@ const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = {
   openRequestDetailsAction: "Open request details",
   providerSessionLogAction: "Codex session log",
   providerSessionLogUnavailable: "Session log unavailable",
+  providerSessionSelectedAction: "Session selected",
+  providerSessionSelectAction: "Inspect session details",
+  providerSessionSelectionUnavailable: "Session details unavailable",
   requestDetailsUnavailable: (dispatchId: string) =>
     `Request details unavailable for dispatch ${dispatchId}.`,
   requestSelectedAction: "Request selected",
+  selectProviderSessionLabel: (sessionLabel: string, dispatchId: string) =>
+    `Select provider session ${sessionLabel} for dispatch ${dispatchId}`,
   selectWorkItemLabel: (workItemLabel: string) =>
     `Select work item ${workItemLabel}`,
   selectWorkstationRequestLabel: (dispatchId: string) =>
@@ -54,10 +64,12 @@ export function CollapsibleProviderSessionAttempts({
   expandActionLabel = "Expand",
   historyItemCountLabel,
   messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
+  onSelectProviderSession,
   onSelectWorkID,
   onSelectWorkstationRequest,
   renderHeading,
   resetKey,
+  selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
   title = "Run history",
@@ -102,9 +114,11 @@ export function CollapsibleProviderSessionAttempts({
             currentDispatchID={currentDispatchID}
             emptyMessage={emptyMessage}
             messages={messages}
+            onSelectProviderSession={onSelectProviderSession}
             onSelectWorkID={onSelectWorkID}
             onSelectWorkstationRequest={onSelectWorkstationRequest}
             renderHeading={renderHeading}
+            selectedProviderSessionKey={selectedProviderSessionKey}
             selectedRequestDispatchID={selectedRequestDispatchID}
             selectedWorkID={selectedWorkID}
             workstationKind={workstationKind}
@@ -121,9 +135,11 @@ export function ProviderSessionAttempts({
   currentDispatchID,
   emptyMessage,
   messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
+  onSelectProviderSession,
   onSelectWorkID,
   onSelectWorkstationRequest,
   renderHeading,
+  selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
   title = "Workstation dispatches",
@@ -138,9 +154,11 @@ export function ProviderSessionAttempts({
         currentDispatchID={currentDispatchID}
         emptyMessage={emptyMessage}
         messages={messages}
+        onSelectProviderSession={onSelectProviderSession}
         onSelectWorkID={onSelectWorkID}
         onSelectWorkstationRequest={onSelectWorkstationRequest}
         renderHeading={renderHeading}
+        selectedProviderSessionKey={selectedProviderSessionKey}
         selectedRequestDispatchID={selectedRequestDispatchID}
         selectedWorkID={selectedWorkID}
         workstationKind={workstationKind}
@@ -155,9 +173,11 @@ function ProviderSessionAttemptList({
   currentDispatchID,
   emptyMessage,
   messages = DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES,
+  onSelectProviderSession,
   onSelectWorkID,
   onSelectWorkstationRequest,
   renderHeading,
+  selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
   workstationKind,
@@ -172,6 +192,12 @@ function ProviderSessionAttemptList({
       {attempts.map((attempt) => {
         const outcome = formatWorkstationRunOutcome(attempt.outcome, { workstationKind });
         const isCurrentDispatch = currentDispatchID === attempt.dispatch_id;
+        const loadableProviderSession = getLoadableProviderSessionRef(attempt);
+        const providerSessionLabel = formatProviderSession(attempt.provider_session);
+        const providerSessionSelected =
+          loadableProviderSession !== null &&
+          selectedProviderSessionKey ===
+            providerSessionSelectionKey(loadableProviderSession);
         const request = workstationRequestsByDispatchID?.[attempt.dispatch_id];
         const requestSelected = selectedRequestDispatchID === attempt.dispatch_id;
 
@@ -209,6 +235,39 @@ function ProviderSessionAttemptList({
                 </p>
               ) : null}
             </div>
+            {loadableProviderSession && onSelectProviderSession ? (
+              <button
+                aria-label={messages.selectProviderSessionLabel(
+                  providerSessionLabel,
+                  attempt.dispatch_id,
+                )}
+                aria-pressed={providerSessionSelected}
+                className={cx(
+                  "mt-[0.55rem]",
+                  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
+                  providerSessionSelected &&
+                    "border-af-accent/35 bg-af-accent/10 text-af-accent",
+                )}
+                onClick={() => onSelectProviderSession(loadableProviderSession)}
+                type="button"
+              >
+                <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
+                  {providerSessionSelected
+                    ? messages.providerSessionSelectedAction
+                    : messages.providerSessionSelectAction}
+                </span>
+                <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
+              </button>
+            ) : (
+              <div className="mt-[0.55rem] grid gap-[0.2rem]">
+                <code className={cx("text-af-code-ink/72", DASHBOARD_BODY_CODE_CLASS)}>
+                  {providerSessionLabel}
+                </code>
+                <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                  {messages.providerSessionSelectionUnavailable}
+                </p>
+              </div>
+            )}
             <ProviderSessionLogAccess
               messages={messages}
               session={attempt.provider_session}
@@ -280,7 +339,6 @@ function ProviderSessionLogAccess({
   startedAt,
 }: ProviderSessionLogAccessProps) {
   const logTarget = getProviderSessionLogTarget(session, startedAt);
-  const metadata = formatProviderSession(session);
 
   return (
     <div className="mt-[0.45rem] grid min-w-0 gap-[0.3rem]">
@@ -300,14 +358,6 @@ function ProviderSessionLogAccess({
           {messages.providerSessionLogUnavailable}
         </span>
       )}
-      <code
-        className={cx(
-          "inline-block text-af-code-ink/78 [overflow-wrap:anywhere]",
-          DASHBOARD_BODY_CODE_CLASS,
-        )}
-      >
-        {metadata}
-      </code>
     </div>
   );
 }

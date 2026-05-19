@@ -206,6 +206,136 @@ type BundledFileContent struct {
 // BundledFileContentEncoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
 type BundledFileContentEncoding string
 
+// CodexSessionFunctionCallSummary defines model for CodexSessionFunctionCallSummary.
+type CodexSessionFunctionCallSummary struct {
+	// Arguments Compact argument payload when present.
+	Arguments *string `json:"arguments,omitempty"`
+
+	// CallId Provider call identifier when present in the session stream.
+	CallId *string `json:"callId,omitempty"`
+
+	// Name Function or tool name when present.
+	Name *string `json:"name,omitempty"`
+
+	// Order Chronological order of the function or tool call in the session stream.
+	Order int `json:"order"`
+
+	// Output Compact output payload when present.
+	Output *string `json:"output,omitempty"`
+
+	// Status Result status inferred from the call output or explicit status fields.
+	Status *string `json:"status,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the call when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+
+	// Type Raw response item type for the call, such as function_call or custom_tool_call.
+	Type string `json:"type"`
+}
+
+// CodexSessionLineError defines model for CodexSessionLineError.
+type CodexSessionLineError struct {
+	// LineNumber One-based line number of the malformed event-stream record.
+	LineNumber int `json:"lineNumber"`
+
+	// Message Client-safe parse error message for the malformed line.
+	Message string `json:"message"`
+}
+
+// CodexSessionParseSummary defines model for CodexSessionParseSummary.
+type CodexSessionParseSummary struct {
+	// EventCount Number of JSON event records parsed from the session stream.
+	EventCount int `json:"eventCount"`
+
+	// FunctionCalls Function and tool calls observed in chronological order.
+	FunctionCalls []CodexSessionFunctionCallSummary `json:"functionCalls"`
+
+	// LineCount Number of non-empty event-stream lines inspected.
+	LineCount int `json:"lineCount"`
+
+	// MalformedLineCount Number of non-empty lines that could not be parsed as JSON objects.
+	MalformedLineCount int `json:"malformedLineCount"`
+
+	// ParseErrors Line-level parse errors for malformed event-stream records.
+	ParseErrors []CodexSessionLineError `json:"parseErrors"`
+
+	// Reasoning Reasoning entries or summaries observed in chronological order.
+	Reasoning  []CodexSessionReasoningSummary `json:"reasoning"`
+	TokenUsage *CodexSessionTokenUsage        `json:"tokenUsage,omitempty"`
+
+	// Turns Chronological execution turns inferred from turn boundaries and response activity.
+	Turns []CodexSessionTurnSummary `json:"turns"`
+
+	// UnknownEventCount Number of parsed JSON events without a recognized type field.
+	UnknownEventCount int `json:"unknownEventCount"`
+
+	// UnknownEvents Compact list of events with unknown or unsupported type fields.
+	UnknownEvents []CodexSessionUnknownEvent `json:"unknownEvents"`
+}
+
+// CodexSessionReasoningSummary defines model for CodexSessionReasoningSummary.
+type CodexSessionReasoningSummary struct {
+	// Encrypted Whether the reasoning entry only exposed encrypted content.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// Order Chronological order of the reasoning entry in the session stream.
+	Order int `json:"order"`
+
+	// SourceType Event or response item type that carried the reasoning entry.
+	SourceType string `json:"sourceType"`
+
+	// Summary Compact reasoning summary when present.
+	Summary *string `json:"summary,omitempty"`
+
+	// Text Reasoning text when plaintext content is present.
+	Text *string `json:"text,omitempty"`
+
+	// TurnIndex One-based execution turn index associated with the reasoning entry when inferable.
+	TurnIndex *int `json:"turnIndex,omitempty"`
+}
+
+// CodexSessionTokenUsage defines model for CodexSessionTokenUsage.
+type CodexSessionTokenUsage struct {
+	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
+	InputTokens           *int `json:"inputTokens,omitempty"`
+	OutputTokens          *int `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           *int `json:"totalTokens,omitempty"`
+}
+
+// CodexSessionTurnSummary defines model for CodexSessionTurnSummary.
+type CodexSessionTurnSummary struct {
+	// EventCount Number of parsed events associated with the turn.
+	EventCount int `json:"eventCount"`
+
+	// FunctionCallCount Number of function or tool calls associated with the turn.
+	FunctionCallCount int `json:"functionCallCount"`
+
+	// Index One-based chronological execution turn index.
+	Index int `json:"index"`
+
+	// ReasoningCount Number of reasoning entries associated with the turn.
+	ReasoningCount int `json:"reasoningCount"`
+
+	// ResponseItemCount Number of response_item records associated with the turn.
+	ResponseItemCount int `json:"responseItemCount"`
+
+	// StartedAt First event timestamp associated with the turn when present.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+}
+
+// CodexSessionUnknownEvent defines model for CodexSessionUnknownEvent.
+type CodexSessionUnknownEvent struct {
+	// LineNumber One-based line number of the unknown event.
+	LineNumber int `json:"lineNumber"`
+
+	// PayloadType Raw nested payload type when present.
+	PayloadType *string `json:"payloadType,omitempty"`
+
+	// Type Raw top-level event type when present.
+	Type *string `json:"type,omitempty"`
+}
+
 // CommandDiagnostic defines model for CommandDiagnostic.
 type CommandDiagnostic struct {
 	Args          *[]string  `json:"args,omitempty"`
@@ -694,11 +824,30 @@ type ProviderFailureMetadata struct {
 	Type   *string `json:"type,omitempty"`
 }
 
+// ProviderSessionDetailResponse defines model for ProviderSessionDetailResponse.
+type ProviderSessionDetailResponse struct {
+	Parse           CodexSessionParseSummary      `json:"parse"`
+	ProviderSession ProviderSessionMetadata       `json:"providerSession"`
+	Source          ProviderSessionSourceMetadata `json:"source"`
+}
+
 // ProviderSessionMetadata defines model for ProviderSessionMetadata.
 type ProviderSessionMetadata struct {
 	Id       *string `json:"id,omitempty"`
 	Kind     *string `json:"kind,omitempty"`
 	Provider *string `json:"provider,omitempty"`
+}
+
+// ProviderSessionSourceMetadata defines model for ProviderSessionSourceMetadata.
+type ProviderSessionSourceMetadata struct {
+	// ModifiedAt Filesystem modification time when available.
+	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
+
+	// RelativePath Path to the loaded session file relative to the configured Codex sessions root.
+	RelativePath string `json:"relativePath"`
+
+	// SizeBytes Size of the loaded session file in bytes.
+	SizeBytes int64 `json:"sizeBytes"`
 }
 
 // Relation defines model for Relation.
@@ -970,6 +1119,9 @@ type Work struct {
 
 	// PreviousChainingTraceIds Explicit predecessor chaining traces that directly caused this work item.
 	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
+
+	// Relations Current outbound relationships attached to this listed source work item when returned by read APIs.
+	Relations *[]Relation `json:"relations,omitempty"`
 
 	// RequestId Identifier for the original request that created this work, if applicable
 	RequestId *string `json:"requestId,omitempty"`
@@ -1252,6 +1404,18 @@ type InternalError = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
+type GetProviderSessionDetailsParams struct {
+	// Provider Provider that emitted the session identifier. Only codex sessions are currently loadable.
+	Provider string `form:"provider" json:"provider"`
+
+	// Kind Provider-session identifier kind. Only session_id is currently loadable.
+	Kind string `form:"kind" json:"kind"`
+
+	// Id Provider-session identifier to resolve. This is an identifier, not a filesystem path.
+	Id string `form:"id" json:"id"`
+}
 
 // ListWorkParams defines parameters for ListWork.
 type ListWorkParams struct {
@@ -1642,6 +1806,9 @@ type ServerInterface interface {
 	// Get current factory
 	// (GET /factory/~current)
 	GetCurrentFactory(w http.ResponseWriter, r *http.Request)
+	// Get provider session details
+	// (GET /provider-sessions/detail)
+	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
@@ -1701,6 +1868,70 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactory(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentFactory(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProviderSessionDetails operation middleware
+func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetProviderSessionDetailsParams
+
+	// ------------- Required query parameter "provider" -------------
+
+	if paramValue := r.URL.Query().Get("provider"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "provider"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "provider", r.URL.Query(), &params.Provider)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "kind", r.URL.Query(), &params.Kind)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "id" -------------
+
+	if paramValue := r.URL.Query().Get("id"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "id"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "id", r.URL.Query(), &params.Id)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProviderSessionDetails(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1965,6 +2196,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory", wrapper.CreateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current", wrapper.GetCurrentFactory).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
 
