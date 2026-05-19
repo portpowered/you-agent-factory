@@ -10,6 +10,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  buttonVariants,
 } from "../../components/ui";
 import { cx } from "../../lib/cx";
 
@@ -78,25 +79,19 @@ export function FactoryGraphEditorModeToggle({
   editorMode: boolean;
   onClick: () => void;
 }) {
-  const label = editorMode
-    ? "Leave factory graph editor"
-    : "Enter factory graph editor";
+  const label = editorMode ? "Leave factory graph editor" : "Enter factory graph editor";
 
   return (
     <TooltipProvider delayDuration={120}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            aria-label={label}
-            aria-pressed={editorMode}
-            className="shrink-0"
-            onClick={onClick}
-            size="icon"
-            tone={editorMode ? "secondary" : "outline"}
-            type="button"
-          >
-            <EditModeIcon />
-          </Button>
+        <TooltipTrigger
+          aria-label={label}
+          aria-pressed={editorMode}
+          className={buttonVariants({ className: "shrink-0", size: "icon", tone: editorMode ? "secondary" : "outline" })}
+          onClick={onClick}
+          type="button"
+        >
+          <EditModeIcon />
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
