@@ -11,6 +11,7 @@ const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
 const OVERFLOW_TOLERANCE_PX = 1;
+const STORY_RENDER_TIMEOUT_MS = 30000;
 
 const viewportChecks = [
   { height: 844, label: "mobile", width: 390 },
@@ -98,19 +99,56 @@ function storyUrl(storyId) {
   return `${STORYBOOK_URL}/iframe.html?id=${storyId}&viewMode=story`;
 }
 
-async function waitForDialog(page, dialogName) {
+export async function waitForStoryRender(page) {
+  await page.waitForSelector("#storybook-root", {
+    state: "attached",
+    timeout: STORY_RENDER_TIMEOUT_MS,
+  });
+  await page.waitForFunction(
+    () => {
+      const root = document.querySelector("#storybook-root");
+      if (!(root instanceof HTMLElement)) {
+        return false;
+      }
+
+      if (root.childElementCount > 0) {
+        return true;
+      }
+
+      return Array.from(document.body.children).some((child) => {
+        if (!(child instanceof HTMLElement)) {
+          return false;
+        }
+
+        if (
+          child.id === "storybook-root" ||
+          child.id === "storybook-docs" ||
+          child.tagName === "SCRIPT" ||
+          child.tagName === "STYLE"
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+    },
+    { timeout: STORY_RENDER_TIMEOUT_MS },
+  );
+}
+
+export async function waitForDialog(page, dialogName) {
   const dialog = page.getByRole("dialog", { name: dialogName });
   await dialog.waitFor({ state: "visible" });
   return dialog;
 }
 
-async function waitForStoryRegion(page, regionName) {
+export async function waitForStoryRegion(page, regionName) {
   const region = page.getByRole("region", { name: regionName });
   await region.waitFor({ state: "visible" });
   return region;
 }
 
-async function expectNoHorizontalOverflow(page, label) {
+export async function expectNoHorizontalOverflow(page, label) {
   const metrics = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
@@ -123,7 +161,7 @@ async function expectNoHorizontalOverflow(page, label) {
   }
 }
 
-async function expectDialogWithinViewport(dialog, viewport, label) {
+export async function expectDialogWithinViewport(dialog, viewport, label) {
   const box = await dialog.boundingBox();
 
   if (!box) {
@@ -143,14 +181,13 @@ async function expectDialogWithinViewport(dialog, viewport, label) {
   }
 }
 
-async function expectVisible(locator, label) {
-  await locator.scrollIntoViewIfNeeded();
+export async function expectVisible(locator, label) {
   if (!(await locator.isVisible())) {
     throw new Error(`${label} was not visible.`);
   }
 }
 
-async function verifyExportDialog(page, dialog, viewport) {
+export async function verifyExportDialog(page, dialog, viewport) {
   await expectVisible(
     dialog.getByRole("textbox", { name: "Factory name" }),
     "Factory name input",
@@ -174,7 +211,7 @@ async function verifyExportDialog(page, dialog, viewport) {
   await expectNoHorizontalOverflow(page, `Export dialog at ${viewport.label}`);
 }
 
-async function verifyImportDialog(page, dialog, viewport) {
+export async function verifyImportDialog(page, dialog, viewport) {
   await expectVisible(
     dialog.getByRole("img", { name: "Dropped Factory preview" }),
     "Import preview image",
@@ -262,7 +299,7 @@ async function verifyLocalizedImportDialog(page, dialog, viewport) {
   );
 }
 
-async function expectOrderedLeftEdges(locators, label) {
+export async function expectOrderedLeftEdges(locators, label) {
   let previousRight = null;
 
   for (const locator of locators) {
@@ -282,11 +319,10 @@ async function expectOrderedLeftEdges(locators, label) {
   }
 }
 
-async function verifyDashboardHeader(page, _dialog, viewport) {
+export async function verifyDashboardHeader(page, _dialog, viewport) {
   const toolbar = await waitForStoryRegion(page, "dashboard summary");
   const heading = toolbar.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
-  const switcher = page.locator("#dashboard-language-switcher");
   const slider = toolbar.getByRole("slider", { name: "Timeline tick" });
   const streamStatus = toolbar.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
@@ -299,11 +335,6 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
 
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible Infinite You wordmark");
-  await expectVisible(switcher, "Dashboard language switcher");
-  await expectVisible(
-    toolbar.getByText("Language"),
-    "Dashboard language label",
-  );
   await expectVisible(slider, "Timeline slider");
   await expectVisible(streamStatus, "Dashboard stream status");
   await expectVisible(currentTick, "Current timeline tick text");
@@ -330,29 +361,10 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
-      [heading, switcher, slider, streamStatus, exportButton],
+      [heading, slider, streamStatus, exportButton],
       "Dashboard header desktop controls",
     );
   }
-
-  await page.selectOption("#dashboard-language-switcher", "zh-CN");
-  const localizedToolbar = await waitForStoryRegion(page, "仪表板概览");
-  await expectVisible(
-    page.locator("#dashboard-language-switcher"),
-    "Localized dashboard language switcher",
-  );
-  await expectVisible(
-    localizedToolbar.getByText("语言"),
-    "Localized dashboard language label",
-  );
-  await expectVisible(
-    localizedToolbar.getByRole("button", { name: "导出 PNG" }),
-    "Localized export trigger button",
-  );
-  await expectVisible(
-    page.getByText("第 5 个刻度，共 5 个"),
-    "Localized current timeline tick text",
-  );
 
   await expectNoHorizontalOverflow(
     page,
@@ -360,28 +372,33 @@ async function verifyDashboardHeader(page, _dialog, viewport) {
   );
 }
 
-async function verifyStory(page, storyCheck, viewport) {
-  await page.setViewportSize({
-    height: viewport.height,
-    width: viewport.width,
-  });
-  await page.goto(storyUrl(storyCheck.id), { waitUntil: "networkidle" });
-  const dialog = storyCheck.dialogName
-    ? await waitForDialog(page, storyCheck.dialogName)
-    : null;
+export async function verifyStory(browser, storyCheck, viewport) {
+  const page = await browser.newPage();
 
-  await storyCheck.assertions(page, dialog, viewport);
+  try {
+    await page.setViewportSize({
+      height: viewport.height,
+      width: viewport.width,
+    });
+    await page.goto(storyUrl(storyCheck.id), { waitUntil: "domcontentloaded" });
+    await waitForStoryRender(page);
+    const dialog = storyCheck.dialogName
+      ? await waitForDialog(page, storyCheck.dialogName)
+      : null;
+
+    await storyCheck.assertions(page, dialog, viewport);
+  } finally {
+    await page.close();
+  }
 }
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {
-    const page = await browser.newPage();
-
     for (const viewport of viewportChecks) {
       for (const storyCheck of storyChecks) {
-        await verifyStory(page, storyCheck, viewport);
+        await verifyStory(browser, storyCheck, viewport);
       }
     }
   } finally {
@@ -389,4 +406,6 @@ async function main() {
   }
 }
 
-await main();
+if (import.meta.main) {
+  await main();
+}

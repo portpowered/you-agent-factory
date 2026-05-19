@@ -81,10 +81,18 @@ export function resolveAppLocale({
     return resolveSupportedLocale(urlLocale);
   }
 
-  return resolveSupportedLocale(
-    browserLanguages?.find((locale) => locale.trim().length > 0) ??
-      browserLanguage,
-  );
+  for (const locale of browserLanguages ?? []) {
+    if (locale.trim().length === 0) {
+      continue;
+    }
+
+    const resolvedLocale = resolveSupportedLocale(locale);
+    if (resolvedLocale !== "en" || locale.toLowerCase().startsWith("en")) {
+      return resolvedLocale;
+    }
+  }
+
+  return resolveSupportedLocale(browserLanguage);
 }
 
 export function useAppLocale(
