@@ -1440,14 +1440,14 @@ func TestRunCommand_VerboseFlagMapsToRunConfig(t *testing.T) {
 	}
 }
 
-func TestSubmitCommand_HelpAdvertisesWorkTypeNameOnly(t *testing.T) {
+func TestSubmitCommand_HelpAdvertisesRequiredFlags(t *testing.T) {
 	root := NewRootCommand()
 	submitCmd, _, err := root.Find([]string{"submit"})
 	if err != nil {
 		t.Fatalf("find submit: %v", err)
 	}
 
-	for _, name := range []string{"work-type-name", "payload"} {
+	for _, name := range []string{"name", "work-type-name", "payload"} {
 		f := submitCmd.Flags().Lookup(name)
 		if f == nil {
 			t.Errorf("expected --%s flag on submit command", name)
@@ -1470,6 +1470,12 @@ func TestSubmitCommand_HelpAdvertisesWorkTypeNameOnly(t *testing.T) {
 	}
 
 	help := out.String()
+	if !strings.Contains(help, "--name") {
+		t.Fatalf("submit help should list --name:\n%s", help)
+	}
+	if !strings.Contains(help, "authored request name") {
+		t.Fatalf("submit help should describe --name:\n%s", help)
+	}
 	if !strings.Contains(help, "--work-type-name") {
 		t.Fatalf("submit help should list --work-type-name:\n%s", help)
 	}
@@ -1531,7 +1537,7 @@ func TestSubmitCommand_MissingWorkTypeNameReturnsLocalValidationError(t *testing
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"submit", "--payload", "work.json"})
+	root.SetArgs([]string{"submit", "--name", "request-name", "--payload", "work.json"})
 
 	err := root.Execute()
 	if err == nil {
@@ -1542,6 +1548,35 @@ func TestSubmitCommand_MissingWorkTypeNameReturnsLocalValidationError(t *testing
 	}
 	if got := err.Error(); got != "--work-type-name is required" {
 		t.Fatalf("missing work type error = %q, want --work-type-name is required", got)
+	}
+}
+
+func TestSubmitCommand_MissingNameReturnsLocalValidationError(t *testing.T) {
+	originalSubmitWork := submitWork
+	defer func() {
+		submitWork = originalSubmitWork
+	}()
+
+	called := false
+	submitWork = func(cfg submitcli.SubmitConfig) error {
+		called = true
+		return submitcli.Submit(cfg)
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"submit", "--work-type-name", "tasks", "--payload", "work.json"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected missing name to fail")
+	}
+	if !called {
+		t.Fatal("expected submit validation to run")
+	}
+	if got := err.Error(); got != "--name is required" {
+		t.Fatalf("missing name error = %q, want --name is required", got)
 	}
 }
 
@@ -1560,7 +1595,7 @@ func TestSubmitCommand_MissingPayloadReturnsLocalValidationError(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"submit", "--work-type-name", "tasks"})
+	root.SetArgs([]string{"submit", "--name", "request-name", "--work-type-name", "tasks"})
 
 	err := root.Execute()
 	if err == nil {
@@ -1591,6 +1626,7 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"submit",
+		"--name", "request-name",
 		"--work-type-name", "tasks",
 		"--payload", "request.md",
 		"--port", "7437",
@@ -1600,6 +1636,9 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 		t.Fatalf("execute submit --work-type-name: %v", err)
 	}
 
+	if got.Name != "request-name" {
+		t.Fatalf("name = %q, want request-name", got.Name)
+	}
 	if got.WorkTypeName != "tasks" {
 		t.Fatalf("work type name = %q, want tasks", got.WorkTypeName)
 	}

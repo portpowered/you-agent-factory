@@ -13,7 +13,7 @@ import (
 )
 
 func TestSubmit_MissingWorkTypeName(t *testing.T) {
-	err := Submit(SubmitConfig{Payload: "some-file.json", Port: 8080})
+	err := Submit(SubmitConfig{Name: "submit-task", Payload: "some-file.json", Port: 8080})
 	if err == nil {
 		t.Fatal("expected error for missing work type name")
 	}
@@ -23,7 +23,7 @@ func TestSubmit_MissingWorkTypeName(t *testing.T) {
 }
 
 func TestSubmit_MissingPayload(t *testing.T) {
-	err := Submit(SubmitConfig{WorkTypeName: "task", Port: 8080})
+	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Port: 8080})
 	if err == nil {
 		t.Fatal("expected error for missing payload")
 	}
@@ -33,9 +33,29 @@ func TestSubmit_MissingPayload(t *testing.T) {
 }
 
 func TestSubmit_PayloadFileNotFound(t *testing.T) {
-	err := Submit(SubmitConfig{WorkTypeName: "task", Payload: "/nonexistent/file.json", Port: 8080})
+	err := Submit(SubmitConfig{Name: "submit-task", WorkTypeName: "task", Payload: "/nonexistent/file.json", Port: 8080})
 	if err == nil {
 		t.Fatal("expected error for missing payload file")
+	}
+}
+
+func TestSubmit_MissingName(t *testing.T) {
+	err := Submit(SubmitConfig{WorkTypeName: "task", Payload: "some-file.json", Port: 8080})
+	if err == nil {
+		t.Fatal("expected error for missing name")
+	}
+	if err.Error() != "--name is required" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmit_BlankName(t *testing.T) {
+	err := Submit(SubmitConfig{Name: "   ", WorkTypeName: "task", Payload: "some-file.json", Port: 8080})
+	if err == nil {
+		t.Fatal("expected error for blank name")
+	}
+	if err.Error() != "--name is required" {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -79,6 +99,7 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	}
 
 	err := Submit(SubmitConfig{
+		Name:         "  CLI JSON submit  ",
 		WorkTypeName: "code-change",
 		Payload:      payloadPath,
 		Port:         port,
@@ -87,8 +108,14 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
+	if receivedReq.Name != "CLI JSON submit" {
+		t.Errorf("Name = %q, want %q", receivedReq.Name, "CLI JSON submit")
+	}
 	if receivedReq.WorkTypeName != "code-change" {
 		t.Errorf("WorkTypeName = %q, want %q", receivedReq.WorkTypeName, "code-change")
+	}
+	if _, ok := rawReq["name"]; !ok {
+		t.Fatalf("request should include name, got keys %#v", rawReq)
 	}
 	if _, ok := rawReq["workTypeName"]; !ok {
 		t.Fatalf("request should include workTypeName, got keys %#v", rawReq)
@@ -130,6 +157,7 @@ func TestSubmit_MarkdownPayload(t *testing.T) {
 	}
 
 	err := Submit(SubmitConfig{
+		Name:         "markdown-submit",
 		WorkTypeName: "prd",
 		Payload:      payloadPath,
 		Port:         port,
@@ -138,6 +166,9 @@ func TestSubmit_MarkdownPayload(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
+	if receivedReq.Name != "markdown-submit" {
+		t.Errorf("Name = %q, want %q", receivedReq.Name, "markdown-submit")
+	}
 	if receivedReq.WorkTypeName != "prd" {
 		t.Errorf("WorkTypeName = %q, want %q", receivedReq.WorkTypeName, "prd")
 	}
@@ -169,6 +200,7 @@ func TestSubmit_ServerError(t *testing.T) {
 	}
 
 	err := Submit(SubmitConfig{
+		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Port:         port,
@@ -190,6 +222,7 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 
 	// Use a port that nothing is listening on.
 	err := Submit(SubmitConfig{
+		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
 		Port:         19999,

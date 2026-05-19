@@ -91,8 +91,8 @@ func newFactoryQueryCommand() *cobra.Command {
 	cfg := factorycli.QueryConfig{Port: 8080}
 
 	cmd := &cobra.Command{
-		Use:          "query",
-		Short:        "Show the current active factory",
+		Use:   "query",
+		Short: "Show the current active factory",
 		Long: "Show the current active factory from a running infinite-you service.\n\n" +
 			"By default the command writes a human-readable table with the current factory name and " +
 			"runtime-identifying fields. Use --json for the API-shaped current-factory payload, and " +
@@ -382,6 +382,7 @@ func newSubmitCommand() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVar(&cfg.Name, "name", "", "authored request name for the submitted work (required)")
 	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
 	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
