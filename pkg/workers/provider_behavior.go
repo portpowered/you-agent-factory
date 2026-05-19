@@ -2,6 +2,8 @@ package workers
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -40,7 +42,7 @@ var codexTemporaryServerFailureNeedles = []string{
 }
 
 type providerBehavior interface {
-	BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) []string
+	BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error)
 	BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest
 	FormatExitFailure(provider string, result CommandResult) string
 	ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType
@@ -73,7 +75,7 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 	}
 }
 
-func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) []string {
+func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
 	args := []string{"-p"}
 	if skipPermissions {
@@ -96,7 +98,7 @@ func (b claudeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceReques
 		args = append(args, "--resume", req.SessionID)
 	}
 	args = append(args, req.UserMessage)
-	return args
+	return args, nil
 }
 
 func (b claudeProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
@@ -129,7 +131,7 @@ func (b claudeProviderBehavior) FormatTimeoutFailure(result CommandResult) strin
 	return formatProviderOutputOrDefault(result, "execution timeout")
 }
 
-func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) []string {
+func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
 	args := []string{"exec"} // quiet mode for non-interactive use
 	if skipPermissions {
@@ -150,8 +152,13 @@ func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
+	imageArgs, err := codexImageArgs(req)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, imageArgs...)
 	args = append(args, "-")
-	return args
+	return args, nil
 }
 
 func (b codexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
@@ -257,6 +264,53 @@ func tailForCodexErrorScan(output []byte) string {
 		return string(output)
 	}
 	return string(output[len(output)-codexErrorLineScanBytes:])
+}
+
+func codexImageArgs(req interfaces.ProviderInferenceRequest) ([]string, error) {
+	tokens := cloneInputTokens(req.InputTokens)
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+
+	var args []string
+	for tokenIndex, token := range tokens {
+		for partIndex, part := range token.Color.Content {
+			if part.Type != interfaces.WorkContentPartTypeImage {
+				continue
+			}
+			if err := validateCodexImageFile(req.WorkingDirectory, part.File); err != nil {
+				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].file: %w", tokenIndex, partIndex, err)
+			}
+			args = append(args, "-i", part.File)
+		}
+	}
+	return args, nil
+}
+
+func validateCodexImageFile(workingDirectory, imageFile string) error {
+	if strings.TrimSpace(imageFile) == "" {
+		return fmt.Errorf("codex image content file is required")
+	}
+
+	statPath := imageFile
+	if workingDirectory != "" && !filepath.IsAbs(filepath.FromSlash(imageFile)) {
+		statPath = filepath.Join(workingDirectory, filepath.FromSlash(imageFile))
+	}
+	info, err := os.Stat(statPath)
+	if err != nil {
+		return fmt.Errorf("codex image content file %q is not readable: %w", imageFile, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("codex image content file %q is a directory", imageFile)
+	}
+	file, err := os.Open(statPath)
+	if err != nil {
+		return fmt.Errorf("codex image content file %q is not readable: %w", imageFile, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("codex image content file %q could not be closed after validation: %w", imageFile, err)
+	}
+	return nil
 }
 
 func formatProviderOutputOrDefault(result CommandResult, fallback string) string {
