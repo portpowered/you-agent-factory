@@ -644,7 +644,7 @@ describe("App current selection", () => {
     });
 
     fireEvent.click(
-      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
+      await screen.findByRole("button", { name: "Select work item Active Story" }),
     );
 
     const currentSelection = await screen.findByRole("article", {
