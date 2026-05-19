@@ -67,13 +67,16 @@ matter to the targeted contract tests in `pkg/api`, `pkg/config`, `pkg/replay`,
 
 ## Guardrail
 
-`pkg/testutil/artifact_contract_test.go` is the focused regression guard for
+`pkg/testutil/artifact_contract_inventory_test.go` is the focused regression
+guard for
 this inventory:
 
 - every targeted root artifact dependency must be classified here
 - every `checked_in` path must exist
 - every `obsolete` path must stay absent
-- the inventory doc table and the enforced classifications must stay in sync
+- the live checked-in maintainer backlog must keep pointing at the canonical
+  `factory/internal/{asks,view,progress,meta}.md` surface without reviving a
+  second canonical ask path
 
 That keeps root artifact drift explicit instead of letting missing files or
 legacy starter assumptions re-enter the targeted package tests silently.
