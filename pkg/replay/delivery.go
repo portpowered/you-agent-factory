@@ -365,8 +365,8 @@ func cloneReplayPlannedResult(result interfaces.WorkResult) interfaces.WorkResul
 		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
 	}
 	clone.ProviderFailure = cloneProviderFailureMetadata(result.ProviderFailure)
-	clone.ProviderSession = cloneProviderSession(result.ProviderSession)
-	clone.Diagnostics = cloneWorkDiagnostics(result.Diagnostics)
+	clone.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
+	clone.Diagnostics = interfaces.CloneWorkDiagnostics(result.Diagnostics)
 	return clone
 }
 

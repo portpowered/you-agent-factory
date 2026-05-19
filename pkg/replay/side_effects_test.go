@@ -79,6 +79,79 @@ func TestSideEffects_RunReturnsRecordedCommandResult(t *testing.T) {
 	}
 }
 
+func TestSideEffects_InferDiagnosticsStayDetachedFromRecordedMutation(t *testing.T) {
+	artifact, providerDiagnostics, _ := replaySideEffectArtifactWithDiagnostics(t)
+	sideEffects, err := NewSideEffects(artifact)
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+
+	providerDiagnostics.Provider.ResponseMetadata["request_id"] = "mutated-request"
+	providerDiagnostics.Metadata["phase"] = "mutated"
+	providerDiagnostics.Panic.Message = "mutated panic"
+
+	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch: interfaces.WorkDispatch{
+			WorkerType: "worker-a",
+			Execution: interfaces.ExecutionMetadata{
+				ReplayKey: "process/trace-1/work-1",
+				TraceID:   "trace-1",
+				WorkIDs:   []string{"work-1"},
+			},
+		},
+		WorkstationType: "process",
+		Model:           "claude-3-5-haiku-20241022",
+		ModelProvider:   "claude",
+		SystemPrompt:    "system prompt",
+		UserMessage:     "user prompt",
+	})
+	if err != nil {
+		t.Fatalf("Infer: %v", err)
+	}
+
+	if got := resp.Diagnostics.Provider.ResponseMetadata["request_id"]; got != "req-1" {
+		t.Fatalf("request_id = %q, want req-1", got)
+	}
+	if resp.Diagnostics.Metadata != nil {
+		t.Fatalf("metadata = %#v, want nil safe replay metadata", resp.Diagnostics.Metadata)
+	}
+	if resp.Diagnostics.Panic != nil {
+		t.Fatalf("panic = %#v, want nil safe replay panic", resp.Diagnostics.Panic)
+	}
+}
+
+func TestSideEffects_RunResultStaysDetachedFromRecordedCommandMutation(t *testing.T) {
+	artifact, _, commandDiagnostics := replaySideEffectArtifactWithDiagnostics(t)
+	sideEffects, err := NewSideEffects(artifact)
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+
+	commandDiagnostics.Command.Args[0] = "mutated"
+	commandDiagnostics.Command.Stdout = "mutated stdout\n"
+	commandDiagnostics.Command.Stderr = "mutated stderr\n"
+
+	result, err := sideEffects.Run(context.Background(), workers.CommandRequest{
+		Command: "echo",
+		Args:    []string{"ok"},
+		Execution: interfaces.ExecutionMetadata{
+			ReplayKey: "process/trace-2/work-2",
+			TraceID:   "trace-2",
+			WorkIDs:   []string{"work-2"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if string(result.Stdout) != "recorded script output\n" {
+		t.Fatalf("stdout = %q, want recorded script output", result.Stdout)
+	}
+	if string(result.Stderr) != "recorded script details\n" {
+		t.Fatalf("stderr = %q, want recorded script details", result.Stderr)
+	}
+}
+
 func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 	sideEffects, err := NewSideEffects(replaySideEffectArtifact(t))
 	if err != nil {
@@ -217,6 +290,11 @@ func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 }
 
 func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
+	artifact, _, _ := replaySideEffectArtifactWithDiagnostics(t)
+	return artifact
+}
+
+func replaySideEffectArtifactWithDiagnostics(t *testing.T) (*interfaces.ReplayArtifact, *interfaces.WorkDiagnostics, *interfaces.WorkDiagnostics) {
 	t.Helper()
 	dispatchProvider := interfaces.WorkDispatch{
 		DispatchID:      "dispatch-provider",
@@ -241,6 +319,10 @@ func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
 		},
 	}
 	providerDiagnostics := &interfaces.WorkDiagnostics{
+		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+			SystemPromptHash: "system-hash",
+			UserMessageHash:  "user-hash",
+		},
 		Provider: &interfaces.ProviderDiagnostic{
 			Provider: "claude",
 			Model:    "claude-3-5-haiku-20241022",
@@ -248,6 +330,8 @@ func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
 				"request_id": "req-1",
 			},
 		},
+		Panic:    &interfaces.PanicDiagnostic{Message: "unsafe panic", Stack: "unsafe stack"},
+		Metadata: map[string]string{"phase": "unsafe"},
 	}
 	commandDiagnostics := &interfaces.WorkDiagnostics{
 		Command: &interfaces.CommandDiagnostic{
@@ -257,6 +341,7 @@ func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			Stderr:   "recorded script details\n",
 			ExitCode: 0,
 		},
+		Metadata: map[string]string{"phase": "unsafe"},
 	}
 	return testReplayArtifact(t,
 		replayDispatchCreatedEvent(t, dispatchProvider, 2),
@@ -287,5 +372,5 @@ func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			Error:        "recorded script details\n",
 			Diagnostics:  commandDiagnostics,
 		}, 5),
-	)
+	), providerDiagnostics, commandDiagnostics
 }

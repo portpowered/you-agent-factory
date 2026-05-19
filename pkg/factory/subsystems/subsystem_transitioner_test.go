@@ -508,6 +508,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 					Color: interfaces.TokenColor{
 						WorkID:     "work-1",
 						WorkTypeID: "task",
+						Tags:       map[string]string{"owner": "dispatcher"},
 					},
 				}},
 			},
@@ -538,6 +539,23 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 	}
 	if completed.ProviderSession.ID != "sess_codex_123" {
 		t.Fatalf("provider session id = %q, want %q", completed.ProviderSession.ID, "sess_codex_123")
+	}
+	if len(completed.OutputMutations) != 1 || completed.OutputMutations[0].Token == nil {
+		t.Fatalf("completed output mutations = %#v, want one cloned output token", completed.OutputMutations)
+	}
+
+	snapshot.Results[0].ProviderSession.ID = "mutated-session"
+	snapshot.Dispatches["d-1"].ConsumedTokens[0].Color.Tags["owner"] = "mutated"
+	result.Mutations[0].NewToken.Color.Payload[0] = 'X'
+
+	if completed.ProviderSession.ID != "sess_codex_123" {
+		t.Fatalf("completed provider session id = %q, want detached original", completed.ProviderSession.ID)
+	}
+	if completed.ConsumedTokens[0].Color.Tags["owner"] != "dispatcher" {
+		t.Fatalf("completed consumed token tags = %#v, want detached original", completed.ConsumedTokens[0].Color.Tags)
+	}
+	if string(completed.OutputMutations[0].Token.Color.Payload) != "done" {
+		t.Fatalf("completed output mutation payload = %q, want detached original", completed.OutputMutations[0].Token.Color.Payload)
 	}
 }
 
