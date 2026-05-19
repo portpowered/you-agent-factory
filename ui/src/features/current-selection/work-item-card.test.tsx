@@ -1788,3 +1788,74 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeNull();
   });
 });
+
+describe("WorkItemDetailCard localized script attempts", () => {
+  it("localizes expanded script-attempt labels for a supported non-default locale", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+
+    render(
+      <CurrentSelectionLocaleProvider locale="ja">
+        <WorkItemDetailCard
+          executionDetails={selectWorkItemExecutionDetails({
+            activeExecution: execution,
+            dispatchID,
+            selectedNode,
+            workItem,
+          })}
+          now={DETAIL_CARD_NOW}
+          dispatchAttempts={[]}
+          selectedNode={selectedNode}
+          selection={{
+            dispatchId: dispatchID,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          }}
+          workstationRequests={[dashboardWorkstationRequestFixtures.scriptSuccess]}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const dispatchCard = within(dispatchHistory)
+      .getByText(dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id)
+      .closest("article");
+
+    if (!(dispatchCard instanceof HTMLElement)) {
+      throw new Error("expected localized script-success dispatch history card");
+    }
+
+    const scriptAttempts = within(
+      expandDispatchSection(dispatchCard, "スクリプト試行", "展開"),
+    );
+
+    expect(scriptAttempts.getByText("リクエスト試行 1")).toBeTruthy();
+    expect(scriptAttempts.getByText("応答試行 1")).toBeTruthy();
+    expect(scriptAttempts.getAllByText("スクリプトリクエスト ID").length).toBeGreaterThan(0);
+    expect(scriptAttempts.getAllByText("スクリプト試行").length).toBeGreaterThan(0);
+    expect(scriptAttempts.getByText("コマンド")).toBeTruthy();
+    expect(scriptAttempts.getByText("解決済み引数")).toBeTruthy();
+    expect(scriptAttempts.getByText("結果")).toBeTruthy();
+    expect(scriptAttempts.getByText("所要時間")).toBeTruthy();
+    expect(scriptAttempts.getByText("標準出力")).toBeTruthy();
+    expect(scriptAttempts.getByText("標準エラー")).toBeTruthy();
+    expect(
+      scriptAttempts.getByText(
+        "このスクリプト応答では stderr は記録されませんでした。",
+      ),
+    ).toBeTruthy();
+    expect(scriptAttempts.queryByText("Script request ID")).toBeNull();
+    expect(scriptAttempts.queryByText("Resolved args")).toBeNull();
+    expect(scriptAttempts.queryByText("Stdout")).toBeNull();
+    expect(scriptAttempts.queryByText("Stderr")).toBeNull();
+    expect(
+      scriptAttempts.queryByText(
+        "No stderr was recorded for this script response.",
+      ),
+    ).toBeNull();
+  });
+});
