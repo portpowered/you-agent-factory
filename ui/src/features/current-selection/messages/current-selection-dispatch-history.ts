@@ -4,34 +4,42 @@ import {
 } from "../../../i18n";
 
 export interface CurrentSelectionDispatchHistoryMessages {
+  collapseAction: string;
   commandLabel: string;
   currentDispatchBadge: string;
   dispatchedCountLabel: string;
   durationLabel: string;
   erroredCountLabel: string;
   exitCodeLabel: string;
+  expandAction: string;
   failureDetailsTitle: string;
   failureMessageLabel: string;
   failureReasonLabel: string;
   failureTypeLabel: string;
+  inferenceAttemptsTitle: string;
   inferenceAttemptsEmptyEnded: string;
   inferenceAttemptsEmptyPending: string;
   inferenceRequestGuidance: string;
   inputWorkLabel: string;
   noScriptResponseYet: string;
+  noScriptAttemptRecordedYet: string;
   noStderrRecorded: string;
   noStdoutRecorded: string;
   outputWorkLabel: string;
   outcomeLabel: string;
   pendingOutcome: string;
+  recordedAttemptStatus: string;
   promptDetailsNotApplicable: string;
   requestDetailsTitle: string;
+  requestAttemptLabel: (attemptLabel: string) => string;
   resolvedArgsLabel: string;
   respondedCountLabel: string;
   selectedTraceSuffix: string;
   selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
   responseDetailsTitle: string;
+  responseAttemptLabel: (attemptLabel: string) => string;
   scriptAttemptLabel: string;
+  scriptAttemptsTitle: string;
   scriptRequestIdLabel: string;
   startedAtLabel: string;
   stderrLabel: string;
@@ -48,16 +56,19 @@ export interface CurrentSelectionDispatchHistoryMessages {
 
 const currentSelectionDispatchHistoryMessagesByLocale = {
   en: {
+    collapseAction: "Collapse",
     commandLabel: "Command",
     currentDispatchBadge: "Current dispatch",
     dispatchedCountLabel: "dispatchedCount",
     durationLabel: "Duration",
     erroredCountLabel: "erroredCount",
     exitCodeLabel: "Exit code",
+    expandAction: "Expand",
     failureDetailsTitle: "Failure details",
     failureMessageLabel: "Failure message",
     failureReasonLabel: "Failure reason",
     failureTypeLabel: "Failure type",
+    inferenceAttemptsTitle: "Inference attempts",
     inferenceAttemptsEmptyEnded:
       "No inference attempt details were recorded before this dispatch ended.",
     inferenceAttemptsEmptyPending:
@@ -66,21 +77,28 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       "Inference request details are shown under Inference attempts.",
     inputWorkLabel: "Input work",
     noScriptResponseYet: "No script response yet for this dispatch.",
+    noScriptAttemptRecordedYet: "No script response attempt has been recorded yet.",
     noStderrRecorded: "No stderr was recorded for this script response.",
     noStdoutRecorded: "No stdout was recorded for this script response.",
     outputWorkLabel: "Output work",
     outcomeLabel: "Outcome",
     pendingOutcome: "PENDING",
+    recordedAttemptStatus: "RECORDED",
     promptDetailsNotApplicable:
       "Prompt details are not applicable to this script-backed dispatch.",
     requestDetailsTitle: "Request details",
+    requestAttemptLabel: (attemptLabel: string) =>
+      `Request attempt ${attemptLabel}`,
     resolvedArgsLabel: "Resolved args",
     respondedCountLabel: "respondedCount",
     selectedTraceSuffix: " (selected)",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
     responseDetailsTitle: "Response details",
+    responseAttemptLabel: (attemptLabel: string) =>
+      `Response attempt ${attemptLabel}`,
     scriptAttemptLabel: "Script attempt",
+    scriptAttemptsTitle: "Script attempts",
     scriptRequestIdLabel: "Script request ID",
     startedAtLabel: "Started at",
     stderrLabel: "Stderr",
@@ -95,16 +113,19 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "Work selected",
   },
   ja: {
+    collapseAction: "折りたたむ",
     commandLabel: "コマンド",
     currentDispatchBadge: "現在のディスパッチ",
     dispatchedCountLabel: "ディスパッチ数",
     durationLabel: "所要時間",
     erroredCountLabel: "エラー数",
     exitCodeLabel: "終了コード",
+    expandAction: "展開",
     failureDetailsTitle: "失敗の詳細",
     failureMessageLabel: "失敗メッセージ",
     failureReasonLabel: "失敗理由",
     failureTypeLabel: "失敗タイプ",
+    inferenceAttemptsTitle: "推論試行",
     inferenceAttemptsEmptyEnded:
       "このディスパッチが終了するまでに推論試行の詳細は記録されませんでした。",
     inferenceAttemptsEmptyPending:
@@ -113,21 +134,29 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       "推論リクエストの詳細は推論試行の下に表示されます。",
     inputWorkLabel: "入力作業",
     noScriptResponseYet: "このディスパッチにはまだスクリプト応答がありません。",
+    noScriptAttemptRecordedYet:
+      "スクリプト応答の試行はまだ記録されていません。",
     noStderrRecorded: "このスクリプト応答では stderr は記録されませんでした。",
     noStdoutRecorded: "このスクリプト応答では stdout は記録されませんでした。",
     outputWorkLabel: "出力作業",
     outcomeLabel: "結果",
     pendingOutcome: "保留中",
+    recordedAttemptStatus: "記録済み",
     promptDetailsNotApplicable:
       "このスクリプトベースのディスパッチではプロンプトの詳細は適用されません。",
     requestDetailsTitle: "リクエストの詳細",
+    requestAttemptLabel: (attemptLabel: string) =>
+      `リクエスト試行 ${attemptLabel}`,
     resolvedArgsLabel: "解決済み引数",
     respondedCountLabel: "応答数",
     selectedTraceSuffix: "（選択中）",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `作業項目 ${workItemLabel} を選択`,
     responseDetailsTitle: "応答の詳細",
+    responseAttemptLabel: (attemptLabel: string) =>
+      `応答試行 ${attemptLabel}`,
     scriptAttemptLabel: "スクリプト試行",
+    scriptAttemptsTitle: "スクリプト試行",
     scriptRequestIdLabel: "スクリプトリクエスト ID",
     startedAtLabel: "開始時刻",
     stderrLabel: "標準エラー",
@@ -143,16 +172,19 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "作業を選択中",
   },
   ko: {
+    collapseAction: "접기",
     commandLabel: "명령",
     currentDispatchBadge: "현재 디스패치",
     dispatchedCountLabel: "디스패치 수",
     durationLabel: "소요 시간",
     erroredCountLabel: "오류 수",
     exitCodeLabel: "종료 코드",
+    expandAction: "펼치기",
     failureDetailsTitle: "실패 세부 정보",
     failureMessageLabel: "실패 메시지",
     failureReasonLabel: "실패 원인",
     failureTypeLabel: "실패 유형",
+    inferenceAttemptsTitle: "추론 시도",
     inferenceAttemptsEmptyEnded:
       "이 디스패치가 끝나기 전까지 추론 시도 세부 정보가 기록되지 않았습니다.",
     inferenceAttemptsEmptyPending:
@@ -161,21 +193,26 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
       "추론 요청 세부 정보는 추론 시도 아래에 표시됩니다.",
     inputWorkLabel: "입력 작업",
     noScriptResponseYet: "이 디스패치에는 아직 스크립트 응답이 없습니다.",
+    noScriptAttemptRecordedYet: "아직 기록된 스크립트 응답 시도가 없습니다.",
     noStderrRecorded: "이 스크립트 응답에는 stderr가 기록되지 않았습니다.",
     noStdoutRecorded: "이 스크립트 응답에는 stdout이 기록되지 않았습니다.",
     outputWorkLabel: "출력 작업",
     outcomeLabel: "결과",
     pendingOutcome: "대기 중",
+    recordedAttemptStatus: "기록됨",
     promptDetailsNotApplicable:
       "이 스크립트 기반 디스패치에는 프롬프트 세부 정보를 적용할 수 없습니다.",
     requestDetailsTitle: "요청 세부 정보",
+    requestAttemptLabel: (attemptLabel: string) => `요청 시도 ${attemptLabel}`,
     resolvedArgsLabel: "해결된 인수",
     respondedCountLabel: "응답 수",
     selectedTraceSuffix: " (선택됨)",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `작업 항목 ${workItemLabel} 선택`,
     responseDetailsTitle: "응답 세부 정보",
+    responseAttemptLabel: (attemptLabel: string) => `응답 시도 ${attemptLabel}`,
     scriptAttemptLabel: "스크립트 시도",
+    scriptAttemptsTitle: "스크립트 시도",
     scriptRequestIdLabel: "스크립트 요청 ID",
     startedAtLabel: "시작 시각",
     stderrLabel: "표준 오류",
@@ -190,35 +227,43 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workSelectedActionLabel: "작업 선택됨",
   },
   "zh-CN": {
+    collapseAction: "收起",
     commandLabel: "命令",
     currentDispatchBadge: "当前分派",
     dispatchedCountLabel: "分派次数",
     durationLabel: "耗时",
     erroredCountLabel: "错误次数",
     exitCodeLabel: "退出码",
+    expandAction: "展开",
     failureDetailsTitle: "失败详情",
     failureMessageLabel: "失败消息",
     failureReasonLabel: "失败原因",
     failureTypeLabel: "失败类型",
+    inferenceAttemptsTitle: "推理尝试",
     inferenceAttemptsEmptyEnded: "该分派结束前没有记录任何推理尝试详情。",
     inferenceAttemptsEmptyPending: "该分派暂时还没有记录推理尝试详情。",
     inferenceRequestGuidance: "推理请求详情显示在推理尝试下方。",
     inputWorkLabel: "输入工作",
     noScriptResponseYet: "这个分派暂时还没有脚本响应。",
+    noScriptAttemptRecordedYet: "这个分派暂时还没有记录脚本响应尝试。",
     noStderrRecorded: "这个脚本响应没有记录 stderr。",
     noStdoutRecorded: "这个脚本响应没有记录 stdout。",
     outputWorkLabel: "输出工作",
     outcomeLabel: "结果",
     pendingOutcome: "等待中",
+    recordedAttemptStatus: "已记录",
     promptDetailsNotApplicable: "这个脚本分派不适用提示词详情。",
     requestDetailsTitle: "请求详情",
+    requestAttemptLabel: (attemptLabel: string) => `请求尝试 ${attemptLabel}`,
     resolvedArgsLabel: "已解析参数",
     respondedCountLabel: "响应次数",
     selectedTraceSuffix: "（已选中）",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `选择工作项 ${workItemLabel}`,
     responseDetailsTitle: "响应详情",
+    responseAttemptLabel: (attemptLabel: string) => `响应尝试 ${attemptLabel}`,
     scriptAttemptLabel: "脚本尝试",
+    scriptAttemptsTitle: "脚本尝试",
     scriptRequestIdLabel: "脚本请求 ID",
     startedAtLabel: "开始时间",
     stderrLabel: "标准错误",

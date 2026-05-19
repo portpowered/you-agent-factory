@@ -1,3 +1,5 @@
+import { type ReactNode, useId, useState } from "react";
+
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
@@ -11,12 +13,15 @@ import type {
 } from "../../api/dashboard/types";
 import {
   EXECUTION_PILL_CLASS,
+  HISTORY_HEADER_CLASS,
+  HISTORY_TOGGLE_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
 } from "./detail-card-shared";
 import { InferenceAttemptCard } from "./inference-attempt";
 import type { SelectedWorkRequestHistoryItem } from "./detail-card-types";
+import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-locale";
 import {
   requestModel,
   requestProvider,
@@ -40,12 +45,10 @@ export function DispatchInferenceAttemptsSection({
   attempts: DashboardInferenceAttempt[];
   emptyCopy?: string;
 }) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+
   return (
-    <section
-      aria-label="Inference attempts"
-      className="mt-3 grid gap-2 border-t border-af-overlay/8 pt-3"
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Inference attempts</h4>
+    <CollapsibleDispatchAttemptSection title={messages.inferenceAttemptsTitle}>
       <div className="grid gap-2.5">
         {attempts.length > 0
           ? attempts.map((attempt) => (
@@ -55,7 +58,7 @@ export function DispatchInferenceAttemptsSection({
             ? <p className={DETAIL_COPY_CLASS}>{emptyCopy}</p>
             : null}
       </div>
-    </section>
+    </CollapsibleDispatchAttemptSection>
   );
 }
 
@@ -72,12 +75,10 @@ export function DispatchScriptAttemptsSection({
   scriptRequest: DashboardScriptRequest | undefined;
   scriptResponse: DashboardScriptResponse | undefined;
 }) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+
   return (
-    <section
-      aria-label="Script attempts"
-      className="mt-3 grid gap-2 border-t border-af-overlay/8 pt-3"
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Script attempts</h4>
+    <CollapsibleDispatchAttemptSection title={messages.scriptAttemptsTitle}>
       <div className="grid gap-2.5">
         {scriptRequest ? (
           <ScriptRequestAttemptCard request={request} scriptRequest={scriptRequest} />
@@ -91,9 +92,43 @@ export function DispatchScriptAttemptsSection({
             scriptResponse={scriptResponse}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>No script response attempt has been recorded yet.</p>
+          <p className={DETAIL_COPY_CLASS}>{messages.noScriptAttemptRecordedYet}</p>
         )}
       </div>
+    </CollapsibleDispatchAttemptSection>
+  );
+}
+
+function CollapsibleDispatchAttemptSection({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+  const [expanded, setExpanded] = useState(false);
+  const sectionId = useId();
+  const panelId = `${sectionId}-panel`;
+  const headingId = `${sectionId}-heading`;
+
+  return (
+    <section aria-labelledby={headingId} className="mt-3 grid gap-2.5 border-t border-af-overlay/8 pt-3">
+      <div className={HISTORY_HEADER_CLASS}>
+        <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
+          {title}
+        </h4>
+        <button
+          aria-controls={panelId}
+          aria-expanded={expanded}
+          className={HISTORY_TOGGLE_CLASS}
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
+        >
+          {expanded ? messages.collapseAction : messages.expandAction}
+        </button>
+      </div>
+      {expanded ? <div id={panelId}>{children}</div> : null}
     </section>
   );
 }
@@ -107,13 +142,16 @@ function ScriptRequestAttemptCard({
 }) {
   const attemptNumber = scriptAttemptNumber(scriptRequest);
   const requestID = scriptRequestID(scriptRequest);
+  const messages = useCurrentSelectionDispatchHistoryMessages();
 
   return (
     <article className={PROVIDER_SESSION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <strong>Request attempt {attemptNumber ?? "pending"}</strong>
-          <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>PENDING</p>
+          <strong>{messages.requestAttemptLabel(String(attemptNumber ?? "pending"))}</strong>
+          <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
+            {messages.pendingOutcome}
+          </p>
         </div>
         <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-request"}</span>
       </div>
@@ -156,14 +194,15 @@ function ScriptResponseAttemptCard({
   const durationMillis = scriptResponseDurationMillis(scriptResponse);
   const exitCode = scriptResponseExitCode(scriptResponse);
   const failureType = scriptResponseFailureType(scriptResponse);
+  const messages = useCurrentSelectionDispatchHistoryMessages();
 
   return (
     <article className={PROVIDER_SESSION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <strong>Response attempt {attemptNumber ?? "completed"}</strong>
+          <strong>{messages.responseAttemptLabel(String(attemptNumber ?? "completed"))}</strong>
           <p className={`m-0 text-af-ink/70 ${DASHBOARD_BODY_TEXT_CLASS}`}>
-            {scriptResponse.outcome ?? "RECORDED"}
+            {scriptResponse.outcome ?? messages.recordedAttemptStatus}
           </p>
         </div>
         <span className={EXECUTION_PILL_CLASS}>{requestID ?? "script-response"}</span>

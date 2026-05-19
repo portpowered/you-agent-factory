@@ -27,6 +27,21 @@ function getDetailRow(container: HTMLElement, label: string): HTMLElement {
   return row;
 }
 
+function expandDispatchSection(
+  container: HTMLElement,
+  title: string,
+  expandLabel = "Expand",
+): HTMLElement {
+  const section = within(container).getByRole("region", { name: title });
+  const toggle = within(section).getByRole("button", { name: expandLabel });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return section;
+}
+
 function buildSelectedTrace(workItem: DashboardWorkItemRef): DashboardTrace {
   return {
     dispatches: [],
@@ -204,7 +219,7 @@ describe("WorkItemDetailCard summary", () => {
       screen.getByRole("region", { name: "Trace details" }),
     );
     const inferenceAttempts = within(
-      screen.getByRole("region", { name: "Inference attempts" }),
+      expandDispatchSection(document.body, "Inference attempts"),
     );
     expect(
       within(currentSelection).queryByRole("heading", {
@@ -682,7 +697,7 @@ describe("WorkItemDetailCard summary", () => {
       screen.getByRole("region", { name: "Trace details" }),
     );
     const inferenceAttempts = within(
-      screen.getByRole("region", { name: "Inference attempts" }),
+      expandDispatchSection(document.body, "Inference attempts"),
     );
     expect(
       within(currentSelection).getByRole("heading", {
@@ -851,6 +866,105 @@ describe("WorkItemDetailCard summary", () => {
 });
 
 describe("WorkItemDetailCard dispatch diagnostics", () => {
+  it("starts attempt sections collapsed and keeps expansion scoped to each dispatch card", () => {
+    const { dispatchID, execution, selectedNode, workItem } =
+      getSelectedWorkItemFixture();
+    const historicalDispatchID = "dispatch-review-historical";
+
+    render(
+      <WorkItemDetailCard
+        dispatchAttempts={[]}
+        executionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID,
+          selectedNode,
+          workItem,
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedNode={selectedNode}
+        selection={{
+          dispatchId: dispatchID,
+          execution,
+          kind: "work-item",
+          nodeId: selectedNode.node_id,
+          workItem,
+        }}
+        workstationRequests={[
+          workstationRequest(historicalDispatchID, {
+            inference_attempts: [
+              inferenceAttempt(historicalDispatchID, {
+                attempt: 1,
+                inference_request_id: `${historicalDispatchID}/inference-request/1`,
+                outcome: "FAILED",
+                prompt: "Historical attempt prompt.",
+              }),
+            ],
+            prompt: "Historical review request.",
+            request_id: "request-review-historical",
+            trace_ids: ["trace-historical-story"],
+            work_items: [workItem],
+          }),
+          workstationRequest(dispatchID, {
+            inference_attempts: [
+              inferenceAttempt(dispatchID, {
+                attempt: 1,
+                inference_request_id: `${dispatchID}/inference-request/1`,
+                outcome: "SUCCEEDED",
+                prompt: "Active attempt prompt.",
+              }),
+            ],
+            prompt: "Active review request.",
+            request_id: "request-review-active",
+            trace_ids: ["trace-active-story"],
+            work_items: [workItem],
+          }),
+        ]}
+      />,
+    );
+
+    const dispatchHistory = screen.getByRole("region", {
+      name: "Workstation dispatches",
+    });
+    const activeCard = within(dispatchHistory)
+      .getAllByText(dispatchID)[0]
+      .closest("article");
+    const historicalCard = within(dispatchHistory)
+      .getByText(historicalDispatchID)
+      .closest("article");
+
+    if (
+      !(activeCard instanceof HTMLElement) ||
+      !(historicalCard instanceof HTMLElement)
+    ) {
+      throw new Error("expected active and historical dispatch cards");
+    }
+
+    const activeSection = within(activeCard).getByRole("region", {
+      name: "Inference attempts",
+    });
+    const historicalSection = within(historicalCard).getByRole("region", {
+      name: "Inference attempts",
+    });
+    const activeToggle = within(activeSection).getByRole("button", {
+      name: "Expand",
+    });
+    const historicalToggle = within(historicalSection).getByRole("button", {
+      name: "Expand",
+    });
+
+    expect(activeToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(historicalToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(within(activeSection).queryByText("Active attempt prompt.")).toBeNull();
+    expect(within(historicalSection).queryByText("Historical attempt prompt.")).toBeNull();
+
+    fireEvent.click(activeToggle);
+
+    expect(activeToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(historicalToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(within(activeSection).getByText("Active attempt prompt.")).toBeTruthy();
+    expect(within(historicalSection).queryByText("Historical attempt prompt.")).toBeNull();
+  });
+
   it("renders nested inference attempts in order and preserves dispatch drilldowns", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
@@ -959,10 +1073,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       );
     }
 
-    const inferenceAttempts = within(dispatchCard).getByRole("region", {
-      name: "Inference attempts",
-    });
-    const attemptCards = within(inferenceAttempts).getAllByRole("article");
+    const inferenceAttempts = within(
+      expandDispatchSection(dispatchCard, "Inference attempts"),
+    );
+    const attemptCards = inferenceAttempts.getAllByRole("article");
 
     expect(attemptCards).toHaveLength(2);
     expect(within(attemptCards[0]).getByText("Attempt 1")).toBeTruthy();
@@ -1071,7 +1185,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toHaveLength(1);
     expect(
       within(
-        screen.getByRole("region", { name: "Inference attempts" }),
+        expandDispatchSection(document.body, "Inference attempts"),
       ).getByText(
         "No inference attempt details were recorded before this dispatch ended.",
       ),
@@ -1132,22 +1246,22 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         "Prompt details are not applicable to this script-backed dispatch.",
       ),
     ).toBeTruthy();
-    const scriptAttempts = within(dispatchCard).getByRole("region", {
-      name: "Script attempts",
-    });
+    const scriptAttempts = within(
+      expandDispatchSection(dispatchCard, "Script attempts"),
+    );
     expect(
-      within(scriptAttempts).getByText(
+      scriptAttempts.getByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.command ?? "",
       ),
     ).toBeTruthy();
     expect(
-      within(scriptAttempts).getAllByText(
+      scriptAttempts.getAllByText(
         dashboardWorkstationRequestFixtures.scriptPending.script_request
           ?.script_request_id ?? "",
       ).length,
     ).toBeGreaterThan(0);
-    expect(within(scriptAttempts).getByText("--work")).toBeTruthy();
+    expect(scriptAttempts.getByText("--work")).toBeTruthy();
     expect(
       within(
         within(dispatchCard).getByRole("region", { name: "Request details" }),
@@ -1164,10 +1278,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         within(dispatchCard).getByRole("region", { name: "Response details" }),
       ).queryByText("No script response yet for this dispatch."),
     ).toBeNull();
-    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
-    expect(within(scriptAttempts).getByText("PENDING")).toBeTruthy();
+    expect(scriptAttempts.getByText("Request attempt 1")).toBeTruthy();
+    expect(scriptAttempts.getByText("PENDING")).toBeTruthy();
     expect(
-      within(scriptAttempts).getByText(
+      scriptAttempts.getByText(
         "No script response attempt has been recorded yet.",
       ),
     ).toBeTruthy();
@@ -1343,8 +1457,8 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeTruthy();
     expect(
       within(
-        within(dispatchCard).getByRole("region", { name: "Script attempts" }),
-      ).getByText("No script response attempt has been recorded yet."),
+        expandDispatchSection(dispatchCard, "スクリプト試行", "展開"),
+      ).getByText("スクリプト応答の試行はまだ記録されていません。"),
     ).toBeTruthy();
     expect(
       within(dispatchCard).queryByText(
@@ -1354,7 +1468,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(dispatchCard).getByText("ワークステーション")).toBeTruthy();
     expect(within(dispatchCard).getByText("遷移 ID")).toBeTruthy();
     expect(within(dispatchCard).getByText("開始時刻")).toBeTruthy();
-    expect(within(dispatchCard).getByText("保留中")).toBeTruthy();
+    expect(within(dispatchCard).getAllByText("保留中").length).toBeGreaterThan(0);
     expect(within(dispatchCard).queryByText("ディスパッチ数")).toBeNull();
     expect(within(dispatchCard).queryByText("応答数")).toBeNull();
     expect(within(dispatchCard).queryByText("エラー数")).toBeNull();
@@ -1430,7 +1544,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeTruthy();
     expect(
       within(
-        within(dispatchCard).getByRole("region", { name: "Script attempts" }),
+        expandDispatchSection(dispatchCard, "Script attempts"),
       ).getByText("No script response attempt has been recorded yet."),
     ).toBeTruthy();
     expect(
@@ -1496,28 +1610,26 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
-    const scriptAttempts = within(dispatchCard).getByRole("region", {
-      name: "Script attempts",
-    });
-    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
-    expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
+    const scriptAttempts = within(
+      expandDispatchSection(dispatchCard, "Script attempts"),
+    );
+    expect(scriptAttempts.getByText("Request attempt 1")).toBeTruthy();
+    expect(scriptAttempts.getByText("Response attempt 1")).toBeTruthy();
     expect(
-      within(scriptAttempts).getByText(
+      scriptAttempts.getByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_request
           ?.command ?? "",
       ),
     ).toBeTruthy();
     expect(
-      within(scriptAttempts).getAllByText(
+      scriptAttempts.getAllByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_response
           ?.script_request_id ?? "",
       ).length,
     ).toBeGreaterThan(0);
-    expect(within(scriptAttempts).getByText("222ms")).toBeTruthy();
-    expect(
-      within(scriptAttempts).getByText(/script success stdout/),
-    );
-    expect(within(scriptAttempts).getAllByRole("article")).toHaveLength(2);
+    expect(scriptAttempts.getByText("222ms")).toBeTruthy();
+    expect(scriptAttempts.getByText(/script success stdout/));
+    expect(scriptAttempts.getAllByRole("article")).toHaveLength(2);
     expect(
       within(
         within(dispatchCard).getByRole("region", { name: "Request details" }),
@@ -1574,15 +1686,13 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getAllByText("TIMED_OUT").length,
     ).toBeGreaterThan(0);
-    const scriptAttempts = within(dispatchCard).getByRole("region", {
-      name: "Script attempts",
-    });
-    expect(within(scriptAttempts).getByText("Request attempt 1")).toBeTruthy();
-    expect(within(scriptAttempts).getByText("Response attempt 1")).toBeTruthy();
-    expect(within(scriptAttempts).getByText("TIMEOUT")).toBeTruthy();
-    expect(
-      within(scriptAttempts).getByText(/script timed out/i),
-    ).toBeTruthy();
+    const scriptAttempts = within(
+      expandDispatchSection(dispatchCard, "Script attempts"),
+    );
+    expect(scriptAttempts.getByText("Request attempt 1")).toBeTruthy();
+    expect(scriptAttempts.getByText("Response attempt 1")).toBeTruthy();
+    expect(scriptAttempts.getByText("TIMEOUT")).toBeTruthy();
+    expect(scriptAttempts.getByText(/script timed out/i)).toBeTruthy();
     expect(
       within(
         within(dispatchCard).getByRole("region", { name: "Response details" }),
@@ -1648,8 +1758,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         name: "Work session runs list",
       }),
     ).toBeNull();
+    const inferenceAttempts = within(
+      expandDispatchSection(dispatchCard, "Inference attempts"),
+    );
     expect(
-      within(dispatchCard).getByText(
+      inferenceAttempts.getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
@@ -1666,11 +1779,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(
-        within(dispatchCard).getByRole("region", {
-          name: "Inference attempts",
-        }),
-      ).getByText(
+      inferenceAttempts.getByText(
         `codex / session_id / ${dashboardWorkstationRequestFixtures.rejected.inference_attempts?.[0]?.provider_session?.id}`,
       ),
     ).toBeTruthy();
