@@ -396,6 +396,62 @@ func TestEnablementEvaluator_SameNameGuardBlocksNonMatchingNames(t *testing.T) {
 	}
 }
 
+func TestEnablementEvaluator_SameNameGuardFindsLaterMatchingBinding(t *testing.T) {
+	eval := NewEnablementEvaluator(nil)
+
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"idea:to-complete": {ID: "idea:to-complete"},
+			"task:to-complete": {ID: "task:to-complete"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"consume": {
+				ID:   "consume",
+				Name: "consume",
+				InputArcs: []petri.Arc{
+					{ID: "task-in", Name: "task", PlaceID: "task:to-complete", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+					{
+						ID:          "idea-in",
+						Name:        "idea",
+						PlaceID:     "idea:to-complete",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+						Guard:       &petri.SameNameGuard{MatchBinding: "task"},
+					},
+				},
+			},
+		},
+	}
+	marking := makeTestSnapshot(map[string]*interfaces.Token{
+		"task-alpha": {
+			ID:      "task-alpha",
+			PlaceID: "task:to-complete",
+			Color:   interfaces.TokenColor{Name: "alpha"},
+		},
+		"task-zeta": {
+			ID:      "task-zeta",
+			PlaceID: "task:to-complete",
+			Color:   interfaces.TokenColor{Name: "zeta"},
+		},
+		"idea-zeta": {
+			ID:      "idea-zeta",
+			PlaceID: "idea:to-complete",
+			Color:   interfaces.TokenColor{Name: "zeta"},
+		},
+	})
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["task"]); strings.Join(got, ",") != "task-zeta" {
+		t.Fatalf("task binding tokens = %v, want [task-zeta]", got)
+	}
+	if got := tokenIDs(enabled[0].Bindings["idea"]); strings.Join(got, ",") != "idea-zeta" {
+		t.Fatalf("idea binding tokens = %v, want [idea-zeta]", got)
+	}
+}
+
 func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorResolves(t *testing.T) {
 	eval := NewEnablementEvaluator(nil)
 
