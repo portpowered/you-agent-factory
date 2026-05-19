@@ -39,7 +39,7 @@ describe("getCurrentSelectionShellMessages", () => {
 
   it.each([
     ["en", "Undo selection", "Redo selection"],
-    ["ja", "選択を元に戻す", "選択をやり直す"],
+    ["zh-CN", "撤销所选内容", "重做所选内容"],
   ] as const)("keeps %s accessible labels available through the resolved locale catalog", (locale, expectedUndoAccessibleLabel, expectedRedoAccessibleLabel) => {
     const messages = getCurrentSelectionShellMessages(locale);
 
