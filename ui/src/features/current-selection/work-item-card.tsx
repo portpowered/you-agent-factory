@@ -137,7 +137,7 @@ function WorkRelationshipsSection({
   return (
     <section
       aria-label="Work relationships"
-      className="mt-4 grid gap-[0.65rem] [&_h4]:m-0"
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Work relationships</h4>
       {relationships.length > 0 ? (
@@ -280,7 +280,7 @@ function RelationshipLane({
       <ul className="m-0 grid list-none gap-2 p-0">
         {items.map((relationship) => (
           <li
-            className="grid gap-[0.3rem] rounded-lg border border-af-overlay/8 bg-af-base/80 p-[0.75rem]"
+            className="grid gap-1 rounded-lg border border-af-overlay/8 bg-af-base/80 p-3"
             key={relationship.key}
           >
             <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>

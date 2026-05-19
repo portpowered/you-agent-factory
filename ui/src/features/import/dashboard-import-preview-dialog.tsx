@@ -26,7 +26,7 @@ import type { FactoryImportActivationState } from "./use-factory-import-activati
 import type { FactoryImportPreviewState } from "./use-factory-import-preview";
 
 const IMPORT_DIALOG_CONTENT_CLASS =
-  "w-[min(92vw,60rem)] gap-6 p-5 max-[900px]:p-4 min-[901px]:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
+  "w-full max-w-5xl gap-6 p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:p-5";
 const IMPORT_DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 const IMPORT_DIALOG_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_BODY_TEXT_CLASS);
 const IMPORT_DIALOG_HINT_CLASS = cx("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
@@ -152,10 +152,10 @@ export function FactoryImportPreviewDialog({
           }
         }}
       >
-        <div className="overflow-hidden rounded-[1.25rem] border border-af-overlay/10 bg-af-overlay/4 p-3">
+        <div className="overflow-hidden rounded-3xl border border-af-overlay/10 bg-af-overlay/4 p-3">
           <img
             alt={messages.previewImageAlt(previewState.value.factory.name)}
-            className="block h-full max-h-[24rem] w-full rounded-[1rem] object-contain"
+            className="block h-full max-h-96 w-full rounded-2xl object-contain"
             src={previewState.value.previewImageSrc}
           />
         </div>
@@ -179,7 +179,7 @@ export function FactoryImportPreviewDialog({
             {previewState.value.factory.name}
           </p>
 
-          <dl className="grid gap-3 rounded-[1.1rem] border border-af-overlay/10 bg-af-overlay/4 p-4 text-sm text-af-ink/80">
+          <dl className="grid gap-3 rounded-2xl border border-af-overlay/10 bg-af-overlay/4 p-4 text-sm text-af-ink/80">
             <div className="grid gap-1">
               <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.droppedFileLabel}</dt>
               <dd className="m-0 font-semibold text-af-ink">{previewState.file.name}</dd>

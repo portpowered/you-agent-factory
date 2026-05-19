@@ -189,4 +189,26 @@ describe("D3CompletionInformationCard", () => {
       within(card).queryByRole("img", { name: "Work outcome chart for 15m" }),
     ).toBeNull();
   });
+
+  it("renders an explicit error state with the card landmark preserved", () => {
+    render(
+      <D3CompletionInformationCard
+        chartState={{ status: "error" }}
+        model={emptyTrend}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Work outcome chart" });
+    const alert = within(card).getByRole("alert");
+    expect(alert).toBeTruthy();
+    expect(within(alert).getByText("Work outcome chart unavailable")).toBeTruthy();
+    expect(
+      within(alert).getByText(
+        "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card).queryByRole("img", { name: "Work outcome chart for 15m" }),
+    ).toBeNull();
+  });
 });

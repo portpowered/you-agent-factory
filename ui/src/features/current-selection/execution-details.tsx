@@ -67,7 +67,7 @@ export function ExecutionDetailsSection({
         </div>
         <div>
           <dt>{messages.traceIdsLabel}</dt>
-          <dd className="grid gap-[0.35rem]">
+          <dd className="grid gap-1.5">
             {hasTraceIDs ? (
               details.traceIDs.map((traceID) => (
                 <a
@@ -91,7 +91,7 @@ export function ExecutionDetailsSection({
         </div>
       </dl>
       {hasTraceIDs ? (
-        <div className="grid gap-[0.55rem]">
+        <div className="grid gap-2">
           <p className={DETAIL_COPY_CLASS}>{messages.traceGuidance}</p>
           <a
             className={TRACE_ACTION_LINK_CLASS}
@@ -122,13 +122,13 @@ export function InferenceAttemptsSection({
   return (
     <section
       aria-label={messages.inferenceAttemptsRegionLabel}
-      className="mt-4 grid gap-[0.65rem] [&_h4]:m-0"
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.inferenceAttemptsHeading}
       </h4>
       {attempts.length > 0 ? (
-        <div className="grid gap-[0.8rem]">
+        <div className="grid gap-3">
           {attempts.map((attempt) => (
             <InferenceAttemptCard
               attempt={attempt}
@@ -159,7 +159,7 @@ function WorkstationRequestProjectionSection({
   return (
     <section
       aria-label={messages.workstationRequestRegionLabel}
-      className="mt-4 grid gap-[0.65rem] [&_h4]:m-0"
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
       <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
         {messages.workstationRequestHeading}

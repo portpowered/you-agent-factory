@@ -44,7 +44,7 @@ const DIALOG_ERROR_PANEL_CLASS =
   "rounded-2xl border border-af-danger/30 bg-af-danger/10 px-4 py-3 text-sm text-af-danger-ink";
 const DIALOG_SUCCESS_PANEL_CLASS =
   "rounded-2xl border border-af-success/30 bg-af-success/12 px-4 py-3 text-sm text-af-success-ink";
-const DIALOG_CONTENT_CLASS = "w-[min(92vw,42rem)] gap-6";
+const DIALOG_CONTENT_CLASS = "w-full max-w-2xl gap-6";
 
 export interface ExportFactoryDialogProps {
   factory: FactoryValue | null;
