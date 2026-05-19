@@ -74,7 +74,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     const toggle = within(editableConfigurationSection()).getByRole("button", {
-      name: "Expand",
+      name: "Expand editable configuration",
     });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByLabelText("Worker")).toBeNull();
@@ -91,7 +91,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
     expect(
       within(editableConfigurationSection())
-        .getByRole("button", { name: "Collapse" })
+        .getByRole("button", { name: "Collapse editable configuration" })
         .getAttribute("aria-controls"),
     ).toBeTruthy();
   });
@@ -113,7 +113,7 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     fireEvent.click(
       within(editableConfigurationSection()).getByRole("button", {
-        name: "Expand",
+        name: "Expand editable configuration",
       }),
     );
     expect(screen.getByLabelText("Worker")).toBeTruthy();
@@ -133,7 +133,7 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(
       within(editableConfigurationSection()).getByRole("button", {
-        name: "Expand",
+        name: "Expand editable configuration",
       }),
     ).toBeTruthy();
     expect(
@@ -168,7 +168,7 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     fireEvent.click(
       within(editableConfigurationSection()).getByRole("button", {
-        name: "Expand",
+        name: "Expand editable configuration",
       }),
     );
 
@@ -215,7 +215,7 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     fireEvent.click(
       within(editableConfigurationSection()).getByRole("button", {
-        name: "Expand",
+        name: "Expand editable configuration",
       }),
     );
 
@@ -269,7 +269,7 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     fireEvent.click(
       within(editableConfigurationSection()).getByRole("button", {
-        name: "Expand",
+        name: "Expand editable configuration",
       }),
     );
 

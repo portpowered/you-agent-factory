@@ -16,6 +16,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationEmpty:
       "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
     editableConfigurationErrorPrefix: "Editable configuration unavailable.",
+    editableConfigurationCollapseActionLabel: "Collapse editable configuration",
+    editableConfigurationExpandActionLabel: "Expand editable configuration",
     editableConfigurationHeading: "Editable configuration",
     editableConfigurationDirtyStatus:
       "You have unsaved changes for this workstation.",
@@ -119,6 +121,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationEmpty:
       "この選択中ワークステーションでは、実行中ファクトリー定義から編集可能な worker と prompt の値を取得できません。",
     editableConfigurationErrorPrefix: "編集可能な構成は利用できません。",
+    editableConfigurationCollapseActionLabel: "編集可能な構成を折りたたむ",
+    editableConfigurationExpandActionLabel: "編集可能な構成を展開",
     editableConfigurationHeading: "編集可能な構成",
     editableConfigurationDirtyStatus:
       "このワークステーションには未保存の変更があります。",
@@ -222,6 +226,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationEmpty:
       "선택한 워크스테이션에 대해 실행 중인 팩토리 정의에서 편집 가능한 worker 및 prompt 값을 찾을 수 없습니다.",
     editableConfigurationErrorPrefix: "편집 가능한 구성을 사용할 수 없습니다.",
+    editableConfigurationCollapseActionLabel: "편집 가능한 구성 접기",
+    editableConfigurationExpandActionLabel: "편집 가능한 구성 펼치기",
     editableConfigurationHeading: "편집 가능한 구성",
     editableConfigurationDirtyStatus:
       "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
@@ -323,6 +329,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationEmpty:
       "运行中的工厂定义没有为所选工作站公开可编辑的 worker 和 prompt 值。",
     editableConfigurationErrorPrefix: "无法提供可编辑配置。",
+    editableConfigurationCollapseActionLabel: "收起可编辑配置",
+    editableConfigurationExpandActionLabel: "展开可编辑配置",
     editableConfigurationHeading: "可编辑配置",
     editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
     editableConfigurationDraftNote:

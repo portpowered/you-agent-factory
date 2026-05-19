@@ -322,7 +322,9 @@ async function expectEditableConfigurationBrowserFlow(
   const currentSelection = currentSelectionCard(canvasElement);
   const section = editableConfigurationSection(currentSelection);
   const sectionScope = within(section);
-  const expandButton = sectionScope.getByRole("button", { name: "Expand" });
+  const expandButton = sectionScope.getByRole("button", {
+    name: "Expand editable configuration",
+  });
 
   await expect(expandButton).toHaveAttribute("aria-expanded", "false");
   expect(sectionScope.queryByLabelText("Worker")).toBeNull();

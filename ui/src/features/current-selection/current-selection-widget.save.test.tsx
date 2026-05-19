@@ -348,7 +348,11 @@ function expandEditableConfiguration() {
     throw new Error("expected editable configuration section");
   }
 
-  fireEvent.click(within(section).getByRole("button", { name: "Expand" }));
+  fireEvent.click(
+    within(section).getByRole("button", {
+      name: "Expand editable configuration",
+    }),
+  );
 }
 
 function renderWorkstationSelection() {

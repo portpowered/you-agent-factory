@@ -58,6 +58,11 @@ export function EditableConfigurationSection({
           </p>
         </div>
         <button
+          aria-label={
+            expanded
+              ? messages.editableConfigurationCollapseActionLabel
+              : messages.editableConfigurationExpandActionLabel
+          }
           aria-controls={contentId}
           aria-expanded={expanded}
           className={HISTORY_TOGGLE_CLASS}
