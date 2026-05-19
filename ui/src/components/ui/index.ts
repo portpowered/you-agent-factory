@@ -16,5 +16,4 @@ export * from "./select";
 export * from "./skeleton";
 export * from "./table";
 export * from "./textarea";
-export * from "./tooltip";
 export * from "./widget-frame";

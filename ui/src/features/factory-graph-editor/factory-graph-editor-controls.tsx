@@ -6,13 +6,10 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
   buttonVariants,
 } from "../../components/ui";
 import { cx } from "../../lib/cx";
+import { FactoryGraphEditorTooltipButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
@@ -82,20 +79,20 @@ export function FactoryGraphEditorModeToggle({
   const label = editorMode ? "Leave factory graph editor" : "Enter factory graph editor";
 
   return (
-    <TooltipProvider delayDuration={120}>
-      <Tooltip>
-        <TooltipTrigger
-          aria-label={label}
-          aria-pressed={editorMode}
-          className={buttonVariants({ className: "shrink-0", size: "icon", tone: editorMode ? "secondary" : "outline" })}
-          onClick={onClick}
-          type="button"
-        >
-          <EditModeIcon />
-        </TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <FactoryGraphEditorTooltipButton
+      aria-label={label}
+      aria-pressed={editorMode}
+      className={buttonVariants({
+        className: "shrink-0",
+        size: "icon",
+        tone: editorMode ? "secondary" : "outline",
+      })}
+      onClick={onClick}
+      tooltip={label}
+      type="button"
+    >
+      <EditModeIcon />
+    </FactoryGraphEditorTooltipButton>
   );
 }
 
@@ -198,43 +195,41 @@ export function FactoryGraphEditorToolbar({
       aria-label="Factory graph editor tools"
       className={TOOLBAR_SHELL_CLASS}
     >
-      <TooltipProvider delayDuration={120}>
-        <FactoryGraphEditorToolbarButton
-          active={activeTool === "add"}
-          description={TOOLTIP_COPY.add}
-          disabled={!canInteract}
-          label="Add"
-          onClick={() => onSelectTool(activeTool === "add" ? null : "add")}
-          tone={activeTool === "add" ? "secondary" : "outline"}
-        />
-        <FactoryGraphEditorAddMenu
-          actions={addMenuActions}
-          canInteract={canInteract}
-          onAction={onAddAction}
-          onOpenChange={onAddMenuOpenChange}
-          open={openAddMenu}
-        />
-        <FactoryGraphEditorToolbarButton
-          active={activeTool === "delete"}
-          description={TOOLTIP_COPY.delete}
-          disabled={!canInteract}
-          label="Delete"
-          onClick={() =>
-            onSelectTool(activeTool === "delete" ? null : "delete")
-          }
-          tone={activeTool === "delete" ? "secondary" : "outline"}
-        />
-        <FactoryGraphEditorToolbarButton
-          active={activeTool === "connect"}
-          description={TOOLTIP_COPY.connect}
-          disabled={!canInteract}
-          label="Connect"
-          onClick={() =>
-            onSelectTool(activeTool === "connect" ? null : "connect")
-          }
-          tone={activeTool === "connect" ? "secondary" : "outline"}
-        />
-      </TooltipProvider>
+      <FactoryGraphEditorToolbarButton
+        active={activeTool === "add"}
+        description={TOOLTIP_COPY.add}
+        disabled={!canInteract}
+        label="Add"
+        onClick={() => onSelectTool(activeTool === "add" ? null : "add")}
+        tone={activeTool === "add" ? "secondary" : "outline"}
+      />
+      <FactoryGraphEditorAddMenu
+        actions={addMenuActions}
+        canInteract={canInteract}
+        onAction={onAddAction}
+        onOpenChange={onAddMenuOpenChange}
+        open={openAddMenu}
+      />
+      <FactoryGraphEditorToolbarButton
+        active={activeTool === "delete"}
+        description={TOOLTIP_COPY.delete}
+        disabled={!canInteract}
+        label="Delete"
+        onClick={() =>
+          onSelectTool(activeTool === "delete" ? null : "delete")
+        }
+        tone={activeTool === "delete" ? "secondary" : "outline"}
+      />
+      <FactoryGraphEditorToolbarButton
+        active={activeTool === "connect"}
+        description={TOOLTIP_COPY.connect}
+        disabled={!canInteract}
+        label="Connect"
+        onClick={() =>
+          onSelectTool(activeTool === "connect" ? null : "connect")
+        }
+        tone={activeTool === "connect" ? "secondary" : "outline"}
+      />
       <p
         aria-live="polite"
         className={cx(
@@ -322,21 +317,16 @@ function FactoryGraphEditorToolbarButton({
   tone: "outline" | "secondary";
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          aria-pressed={active}
-          disabled={disabled}
-          onClick={onClick}
-          size="sm"
-          tone={tone}
-          type="button"
-        >
-          {label}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{description}</TooltipContent>
-    </Tooltip>
+    <FactoryGraphEditorTooltipButton
+      aria-pressed={active}
+      className={buttonVariants({ size: "sm", tone })}
+      disabled={disabled}
+      onClick={onClick}
+      tooltip={description}
+      type="button"
+    >
+      {label}
+    </FactoryGraphEditorTooltipButton>
   );
 }
 
@@ -359,14 +349,12 @@ function FactoryGraphEditorAddMenu({
 
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
-      <PopoverTrigger asChild>
-        <Button
-          aria-label="Open add entity menu"
-          disabled={!canInteract}
-          size="icon"
-          tone="ghost"
-          type="button"
-        >
+      <PopoverTrigger
+        aria-label="Open add entity menu"
+        className={buttonVariants({ size: "icon", tone: "ghost" })}
+        disabled={!canInteract}
+        type="button"
+      >
           <svg
             aria-hidden="true"
             fill="none"
@@ -381,7 +369,6 @@ function FactoryGraphEditorAddMenu({
             <path d="M12 5v14" />
             <path d="M5 12h14" />
           </svg>
-        </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
