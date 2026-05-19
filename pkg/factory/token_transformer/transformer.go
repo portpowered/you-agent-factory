@@ -372,13 +372,6 @@ func newTokenHistory() interfaces.TokenHistory {
 	}
 }
 
-func cloneStringSlice(values []string) []string {
-	if values == nil {
-		return nil
-	}
-	return append([]string(nil), values...)
-}
-
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {
