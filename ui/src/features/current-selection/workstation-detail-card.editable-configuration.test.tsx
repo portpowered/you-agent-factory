@@ -5,8 +5,20 @@ import { WorkstationDetailCard } from "./workstation-detail-card";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
+function editableConfigurationSection() {
+  const heading = screen
+    .getAllByRole("heading", { name: "Editable configuration" })
+    .at(-1);
+  const section = heading?.closest("section");
+  if (!section) {
+    throw new Error("expected editable configuration section");
+  }
+
+  return section;
+}
+
 describe("WorkstationDetailCard editable configuration", () => {
-  it("renders editable workstation prompt, model, template, and worker values", () => {
+  it("starts collapsed and expands with accessible disclosure behavior", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -45,27 +57,118 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    const editableSection = screen
-      .getByRole("heading", { name: "Editable configuration" })
-      .closest("section");
-    if (!editableSection) {
-      throw new Error("expected editable configuration section");
-    }
+    const toggle = within(editableConfigurationSection()).getByRole("button", {
+      name: "Expand",
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("Model")).toBeNull();
 
-    expect(within(editableSection).getByText("Model")).toBeTruthy();
-    expect(within(editableSection).getByDisplayValue("gpt-5.5")).toBeTruthy();
-    expect(within(editableSection).getByText("Template")).toBeTruthy();
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Model")).toBeTruthy();
     expect(
-      within(editableSection).getByDisplayValue("prompts/review.md"),
-    ).toBeTruthy();
-    expect(within(editableSection).getByText("Worker")).toBeTruthy();
-    expect(within(editableSection).getByText("reviewer")).toBeTruthy();
-    expect(within(editableSection).getByText("Prompt")).toBeTruthy();
-    expect(
-      within(editableSection).getByDisplayValue(
+      screen.getByDisplayValue(
         "Review the latest story changes before approval.",
       ),
     ).toBeTruthy();
+    expect(
+      within(editableConfigurationSection())
+        .getByRole("button", { name: "Collapse" })
+        .getAttribute("aria-controls"),
+    ).toBeTruthy();
+  });
+
+  it("resets the disclosure to collapsed when the selected workstation changes", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
+    const planNode = snapshot.topology.workstation_nodes_by_id.plan;
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          draft: {
+            model: "gpt-5.5",
+            prompt: "Review the latest story changes before approval.",
+            promptFile: "prompts/review.md",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            isModelEditable: true,
+            model: "gpt-5.5",
+            modelEditBlockedReason: null,
+            prompt: "Review the latest story changes before approval.",
+            promptFile: "prompts/review.md",
+            workerName: "reviewer",
+            workstationName: "Review",
+          },
+          isDirty: false,
+          isModelEditable: true,
+          onModelChange: vi.fn(),
+          onPromptChange: vi.fn(),
+          onPromptFileChange: vi.fn(),
+          overwriteFieldNames: [],
+          pendingFactoryDefinition: null,
+          status: "ready",
+          validationErrors: {},
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={reviewNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand",
+      }),
+    );
+    expect(screen.getByLabelText("Model")).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={{
+          draft: {
+            model: "gpt-5.5",
+            prompt: "Plan the next change.",
+            promptFile: "prompts/plan.md",
+          },
+          hasValidationErrors: false,
+          initialValues: {
+            isModelEditable: true,
+            model: "gpt-5.5",
+            modelEditBlockedReason: null,
+            prompt: "Plan the next change.",
+            promptFile: "prompts/plan.md",
+            workerName: "planner",
+            workstationName: "Plan",
+          },
+          isDirty: false,
+          isModelEditable: true,
+          onModelChange: vi.fn(),
+          onPromptChange: vi.fn(),
+          onPromptFileChange: vi.fn(),
+          overwriteFieldNames: [],
+          pendingFactoryDefinition: null,
+          status: "ready",
+          validationErrors: {},
+        }}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={planNode}
+      />,
+    );
+
+    expect(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(editableConfigurationSection()).queryByLabelText("Model"),
+    ).toBeNull();
   });
 
   it("renders editable controls with local-draft and validation states", () => {
@@ -113,6 +216,12 @@ describe("WorkstationDetailCard editable configuration", () => {
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand",
+      }),
     );
 
     expect(screen.getByRole("alert")).toBeTruthy();
@@ -177,7 +286,15 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Model").getAttribute("disabled")).not.toBeNull();
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand",
+      }),
+    );
+
+    expect(
+      screen.getByLabelText("Model").getAttribute("disabled"),
+    ).not.toBeNull();
     expect(
       screen.getByText(
         'Model edits are disabled here because worker "processor" is shared with "Review" and "Plan".',
@@ -196,6 +313,12 @@ describe("WorkstationDetailCard editable configuration", () => {
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand",
+      }),
     );
 
     expect(

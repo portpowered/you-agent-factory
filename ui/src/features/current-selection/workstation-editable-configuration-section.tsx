@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId, useState } from "react";
 
 import { Input, Textarea } from "../../components/ui";
 import {
@@ -9,7 +9,11 @@ import {
 } from "../../components/ui/dashboard-typography";
 import { formatList } from "../../components/ui/formatters";
 import { cx } from "../../lib/cx";
-import { WORKSTATION_SUMMARY_ITEM_CLASS } from "./detail-card-shared";
+import {
+  HISTORY_HEADER_CLASS,
+  HISTORY_TOGGLE_CLASS,
+  WORKSTATION_SUMMARY_ITEM_CLASS,
+} from "./detail-card-shared";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
@@ -29,42 +33,68 @@ export function EditableConfigurationSection({
   saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const sectionId = useId();
+  const contentId = `${sectionId}-content`;
+  const headingId = `${sectionId}-heading`;
+
   return (
-    <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <div className="grid gap-1">
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-          {messages.editableConfigurationHeading}
-        </h4>
-        <p
-          className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+    <section
+      aria-labelledby={headingId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
+      <div className={HISTORY_HEADER_CLASS}>
+        <div className="grid min-w-0 gap-1">
+          <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
+            {messages.editableConfigurationHeading}
+          </h4>
+          <p
+            className={cx(
+              "m-0 text-af-ink/62",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
+            {messages.editableConfigurationSummary}
+          </p>
+        </div>
+        <button
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          className={HISTORY_TOGGLE_CLASS}
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
         >
-          {messages.editableConfigurationSummary}
-        </p>
+          {expanded ? messages.collapseAction : messages.expandAction}
+        </button>
       </div>
-      {state?.status === "loading" ? (
-        <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-          {messages.editableConfigurationLoading}
-        </p>
-      ) : null}
-      {state?.status === "error" ? (
-        <p
-          className={cx("m-0 text-af-danger", DASHBOARD_BODY_TEXT_CLASS)}
-          role="alert"
-        >
-          {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-        </p>
-      ) : null}
-      {state?.status === "empty" ? (
-        <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
-          {state.message || messages.editableConfigurationEmpty}
-        </p>
-      ) : null}
-      {state?.status === "ready" ? (
-        <EditableConfigurationReadyForm
-          messages={messages}
-          saveState={saveState}
-          state={state}
-        />
+      {expanded ? (
+        <div className="grid gap-2.5" id={contentId}>
+          {state?.status === "loading" ? (
+            <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+              {messages.editableConfigurationLoading}
+            </p>
+          ) : null}
+          {state?.status === "error" ? (
+            <p
+              className={cx("m-0 text-af-danger", DASHBOARD_BODY_TEXT_CLASS)}
+              role="alert"
+            >
+              {messages.editableConfigurationErrorPrefix} {state.errorMessage}
+            </p>
+          ) : null}
+          {state?.status === "empty" ? (
+            <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+              {state.message || messages.editableConfigurationEmpty}
+            </p>
+          ) : null}
+          {state?.status === "ready" ? (
+            <EditableConfigurationReadyForm
+              messages={messages}
+              saveState={saveState}
+              state={state}
+            />
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
