@@ -130,10 +130,14 @@ func TestRuntimeState_Snapshot_Independence(t *testing.T) {
 
 	// Mutate consumed tokens in existing dispatch
 	rs.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Tags["source"] = "mutated"
+	rs.Dispatches["dispatch-1"].ConsumedTokens[0].Color.PreviousChainingTraceIDs = []string{"trace-mutated"}
 	rs.Dispatches["dispatch-1"].ConsumedTokens[0].History.TotalVisits["trans-new"] = 99
 	rs.Dispatches["dispatch-1"].ConsumedTokens[0].History.FailureLog[0].Error = "mutated failure"
 	if snap.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Tags["source"] != "dispatcher" {
 		t.Error("snapshot dispatch consumed token tags should not reflect mutations to original")
+	}
+	if len(snap.Dispatches["dispatch-1"].ConsumedTokens[0].Color.PreviousChainingTraceIDs) != 0 {
+		t.Error("snapshot dispatch consumed token previous chaining traces should not reflect mutations to original")
 	}
 	if _, exists := snap.Dispatches["dispatch-1"].ConsumedTokens[0].History.TotalVisits["trans-new"]; exists {
 		t.Error("snapshot dispatch consumed token history should not reflect new visits added after snapshot")
