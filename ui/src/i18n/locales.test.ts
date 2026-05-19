@@ -30,8 +30,10 @@ describe("website locale policy", () => {
 
   it.each([
     ["en", "en"],
+    ["EN", "en"],
     ["zh-CN", "zh-CN"],
     ["zh_CN", "zh-CN"],
+    ["ZH-cn", "zh-CN"],
   ] as const)("resolves canonical locale input %s", (locale, expected) => {
     expect(resolveSupportedLocale(locale)).toBe(expected);
   });
@@ -39,7 +41,9 @@ describe("website locale policy", () => {
   it.each([
     ["zh", "zh-CN"],
     ["zh-Hans", "zh-CN"],
+    ["ZH-HANS", "zh-CN"],
     ["zh-hans", "zh-CN"],
+    ["zh-Hans-CN", "zh-CN"],
   ] as const)("resolves Mandarin alias %s to zh-CN", (locale, expected) => {
     expect(resolveSupportedLocale(locale)).toBe(expected);
   });

@@ -46,6 +46,19 @@ describe("app locale provider", () => {
     expect(screen.getByText("zh-CN")).toBeTruthy();
   });
 
+  it("resolves case-insensitive locale aliases from the URL search", () => {
+    render(
+      <AppLocaleProvider
+        browserLanguage="en-US"
+        locationSearch="?locale=ZH-HANS"
+      >
+        <LocaleProbe />
+      </AppLocaleProvider>,
+    );
+
+    expect(screen.getByText("zh-CN")).toBeTruthy();
+  });
+
   it("keeps the in-app session locale ahead of URL and browser language until cleared", () => {
     render(
       <AppLocaleProvider browserLanguage="en-US" locationSearch="?locale=en">
@@ -97,6 +110,15 @@ describe("resolveAppLocale", () => {
       resolveAppLocale({
         browserLanguage: "zh-CN",
         browserLanguages: ["fr-FR", "de-DE"],
+      }),
+    ).toBe("zh-CN");
+  });
+
+  it("resolves expanded Mandarin browser-language aliases predictably", () => {
+    expect(
+      resolveAppLocale({
+        browserLanguage: "en-US",
+        browserLanguages: ["zh-Hans-CN"],
       }),
     ).toBe("zh-CN");
   });

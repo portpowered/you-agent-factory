@@ -1,0 +1,6 @@
+type: string
+description: Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
+x-enum-varnames:
+  - SessionID
+enum:
+  - session_id

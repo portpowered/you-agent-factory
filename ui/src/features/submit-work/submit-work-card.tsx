@@ -1,10 +1,16 @@
-import { cx } from "../../lib/cx";
+import {
+  Button,
+  DashboardWidgetFrame,
+  Input,
+  Select,
+  Textarea,
+} from "../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { Button, DashboardWidgetFrame, Input, Select, Textarea } from "../../components/ui";
+import { cx } from "../../lib/cx";
 import { getSubmitWorkMessages } from "./messages/submit-work";
 
 export interface SubmitWorkDraft {
@@ -14,7 +20,6 @@ export interface SubmitWorkDraft {
 }
 
 export interface SubmitWorkValidationErrors {
-  requestText?: string;
   workTypeName?: string;
 }
 
@@ -68,15 +73,14 @@ export function SubmitWorkCard({
   const messages = getSubmitWorkMessages(locale);
   const hasConfiguredWorkTypes = submitWorkTypeNames.length > 0;
   const hasSelectedWorkType = draft.workTypeName.length > 0;
-  const hasRequestText = draft.requestText.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
-  const canSubmit = hasConfiguredWorkTypes && hasSelectedWorkType && hasRequestText && !isSubmitting;
-  const showStatusMessage = !(status.kind === "guidance" && canSubmit);
+  const canSubmit =
+    hasConfiguredWorkTypes && hasSelectedWorkType && !isSubmitting;
   const requestNameID = `${widgetId}-request-name`;
   const requestTextID = `${widgetId}-request-text`;
+  const requestTextHintID = `${widgetId}-request-text-hint`;
   const workTypeID = `${widgetId}-work-type`;
   const workTypeErrorID = `${widgetId}-work-type-error`;
-  const requestTextErrorID = `${widgetId}-request-text-error`;
   const statusID = `${widgetId}-status`;
 
   return (
@@ -93,7 +97,9 @@ export function SubmitWorkCard({
             {messages.workTypeLabel}
           </label>
           <Select
-            aria-describedby={validationErrors?.workTypeName ? workTypeErrorID : undefined}
+            aria-describedby={
+              validationErrors?.workTypeName ? workTypeErrorID : undefined
+            }
             aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
@@ -135,8 +141,7 @@ export function SubmitWorkCard({
             {messages.requestLabel}
           </label>
           <Textarea
-            aria-describedby={validationErrors?.requestText ? requestTextErrorID : undefined}
-            aria-invalid={validationErrors?.requestText ? "true" : undefined}
+            aria-describedby={requestTextHintID}
             className={DASHBOARD_BODY_TEXT_CLASS}
             disabled={controlsDisabled}
             id={requestTextID}
@@ -144,25 +149,26 @@ export function SubmitWorkCard({
             placeholder={messages.requestPlaceholder}
             value={draft.requestText}
           />
-          {validationErrors?.requestText ? (
-            <p className={VALIDATION_TEXT_CLASS} id={requestTextErrorID}>
-              {validationErrors.requestText}
-            </p>
-          ) : null}
+          <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
+            {messages.requestHint}
+          </p>
         </div>
 
         <div className={ACTION_ROW_CLASS}>
-          {showStatusMessage ? (
-            <p
-              className={cx(HELP_TEXT_CLASS, STATUS_TONE_CLASS_BY_KIND[status.kind])}
-              id={statusID}
-              role={status.kind === "error" || status.kind === "validation-error" ? "alert" : "status"}
-            >
-              {status.message}
-            </p>
-          ) : (
-            <div />
-          )}
+          <p
+            className={cx(
+              HELP_TEXT_CLASS,
+              STATUS_TONE_CLASS_BY_KIND[status.kind],
+            )}
+            id={statusID}
+            role={
+              status.kind === "error" || status.kind === "validation-error"
+                ? "alert"
+                : "status"
+            }
+          >
+            {status.message}
+          </p>
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
             className="shrink-0"
