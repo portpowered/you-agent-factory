@@ -40,7 +40,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 func withInferenceResponseDiagnostics(base *interfaces.WorkDiagnostics, resp interfaces.InferenceResponse, retryCount int) *interfaces.WorkDiagnostics {
-	diagnostics := cloneWorkDiagnostics(base)
+	diagnostics := interfaces.CloneWorkDiagnostics(base)
 	diagnostics = mergeWorkDiagnostics(diagnostics, resp.Diagnostics)
 	if diagnostics == nil {
 		diagnostics = &interfaces.WorkDiagnostics{}
@@ -62,7 +62,7 @@ func withInferenceResponseDiagnostics(base *interfaces.WorkDiagnostics, resp int
 }
 
 func withInferenceErrorDiagnostics(base *interfaces.WorkDiagnostics, err error, retryCount int) *interfaces.WorkDiagnostics {
-	diagnostics := cloneWorkDiagnostics(base)
+	diagnostics := interfaces.CloneWorkDiagnostics(base)
 	if diagnostics == nil {
 		diagnostics = &interfaces.WorkDiagnostics{}
 	}
@@ -98,7 +98,7 @@ func commandDiagnostics(req CommandRequest, result CommandResult, duration time.
 
 func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces.WorkDiagnostics {
 	if base == nil {
-		return cloneWorkDiagnostics(overlay)
+		return interfaces.CloneWorkDiagnostics(overlay)
 	}
 	if overlay == nil {
 		return base
@@ -124,22 +124,6 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 		}
 	}
 	return base
-}
-
-func cloneWorkDiagnostics(in *interfaces.WorkDiagnostics) *interfaces.WorkDiagnostics {
-	if in == nil {
-		return nil
-	}
-	out := &interfaces.WorkDiagnostics{
-		RenderedPrompt: cloneRenderedPromptDiagnostic(in.RenderedPrompt),
-		Provider:       cloneProviderDiagnostic(in.Provider),
-		Command:        cloneCommandDiagnostic(in.Command),
-		Metadata:       cloneStringMap(in.Metadata),
-	}
-	if in.Panic != nil {
-		out.Panic = &interfaces.PanicDiagnostic{Message: in.Panic.Message, Stack: in.Panic.Stack}
-	}
-	return out
 }
 
 func cloneRenderedPromptDiagnostic(in *interfaces.RenderedPromptDiagnostic) *interfaces.RenderedPromptDiagnostic {

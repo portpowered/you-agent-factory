@@ -166,6 +166,137 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 	}
 }
 
+func TestAgentExecutor_SuccessResponseDiagnosticsStayDetachedFromProviderMutation(t *testing.T) {
+	responseDiagnostics := &interfaces.WorkDiagnostics{
+		Provider: &interfaces.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{"request_id": "provider-request-1"},
+		},
+		Command: &interfaces.CommandDiagnostic{
+			Command: "provider-cli",
+			Args:    []string{"--prompt", "story"},
+			Env:     map[string]string{"API_KEY": "redacted"},
+		},
+		Panic: &interfaces.PanicDiagnostic{
+			Message: "panic message",
+			Stack:   "panic stack",
+		},
+		Metadata: map[string]string{"phase": "initial"},
+	}
+	provider := &agentMockProvider{
+		response: interfaces.InferenceResponse{
+			Content:     "diagnosed response",
+			Diagnostics: responseDiagnostics,
+		},
+	}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
+		},
+	}, provider)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:      "d-1",
+			TransitionID:    "t-1",
+			WorkerType:      "worker-a",
+			WorkstationName: "review",
+		},
+		withAgentPrompts("System prompt", "User prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	responseDiagnostics.Provider.ResponseMetadata["request_id"] = "provider-request-mutated"
+	responseDiagnostics.Command.Args[0] = "--mutated"
+	responseDiagnostics.Command.Env["API_KEY"] = "mutated"
+	responseDiagnostics.Panic.Message = "mutated panic"
+	responseDiagnostics.Metadata["phase"] = "mutated"
+
+	if got := result.Diagnostics.Provider.ResponseMetadata["request_id"]; got != "provider-request-1" {
+		t.Fatalf("provider response metadata = %q, want provider-request-1", got)
+	}
+	if got := result.Diagnostics.Command.Args[0]; got != "--prompt" {
+		t.Fatalf("command args[0] = %q, want --prompt", got)
+	}
+	if got := result.Diagnostics.Command.Env["API_KEY"]; got != "redacted" {
+		t.Fatalf("command env API_KEY = %q, want redacted", got)
+	}
+	if got := result.Diagnostics.Panic.Message; got != "panic message" {
+		t.Fatalf("panic message = %q, want panic message", got)
+	}
+	if got := result.Diagnostics.Metadata["phase"]; got != "initial" {
+		t.Fatalf("metadata phase = %q, want initial", got)
+	}
+}
+
+func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testing.T) {
+	errorDiagnostics := &interfaces.WorkDiagnostics{
+		Provider: &interfaces.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{"request_id": "provider-request-1"},
+		},
+		Command: &interfaces.CommandDiagnostic{
+			Command: "provider-cli",
+			Args:    []string{"--prompt", "story"},
+			Env:     map[string]string{"API_KEY": "redacted"},
+		},
+		Panic: &interfaces.PanicDiagnostic{
+			Message: "panic message",
+			Stack:   "panic stack",
+		},
+		Metadata: map[string]string{"phase": "initial"},
+	}
+	provider := &agentMockProvider{
+		err: NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
+	}
+	var providerErr *ProviderError
+	if !errors.As(provider.err, &providerErr) {
+		t.Fatal("expected ProviderError test fixture")
+	}
+	providerErr.Diagnostics = errorDiagnostics
+
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
+		},
+	}, provider)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:      "d-1",
+			TransitionID:    "t-1",
+			WorkerType:      "worker-a",
+			WorkstationName: "review",
+		},
+		withAgentPrompts("System prompt", "User prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	errorDiagnostics.Provider.ResponseMetadata["request_id"] = "provider-request-mutated"
+	errorDiagnostics.Command.Args[0] = "--mutated"
+	errorDiagnostics.Command.Env["API_KEY"] = "mutated"
+	errorDiagnostics.Panic.Message = "mutated panic"
+	errorDiagnostics.Metadata["phase"] = "mutated"
+
+	if got := result.Diagnostics.Provider.ResponseMetadata["request_id"]; got != "provider-request-1" {
+		t.Fatalf("provider response metadata = %q, want provider-request-1", got)
+	}
+	if got := result.Diagnostics.Command.Args[0]; got != "--prompt" {
+		t.Fatalf("command args[0] = %q, want --prompt", got)
+	}
+	if got := result.Diagnostics.Command.Env["API_KEY"]; got != "redacted" {
+		t.Fatalf("command env API_KEY = %q, want redacted", got)
+	}
+	if got := result.Diagnostics.Panic.Message; got != "panic message" {
+		t.Fatalf("panic message = %q, want panic message", got)
+	}
+	if got := result.Diagnostics.Metadata["phase"]; got != "initial" {
+		t.Fatalf("metadata phase = %q, want initial", got)
+	}
+}
+
 func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
