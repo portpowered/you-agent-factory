@@ -276,7 +276,7 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 	if err != nil {
 		return replayCompletion{}, fmt.Errorf("decode dispatch completed event %q: %w", event.Id, err)
 	}
-	diagnostics := cloneWorkDiagnostics(inference.diagnostics)
+	diagnostics := interfaces.CloneWorkDiagnostics(inference.diagnostics)
 	completionID := stringValue(payload.CompletionId)
 	if completionID == "" {
 		completionID = event.Id
@@ -299,7 +299,7 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 			Feedback:           stringValue(payload.Feedback),
 			RecordedOutputWork: recordedOutputWork,
 			ProviderFailure:    interfaces.ProviderFailureMetadataFromGenerated(payload.ProviderFailure),
-			ProviderSession:    cloneProviderSession(inference.providerSession),
+			ProviderSession:    interfaces.CloneProviderSessionMetadata(inference.providerSession),
 			Metrics:            replayWorkMetricsFromGenerated(payload.Metrics),
 			Diagnostics:        diagnostics,
 		},
