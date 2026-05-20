@@ -57,24 +57,6 @@ func ValidateCanonicalWorkRequestJSON(data []byte) error {
 	return nil
 }
 
-// RejectRetiredWorkRequestFieldAliases rejects retired public submit fields
-// that should no longer be accepted on canonical work-request JSON inputs.
-func RejectRetiredWorkRequestFieldAliases(data []byte) error {
-	var raw canonicalWorkRequestJSON
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("parse work request retired fields: %w", err)
-	}
-	return validateRetiredWorkRequestFieldAliases(raw)
-}
-
-func RejectConflictingWorkRequestTraceFields(data []byte) error {
-	var raw canonicalWorkRequestJSON
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("parse work request chaining traces: %w", err)
-	}
-	return validateConflictingWorkRequestTraceFields(raw)
-}
-
 func validateRetiredWorkRequestFieldAliases(raw canonicalWorkRequestJSON) error {
 	if raw.WorkTypeID != nil {
 		return fmt.Errorf("work request batch uses retired work_type_id field; use workTypeName")
