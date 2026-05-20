@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
+import { formatTimeOfDay } from "../../components/ui/formatters";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { StateNodeDetailCard } from "./state-node-detail";
@@ -27,6 +27,7 @@ describe("StateNodeDetailCard", () => {
         currentWorkItems={[
           {
             display_name: "Active Story",
+            started_at: "2026-04-08T12:00:01Z",
             trace_id: "trace-active-story",
             work_id: "work-active-story",
             work_type_id: "story",
@@ -37,22 +38,28 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
+    const summaryDetails = screen.getByText("Count").closest("dl");
+
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(screen.getAllByText("Work type").length).toBeGreaterThan(0);
-    expect(screen.getByText("State")).toBeTruthy();
-    expect(screen.getByText("State node ID")).toBeTruthy();
-    expect(screen.getAllByText("implemented").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("story:implemented")).toHaveLength(1);
+    expect(screen.getByText("story: implemented")).toBeTruthy();
+    expect(summaryDetails).toBeTruthy();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("Work type")).toBeNull();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("State")).toBeNull();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("State node ID")).toBeNull();
     expect(screen.getByText("Count")).toBeTruthy();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Active Story")).toBeTruthy();
-    expect(screen.getByText("work-active-story")).toBeTruthy();
-    expect(screen.getByText("trace-active-story")).toBeTruthy();
+    expect(
+      screen.getByText(`Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`),
+    ).toBeTruthy();
+    expect(screen.queryByText("work-active-story")).toBeNull();
+    expect(screen.queryByText("trace-active-story")).toBeNull();
+    expect(screen.queryByText("story")).toBeNull();
   });
 
-  it("renders an English fallback when current work has no work type", () => {
+  it("omits the supporting time row when current work has no started-at timestamp", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
       (place) => place.place_id === "story:implemented",
@@ -74,12 +81,14 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("Work type").length).toBeGreaterThan(0);
-    expect(screen.getByText("Unknown")).toBeTruthy();
-    expect(screen.queryByText("不明")).toBeNull();
+    const summaryDetails = screen.getByText("Count").closest("dl");
+
+    expect(summaryDetails).toBeTruthy();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("Work type")).toBeNull();
+    expect(screen.queryByText(/^Started at /)).toBeNull();
   });
 
-  it("applies shared typography helpers to the state-node selection header", () => {
+  it("renders the state-node selection header as one combined summary", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
       (place) => place.place_id === "story:implemented",
@@ -90,11 +99,9 @@ describe("StateNodeDetailCard", () => {
     render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
 
     const header = screen.getByTitle("story:implemented");
-    const workType = within(header).getByText("story", { selector: "span" });
-    const stateValue = within(header).getByText("implemented", { selector: "span" });
+    const summary = within(header).getByText("story: implemented", { selector: "p" });
 
-    expect(workType.className).toContain(DASHBOARD_SUPPORTING_LABEL_CLASS);
-    expect(stateValue.className).toContain(WIDGET_SUBTITLE_CLASS);
+    expect(summary.className).toContain(WIDGET_SUBTITLE_CLASS);
   });
 
   it("renders selected state node empty-position guidance", () => {
@@ -108,8 +115,8 @@ describe("StateNodeDetailCard", () => {
     render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
 
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(screen.getByText("State")).toBeTruthy();
-    expect(screen.getAllByText("implemented").length).toBeGreaterThan(0);
+    expect(screen.getByText("story: implemented")).toBeTruthy();
+    expect(screen.queryByText("State")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
@@ -131,6 +138,7 @@ describe("StateNodeDetailCard", () => {
         terminalHistoryWorkItems={[
           {
             display_name: "Done Story",
+            started_at: "2026-04-08T12:00:06Z",
             trace_id: "trace-done-story",
             work_id: "work-done-story",
             work_type_id: "story",
@@ -141,15 +149,18 @@ describe("StateNodeDetailCard", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(screen.getAllByText("complete").length).toBeGreaterThan(0);
-    expect(screen.getByText("State node ID")).toBeTruthy();
+    expect(screen.getByText("story: complete")).toBeTruthy();
+    expect(screen.queryByText("State node ID")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Done Story")).toBeTruthy();
-    expect(screen.getByText("work-done-story")).toBeTruthy();
-    expect(screen.getByText("trace-done-story")).toBeTruthy();
-    expect(screen.getAllByText("story").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(`Started at ${formatTimeOfDay("2026-04-08T12:00:06Z")}`),
+    ).toBeTruthy();
+    expect(screen.queryByText("work-done-story")).toBeNull();
+    expect(screen.queryByText("trace-done-story")).toBeNull();
+    expect(screen.queryByText(/^story$/)).toBeNull();
     expect(screen.queryByText("No current work is occupying this place.")).toBeNull();
   });
 
@@ -182,6 +193,7 @@ describe("StateNodeDetailCard", () => {
         terminalHistoryWorkItems={[
           {
             display_name: "Failed Story",
+            started_at: "2026-04-08T12:00:08Z",
             trace_id: "trace-failed-story",
             work_id: "work-failed-story",
             work_type_id: "story",
@@ -191,12 +203,15 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
+    expect(screen.getByText("story: blocked")).toBeTruthy();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Failed Story")).toBeTruthy();
-    expect(screen.getByText("work-failed-story")).toBeTruthy();
+    expect(
+      screen.getByText(`Started at ${formatTimeOfDay("2026-04-08T12:00:08Z")}`),
+    ).toBeTruthy();
+    expect(screen.queryByText("work-failed-story")).toBeNull();
     expect(screen.getByText("Failure reason")).toBeTruthy();
     expect(screen.getByText("provider_rate_limit")).toBeTruthy();
     expect(screen.getByText("Failure message")).toBeTruthy();
@@ -273,8 +288,9 @@ describe("StateNodeDetailCard", () => {
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.getByText("状态")).toBeTruthy();
-    expect(screen.getByText("状态节点 ID")).toBeTruthy();
+    expect(screen.getByText("story: complete")).toBeTruthy();
+    expect(screen.queryByText("状态")).toBeNull();
+    expect(screen.queryByText("状态节点 ID")).toBeNull();
     expect(screen.getByText("当前工作")).toBeTruthy();
     expect(screen.getByText("在所选时间刻度，这个位置暂时没有记录到工作。")).toBeTruthy();
   });

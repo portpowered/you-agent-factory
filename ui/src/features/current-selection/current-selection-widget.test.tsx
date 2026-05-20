@@ -1013,6 +1013,12 @@ describe("CurrentSelectionWidget", () => {
     const inferenceAttempts = within(
       within(currentSelection).getByRole("region", { name: "Inference attempts" }),
     );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    fireEvent.click(
+      inferenceAttempts.getByRole("button", { name: "Expand request body" }),
+    );
     const requestBody = within(
       inferenceAttempts.getByRole("region", { name: "Request body" }),
     );

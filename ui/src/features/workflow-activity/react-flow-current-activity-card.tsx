@@ -14,7 +14,6 @@ import type {
 } from "../../api/dashboard/types";
 import type { FactoryValue } from "../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
 import { cn } from "../../lib/cn";
 import { FactoryGraphEditorDraftActions } from "../factory-graph-editor/factory-graph-editor-draft-actions";
 import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
@@ -31,7 +30,7 @@ import {
 import {
   useCurrentActivityGraphEditor,
 } from "./react-flow-current-activity-card-editor";
-import { CurrentActivityGraphEditorHeader } from "./react-flow-current-activity-card-editor-chrome";
+import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { useFactoryGraphEditorViewModel } from "./react-flow-current-activity-card-editor-graph";
 import {
@@ -67,7 +66,6 @@ const CURRENT_ACTIVITY_CARD_CLASS = cn(
   "relative flex h-full min-h-0 min-w-0 flex-col p-4 md:p-5",
 );
 const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
-const CURRENT_ACTIVITY_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
@@ -78,11 +76,9 @@ function CurrentActivityCardHeading({ locale }: { locale?: string }) {
   const messages = getWorkflowActivityShellMessages(locale);
 
   return (
-    <div>
-      <h2 className={CURRENT_ACTIVITY_TITLE_CLASS} id="workflow-graph-heading">
-        {messages.title}
-      </h2>
-    </div>
+    <span className="sr-only" id="workflow-graph-heading">
+      {messages.title}
+    </span>
   );
 }
 interface ReactFlowCurrentActivityCardProps {
@@ -335,6 +331,22 @@ export function ReactFlowCurrentActivityCard(
   props: ReactFlowCurrentActivityCardProps,
 ) {
   const editor = useCurrentActivityGraphEditor(props.snapshot);
+  return (
+    <ReactFlowCurrentActivityCardView
+      {...props}
+      editor={editor}
+      showHeaderActions
+    />
+  );
+}
+
+export function ReactFlowCurrentActivityCardView(
+  props: ReactFlowCurrentActivityCardProps & {
+    editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+    showHeaderActions?: boolean;
+  },
+) {
+  const { editor, showHeaderActions = false } = props;
   const graph = useCurrentActivityGraphViewModel(props);
   const editorGraph = useFactoryGraphEditorViewModel(
     editor,
@@ -359,19 +371,21 @@ export function ReactFlowCurrentActivityCard(
       aria-labelledby="workflow-graph-heading"
       className={CURRENT_ACTIVITY_CARD_CLASS}
     >
-      <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
-        <CurrentActivityGraphEditorHeader
-          editorMode={editor.editorMode}
-          hasChanges={editor.draftState.hasChanges}
-          isDefinitionLoading={
-            editor.editableDefinitionQuery.status === "pending"
-          }
-          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
-          locale={props.locale}
-          onToggle={editor.handleEditorModeToggle}
-          title={<CurrentActivityCardHeading locale={props.locale} />}
-        />
-      </div>
+      {showHeaderActions ? (
+        <div className={CURRENT_ACTIVITY_HEADER_CLASS}>
+          <CurrentActivityGraphHeaderActions
+            editorMode={editor.editorMode}
+            hasChanges={editor.draftState.hasChanges}
+            isDefinitionLoading={
+              editor.editableDefinitionQuery.status === "pending"
+            }
+            loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+            locale={props.locale}
+            onToggle={editor.handleEditorModeToggle}
+          />
+        </div>
+      ) : null}
+      <CurrentActivityCardHeading locale={props.locale} />
       <FactoryGraphEditorDraftActions
         canSave={editor.canSaveDraft}
         description={editor.saveSummary.description}

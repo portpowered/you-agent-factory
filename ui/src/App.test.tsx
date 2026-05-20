@@ -1573,6 +1573,42 @@ async function selectWorkstationRequest(dispatchId: string): Promise<void> {
   );
 }
 
+function expandWorkstationRequestAttempt(
+  currentSelection: HTMLElement,
+  attemptNumber: number,
+): HTMLElement {
+  const inferenceAttempts = within(currentSelection).getByRole("region", {
+    name: "Inference attempts",
+  });
+  const attemptCard = within(inferenceAttempts).getByRole("article", {
+    name: `Inference attempt ${attemptNumber}`,
+  });
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand attempt ${attemptNumber}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return attemptCard;
+}
+
+function expandAttemptBodySection(
+  attemptCard: HTMLElement,
+  bodyLabel: "Request body" | "Response body",
+): HTMLElement {
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand ${bodyLabel.toLowerCase()}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return within(attemptCard).getByRole("region", { name: bodyLabel });
+}
+
 function _getDispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
@@ -2754,24 +2790,20 @@ describe("App timeline reconstruction flows", () => {
       label: "ready",
       requestProjection: dashboardWorkstationRequestFixtures.ready,
       verify: (currentSelection: HTMLElement) => {
+        const readyAttempt = expandWorkstationRequestAttempt(currentSelection, 2);
+        const responseBody = expandAttemptBodySection(
+          readyAttempt,
+          "Response body",
+        );
         expect(
           within(currentSelection).getAllByText("request-ready-story").length,
         ).toBeGreaterThan(0);
         expect(
-          within(currentSelection).getByRole("heading", {
+          within(currentSelection).queryByRole("heading", {
             name: "Request counts",
           }),
-        ).toBeTruthy();
-        expect(
-          within(currentSelection).getByRole("heading", {
-            name: "Response details",
-          }),
-        ).toBeTruthy();
-        expect(
-          within(currentSelection).getAllByText(
-            "Ready for the next workstation.",
-          ).length,
-        ).toBeGreaterThan(0);
+        ).toBeNull();
+        expect(within(responseBody).getByText("Ready for the next workstation.")).toBeTruthy();
       },
     },
     {
@@ -2789,15 +2821,18 @@ describe("App timeline reconstruction flows", () => {
       label: "rejected",
       requestProjection: dashboardWorkstationRequestFixtures.rejected,
       verify: (currentSelection: HTMLElement) => {
+        const rejectedAttempt = expandWorkstationRequestAttempt(
+          currentSelection,
+          1,
+        );
+        const responseBody = expandAttemptBodySection(
+          rejectedAttempt,
+          "Response body",
+        );
         expect(
-          within(currentSelection).getAllByText(
+          within(responseBody).getByText(
             "The active story needs revision before it can continue.",
-          ).length,
-        ).toBeGreaterThan(0);
-        expect(
-          within(currentSelection).getByRole("heading", {
-            name: "Response details",
-          }),
+          ),
         ).toBeTruthy();
       },
     },
@@ -2824,10 +2859,10 @@ describe("App timeline reconstruction flows", () => {
             .length,
         ).toBeGreaterThan(0);
         expect(
-          within(currentSelection).getByRole("heading", {
+          within(currentSelection).queryByRole("heading", {
             name: "Request counts",
           }),
-        ).toBeTruthy();
+        ).toBeNull();
         expect(
           within(currentSelection).queryByRole("heading", {
             name: "Execution details",
@@ -2995,8 +3030,11 @@ describe("App streamed replay smoke flows", () => {
       within(currentPositionDetail).getByText("Queued Analysis Story"),
     ).toBeTruthy();
     expect(
-      within(currentPositionDetail).getByText("work-queued-analysis"),
-    ).toBeTruthy();
+      within(currentPositionDetail).queryByText("work-queued-analysis"),
+    ).toBeNull();
+    expect(
+      within(currentPositionDetail).queryByText(/^Started at /),
+    ).toBeNull();
 
     fireEvent.change(slider, { target: { value: "3" } });
 
@@ -3112,10 +3150,10 @@ describe("App streamed replay smoke flows", () => {
       name: "Current selection",
     });
     expect(
-      within(completedSelection).getByRole("heading", {
+      within(completedSelection).queryByRole("heading", {
         name: "Request counts",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(completedSelection).getAllByText(
         runtimeDetailsFixtureIDs.completedDispatchID,
@@ -3150,8 +3188,8 @@ describe("App streamed replay smoke flows", () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(failedSelection).getByRole("heading", { name: "Request counts" }),
-    ).toBeTruthy();
+      within(failedSelection).queryByRole("heading", { name: "Request counts" }),
+    ).toBeNull();
 
     fireEvent.click(
       (
@@ -3249,10 +3287,10 @@ describe("App streamed replay smoke flows", () => {
       name: "Current selection",
     });
     expect(
-      within(scriptSuccessSelection).getByRole("heading", {
+      within(scriptSuccessSelection).queryByRole("heading", {
         name: "Request counts",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(scriptSuccessSelection).getAllByText(
         scriptDashboardIntegrationFixtureIDs.scriptSuccessDispatchID,
@@ -3306,13 +3344,21 @@ describe("App streamed replay smoke flows", () => {
     const inferenceSelection = await screen.findByRole("article", {
       name: "Current selection",
     });
+    const inferenceAttempt = expandWorkstationRequestAttempt(
+      inferenceSelection,
+      1,
+    );
+    const inferenceResponseBody = expandAttemptBodySection(
+      inferenceAttempt,
+      "Response body",
+    );
     expect(
       within(inferenceSelection).getByRole("heading", {
         name: "Inference attempts",
       }),
     ).toBeTruthy();
     expect(
-      within(inferenceSelection).getAllByText(
+      within(inferenceResponseBody).getAllByText(
         scriptDashboardIntegrationFixtureIDs.inferenceResponseText,
       ).length,
     ).toBeGreaterThan(0);
@@ -3359,14 +3405,17 @@ describe("App streamed replay smoke flows", () => {
       within(completedDetail).getByText("Completed Smoke Story One"),
     ).toBeTruthy();
     expect(
-      within(completedDetail).getByText("work-smoke-complete-one"),
-    ).toBeTruthy();
-    expect(
       within(completedDetail).getByText("Completed Smoke Story Two"),
     ).toBeTruthy();
     expect(
-      within(completedDetail).getByText("work-smoke-complete-two"),
-    ).toBeTruthy();
+      within(completedDetail).queryByText("work-smoke-complete-one"),
+    ).toBeNull();
+    expect(
+      within(completedDetail).queryByText("work-smoke-complete-two"),
+    ).toBeNull();
+    expect(within(completedDetail).queryAllByText(/^Started at /)).toHaveLength(
+      2,
+    );
 
     fireEvent.click(
       screen.getByRole("button", { name: "Select story:failed state" }),
@@ -3379,7 +3428,10 @@ describe("App streamed replay smoke flows", () => {
 
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Smoke Story")).toBeTruthy();
-      expect(within(failedDetail).getByText("work-smoke-failed")).toBeTruthy();
+      expect(within(failedDetail).queryByText("work-smoke-failed")).toBeNull();
+      expect(within(failedDetail).queryAllByText(/^Started at /)).toHaveLength(
+        1,
+      );
       expect(
         within(failedDetail).getByText("provider_rate_limit"),
       ).toBeTruthy();

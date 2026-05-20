@@ -8,8 +8,10 @@ import type { DashboardSelection } from "../current-selection";
 import type { CurrentActivityImportController } from "./current-activity-import-controller";
 import {
   type CurrentActivitySelection,
-  ReactFlowCurrentActivityCard,
+  ReactFlowCurrentActivityCardView,
 } from "./react-flow-current-activity-card";
+import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
+import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { getWorkflowActivityShellMessages } from "./messages/activity-shell";
 
 interface WorkflowActivityBentoCardProps {
@@ -41,15 +43,30 @@ export function WorkflowActivityBentoCard({
   onSelectWorkstation,
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
+  const editor = useCurrentActivityGraphEditor(snapshot);
 
   return (
-    <AgentBentoCard title={messages.widgetTitle}>
+    <AgentBentoCard
+      headerAction={
+        <CurrentActivityGraphHeaderActions
+          editorMode={editor.editorMode}
+          hasChanges={editor.draftState.hasChanges}
+          isDefinitionLoading={editor.editableDefinitionQuery.status === "pending"}
+          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+          locale={locale}
+          onToggle={editor.handleEditorModeToggle}
+        />
+      }
+      title={messages.widgetTitle}
+    >
       <section className={GRAPH_PANEL_SHELL_CLASS}>
-        <ReactFlowCurrentActivityCard
+        <ReactFlowCurrentActivityCardView
+          editor={editor}
           importController={importController}
           locale={locale}
           now={now}
           selection={toCurrentActivitySelection(selection)}
+          showHeaderActions={false}
           snapshot={snapshot}
           onSelectWorkItem={onSelectWorkItem}
           onSelectStateNode={onSelectStateNode}

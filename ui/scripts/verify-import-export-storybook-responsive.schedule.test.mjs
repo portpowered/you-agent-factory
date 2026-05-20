@@ -131,6 +131,25 @@ describe("current-selection prompt hint responsive schedule", () => {
   });
 });
 
+describe("provider-session detail responsive schedule", () => {
+  test("keeps the provider-session success story in the default responsive schedule", () => {
+    const providerSessionStory = storyChecks.find(
+      (storyCheck) =>
+        storyCheck.label === "current selection provider-session success",
+    );
+
+    expect(providerSessionStory?.id).toBe(
+      "infinite-you-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+    );
+    expect(providerSessionStory?.dialogName).toBeUndefined();
+    expect(viewportChecks).toEqual([
+      { height: 844, label: "mobile", width: 390 },
+      { height: 1024, label: "tablet", width: 768 },
+      { height: 900, label: "desktop", width: 1440 },
+    ]);
+  });
+});
+
 describe("localized import/export assertions", () => {
   test("checks the expected localized export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };
