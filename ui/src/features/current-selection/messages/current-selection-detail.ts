@@ -234,7 +234,7 @@ const currentSelectionDetailMessagesByLocale = {
     workstationLabel: "Workstation",
     workstationUnavailable:
       "Workstation details are not available for this request.",
-    workTypeUnavailable: "不明",
+    workTypeUnavailable: "Unknown",
     workingDirectoryLabel: "Working directory",
     openWorkItemAction: (workItemLabel: string) => `Open ${workItemLabel}`,
   },

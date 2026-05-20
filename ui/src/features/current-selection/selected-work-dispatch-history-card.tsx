@@ -83,7 +83,7 @@ export function DispatchHistoryCard({
     <article
       className={cx(
         PROVIDER_SESSION_CARD_CLASS,
-        isCurrentDispatch && "border-af-accent/30 bg-af-accent/6",
+        isCurrentDispatch && "border-on-foreground/30 bg-on-foreground/6",
       )}
     >
       <DispatchHistoryHeader
@@ -224,7 +224,7 @@ function DispatchHistoryHeader({
           {isCurrentDispatch ? (
             <span
               className={cx(
-                "inline-flex rounded-full border border-af-accent/35 bg-af-accent/10 px-2 py-0.5 text-af-accent",
+                "inline-flex rounded-full border border-on-foreground/35 bg-on-foreground/10 px-2 py-0.5 text-on-foreground",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
             >

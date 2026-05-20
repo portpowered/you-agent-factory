@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
+import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import { DashboardStatusPanel } from "./dashboard-status-panel";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
@@ -17,12 +18,12 @@ describe("DashboardStatusPanel", () => {
     expect(headerEyebrow?.textContent).toContain("∞");
     expect(headerEyebrow?.textContent).toContain("U");
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
-    expect(container.querySelector("section")?.className).not.toContain(
-      "border-af-danger/45",
+    expect(container.querySelector("section")?.className).toContain(
+      DASHBOARD_PANEL_SHELL_CLASS,
     );
   });
 
-  it("renders the error tone and optional detail copy when provided", () => {
+  it("renders the error tone through the shared shell and optional detail copy when provided", () => {
     const { container } = render(
       <DashboardStatusPanel
         detail="Waiting for more timeline data."
@@ -33,8 +34,11 @@ describe("DashboardStatusPanel", () => {
 
     expect(screen.getByText("Waiting for more timeline data.")).toBeTruthy();
     expect(container.querySelector("section")?.className).toContain(
-      "border-af-danger/45",
+      DASHBOARD_PANEL_SHELL_CLASS,
     );
+    expect(
+      screen.getByText("Waiting for more timeline data.").className,
+    ).toContain("text-af-danger-ink");
   });
 
   it("resolves brand copy from the requested locale catalog", () => {
