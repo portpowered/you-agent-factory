@@ -300,6 +300,11 @@ func sortListWorkItems(items []listWorkItem, mode listWorkSortModeValue) {
 		if leftOrder != rightOrder {
 			return leftOrder < rightOrder
 		}
+		if isFinishedListWorkState(left.work.State) && isFinishedListWorkState(right.work.State) {
+			if less, decided := lessListWorkByCompletedAt(left, right); decided {
+				return less
+			}
+		}
 
 		leftStateType := listWorkStateType(left.work.State)
 		rightStateType := listWorkStateType(right.work.State)
@@ -317,7 +322,40 @@ func lessListWorkByStateType(left, right listWorkItem) bool {
 	if leftStateType != rightStateType {
 		return leftStateType < rightStateType
 	}
+	if isFinishedListWorkState(left.work.State) && isFinishedListWorkState(right.work.State) {
+		if less, decided := lessListWorkByCompletedAt(left, right); decided {
+			return less
+		}
+	}
 	return left.cursorID < right.cursorID
+}
+
+func lessListWorkByCompletedAt(left, right listWorkItem) (bool, bool) {
+	leftCompletedAt := left.work.CompletedAt
+	rightCompletedAt := right.work.CompletedAt
+	switch {
+	case leftCompletedAt != nil && rightCompletedAt != nil:
+		if !leftCompletedAt.Equal(*rightCompletedAt) {
+			return leftCompletedAt.After(*rightCompletedAt), true
+		}
+	case leftCompletedAt != nil:
+		return true, true
+	case rightCompletedAt != nil:
+		return false, true
+	}
+	return false, false
+}
+
+func isFinishedListWorkState(workState *factoryapi.WorkState) bool {
+	if workState == nil {
+		return false
+	}
+	switch workState.Type {
+	case factoryapi.WorkStateTypeTERMINAL, factoryapi.WorkStateTypeFAILED:
+		return true
+	default:
+		return false
+	}
 }
 
 func listWorkStateOrder(workState *factoryapi.WorkState) int {
