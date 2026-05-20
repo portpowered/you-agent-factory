@@ -2,8 +2,6 @@ import "@xyflow/react/dist/style.css";
 
 import {
   applyNodeChanges,
-  Background,
-  Controls,
   Handle,
   MarkerType,
   Position,
@@ -13,10 +11,14 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { cn } from "../../../lib/cn";
+import {
+  DashboardGraphBackground,
+  DashboardGraphControls,
+  DashboardGraphFrame,
+} from "../../../components/dashboard/dashboard-graph";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -38,32 +40,15 @@ import {
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[36rem] min-h-[36rem] rounded-xl border border-af-overlay/8 bg-af-overlay/4";
+  "h-[36rem] min-h-[36rem] border-transparent bg-af-overlay/4";
 const PATH_NODE_CLASS =
   "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)]";
-const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
-const GRAPH_BACKGROUND_GAP = 24;
-const GRAPH_BACKGROUND_SIZE = 1;
 const DISPATCH_NODE_WIDTH = 240;
 const DISPATCH_NODE_HEIGHT = 124;
-
-type CSSPropertiesWithVariables = CSSProperties & Record<`--${string}`, string | number>;
-
-const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
-  "--xy-controls-box-shadow": "none",
-  "--xy-controls-button-background-color-props":
-    "rgb(from var(--color-af-surface) r g b / 0.94)",
-  "--xy-controls-button-background-color-hover-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.1)",
-  "--xy-controls-button-border-color-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.08)",
-  "--xy-controls-button-color-props": "rgb(from var(--color-af-ink) r g b / 0.72)",
-  "--xy-controls-button-color-hover-props": "var(--color-af-ink)",
-  backgroundColor: "rgb(from var(--color-af-surface) r g b / 0.88)",
-  border: "1px solid rgb(from var(--color-af-overlay) r g b / 0.08)",
-  borderRadius: 8,
-  overflow: "hidden",
-};
+const TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS = {
+  maxZoom: 1.15,
+  padding: 0.16,
+} as const;
 
 interface PathNodeData extends Record<string, unknown> {
   inputSummary: string;
@@ -166,7 +151,7 @@ export function TraceWorkstationPath({
   }
 
   return (
-    <section
+    <DashboardGraphFrame
       aria-label={messages.dispatchPathGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-workstation-path
@@ -184,7 +169,7 @@ export function TraceWorkstationPath({
         }}
         edges={graph.edges}
         fitView
-        fitViewOptions={{ maxZoom: 1.15, padding: 0.16 }}
+        fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
         maxZoom={1.8}
         minZoom={0.35}
         nodes={nodes}
@@ -195,18 +180,12 @@ export function TraceWorkstationPath({
         proOptions={{ hideAttribution: true }}
         zoomOnScroll
       >
-        <Background
-          color={GRAPH_BACKGROUND_COLOR}
-          gap={GRAPH_BACKGROUND_GAP}
-          size={GRAPH_BACKGROUND_SIZE}
-        />
-        <Controls
-          fitViewOptions={{ maxZoom: 1.15, padding: 0.16 }}
-          showInteractive={false}
-          style={GRAPH_CONTROLS_STYLE}
+        <DashboardGraphBackground />
+        <DashboardGraphControls
+          fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
         />
       </ReactFlow>
-    </section>
+    </DashboardGraphFrame>
   );
 }
 

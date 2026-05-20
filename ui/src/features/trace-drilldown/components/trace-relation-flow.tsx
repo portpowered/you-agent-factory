@@ -2,8 +2,6 @@ import "@xyflow/react/dist/style.css";
 
 import {
   applyNodeChanges,
-  Background,
-  Controls,
   Handle,
   MarkerType,
   Position,
@@ -13,10 +11,14 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { cn } from "../../../lib/cn";
+import {
+  DashboardGraphBackground,
+  DashboardGraphControls,
+  DashboardGraphFrame,
+} from "../../../components/dashboard/dashboard-graph";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -31,40 +33,33 @@ import {
 
 // tailwind-exception: intrinsic-sizing
 const GRAPH_SHELL_CLASS =
-  "h-[60rem] min-h-[40rem] rounded-xl border border-af-overlay/8 bg-af-overlay/4";
+  "h-[60rem] min-h-[40rem] border-transparent bg-af-overlay/4";
 const RELATION_NODE_CLASS =
-  "flex h-full min-w-0 w-full flex-col gap-1.5 overflow-hidden rounded-lg border border-af-overlay/10 bg-af-canvas px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-colors";
-const RELATION_NODE_ACTIVE_CLASS = "hover:border-af-accent/28 hover:bg-af-accent/8";
-const RELATION_EDGE_STROKE = "var(--color-af-edge-muted)";
-const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
-const GRAPH_BACKGROUND_GAP = 24;
-const GRAPH_BACKGROUND_SIZE = 1;
+  "flex h-full min-w-0 w-full flex-col gap-2 overflow-hidden rounded-lg border px-3 py-3 text-left text-af-ink shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-accent/25";
+const RELATION_NODE_ACTIVE_CLASS =
+  "hover:border-af-accent/30 hover:bg-af-accent/8";
+const RELATION_NODE_BADGE_CLASS =
+  "inline-flex rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em]";
+const RELATION_STATE_BADGE_DANGER_CLASS =
+  "border-af-danger/24 bg-af-danger/10 text-af-danger-ink";
+const RELATION_STATE_BADGE_SUCCESS_CLASS =
+  "border-af-success/24 bg-af-success/10 text-af-success-ink";
+const RELATION_STATE_BADGE_WARNING_CLASS =
+  "border-af-warning/24 bg-af-warning/10 text-af-warning-ink";
+const RELATION_NODE_TONE_DEFAULT_CLASS = "border-af-overlay/10 bg-af-canvas";
+const RELATION_NODE_TONE_DANGER_CLASS = "border-af-danger/24 bg-af-danger/6";
+const RELATION_NODE_TONE_SUCCESS_CLASS = "border-af-success/20 bg-af-success/6";
+const RELATION_NODE_TONE_WARNING_CLASS = "border-af-warning/20 bg-af-warning/6";
 const RELATION_NODE_WIDTH = 220;
 const RELATION_NODE_HEIGHT = 112;
 const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;
-
-type CSSPropertiesWithVariables = CSSProperties & Record<`--${string}`, string | number>;
-
-const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
-  "--xy-controls-box-shadow": "none",
-  "--xy-controls-button-background-color-props":
-    "rgb(from var(--color-af-surface) r g b / 0.94)",
-  "--xy-controls-button-background-color-hover-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.1)",
-  "--xy-controls-button-border-color-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.08)",
-  "--xy-controls-button-color-props": "rgb(from var(--color-af-ink) r g b / 0.72)",
-  "--xy-controls-button-color-hover-props": "var(--color-af-ink)",
-  backgroundColor: "rgb(from var(--color-af-surface) r g b / 0.88)",
-  border: "1px solid rgb(from var(--color-af-overlay) r g b / 0.08)",
-  borderRadius: 8,
-  overflow: "hidden",
-};
 
 interface RelationFlowNodeData extends Record<string, unknown> {
   label: string;
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
+  relationStates: string[];
+  relationTypes: string[];
   selectable: boolean;
   workID?: string;
 }
@@ -169,7 +164,7 @@ export function TraceRelationFlow({
   }
 
   return (
-    <section
+    <DashboardGraphFrame
       aria-label={messages.batchRelationGraphLabel}
       className={GRAPH_SHELL_CLASS}
       data-trace-relation-flow
@@ -178,11 +173,6 @@ export function TraceRelationFlow({
       <ReactFlow
         defaultEdgeOptions={{
           animated: false,
-          markerEnd: {
-            color: RELATION_EDGE_STROKE,
-            type: MarkerType.ArrowClosed,
-          },
-          style: { stroke: RELATION_EDGE_STROKE, strokeWidth: 1.7 },
           type: "smoothstep",
         }}
         edges={graph.edges}
@@ -199,18 +189,10 @@ export function TraceRelationFlow({
         proOptions={{ hideAttribution: true }}
         zoomOnScroll
       >
-        <Background
-          color={GRAPH_BACKGROUND_COLOR}
-          gap={GRAPH_BACKGROUND_GAP}
-          size={GRAPH_BACKGROUND_SIZE}
-        />
-        <Controls
-          fitViewOptions={GRAPH_FIT_VIEW_OPTIONS}
-          showInteractive={false}
-          style={GRAPH_CONTROLS_STYLE}
-        />
+        <DashboardGraphBackground />
+        <DashboardGraphControls fitViewOptions={GRAPH_FIT_VIEW_OPTIONS} />
       </ReactFlow>
-    </section>
+    </DashboardGraphFrame>
   );
 }
 
@@ -228,9 +210,41 @@ function RelationWorkNode({
     <>
       <Handle className="opacity-0" position={Position.Left} type="target" />
       <Handle className="opacity-0" position={Position.Right} type="source" />
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-        {messages.workItemsLabel}
-      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span
+          className={cn(
+            RELATION_NODE_BADGE_CLASS,
+            "border-af-accent/24 bg-af-accent/10 text-af-accent",
+            DASHBOARD_SUPPORTING_LABEL_CLASS,
+          )}
+        >
+          {messages.workItemsLabel}
+        </span>
+        {data.relationTypes.slice(0, 1).map((relationType) => (
+          <span
+            className={cn(
+              RELATION_NODE_BADGE_CLASS,
+              "border-af-info/24 bg-af-info/8 text-af-info",
+              DASHBOARD_SUPPORTING_LABEL_CLASS,
+            )}
+            key={relationType}
+          >
+            {formatRelationBadgeLabel(relationType)}
+          </span>
+        ))}
+        {data.relationStates.slice(0, 1).map((relationState) => (
+          <span
+            className={cn(
+              RELATION_NODE_BADGE_CLASS,
+              relationStateToneClassName(relationState),
+              DASHBOARD_SUPPORTING_LABEL_CLASS,
+            )}
+            key={relationState}
+          >
+            {relationState}
+          </span>
+        ))}
+      </div>
       <strong
         className={cn("text-sm text-af-ink [overflow-wrap:anywhere]", DASHBOARD_BODY_TEXT_CLASS)}
       >
@@ -242,7 +256,12 @@ function RelationWorkNode({
   if (data.selectable && data.workID && data.onSelectWorkID) {
     return (
       <button
-        className={cn(RELATION_NODE_CLASS, RELATION_NODE_ACTIVE_CLASS)}
+        aria-label={data.label}
+        className={cn(
+          RELATION_NODE_CLASS,
+          relationNodeToneClassName(data.relationStates),
+          RELATION_NODE_ACTIVE_CLASS,
+        )}
         onClick={handleSelectWork}
         title={data.workID}
         type="button"
@@ -253,7 +272,13 @@ function RelationWorkNode({
   }
 
   return (
-    <article className={RELATION_NODE_CLASS} title={data.workID}>
+    <article
+      className={cn(
+        RELATION_NODE_CLASS,
+        relationNodeToneClassName(data.relationStates),
+      )}
+      title={data.workID}
+    >
       {content}
     </article>
   );
@@ -268,19 +293,28 @@ function buildRelationGraph(
 } {
   const nodeRecords = new Map<
     string,
-    { id: string; label: string; order: number; workID?: string }
+    {
+      id: string;
+      label: string;
+      order: number;
+      relationStates: Set<string>;
+      relationTypes: Set<string>;
+      workID?: string;
+    }
   >();
   const edgeRecords: Edge[] = [];
 
   relations.forEach((relation, index) => {
-    const source = relationEndpoint(relation, "source", index);
-    const target = relationEndpoint(relation, "target", index);
+    const source = relationEndpoint(relation, "source", index, locale);
+    const target = relationEndpoint(relation, "target", index, locale);
 
     if (!nodeRecords.has(source.id)) {
       nodeRecords.set(source.id, {
         id: source.id,
         label: source.label,
         order: index * 2,
+        relationStates: new Set<string>(),
+        relationTypes: new Set<string>(),
         workID: source.workID,
       });
     }
@@ -290,13 +324,30 @@ function buildRelationGraph(
         id: target.id,
         label: target.label,
         order: index * 2 + 1,
+        relationStates: new Set<string>(),
+        relationTypes: new Set<string>(),
         workID: target.workID,
       });
     }
 
+    const sourceRecord = nodeRecords.get(source.id);
+    const targetRecord = nodeRecords.get(target.id);
+    sourceRecord?.relationTypes.add(relation.type);
+    targetRecord?.relationTypes.add(relation.type);
+    if (relation.required_state) {
+      sourceRecord?.relationStates.add(relation.required_state);
+      targetRecord?.relationStates.add(relation.required_state);
+    }
+
     edgeRecords.push({
+      ariaLabel: relationEdgeLabel(source.label, target.label, relation),
       id: relationEdgeID(relation, index),
+      markerEnd: {
+        color: relationEdgeStroke(relation),
+        type: MarkerType.ArrowClosed,
+      },
       source: source.id,
+      style: relationEdgeStyle(relation),
       target: target.id,
     });
   });
@@ -307,6 +358,8 @@ function buildRelationGraph(
       data: {
         label: record.label,
         locale,
+        relationStates: [...record.relationStates.values()],
+        relationTypes: [...record.relationTypes.values()],
         selectable: false,
         workID: record.workID,
       },
@@ -323,12 +376,16 @@ function relationEndpoint(
   relation: DashboardWorkRelation,
   side: "source" | "target",
   index: number,
+  locale?: string,
 ): { id: string; label: string; workID?: string } {
   if (side === "source") {
     const workID = relation.source_work_id?.trim();
     return {
       id: workID || `relation-${index}-source`,
-      label: relation.source_work_name || workID || "Unknown source",
+      label:
+        relation.source_work_name ||
+        workID ||
+        getTraceDrilldownMessages(locale).unknownRelationSource,
       workID: workID || undefined,
     };
   }
@@ -349,4 +406,89 @@ function relationEdgeID(relation: DashboardWorkRelation, index: number): string 
     relation.required_state ?? "",
     relation.request_id ?? "",
   ].join("|");
+}
+
+function formatRelationBadgeLabel(relationType: string): string {
+  return relationType.replaceAll("_", " ");
+}
+
+function relationStateToneClassName(relationState: string): string {
+  const normalizedState = relationState.trim().toUpperCase();
+  if (
+    normalizedState === "FAILED" ||
+    normalizedState === "FAIL" ||
+    normalizedState === "REJECTED"
+  ) {
+    return RELATION_STATE_BADGE_DANGER_CLASS;
+  }
+
+  if (
+    normalizedState === "DONE" ||
+    normalizedState === "ACCEPTED" ||
+    normalizedState === "COMPLETED"
+  ) {
+    return RELATION_STATE_BADGE_SUCCESS_CLASS;
+  }
+
+  return RELATION_STATE_BADGE_WARNING_CLASS;
+}
+
+function relationNodeToneClassName(relationStates: string[]): string {
+  const primaryState = relationStates[0];
+  if (!primaryState) {
+    return RELATION_NODE_TONE_DEFAULT_CLASS;
+  }
+
+  const toneClassName = relationStateToneClassName(primaryState);
+  if (toneClassName === RELATION_STATE_BADGE_DANGER_CLASS) {
+    return RELATION_NODE_TONE_DANGER_CLASS;
+  }
+  if (toneClassName === RELATION_STATE_BADGE_SUCCESS_CLASS) {
+    return RELATION_NODE_TONE_SUCCESS_CLASS;
+  }
+
+  return RELATION_NODE_TONE_WARNING_CLASS;
+}
+
+function relationEdgeStroke(relation: DashboardWorkRelation): string {
+  if (relation.required_state) {
+    const toneClassName = relationStateToneClassName(relation.required_state);
+    if (toneClassName === RELATION_STATE_BADGE_DANGER_CLASS) {
+      return "var(--color-af-danger-ink)";
+    }
+    if (toneClassName === RELATION_STATE_BADGE_SUCCESS_CLASS) {
+      return "var(--color-af-success)";
+    }
+
+    return "var(--color-af-warning-ink)";
+  }
+
+  if (relation.type === "PARENT_CHILD") {
+    return "var(--color-af-accent)";
+  }
+
+  return "var(--color-af-edge-muted)";
+}
+
+function relationEdgeStyle(relation: DashboardWorkRelation) {
+  return {
+    stroke: relationEdgeStroke(relation),
+    strokeDasharray: relation.required_state ? "7 5" : undefined,
+    strokeWidth: relation.required_state ? 2 : 1.7,
+  };
+}
+
+function relationEdgeLabel(
+  sourceLabel: string,
+  targetLabel: string,
+  relation: DashboardWorkRelation,
+): string {
+  const fragments = [
+    `${formatRelationBadgeLabel(relation.type)} relation from ${sourceLabel} to ${targetLabel}`,
+  ];
+  if (relation.required_state) {
+    fragments.push(`requiring ${relation.required_state}`);
+  }
+
+  return fragments.join(", ");
 }
