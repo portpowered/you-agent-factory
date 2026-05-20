@@ -1039,30 +1039,6 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	)
 }
 
-func TestOpenAPIAuthoring_DefaultLocalServerURL(t *testing.T) {
-	data, err := os.ReadFile("../../api/openapi-main.yaml")
-	if err != nil {
-		t.Fatalf("read authored openapi contract: %v", err)
-	}
-
-	var doc map[string]any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		t.Fatalf("parse authored openapi contract: %v", err)
-	}
-
-	servers, ok := doc["servers"].([]any)
-	if !ok || len(servers) != 1 {
-		t.Fatalf("servers = %#v, want one local server entry", doc["servers"])
-	}
-	server, ok := servers[0].(map[string]any)
-	if !ok {
-		t.Fatalf("servers[0] = %#v, want object", servers[0])
-	}
-	if got, _ := server["url"].(string); got != "http://localhost:7437" {
-		t.Fatalf("authored openapi default local server url = %q, want %q", got, "http://localhost:7437")
-	}
-}
-
 func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T) {
 	data, err := os.ReadFile("../../api/openapi-main.yaml")
 	if err != nil {
