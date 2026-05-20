@@ -52,6 +52,33 @@ describe("StateNodeDetailCard", () => {
     expect(screen.getByText("trace-active-story")).toBeTruthy();
   });
 
+  it("renders an English fallback when current work has no work type", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[
+          {
+            display_name: "Active Story",
+            trace_id: "trace-active-story",
+            work_id: "work-active-story",
+          },
+        ]}
+        place={resolvedSelectedState}
+        tokenCount={1}
+      />,
+    );
+
+    expect(screen.getAllByText("Work type").length).toBeGreaterThan(0);
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByText("不明")).toBeNull();
+  });
+
   it("applies shared typography helpers to the state-node selection header", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(

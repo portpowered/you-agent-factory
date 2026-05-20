@@ -55,17 +55,17 @@ export const RUNTIME_DETAIL_CODE_CLASS = cx(
   "[overflow-wrap:anywhere]",
 );
 export const TRACE_ACTION_LINK_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-accent/35 bg-af-accent/10 px-3 py-2 text-sm font-bold text-af-accent outline-af-accent transition hover:bg-af-accent/15 focus-visible:outline-2 focus-visible:outline-offset-2";
+  "inline-flex w-fit rounded-lg border border-on-foreground/35 bg-on-foreground/10 px-3 py-2 text-sm font-bold text-on-foreground outline-af-accent transition hover:bg-on-foreground/15 focus-visible:outline-2 focus-visible:outline-offset-2";
 export const REQUEST_SELECTION_STATUS_CLASS = cx(
   "m-0 text-af-ink/68",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cx(
-  "grid w-full gap-1.5 rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-af-ink/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
+  "grid w-full gap-1.5 rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-3 py-2.5 text-left text-on-foreground/82 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const WORK_SELECTION_BUTTON_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs font-bold text-af-ink/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
+  "inline-flex w-fit rounded-lg border border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs font-bold text-on-foreground/78 outline-af-accent transition hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-on-foreground focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-overlay/8 disabled:bg-af-overlay/4 disabled:text-af-ink/35";
 export const REQUEST_HISTORY_TEXT_CLASS = cx(
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
