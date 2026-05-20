@@ -39,20 +39,24 @@ describe("import/export responsive schedule", () => {
     const visitedUrls = [];
     const visitedViewports = [];
     const page = {
-      close: vi.fn().mockResolvedValue(undefined),
       goto: vi.fn((url) => {
         visitedUrls.push(url);
-        return Promise.resolve();
-      }),
-      setViewportSize: vi.fn((viewport) => {
-        visitedViewports.push(viewport);
         return Promise.resolve();
       }),
       waitForFunction: vi.fn().mockResolvedValue(undefined),
       waitForSelector: vi.fn().mockResolvedValue(undefined),
     };
+    const contexts = [];
     const browser = {
-      newPage: vi.fn().mockResolvedValue(page),
+      newContext: vi.fn((options) => {
+        visitedViewports.push(options.viewport);
+        const context = {
+          close: vi.fn().mockResolvedValue(undefined),
+          newPage: vi.fn().mockResolvedValue(page),
+        };
+        contexts.push(context);
+        return Promise.resolve(context);
+      }),
     };
     const checks = [
       { assertions: vi.fn().mockResolvedValue(undefined), id: "story-one" },
@@ -79,7 +83,10 @@ describe("import/export responsive schedule", () => {
     ]);
     expect(checks[0].assertions).toHaveBeenCalledTimes(2);
     expect(checks[1].assertions).toHaveBeenCalledTimes(2);
-    expect(page.close).toHaveBeenCalledTimes(4);
+    expect(contexts).toHaveLength(4);
+    for (const context of contexts) {
+      expect(context.close).toHaveBeenCalledTimes(1);
+    }
   });
 });
 

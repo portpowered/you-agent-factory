@@ -4,8 +4,10 @@ import { App } from "./App";
 import type {
   DashboardSnapshot,
   DashboardTrace,
+  DashboardWorkstationRequest,
 } from "./api/dashboard";
 import type { FactoryValue } from "./api/named-factory";
+import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
 import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
@@ -14,6 +16,14 @@ import {
 import { formatTimeOfDay } from "./components/ui/formatters";
 import { DashboardScreen } from "./features/dashboard";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_PAGE_HEADING_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "./components/ui/dashboard-typography";
+import { LocalePropagationStory } from "./stories/localePropagationStory";
 import {
   buttonVisibleStyle,
   expectGraphWorkstation,
@@ -500,34 +510,6 @@ function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {
   expect(
     outcomeChart.querySelector('[data-chart-series="failed"]'),
   ).not.toBeNull();
-}
-
-function LocalePropagationStory() {
-  return (
-    <AppLocaleProvider initialLocale="en">
-      <LocalePropagationControls />
-      <div style={{ maxWidth: "100%", width: "1280px" }}>
-        <DashboardScreen />
-      </div>
-    </AppLocaleProvider>
-  );
-}
-
-function LocalePropagationControls() {
-  const { locale, setLocale } = useAppLocale();
-
-  return (
-    <fieldset style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
-      <legend>Locale verification controls</legend>
-      <span>Current locale: {locale}</span>
-      <button onClick={() => setLocale("en")} type="button">
-        Switch to English
-      </button>
-      <button onClick={() => setLocale("zh-CN")} type="button">
-        Switch to zh-CN
-      </button>
-    </fieldset>
-  );
 }
 
 export default {
