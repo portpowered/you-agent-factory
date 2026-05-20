@@ -425,6 +425,37 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	assertExecutionMetadataEqual(t, dispatch.Execution, req.Dispatch.Execution)
 }
 
+func TestAgentExecutor_InferenceRequestDefaultsCodexProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "gpt-5-codex",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-codex-default",
+			TransitionID: "t-codex-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDCodex),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderCodex) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderCodex)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDCodex {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDCodex)
+	}
+}
+
 func TestAgentExecutor_InferenceRequestMarksImageInputCapabilityWhenPresent(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{

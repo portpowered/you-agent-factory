@@ -1949,9 +1949,9 @@ func buildWorkerExecutor(
 
 	switch def.Type {
 	case interfaces.WorkerTypeModel:
-		var provider workers.Provider
+		var runner workers.Runner
 		if providerOverride != nil {
-			provider = providerOverride
+			runner = workers.RunnerFromProvider(providerOverride)
 		} else {
 			var providerOpts []workers.ScriptWrapProviderOption
 			providerOpts = append(providerOpts, workers.WithSkipPermissions(def.SkipPermissions))
@@ -1959,20 +1959,30 @@ func buildWorkerExecutor(
 			if providerCommandRunner != nil {
 				providerOpts = append(providerOpts, workers.WithProviderCommandRunner(providerCommandRunner))
 			}
-			provider = workers.NewScriptWrapProvider(providerOpts...)
+			runner = workers.NewScriptWrapProvider(providerOpts...)
 		}
 		if inferenceRecorder != nil {
-			provider = workers.NewRecordingProvider(
-				provider,
-				inferenceRecorder,
-				workers.WithRecordingProviderClock(now),
-			)
+			if providerOverride != nil {
+				provider := workers.NewRecordingProvider(
+					providerOverride,
+					inferenceRecorder,
+					workers.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			} else if providerRunner, ok := runner.(*workers.ScriptWrapProvider); ok {
+				provider := workers.NewRecordingProvider(
+					providerRunner,
+					inferenceRecorder,
+					workers.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			}
 		}
 
 		agentOpts := []workers.AgentExecutorOption{
 			workers.WithLogger(logger),
 		}
-		agentExec := workers.NewAgentExecutor(runtimeCfg, provider, agentOpts...)
+		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return &workers.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,

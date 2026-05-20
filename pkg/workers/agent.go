@@ -165,13 +165,25 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 	}
 	if workerDef != nil {
 		req.Model = workerDef.Model
-		req.ModelProvider = workerDef.ModelProvider
+		req.ModelProvider = modelProviderForRunnerSelection(workerDef.ModelProvider, request.RunnerID)
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {
 			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, interfaces.RunnerOptionalCapabilitySessionResume)
 		}
 	}
 	return req
+}
+
+func modelProviderForRunnerSelection(workerModelProvider, runnerID string) string {
+	if workerModelProvider != "" {
+		return workerModelProvider
+	}
+	switch interfaces.NormalizeRunnerID(runnerID) {
+	case interfaces.RunnerIDCodex:
+		return string(ModelProviderCodex)
+	default:
+		return ""
+	}
 }
 
 func inferenceWorkstationType(request interfaces.WorkstationExecutionRequest) string {
@@ -275,6 +287,12 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 
 type providerRunnerAdapter struct {
 	inner Provider
+}
+
+// RunnerFromProvider adapts a legacy provider implementation onto the shared
+// runner execution contract.
+func RunnerFromProvider(provider Provider) Runner {
+	return providerRunnerAdapter{inner: provider}
 }
 
 func (a providerRunnerAdapter) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {

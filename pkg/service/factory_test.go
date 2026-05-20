@@ -6185,6 +6185,74 @@ func TestLoadWorkersFromConfig_LoadedRuntimeBaseDirOverrideFlowsThroughCanonical
 	}
 }
 
+func TestLoadWorkersFromConfig_DefaultCodexRunnerPreservesLegacyProviderlessWorkers(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-codex-default",
+		TransitionID:    "t-codex-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-codex-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-codex-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderCodex) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderCodex)
+	}
+	if len(runner.request.Args) == 0 || runner.request.Args[0] != "exec" {
+		t.Fatalf("args = %#v, want codex exec invocation", runner.request.Args)
+	}
+}
+
 func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
 	runtimeBaseDir := t.TempDir()
