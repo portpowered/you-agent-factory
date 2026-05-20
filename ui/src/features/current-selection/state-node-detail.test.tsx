@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
+import { formatTimeOfDay } from "../../components/ui/formatters";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { StateNodeDetailCard } from "./state-node-detail";
@@ -26,6 +27,7 @@ describe("StateNodeDetailCard", () => {
         currentWorkItems={[
           {
             display_name: "Active Story",
+            started_at: "2026-04-08T12:00:01Z",
             trace_id: "trace-active-story",
             work_id: "work-active-story",
             work_type_id: "story",
@@ -49,11 +51,15 @@ describe("StateNodeDetailCard", () => {
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Active Story")).toBeTruthy();
-    expect(screen.getByText("work-active-story")).toBeTruthy();
-    expect(screen.getByText("trace-active-story")).toBeTruthy();
+    expect(
+      screen.getByText(`Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`),
+    ).toBeTruthy();
+    expect(screen.queryByText("work-active-story")).toBeNull();
+    expect(screen.queryByText("trace-active-story")).toBeNull();
+    expect(screen.queryByText("story")).toBeNull();
   });
 
-  it("renders an English fallback when current work has no work type", () => {
+  it("omits the supporting time row when current work has no started-at timestamp", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
       (place) => place.place_id === "story:implemented",
@@ -79,8 +85,7 @@ describe("StateNodeDetailCard", () => {
 
     expect(summaryDetails).toBeTruthy();
     expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("Work type")).toBeNull();
-    expect(screen.getByText("Unknown")).toBeTruthy();
-    expect(screen.queryByText("不明")).toBeNull();
+    expect(screen.queryByText(/^Started at /)).toBeNull();
   });
 
   it("renders the state-node selection header as one combined summary", () => {
@@ -133,6 +138,7 @@ describe("StateNodeDetailCard", () => {
         terminalHistoryWorkItems={[
           {
             display_name: "Done Story",
+            started_at: "2026-04-08T12:00:06Z",
             trace_id: "trace-done-story",
             work_id: "work-done-story",
             work_type_id: "story",
@@ -149,9 +155,12 @@ describe("StateNodeDetailCard", () => {
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Done Story")).toBeTruthy();
-    expect(screen.getByText("work-done-story")).toBeTruthy();
-    expect(screen.getByText("trace-done-story")).toBeTruthy();
-    expect(screen.getAllByText("story").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(`Started at ${formatTimeOfDay("2026-04-08T12:00:06Z")}`),
+    ).toBeTruthy();
+    expect(screen.queryByText("work-done-story")).toBeNull();
+    expect(screen.queryByText("trace-done-story")).toBeNull();
+    expect(screen.queryByText(/^story$/)).toBeNull();
     expect(screen.queryByText("No current work is occupying this place.")).toBeNull();
   });
 
@@ -184,6 +193,7 @@ describe("StateNodeDetailCard", () => {
         terminalHistoryWorkItems={[
           {
             display_name: "Failed Story",
+            started_at: "2026-04-08T12:00:08Z",
             trace_id: "trace-failed-story",
             work_id: "work-failed-story",
             work_type_id: "story",
@@ -198,7 +208,10 @@ describe("StateNodeDetailCard", () => {
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Failed Story")).toBeTruthy();
-    expect(screen.getByText("work-failed-story")).toBeTruthy();
+    expect(
+      screen.getByText(`Started at ${formatTimeOfDay("2026-04-08T12:00:08Z")}`),
+    ).toBeTruthy();
+    expect(screen.queryByText("work-failed-story")).toBeNull();
     expect(screen.getByText("Failure reason")).toBeTruthy();
     expect(screen.getByText("provider_rate_limit")).toBeTruthy();
     expect(screen.getByText("Failure message")).toBeTruthy();

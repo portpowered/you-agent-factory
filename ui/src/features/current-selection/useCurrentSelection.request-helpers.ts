@@ -283,7 +283,9 @@ function mergeDispatchAttempts(
   };
 }
 
-function requestStartedAt(request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest): string {
+export function requestStartedAt(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string {
   return isProjectedWorkstationRequest(request)
     ? request.started_at ?? ""
     : request.request.startedAt ?? request.request.started_at ?? "";

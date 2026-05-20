@@ -20,3 +20,8 @@ export interface TerminalWorkDetail {
   traceWorkID: string;
   workItem?: DashboardWorkItemRef;
 }
+
+export interface StatePositionWorkItem extends DashboardWorkItemRef {
+  startedAt?: string;
+  started_at?: string;
+}
