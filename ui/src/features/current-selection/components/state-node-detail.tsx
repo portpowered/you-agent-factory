@@ -1,6 +1,14 @@
-import { formatTimeOfDay, formatWorkItemLabel } from "../../../components/ui/formatters";
+import {
+  formatTimeOfDay,
+  formatWorkItemLabel,
+} from "../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../components/ui/place-labels";
-import { DASHBOARD_BODY_TEXT_CLASS, DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
+import {
+  DASHBOARD_BODY_CODE_CLASS,
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../../components/ui/dashboard-typography";
 import {
   DETAIL_COPY_CLASS,
   WIDGET_SUBTITLE_CLASS,
@@ -101,12 +109,18 @@ function StatePositionWorkListItem({
   workItem,
 }: StatePositionWorkListItemProps) {
   const workLabel = formatWorkItemLabel(workItem);
+  const workID = workItem.work_id?.trim();
   const startedAt = resolveStartedAt(workItem);
   const hasFailureReason = Boolean(failureDetail?.failure_reason);
   const hasFailureMessage = Boolean(failureDetail?.failure_message);
   const content = (
     <>
       <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
+      {workID ? (
+        <code className={`${DASHBOARD_BODY_CODE_CLASS} ${DASHBOARD_SUPPORTING_TEXT_CLASS}`}>
+          {workID}
+        </code>
+      ) : null}
       {startedAt ? (
         <time
           className={DASHBOARD_BODY_TEXT_CLASS}

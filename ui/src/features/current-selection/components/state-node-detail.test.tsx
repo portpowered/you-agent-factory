@@ -51,8 +51,8 @@ describe("StateNodeDetailCard", () => {
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Active Story")).toBeTruthy();
+    expect(screen.getByText("work-active-story")).toBeTruthy();
     expect(screen.getByText("Started at 7:00PM")).toBeTruthy();
-    expect(screen.queryByText("work-active-story")).toBeNull();
     expect(screen.queryByText("trace-active-story")).toBeNull();
     expect(screen.queryByText("story")).toBeNull();
   });
@@ -152,8 +152,8 @@ describe("StateNodeDetailCard", () => {
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Done Story")).toBeTruthy();
+    expect(screen.getByText("work-done-story")).toBeTruthy();
     expect(screen.getByText("Started at 7:00PM")).toBeTruthy();
-    expect(screen.queryByText("work-done-story")).toBeNull();
     expect(screen.queryByText("trace-done-story")).toBeNull();
     expect(screen.queryByText(/^story$/)).toBeNull();
     expect(screen.queryByText("No current work is occupying this place.")).toBeNull();
@@ -203,7 +203,7 @@ describe("StateNodeDetailCard", () => {
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Failed Story")).toBeTruthy();
-    expect(screen.queryByText("work-failed-story")).toBeNull();
+    expect(screen.getByText("work-failed-story")).toBeTruthy();
     expect(screen.getByText("Started at 7:00PM")).toBeTruthy();
     expect(screen.getByText("Failure reason")).toBeTruthy();
     expect(screen.getByText("provider_rate_limit")).toBeTruthy();

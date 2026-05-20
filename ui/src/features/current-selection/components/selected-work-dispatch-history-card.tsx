@@ -6,6 +6,7 @@ import {
 import { DETAIL_COPY_CLASS } from "../../../components/dashboard/widget-board";
 import {
   formatDurationMillis,
+  formatLocalDateTime,
 } from "../../../components/ui/formatters";
 import {
   EXECUTION_PILL_CLASS,
@@ -239,11 +240,16 @@ function DispatchSummaryDetails({
   request: SelectedWorkRequestHistoryItem;
   view: DispatchHistoryView;
 }) {
+  const startedAt = formatLocalDateTime(
+    requestStartedAt(request),
+    messages.workstationUnavailableValue,
+  );
+
   return (
     <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
       <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
       <InferenceAttemptDetail label={messages.transitionIdLabel} code value={request.transition_id} />
-      <InferenceAttemptDetail label={messages.startedAtLabel} value={requestStartedAt(request)} />
+      <InferenceAttemptDetail label={messages.startedAtLabel} value={startedAt} />
       <InferenceAttemptDetail
         label={messages.durationLabel}
         value={view.durationMillis !== undefined ? formatDurationMillis(view.durationMillis) : undefined}

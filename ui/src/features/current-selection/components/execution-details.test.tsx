@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { formatLocalDateTime } from "../../components/ui/formatters";
+import { formatLocalDateTime } from "../../../components/ui/formatters";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { DETAIL_CARD_NOW, inferenceAttempt } from "./detail-card-test-helpers";
 import {

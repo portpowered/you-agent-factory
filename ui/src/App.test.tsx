@@ -3030,8 +3030,8 @@ describe("App streamed replay smoke flows", () => {
       within(currentPositionDetail).getByText("Queued Analysis Story"),
     ).toBeTruthy();
     expect(
-      within(currentPositionDetail).queryByText("work-queued-analysis"),
-    ).toBeNull();
+      within(currentPositionDetail).getByText("work-queued-analysis"),
+    ).toBeTruthy();
     expect(
       within(currentPositionDetail).queryByText(/^Started at /),
     ).toBeNull();
@@ -3408,11 +3408,11 @@ describe("App streamed replay smoke flows", () => {
       within(completedDetail).getByText("Completed Smoke Story Two"),
     ).toBeTruthy();
     expect(
-      within(completedDetail).queryByText("work-smoke-complete-one"),
-    ).toBeNull();
+      within(completedDetail).getByText("work-smoke-complete-one"),
+    ).toBeTruthy();
     expect(
-      within(completedDetail).queryByText("work-smoke-complete-two"),
-    ).toBeNull();
+      within(completedDetail).getByText("work-smoke-complete-two"),
+    ).toBeTruthy();
     expect(within(completedDetail).queryAllByText(/^Started at /)).toHaveLength(
       2,
     );
@@ -3428,7 +3428,7 @@ describe("App streamed replay smoke flows", () => {
 
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Smoke Story")).toBeTruthy();
-      expect(within(failedDetail).queryByText("work-smoke-failed")).toBeNull();
+      expect(within(failedDetail).getByText("work-smoke-failed")).toBeTruthy();
       expect(within(failedDetail).queryAllByText(/^Started at /)).toHaveLength(
         1,
       );

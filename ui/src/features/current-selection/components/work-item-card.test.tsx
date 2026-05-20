@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { formatLocalDateTime } from "../../../components/ui/formatters";
 import type {
   DashboardTrace,
   DashboardWorkItemRef,
@@ -1658,7 +1659,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(dispatchCard).getByText("Started at")).toBeTruthy();
     expect(
       within(getDetailRow(dispatchCard, "Started at")).getByText(
-        "2026-04-08T12:00:01Z",
+        formatLocalDateTime("2026-04-08T12:00:01Z", "Unavailable"),
       ),
     ).toBeTruthy();
     expect(within(dispatchCard).queryByText("dispatchedCount")).toBeNull();

@@ -1198,7 +1198,7 @@ describe("App current selection", () => {
     expect(within(stateInfo).getByText("Count")).toBeTruthy();
     expect(within(stateInfo).getByText("Current work")).toBeTruthy();
     expect(within(stateInfo).getByText(activeWorkLabel)).toBeTruthy();
-    expect(within(stateInfo).queryByText(activeWorkID)).toBeNull();
+    expect(within(stateInfo).getByText(activeWorkID)).toBeTruthy();
 
     fireEvent.click(
       within(stateInfo).getByRole("button", {
@@ -1936,7 +1936,7 @@ describe("App current selection terminal states", () => {
     expect(within(completedDetail).getByText("Count")).toBeTruthy();
     expect(within(completedDetail).getByText("Current work")).toBeTruthy();
     expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
-    expect(within(completedDetail).queryByText(completedWorkID)).toBeNull();
+    expect(within(completedDetail).getByText(completedWorkID)).toBeTruthy();
     expect(
       within(completedDetail).queryByText(
         "No current work is occupying this place.",
@@ -1975,7 +1975,7 @@ describe("App current selection terminal states", () => {
       expect(within(failedDetail).getByText("Count")).toBeTruthy();
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
-      expect(within(failedDetail).queryByText(failedWorkID)).toBeNull();
+      expect(within(failedDetail).getByText(failedWorkID)).toBeTruthy();
       expect(
         within(failedDetail).getAllByText("Failure reason").length,
       ).toBeGreaterThan(0);
