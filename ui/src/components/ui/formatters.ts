@@ -27,6 +27,10 @@ const TIME_OF_DAY_FORMATTER = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
   minute: "2-digit",
 });
+const LOCAL_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 
 export function formatDurationMillis(durationMillis: number): string {
   const safeDurationMillis = Math.max(0, Math.floor(durationMillis));
@@ -90,6 +94,23 @@ export function formatTimeOfDay(isoTimestamp: string): string {
   }
 
   return TIME_OF_DAY_FORMATTER.format(timestampMs).replace(/\s/g, "");
+}
+
+export function formatLocalDateTime(
+  timestamp: string | undefined,
+  unavailableLabel: string,
+): string {
+  const normalizedTimestamp = timestamp?.trim();
+  if (!normalizedTimestamp) {
+    return unavailableLabel;
+  }
+
+  const timestampMs = Date.parse(normalizedTimestamp);
+  if (Number.isNaN(timestampMs)) {
+    return unavailableLabel;
+  }
+
+  return LOCAL_DATE_TIME_FORMATTER.format(timestampMs);
 }
 
 export function formatWorkItemLabel(workItem: DashboardWorkItemRef): string {
