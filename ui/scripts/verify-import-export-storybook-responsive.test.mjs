@@ -279,7 +279,7 @@ describe("viewport assertions", () => {
   });
 });
 
-describe("story assertions", () => {
+describe("export story assertions", () => {
   test("verifyExportDialog checks the expected export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };
     const coverImage = { isVisible: vi.fn().mockResolvedValue(true) };
@@ -324,7 +324,9 @@ describe("story assertions", () => {
       name: "Export PNG",
     });
   });
+});
 
+describe("import story assertions", () => {
   test("verifyImportDialog checks the expected import controls", async () => {
     const previewImage = { isVisible: vi.fn().mockResolvedValue(true) };
     const fileName = { isVisible: vi.fn().mockResolvedValue(true) };
@@ -370,7 +372,9 @@ describe("story assertions", () => {
       name: "Activate factory",
     });
   });
+});
 
+describe("provider-session story assertions", () => {
   test("verifyProviderSessionDetailSuccess checks the provider-session success panel", async () => {
     const selectedSessionHeading = {
       waitFor: vi.fn().mockResolvedValue(undefined),
