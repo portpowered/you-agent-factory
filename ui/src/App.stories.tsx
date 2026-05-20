@@ -300,7 +300,7 @@ function editableConfigurationSection(
   currentSelection: HTMLElement,
 ): HTMLElement {
   const section = within(currentSelection)
-    .getByRole("heading", { name: "Editable configuration" })
+    .getByRole("heading", { name: "Configuration" })
     .closest("section");
 
   if (!(section instanceof HTMLElement)) {
