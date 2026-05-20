@@ -749,8 +749,28 @@ describe("App current selection", () => {
     expect(within(readyRequestDetails).queryByText(
       "Review the active story and decide whether it is ready.",
     )).toBeNull();
-    expect(within(readyAttempt).getByText("Retry the review with the latest context.")).toBeTruthy();
-    expect(within(readyAttempt).getByText("Ready for the next workstation.")).toBeTruthy();
+    const readyRequestBody = within(readyAttempt).getByRole("region", {
+      name: "Request body",
+    });
+    const readyResponseBody = within(readyAttempt).getByRole("region", {
+      name: "Response body",
+    });
+    fireEvent.click(
+      within(readyRequestBody).getByRole("button", { name: "Expand" }),
+    );
+    fireEvent.click(
+      within(readyResponseBody).getByRole("button", { name: "Expand" }),
+    );
+    expect(
+      within(readyRequestBody).getByText(
+        "Retry the review with the latest context.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(readyResponseBody).getByText(
+        "Ready for the next workstation.",
+      ),
+    ).toBeTruthy();
     expect(within(readyAttempt).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
     expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
     expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
@@ -786,6 +806,16 @@ describe("App current selection", () => {
     const rejectedAttempt = within(rejectedInferenceAttempts).getByRole("article", {
       name: "Inference attempt 1",
     });
+    fireEvent.click(
+      within(
+        within(rejectedAttempt).getByRole("region", { name: "Request body" }),
+      ).getByRole("button", { name: "Expand" }),
+    );
+    fireEvent.click(
+      within(
+        within(rejectedAttempt).getByRole("region", { name: "Response body" }),
+      ).getByRole("button", { name: "Expand" }),
+    );
     expect(
       within(rejectedAttempt).getByText(
         "Review the active story and explain what needs to change before approval.",
