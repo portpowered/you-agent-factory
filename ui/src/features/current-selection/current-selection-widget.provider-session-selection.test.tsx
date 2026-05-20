@@ -381,6 +381,9 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     await user.click(
       within(inferenceAttempts).getByRole("button", { name: "Expand" }),
     );
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand attempt 1" }),
+    );
 
     await user.click(
       within(currentSelection).getByRole("button", {
