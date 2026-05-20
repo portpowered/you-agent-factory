@@ -245,13 +245,16 @@ function seedSelectedWork(dispatchID: string, nodeID: string, workItem: Dashboar
 }
 
 function SelectionHarness({
+  sessionID = "~default",
   snapshot,
   workstationRequestsByDispatchID,
 }: {
+  sessionID?: string;
   snapshot: DashboardSnapshot;
   workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;
 }) {
   const currentSelection = useCurrentSelection({
+    sessionID,
     snapshot,
     workstationRequestsByDispatchID,
   });
@@ -286,6 +289,7 @@ function SelectionHarness({
           .map((attempt) => attempt.provider_session?.id ?? "missing")
           .join(",")}
       </div>
+      <div data-testid="selected-work-id">{currentSelection.selectedWorkID ?? ""}</div>
     </>
   );
 }
@@ -603,5 +607,46 @@ describe("useCurrentSelection", () => {
       expect(screen.getByTestId("provider-sessions").textContent).toBe("");
     });
   });
-});
 
+  it("drops the previous session's selected work when the session ID changes", async () => {
+    const selectedWorkItem = buildWorkItem("work-active", "Active Story");
+    seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);
+
+    const { rerender } = render(
+      <SelectionHarness
+        sessionID="~default"
+        snapshot={buildSnapshot({
+          activeExecution: buildActiveExecution(
+            "dispatch-review-active",
+            [selectedWorkItem],
+            "2026-04-08T12:00:03Z",
+          ),
+        })}
+        workstationRequestsByDispatchID={{}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-work-id").textContent).toBe("work-active");
+    });
+
+    rerender(
+      <SelectionHarness
+        sessionID="session-beta"
+        snapshot={buildSnapshot({
+          activeExecution: buildActiveExecution(
+            "dispatch-review-beta",
+            [buildWorkItem("work-beta", "Beta Story")],
+            "2026-04-08T12:01:03Z",
+          ),
+        })}
+        workstationRequestsByDispatchID={{}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-work-id").textContent).toBe("");
+      expect(screen.getByTestId("dispatch-history").textContent).toBe("");
+    });
+  });
+});

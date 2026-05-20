@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { verifyDashboardHeader } from "./verify-import-export-storybook-responsive.mjs";
+import { verifyDashboardSessionSwitching } from "./verify-dashboard-session-switching-storybook-responsive.mjs";
 import { verifyDashboardSessionTabs } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
 
 describe("verifyDashboardHeader", () => {
@@ -208,5 +209,54 @@ describe("verifyDashboardSessionTabs", () => {
       name: "Catalog / review catalog",
     });
     expect(targetButton.click).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("verifyDashboardSessionSwitching", () => {
+  test("verifyDashboardSessionSwitching exercises tab switching without state leakage", async () => {
+    const betaStoryButton = {
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const activeStoryButton = {
+      count: vi.fn().mockResolvedValue(0),
+    };
+    const betaTab = {
+      click: vi.fn().mockResolvedValue(undefined),
+      getAttribute: vi.fn().mockResolvedValue("true"),
+    };
+    const page = {
+      evaluate: vi.fn().mockResolvedValue({ clientWidth: 1440, scrollWidth: 1440 }),
+      getByRole: vi.fn((role, options) => {
+        if (role === "tab" && options?.name === "root / beta beta") {
+          return betaTab;
+        }
+        if (role === "button" && String(options?.name) === String(/Active Story/)) {
+          return activeStoryButton;
+        }
+        if (role === "button" && String(options?.name) === String(/Beta Story/)) {
+          return betaStoryButton;
+        }
+        throw new Error(`unexpected role ${role}`);
+      }),
+    };
+
+    await verifyDashboardSessionSwitching(
+      {
+        expectNoHorizontalOverflow: async () => {},
+        expectVisible: async (locator) => {
+          if (!(await locator.isVisible())) {
+            throw new Error("Locator was not visible.");
+          }
+        },
+      },
+      page,
+      {
+        height: 900,
+        label: "desktop",
+        width: 1440,
+      },
+    );
+
+    expect(betaTab.click).toHaveBeenCalledTimes(1);
   });
 });

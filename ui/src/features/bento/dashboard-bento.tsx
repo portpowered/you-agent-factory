@@ -10,6 +10,7 @@ import {
 import { DashboardImportPreviewDialog } from "../import";
 import { SubmitWorkWidget } from "../submit-work";
 import { TerminalWorkWidget } from "../terminal-work";
+import { useDashboardSessionStore } from "../dashboard/state/dashboardSessionStore";
 import { useFactoryTimelineStore } from "../timeline/state/factoryTimelineStore";
 import { TraceDrilldownWidget, useTraceDrilldown } from "../trace-drilldown";
 import { useWorkOutcomeChart, WorkOutcomeWidget } from "../work-outcome";
@@ -64,6 +65,9 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const setSelectedTraceID = useDashboardBentoStore(
     (state) => state.setSelectedTraceID,
   );
+  const selectedSessionID = useDashboardSessionStore(
+    (state) => state.selectedSessionID,
+  );
   const timelineEvents = useFactoryTimelineStore((state) => state.events);
   const selectedTimelineTick = useFactoryTimelineStore(
     (state) => state.selectedTick,
@@ -81,6 +85,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const snapshot = selectedSnapshot ?? EMPTY_DASHBOARD_SNAPSHOT;
 
   const currentSelection = useCurrentSelection({
+    sessionID: selectedSessionID,
     snapshot,
     workstationRequestsByDispatchID,
   });
