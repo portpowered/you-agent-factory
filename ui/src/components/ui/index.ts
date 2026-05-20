@@ -11,6 +11,7 @@ export * from "./dialog";
 export * from "./formatters";
 export * from "./input";
 export * from "./place-labels";
+export * from "./popover";
 export * from "./resizable";
 export * from "./select";
 export * from "./skeleton";

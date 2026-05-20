@@ -33,6 +33,10 @@ type MockFactory struct {
 	CreateNamedFactoryErr    error
 	CurrentNamedFactory      *factoryapi.Factory
 	CurrentNamedFactoryErr   error
+	EditableFactoryVersion   factoryapi.HybridLogicalTimestamp
+	EditableFactoryErr       error
+	SavedEditableFactories   []factoryapi.SaveEditableFactoryDefinitionRequest
+	SaveEditableFactoryErr   error
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
@@ -140,6 +144,45 @@ func (m *MockFactory) GetCurrentNamedFactory(_ context.Context) (factoryapi.Fact
 		return factoryapi.Factory{}, errors.New("current named factory not found")
 	}
 	return *m.CurrentNamedFactory, nil
+}
+
+func (m *MockFactory) GetEditableFactoryDefinition(_ context.Context) (factoryapi.EditableFactoryDefinition, error) {
+	if m.EditableFactoryErr != nil {
+		return factoryapi.EditableFactoryDefinition{}, m.EditableFactoryErr
+	}
+	if m.CurrentNamedFactoryErr != nil {
+		return factoryapi.EditableFactoryDefinition{}, m.CurrentNamedFactoryErr
+	}
+	if m.CurrentNamedFactory == nil {
+		return factoryapi.EditableFactoryDefinition{}, errors.New("current named factory not found")
+	}
+	version := m.EditableFactoryVersion
+	if version.Physical.IsZero() {
+		version.Physical = time.Unix(0, 1).UTC()
+		version.Logical = 1
+	}
+	return factoryapi.EditableFactoryDefinition{
+		FactoryDefinition: *m.CurrentNamedFactory,
+		Version:           version,
+	}, nil
+}
+
+func (m *MockFactory) SaveEditableFactoryDefinition(_ context.Context, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error) {
+	if m.SaveEditableFactoryErr != nil {
+		return factoryapi.EditableFactoryDefinition{}, m.SaveEditableFactoryErr
+	}
+	m.SavedEditableFactories = append(m.SavedEditableFactories, request)
+	copied := request.FactoryDefinition
+	m.CurrentNamedFactory = &copied
+	version := m.EditableFactoryVersion
+	if version.Physical.IsZero() {
+		version.Physical = time.Unix(0, 2).UTC()
+		version.Logical = 2
+	}
+	return factoryapi.EditableFactoryDefinition{
+		FactoryDefinition: request.FactoryDefinition,
+		Version:           version,
+	}, nil
 }
 
 func (m *MockFactory) WaitToComplete() <-chan struct{} {

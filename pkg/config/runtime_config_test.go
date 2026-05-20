@@ -576,7 +576,7 @@ func TestPersistNamedFactory_RollsBackStagedLayoutWhenLoadRuntimeConfigFails(t *
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	_, err := persistNamedFactory(rootDir, "broken", namedFactoryPayload(t, "broken"), namedFactoryPersistHooks{
+	_, err := persistNamedFactory(rootDir, "broken", namedFactoryPayload(t, "broken"), namedFactoryPersistOptions{}, namedFactoryPersistHooks{
 		afterWrite: func(stagingDir string) error {
 			path := filepath.Join(stagingDir, interfaces.WorkstationsDir, "execute-broken", interfaces.FactoryAgentsFileName)
 			return os.WriteFile(path, []byte("---\ntype: [\n"), 0o644)

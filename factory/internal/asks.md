@@ -1,13 +1,14 @@
-# Maintainer Asks
+# Repository Maintainer Asks
 
 This file is the canonical checked-in customer-ask backlog for the repository
 maintainer workflow.
 
-Use it alongside:
+Keep this backlog aligned with the companion control-surface files:
 
 - `factory/internal/view.md` for the current repository view
-- `factory/internal/progress.md` for recorded maintainer progress
-- `factory/internal/meta.md` for maintainer theory-of-mind notes
+- `factory/internal/progress.md` for the maintainer progress log
+- `factory/internal/meta.md` for the maintainer theory of mind
 
-Do not reintroduce legacy maintainer backlog surfaces. Keep this checked-in
-path as the single canonical maintainer ask surface.
+## Active asks
+
+No active checked-in asks are recorded right now.

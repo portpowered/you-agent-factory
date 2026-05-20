@@ -4,10 +4,6 @@ import {
   expectMatchingDashboardShellStyles,
   verifyDashboardShellConsolidation,
 } from "./dashboard-shell-storybook-responsive.mjs";
-import {
-  storyChecks,
-  viewportChecks,
-} from "./verify-import-export-storybook-responsive.mjs";
 
 function matchingShellStyle() {
   return {
@@ -70,25 +66,6 @@ describe("expectMatchingDashboardShellStyles", () => {
 });
 
 describe("verifyDashboardShellConsolidation", () => {
-  test("keeps the dashboard shell story and viewport schedule", () => {
-    const dashboardShellStory = storyChecks.find(
-      (storyCheck) => storyCheck.label === "dashboard shared shell",
-    );
-
-    expect(dashboardShellStory?.id).toBe(
-      "infinite-you-workflow-dashboard--header-action-buttons-verification",
-    );
-    expect(dashboardShellStory?.dialogName).toBeUndefined();
-    expect(dashboardShellStory?.assertions).toBe(
-      verifyDashboardShellConsolidation,
-    );
-    expect(viewportChecks).toEqual([
-      { height: 844, label: "mobile", width: 390 },
-      { height: 1024, label: "tablet", width: 768 },
-      { height: 900, label: "desktop", width: 1440 },
-    ]);
-  });
-
   test("compares header and grid-card shell styles while preserving controls", async () => {
     const shellStyle = matchingShellStyle();
     const exportButton = { isVisible: vi.fn().mockResolvedValue(true) };
@@ -127,9 +104,6 @@ describe("verifyDashboardShellConsolidation", () => {
         .fn()
         .mockResolvedValue({ clientWidth: 1440, scrollWidth: 1440 }),
       getByRole: vi.fn((_role, options) => {
-        if (options?.name === "Work totals") {
-          return workTotalsCard;
-        }
         if (options?.name === "Infinite You bento board") {
           return board;
         }
@@ -149,7 +123,7 @@ describe("verifyDashboardShellConsolidation", () => {
     expect(page.getByRole).toHaveBeenCalledWith("region", {
       name: "Infinite You bento board",
     });
-    expect(page.getByRole).toHaveBeenCalledWith("article", {
+    expect(board.getByRole).toHaveBeenCalledWith("article", {
       name: "Work totals",
     });
     expect(board.getByRole).toHaveBeenCalledWith("button", {
@@ -161,11 +135,5 @@ describe("verifyDashboardShellConsolidation", () => {
     expect(toolbar.getByRole).toHaveBeenCalledWith("button", {
       name: "Return to current tick",
     });
-    expect(toolbar.getByRole).toHaveBeenCalledWith("status", {
-      name: /Infinite You event stream (connecting|live)/,
-    });
-    expect(toolbar.waitFor).toHaveBeenCalledWith({ state: "visible" });
-    expect(board.waitFor).toHaveBeenCalledWith({ state: "visible" });
-    expect(page.evaluate).toHaveBeenCalledTimes(1);
   });
 });

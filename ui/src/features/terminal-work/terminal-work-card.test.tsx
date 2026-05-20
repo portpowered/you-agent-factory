@@ -154,31 +154,6 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(screen.queryByText(/codex/i)).toBeNull();
   });
 
-  it("renders formatted completion times and a missing timestamp fallback", () => {
-    render(
-      <CompletedFailedWorkstationCard
-        completedItems={[
-          {
-            completedAt: "2026-04-08T12:04:00Z",
-            label: "Done Story",
-            traceWorkID: "work-done-story",
-          },
-        ]}
-        failedItems={[
-          {
-            label: "Failed Story",
-            traceWorkID: "work-failed-story",
-          },
-        ]}
-        locale="en"
-        onSelectItem={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText(/Completed Apr 8, 2026/)).toBeTruthy();
-    expect(screen.getByText("Completion time unavailable")).toBeTruthy();
-  });
-
   it("collapses each row independently without hiding the other row heading", () => {
     const messages = getTerminalWorkMessages("en");
 

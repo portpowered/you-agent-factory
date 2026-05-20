@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+required:
+  - factoryDefinition
+  - version
+properties:
+  factoryDefinition:
+    $ref: '../data-models/Factory.yaml'
+  version:
+    $ref: './HybridLogicalTimestamp.yaml'

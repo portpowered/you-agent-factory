@@ -1,0 +1,164 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+
+import {
+  FactoryGraphEditorActionPopover,
+  FactoryGraphEditorConfirmationDialog,
+  FactoryGraphEditorModeToggle,
+  type FactoryGraphEditorTool,
+  FactoryGraphEditorToolbar,
+  FactoryGraphEditorVisibilityPanel,
+} from "./factory-graph-editor-controls";
+
+function renderToolbar() {
+  function ToolbarHarness() {
+    const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    return (
+      <div className="relative min-h-48">
+        <FactoryGraphEditorToolbar
+          activeTool={activeTool}
+          addMenuActions={[
+            {
+              description: "Create a workstation node.",
+              id: "workstation",
+              label: "Workstation",
+            },
+          ]}
+          canInteract={true}
+          hasPendingChanges={true}
+          onAddAction={() => {}}
+          onAddMenuOpenChange={setMenuOpen}
+          onSelectTool={setActiveTool}
+          openAddMenu={menuOpen}
+          visible={true}
+        />
+      </div>
+    );
+  }
+
+  render(<ToolbarHarness />);
+}
+
+describe("factory graph editor controls", () => {
+  it("opens the add menu from the keyboard and exposes action copy", async () => {
+    const user = userEvent.setup();
+
+    renderToolbar();
+
+    await user.tab();
+    await user.tab();
+    await user.keyboard("{Enter}");
+
+    const menu = await screen.findByLabelText("Add graph entity menu");
+    expect(menu).toBeTruthy();
+    expect(
+      within(menu).getByRole("button", { name: "Workstation" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Draft changes pending")).toBeTruthy();
+  });
+
+  it("renders the confirmation dialog through the shared dialog pattern", async () => {
+    render(
+      <FactoryGraphEditorConfirmationDialog
+        cancelLabel="Cancel removal"
+        confirmLabel="Delete review workstation"
+        confirmTone="destructive"
+        description="Deleting review will remove 3 graph edges and clear its worker assignment."
+        isOpen={true}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+        title="Remove review workstation?"
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Remove review workstation?",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel removal" }),
+    ).toBeTruthy();
+    expect(
+      within(dialog).getByRole("button", { name: "Delete review workstation" }),
+    ).toBeTruthy();
+  });
+
+  it("shows the mode-toggle tooltip on hover", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FactoryGraphEditorModeToggle editorMode={false} onClick={() => {}} />,
+    );
+
+    await user.hover(
+      screen.getByRole("button", { name: "Enter factory graph editor" }),
+    );
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Enter factory graph editor",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("keeps action popovers keyboard reachable without right-click", async () => {
+    const user = userEvent.setup();
+
+    function PopoverHarness() {
+      const [open, setOpen] = useState(false);
+
+      return (
+        <FactoryGraphEditorActionPopover
+          description="Reusable graph action shell"
+          onOpenChange={setOpen}
+          open={open}
+          title="Node actions"
+          trigger={<button type="button">Open actions</button>}
+        >
+          <button type="button">Rename node</button>
+        </FactoryGraphEditorActionPopover>
+      );
+    }
+
+    render(<PopoverHarness />);
+
+    await user.tab();
+    await user.keyboard("{Enter}");
+
+    const menu = await screen.findByText("Node actions");
+    expect(menu).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Rename node" })).toBeTruthy();
+  });
+
+  it("exposes keyboard-reachable worker and resource visibility controls", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+
+    render(
+      <FactoryGraphEditorVisibilityPanel
+        onToggle={onToggle}
+        options={[
+          { count: 3, key: "workers", label: "Workers", visible: true },
+          { count: 2, key: "resources", label: "Resources", visible: false },
+        ]}
+        visible={true}
+      />,
+    );
+
+    await user.tab();
+    await user.keyboard("{Enter}");
+
+    expect(onToggle).toHaveBeenCalledWith("workers");
+    expect(
+      screen
+        .getByRole("button", { name: "Hide workers lane" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Show resources lane" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+});

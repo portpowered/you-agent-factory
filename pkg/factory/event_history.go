@@ -687,9 +687,42 @@ func generatedWork(item interfaces.FactoryWorkItem) factoryapi.Work {
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
 		PreviousChainingTraceIds: stringSlicePtr(item.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(item.TraceID),
-		Content:                  interfaces.GeneratedWorkContentPtr(item.Content),
+		Content:                  generatedWorkContentPtr(item.Content),
 		Tags:                     generatedStringMapPtr(item.Tags),
 	}
+}
+
+func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+	if len(parts) == 0 {
+		return nil
+	}
+	content := make(factoryapi.WorkContent, 0, len(parts))
+	for _, part := range parts {
+		var generated factoryapi.WorkContentPart
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: part.Text,
+			}); err != nil {
+				continue
+			}
+		case interfaces.WorkContentPartTypeImage:
+			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+				Type: factoryapi.WorkContentPartTypeImage,
+				File: part.File,
+			}); err != nil {
+				continue
+			}
+		default:
+			continue
+		}
+		content = append(content, generated)
+	}
+	if len(content) == 0 {
+		return nil
+	}
+	return &content
 }
 
 func generatedDispatchConsumedWorkRefsFromTokens(tokens []interfaces.Token) []factoryapi.DispatchConsumedWorkRef {

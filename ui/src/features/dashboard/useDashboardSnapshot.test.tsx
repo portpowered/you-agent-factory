@@ -5,7 +5,10 @@ import type { PropsWithChildren } from "react";
 import type { DashboardSnapshot } from "../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../api/events";
 import { createReplayHarness } from "../../testing/replay-harness";
-import { CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY } from "../current-factory-definition";
+import {
+  CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+  CURRENT_EDITABLE_FACTORY_DEFINITION_QUERY_KEY,
+} from "../current-factory-definition";
 import { FACTORY_TIMELINE_DEBUG_STORAGE_KEY } from "../timeline/state/factoryTimelineDebug";
 import {
   type WorldState,
@@ -481,7 +484,20 @@ describe("useDashboardSnapshot", () => {
     expect(window.__agentFactoryTimelineDebug__?.summarize().selectedTick).toBe(4);
   });
 
-  it("hydrates the editable current-factory cache from a streamed factory-change event", async () => {
+  it("updates streamed dashboard topology and the editable current-factory cache from a factory-change event", async () => {
+    queryClient.setQueryData(CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY, {
+      factoryDefinition: {
+        name: "factory",
+        workers: [],
+        workstations: [],
+        workTypes: [],
+      },
+      version: {
+        logical: 7,
+        physical: "2026-05-17T14:59:00Z",
+      },
+    });
+
     renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),
     });
@@ -546,6 +562,28 @@ describe("useDashboardSnapshot", () => {
           ],
         },
       );
+    });
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryState(
+          CURRENT_EDITABLE_FACTORY_DEFINITION_DOCUMENT_QUERY_KEY,
+        )?.isInvalidated,
+      ).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(useFactoryTimelineStore.getState().latestTick).toBe(8);
+    });
+
+    expect(useFactoryTimelineStore.getState().worldViewCache[8]?.topology).toMatchObject({
+      submit_work_types: [{ work_type_name: "story" }],
+      workstation_node_ids: ["review"],
+      workstation_nodes_by_id: {
+        review: expect.objectContaining({
+          workstation_name: "Review",
+        }),
+      },
     });
   });
 });

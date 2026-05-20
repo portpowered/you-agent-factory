@@ -2,13 +2,6 @@ import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import {
-  expectNoHorizontalOverflow,
-  expectVisible,
-  OVERFLOW_TOLERANCE_PX,
-  STORY_RENDER_TIMEOUT_MS,
-  waitForStoryRegion,
-} from "./storybook-responsive-helpers.mjs";
-import {
   verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
@@ -16,25 +9,19 @@ import {
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
 
-export {
-  expectNoHorizontalOverflow,
-  expectVisible,
-  OVERFLOW_TOLERANCE_PX,
-  STORY_RENDER_TIMEOUT_MS,
-  waitForStoryRegion,
-} from "./storybook-responsive-helpers.mjs";
-
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
+const OVERFLOW_TOLERANCE_PX = 1;
+const STORY_RENDER_TIMEOUT_MS = 30000;
 
-export const viewportChecks = [
+const viewportChecks = [
   { height: 844, label: "mobile", width: 390 },
   { height: 1024, label: "tablet", width: 768 },
   { height: 900, label: "desktop", width: 1440 },
 ];
 
-export const storyChecks = [
+const storyChecks = [
   {
     assertions: verifyExportDialog,
     dialogName: "Export factory",
@@ -61,7 +48,7 @@ export const storyChecks = [
   },
   {
     assertions: verifyDashboardHeader,
-    id: "infinite-you-workflow-dashboard--header-timeline-alignment-verification",
+    id: "infinite-you-dashboard-dashboard-header--responsive-verification",
     label: "dashboard header",
   },
   {
@@ -173,6 +160,25 @@ export async function waitForDialog(page, dialogName) {
   return dialog;
 }
 
+export async function waitForStoryRegion(page, regionName) {
+  const region = page.getByRole("region", { name: regionName });
+  await region.waitFor({ state: "visible" });
+  return region;
+}
+
+export async function expectNoHorizontalOverflow(page, label) {
+  const metrics = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+
+  if (metrics.scrollWidth > metrics.clientWidth + OVERFLOW_TOLERANCE_PX) {
+    throw new Error(
+      `${label} overflowed horizontally: scrollWidth=${metrics.scrollWidth}, clientWidth=${metrics.clientWidth}.`,
+    );
+  }
+}
+
 export async function expectDialogWithinViewport(dialog, viewport, label) {
   const box = await dialog.boundingBox();
 
@@ -190,6 +196,19 @@ export async function expectDialogWithinViewport(dialog, viewport, label) {
     throw new Error(
       `${label} dialog exceeded the ${viewport.label} viewport (${viewport.width}x${viewport.height}).`,
     );
+  }
+}
+
+export async function expectVisible(locator, label) {
+  if (typeof locator.waitFor === "function") {
+    await locator.waitFor({
+      state: "visible",
+      timeout: STORY_RENDER_TIMEOUT_MS,
+    });
+  }
+
+  if (!(await locator.isVisible())) {
+    throw new Error(`${label} was not visible.`);
   }
 }
 
@@ -245,7 +264,7 @@ export async function verifyImportDialog(page, dialog, viewport) {
   );
 }
 
-export async function verifyLocalizedExportDialog(page, dialog, viewport) {
+async function verifyLocalizedExportDialog(page, dialog, viewport) {
   await expectVisible(
     dialog.getByRole("textbox", { name: "工厂名称" }),
     "Localized factory name input",
@@ -273,7 +292,7 @@ export async function verifyLocalizedExportDialog(page, dialog, viewport) {
   );
 }
 
-export async function verifyLocalizedImportDialog(page, dialog, viewport) {
+async function verifyLocalizedImportDialog(page, dialog, viewport) {
   await expectVisible(
     dialog.getByRole("img", { name: "Dropped Factory 预览图" }),
     "Localized import preview image",
@@ -398,22 +417,15 @@ export async function verifyStory(browser, storyCheck, viewport) {
   }
 }
 
-export async function runResponsiveStorybookChecks(
-  browser,
-  { checks = storyChecks, viewports = viewportChecks } = {},
-) {
-  for (const viewport of viewports) {
-    for (const storyCheck of checks) {
-      await verifyStory(browser, storyCheck, viewport);
-    }
-  }
-}
-
-async function main() {
+export async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {
-    await runResponsiveStorybookChecks(browser);
+    for (const viewport of viewportChecks) {
+      for (const storyCheck of storyChecks) {
+        await verifyStory(browser, storyCheck, viewport);
+      }
+    }
   } finally {
     await browser.close();
   }

@@ -1,4 +1,10 @@
-# Maintainer Meta
+# Repository Maintainer Meta
 
-Use this file to capture repository-maintainer theory-of-mind notes for the
-checked-in workflow.
+This file is the canonical checked-in theory-of-mind surface for the
+repository maintainer workflow.
+
+Keep it aligned with:
+
+- `factory/internal/asks.md`
+- `factory/internal/view.md`
+- `factory/internal/progress.md`

@@ -168,6 +168,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/factory/~current/editable-definition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get editable current factory definition
+         * @description Returns the complete current factory definition for graph editing together with hybrid logical timestamp metadata clients must carry into saves for stale-edit detection.
+         */
+        get: operations["getEditableCurrentFactoryDefinition"];
+        /**
+         * Save editable current factory definition
+         * @description Submits one complete replacement for the current factory definition. The payload preserves all untouched fields because the full Factory contract is saved through the same canonical factory persistence path used by named-factory activation.
+         */
+        put: operations["saveEditableCurrentFactoryDefinition"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -270,7 +294,37 @@ export interface components {
              * @description Stable machine-readable error code.
              * @enum {string}
              */
-            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "NOT_FOUND" | "INTERNAL_ERROR";
+            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "NOT_FOUND" | "INTERNAL_ERROR";
+            /** @description Optional structured error targets that clients can map to forms, graph nodes, graph edges, fields, or save-level messages. */
+            targets?: components["schemas"]["ErrorTarget"][];
+        };
+        ErrorTarget: {
+            /** @description Client-visible target category such as form, node, edge, field, or save. */
+            kind: string;
+            /** @description Optional graph entity, relationship, or save condition identifier. */
+            id?: string;
+            /** @description Optional request or form field path associated with the error. */
+            field?: string;
+        };
+        HybridLogicalTimestamp: {
+            /**
+             * Format: int64
+             * @description Monotonic Lamport-style logical component derived from the persisted factory definition version.
+             */
+            logical: number;
+            /**
+             * Format: date-time
+             * @description UTC physical timestamp component for the persisted factory definition version.
+             */
+            physical: string;
+        };
+        EditableFactoryDefinition: {
+            factoryDefinition: components["schemas"]["Factory"];
+            version: components["schemas"]["HybridLogicalTimestamp"];
+        };
+        SaveEditableFactoryDefinitionRequest: {
+            factoryDefinition: components["schemas"]["Factory"];
+            baseVersion?: components["schemas"]["HybridLogicalTimestamp"];
         };
         ProviderSessionDetailResponse: {
             providerSession: components["schemas"]["LoadableProviderSessionRef"];
@@ -1267,11 +1321,6 @@ export interface components {
             workTypeName?: string;
             /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
             state?: components["schemas"]["WorkState"];
-            /**
-             * Format: date-time
-             * @description Time when this work item entered a completed or failed state, when known.
-             */
-            completedAt?: string;
             /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
             chainingTraceDepth?: number;
             /** @description Explicit chaining-trace identifier for this submitted work item. */
@@ -1364,6 +1413,24 @@ export interface components {
         };
         /** @description Current named factory was not found. */
         CurrentFactoryNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Editable factory definition save request failed validation. */
+        SaveEditableFactoryDefinitionBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Editable factory definition could not be saved because the runtime or submitted version is not safe to replace. */
+        SaveEditableFactoryDefinitionConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1631,6 +1698,56 @@ export interface operations {
                 };
             };
             404: components["responses"]["CurrentFactoryNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEditableCurrentFactoryDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Editable current factory definition and version metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableFactoryDefinition"];
+                };
+            };
+            404: components["responses"]["CurrentFactoryNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    saveEditableCurrentFactoryDefinition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveEditableFactoryDefinitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved editable factory definition and new version metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableFactoryDefinition"];
+                };
+            };
+            400: components["responses"]["SaveEditableFactoryDefinitionBadRequest"];
+            404: components["responses"]["CurrentFactoryNotFound"];
+            409: components["responses"]["SaveEditableFactoryDefinitionConflict"];
             500: components["responses"]["InternalError"];
         };
     };

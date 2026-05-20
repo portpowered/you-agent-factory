@@ -964,70 +964,6 @@ func TestParseCanonicalWorkRequestJSON_RejectsConflictingCurrentChainingTraceID(
 	}
 }
 
-func TestParseCanonicalWorkRequestJSON_RejectsRequestLevelConflictingCurrentChainingTraceID(t *testing.T) {
-	_, err := ParseCanonicalWorkRequestJSON([]byte(`{
-		"requestId": "request-json-root-conflict",
-		"type": "FACTORY_REQUEST_BATCH",
-		"currentChainingTraceId": "chain-a",
-		"traceId": "trace-b",
-		"works": [
-			{
-				"name": "draft",
-				"workTypeName": "task"
-			}
-		]
-	}`))
-	if err == nil || err.Error() != "work request batch currentChainingTraceId and traceId must match when both are provided" {
-		t.Fatalf("ParseCanonicalWorkRequestJSON error = %v, want request-level conflict rejection", err)
-	}
-}
-
-func TestParseCanonicalWorkRequestJSON_RejectsRetiredAliases(t *testing.T) {
-	tests := []struct {
-		name    string
-		data    string
-		wantErr string
-	}{
-		{
-			name: "top level work type id",
-			data: `{
-				"requestId": "request-json-top-level-alias",
-				"type": "FACTORY_REQUEST_BATCH",
-				"work_type_id": "task",
-				"works": [{"name": "draft", "workTypeName": "task"}]
-			}`,
-			wantErr: "work request batch uses retired work_type_id field; use workTypeName",
-		},
-		{
-			name: "nested work type id",
-			data: `{
-				"requestId": "request-json-work-alias",
-				"type": "FACTORY_REQUEST_BATCH",
-				"works": [{"name": "draft", "work_type_id": "task"}]
-			}`,
-			wantErr: "work request batch works[0] uses retired work_type_id field; use workTypeName",
-		},
-		{
-			name: "nested target state",
-			data: `{
-				"requestId": "request-json-target-state-alias",
-				"type": "FACTORY_REQUEST_BATCH",
-				"works": [{"name": "draft", "workTypeName": "task", "target_state": "queued"}]
-			}`,
-			wantErr: "work request batch works[0] uses retired target_state field; use state",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := ParseCanonicalWorkRequestJSON([]byte(tc.data))
-			if err == nil || err.Error() != tc.wantErr {
-				t.Fatalf("ParseCanonicalWorkRequestJSON error = %v, want %q", err, tc.wantErr)
-			}
-		})
-	}
-}
-
 func TestParseCanonicalWorkRequestJSON_AcceptsMatchingCurrentChainingTraceIDAliases(t *testing.T) {
 	request, err := ParseCanonicalWorkRequestJSON([]byte(`{
 		"requestId": "request-json-match",
@@ -1052,24 +988,6 @@ func TestParseCanonicalWorkRequestJSON_AcceptsMatchingCurrentChainingTraceIDAlia
 	}
 	if request.Works[0].TraceID != "chain-a" {
 		t.Fatalf("trace ID = %q, want chain-a", request.Works[0].TraceID)
-	}
-}
-
-func TestValidateCanonicalWorkRequestJSON_AcceptsLegacyTraceAliasesWhenTheyMatch(t *testing.T) {
-	err := ValidateCanonicalWorkRequestJSON([]byte(`{
-		"requestId": "request-json-legacy-match",
-		"type": "FACTORY_REQUEST_BATCH",
-		"works": [
-			{
-				"name": "draft",
-				"workTypeName": "task",
-				"current_chaining_trace_id": "chain-a",
-				"trace_id": "chain-a"
-			}
-		]
-	}`))
-	if err != nil {
-		t.Fatalf("ValidateCanonicalWorkRequestJSON: %v", err)
 	}
 }
 

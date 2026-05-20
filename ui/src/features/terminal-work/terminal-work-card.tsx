@@ -3,7 +3,6 @@ import type {
   DashboardProviderSessionAttempt,
   DashboardWorkItemRef,
 } from "../../api/dashboard/types";
-import { formatDate, formatTime } from "../../i18n";
 import {
   DASHBOARD_WIDGET_CLASS,
   DETAIL_CARD_CLASS,
@@ -30,7 +29,6 @@ export type TerminalWorkStatus = "completed" | "failed";
 
 export interface TerminalWorkItem {
   attempts?: DashboardProviderSessionAttempt[];
-  completedAt?: string;
   dispatchID?: string;
   failureMessage?: string;
   failureReason?: string;
@@ -60,14 +58,11 @@ interface TerminalWorkRowProps {
   iconLabel: string;
   itemCountLabel: string;
   items: TerminalWorkItem[];
-  locale?: string;
   onExpandedChange: (expanded: boolean) => void;
   onSelectItem: (item: TerminalWorkItem) => void;
   selectedLabel?: string;
   status: TerminalWorkStatus;
   summary: (status: TerminalWorkStatus, workstation: string) => string;
-  completionTime: (formattedTime: string) => string;
-  completionTimeUnavailable: string;
   title: string;
   toggleLabel: string;
 }
@@ -139,7 +134,6 @@ export function CompletedFailedWorkstationCard({
           iconLabel={messages.iconLabel("completed")}
           itemCountLabel={messages.itemCountLabel(completedItems.length)}
           items={completedItems}
-          locale={locale}
           onExpandedChange={setCompletedExpanded}
           onSelectItem={(item) => onSelectItem("completed", item)}
           selectedLabel={
@@ -150,8 +144,6 @@ export function CompletedFailedWorkstationCard({
           toggleLabel={messages.disclosureLabel(completedExpanded)}
           status="completed"
           summary={messages.summary}
-          completionTime={messages.completionTime}
-          completionTimeUnavailable={messages.completionTimeUnavailable}
           title={messages.rowTitle("completed")}
         />
         <TerminalWorkRow
@@ -161,7 +153,6 @@ export function CompletedFailedWorkstationCard({
           iconLabel={messages.iconLabel("failed")}
           itemCountLabel={messages.itemCountLabel(failedItems.length)}
           items={failedItems}
-          locale={locale}
           onExpandedChange={setFailedExpanded}
           onSelectItem={(item) => onSelectItem("failed", item)}
           selectedLabel={
@@ -170,8 +161,6 @@ export function CompletedFailedWorkstationCard({
           toggleLabel={messages.disclosureLabel(failedExpanded)}
           status="failed"
           summary={messages.summary}
-          completionTime={messages.completionTime}
-          completionTimeUnavailable={messages.completionTimeUnavailable}
           title={messages.rowTitle("failed")}
         />
       </fieldset>
@@ -186,14 +175,11 @@ function TerminalWorkRow({
   iconLabel,
   itemCountLabel,
   items,
-  locale,
   onExpandedChange,
   onSelectItem,
   selectedLabel,
   status,
   summary,
-  completionTime,
-  completionTimeUnavailable,
   title,
   toggleLabel,
 }: TerminalWorkRowProps) {
@@ -270,14 +256,6 @@ function TerminalWorkRow({
                   summary,
                   status,
                 )}
-                <span className={TERMINAL_BUTTON_META_CLASS}>
-                  {renderCompletionTime(
-                    item.completedAt,
-                    locale,
-                    completionTime,
-                    completionTimeUnavailable,
-                  )}
-                </span>
               </Button>
             ))
           ) : (
@@ -286,21 +264,6 @@ function TerminalWorkRow({
         </CollapsibleContent>
       </Collapsible>
     </section>
-  );
-}
-
-function renderCompletionTime(
-  completedAt: string | undefined,
-  locale: string | undefined,
-  completionTime: (formattedTime: string) => string,
-  completionTimeUnavailable: string,
-): string {
-  if (!completedAt || Number.isNaN(Date.parse(completedAt))) {
-    return completionTimeUnavailable;
-  }
-
-  return completionTime(
-    `${formatDate(completedAt, locale)} ${formatTime(completedAt, locale)}`,
   );
 }
 

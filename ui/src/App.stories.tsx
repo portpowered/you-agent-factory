@@ -94,6 +94,7 @@ const _markdownReadyWorkstationRequest: DashboardWorkstationRequest = {
 };
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
+const editableConfigurationDocument = buildEditableConfigurationDocument();
 
 interface WorkOutcomeCounts {
   completed: number;
@@ -285,7 +286,19 @@ function buildEditableConfigurationFactoryDefinition(
   };
 }
 
-function submittedFactoryBody(init?: RequestInit): FactoryValue {
+function buildEditableConfigurationDocument(
+  factoryDefinition: FactoryValue = editableConfigurationFactoryDefinition,
+) {
+  return {
+    factoryDefinition,
+    version: {
+      logical: 7,
+      physical: "2026-05-20T10:00:00Z",
+    },
+  };
+}
+
+function submittedFactoryDefinitionBody(init?: RequestInit): FactoryValue {
   if (typeof init?.body !== "string") {
     return buildEditableConfigurationFactoryDefinition({
       prompt: "Browser verified prompt update.",
@@ -293,7 +306,17 @@ function submittedFactoryBody(init?: RequestInit): FactoryValue {
     });
   }
 
-  return JSON.parse(init.body) as FactoryValue;
+  const requestBody = JSON.parse(init.body) as {
+    factoryDefinition?: FactoryValue;
+  };
+
+  return (
+    requestBody.factoryDefinition ??
+    buildEditableConfigurationFactoryDefinition({
+      prompt: "Browser verified prompt update.",
+      workerName: "planner",
+    })
+  );
 }
 
 function editableConfigurationSection(
@@ -755,10 +778,15 @@ export const SemanticGraphComposition = {
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
+    const graphCard = await canvas.findByRole("article", {
+      name: "Factory graph",
+    });
 
     await expectGraphWorkstation(canvasElement, "Select Review workstation");
     expect(canvas.queryByText("Operator View")).toBeNull();
-    expect(canvas.queryByText("Current activity")).toBeNull();
+    await expect(
+      within(graphCard).getByRole("heading", { name: "Current activity" }),
+    ).toBeVisible();
     expect(
       (await canvas.findAllByText("dispatch-review-active")).length,
     ).toBeGreaterThan(0);
@@ -903,7 +931,9 @@ export const DashboardImprovementsSmoke = {
     await expect(graphCard).toBeVisible();
     await expect(submitWorkCard).toBeVisible();
     expect(within(graphCard).queryByText("Operator View")).toBeNull();
-    expect(within(graphCard).queryByText("Current activity")).toBeNull();
+    await expect(
+      within(graphCard).getByRole("heading", { name: "Current activity" }),
+    ).toBeVisible();
     await expect(
       within(submitWorkCard).getByRole("combobox", { name: "Work type" }),
     ).toBeVisible();
@@ -1065,16 +1095,16 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory/~current",
+          path: "/factory/~current/editable-definition",
           response: {
-            body: editableConfigurationFactoryDefinition,
+            body: editableConfigurationDocument,
           },
         },
         {
           method: "POST",
           path: "/factory",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryBody(init),
+            body: submittedFactoryDefinitionBody(init),
             status: 201,
           }),
         },
@@ -1099,16 +1129,16 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory/~current",
+          path: "/factory/~current/editable-definition",
           response: {
-            body: editableConfigurationFactoryDefinition,
+            body: editableConfigurationDocument,
           },
         },
         {
           method: "POST",
           path: "/factory",
           response: (_input: RequestInfo | URL, init?: RequestInit) => ({
-            body: submittedFactoryBody(init),
+            body: submittedFactoryDefinitionBody(init),
             status: 201,
           }),
         },
