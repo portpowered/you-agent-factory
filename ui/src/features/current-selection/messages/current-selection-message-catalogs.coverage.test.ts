@@ -86,6 +86,9 @@ const invokeDispatchHistory = (
     case "requestAttemptTitle":
     case "responseAttemptTitle":
       return [formatter(undefined as never), formatter(2 as never)];
+    case "requestAttemptLabel":
+    case "responseAttemptLabel":
+      return [formatter("pending" as never)];
     case "relationshipLaneAriaLabel":
     case "relatedWorkSelectLabel":
     case "selectWorkItemAccessibleLabel":
