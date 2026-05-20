@@ -202,8 +202,27 @@ func TestProjectInitialStructure_RuntimeConfig_MissingWorkerKeepsWorkstationTopo
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=topology-projection-contract-fixture review=2026-07-18 removal=split-runtime-config-projection-assertions-before-next-topology-expansion
 func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstationMetadata(t *testing.T) {
+	net, runtimeConfig := projectionNetAndRuntimeConfigWithConstraints()
+	got := ProjectInitialStructure(net, runtimeConfig)
+
+	wantConstraints := projectionRuntimeConstraints()
+	if !reflect.DeepEqual(got.Constraints, wantConstraints) {
+		t.Fatalf("Constraints = %#v, want %#v", got.Constraints, wantConstraints)
+	}
+	assertSingleConstraint(t, got.Constraints, "workstation/build/stop-words")
+	assertSingleConstraint(t, got.Constraints, "workstation/build/limits")
+
+	wantConfig := projectionRuntimeWorkstationConfig()
+	if !reflect.DeepEqual(got.Workstations[0].Config, wantConfig) {
+		t.Fatalf("Workstations[0].Config = %#v, want %#v", got.Workstations[0].Config, wantConfig)
+	}
+	if got.Workstations[0].Kind != "CRON" {
+		t.Fatalf("Workstations[0].Kind = %q, want CRON", got.Workstations[0].Kind)
+	}
+}
+
+func projectionNetAndRuntimeConfigWithConstraints() (*state.Net, projectionRuntimeConfig) {
 	net := representativeProjectionNet()
 	net.Limits = state.GlobalLimits{
 		MaxTokenAge:    2 * time.Hour,
@@ -213,7 +232,7 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 		TransitionID: "build",
 		MaxVisits:    3,
 	}
-	runtimeConfig := projectionRuntimeConfig{
+	return net, projectionRuntimeConfig{
 		Workers: map[string]*interfaces.WorkerConfig{
 			"builder": {
 				Type:        interfaces.WorkerTypeModel,
@@ -250,10 +269,10 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 			},
 		},
 	}
+}
 
-	got := ProjectInitialStructure(net, runtimeConfig)
-
-	wantConstraints := []interfaces.FactoryConstraint{
+func projectionRuntimeConstraints() []interfaces.FactoryConstraint {
+	return []interfaces.FactoryConstraint{
 		{
 			ID:    "global/limits",
 			Type:  "global_limit",
@@ -341,13 +360,10 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 			},
 		},
 	}
-	if !reflect.DeepEqual(got.Constraints, wantConstraints) {
-		t.Fatalf("Constraints = %#v, want %#v", got.Constraints, wantConstraints)
-	}
-	assertSingleConstraint(t, got.Constraints, "workstation/build/stop-words")
-	assertSingleConstraint(t, got.Constraints, "workstation/build/limits")
+}
 
-	wantConfig := map[string]string{
+func projectionRuntimeWorkstationConfig() map[string]string {
+	return map[string]string{
 		"configured_worker": "builder",
 		"behavior":          string(interfaces.WorkstationKindCron),
 		"output_schema":     "schema.json",
@@ -356,12 +372,6 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 		"worker":            "builder",
 		"worktree":          "{{.worktree}}",
 		"working_directory": "{{.working_directory}}",
-	}
-	if !reflect.DeepEqual(got.Workstations[0].Config, wantConfig) {
-		t.Fatalf("Workstations[0].Config = %#v, want %#v", got.Workstations[0].Config, wantConfig)
-	}
-	if got.Workstations[0].Kind != "CRON" {
-		t.Fatalf("Workstations[0].Kind = %q, want CRON", got.Workstations[0].Kind)
 	}
 }
 

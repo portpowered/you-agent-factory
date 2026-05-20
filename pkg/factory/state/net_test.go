@@ -131,7 +131,48 @@ func TestGenerateResourcePlacesZeroCapacity(t *testing.T) {
 }
 
 func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testing.T) {
-	net := &Net{
+	net := normalizeTransitionTopologyFixture()
+
+	NormalizeTransitionTopology(net, map[string]interfaces.WorkstationKind{
+		"repeat": interfaces.WorkstationKindRepeater,
+	})
+
+	transition := net.Transitions["repeat"]
+	if len(transition.RejectionArcs) != 1 {
+		t.Fatalf("expected 1 rejection arc, got %d", len(transition.RejectionArcs))
+	}
+	if transition.RejectionArcs[0].PlaceID != "task:init" {
+		t.Fatalf("rejection arc PlaceID = %q, want %q", transition.RejectionArcs[0].PlaceID, "task:init")
+	}
+	if len(transition.FailureArcs) != 1 {
+		t.Fatalf("expected 1 failure arc, got %d", len(transition.FailureArcs))
+	}
+	if transition.FailureArcs[0].PlaceID != "task:failed" {
+		t.Fatalf("failure arc PlaceID = %q, want %q", transition.FailureArcs[0].PlaceID, "task:failed")
+	}
+
+	fanIn := net.Transitions["fan-in"]
+	if len(fanIn.FailureArcs) != 2 {
+		t.Fatalf("fan-in failure arc count = %d, want 2", len(fanIn.FailureArcs))
+	}
+	failurePlaces := map[string]struct{}{}
+	for _, arc := range fanIn.FailureArcs {
+		failurePlaces[arc.PlaceID] = struct{}{}
+	}
+	if _, ok := failurePlaces["task:failed"]; !ok {
+		t.Fatalf("fan-in failure arcs = %+v, want task:failed destination", fanIn.FailureArcs)
+	}
+	if _, ok := failurePlaces["page:failed"]; !ok {
+		t.Fatalf("fan-in failure arcs = %+v, want page:failed destination", fanIn.FailureArcs)
+	}
+	if len(fanIn.RejectionArcs) != 2 {
+		t.Fatalf("fan-in rejection arc count = %d, want 2", len(fanIn.RejectionArcs))
+	}
+	assertArcPlaces(t, fanIn.RejectionArcs, "task:failed", "page:failed")
+}
+
+func normalizeTransitionTopologyFixture() *Net {
+	return &Net{
 		Places: map[string]*petri.Place{
 			"task:init":        {ID: "task:init", TypeID: "task", State: "init"},
 			"task:complete":    {ID: "task:complete", TypeID: "task", State: "complete"},
@@ -186,50 +227,18 @@ func TestNormalizeTransitionTopology_AddsRepeaterAndDefaultFailureArcs(t *testin
 			},
 		},
 	}
+}
 
-	NormalizeTransitionTopology(net, map[string]interfaces.WorkstationKind{
-		"repeat": interfaces.WorkstationKindRepeater,
-	})
+func assertArcPlaces(t *testing.T, arcs []petri.Arc, wantPlaces ...string) {
+	t.Helper()
 
-	transition := net.Transitions["repeat"]
-	if len(transition.RejectionArcs) != 1 {
-		t.Fatalf("expected 1 rejection arc, got %d", len(transition.RejectionArcs))
+	places := map[string]struct{}{}
+	for _, arc := range arcs {
+		places[arc.PlaceID] = struct{}{}
 	}
-	if transition.RejectionArcs[0].PlaceID != "task:init" {
-		t.Fatalf("rejection arc PlaceID = %q, want %q", transition.RejectionArcs[0].PlaceID, "task:init")
-	}
-	if len(transition.FailureArcs) != 1 {
-		t.Fatalf("expected 1 failure arc, got %d", len(transition.FailureArcs))
-	}
-	if transition.FailureArcs[0].PlaceID != "task:failed" {
-		t.Fatalf("failure arc PlaceID = %q, want %q", transition.FailureArcs[0].PlaceID, "task:failed")
-	}
-
-	fanIn := net.Transitions["fan-in"]
-	if len(fanIn.FailureArcs) != 2 {
-		t.Fatalf("fan-in failure arc count = %d, want 2", len(fanIn.FailureArcs))
-	}
-	failurePlaces := map[string]struct{}{}
-	for _, arc := range fanIn.FailureArcs {
-		failurePlaces[arc.PlaceID] = struct{}{}
-	}
-	if _, ok := failurePlaces["task:failed"]; !ok {
-		t.Fatalf("fan-in failure arcs = %+v, want task:failed destination", fanIn.FailureArcs)
-	}
-	if _, ok := failurePlaces["page:failed"]; !ok {
-		t.Fatalf("fan-in failure arcs = %+v, want page:failed destination", fanIn.FailureArcs)
-	}
-	if len(fanIn.RejectionArcs) != 2 {
-		t.Fatalf("fan-in rejection arc count = %d, want 2", len(fanIn.RejectionArcs))
-	}
-	rejectionPlaces := map[string]struct{}{}
-	for _, arc := range fanIn.RejectionArcs {
-		rejectionPlaces[arc.PlaceID] = struct{}{}
-	}
-	if _, ok := rejectionPlaces["task:failed"]; !ok {
-		t.Fatalf("fan-in rejection arcs = %+v, want task:failed destination", fanIn.RejectionArcs)
-	}
-	if _, ok := rejectionPlaces["page:failed"]; !ok {
-		t.Fatalf("fan-in rejection arcs = %+v, want page:failed destination", fanIn.RejectionArcs)
+	for _, want := range wantPlaces {
+		if _, ok := places[want]; !ok {
+			t.Fatalf("arc places = %+v, want %s destination", arcs, want)
+		}
 	}
 }

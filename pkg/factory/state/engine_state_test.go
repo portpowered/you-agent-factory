@@ -9,83 +9,7 @@ import (
 )
 
 func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
-	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
-	topology := &Net{ID: "snapshot-topology"}
-	snap := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
-		// Runtime state fields.
-		RuntimeStatus: interfaces.RuntimeStatusActive,
-		Marking: petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
-				"tok-1": {ID: "tok-1", PlaceID: "task:init", Color: interfaces.TokenColor{WorkTypeID: "task"}},
-			},
-		},
-		Dispatches: map[string]*interfaces.DispatchEntry{
-			"t1": {
-				DispatchID:      "dispatch-1",
-				TransitionID:    "t1",
-				WorkstationName: "review",
-				StartTime:       now,
-				ConsumedTokens: []interfaces.Token{
-					{
-						ID:        "tok-2",
-						PlaceID:   "task:processing",
-						CreatedAt: now.Add(-time.Minute),
-						Color:     interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
-					},
-				},
-				HeldMutations: []interfaces.MarkingMutation{
-					{Type: interfaces.MutationConsume, TokenID: "tok-2", FromPlace: "task:processing"},
-				},
-			},
-		},
-		InFlightCount: 1,
-		DispatchHistory: []interfaces.CompletedDispatch{
-			{
-				DispatchID:      "dispatch-0",
-				TransitionID:    "t0",
-				WorkstationName: "plan",
-				Outcome:         "ACCEPTED",
-				Duration:        5 * time.Second,
-				ConsumedTokens: []interfaces.Token{
-					{ID: "tok-0", PlaceID: "task:init", Color: interfaces.TokenColor{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"}},
-				},
-				OutputMutations: []interfaces.TokenMutationRecord{
-					{
-						DispatchID:   "dispatch-0",
-						TransitionID: "t0",
-						Outcome:      "ACCEPTED",
-						Type:         interfaces.MutationCreate,
-						TokenID:      "work-0",
-						ToPlace:      "task:complete",
-						Token: &interfaces.Token{
-							ID:      "work-0",
-							PlaceID: "task:complete",
-							Color:   interfaces.TokenColor{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
-						},
-					},
-				},
-			},
-		},
-		ActiveThrottlePauses: []interfaces.ActiveThrottlePause{
-			{
-				LaneID:      "claude/claude-sonnet",
-				Provider:    "claude",
-				Model:       "claude-sonnet",
-				PausedAt:    now,
-				PausedUntil: now.Add(5 * time.Minute),
-			},
-		},
-		TickCount: 42,
-
-		// Factory lifecycle.
-		FactoryState: "RUNNING",
-
-		// Uptime.
-		Uptime: 10 * time.Minute,
-
-		// Topology.
-		Topology: topology,
-	}
+	snap := engineStateSnapshotFixture()
 
 	// Runtime state assertions.
 	if len(snap.Marking.Tokens) != 1 {
@@ -145,8 +69,73 @@ func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 	if len(runtime.ActiveThrottlePauses) != 1 {
 		t.Fatalf("runtime active throttle pause count = %d, want 1", len(runtime.ActiveThrottlePauses))
 	}
-	aggregate := NewEngineStateSnapshot(runtime, "RUNNING", time.Minute, topology)
+	aggregate := NewEngineStateSnapshot(runtime, "RUNNING", time.Minute, snap.Topology)
 	if len(aggregate.ActiveThrottlePauses) != 1 {
 		t.Fatalf("aggregate active throttle pause count = %d, want 1", len(aggregate.ActiveThrottlePauses))
+	}
+}
+
+func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net] {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	topology := &Net{ID: "snapshot-topology"}
+	return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
+		RuntimeStatus: interfaces.RuntimeStatusActive,
+		Marking: petri.MarkingSnapshot{
+			Tokens: map[string]*interfaces.Token{
+				"tok-1": {ID: "tok-1", PlaceID: "task:init", Color: interfaces.TokenColor{WorkTypeID: "task"}},
+			},
+		},
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"t1": {
+				DispatchID:      "dispatch-1",
+				TransitionID:    "t1",
+				WorkstationName: "review",
+				StartTime:       now,
+				ConsumedTokens: []interfaces.Token{{
+					ID:        "tok-2",
+					PlaceID:   "task:processing",
+					CreatedAt: now.Add(-time.Minute),
+					Color:     interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+				}},
+				HeldMutations: []interfaces.MarkingMutation{{
+					Type: interfaces.MutationConsume, TokenID: "tok-2", FromPlace: "task:processing",
+				}},
+			},
+		},
+		InFlightCount: 1,
+		DispatchHistory: []interfaces.CompletedDispatch{{
+			DispatchID:      "dispatch-0",
+			TransitionID:    "t0",
+			WorkstationName: "plan",
+			Outcome:         "ACCEPTED",
+			Duration:        5 * time.Second,
+			ConsumedTokens: []interfaces.Token{{
+				ID: "tok-0", PlaceID: "task:init", Color: interfaces.TokenColor{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
+			}},
+			OutputMutations: []interfaces.TokenMutationRecord{{
+				DispatchID:   "dispatch-0",
+				TransitionID: "t0",
+				Outcome:      "ACCEPTED",
+				Type:         interfaces.MutationCreate,
+				TokenID:      "work-0",
+				ToPlace:      "task:complete",
+				Token: &interfaces.Token{
+					ID:      "work-0",
+					PlaceID: "task:complete",
+					Color:   interfaces.TokenColor{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
+				},
+			}},
+		}},
+		ActiveThrottlePauses: []interfaces.ActiveThrottlePause{{
+			LaneID:      "claude/claude-sonnet",
+			Provider:    "claude",
+			Model:       "claude-sonnet",
+			PausedAt:    now,
+			PausedUntil: now.Add(5 * time.Minute),
+		}},
+		TickCount:    42,
+		FactoryState: "RUNNING",
+		Uptime:       10 * time.Minute,
+		Topology:     topology,
 	}
 }
