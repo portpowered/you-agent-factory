@@ -203,6 +203,11 @@ that are not runtime-capacity pools.
   portability checks can probe on `PATH`.
 - `bundledFiles` carry portable file content and a canonical factory-relative
   `targetPath`; they are not the same as runtime `resources`.
+- In v1 shared-factory flows, the runtime also uses `bundledFiles` to carry a
+  share-time snapshot of every valid work item currently present under
+  `inputs/<work-type-or-BATCH>/<channel>/`. The copy happens when the share
+  operation runs, so later edits to the original factory or its `inputs/`
+  contents do not change an already shared recipient factory.
 - `config flatten` collects the supported allowlist from `factory/scripts/**`,
   `factory/docs/**`, and supported root helper files such as `Makefile` when
   you flatten a checked-in `factory/` layout.
@@ -210,6 +215,9 @@ that are not runtime-capacity pools.
   `factory/docs/...`, `ROOT_HELPER` entries target supported project-root
   helper files such as `Makefile`, and `content.encoding` is `utf-8` in this
   v1 slice.
+- Shared-factory starter-work copies are restored as detached recipient files.
+  Recipients can inspect, edit, or run the copied files in their own
+  `inputs/` tree without mutating the original author factory.
 - `targetPath` must use forward slashes and must not be absolute or contain `.`
   or `..` path segments.
 
