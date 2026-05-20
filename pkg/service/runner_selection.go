@@ -7,7 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
-func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup) error {
+func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, preflight runnerSelectionPreflight) error {
 	if factoryCfg == nil {
 		return nil
 	}
@@ -27,11 +27,15 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 		if !runnerSelectionRequiresValidation(selection, workstation.Runner, factoryRunnerID, workerModelProvider) {
 			continue
 		}
-		if err := validateResolvedRunnerSelection(selection); err != nil {
+		if err := validateResolvedRunnerSelection(selection, preflight); err != nil {
 			return fmt.Errorf("workstations[%d](%s).runner: %w", i, workstation.Name, err)
 		}
 	}
 	return nil
+}
+
+type runnerSelectionPreflight struct {
+	skipCommandAvailability bool
 }
 
 func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection, workstationRunner, factoryRunnerID, workerModelProvider string) bool {
@@ -41,12 +45,17 @@ func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelect
 	return interfaces.IsBuiltInRunnerID(workerModelProvider) && selection.RunnerID != ""
 }
 
-func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection) error {
+func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
 	if _, ok := interfaces.BuiltInRunnerMetadata(selection.RunnerID); !ok {
 		return fmt.Errorf("unknown runner %q", selection.RunnerID)
 	}
 	if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
 		return fmt.Errorf("%s", status.UnavailableReason)
+	}
+	if !preflight.skipCommandAvailability {
+		if err := workers.ValidateBuiltInRunnerPrerequisites(selection.RunnerID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -322,6 +322,9 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	if cfg.Project != "" {
 		apiCfg.Id = stringPtr(cfg.Project)
 	}
+	if cfg.Runner != "" {
+		apiCfg.Runner = interfaces.GeneratedPublicFactoryRunnerIDPtr(cfg.Runner)
+	}
 	if len(cfg.Guards) > 0 {
 		apiCfg.Guards = factoryGuardsAPIFromInternal(cfg.Guards)
 	}
@@ -403,6 +406,7 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	if apiCfg.Id != nil {
 		cfg.Project = *apiCfg.Id
 	}
+	cfg.Runner = internalFactoryRunnerIDFromPublic(apiCfg.Runner)
 	cfg.Guards = factoryGuardsInternalFromAPI(apiCfg.Guards)
 	if apiCfg.InputTypes != nil {
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
@@ -597,6 +601,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
 		WorkerTypeName:        workstation.Worker,
+		Runner:                internalFactoryRunnerIDFromPublic(workstation.Runner),
 		Type:                  internalFactoryWorkstationTypeFromPublic(workstation.Type),
 		PromptFile:            stringValue(workstation.PromptFile),
 		OutputSchema:          stringValue(workstation.OutputSchema),
@@ -786,6 +791,9 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 	}
 	if normalized.ID != "" {
 		apiWorkstation.Id = stringPtr(normalized.ID)
+	}
+	if normalized.Runner != "" {
+		apiWorkstation.Runner = interfaces.GeneratedPublicFactoryRunnerIDPtr(normalized.Runner)
 	}
 	if normalized.Kind != "" {
 		behavior := publicFactoryWorkstationKindFromInternal(normalized.Kind)

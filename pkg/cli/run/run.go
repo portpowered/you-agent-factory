@@ -34,6 +34,7 @@ type RunConfig struct {
 	Continuously bool
 	WorkFile     string
 	Dir          string
+	RunnerID     string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths. Empty defaults to the caller's current working
 	// directory for CLI-style runs.
@@ -271,6 +272,7 @@ func buildRunServiceConfig(
 ) *service.FactoryServiceConfig {
 	svcCfg := &service.FactoryServiceConfig{
 		Dir:               cfg.Dir,
+		RunnerID:          cfg.RunnerID,
 		ExecutionBaseDir:  cfg.ExecutionBaseDir,
 		RuntimeMode:       runtimeModeForRun(cfg),
 		Port:              cfg.Port,

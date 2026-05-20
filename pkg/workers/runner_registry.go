@@ -1,6 +1,11 @@
 package workers
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import (
+	"fmt"
+	"os/exec"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
 
 // RunnerStatus reports whether a built-in runner can be selected safely in the
 // current build before dispatch starts.
@@ -33,6 +38,8 @@ var builtInRunnerStatus = map[string]RunnerStatus{
 	},
 }
 
+var lookPath = exec.LookPath
+
 // BuiltInRunnerStatus reports the build-local availability of one stable
 // runner registration.
 func BuiltInRunnerStatus(id string) (RunnerStatus, bool) {
@@ -41,6 +48,44 @@ func BuiltInRunnerStatus(id string) (RunnerStatus, bool) {
 		return RunnerStatus{}, false
 	}
 	return status, true
+}
+
+// ValidateBuiltInRunnerPrerequisites checks PATH-visible prerequisites for one
+// built-in runner before the runtime attempts dispatch.
+func ValidateBuiltInRunnerPrerequisites(id string) error {
+	status, ok := BuiltInRunnerStatus(id)
+	if !ok {
+		return fmt.Errorf("unknown runner %q", interfaces.NormalizeRunnerID(id))
+	}
+	if !status.Available {
+		return fmt.Errorf("%s", status.UnavailableReason)
+	}
+
+	command := builtInRunnerCommand(id)
+	if command == "" {
+		return nil
+	}
+	if _, err := lookPath(command); err != nil {
+		return fmt.Errorf("%s runner requires %q on PATH: %w", status.Metadata.DisplayName, command, err)
+	}
+	return nil
+}
+
+func builtInRunnerCommand(id string) string {
+	switch interfaces.NormalizeRunnerID(id) {
+	case interfaces.RunnerIDCodex:
+		return string(ModelProviderCodex)
+	case interfaces.RunnerIDGemini:
+		return string(ModelProviderGemini)
+	case interfaces.RunnerIDKiro:
+		return string(ModelProviderKiro)
+	case interfaces.RunnerIDCursorCLI:
+		return string(ModelProviderCursor)
+	case interfaces.RunnerIDOpenCode:
+		return string(ModelProviderOpenCode)
+	default:
+		return ""
+	}
 }
 
 func mustBuiltInRunnerMetadata(id string) interfaces.RunnerMetadata {

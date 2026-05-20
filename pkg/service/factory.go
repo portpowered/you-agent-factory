@@ -284,10 +284,11 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 
 	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
-		cfg.RunnerID,
+		effectiveFactoryRunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, cfg.Verbose),
 		providerOverrideForMode(cfg, replaySideEffects),
@@ -441,10 +442,11 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 		clock = factory.EnsureClock(clockwork.NewRealClock())
 	}
 	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(fs.cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
-		fs.cfg.RunnerID,
+		effectiveFactoryRunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, fs.cfg.Verbose),
 		providerOverrideForMode(fs.cfg, nil),
@@ -1868,6 +1870,16 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
+	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+		return runner
+	}
+	if factoryCfg == nil {
+		return ""
+	}
+	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+}
+
 // loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
 // Workers missing AGENTS.md keep the existing noop behavior so topology-only tests continue to work.
 func loadWorkersFromConfig(
@@ -1888,7 +1900,10 @@ func loadWorkersFromConfig(
 	if factoryCfg == nil {
 		return nil, fmt.Errorf("factory config is required")
 	}
-	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg); err != nil {
+	preflight := runnerSelectionPreflight{
+		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil,
+	}
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
 		return nil, err
 	}
 	for _, workerCfg := range factoryCfg.Workers {

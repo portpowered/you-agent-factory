@@ -25,6 +25,14 @@ var publicFactoryWorkstationTypeAliases = map[string]string{
 	WorkstationTypeModel:   WorkstationTypeModel,
 }
 
+var publicFactoryRunnerIDAliases = map[string]string{
+	RunnerIDCodex:     RunnerIDCodex,
+	RunnerIDGemini:    RunnerIDGemini,
+	RunnerIDKiro:      RunnerIDKiro,
+	RunnerIDCursorCLI: RunnerIDCursorCLI,
+	RunnerIDOpenCode:  RunnerIDOpenCode,
+}
+
 const (
 	publicFactoryWorkerModelProviderClaude = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex  = "CODEX"
@@ -129,6 +137,16 @@ func StrictPublicFactoryWorkstationType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationTypeAliases, false)
 }
 
+// PermissivePublicFactoryRunnerID canonicalizes supported public runner IDs and preserves unknown values.
+func PermissivePublicFactoryRunnerID(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerIDAliases, true)
+}
+
+// StrictPublicFactoryRunnerID canonicalizes supported public runner IDs and rejects unknown values.
+func StrictPublicFactoryRunnerID(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerIDAliases, false)
+}
+
 // GeneratedPublicFactoryWorkerType returns the generated worker type enum.
 func GeneratedPublicFactoryWorkerType(value string) factoryapi.WorkerType {
 	return factoryapi.WorkerType(PermissivePublicFactoryWorkerType(value))
@@ -167,4 +185,14 @@ func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationT
 // GeneratedPublicFactoryWorkstationTypePtr returns the generated workstation type enum when non-empty.
 func GeneratedPublicFactoryWorkstationTypePtr(value string) *factoryapi.WorkstationType {
 	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkstationType)
+}
+
+// GeneratedPublicFactoryRunnerID returns the generated runner ID enum.
+func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
+	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(NormalizeRunnerID(value)))
+}
+
+// GeneratedPublicFactoryRunnerIDPtr returns the generated runner ID enum when non-empty.
+func GeneratedPublicFactoryRunnerIDPtr(value string) *factoryapi.RunnerID {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerID)
 }

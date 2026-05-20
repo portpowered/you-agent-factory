@@ -361,6 +361,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		t.Fatalf("components.schemas.Workstation.properties is missing")
 	}
 	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
+	assertPropertyRef(t, workstationProperties, "runner", "#/components/schemas/RunnerID")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
 	if _, ok := workstationProperties["timeout"]; ok {
 		t.Fatalf("components.schemas.Workstation.properties.timeout must not be advertised")
@@ -1258,7 +1259,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 
 	factory := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factory, "Factory")
-	for _, field := range []string{"factoryDirectory", "sourceDirectory", "metadata", "inputTypes", "workTypes"} {
+	for _, field := range []string{"factoryDirectory", "sourceDirectory", "metadata", "inputTypes", "runner", "workTypes"} {
 		if _, ok := factoryProperties[field]; !ok {
 			t.Fatalf("Factory.properties.%s is missing", field)
 		}

@@ -159,6 +159,7 @@ func normalizeWorkstationPublicEnums(cfg *interfaces.FactoryWorkstationConfig) {
 	if cfg == nil {
 		return
 	}
+	cfg.Runner = interfaces.NormalizeRunnerID(cfg.Runner)
 	if cfg.Kind != "" {
 		behavior := factoryapi.WorkstationKind(cfg.Kind)
 		cfg.Kind = internalFactoryWorkstationKindFromPublic(&behavior)

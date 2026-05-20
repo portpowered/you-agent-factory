@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func TestLoadWorkersFromConfig_RejectsUnknownConfiguredRunner(t *testing.T) {
@@ -70,7 +71,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, logging.NoopLogger{}, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available gemini runner", err)
 	}
 }
@@ -93,7 +94,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, logging.NoopLogger{}, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available kiro runner", err)
 	}
 }
@@ -116,7 +117,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, logging.NoopLogger{}, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available cursor runner", err)
 	}
 }
@@ -139,7 +140,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableOpenCodeFactoryRunner(t *testing.
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, logging.NoopLogger{}, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available opencode runner", err)
 	}
 }
@@ -156,8 +157,22 @@ func TestValidateConfiguredWorkstationRunners_AcceptsLegacyBuiltInRunnerDefault(
 		ModelProvider: interfaces.RunnerIDCodex,
 	})
 
-	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg); err != nil {
+	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true}); err != nil {
 		t.Fatalf("validateConfiguredWorkstationRunners: %v", err)
+	}
+}
+
+func TestEffectiveFactoryRunnerID_PrefersExplicitOverrideThenConfig(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{Runner: interfaces.RunnerIDGemini}
+
+	if got := effectiveFactoryRunnerID("  cursor-cli  ", cfg); got != interfaces.RunnerIDCursorCLI {
+		t.Fatalf("effectiveFactoryRunnerID override = %q, want %q", got, interfaces.RunnerIDCursorCLI)
+	}
+	if got := effectiveFactoryRunnerID("", cfg); got != interfaces.RunnerIDGemini {
+		t.Fatalf("effectiveFactoryRunnerID config = %q, want %q", got, interfaces.RunnerIDGemini)
+	}
+	if got := effectiveFactoryRunnerID("", nil); got != "" {
+		t.Fatalf("effectiveFactoryRunnerID nil config = %q, want empty", got)
 	}
 }
 

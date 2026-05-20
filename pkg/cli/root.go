@@ -19,6 +19,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
@@ -298,6 +299,7 @@ func newRunCommand() *cobra.Command {
 			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
 			"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
 			"Default execution uses batch mode and exits after idle completion. " +
+			"Use --runner to override the factory-level runner for this run while still allowing workstation-specific runner overrides to win. " +
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
@@ -328,6 +330,13 @@ func newRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
+	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
+		interfaces.RunnerIDCodex,
+		interfaces.RunnerIDGemini,
+		interfaces.RunnerIDKiro,
+		interfaces.RunnerIDCursorCLI,
+		interfaces.RunnerIDOpenCode,
+	}, ", ")))
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port; specifying this flag disables automatic fallback")
 	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run")
 	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing replay artifact")

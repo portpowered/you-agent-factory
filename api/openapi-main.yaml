@@ -735,6 +735,8 @@ components:
       $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
     WorkerProvider:
       $ref: './components/schemas/data-models/WorkerProvider.yaml'
+    RunnerID:
+      $ref: './components/schemas/data-models/RunnerID.yaml'
     Workstation:
       $ref: './components/schemas/data-models/Workstation.yaml'
     WorkstationLimits:

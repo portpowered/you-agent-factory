@@ -2155,6 +2155,9 @@ components:
         id:
           type: string
           description: Factory identifier used as the factory-level template context fallback.
+        runner:
+          $ref: '#/components/schemas/RunnerID'
+          description: Default runner selection for the factory when a workstation does not declare its own runner override.
         factoryDirectory:
           type: string
           description: Directory that contained the factory.json used for this serialized runtime config.
@@ -2459,6 +2462,27 @@ components:
         - SCRIPT_WRAP
       x-enum-descriptions:
         - Public worker executor adapter that shells out through the configured worker command path.
+    RunnerID:
+      type: string
+      description: Stable built-in runner identifiers supported by factory and workstation runner selection.
+      x-enum-varnames:
+        - RunnerIDCodex
+        - RunnerIDGemini
+        - RunnerIDKiro
+        - RunnerIDCursorCLI
+        - RunnerIDOpenCode
+      enum:
+        - codex
+        - gemini
+        - kiro
+        - cursor-cli
+        - opencode
+      x-enum-descriptions:
+        - Codex runner selected through the shared runner contract.
+        - Gemini runner selected through the shared runner contract.
+        - Kiro runner selected through the shared runner contract.
+        - Cursor CLI runner selected through the shared runner contract.
+        - OpenCode runner selected through the shared runner contract.
     Workstation:
       description: A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
       type: object
@@ -2484,6 +2508,9 @@ components:
         worker:
           type: string
           description: Name of a worker declared in the workers list.
+        runner:
+          $ref: '#/components/schemas/RunnerID'
+          description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner.
         promptFile:
           type: string
           description: Path to a prompt template file loaded for model-oriented workstation execution.

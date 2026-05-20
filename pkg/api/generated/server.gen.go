@@ -131,6 +131,15 @@ const (
 	RelationTypeSpawnedBy   RelationType = "SPAWNED_BY"
 )
 
+// Defines values for RunnerID.
+const (
+	RunnerIDCodex     RunnerID = "codex"
+	RunnerIDCursorCLI RunnerID = "cursor-cli"
+	RunnerIDGemini    RunnerID = "gemini"
+	RunnerIDKiro      RunnerID = "kiro"
+	RunnerIDOpenCode  RunnerID = "opencode"
+)
+
 // Defines values for ScriptExecutionOutcome.
 const (
 	ScriptExecutionOutcomeFailedExitCode ScriptExecutionOutcome = "FAILED_EXIT_CODE"
@@ -504,6 +513,9 @@ type Factory struct {
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
@@ -1105,6 +1117,9 @@ type RunResponseEventPayload struct {
 	WallClock *WallClock    `json:"wallClock,omitempty"`
 }
 
+// RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
+type RunnerID string
+
 // SafeWorkDiagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
 type SafeWorkDiagnostics struct {
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
@@ -1517,6 +1532,9 @@ type Workstation struct {
 
 	// Resources Resource capacity this workstation consumes while one dispatch is in flight.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// StopWords Stop words authored on the topology entry for model-oriented dispatches.
 	StopWords *[]string `json:"stopWords,omitempty"`
