@@ -19,7 +19,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationErrorPrefix: "Editable configuration unavailable.",
     editableConfigurationCollapseActionLabel: "Collapse editable configuration",
     editableConfigurationExpandActionLabel: "Expand editable configuration",
-    editableConfigurationHeading: "Editable configuration",
+    editableConfigurationHeading: "Configuration",
     editableConfigurationDirtyStatus:
       "You have unsaved changes for this workstation.",
     editableConfigurationDraftNote:
@@ -45,8 +45,6 @@ const workstationDetailMessagesByLocale = {
       "Running factory saved. The editable workstation values were refreshed to the saved definition.",
     editableConfigurationLoading:
       "Loading the current factory definition for this workstation.",
-    editableConfigurationSummary:
-      "Worker and prompt values are loaded from the latest editable current-factory definition.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this workstation.",
     editableConfigurationPromptRequired:
@@ -136,7 +134,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationErrorPrefix: "編集可能な構成は利用できません。",
     editableConfigurationCollapseActionLabel: "編集可能な構成を折りたたむ",
     editableConfigurationExpandActionLabel: "編集可能な構成を展開",
-    editableConfigurationHeading: "編集可能な構成",
+    editableConfigurationHeading: "構成",
     editableConfigurationDirtyStatus:
       "このワークステーションには未保存の変更があります。",
     editableConfigurationDraftNote:
@@ -162,8 +160,6 @@ const workstationDetailMessagesByLocale = {
       "実行中ファクトリーを保存しました。編集可能なワークステーション値は保存済み定義へ更新されました。",
     editableConfigurationLoading:
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
-    editableConfigurationSummary:
-      "Worker と prompt の値は最新の編集可能な current-factory 定義から読み込まれます。",
     editableConfigurationValidationStatus:
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
     editableConfigurationPromptRequired:
@@ -253,7 +249,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationErrorPrefix: "편집 가능한 구성을 사용할 수 없습니다.",
     editableConfigurationCollapseActionLabel: "편집 가능한 구성 접기",
     editableConfigurationExpandActionLabel: "편집 가능한 구성 펼치기",
-    editableConfigurationHeading: "편집 가능한 구성",
+    editableConfigurationHeading: "구성",
     editableConfigurationDirtyStatus:
       "이 워크스테이션에 저장되지 않은 변경 사항이 있습니다.",
     editableConfigurationDraftNote:
@@ -279,8 +275,6 @@ const workstationDetailMessagesByLocale = {
       "실행 중인 팩토리를 저장했습니다. 편집 가능한 워크스테이션 값이 저장된 정의로 새로 고쳐졌습니다.",
     editableConfigurationLoading:
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
-    editableConfigurationSummary:
-      "Worker 및 prompt 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
     editableConfigurationValidationStatus:
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
     editableConfigurationPromptRequired:
@@ -368,7 +362,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationErrorPrefix: "无法提供可编辑配置。",
     editableConfigurationCollapseActionLabel: "收起可编辑配置",
     editableConfigurationExpandActionLabel: "展开可编辑配置",
-    editableConfigurationHeading: "可编辑配置",
+    editableConfigurationHeading: "配置",
     editableConfigurationDirtyStatus: "此工作站存在未保存的更改。",
     editableConfigurationDraftNote:
       "在保存运行中的工厂之前，更改只会保留在当前编辑会话中。",
@@ -391,8 +385,6 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveSuccess:
       "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
-    editableConfigurationSummary:
-      "Worker 和 prompt 值来自最新可编辑的 current-factory 定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
     editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",

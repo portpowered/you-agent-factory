@@ -341,7 +341,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
 function expandEditableConfiguration() {
   const section = screen
-    .getAllByRole("heading", { name: "Editable configuration" })
+    .getAllByRole("heading", { name: "Configuration" })
     .at(-1)
     ?.closest("section");
   if (!section) {

@@ -7,7 +7,7 @@ const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
 function editableConfigurationSection() {
   const heading = screen
-    .getAllByRole("heading", { name: "Editable configuration" })
+    .getAllByRole("heading", { name: "Configuration" })
     .at(-1);
   const section = heading?.closest("section");
   if (!section) {

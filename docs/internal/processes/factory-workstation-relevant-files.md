@@ -27,6 +27,8 @@ work inputs.
 - Treat `factory/inputs/idea/default/` as the live standalone idea inbox, not as a checked-in template catalog; clean checkouts may only contain `.gitkeep`.
 - Treat `factory/inputs/task/default/` as the live standalone task inbox, not as a checked-in template catalog; clean checkouts may only contain `.gitkeep`.
 - Treat `factory/internal/{asks,view,progress,meta}.md` as one control surface; if maintainer guidance mentions one of these files, keep the other three aligned in the same `factory/internal/` family.
+- The canonical `factory/internal/{asks,view,progress,meta}.md` control-surface files are gitignored by default, so intentional contract repairs there must be force-added to review commits; otherwise local test fixes can disappear from the PR diff and CI checkout.
+- Keep all four `factory/internal/{asks,view,progress,meta}.md` files tracked in clean checkouts whenever the artifact contract classifies them as `checked_in`; prompt and test guidance now relies on their physical presence, not just documentation references.
 - Before redispatching a checked-in workflow-input markdown file, verify that the lane is not already landed on `main`; stale inbox residue should be treated as cleanup, not as a fresh request.
 - Do not introduce a second checked-in maintainer backlog path or a redirect-only parallel surface; the canonical maintainer control plane lives only under `factory/internal/`.
 - When prompt instructions need ordered or multi-item follow-up work, point them to `docs/reference/batch-inputs.md` and `factory/inputs/BATCH/default/` instead of overloading the markdown idea inbox.
