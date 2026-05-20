@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
 
@@ -173,19 +174,66 @@ func (s *Server) CreateFactory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
+	namedFactory, ok := s.loadCurrentFactory(w, r)
+	if !ok {
+		return
+	}
+	s.writeJSON(w, http.StatusOK, namedFactory)
+}
+
+func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string) {
+	namedFactory, ok := s.loadCurrentFactory(w, r)
+	if !ok {
+		return
+	}
+	workstation, ok := currentFactoryWorkstation(namedFactory, workstationName)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "Current named factory workstation not found.", "NOT_FOUND")
+		return
+	}
+
+	contract := workers.BuildPromptTemplateContract(len(workstation.Inputs))
+	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
+}
+
+func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string) {
+	namedFactory, ok := s.loadCurrentFactory(w, r)
+	if !ok {
+		return
+	}
+	workstation, ok := currentFactoryWorkstation(namedFactory, workstationName)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "Current named factory workstation not found.", "NOT_FOUND")
+		return
+	}
+	req, err := decodePromptTemplateValidationRequestBody(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	result := workers.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
+	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
+}
+
+func (s *Server) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (factoryapi.Factory, bool) {
 	namedFactory, err := s.runtime.GetCurrentNamedFactory(r.Context())
 	if err != nil {
 		switch {
 		case errors.Is(err, apisurface.ErrCurrentNamedFactoryNotFound):
 			s.writeError(w, http.StatusNotFound, "Current named factory not found.", "NOT_FOUND")
-			return
+			return factoryapi.Factory{}, false
 		default:
 			s.logger.Error("get current factory failed", zap.Error(err))
 			s.writeError(w, http.StatusInternalServerError, "failed to load current named factory", "INTERNAL_ERROR")
-			return
+			return factoryapi.Factory{}, false
 		}
 	}
-	s.writeJSON(w, http.StatusOK, namedFactory)
+	return namedFactory, true
 }
 
 func (s *Server) GetEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request) {
@@ -1151,7 +1199,90 @@ func decodeSaveEditableFactoryDefinitionBody(body io.Reader) (factoryapi.SaveEdi
 	}
 	return req, nil
 }
+func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+	}
 
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
+	var req factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody
+	if err := dec.Decode(&req); err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+	}
+	if err := ensureSingleJSONObject(dec); err != nil {
+		return factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody{}, err
+	}
+
+	return req, nil
+}
+
+func ensureSingleJSONObject(dec *json.Decoder) error {
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return requestFieldValidationError{message: "request payload must contain one JSON object"}
+		}
+		return err
+	}
+	return nil
+}
+
+func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {
+	if factory.Workstations == nil {
+		return factoryapi.Workstation{}, false
+	}
+	for _, workstation := range *factory.Workstations {
+		if workstation.Name == workstationName || stringValue(workstation.Id) == workstationName {
+			return workstation, true
+		}
+	}
+	return factoryapi.Workstation{}, false
+}
+
+func promptTemplateContractResponse(contract workers.PromptTemplateContract) factoryapi.PromptTemplateContract {
+	availableVariables := make([]factoryapi.PromptTemplateVariableReference, 0, len(contract.AvailableVariables))
+	for _, reference := range contract.AvailableVariables {
+		availableVariables = append(availableVariables, factoryapi.PromptTemplateVariableReference{
+			Category:    factoryapi.PromptTemplateVariableReferenceCategory(reference.Category),
+			Description: reference.Description,
+			Example:     reference.Example,
+			Path:        reference.Path,
+		})
+	}
+	unavailablePatterns := make([]factoryapi.PromptTemplateUnavailableAccessPattern, 0, len(contract.UnavailableAccessPatterns))
+	for _, pattern := range contract.UnavailableAccessPatterns {
+		unavailablePatterns = append(unavailablePatterns, factoryapi.PromptTemplateUnavailableAccessPattern{
+			Example: pattern.Example,
+			Path:    pattern.Path,
+			Reason:  pattern.Reason,
+		})
+	}
+	return factoryapi.PromptTemplateContract{
+		AvailableVariables:        availableVariables,
+		InputCount:                contract.InputCount,
+		UnavailableAccessPatterns: unavailablePatterns,
+	}
+}
+
+func promptTemplateValidationResultResponse(result workers.PromptTemplateValidationResult) factoryapi.PromptTemplateValidationResult {
+	diagnostics := make([]factoryapi.PromptTemplateDiagnostic, 0, len(result.Diagnostics))
+	for _, diagnostic := range result.Diagnostics {
+		diagnostics = append(diagnostics, factoryapi.PromptTemplateDiagnostic{
+			EndOffset:   diagnostic.EndOffset,
+			Kind:        factoryapi.PromptTemplateDiagnosticKind(diagnostic.Kind),
+			Message:     diagnostic.Message,
+			Path:        diagnostic.Path,
+			SourceText:  diagnostic.SourceText,
+			StartOffset: diagnostic.StartOffset,
+		})
+	}
+	return factoryapi.PromptTemplateValidationResult{
+		Diagnostics: diagnostics,
+		Valid:       result.Valid,
+	}
+}
 func rejectPublicBatchWorkAliases(fields map[string]json.RawMessage, prefix string) error {
 	if _, ok := fields[workTypeIDField]; ok {
 		return requestFieldValidationError{message: fmt.Sprintf("%swork_type_id is not supported; use workTypeName", prefix)}

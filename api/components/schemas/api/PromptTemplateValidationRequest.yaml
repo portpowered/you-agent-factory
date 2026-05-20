@@ -1,0 +1,8 @@
+type: object
+additionalProperties: false
+required:
+  - prompt
+properties:
+  prompt:
+    type: string
+    description: Prompt draft to validate against the selected current-factory workstation contract.

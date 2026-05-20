@@ -108,6 +108,22 @@ const (
 	Codex LoadableProviderSessionProvider = "codex"
 )
 
+// Defines values for PromptTemplateDiagnosticKind.
+const (
+	INVALIDVARIABLE     PromptTemplateDiagnosticKind = "INVALID_VARIABLE"
+	SYNTAXERROR         PromptTemplateDiagnosticKind = "SYNTAX_ERROR"
+	UNAVAILABLEVARIABLE PromptTemplateDiagnosticKind = "UNAVAILABLE_VARIABLE"
+)
+
+// Defines values for PromptTemplateVariableReferenceCategory.
+const (
+	CONTEXT   PromptTemplateVariableReferenceCategory = "CONTEXT"
+	HISTORY   PromptTemplateVariableReferenceCategory = "HISTORY"
+	INPUT     PromptTemplateVariableReferenceCategory = "INPUT"
+	MAPACCESS PromptTemplateVariableReferenceCategory = "MAP_ACCESS"
+	ROOT      PromptTemplateVariableReferenceCategory = "ROOT"
+)
+
 // Defines values for RelationType.
 const (
 	RelationTypeDependsOn   RelationType = "DEPENDS_ON"
@@ -876,6 +892,87 @@ type PanicDiagnostic struct {
 	Stack   *string `json:"stack,omitempty"`
 }
 
+// PromptTemplateContract defines model for PromptTemplateContract.
+type PromptTemplateContract struct {
+	// AvailableVariables Available prompt-template variables for the selected workstation editing context.
+	AvailableVariables []PromptTemplateVariableReference `json:"availableVariables"`
+
+	// InputCount Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access.
+	InputCount int `json:"inputCount"`
+
+	// UnavailableAccessPatterns Unsupported or unavailable variable access patterns for the selected workstation editing context.
+	UnavailableAccessPatterns []PromptTemplateUnavailableAccessPattern `json:"unavailableAccessPatterns"`
+}
+
+// PromptTemplateDiagnostic defines model for PromptTemplateDiagnostic.
+type PromptTemplateDiagnostic struct {
+	// EndOffset Inclusive 1-based byte offset where the diagnostic source span ends when available.
+	EndOffset int `json:"endOffset"`
+
+	// Kind Diagnostic classification for prompt-template validation.
+	Kind PromptTemplateDiagnosticKind `json:"kind"`
+
+	// Message User-readable explanation of the validation failure.
+	Message string `json:"message"`
+
+	// Path Canonical variable path or access pattern involved in the diagnostic when available.
+	Path string `json:"path"`
+
+	// SourceText Source variable or access expression that triggered the diagnostic when available.
+	SourceText string `json:"sourceText"`
+
+	// StartOffset Inclusive 1-based byte offset where the diagnostic source span starts when available.
+	StartOffset int `json:"startOffset"`
+}
+
+// PromptTemplateDiagnosticKind Diagnostic classification for prompt-template validation.
+type PromptTemplateDiagnosticKind string
+
+// PromptTemplateUnavailableAccessPattern defines model for PromptTemplateUnavailableAccessPattern.
+type PromptTemplateUnavailableAccessPattern struct {
+	// Example Representative unsupported template snippet for this access pattern.
+	Example string `json:"example"`
+
+	// Path Unsupported or unavailable variable path pattern.
+	Path string `json:"path"`
+
+	// Reason Why the access pattern is unavailable or unsupported in the selected workstation context.
+	Reason string `json:"reason"`
+}
+
+// PromptTemplateValidationRequest defines model for PromptTemplateValidationRequest.
+type PromptTemplateValidationRequest struct {
+	// Prompt Prompt draft to validate against the selected current-factory workstation contract.
+	Prompt string `json:"prompt"`
+}
+
+// PromptTemplateValidationResult defines model for PromptTemplateValidationResult.
+type PromptTemplateValidationResult struct {
+	// Diagnostics Typed validation diagnostics for the submitted prompt draft.
+	Diagnostics []PromptTemplateDiagnostic `json:"diagnostics"`
+
+	// Valid True when the prompt contains no syntax or variable diagnostics.
+	Valid bool `json:"valid"`
+}
+
+// PromptTemplateVariableReference defines model for PromptTemplateVariableReference.
+type PromptTemplateVariableReference struct {
+	// Category High-level grouping for the variable reference.
+	Category PromptTemplateVariableReferenceCategory `json:"category"`
+
+	// Description User-readable description of what the variable resolves to.
+	Description string `json:"description"`
+
+	// Example Go template snippet that shows how to reference the variable.
+	Example string `json:"example"`
+
+	// Path Canonical variable path summary used in diagnostics and help surfaces.
+	Path string `json:"path"`
+}
+
+// PromptTemplateVariableReferenceCategory High-level grouping for the variable reference.
+type PromptTemplateVariableReferenceCategory string
+
 // ProviderDiagnostic defines model for ProviderDiagnostic.
 type ProviderDiagnostic struct {
 	Model            *string    `json:"model,omitempty"`
@@ -1560,6 +1657,9 @@ type CreateFactoryJSONRequestBody = Factory
 // SaveEditableCurrentFactoryDefinitionJSONRequestBody defines body for SaveEditableCurrentFactoryDefinition for application/json ContentType.
 type SaveEditableCurrentFactoryDefinitionJSONRequestBody = SaveEditableFactoryDefinitionRequest
 
+// ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplate for application/json ContentType.
+type ValidateCurrentFactoryWorkstationPromptTemplateJSONRequestBody = PromptTemplateValidationRequest
+
 // SubmitWorkJSONRequestBody defines body for SubmitWork for application/json ContentType.
 type SubmitWorkJSONRequestBody = SubmitWorkRequest
 
@@ -1993,6 +2093,12 @@ type ServerInterface interface {
 	// Save editable current factory definition
 	// (PUT /factory/~current/editable-definition)
 	SaveEditableCurrentFactoryDefinition(w http.ResponseWriter, r *http.Request)
+	// Get workstation prompt-template contract
+	// (GET /factory/~current/workstations/{workstation_name}/prompt-template-contract)
+	GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request, workstationName string)
+	// Validate workstation prompt template
+	// (POST /factory/~current/workstations/{workstation_name}/prompt-template-validation)
+	ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request, workstationName string)
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
@@ -2083,6 +2189,56 @@ func (siw *ServerInterfaceWrapper) SaveEditableCurrentFactoryDefinition(w http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SaveEditableCurrentFactoryDefinition(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentFactoryWorkstationPromptTemplateContract operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentFactoryWorkstationPromptTemplateContract(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "workstation_name" -------------
+	var workstationName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentFactoryWorkstationPromptTemplateContract(w, r, workstationName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ValidateCurrentFactoryWorkstationPromptTemplate operation middleware
+func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "workstation_name" -------------
+	var workstationName string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "workstation_name", mux.Vars(r)["workstation_name"], &workstationName, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workstation_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplate(w, r, workstationName)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2415,6 +2571,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.GetEditableCurrentFactoryDefinition).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory/~current/editable-definition", wrapper.SaveEditableCurrentFactoryDefinition).Methods("PUT")
+
+	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContract).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory/~current/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplate).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 

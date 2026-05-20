@@ -1,0 +1,631 @@
+package workers
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"text/template"
+	"text/template/parse"
+)
+
+type PromptTemplateVariableCategory string
+
+const (
+	PromptTemplateVariableCategoryRoot      PromptTemplateVariableCategory = "ROOT"
+	PromptTemplateVariableCategoryInput     PromptTemplateVariableCategory = "INPUT"
+	PromptTemplateVariableCategoryHistory   PromptTemplateVariableCategory = "HISTORY"
+	PromptTemplateVariableCategoryContext   PromptTemplateVariableCategory = "CONTEXT"
+	PromptTemplateVariableCategoryMapAccess PromptTemplateVariableCategory = "MAP_ACCESS"
+)
+
+type PromptTemplateVariableReference struct {
+	Category    PromptTemplateVariableCategory
+	Description string
+	Example     string
+	Path        string
+}
+
+type PromptTemplateUnavailableAccessPattern struct {
+	Example string
+	Path    string
+	Reason  string
+}
+
+type PromptTemplateContract struct {
+	AvailableVariables        []PromptTemplateVariableReference
+	InputCount                int
+	UnavailableAccessPatterns []PromptTemplateUnavailableAccessPattern
+}
+
+type PromptTemplateDiagnosticKind string
+
+const (
+	PromptTemplateDiagnosticKindSyntaxError         PromptTemplateDiagnosticKind = "SYNTAX_ERROR"
+	PromptTemplateDiagnosticKindInvalidVariable     PromptTemplateDiagnosticKind = "INVALID_VARIABLE"
+	PromptTemplateDiagnosticKindUnavailableVariable PromptTemplateDiagnosticKind = "UNAVAILABLE_VARIABLE"
+)
+
+type PromptTemplateDiagnostic struct {
+	EndOffset   int
+	Kind        PromptTemplateDiagnosticKind
+	Message     string
+	Path        string
+	SourceText  string
+	StartOffset int
+}
+
+type PromptTemplateValidationResult struct {
+	Diagnostics []PromptTemplateDiagnostic
+	Valid       bool
+}
+
+func BuildPromptTemplateContract(inputCount int) PromptTemplateContract {
+	references := []PromptTemplateVariableReference{
+		{
+			Category:    PromptTemplateVariableCategoryRoot,
+			Description: "All input tokens consumed by the selected workstation, addressed intentionally by position.",
+			Example:     "{{ (index .Inputs 0).Payload }}",
+			Path:        ".Inputs",
+		},
+		{
+			Category:    PromptTemplateVariableCategoryContext,
+			Description: "Execution working directory resolved for the selected workstation run.",
+			Example:     "{{ .Context.WorkDir }}",
+			Path:        ".Context.WorkDir",
+		},
+		{
+			Category:    PromptTemplateVariableCategoryContext,
+			Description: "Artifact output directory available during execution.",
+			Example:     "{{ .Context.ArtifactDir }}",
+			Path:        ".Context.ArtifactDir",
+		},
+		{
+			Category:    PromptTemplateVariableCategoryContext,
+			Description: "Resolved project context for the active run.",
+			Example:     "{{ .Context.Project }}",
+			Path:        ".Context.Project",
+		},
+		{
+			Category:    PromptTemplateVariableCategoryMapAccess,
+			Description: "Environment variables exposed to the execution context. Access keys with index.",
+			Example:     "{{ index .Context.Env \"API_KEY\" }}",
+			Path:        ".Context.Env[\"KEY\"]",
+		},
+	}
+
+	for inputIndex := 0; inputIndex < inputCount; inputIndex++ {
+		references = append(references, inputVariableReferences(inputIndex)...)
+	}
+
+	return PromptTemplateContract{
+		AvailableVariables: references,
+		InputCount:         inputCount,
+		UnavailableAccessPatterns: []PromptTemplateUnavailableAccessPattern{
+			{
+				Example: unavailableInputExample(inputCount),
+				Path:    ".Inputs[N]",
+				Reason:  unavailableInputReason(inputCount),
+			},
+			{
+				Example: "{{ (index .Inputs 0).Tags.branch }}",
+				Path:    ".Inputs[N].Tags.<key>",
+				Reason:  "Tag map keys are not addressable as struct fields. Use index with a quoted key, for example {{ index (index .Inputs 0).Tags \"branch\" }}.",
+			},
+			{
+				Example: "{{ .Context.Env.API_KEY }}",
+				Path:    ".Context.Env.<key>",
+				Reason:  "Environment map keys are not addressable as struct fields. Use index with a quoted key, for example {{ index .Context.Env \"API_KEY\" }}.",
+			},
+		},
+	}
+}
+
+func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidationResult {
+	parsed, err := template.New("prompt").Parse(tmpl)
+	if err != nil {
+		return PromptTemplateValidationResult{
+			Diagnostics: []PromptTemplateDiagnostic{{
+				Kind:    PromptTemplateDiagnosticKindSyntaxError,
+				Message: err.Error(),
+			}},
+			Valid: false,
+		}
+	}
+
+	validator := promptTemplateValidator{
+		inputCount: inputCount,
+		seen:       make(map[string]struct{}),
+	}
+	rootScope := &promptValidationScope{
+		bindings: make(map[string]promptValidationValue),
+		dot:      promptValidationValue{kind: promptValidationValueRoot},
+	}
+	validator.walkList(parsed.Tree.Root, rootScope)
+
+	return PromptTemplateValidationResult{
+		Diagnostics: validator.diagnostics,
+		Valid:       len(validator.diagnostics) == 0,
+	}
+}
+
+func inputVariableReferences(inputIndex int) []PromptTemplateVariableReference {
+	return []PromptTemplateVariableReference{
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Human-readable work name for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).Name }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].Name", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Stable work identifier for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).WorkID }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].WorkID", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Work type identifier for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).WorkTypeID }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].WorkTypeID", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Payload content for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).Payload }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].Payload", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Project resolved for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).Project }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].Project", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Tag metadata for input %d. Access keys with index.", inputIndex),
+			Example:     fmt.Sprintf("{{ index (index .Inputs %d).Tags \"branch\" }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].Tags[\"KEY\"]", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Previous output captured for input %d retries.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).PreviousOutput }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].PreviousOutput", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Reviewer or rejection feedback recorded for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).RejectionFeedback }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].RejectionFeedback", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryHistory,
+			Description: fmt.Sprintf("Current attempt number for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).History.AttemptNumber }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].History.AttemptNumber", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryHistory,
+			Description: fmt.Sprintf("Most recent failure message for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).History.LastError }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].History.LastError", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryHistory,
+			Description: fmt.Sprintf("Total historical failure count for input %d.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).History.FailureCount }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].History.FailureCount", inputIndex),
+		},
+	}
+}
+
+func unavailableInputExample(inputCount int) string {
+	if inputCount == 0 {
+		return "{{ (index .Inputs 0).Payload }}"
+	}
+	return fmt.Sprintf("{{ (index .Inputs %d).Payload }}", inputCount)
+}
+
+func unavailableInputReason(inputCount int) string {
+	if inputCount == 0 {
+		return "The selected workstation does not consume any authored work inputs, so direct .Inputs indexing is unavailable in this editing context."
+	}
+	return fmt.Sprintf("The selected workstation consumes %d input(s), so only .Inputs indexes 0 through %d are available in this editing context.", inputCount, inputCount-1)
+}
+
+type promptValidationValueKind int
+
+const (
+	promptValidationValueUnknown promptValidationValueKind = iota
+	promptValidationValueRoot
+	promptValidationValueInputsSlice
+	promptValidationValueToken
+	promptValidationValueHistory
+	promptValidationValueContext
+	promptValidationValueTagsMap
+	promptValidationValueEnvMap
+	promptValidationValueRelationsSlice
+	promptValidationValueRelation
+	promptValidationValueFailureLog
+	promptValidationValueContent
+	promptValidationValueScalar
+)
+
+type promptValidationValue struct {
+	displayPath string
+	kind        promptValidationValueKind
+}
+
+type promptValidationScope struct {
+	bindings map[string]promptValidationValue
+	dot      promptValidationValue
+	parent   *promptValidationScope
+}
+
+func (s *promptValidationScope) lookup(name string) (promptValidationValue, bool) {
+	for current := s; current != nil; current = current.parent {
+		if value, ok := current.bindings[name]; ok {
+			return value, true
+		}
+	}
+	return promptValidationValue{}, false
+}
+
+type promptTemplateValidator struct {
+	diagnostics []PromptTemplateDiagnostic
+	inputCount  int
+	seen        map[string]struct{}
+}
+
+func (v *promptTemplateValidator) walkList(list *parse.ListNode, scope *promptValidationScope) {
+	if list == nil {
+		return
+	}
+	for _, node := range list.Nodes {
+		v.walkNode(node, scope)
+	}
+}
+
+func (v *promptTemplateValidator) walkNode(node parse.Node, scope *promptValidationScope) {
+	switch typed := node.(type) {
+	case *parse.ActionNode:
+		v.resolvePipe(typed.Pipe, scope)
+	case *parse.IfNode:
+		v.resolvePipe(typed.Pipe, scope)
+		v.walkList(typed.List, scope.child(scope.dot))
+		v.walkList(typed.ElseList, scope.child(scope.dot))
+	case *parse.RangeNode:
+		sequenceValue := v.resolvePipe(typed.Pipe, scope)
+		rangeScope := scope.child(rangeElementValue(sequenceValue))
+		bindRangeDecls(rangeScope, typed.Pipe, sequenceValue)
+		v.walkList(typed.List, rangeScope)
+		v.walkList(typed.ElseList, scope.child(scope.dot))
+	case *parse.WithNode:
+		value := v.resolvePipe(typed.Pipe, scope)
+		withScope := scope.child(value)
+		v.walkList(typed.List, withScope)
+		v.walkList(typed.ElseList, scope.child(scope.dot))
+	case *parse.TemplateNode:
+		if typed.Pipe != nil {
+			v.resolvePipe(typed.Pipe, scope)
+		}
+	}
+}
+
+func (v *promptTemplateValidator) resolvePipe(pipe *parse.PipeNode, scope *promptValidationScope) promptValidationValue {
+	if pipe == nil {
+		return promptValidationValue{kind: promptValidationValueUnknown}
+	}
+	var result promptValidationValue
+	for _, cmd := range pipe.Cmds {
+		result = v.resolveCommand(cmd, scope)
+	}
+	return result
+}
+
+func (v *promptTemplateValidator) resolveCommand(cmd *parse.CommandNode, scope *promptValidationScope) promptValidationValue {
+	if cmd == nil || len(cmd.Args) == 0 {
+		return promptValidationValue{kind: promptValidationValueUnknown}
+	}
+	if ident, ok := cmd.Args[0].(*parse.IdentifierNode); ok {
+		if ident.Ident == "index" {
+			return v.resolveIndexCommand(cmd, scope)
+		}
+		for _, arg := range cmd.Args[1:] {
+			v.resolveArgument(arg, scope)
+		}
+		return promptValidationValue{kind: promptValidationValueScalar}
+	}
+	value := v.resolveArgument(cmd.Args[0], scope)
+	for _, arg := range cmd.Args[1:] {
+		v.resolveArgument(arg, scope)
+	}
+	return value
+}
+
+func (v *promptTemplateValidator) resolveIndexCommand(cmd *parse.CommandNode, scope *promptValidationScope) promptValidationValue {
+	if len(cmd.Args) < 3 {
+		return promptValidationValue{kind: promptValidationValueUnknown}
+	}
+	current := v.resolveArgument(cmd.Args[1], scope)
+	for _, arg := range cmd.Args[2:] {
+		switch current.kind {
+		case promptValidationValueInputsSlice:
+			index, ok := literalInteger(arg)
+			if !ok {
+				current = promptValidationValue{kind: promptValidationValueToken, displayPath: ".Inputs[*]"}
+				continue
+			}
+			path := fmt.Sprintf(".Inputs[%d]", index)
+			source := fmt.Sprintf("(index .Inputs %d)", index)
+			if index < 0 || index >= v.inputCount {
+				v.addDiagnostic(PromptTemplateDiagnostic{
+					Kind:        PromptTemplateDiagnosticKindUnavailableVariable,
+					Message:     unavailableInputReason(v.inputCount),
+					Path:        path,
+					SourceText:  source,
+					StartOffset: int(arg.Position()),
+					EndOffset:   int(arg.Position()) + len(strconv.Itoa(index)) - 1,
+				})
+				current = promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
+				continue
+			}
+			current = promptValidationValue{kind: promptValidationValueToken, displayPath: path}
+		case promptValidationValueTagsMap:
+			current = promptValidationValue{kind: promptValidationValueScalar, displayPath: current.displayPath}
+		case promptValidationValueEnvMap:
+			current = promptValidationValue{kind: promptValidationValueScalar, displayPath: current.displayPath}
+		case promptValidationValueRelationsSlice:
+			current = promptValidationValue{kind: promptValidationValueRelation, displayPath: current.displayPath + "[*]"}
+		default:
+			current = promptValidationValue{kind: promptValidationValueUnknown, displayPath: current.displayPath}
+		}
+	}
+	return current
+}
+
+func (v *promptTemplateValidator) resolveArgument(arg parse.Node, scope *promptValidationScope) promptValidationValue {
+	switch typed := arg.(type) {
+	case *parse.DotNode:
+		return scope.dot
+	case *parse.FieldNode:
+		return v.resolveFieldChain(scope.dot, typed.Ident, typed.Position(), "."+strings.Join(typed.Ident, "."))
+	case *parse.VariableNode:
+		return v.resolveVariableNode(typed, scope)
+	case *parse.ChainNode:
+		base := v.resolveArgument(typed.Node, scope)
+		return v.resolveFieldChain(base, typed.Field, typed.Position(), chainDisplay(base.displayPath, typed.Field))
+	case *parse.PipeNode:
+		return v.resolvePipe(typed, scope)
+	case *parse.CommandNode:
+		return v.resolveCommand(typed, scope)
+	case *parse.StringNode, *parse.NumberNode, *parse.BoolNode, *parse.NilNode:
+		return promptValidationValue{kind: promptValidationValueScalar}
+	default:
+		return promptValidationValue{kind: promptValidationValueUnknown}
+	}
+}
+
+func (v *promptTemplateValidator) resolveVariableNode(node *parse.VariableNode, scope *promptValidationScope) promptValidationValue {
+	if len(node.Ident) == 0 {
+		return promptValidationValue{kind: promptValidationValueUnknown}
+	}
+	baseName := node.Ident[0]
+	if baseName == "$" {
+		return v.resolveFieldChain(promptValidationValue{kind: promptValidationValueRoot, displayPath: "$"}, node.Ident[1:], node.Position(), "$."+strings.Join(node.Ident[1:], "."))
+	}
+	base, ok := scope.lookup(baseName)
+	if !ok {
+		v.addDiagnostic(PromptTemplateDiagnostic{
+			Kind:        PromptTemplateDiagnosticKindInvalidVariable,
+			Message:     fmt.Sprintf("Template variable %s is not defined in this scope.", baseName),
+			Path:        baseName,
+			SourceText:  strings.Join(node.Ident, "."),
+			StartOffset: int(node.Position()),
+			EndOffset:   int(node.Position()) + len(strings.Join(node.Ident, ".")) - 1,
+		})
+		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: baseName}
+	}
+	if len(node.Ident) == 1 {
+		return base
+	}
+	return v.resolveFieldChain(base, node.Ident[1:], node.Position(), strings.Join(node.Ident, "."))
+}
+
+func (v *promptTemplateValidator) resolveFieldChain(base promptValidationValue, fields []string, pos parse.Pos, display string) promptValidationValue {
+	current := base
+	if current.displayPath == "" {
+		current.displayPath = display
+	}
+	for index, field := range fields {
+		nextPath := fieldPath(current.displayPath, field)
+		switch current.kind {
+		case promptValidationValueRoot:
+			switch field {
+			case "Inputs":
+				current = promptValidationValue{kind: promptValidationValueInputsSlice, displayPath: ".Inputs"}
+			case "Context":
+				current = promptValidationValue{kind: promptValidationValueContext, displayPath: ".Context"}
+			default:
+				v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt root")
+				return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
+			}
+		case promptValidationValueToken:
+			current = resolveTokenField(field, nextPath)
+			if current.kind == promptValidationValueUnknown {
+				v.addUnknownFieldDiagnostic(pos, nextPath, field, "input token")
+				return current
+			}
+		case promptValidationValueHistory:
+			current = resolveHistoryField(field, nextPath)
+			if current.kind == promptValidationValueUnknown {
+				v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt history")
+				return current
+			}
+		case promptValidationValueContext:
+			current = resolveContextField(field, nextPath)
+			if current.kind == promptValidationValueUnknown {
+				v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt context")
+				return current
+			}
+		case promptValidationValueRelation:
+			current = resolveRelationField(field, nextPath)
+			if current.kind == promptValidationValueUnknown {
+				v.addUnknownFieldDiagnostic(pos, nextPath, field, "relation")
+				return current
+			}
+		case promptValidationValueTagsMap, promptValidationValueEnvMap:
+			v.addDiagnostic(PromptTemplateDiagnostic{
+				Kind:        PromptTemplateDiagnosticKindInvalidVariable,
+				Message:     fmt.Sprintf("%s is a map. Access keys with index and a quoted key instead of dot notation.", current.displayPath),
+				Path:        nextPath,
+				SourceText:  nextPath,
+				StartOffset: int(pos),
+				EndOffset:   int(pos) + len(nextPath) - 1,
+			})
+			return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
+		case promptValidationValueInputsSlice, promptValidationValueRelationsSlice, promptValidationValueFailureLog, promptValidationValueContent:
+			v.addDiagnostic(PromptTemplateDiagnostic{
+				Kind:        PromptTemplateDiagnosticKindInvalidVariable,
+				Message:     fmt.Sprintf("%s is a collection. Index or range it before reading %s.", current.displayPath, field),
+				Path:        nextPath,
+				SourceText:  nextPath,
+				StartOffset: int(pos),
+				EndOffset:   int(pos) + len(nextPath) - 1,
+			})
+			return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
+		default:
+			if current.kind != promptValidationValueUnknown && index < len(fields) {
+				v.addUnknownFieldDiagnostic(pos, nextPath, field, "scalar value")
+			}
+			return promptValidationValue{kind: promptValidationValueUnknown, displayPath: nextPath}
+		}
+	}
+	return current
+}
+
+func (v *promptTemplateValidator) addUnknownFieldDiagnostic(pos parse.Pos, path, field, subject string) {
+	v.addDiagnostic(PromptTemplateDiagnostic{
+		Kind:        PromptTemplateDiagnosticKindInvalidVariable,
+		Message:     fmt.Sprintf("%q is not an available field on %s.", field, subject),
+		Path:        path,
+		SourceText:  path,
+		StartOffset: int(pos),
+		EndOffset:   int(pos) + len(path) - 1,
+	})
+}
+
+func (v *promptTemplateValidator) addDiagnostic(diagnostic PromptTemplateDiagnostic) {
+	key := fmt.Sprintf("%s|%s|%s|%d", diagnostic.Kind, diagnostic.Path, diagnostic.Message, diagnostic.StartOffset)
+	if _, exists := v.seen[key]; exists {
+		return
+	}
+	v.seen[key] = struct{}{}
+	v.diagnostics = append(v.diagnostics, diagnostic)
+}
+
+func (s *promptValidationScope) child(dot promptValidationValue) *promptValidationScope {
+	return &promptValidationScope{
+		bindings: make(map[string]promptValidationValue),
+		dot:      dot,
+		parent:   s,
+	}
+}
+
+func bindRangeDecls(scope *promptValidationScope, pipe *parse.PipeNode, sequence promptValidationValue) {
+	if pipe == nil || len(pipe.Decl) == 0 {
+		return
+	}
+	element := rangeElementValue(sequence)
+	switch len(pipe.Decl) {
+	case 1:
+		scope.bindings[pipe.Decl[0].Ident[0]] = element
+	default:
+		scope.bindings[pipe.Decl[0].Ident[0]] = promptValidationValue{kind: promptValidationValueScalar, displayPath: pipe.Decl[0].Ident[0]}
+		scope.bindings[pipe.Decl[len(pipe.Decl)-1].Ident[0]] = element
+	}
+}
+
+func rangeElementValue(sequence promptValidationValue) promptValidationValue {
+	switch sequence.kind {
+	case promptValidationValueInputsSlice:
+		return promptValidationValue{kind: promptValidationValueToken, displayPath: ".Inputs[*]"}
+	case promptValidationValueRelationsSlice:
+		return promptValidationValue{kind: promptValidationValueRelation, displayPath: ".Relations[*]"}
+	default:
+		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: sequence.displayPath}
+	}
+}
+
+func resolveTokenField(field, path string) promptValidationValue {
+	switch field {
+	case "Name", "WorkID", "WorkTypeID", "DataType", "TraceID", "ParentID", "Project", "Payload", "PreviousOutput", "RejectionFeedback":
+		return promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
+	case "Tags":
+		return promptValidationValue{kind: promptValidationValueTagsMap, displayPath: path}
+	case "Relations":
+		return promptValidationValue{kind: promptValidationValueRelationsSlice, displayPath: path}
+	case "Content":
+		return promptValidationValue{kind: promptValidationValueContent, displayPath: path}
+	case "History":
+		return promptValidationValue{kind: promptValidationValueHistory, displayPath: path}
+	default:
+		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
+	}
+}
+
+func resolveHistoryField(field, path string) promptValidationValue {
+	switch field {
+	case "LastError", "FailureCount", "TotalVisits", "AttemptNumber":
+		return promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
+	case "FailureLog":
+		return promptValidationValue{kind: promptValidationValueFailureLog, displayPath: path}
+	default:
+		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
+	}
+}
+
+func resolveContextField(field, path string) promptValidationValue {
+	switch field {
+	case "WorkDir", "ArtifactDir", "Project":
+		return promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
+	case "Env":
+		return promptValidationValue{kind: promptValidationValueEnvMap, displayPath: path}
+	default:
+		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
+	}
+}
+
+func resolveRelationField(field, path string) promptValidationValue {
+	switch field {
+	case "Type", "TargetWorkID", "RequiredState":
+		return promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
+	default:
+		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
+	}
+}
+
+func literalInteger(node parse.Node) (int, bool) {
+	number, ok := node.(*parse.NumberNode)
+	if !ok || !number.IsInt {
+		return 0, false
+	}
+	return int(number.Int64), true
+}
+
+func fieldPath(base, field string) string {
+	if base == "" {
+		return field
+	}
+	if strings.HasSuffix(base, "]") {
+		return base + "." + field
+	}
+	return base + "." + field
+}
+
+func chainDisplay(base string, fields []string) string {
+	if base == "" {
+		return "." + strings.Join(fields, ".")
+	}
+	return fieldPath(base, strings.Join(fields, "."))
+}

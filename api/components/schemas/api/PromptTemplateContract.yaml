@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - availableVariables
+  - inputCount
+  - unavailableAccessPatterns
+properties:
+  availableVariables:
+    type: array
+    description: Available prompt-template variables for the selected workstation editing context.
+    items:
+      $ref: '../../../openapi-main.yaml#/components/schemas/PromptTemplateVariableReference'
+  inputCount:
+    type: integer
+    minimum: 0
+    description: Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access.
+  unavailableAccessPatterns:
+    type: array
+    description: Unsupported or unavailable variable access patterns for the selected workstation editing context.
+    items:
+      $ref: '../../../openapi-main.yaml#/components/schemas/PromptTemplateUnavailableAccessPattern'
