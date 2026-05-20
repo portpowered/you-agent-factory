@@ -277,6 +277,26 @@ export const SelectedWorkDispatchHistorySmoke = {
       within(activeCard).getByText("Current dispatch"),
     ).toBeVisible();
     await expect(
+      within(activeCard).getByText("Active Story"),
+    ).toBeVisible();
+    await expect(
+      within(activeCard).getByText("Started at"),
+    ).toBeVisible();
+    expect(within(activeCard).queryByText("Dispatched")).toBeNull();
+    expect(within(activeCard).queryByText("Responded")).toBeNull();
+    expect(within(activeCard).queryByText("Errored")).toBeNull();
+    const inferenceAttemptsToggle = within(activeCard).getByRole("button", {
+      name: "Expand",
+    });
+    expect(inferenceAttemptsToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      within(activeCard).queryByText(
+        "No inference attempt details have been recorded for this dispatch yet.",
+      ),
+    ).toBeNull();
+    await userEvent.click(inferenceAttemptsToggle);
+    expect(inferenceAttemptsToggle.getAttribute("aria-expanded")).toBe("true");
+    await expect(
       within(activeCard).getByText(
         "No inference attempt details have been recorded for this dispatch yet.",
       ),
@@ -309,6 +329,16 @@ export const SelectedWorkDispatchHistorySmoke = {
       dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
     );
     await expect(
+      within(scriptSuccessCard).getByText("Script attempts"),
+    ).toBeVisible();
+    const scriptAttemptsToggle = within(scriptSuccessCard).getByRole("button", {
+      name: "Expand",
+    });
+    expect(scriptAttemptsToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(within(scriptSuccessCard).queryByText("script success stdout")).toBeNull();
+    await userEvent.click(scriptAttemptsToggle);
+    expect(scriptAttemptsToggle.getAttribute("aria-expanded")).toBe("true");
+    await expect(
       within(scriptSuccessCard).getAllByText("script-tool").length,
     ).toBeGreaterThan(0);
     await expect(
@@ -326,8 +356,11 @@ export const SelectedWorkDispatchHistorySmoke = {
       within(scriptFailedCard).getAllByText("TIMEOUT").length,
     ).toBeGreaterThan(0);
     await expect(
-      within(scriptFailedCard).getAllByText("script timed out").length,
-    ).toBeGreaterThan(0);
+      within(scriptFailedCard).getByText("Script timed out."),
+    ).toBeVisible();
+    await expect(
+      within(scriptFailedCard).getByText("Started at"),
+    ).toBeVisible();
     expect(within(scriptFailedCard).queryByText("Current dispatch")).toBeNull();
 
     await expect(

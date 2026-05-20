@@ -413,6 +413,20 @@ function getDispatchHistoryCard(
   return card;
 }
 
+function expandDispatchAttemptSection(
+  card: HTMLElement,
+  title: string,
+): HTMLElement {
+  const section = within(card).getByRole("region", { name: title });
+  const toggle = within(section).getByRole("button", { name: "Expand" });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return section;
+}
+
 function expectDefinitionValue(
   section: HTMLElement,
   label: string,
@@ -692,9 +706,10 @@ describe("App current selection", () => {
     const pendingRequestDetails = within(pendingCard).getByRole("region", {
       name: "Request details",
     });
-    const pendingInferenceAttempts = within(pendingCard).getByRole("region", {
-      name: "Inference attempts",
-    });
+    const pendingInferenceAttempts = expandDispatchAttemptSection(
+      pendingCard,
+      "Inference attempts",
+    );
     expect(
       within(pendingRequestDetails).getByText(
         "Inference request details are shown under Inference attempts.",
@@ -719,7 +734,11 @@ describe("App current selection", () => {
     const readyRequestDetails = within(readyCard).getByRole("region", {
       name: "Request details",
     });
-    const readyAttempt = within(readyCard).getByRole("article", {
+    const readyInferenceAttempts = expandDispatchAttemptSection(
+      readyCard,
+      "Inference attempts",
+    );
+    const readyAttempt = within(readyInferenceAttempts).getByRole("article", {
       name: "Inference attempt 2",
     });
     expect(
@@ -760,7 +779,11 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.rejected.dispatch_id,
     );
-    const rejectedAttempt = within(rejectedCard).getByRole("article", {
+    const rejectedInferenceAttempts = expandDispatchAttemptSection(
+      rejectedCard,
+      "Inference attempts",
+    );
+    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole("article", {
       name: "Inference attempt 1",
     });
     expect(
@@ -781,7 +804,11 @@ describe("App current selection", () => {
     const erroredRequestDetails = within(erroredCard).getByRole("region", {
       name: "Request details",
     });
-    const erroredAttempt = within(erroredCard).getByRole("article", {
+    const erroredInferenceAttempts = expandDispatchAttemptSection(
+      erroredCard,
+      "Inference attempts",
+    );
+    const erroredAttempt = within(erroredInferenceAttempts).getByRole("article", {
       name: "Inference attempt 1",
     });
     expect(
@@ -802,17 +829,12 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
     );
-    expect(
-      within(scriptSuccessCard).getAllByText("script-tool").length,
-    ).toBeGreaterThan(0);
-    expect(
-      within(scriptSuccessCard).getByRole("region", {
-        name: "Script attempts",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(scriptSuccessCard).getAllByText("script success stdout").length,
-    ).toBeGreaterThan(0);
+    const scriptSuccessAttempts = expandDispatchAttemptSection(
+      scriptSuccessCard,
+      "Script attempts",
+    );
+    expect(within(scriptSuccessAttempts).getAllByText("script-tool").length).toBeGreaterThan(0);
+    expect(within(scriptSuccessAttempts).getAllByText("script success stdout").length).toBeGreaterThan(0);
     expect(
       within(scriptSuccessCard).getAllByText("SUCCEEDED").length,
     ).toBeGreaterThan(0);
@@ -821,11 +843,15 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
     );
+    const scriptFailedAttempts = expandDispatchAttemptSection(
+      scriptFailedCard,
+      "Script attempts",
+    );
     expect(
-      within(scriptFailedCard).getAllByText("TIMEOUT").length,
+      within(scriptFailedAttempts).getAllByText("TIMEOUT").length,
     ).toBeGreaterThan(0);
     expect(
-      within(scriptFailedCard).getAllByText("script timed out").length,
+      within(scriptFailedAttempts).getAllByText("script timed out").length,
     ).toBeGreaterThan(0);
     expect(
       within(scriptFailedCard).getByText(
