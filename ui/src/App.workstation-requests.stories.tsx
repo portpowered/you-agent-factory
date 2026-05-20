@@ -163,20 +163,36 @@ export const WorkstationRequestSelectionRejected = {
     const inferenceAttempts = within(
       currentSelection.getByRole("region", { name: "Inference attempts" }),
     );
+    const rejectedAttempt = within(
+      inferenceAttempts.getByRole("article", { name: "Inference attempt 1" }),
+    );
+    const requestBodyRegion = rejectedAttempt.getByRole("region", {
+      name: "Request body",
+    });
+    const responseBodyRegion = rejectedAttempt.getByRole("region", {
+      name: "Response body",
+    });
     const responseDetails = within(
       currentSelection.getByRole("region", { name: "Response details" }),
+    );
+
+    await userEvent.click(
+      within(requestBodyRegion).getByRole("button", { name: "Expand" }),
+    );
+    await userEvent.click(
+      within(responseBodyRegion).getByRole("button", { name: "Expand" }),
     );
 
     expect(
       currentSelection.getAllByText("request-rejected-story").length,
     ).toBeGreaterThan(0);
     await expect(
-      currentSelection.getByText(
+      within(requestBodyRegion).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeVisible();
     await expect(
-      inferenceAttempts.getByText(
+      within(responseBodyRegion).getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeVisible();
@@ -211,6 +227,15 @@ export const WorkstationRequestSelectionErrored = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
+    const inferenceAttempts = within(
+      currentSelection.getByRole("region", { name: "Inference attempts" }),
+    );
+    const erroredAttempt = within(
+      inferenceAttempts.getByRole("article", { name: "Inference attempt 1" }),
+    );
+    const requestBodyRegion = erroredAttempt.getByRole("region", {
+      name: "Request body",
+    });
     const errorDetails = within(
       currentSelection.getByRole("region", { name: "Error details" }),
     );
@@ -219,6 +244,10 @@ export const WorkstationRequestSelectionErrored = {
       .map((label) => label.closest("div"))
       .find((row) => row?.textContent?.includes("provider_rate_limit"));
 
+    await userEvent.click(
+      within(requestBodyRegion).getByRole("button", { name: "Expand" }),
+    );
+
     expect(
       currentSelection.getAllByText("request-error-story").length,
     ).toBeGreaterThan(0);
@@ -226,7 +255,7 @@ export const WorkstationRequestSelectionErrored = {
       currentSelection.getByRole("heading", { name: "Inference attempts" }),
     ).toBeVisible();
     await expect(
-      currentSelection.getByText(
+      within(requestBodyRegion).getByText(
         "Review the blocked story and explain the failure.",
       ),
     ).toBeVisible();
@@ -307,8 +336,11 @@ export const SelectedWorkDispatchHistorySmoke = {
       within(activeCard).getByText("Current dispatch"),
     ).toBeVisible();
     await expect(
-      within(activeCard).getByText("Active Story"),
+      within(activeCard).getByRole("strong"),
     ).toBeVisible();
+    expect(within(activeCard).getByRole("strong")).toHaveTextContent(
+      "Active Story",
+    );
     await expect(
       within(activeCard).getByText("Started at"),
     ).toBeVisible();
