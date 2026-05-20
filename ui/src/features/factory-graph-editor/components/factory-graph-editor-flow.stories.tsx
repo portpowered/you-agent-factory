@@ -2,7 +2,7 @@ import { Background, Controls, ReactFlow } from "@xyflow/react";
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
-import "../../styles.css";
+import "../../../styles.css";
 import { FactoryGraphEditorVisibilityPanel } from "./factory-graph-editor-controls";
 import type { FactoryGraphTopology } from "../factory-graph-draft-types";
 import {

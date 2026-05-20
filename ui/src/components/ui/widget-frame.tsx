@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { AgentBentoCard } from "../../features/bento";
+import { AgentBentoCard } from "../../features/bento/components/agent-bento";
 import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,

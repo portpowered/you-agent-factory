@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { expect, userEvent, within } from "storybook/test";
 
-import "../../styles.css";
+import "../../../styles.css";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -20,7 +20,7 @@ import {
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../flowchart";
+} from "../../flowchart";
 import type { FactoryPngImportValue, ReadFactoryImportFile } from "../../import";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";

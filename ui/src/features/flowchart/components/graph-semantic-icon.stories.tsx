@@ -1,6 +1,6 @@
 import { expect, within } from "storybook/test";
 
-import "../../styles.css";
+import "../../../styles.css";
 import {
   GRAPH_SEMANTIC_ICON_KINDS,
   GraphSemanticIcon,
@@ -40,4 +40,3 @@ export const Vocabulary = {
     await expect(canvas.getByRole("img", { name: "Unknown graph semantic" })).toBeVisible();
   },
 };
-
