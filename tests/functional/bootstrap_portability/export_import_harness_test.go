@@ -3,6 +3,7 @@ package bootstrap_portability
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"path/filepath"
 	"reflect"
@@ -181,8 +182,9 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 		t.Fatalf("POST /factory: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
+		data, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("POST /factory status = %d, want 201", resp.StatusCode)
+		t.Fatalf("POST /factory status = %d, want 201: %s", resp.StatusCode, string(data))
 	}
 
 	var created factoryapi.Factory
