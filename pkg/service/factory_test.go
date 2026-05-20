@@ -5167,6 +5167,44 @@ func TestBuildFactoryService_WorkFileRejectsRetiredTargetStateAlias(t *testing.T
 	}
 }
 
+func TestBuildFactoryService_WorkFileRejectsConflictingTraceAliases(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	workFile := filepath.Join(dir, "initial-work.json")
+	if err := os.WriteFile(workFile, []byte(`{
+  "requestId": "request-service-trace-conflict",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {"name": "draft", "workTypeName": "task", "currentChainingTraceId": "chain-a", "traceId": "trace-b"}
+  ]
+}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		WorkFile:          workFile,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	err = svc.submitWorkFile(context.Background())
+	if err == nil {
+		t.Fatal("expected conflicting trace aliases to fail")
+	}
+	if !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
+		t.Fatalf("error = %q, want conflicting trace alias rejection", err.Error())
+	}
+}
+
 func TestBuildFactoryService_ConfigWithAllOptions(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
