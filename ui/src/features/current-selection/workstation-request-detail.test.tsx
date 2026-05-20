@@ -7,7 +7,7 @@ import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "./detail-card-shared";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 describe("WorkstationRequestDetailCard", () => {
-  it("keeps inference-backed request and response detail inside inference attempts", () => {
+  it("keeps inference-backed request and response detail inside inference attempts without visible request counts", () => {
     render(
       <WorkstationRequestDetailCard
         request={workstationRequest("dispatch-review-ready", {
@@ -72,7 +72,12 @@ describe("WorkstationRequestDetailCard", () => {
     expect(within(currentSelection).getByText("Active Story")).toBeTruthy();
     expect(within(currentSelection).getAllByText("request-ready-story")).toHaveLength(1);
     expect(within(currentSelection).getAllByText("Dispatch ID").length).toBeGreaterThan(0);
-    expect(within(currentSelection).getByRole("heading", { name: "Request counts" })).toBeTruthy();
+    expect(
+      within(currentSelection).queryByRole("heading", { name: "Request counts" }),
+    ).toBeNull();
+    expect(within(currentSelection).queryByText("dispatchedCount")).toBeNull();
+    expect(within(currentSelection).queryByText("respondedCount")).toBeNull();
+    expect(within(currentSelection).queryByText("erroredCount")).toBeNull();
     expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
     expect(inferenceAttempts.getByText("Retry the review with the latest context.")).toBeTruthy();
     expect(inferenceAttempts.getByText("Ready for the next workstation.")).toBeTruthy();

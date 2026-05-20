@@ -320,10 +320,6 @@ export interface TerminalWorkSummaryCardProps {
   widgetId?: string;
 }
 
-export interface RequestCountSectionProps {
-  request: DashboardWorkstationRequest;
-}
-
 export interface MetadataSectionProps {
   emptyMessage: string;
   metadata: Record<string, string> | undefined;
