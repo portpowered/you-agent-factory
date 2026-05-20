@@ -171,7 +171,7 @@ function EditableConfigurationPromptHelp({
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p
-          className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+          className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}
         >
           {messages.editableConfigurationPromptHelpHeading}
         </p>
@@ -193,13 +193,13 @@ function EditableConfigurationPromptHelp({
           id={contentId}
         >
           {helpState.status === "loading" ? (
-            <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
               {messages.editableConfigurationPromptHelpLoading}
             </p>
           ) : null}
           {helpState.status === "error" ? (
             <p
-              className={cx(
+              className={cn(
                 "m-0 text-af-danger-ink",
                 DASHBOARD_BODY_TEXT_CLASS,
               )}
@@ -210,14 +210,14 @@ function EditableConfigurationPromptHelp({
             </p>
           ) : null}
           {helpState.status === "empty" ? (
-            <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
               {helpState.message}
             </p>
           ) : null}
           {helpState.status === "ready" ? (
             <>
               <p
-                className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}
+                className={cn("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}
               >
                 {messages.editableConfigurationPromptHelpInputCountSummary(
                   helpState.contract.inputCount,
@@ -498,7 +498,7 @@ function PromptTemplateReferenceList({
 
   return (
     <section className="grid gap-2">
-      <h5 className={cx("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>{heading}</h5>
+      <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>{heading}</h5>
       <ul className="m-0 grid list-none gap-2 p-0">
         {items.map((item) => (
           <li
@@ -506,7 +506,7 @@ function PromptTemplateReferenceList({
             key={item.key}
           >
             <code className={DASHBOARD_BODY_TEXT_CLASS}>{item.label}</code>
-            <p className={cx("m-0 text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
+            <p className={cn("m-0 text-af-ink/72", DASHBOARD_BODY_TEXT_CLASS)}>
               {item.body}
             </p>
             <pre className="m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 text-xs text-af-ink/78 [overflow-wrap:anywhere]">

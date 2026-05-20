@@ -6,7 +6,7 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { WorkstationDetailCardProps } from "./detail-card-types";
 import type { getWorkstationDetailMessages } from "./messages";
 
@@ -53,7 +53,7 @@ export function EditableConfigurationPromptInput({
       <div className="relative">
         <div
           aria-hidden="true"
-          className={cx(
+          className={cn(
             "pointer-events-none absolute inset-0 overflow-hidden rounded-xl border border-af-overlay/14 px-3 py-3 text-sm text-transparent",
             DASHBOARD_BODY_TEXT_CLASS,
           )}
@@ -67,7 +67,7 @@ export function EditableConfigurationPromptInput({
         <Textarea
           aria-describedby={describedBy || undefined}
           aria-invalid={state.validationErrors.prompt ? "true" : undefined}
-          className={cx(
+          className={cn(
             "relative z-10 bg-transparent",
             state.promptDiagnostics.length > 0
               ? "border-af-danger/45 focus-visible:border-af-danger focus-visible:ring-af-danger/20"
@@ -103,7 +103,7 @@ function EditableConfigurationPromptValidationFeedback({
 }) {
   if (state.promptValidationState.status === "loading") {
     return (
-      <p className={cx("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-ink/70", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {messages.editableConfigurationPromptValidationLoading}
       </p>
     );
@@ -112,7 +112,7 @@ function EditableConfigurationPromptValidationFeedback({
   if (state.promptValidationState.status === "error") {
     return (
       <p
-        className={cx(
+        className={cn(
           "m-0 text-af-danger-ink",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
@@ -134,14 +134,14 @@ function EditableConfigurationPromptValidationFeedback({
       id={diagnosticsId}
       role="alert"
     >
-      <p className={cx("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.editableConfigurationPromptDiagnosticsSummary}
       </p>
-      <p className={cx("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+      <p className={cn("m-0 text-af-ink/62", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
         {messages.editableConfigurationPromptValidationDetail}
       </p>
       <div className="grid gap-2">
-        <h5 className={cx("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
+        <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
           {messages.editableConfigurationPromptDiagnosticsHeading}
         </h5>
         <ul className="m-0 grid list-none gap-2 p-0">
@@ -151,7 +151,7 @@ function EditableConfigurationPromptValidationFeedback({
               key={`${diagnostic.kind}:${diagnostic.path ?? diagnostic.sourceText ?? index}`}
             >
               <p
-                className={cx("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
+                className={cn("m-0 text-af-danger-ink", DASHBOARD_BODY_TEXT_CLASS)}
               >
                 {diagnosticLabel(diagnostic.kind, messages)}: {diagnostic.message}
               </p>
