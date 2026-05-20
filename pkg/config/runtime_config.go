@@ -32,6 +32,9 @@ func NewLoadedFactoryConfig(factoryDir string, factoryCfg *interfaces.FactoryCon
 	if err != nil {
 		return nil, fmt.Errorf("clone factory config: %w", err)
 	}
+	if err := applyRuntimeDefinitionsToClonedFactoryConfig(effectiveFactory, runtimeCfg); err != nil {
+		return nil, err
+	}
 
 	loaded := &LoadedFactoryConfig{
 		factoryDir: factoryDir,
@@ -40,29 +43,12 @@ func NewLoadedFactoryConfig(factoryDir string, factoryCfg *interfaces.FactoryCon
 	}
 
 	for i := range effectiveFactory.Workers {
-		worker := CloneWorkerConfig(effectiveFactory.Workers[i])
-		if runtimeCfg != nil {
-			if def, ok := runtimeCfg.Worker(worker.Name); ok && def != nil {
-				applyWorkerRuntimeDefinition(&worker, def)
-			}
-		}
-		effectiveFactory.Workers[i] = worker
-		workerCopy := CloneWorkerConfig(worker)
+		workerCopy := CloneWorkerConfig(effectiveFactory.Workers[i])
 		loaded.lookup.workers[workerCopy.Name] = &workerCopy
 	}
 
 	for i := range effectiveFactory.Workstations {
-		workstation := CloneWorkstationConfig(effectiveFactory.Workstations[i])
-		normalizeCanonicalWorkstationRuntime(&workstation)
-		if runtimeCfg != nil {
-			if def, ok := runtimeCfg.Workstation(workstation.Name); ok && def != nil {
-				if err := applyWorkstationRuntimeDefinition(&workstation, def); err != nil {
-					return nil, fmt.Errorf("normalize workstation %q config: %w", workstation.Name, err)
-				}
-			}
-		}
-		effectiveFactory.Workstations[i] = workstation
-		workstationCopy := CloneWorkstationConfig(workstation)
+		workstationCopy := CloneWorkstationConfig(effectiveFactory.Workstations[i])
 		loaded.lookup.workstations[workstationCopy.Name] = &workstationCopy
 	}
 
@@ -88,28 +74,13 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	if err := ApplySupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
-	runtimeDefs := newRuntimeDefinitionLookupMaps(len(factoryCfg.Workers), len(factoryCfg.Workstations))
-
 	inlineDefinitionsRequired := hasInlineRuntimeDefinitions(factoryCfg)
-	for _, workstation := range factoryCfg.Workstations {
-		def, err := runtimeWorkstationDefinition(resolvedFactoryDir, workstation, inlineDefinitionsRequired, workstationLoader)
-		if err != nil {
-			return nil, fmt.Errorf("load workstation %q config: %w", workstation.Name, err)
-		}
-		if def != nil {
-			runtimeDefs.workstations[workstation.Name] = def
-		}
-	}
-
-	for _, worker := range factoryCfg.Workers {
-		def, err := runtimeWorkerDefinition(resolvedFactoryDir, worker, inlineDefinitionsRequired)
-		if err != nil {
-			return nil, fmt.Errorf("load worker %q config: %w", worker.Name, err)
-		}
-		if def == nil {
-			continue
-		}
-		runtimeDefs.workers[worker.Name] = def
+	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(resolvedFactoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
+		RequireSplitDefinitions: inlineDefinitionsRequired,
+		WorkstationLoader:       workstationLoader,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	loaded, err := NewLoadedFactoryConfig(resolvedFactoryDir, factoryCfg, runtimeDefs)

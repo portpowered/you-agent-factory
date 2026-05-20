@@ -1024,6 +1024,83 @@ promptFile: prompt.md
 	}
 }
 
+func TestInlineRuntimeDefinitions_MatchesFactoryConfigWithLoadedRuntimeDefinitions(t *testing.T) {
+	factoryDir := t.TempDir()
+
+	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{
+			{
+				"name": "story",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+				},
+			},
+		},
+		"resources": []map[string]any{},
+		"workers": []map[string]any{{
+			"name":      "executor",
+			"type":      "MODEL_WORKER",
+			"model":     "canonical-model",
+			"stopToken": "CANONICAL_STOP",
+		}},
+		"workstations": []map[string]any{{
+			"name":      "execute-story",
+			"worker":    "executor",
+			"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+			"stopWords": []string{"CANONICAL"},
+		}},
+	})
+	writeRuntimeWorkerAgentsMD(t, factoryDir, "executor", `---
+type: SCRIPT_WORKER
+command: go
+args: ["test", "./..."]
+---
+Run tests.
+`)
+	writeRuntimeWorkstationAgentsMD(t, factoryDir, "execute-story", `---
+type: MODEL_WORKSTATION
+worker: executor
+promptFile: prompt.md
+stopWords: ["DONE"]
+limits:
+  maxRetries: 2
+---
+Fallback body.
+`)
+	if err := os.WriteFile(filepath.Join(factoryDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
+		t.Fatalf("write prompt file: %v", err)
+	}
+
+	factoryCfg, err := loadFactoryConfig(factoryDir)
+	if err != nil {
+		t.Fatalf("loadFactoryConfig: %v", err)
+	}
+	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
+		RequireSplitDefinitions: true,
+	})
+	if err != nil {
+		t.Fatalf("loadRuntimeDefinitionLookupMapsFromFactoryConfig: %v", err)
+	}
+
+	inlined, err := InlineRuntimeDefinitions(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
+		RequireSplitDefinitions: true,
+	})
+	if err != nil {
+		t.Fatalf("InlineRuntimeDefinitions: %v", err)
+	}
+	merged, err := FactoryConfigWithRuntimeDefinitions(factoryCfg, runtimeDefs)
+	if err != nil {
+		t.Fatalf("FactoryConfigWithRuntimeDefinitions: %v", err)
+	}
+
+	if !reflect.DeepEqual(inlined, merged) {
+		t.Fatalf("inline and lookup-merged factory configs differ\ninline: %#v\nlookup: %#v", inlined, merged)
+	}
+}
+
 func TestLoadRuntimeConfig_LoadsCronWorkstationConfig(t *testing.T) {
 	factoryDir := t.TempDir()
 
@@ -1783,33 +1860,33 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 }
 
 func TestNewLoadedFactoryConfig_MergesRuntimeDefinitionsOntoCanonicalConfig(t *testing.T) {
-	runtimeDefs := newRuntimeDefinitionLookupMaps(1, 1)
-	runtimeDefs.workers["executor"] = &interfaces.WorkerConfig{
-		Type:        interfaces.WorkerTypeScript,
-		Command:     "go",
-		Args:        []string{"test", "./..."},
-		Concurrency: 3,
-		Body:        "runtime worker body",
-	}
-	runtimeDefs.workstations["review"] = &interfaces.FactoryWorkstationConfig{
-		Type:           interfaces.WorkstationTypeModel,
-		WorkerTypeName: "runtime-worker",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
-		Timeout:        "5m",
-		Limits:         interfaces.WorkstationLimits{MaxRetries: 3},
-		StopWords:      []string{"RUNTIME"},
-		PromptTemplate: "Runtime prompt.",
-		Env:            map[string]string{"SHARED": "runtime", "RUNTIME_ONLY": "true"},
-	}
-
-	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), runtimeDefs)
+	loaded, err := NewLoadedFactoryConfig("factory-dir", canonicalMergeFactoryConfig(), canonicalMergeRuntimeDefinitions())
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
 	assertMergedWorker(t, loaded)
 	assertMergedWorkstation(t, loaded)
+}
+
+func TestFactoryConfigWithRuntimeDefinitions_MergesRuntimeDefinitionsOntoCanonicalConfig(t *testing.T) {
+	inlined, err := FactoryConfigWithRuntimeDefinitions(canonicalMergeFactoryConfig(), canonicalMergeRuntimeDefinitions())
+	if err != nil {
+		t.Fatalf("FactoryConfigWithRuntimeDefinitions: %v", err)
+	}
+
+	assertMergedWorkerConfig(t, inlined)
+	assertMergedWorkstationConfig(t, inlined)
+}
+
+func TestFactoryConfigWithRuntimeDefinitions_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAreMissing(t *testing.T) {
+	inlined, err := FactoryConfigWithRuntimeDefinitions(canonicalMergeFactoryConfig(), newRuntimeDefinitionLookupMaps(0, 0))
+	if err != nil {
+		t.Fatalf("FactoryConfigWithRuntimeDefinitions: %v", err)
+	}
+
+	assertCanonicalMergeWorkerConfig(t, inlined)
+	assertCanonicalMergeWorkstationConfig(t, inlined)
 }
 
 func TestNewLoadedFactoryConfig_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAreMissing(t *testing.T) {
@@ -2016,6 +2093,29 @@ func canonicalMergeFactoryConfig() *interfaces.FactoryConfig {
 	}
 }
 
+func canonicalMergeRuntimeDefinitions() interfaces.RuntimeDefinitionLookup {
+	runtimeDefs := newRuntimeDefinitionLookupMaps(1, 1)
+	runtimeDefs.workers["executor"] = &interfaces.WorkerConfig{
+		Type:        interfaces.WorkerTypeScript,
+		Command:     "go",
+		Args:        []string{"test", "./..."},
+		Concurrency: 3,
+		Body:        "runtime worker body",
+	}
+	runtimeDefs.workstations["review"] = &interfaces.FactoryWorkstationConfig{
+		Type:           interfaces.WorkstationTypeModel,
+		WorkerTypeName: "runtime-worker",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
+		Timeout:        "5m",
+		Limits:         interfaces.WorkstationLimits{MaxRetries: 3},
+		StopWords:      []string{"RUNTIME"},
+		PromptTemplate: "Runtime prompt.",
+		Env:            map[string]string{"SHARED": "runtime", "RUNTIME_ONLY": "true"},
+	}
+	return runtimeDefs
+}
+
 func canonicalMergeWorkstation() interfaces.FactoryWorkstationConfig {
 	return interfaces.FactoryWorkstationConfig{
 		ID:               "review-id",
@@ -2051,6 +2151,20 @@ func assertMergedWorker(t *testing.T, loaded *LoadedFactoryConfig) {
 	}
 }
 
+func assertMergedWorkerConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+	if cfg == nil || len(cfg.Workers) == 0 {
+		t.Fatalf("expected merged worker config, got %#v", cfg)
+	}
+	worker := cfg.Workers[0]
+	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "go" || worker.Concurrency != 3 {
+		t.Fatalf("runtime worker fields did not override canonical fields: %#v", worker)
+	}
+	if worker.Model != "canonical-model" || worker.StopToken != "CANONICAL_STOP" || worker.Timeout != "20m" {
+		t.Fatalf("canonical worker fields without runtime equivalents were not preserved: %#v", worker)
+	}
+}
+
 func assertMergedWorkstation(t *testing.T, loaded *LoadedFactoryConfig) {
 	t.Helper()
 	workstation, ok := loaded.Workstation("review")
@@ -2074,12 +2188,60 @@ func assertMergedWorkstation(t *testing.T, loaded *LoadedFactoryConfig) {
 	}
 }
 
+func assertMergedWorkstationConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+	if cfg == nil || len(cfg.Workstations) == 0 {
+		t.Fatalf("expected merged workstation config, got %#v", cfg)
+	}
+	workstation := cfg.Workstations[0]
+	if workstation.Inputs[0].StateName != "ready" || workstation.Outputs[0].StateName != "approved" {
+		t.Fatalf("runtime workstation states did not override canonical states: %#v", workstation)
+	}
+	if workstation.ID != "review-id" || workstation.Kind != interfaces.WorkstationKindCron || workstation.Cron.Schedule != "*/5 * * * *" {
+		t.Fatalf("canonical workstation topology fields were not preserved: %#v", workstation)
+	}
+	if workstation.Limits.MaxRetries != 3 || workstation.Limits.MaxExecutionTime != "5m" {
+		t.Fatalf("workstation limits were not merged: %#v", workstation.Limits)
+	}
+	if workstation.Timeout != "" {
+		t.Fatalf("expected canonical workstation timeout alias to be cleared, got %#v", workstation)
+	}
+	if workstation.Env["CANONICAL_ONLY"] != "true" || workstation.Env["SHARED"] != "runtime" || workstation.Env["RUNTIME_ONLY"] != "true" {
+		t.Fatalf("workstation env was not merged with runtime override: %#v", workstation.Env)
+	}
+}
+
+func assertCanonicalMergeWorkerConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+	if cfg == nil || len(cfg.Workers) == 0 {
+		t.Fatalf("expected canonical worker config, got %#v", cfg)
+	}
+	worker := cfg.Workers[0]
+	if worker.Type != interfaces.WorkerTypeModel || worker.Model != "canonical-model" {
+		t.Fatalf("canonical worker fields were not preserved: %#v", worker)
+	}
+}
+
 func assertCanonicalMergeWorkstation(t *testing.T, lookup interfaces.RuntimeDefinitionLookup) {
 	t.Helper()
 	workstation, ok := lookup.Workstation("review")
 	if !ok {
 		t.Fatal("expected canonical workstation")
 	}
+	if workstation.Inputs[0].StateName != "init" || workstation.Outputs[0].StateName != "failed" {
+		t.Fatalf("canonical workstation states were not preserved: %#v", workstation)
+	}
+	if workstation.PromptTemplate != "Canonical prompt." || workstation.Timeout != "" || workstation.Limits.MaxExecutionTime != "40m" {
+		t.Fatalf("canonical workstation runtime fields were not preserved: %#v", workstation)
+	}
+}
+
+func assertCanonicalMergeWorkstationConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+	if cfg == nil || len(cfg.Workstations) == 0 {
+		t.Fatalf("expected canonical workstation config, got %#v", cfg)
+	}
+	workstation := cfg.Workstations[0]
 	if workstation.Inputs[0].StateName != "init" || workstation.Outputs[0].StateName != "failed" {
 		t.Fatalf("canonical workstation states were not preserved: %#v", workstation)
 	}
