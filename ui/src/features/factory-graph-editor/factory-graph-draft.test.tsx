@@ -275,6 +275,98 @@ describe("factory graph draft state", () => {
     );
   });
 
+  it("replaces workstation worker assignments in the pending definition without introducing validation errors", () => {
+    const draft = createEmptyFactoryGraphDraft();
+    draft.additions.workers.push({
+      model: "gpt-5-mini",
+      name: "reviewer",
+      type: "MODEL_WORKER",
+    });
+    draft.edgeChanges.removals.push({
+      kind: "worker-assignment",
+      source: {
+        kind: "worker",
+        name: "writer",
+      },
+      target: {
+        kind: "workstation",
+        name: "draft",
+      },
+    });
+    draft.edgeChanges.additions.push({
+      kind: "worker-assignment",
+      source: {
+        kind: "worker",
+        name: "reviewer",
+      },
+      target: {
+        kind: "workstation",
+        name: "draft",
+      },
+    });
+
+    const pendingFactoryDefinition = buildPendingFactoryDefinition(
+      baseFactoryDefinition,
+      draft,
+    );
+    const validationErrors = validateFactoryGraphDraft(
+      baseFactoryDefinition,
+      draft,
+    );
+
+    expect(
+      pendingFactoryDefinition?.workstations?.find(
+        (workstation) => workstation.name === "draft",
+      ),
+    ).toMatchObject({
+      body: "Draft the story.",
+      name: "draft",
+      worker: "reviewer",
+    });
+    expect(validationErrors).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "MISSING_REQUIRED_FIELD",
+          field: "worker",
+        }),
+      ]),
+    );
+  });
+
+  it("returns null for save-building when the final workstation worker assignment is removed without a replacement", () => {
+    const draft = createEmptyFactoryGraphDraft();
+    draft.edgeChanges.removals.push({
+      kind: "worker-assignment",
+      source: {
+        kind: "worker",
+        name: "writer",
+      },
+      target: {
+        kind: "workstation",
+        name: "draft",
+      },
+    });
+
+    const validationErrors = validateFactoryGraphDraft(
+      baseFactoryDefinition,
+      draft,
+    );
+
+    expect(validationErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "MISSING_REQUIRED_FIELD",
+          field: "worker",
+          target: {
+            kind: "node",
+            id: "workstation:draft",
+          },
+        }),
+      ]),
+    );
+    expect(buildPendingFactoryDefinition(baseFactoryDefinition, draft)).toBeNull();
+  });
+
   it("keeps a dirty draft while newer editable-definition versions arrive", () => {
     const dirtyDraft = createEmptyFactoryGraphDraft();
     dirtyDraft.additions.workers.push({
