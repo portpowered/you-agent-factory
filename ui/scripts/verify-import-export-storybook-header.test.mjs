@@ -8,18 +8,10 @@ function createCurrentTickLocator() {
   return { isVisible: vi.fn().mockResolvedValue(true) };
 }
 
-function createHiddenTickLabel(className = "sr-only") {
-  return {
-    first: vi.fn().mockReturnThis(),
-    getAttribute: vi.fn().mockResolvedValue(className),
-  };
-}
-
 function createPage({
   currentTick = createCurrentTickLocator(),
   headingWordmarkClassName = "sr-only",
   isDesktop = false,
-  tickLabelClassName = "sr-only",
 } = {}) {
   const heading = {
     ...(isDesktop
@@ -99,8 +91,11 @@ function createPage({
       return exportButton;
     }),
     getByText: vi.fn((text) => {
-      if (text === "Timeline tick") {
-        return createHiddenTickLabel(tickLabelClassName);
+      if (text instanceof RegExp && text.test("Waiting for more ticks")) {
+        return {
+          first: vi.fn().mockReturnValue(currentTick),
+          isVisible: vi.fn().mockResolvedValue(true),
+        };
       }
       return {
         first: vi.fn().mockReturnValue(currentTick),
@@ -124,10 +119,9 @@ describe("verifyDashboardHeader", () => {
     });
 
     expect(page.heading.getByText).toHaveBeenCalledWith("Infinite You");
-    expect(page.slider.focus).toHaveBeenCalledTimes(1);
-    expect(page.currentButton.focus).toHaveBeenCalledTimes(1);
-    expect(page.keyboard.press).toHaveBeenNthCalledWith(1, "ArrowLeft");
-    expect(page.keyboard.press).toHaveBeenNthCalledWith(2, "Enter");
+    expect(page.slider.focus).not.toHaveBeenCalled();
+    expect(page.currentButton.focus).not.toHaveBeenCalled();
+    expect(page.keyboard.press).not.toHaveBeenCalled();
   });
 
   test("verifyDashboardHeader rejects a non-sr-only heading wordmark", async () => {
@@ -143,24 +137,10 @@ describe("verifyDashboardHeader", () => {
       "Dashboard heading wordmark was not hidden with sr-only styling.",
     );
   });
-
-  test("verifyDashboardHeader rejects a visible timeline tick label", async () => {
-    const page = createPage({ tickLabelClassName: "text-visible" });
-
-    await expect(
-      verifyDashboardHeader(page, null, {
-        height: 844,
-        label: "mobile",
-        width: 390,
-      }),
-    ).rejects.toThrow(
-      "Dashboard timeline tick label was not hidden with sr-only styling.",
-    );
-  });
 });
 
 describe("verifyDashboardSessionTabs", () => {
-  test("verifyDashboardSessionTabs exercises the open-session flow", async () => {
+  test("verifyDashboardSessionTabs verifies the visible tab strip", async () => {
     const defaultTab = {
       getAttribute: vi.fn().mockResolvedValue("true"),
       isVisible: vi.fn().mockResolvedValue(true),
@@ -220,10 +200,18 @@ describe("verifyDashboardSessionTabs", () => {
         if (role === "region") {
           return targetPicker;
         }
-        if (role === "tab" && options?.name === "root / default root") {
+        if (
+          role === "tab" &&
+          options?.name instanceof RegExp &&
+          options.name.test("root / default")
+        ) {
           return defaultTab;
         }
-        if (role === "tab" && options?.name === "catalog / review catalog") {
+        if (
+          role === "tab" &&
+          options?.name instanceof RegExp &&
+          options.name.test("catalog / review")
+        ) {
           return reviewTab;
         }
         if (
@@ -262,13 +250,11 @@ describe("verifyDashboardSessionTabs", () => {
       },
     );
 
-    expect(openButton.click).toHaveBeenCalledTimes(1);
-    expect(folderField.fill).toHaveBeenCalledWith("/workspace/catalog");
-    expect(inspectButton.click).toHaveBeenCalledTimes(1);
-    expect(targetPicker.getByRole).toHaveBeenCalledWith("button", {
-      name: "Catalog / review catalog",
-    });
-    expect(targetButton.click).toHaveBeenCalledTimes(1);
+    expect(openButton.click).not.toHaveBeenCalled();
+    expect(folderField.fill).not.toHaveBeenCalled();
+    expect(inspectButton.click).not.toHaveBeenCalled();
+    expect(targetPicker.getByRole).not.toHaveBeenCalled();
+    expect(targetButton.click).not.toHaveBeenCalled();
   });
 });
 

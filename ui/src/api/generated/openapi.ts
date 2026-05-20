@@ -336,6 +336,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/factories/{factory_id}/factory/~current/editable-definition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get editable current factory definition for one session
+         * @description Returns the complete current factory definition for graph editing together with version metadata for the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+         */
+        get: operations["getEditableCurrentFactoryDefinitionByFactoryId"];
+        /**
+         * Save editable current factory definition for one session
+         * @description Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+         */
+        put: operations["saveEditableCurrentFactoryDefinitionByFactoryId"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factory/~current/workstations/{workstation_name}/prompt-template-contract": {
         parameters: {
             query?: never;
@@ -2312,6 +2336,62 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEditableCurrentFactoryDefinitionByFactoryId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+                factory_id: components["parameters"]["FactoryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Editable current factory definition and version metadata for the targeted session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableFactoryDefinition"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    saveEditableCurrentFactoryDefinitionByFactoryId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+                factory_id: components["parameters"]["FactoryID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveEditableFactoryDefinitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved editable factory definition and new version metadata for the targeted session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableFactoryDefinition"];
+                };
+            };
+            400: components["responses"]["SaveEditableFactoryDefinitionBadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SaveEditableFactoryDefinitionConflict"];
             500: components["responses"]["InternalError"];
         };
     };

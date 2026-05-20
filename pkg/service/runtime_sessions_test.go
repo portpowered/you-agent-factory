@@ -3,12 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -614,6 +617,111 @@ func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for restarted service shutdown")
+	}
+}
+
+func TestFactoryService_SaveEditableFactoryDefinitionForSession_ReplacesOnlyTargetedSession(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+
+	betaSessionID, err := svc.openFactorySession(context.Background(), betaDir)
+	if err != nil {
+		t.Fatalf("openFactorySession(beta): %v", err)
+	}
+	waitForSessionRuntimeStatus(t, svc, betaSessionID, interfaces.RuntimeStatusIdle, time.Second, "beta runtime")
+
+	editable, err := svc.GetEditableFactoryDefinitionForSession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetEditableFactoryDefinitionForSession(beta): %v", err)
+	}
+	if editable.FactoryDefinition.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("beta editable factory name = %q, want beta", editable.FactoryDefinition.Name)
+	}
+
+	replacement := serviceNamedFactoryContractWithWorkType(t, "beta", "story")
+	saved, err := svc.SaveEditableFactoryDefinitionForSession(context.Background(), betaSessionID, factoryapi.SaveEditableFactoryDefinitionRequest{
+		BaseVersion:       &editable.Version,
+		FactoryDefinition: replacement,
+	})
+	if err != nil {
+		t.Fatalf("SaveEditableFactoryDefinitionForSession(beta): %v", err)
+	}
+	if saved.FactoryDefinition.WorkTypes == nil || len(*saved.FactoryDefinition.WorkTypes) != 1 || (*saved.FactoryDefinition.WorkTypes)[0].Name != "story" {
+		t.Fatalf("saved beta work types = %#v, want story", saved.FactoryDefinition.WorkTypes)
+	}
+
+	betaCurrent, err := svc.GetCurrentNamedFactoryForSession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactoryForSession(beta) after save: %v", err)
+	}
+	if betaCurrent.WorkTypes == nil || len(*betaCurrent.WorkTypes) != 1 || (*betaCurrent.WorkTypes)[0].Name != "story" {
+		t.Fatalf("beta current work types after save = %#v, want story", betaCurrent.WorkTypes)
+	}
+
+	defaultCurrent, err := svc.GetCurrentNamedFactoryForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactoryForSession(default) after beta save: %v", err)
+	}
+	if defaultCurrent.Name != "alpha" {
+		t.Fatalf("default current factory name after beta save = %q, want alpha", defaultCurrent.Name)
+	}
+	if defaultCurrent.WorkTypes == nil || len(*defaultCurrent.WorkTypes) != 1 || (*defaultCurrent.WorkTypes)[0].Name != "task" {
+		t.Fatalf("default current work types after beta save = %#v, want unchanged task", defaultCurrent.WorkTypes)
+	}
+
+	assertCurrentFactoryPointer(t, rootDir, "alpha", "default session pointer after beta editable save")
+	betaConfig, err := config.LoadRuntimeConfig(betaDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(beta) after save: %v", err)
+	}
+	if betaConfig.FactoryConfig().WorkTypes == nil || len(betaConfig.FactoryConfig().WorkTypes) != 1 || betaConfig.FactoryConfig().WorkTypes[0].Name != "story" {
+		t.Fatalf("persisted beta work types after save = %#v, want story", betaConfig.FactoryConfig().WorkTypes)
+	}
+
+	legacyCurrent, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory after beta save: %v", err)
+	}
+	if legacyCurrent.Name != "alpha" {
+		t.Fatalf("legacy current factory name after beta save = %q, want alpha", legacyCurrent.Name)
+	}
+
+	if _, err := svc.GetEditableFactoryDefinitionForSession(context.Background(), "missing-session"); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("GetEditableFactoryDefinitionForSession(missing) error = %v, want factory session not found", err)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
 	}
 }
 

@@ -1564,10 +1564,18 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 }
 
 func (fs *FactoryService) requireFreshEditableFactoryVersion(baseVersion *factoryapi.HybridLogicalTimestamp, name factoryapi.FactoryName) error {
+	rootDir := fs.factoryRootDir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
+	}
+	return fs.requireFreshEditableFactoryVersionAtRoot(baseVersion, rootDir, name)
+}
+
+func (fs *FactoryService) requireFreshEditableFactoryVersionAtRoot(baseVersion *factoryapi.HybridLogicalTimestamp, rootDir string, name factoryapi.FactoryName) error {
 	if baseVersion == nil {
 		return nil
 	}
-	currentVersion, err := fs.currentFactoryDefinitionVersion(name)
+	currentVersion, err := fs.currentFactoryDefinitionVersionAtRoot(rootDir, name)
 	if err != nil {
 		return err
 	}
@@ -1855,7 +1863,10 @@ func (fs *FactoryService) currentFactoryDefinitionVersion(name factoryapi.Factor
 	if rootDir == "" && fs.cfg != nil {
 		rootDir = fs.cfg.Dir
 	}
+	return fs.currentFactoryDefinitionVersionAtRoot(rootDir, name)
+}
 
+func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
 	factoryDir := rootDir
 	if name != apisurface.DefaultCurrentFactoryName {
 		resolved, err := factoryconfig.ResolveNamedFactoryDir(rootDir, string(name))

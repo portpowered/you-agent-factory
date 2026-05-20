@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"go.uber.org/zap"
 )
 
 const defaultFactorySessionID = "~default"
@@ -263,11 +265,104 @@ func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, 
 }
 
 func (fs *FactoryService) GetCurrentNamedFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
 	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return fs.serializeNamedFactory(sessionFactoryName(fs.factoryRootDir, runtimeCfg), runtimeCfg, true)
+	return fs.serializeNamedFactory(sessionFactoryName(sessionFactoryRootDir(fs, session), runtimeCfg), runtimeCfg, true)
+}
+
+func (fs *FactoryService) GetEditableFactoryDefinitionForSession(ctx context.Context, sessionID string) (factoryapi.EditableFactoryDefinition, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	current, err := fs.GetCurrentNamedFactoryForSession(ctx, sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	version, err := fs.currentFactoryDefinitionVersionAtRoot(sessionFactoryRootDir(fs, session), current.Name)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	return factoryapi.EditableFactoryDefinition{
+		FactoryDefinition: current,
+		Version:           version,
+	}, nil
+}
+
+func (fs *FactoryService) SaveEditableFactoryDefinitionForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.SaveEditableFactoryDefinitionRequest,
+) (factoryapi.EditableFactoryDefinition, error) {
+	if fs == nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("factory service is required")
+	}
+
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	current, err := fs.GetCurrentNamedFactoryForSession(ctx, sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if current.Name == apisurface.DefaultCurrentFactoryName {
+		return factoryapi.EditableFactoryDefinition{}, ErrCurrentNamedFactoryNotFound
+	}
+	if request.FactoryDefinition.Name != current.Name {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: editable save must preserve current factory name %q", ErrInvalidNamedFactoryName, current.Name)
+	}
+	if err := apisurface.ValidateWritableNamedFactoryName(request.FactoryDefinition.Name); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if err := validateEditableFactoryTopology(request.FactoryDefinition); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	payload, err := json.Marshal(request.FactoryDefinition)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("marshal editable factory payload: %w", err)
+	}
+
+	fs.activationMu.Lock()
+	defer fs.activationMu.Unlock()
+
+	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	sessionRootDir := sessionFactoryRootDir(fs, session)
+	if err := fs.requireFreshEditableFactoryVersionAtRoot(request.BaseVersion, sessionRootDir, current.Name); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	factoryDir, err := factoryconfig.ReplaceNamedFactory(sessionRootDir, string(request.FactoryDefinition.Name), payload)
+	if err != nil {
+		switch {
+		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
+			return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
+		default:
+			return factoryapi.EditableFactoryDefinition{}, err
+		}
+	}
+
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, sessionRootDir, factoryDir, sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
+	}
+	if err := fs.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	if err := fs.replaceSessionRuntime(ctx, session, string(request.FactoryDefinition.Name), replacement); err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+
+	return fs.GetEditableFactoryDefinitionForSession(ctx, sessionID)
 }
 
 func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
@@ -469,6 +564,103 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 		return err
 	}
 	return nil
+}
+
+func (fs *FactoryService) requireIdleRuntimeForSession(
+	ctx context.Context,
+	sessionID string,
+) error {
+	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("read session runtime status: %w", err)
+	}
+	if snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
+		return fmt.Errorf("%w: current runtime status is %s", ErrFactoryActivationRequiresIdle, snapshot.RuntimeStatus)
+	}
+	if snapshotHasActiveWork(snapshot) {
+		return fmt.Errorf("%w: current runtime has active work", ErrFactoryActivationRequiresIdle)
+	}
+	return nil
+}
+
+//nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.
+func (fs *FactoryService) replaceSessionRuntime(
+	ctx context.Context,
+	session *liveFactorySession,
+	name string,
+	replacement *replacementFactoryRuntime,
+) error {
+	if session == nil || session.handle == nil {
+		return fmt.Errorf("%w: session handle is unavailable", apisurface.ErrFactorySessionNotFound)
+	}
+	runState := fs.currentRunState()
+	serviceCtx := ctx
+	if runState != nil && runState.ctx != nil {
+		serviceCtx = runState.ctx
+	}
+	isActiveSession := runState != nil && runState.sessionID == session.id
+
+	restoreCurrentSidecars := false
+	serviceMode := fs.cfg != nil && runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
+	if serviceMode {
+		fs.stopLiveRuntimeSidecars(session.handle)
+		restoreCurrentSidecars = true
+		defer func() {
+			if restoreCurrentSidecars {
+				fs.restoreLiveRuntimeSidecars(&serviceRunState{ctx: serviceCtx, runtime: session.handle})
+			}
+		}()
+	}
+
+	replacementHandle := fs.startLiveRuntime(serviceCtx, replacement)
+	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
+		_ = fs.stopLiveRuntime(replacementHandle)
+		return fmt.Errorf("start replacement runtime: %w", err)
+	}
+	if serviceMode {
+		if err := fs.startLiveRuntimeSidecars(serviceCtx, replacementHandle); err != nil {
+			_ = fs.stopLiveRuntime(replacementHandle)
+			return fmt.Errorf("start replacement runtime sidecars: %w", err)
+		}
+	}
+
+	fs.publishFactoryChangeEvent(ctx, session.handle, replacement)
+	restoreCurrentSidecars = false
+	fs.sessions.upsert(newLiveFactorySession(
+		session.id,
+		replacement.dir,
+		session.folderPath,
+		session.target,
+		replacementHandle,
+		session.isDefault,
+		session.project,
+	), isActiveSession)
+	if isActiveSession {
+		fs.swapActiveRuntime(replacement)
+		fs.setRunState(serviceCtx, session.id, replacementHandle)
+	}
+	if err := fs.stopLiveRuntime(session.handle); err != nil && !errors.Is(err, context.Canceled) {
+		fs.logger.Warn("prior session runtime shutdown failed", zap.Error(err), zap.String("session_id", session.id))
+	}
+	return nil
+}
+
+func sessionFactoryRootDir(fs *FactoryService, session *liveFactorySession) string {
+	if session == nil {
+		return ""
+	}
+	rootDir := session.folderPath
+	if session.folderPath == "" {
+		return rootDir
+	}
+	if session.factoryDir == "" || !sameFactoryDir(session.factoryDir, session.folderPath) {
+		return rootDir
+	}
+	serviceRoot := filepath.Clean(fs.factoryRootDir)
+	if serviceRoot != "" && filepath.Dir(session.factoryDir) == serviceRoot {
+		return serviceRoot
+	}
+	return rootDir
 }
 
 func (fs *FactoryService) nextLiveSessionAfterStop(sessionID string) *liveFactorySession {

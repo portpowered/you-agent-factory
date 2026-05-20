@@ -149,6 +149,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		"/factory":                                 {"post"},
 		"/factory/~current":                        {"get"},
 		"/factories/{factory_id}/factory/~current": {"get"},
+		"/factories/{factory_id}/factory/~current/editable-definition": {"get", "put"},
 	}
 	for path, methods := range requiredOperations {
 		pathItem, ok := paths[path].(map[string]any)
@@ -608,6 +609,16 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 	assertResponseRef(t, saveEditableFactory, "400", "#/components/responses/SaveEditableFactoryDefinitionBadRequest")
 	assertResponseRef(t, saveEditableFactory, "409", "#/components/responses/SaveEditableFactoryDefinitionConflict")
 	assertResponseRef(t, saveEditableFactory, "404", "#/components/responses/CurrentFactoryNotFound")
+
+	getEditableFactoryBySession := pathOperation(t, paths, "/factories/{factory_id}/factory/~current/editable-definition", "get")
+	assertResponseSchemaRef(t, getEditableFactoryBySession, "200", "#/components/schemas/EditableFactoryDefinition")
+	assertResponseRef(t, getEditableFactoryBySession, "404", "#/components/responses/NotFound")
+
+	saveEditableFactoryBySession := pathOperation(t, paths, "/factories/{factory_id}/factory/~current/editable-definition", "put")
+	assertResponseSchemaRef(t, saveEditableFactoryBySession, "200", "#/components/schemas/EditableFactoryDefinition")
+	assertResponseRef(t, saveEditableFactoryBySession, "400", "#/components/responses/SaveEditableFactoryDefinitionBadRequest")
+	assertResponseRef(t, saveEditableFactoryBySession, "409", "#/components/responses/SaveEditableFactoryDefinitionConflict")
+	assertResponseRef(t, saveEditableFactoryBySession, "404", "#/components/responses/NotFound")
 
 	components, ok := doc["components"].(map[string]any)
 	if !ok {

@@ -1824,6 +1824,9 @@ type ListWorkParams struct {
 // ListWorkParamsSortBy defines parameters for ListWork.
 type ListWorkParamsSortBy string
 
+// SaveEditableCurrentFactoryDefinitionByFactoryIdJSONRequestBody defines body for SaveEditableCurrentFactoryDefinitionByFactoryId for application/json ContentType.
+type SaveEditableCurrentFactoryDefinitionByFactoryIdJSONRequestBody = SaveEditableFactoryDefinitionRequest
+
 // SubmitWorkByFactoryIdJSONRequestBody defines body for SubmitWorkByFactoryId for application/json ContentType.
 type SubmitWorkByFactoryIdJSONRequestBody = SubmitWorkRequest
 
@@ -2269,6 +2272,12 @@ type ServerInterface interface {
 	// Get current factory for one session
 	// (GET /factories/{factory_id}/factory/~current)
 	GetCurrentFactoryByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
+	// Get editable current factory definition for one session
+	// (GET /factories/{factory_id}/factory/~current/editable-definition)
+	GetEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
+	// Save editable current factory definition for one session
+	// (PUT /factories/{factory_id}/factory/~current/editable-definition)
+	SaveEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
 	// Get runtime status for one session
 	// (GET /factories/{factory_id}/status)
 	GetStatusByFactoryId(w http.ResponseWriter, r *http.Request, factoryId FactoryID)
@@ -2395,6 +2404,56 @@ func (siw *ServerInterfaceWrapper) GetCurrentFactoryByFactoryId(w http.ResponseW
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentFactoryByFactoryId(w, r, factoryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEditableCurrentFactoryDefinitionByFactoryId operation middleware
+func (siw *ServerInterfaceWrapper) GetEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "factory_id" -------------
+	var factoryId FactoryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEditableCurrentFactoryDefinitionByFactoryId(w, r, factoryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SaveEditableCurrentFactoryDefinitionByFactoryId operation middleware
+func (siw *ServerInterfaceWrapper) SaveEditableCurrentFactoryDefinitionByFactoryId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "factory_id" -------------
+	var factoryId FactoryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory_id", mux.Vars(r)["factory_id"], &factoryId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SaveEditableCurrentFactoryDefinitionByFactoryId(w, r, factoryId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3068,6 +3127,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/events", wrapper.GetEventsByFactoryId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/factory/~current", wrapper.GetCurrentFactoryByFactoryId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/factory/~current/editable-definition", wrapper.GetEditableCurrentFactoryDefinitionByFactoryId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/factory/~current/editable-definition", wrapper.SaveEditableCurrentFactoryDefinitionByFactoryId).Methods("PUT")
 
 	r.HandleFunc(options.BaseURL+"/factories/{factory_id}/status", wrapper.GetStatusByFactoryId).Methods("GET")
 

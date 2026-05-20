@@ -34,6 +34,8 @@ type SessionAPISurface interface {
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentNamedFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
+	GetEditableFactoryDefinitionForSession(ctx context.Context, sessionID string) (factoryapi.EditableFactoryDefinition, error)
+	SaveEditableFactoryDefinitionForSession(ctx context.Context, sessionID string, request factoryapi.SaveEditableFactoryDefinitionRequest) (factoryapi.EditableFactoryDefinition, error)
 }
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was

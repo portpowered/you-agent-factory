@@ -1288,6 +1288,50 @@ func TestGetEditableCurrentFactoryDefinition_ReturnsDefinitionAndVersion(t *test
 	}
 }
 
+func TestGetEditableCurrentFactoryDefinitionByFactoryId_ReturnsSessionDefinitionAndVersion(t *testing.T) {
+	versionTime := time.Date(2026, 5, 18, 10, 35, 0, 0, time.UTC)
+	mf := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-2": {
+				CurrentNamedFactory: &factoryapi.Factory{
+					Name: factoryapi.FactoryName("beta"),
+					WorkTypes: &[]factoryapi.WorkType{{
+						Name: "beta-task",
+						States: []factoryapi.WorkState{
+							{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+							{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+						},
+					}},
+				},
+				EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{
+					Logical:  43,
+					Physical: versionTime,
+				},
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodGet, "/factories/session-2/factory/~current/editable-definition", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var editable factoryapi.EditableFactoryDefinition
+	if err := json.NewDecoder(rec.Body).Decode(&editable); err != nil {
+		t.Fatalf("decode editable factory response: %v", err)
+	}
+	if editable.FactoryDefinition.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("editable factory name = %q, want beta", editable.FactoryDefinition.Name)
+	}
+	if editable.Version.Logical != 43 || !editable.Version.Physical.Equal(versionTime) {
+		t.Fatalf("editable version = %#v, want logical 43 physical %s", editable.Version, versionTime)
+	}
+}
+
 func TestSaveEditableCurrentFactoryDefinition_SubmitsCompleteDefinitionAndReturnsVersion(t *testing.T) {
 	versionTime := time.Date(2026, 5, 18, 10, 45, 0, 0, time.UTC)
 	mf := &testutil.MockFactory{
@@ -1323,6 +1367,76 @@ func TestSaveEditableCurrentFactoryDefinition_SubmitsCompleteDefinitionAndReturn
 	if editable.Version.Logical != 44 || !editable.Version.Physical.Equal(versionTime) {
 		t.Fatalf("save editable version = %#v, want logical 44 physical %s", editable.Version, versionTime)
 	}
+}
+
+func TestSaveEditableCurrentFactoryDefinitionByFactoryId_SubmitsToTargetedSessionOnly(t *testing.T) {
+	versionTime := time.Date(2026, 5, 18, 10, 50, 0, 0, time.UTC)
+	defaultFactory := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{Name: factoryapi.FactoryName("alpha")},
+		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{
+			Logical:  10,
+			Physical: versionTime,
+		},
+	}
+	sessionFactory := &testutil.MockFactory{
+		CurrentNamedFactory: &factoryapi.Factory{Name: factoryapi.FactoryName("beta")},
+		EditableFactoryVersion: factoryapi.HybridLogicalTimestamp{
+			Logical:  45,
+			Physical: versionTime,
+		},
+	}
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"~default":  defaultFactory,
+			"session-2": sessionFactory,
+		},
+	})
+
+	body := `{"factoryDefinition":{"name":"beta","metadata":{"owner":"graph-editor"},"workTypes":[{"name":"beta-task","states":[{"name":"init","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}]}}`
+	req := httptest.NewRequest(http.MethodPut, "/factories/session-2/factory/~current/editable-definition", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(defaultFactory.SavedEditableFactories) != 0 {
+		t.Fatalf("default session save count = %d, want 0", len(defaultFactory.SavedEditableFactories))
+	}
+	if len(sessionFactory.SavedEditableFactories) != 1 {
+		t.Fatalf("session save count = %d, want 1", len(sessionFactory.SavedEditableFactories))
+	}
+	saved := sessionFactory.SavedEditableFactories[0].FactoryDefinition
+	if saved.Metadata == nil || (*saved.Metadata)["owner"] != "graph-editor" {
+		t.Fatalf("saved metadata = %#v, want owner graph-editor", saved.Metadata)
+	}
+
+	var editable factoryapi.EditableFactoryDefinition
+	if err := json.NewDecoder(rec.Body).Decode(&editable); err != nil {
+		t.Fatalf("decode save editable factory response: %v", err)
+	}
+	if editable.FactoryDefinition.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("saved factory name = %q, want beta", editable.FactoryDefinition.Name)
+	}
+	if editable.Version.Logical != 45 || !editable.Version.Physical.Equal(versionTime) {
+		t.Fatalf("save editable version = %#v, want logical 45 physical %s", editable.Version, versionTime)
+	}
+}
+
+func TestEditableCurrentFactoryDefinitionByFactoryId_UnknownSessionReturnsNotFound(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{}})
+
+	getReq := httptest.NewRequest(http.MethodGet, "/factories/missing-session/factory/~current/editable-definition", nil)
+	getRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(getRec, getReq)
+	assertJSONError(t, getRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
+
+	putReq := httptest.NewRequest(http.MethodPut, "/factories/missing-session/factory/~current/editable-definition", bytes.NewBufferString(`{"factoryDefinition":{"name":"beta"}}`))
+	putReq.Header.Set("Content-Type", "application/json")
+	putRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(putRec, putReq)
+	assertJSONError(t, putRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 }
 
 func TestSaveEditableCurrentFactoryDefinition_MapsValidationErrorsToTargets(t *testing.T) {

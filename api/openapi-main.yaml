@@ -516,6 +516,55 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/{factory_id}/factory/~current/editable-definition:
+    get:
+      tags:
+        - Factory
+      operationId: getEditableCurrentFactoryDefinitionByFactoryId
+      summary: Get editable current factory definition for one session
+      description: Returns the complete current factory definition for graph editing together with version metadata for the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+      responses:
+        '200':
+          description: Editable current factory definition and version metadata for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditableFactoryDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags:
+        - Factory
+      operationId: saveEditableCurrentFactoryDefinitionByFactoryId
+      summary: Save editable current factory definition for one session
+      description: Submits one complete replacement for the current factory definition owned by the explicitly selected live session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      parameters:
+        - $ref: '#/components/parameters/FactoryID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveEditableFactoryDefinitionRequest'
+      responses:
+        '200':
+          description: Saved editable factory definition and new version metadata for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditableFactoryDefinition'
+        '400':
+          $ref: '#/components/responses/SaveEditableFactoryDefinitionBadRequest'
+        '409':
+          $ref: '#/components/responses/SaveEditableFactoryDefinitionConflict'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory/~current/workstations/{workstation_name}/prompt-template-contract:
     get:
       tags:

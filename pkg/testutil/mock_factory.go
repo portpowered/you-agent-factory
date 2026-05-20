@@ -254,6 +254,26 @@ func (m *MockFactory) GetCurrentNamedFactoryForSession(ctx context.Context, sess
 	return session.GetCurrentNamedFactory(ctx)
 }
 
+func (m *MockFactory) GetEditableFactoryDefinitionForSession(ctx context.Context, sessionID string) (factoryapi.EditableFactoryDefinition, error) {
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	return session.GetEditableFactoryDefinition(ctx)
+}
+
+func (m *MockFactory) SaveEditableFactoryDefinitionForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.SaveEditableFactoryDefinitionRequest,
+) (factoryapi.EditableFactoryDefinition, error) {
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return factoryapi.EditableFactoryDefinition{}, err
+	}
+	return session.SaveEditableFactoryDefinition(ctx, request)
+}
+
 func (m *MockFactory) sessionFactory(sessionID string) (*MockFactory, error) {
 	if m == nil || m.SessionFactories == nil {
 		return nil, apisurface.ErrFactorySessionNotFound
