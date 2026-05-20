@@ -37,7 +37,7 @@ Use these canonical concept owners when you need the current contract.
   `factory.json`, `workers/`, `workstations/`, and `inputs/`.
 - [Resources](resources.md) explains top-level resource pools and the
   `{name, capacity}` requirements consumed by workers or workstations.
-- [Batch work](batch-work.md) explains the `FACTORY_REQUEST_BATCH` request
+- [Batch inputs](batch-inputs.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces and the
   JSON-versus-Markdown quoting rules.
@@ -48,8 +48,8 @@ Use these canonical concept owners when you need the current contract.
   examples, and run commands.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
-- [Batch inputs](batch-inputs.md) owns submitted batch payload fields and
-  dependency relations.
+- [Batch inputs](batch-inputs.md) owns submitted batch payload fields,
+  watched-file placement rules, and dependency relations.
 - [Prompt variables](prompt-variables.md) owns the complete variable list for
   prompts and rendered runtime fields.
 

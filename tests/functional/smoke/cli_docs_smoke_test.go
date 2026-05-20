@@ -23,7 +23,7 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "workstation", heading: "# Workstation", markers: []string{"inputs", "outputs", "LOGICAL_MOVE"}},
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot"}},
-	{name: "batch-work", heading: "# Batch Work", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "PARENT_CHILD"}},
+	{name: "batch-work", heading: "# Batch Work", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "docs/reference/batch-inputs.md"}},
 	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "text/template"}},
 }
 

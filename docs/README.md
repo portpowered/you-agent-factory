@@ -38,7 +38,7 @@ These are the fixed topic names accepted by `infinite-you docs <topic>`.
   - [Workers reference](reference/workers.md) owns worker types, worker-scoped runtime fields, and split `workers/<name>/AGENTS.md` placement.
 - [Config reference](reference/config.md) explains the canonical split layout, `factory.json`, and where worker, workstation, and input files live.
 - [Resources reference](reference/resources.md) explains top-level resource pools and workstation or worker resource requirements.
-- [Batch-work reference](reference/batch-work.md) explains `FACTORY_REQUEST_BATCH`, watched-file placement, and authored relation types.
+- [Batch inputs](reference/batch-inputs.md) explains `FACTORY_REQUEST_BATCH`, watched-file placement, and authored relation types.
 - [Templates reference](reference/templates.md) explains supported Go-template surfaces and the JSON-versus-Markdown quoting rule.
 - [Author workflows](reference/authoring-workflows.md) explains how to configure and run factory workflows.
 - [Author AGENTS.md](reference/authoring-agents-md.md) explains split `AGENTS.md` file shape, prompt placement, and authoring patterns.
