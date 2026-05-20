@@ -287,4 +287,4 @@ substitute for a visible workflow route to a named failed or terminal state.
 - [Workstations](../reference/workstations.md)
 - [Workers](../reference/workers.md)
 - [Work inputs](../reference/work.md)
-- [Prompt variables](../reference/prompt-variables.md)
+- [Templates](../reference/templates.md)

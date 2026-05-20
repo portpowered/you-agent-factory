@@ -136,7 +136,7 @@ The file `prompt.md` (in the same directory as `AGENTS.md`) contains the Go temp
 
 Workstation prompt bodies and `promptFile` contents are rendered with Go's
 `text/template` package. Use the common variables in examples, and use
-[Prompt Variables Reference](./prompt-variables.md) for the complete supported
+[Templates](./templates.md) for the complete supported
 surface.
 
 Single-input workstations usually read from the first token:
@@ -172,7 +172,7 @@ Second input: {{ (index .Inputs 1).Payload }}
 ```
 
 For the full variable reference and template-surface contract, see
-[Prompt Variables Reference](./prompt-variables.md). Older snake_case
+[Templates](./templates.md). Older snake_case
 frontmatter aliases remain compatibility-only input during migration. Canonical
 examples and preferred configs should use camelCase keys.
 
@@ -291,5 +291,5 @@ For complete current examples that include workers and workstations, see:
 - [Workers](workers.md) - worker field contract and backend settings
 - [Workstations](workstations.md) - workstation runtime fields, routing, and logical moves
 - [Authoring Factories](./authoring-factories.md) - factory sequencing and mock-worker checks
-- [Prompt Variables Reference](./prompt-variables.md) - complete variable listing with examples
+- [Templates](./templates.md) - complete variable listing, supported surfaces, and quoting examples
 - [Architecture](../internal/development/architecture.md) - engine design and subsystem details

@@ -11,6 +11,10 @@ script-worker arguments with Go `text/template` syntax. Template data comes
 from consumed input tokens under `.Inputs` and execution context under
 `.Context`.
 
+Use `docs/reference/templates.md` as the maintained canonical guide for the
+full template variable inventory, supported surfaces, and JSON-versus-Markdown
+quoting rules.
+
 ## Common Variables
 
 | Variable | Description |
@@ -30,6 +34,13 @@ from consumed input tokens under `.Inputs` and execution context under
 - Inline `promptTemplate` values
 - Workstation `workingDirectory`, `worktree`, and `env` values
 - Script-worker `args`
+
+## Variable Roots
+
+- `.Inputs` is the token-data root for payloads, tags, relations, retry
+  history, and per-input metadata.
+- `.Context` is the execution-context root for project, working directory,
+  artifact directory, and environment values.
 
 ## Quoting Rules
 

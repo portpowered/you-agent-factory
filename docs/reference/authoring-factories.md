@@ -364,5 +364,5 @@ If no entry matches, mock-worker mode returns the default accepted result.
 - [Batch Inputs](batch-inputs.md)
 - [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
 - [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
-- [Prompt Template Variables](prompt-variables.md)
+- [Templates](templates.md)
 - [README](../README.md)

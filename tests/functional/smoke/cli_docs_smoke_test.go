@@ -24,7 +24,7 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "workers", heading: "# Workers", markers: []string{"MODEL_WORKER", "SCRIPT_WORKER", "modelProvider"}},
 	{name: "resources", heading: "# Resources", markers: []string{"capacity", "workstations", "agent-slot"}},
 	{name: "batch-work", heading: "# Batch Work", markers: []string{"FACTORY_REQUEST_BATCH", "DEPENDS_ON", "docs/reference/batch-inputs.md"}},
-	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "text/template"}},
+	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "docs/reference/templates.md", "text/template"}},
 }
 
 func TestCLIDocsSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {

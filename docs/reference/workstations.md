@@ -412,7 +412,7 @@ With this authored shape, `config flatten` succeeds without a split workstation
 
 Workstation prompts, `workingDirectory`, `worktree`, and `env` values can use
 Go template syntax. Use [Templates](templates.md) for the shared template
-surface and JSON-versus-Markdown quoting rules.
+surface, complete variable inventory, and JSON-versus-Markdown quoting rules.
 
 ## Guards And Fan-In
 

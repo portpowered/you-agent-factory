@@ -16,7 +16,7 @@ complete customer-facing contract.
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Factory JSON and work configuration](work.md) |
 | `batch-work` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
-| `templates` | Template syntax quick reference | [Templates](templates.md) and [Prompt variables](prompt-variables.md) |
+| `templates` | Template authoring guide | [Templates](templates.md) |
 
 ## Canonical Concept Owners
 
@@ -39,16 +39,14 @@ Use these canonical concept owners when you need the current contract.
   `{name, capacity}` requirements consumed by workers or workstations.
 - [Batch inputs](batch-inputs.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.
-- [Templates](templates.md) explains the supported Go-template surfaces and the
-  JSON-versus-Markdown quoting rules.
+- [Templates](templates.md) explains the supported Go-template surfaces, the
+  full variable inventory, and the JSON-versus-Markdown quoting rules.
 - [Author factories](authoring-factories.md) keeps factory sequencing,
   examples, and run commands.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
 - [Batch inputs](batch-inputs.md) owns submitted batch payload fields,
   watched-file placement rules, and dependency relations.
-- [Prompt variables](prompt-variables.md) owns the complete variable list for
-  prompts and rendered runtime fields.
 
 ## Related
 
@@ -60,4 +58,3 @@ Use these canonical concept owners when you need the current contract.
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)
 - [Templates](templates.md)
-- [Prompt variables](prompt-variables.md)
