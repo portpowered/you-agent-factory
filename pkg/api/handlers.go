@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -43,6 +44,12 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "workTypeName is required", "BAD_REQUEST")
 		return
 	}
+	if err := validateGeneratedWorkContentAtPath(req.Content, "content"); err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+	}
 
 	payload, err := generatedPayloadToRawMessage(req.Payload)
 	if err != nil {
@@ -55,7 +62,7 @@ func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
 		TraceID:                factorypkg.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
-		Content:                generatedWorkContentToDomain(req.Content),
+		Content:                workcontent.PartsFromGenerated(req.Content),
 		Payload:                payload,
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
@@ -947,8 +954,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 	if req.Works != nil {
 		workRequest.Works = make([]interfaces.Work, 0, len(*req.Works))
 		for i, work := range *req.Works {
-			content, err := generatedWorkContentToDomainAtPath(work.Content, fmt.Sprintf("works[%d].content", i))
-			if err != nil {
+			if err := validateGeneratedWorkContentAtPath(work.Content, fmt.Sprintf("works[%d].content", i)); err != nil {
 				return interfaces.WorkRequest{}, err
 			}
 			workRequest.Works = append(workRequest.Works, interfaces.Work{
@@ -961,7 +967,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
 				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
 				TraceID:                  stringValue(work.TraceId),
-				Content:                  content,
+				Content:                  workcontent.PartsFromGenerated(work.Content),
 				Payload:                  work.Payload,
 				Tags:                     generatedStringMap(work.Tags),
 			})
@@ -979,14 +985,6 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 		}
 	}
 	return workRequest, nil
-}
-
-func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
-	parts, err := generatedWorkContentToDomainAtPath(content, "content")
-	if err != nil {
-		return nil
-	}
-	return parts
 }
 
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
@@ -1022,35 +1020,26 @@ func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factor
 	return &content
 }
 
-func generatedWorkContentToDomainAtPath(content *factoryapi.WorkContent, fieldPath string) ([]interfaces.WorkContentPart, error) {
+func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPath string) error {
 	if content == nil || len(*content) == 0 {
-		return nil, nil
+		return nil
 	}
 
-	parts := make([]interfaces.WorkContentPart, 0, len(*content))
 	for i, part := range *content {
 		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
 		textPart, textErr := part.AsWorkTextContentPart()
 		if textErr == nil && textPart.Type == factoryapi.WorkContentPartTypeText {
-			parts = append(parts, interfaces.WorkContentPart{
-				Type: interfaces.WorkContentPartTypeText,
-				Text: textPart.Text,
-			})
 			continue
 		}
 
 		imagePart, imageErr := part.AsWorkImageContentPart()
 		if imageErr == nil && imagePart.Type == factoryapi.WorkContentPartTypeImage {
-			parts = append(parts, interfaces.WorkContentPart{
-				Type: interfaces.WorkContentPartTypeImage,
-				File: imagePart.File,
-			})
 			continue
 		}
 
-		return nil, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text or image", pathPrefix)}
 	}
-	return parts, nil
+	return nil
 }
 
 type requestFieldValidationError struct {
