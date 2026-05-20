@@ -23,17 +23,17 @@ import {
 } from "./components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "./components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
-import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
-import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { reloadDashboardLayoutFromStorage } from "./features/bento";
+import { useDashboardBentoStore } from "./features/bento/state";
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
-import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "./features/current-selection/state";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
-} from "./features/dashboard/state/dashboardStreamStore";
-import { useExportDialogStore } from "./features/export/state/exportDialogStore";
-import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
-import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+} from "./features/dashboard/state";
+import { useExportDialogStore } from "./features/export/state";
+import type { WorldState } from "./features/timeline/state";
+import { useFactoryTimelineStore } from "./features/timeline/state";
 
 vi.mock("./features/current-factory-definition", async () => {
   const actual = await vi.importActual("./features/current-factory-definition");

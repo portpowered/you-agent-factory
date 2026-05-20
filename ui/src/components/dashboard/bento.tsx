@@ -1,2 +1,1 @@
-export * from "../../features/bento/agent-bento";
-
+export * from "../../features/bento";

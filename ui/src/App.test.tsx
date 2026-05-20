@@ -48,20 +48,20 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "./components/ui/dashboard-typography";
 import { formatDurationMillis } from "./components/ui/formatters";
-import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
-import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { reloadDashboardLayoutFromStorage } from "./features/bento";
+import { useDashboardBentoStore } from "./features/bento/state";
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
-import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "./features/current-selection/state";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
-} from "./features/dashboard/state/dashboardStreamStore";
+} from "./features/dashboard/state";
 import * as factoryPngExportModule from "./features/export/factory-png-export";
-import { useExportDialogStore } from "./features/export/state/exportDialogStore";
+import { useExportDialogStore } from "./features/export/state";
 import type { FactoryPngImportValue } from "./features/import";
 import * as factoryPngImportModule from "./features/import/factory-png-import";
-import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
-import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+import type { WorldState } from "./features/timeline/state";
+import { useFactoryTimelineStore } from "./features/timeline/state";
 import {
   TraceDrilldownWidget,
   useTraceDrilldown,
