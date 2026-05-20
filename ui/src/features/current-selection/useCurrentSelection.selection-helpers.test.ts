@@ -469,6 +469,9 @@ describe("useCurrentSelection.selection-helpers", () => {
         inference_attempts: [],
         outcome: "FAILED",
         responded_request_count: 1,
+        response_view: {
+          end_time: "2026-04-08T12:04:00Z",
+        },
         started_at: "2026-04-08T12:01:00Z",
         transition_id: "setup-workspace",
         work_items: [workAlpha],
@@ -495,6 +498,7 @@ describe("useCurrentSelection.selection-helpers", () => {
       ),
     ).toEqual([
       expect.objectContaining({
+        completedAt: "2026-04-08T12:04:00Z",
         dispatchID: "dispatch-failed",
         workstationName: "setup-workspace",
       }),
