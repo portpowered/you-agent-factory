@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DashboardWorkItemRef } from "../../api/dashboard/types";
 import {
   formatDurationFromISO,
+  formatLocalDateTime,
   formatDurationMillis,
   formatDurationMillisVerbose,
   formatTimeOfDay,
@@ -74,6 +75,23 @@ describe("formatTimeOfDay", () => {
 
   it("falls back to the raw value for invalid timestamps", () => {
     expect(formatTimeOfDay("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("formatLocalDateTime", () => {
+  it("formats ISO timestamps as local date-time values for customer-visible details", () => {
+    expect(formatLocalDateTime("2026-04-10T18:16:00.000Z", "Unavailable")).toBe(
+      new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(Date.parse("2026-04-10T18:16:00.000Z")),
+    );
+  });
+
+  it("returns the explicit unavailable fallback for invalid or missing timestamps", () => {
+    expect(formatLocalDateTime("not-a-date", "Unavailable")).toBe("Unavailable");
+    expect(formatLocalDateTime(undefined, "Unavailable")).toBe("Unavailable");
+    expect(formatLocalDateTime("   ", "Unavailable")).toBe("Unavailable");
   });
 });
 
@@ -174,4 +192,3 @@ describe("getProviderSessionLogTarget", () => {
     ).toBeNull();
   });
 });
-

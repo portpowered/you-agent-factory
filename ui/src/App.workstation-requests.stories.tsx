@@ -17,10 +17,18 @@ export default {
   component: App,
 };
 
+function formatExpectedLocalDateTime(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(Date.parse(value));
+}
+
 export const WorkstationRequestSelection = {
   parameters: workstationRequestStoryParameters(
     markdownReadyWorkstationRequest,
   ),
+  tags: ["test"],
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await selectWorkstationRequest(
@@ -72,6 +80,18 @@ export const WorkstationRequestSelection = {
     await expect(
       responseBody.getByText("Confirm the diff is limited"),
     ).toBeVisible();
+    await expect(
+      formattedAttempt.getAllByText(
+        formatExpectedLocalDateTime("2026-04-08T12:00:03Z"),
+      ).length,
+    ).toBeGreaterThan(0);
+    await expect(
+      formattedAttempt.getAllByText(
+        formatExpectedLocalDateTime("2026-04-08T12:00:04Z"),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(formattedAttempt.queryByText("2026-04-08T12:00:03Z")).toBeNull();
+    expect(formattedAttempt.queryByText("2026-04-08T12:00:04Z")).toBeNull();
     expect(responseBody.queryByText("### Reviewer response")).toBeNull();
     expect(responseBody.queryByText("```text")).toBeNull();
     expect(
@@ -93,6 +113,7 @@ export const WorkstationRequestSelectionNoResponse = {
   parameters: workstationRequestStoryParameters(
     dashboardWorkstationRequestFixtures.noResponse,
   ),
+  tags: ["test"],
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await selectWorkstationRequest(
@@ -229,6 +250,7 @@ export const WorkstationRequestSelectionErrored = {
 
 export const SelectedWorkDispatchHistorySmoke = {
   parameters: selectedWorkDispatchHistoryStoryParameters(),
+  tags: ["test"],
   render: () => <App />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -282,6 +304,12 @@ export const SelectedWorkDispatchHistorySmoke = {
     await expect(
       within(activeCard).getByText("Started at"),
     ).toBeVisible();
+    await expect(
+      within(activeCard).getAllByText(
+        formatExpectedLocalDateTime("2026-04-08T12:00:06Z"),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(activeCard).queryByText("2026-04-08T12:00:06Z")).toBeNull();
     expect(within(activeCard).queryByText("Dispatched")).toBeNull();
     expect(within(activeCard).queryByText("Responded")).toBeNull();
     expect(within(activeCard).queryByText("Errored")).toBeNull();
@@ -361,6 +389,12 @@ export const SelectedWorkDispatchHistorySmoke = {
     await expect(
       within(scriptFailedCard).getByText("Started at"),
     ).toBeVisible();
+    await expect(
+      within(scriptFailedCard).getAllByText(
+        formatExpectedLocalDateTime("2026-04-08T12:00:00Z"),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(scriptFailedCard).queryByText("2026-04-08T12:00:00Z")).toBeNull();
     expect(within(scriptFailedCard).queryByText("Current dispatch")).toBeNull();
 
     await expect(
