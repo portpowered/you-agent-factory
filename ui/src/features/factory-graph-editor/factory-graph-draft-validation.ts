@@ -5,10 +5,9 @@ import type {
   FactoryGraphDraftValidationError,
   FactoryGraphNode,
   FactoryGraphNodeKind,
-  FactoryWorkState,
-  FactoryWorkstation,
 } from "./factory-graph-draft-types";
-import { nodeKeyId } from "./factory-graph-draft-types";
+import { buildNode, nodeKeyId } from "./factory-graph-draft-types";
+import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
 
 export function validateFactoryGraphDraft(
@@ -16,7 +15,7 @@ export function validateFactoryGraphDraft(
   draft: FactoryGraphDraft,
 ): FactoryGraphDraftValidationError[] {
   const errors: FactoryGraphDraftValidationError[] = [];
-  const pendingFactoryDefinition = buildPendingFactoryDefinition(
+  const pendingFactoryDefinition = buildDraftAppliedFactoryDefinition(
     baseFactoryDefinition,
     draft,
   );
@@ -25,6 +24,7 @@ export function validateFactoryGraphDraft(
       (node) => [node.id, node],
     ),
   );
+  seedRemovalEdgeNodes(draft, nodeIndex);
 
   for (const resource of draft.additions.resources) {
     validateRequiredName(resource.name, "resource", errors);
@@ -48,7 +48,7 @@ export function validateFactoryGraphDraft(
 
   validateDuplicateIdentifiers(pendingFactoryDefinition, errors);
   validateEdgeChanges(draft, nodeIndex, errors);
-  validateFinalWorkerAssignments(baseFactoryDefinition, draft, errors);
+  validateFinalWorkerAssignments(pendingFactoryDefinition, errors);
 
   return dedupeValidationErrors(errors);
 }
@@ -90,86 +90,32 @@ function validateEdgeChanges(
   }
 }
 
-function validateFinalWorkerAssignments(
-  baseFactoryDefinition: CanonicalFactoryDefinition,
+function seedRemovalEdgeNodes(
   draft: FactoryGraphDraft,
-  errors: FactoryGraphDraftValidationError[],
+  nodeIndex: Map<string, FactoryGraphNode>,
 ) {
-  const pendingFactoryDefinition = structuredClone(baseFactoryDefinition);
-  pendingFactoryDefinition.workstations = applyNamedEntityChanges(
-    baseFactoryDefinition.workstations,
-    draft.removals.workstations,
-    draft.additions.workstations,
-  );
+  for (const edgeChange of draft.edgeChanges.removals) {
+    const sourceId = nodeKeyId(edgeChange.source);
+    if (!nodeIndex.has(sourceId)) {
+      nodeIndex.set(sourceId, buildNode(edgeChange.source));
+    }
 
-  for (const workstation of pendingFactoryDefinition.workstations ?? []) {
-    const nextWorkstation = applyWorkstationWorkerAssignments(workstation, draft);
-    if (nextWorkstation.worker.trim().length === 0) {
-      errors.push(missingWorkerError(nextWorkstation.name));
+    const targetId = nodeKeyId(edgeChange.target);
+    if (!nodeIndex.has(targetId)) {
+      nodeIndex.set(targetId, buildNode(edgeChange.target));
     }
   }
 }
 
-function applyNamedEntityChanges<T extends { name: string }>(
-  baseItems: T[] | undefined,
-  removals: string[],
-  additions: T[],
-): T[] {
-  const retainedItems = (baseItems ?? []).filter(
-    (item) => !removals.includes(item.name),
-  );
-  return [...retainedItems, ...additions.map((item) => structuredClone(item))];
-}
-
-function applyWorkStateChanges(
-  baseStates: FactoryWorkState[],
-  draft: FactoryGraphDraft,
-  workTypeName: string,
-): FactoryWorkState[] {
-  const removedStateNames = new Set(
-    draft.removals.workStates
-      .filter((state) => state.workTypeName === workTypeName)
-      .map((state) => state.stateName),
-  );
-  const retainedStates = baseStates.filter(
-    (state) => !removedStateNames.has(state.name),
-  );
-  const addedStates = draft.additions.workStates
-    .filter((state) => state.workTypeName === workTypeName)
-    .map((state) => structuredClone(state.state));
-
-  return [...retainedStates, ...addedStates];
-}
-
-function applyWorkstationWorkerAssignments(
-  workstation: FactoryWorkstation,
-  draft: FactoryGraphDraft,
-): FactoryWorkstation {
-  const nextWorkstation = structuredClone(workstation);
-  const removedAssignment = draft.edgeChanges.removals.some(
-    (edge) =>
-      edge.kind === "worker-assignment" &&
-      edge.target.kind === "workstation" &&
-      edge.target.name === workstation.name &&
-      edge.source.kind === "worker" &&
-      edge.source.name === nextWorkstation.worker,
-  );
-  const addedAssignment = draft.edgeChanges.additions.find(
-    (edge) =>
-      edge.kind === "worker-assignment" &&
-      edge.target.kind === "workstation" &&
-      edge.target.name === workstation.name &&
-      edge.source.kind === "worker",
-  );
-
-  if (removedAssignment && !addedAssignment) {
-    nextWorkstation.worker = "";
+function validateFinalWorkerAssignments(
+  pendingFactoryDefinition: CanonicalFactoryDefinition,
+  errors: FactoryGraphDraftValidationError[],
+) {
+  for (const workstation of pendingFactoryDefinition.workstations ?? []) {
+    if (workstation.worker.trim().length === 0) {
+      errors.push(missingWorkerError(workstation.name));
+    }
   }
-  if (addedAssignment?.source.kind === "worker") {
-    nextWorkstation.worker = addedAssignment.source.name;
-  }
-
-  return nextWorkstation;
 }
 
 function validateRequiredName(
@@ -257,38 +203,6 @@ function dedupeValidationErrors(
     seen.add(key);
     return true;
   });
-}
-
-function buildPendingFactoryDefinition(
-  baseFactoryDefinition: CanonicalFactoryDefinition,
-  draft: FactoryGraphDraft,
-): CanonicalFactoryDefinition {
-  const pendingFactoryDefinition = structuredClone(baseFactoryDefinition);
-  pendingFactoryDefinition.resources = applyNamedEntityChanges(
-    baseFactoryDefinition.resources,
-    draft.removals.resources,
-    draft.additions.resources,
-  );
-  pendingFactoryDefinition.workers = applyNamedEntityChanges(
-    baseFactoryDefinition.workers,
-    draft.removals.workers,
-    draft.additions.workers,
-  );
-  pendingFactoryDefinition.workstations = applyNamedEntityChanges(
-    baseFactoryDefinition.workstations,
-    draft.removals.workstations,
-    draft.additions.workstations,
-  );
-  pendingFactoryDefinition.workTypes = applyNamedEntityChanges(
-    baseFactoryDefinition.workTypes,
-    draft.removals.workTypes,
-    draft.additions.workTypes,
-  ).map((workType) => ({
-    ...workType,
-    states: applyWorkStateChanges(workType.states, draft, workType.name),
-  }));
-
-  return pendingFactoryDefinition;
 }
 
 function collectFactoryGraphNodeIds(
