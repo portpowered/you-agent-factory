@@ -46,8 +46,7 @@ export interface SubmitWorkCardProps {
 const FORM_CLASS = "grid h-full min-h-0 gap-4";
 const FIELD_GROUP_CLASS = "grid gap-2";
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const ACTION_ROW_CLASS =
-  "mt-auto grid gap-3 md:flex md:flex-wrap md:items-start md:justify-between";
+const ACTION_ROW_CLASS = "mt-auto flex items-start gap-3";
 const HELP_TEXT_CLASS = cx(
   "max-w-xl leading-relaxed text-af-ink/66",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -181,6 +180,7 @@ export function SubmitWorkCard({
         <div className={ACTION_ROW_CLASS}>
           <p
             className={cx(
+              "min-w-0 flex-1",
               HELP_TEXT_CLASS,
               STATUS_TONE_CLASS_BY_KIND[status.kind],
             )}
@@ -195,7 +195,7 @@ export function SubmitWorkCard({
           </p>
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
-            className="shrink-0"
+            className="ml-auto shrink-0 self-start"
             disabled={!canSubmit}
             tone={canSubmit ? "default" : "outline"}
             type="submit"
