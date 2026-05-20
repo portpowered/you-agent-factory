@@ -12,6 +12,7 @@ import {
   verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
+import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSuccessImpl } from "./verify-provider-session-storybook-responsive.mjs";
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
@@ -113,6 +114,11 @@ export const storyChecks = [
       }),
     id: "infinite-you-workflow-dashboard--locale-propagation-verification",
     label: "current selection widget (zh-CN)",
+  },
+  {
+    assertions: verifyProviderSessionDetailSuccess,
+    id: "infinite-you-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+    label: "current selection provider-session success",
   },
   {
     assertions: verifyCurrentSelectionPromptHint,
@@ -406,6 +412,19 @@ export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) 
     page,
     `Current selection prompt hinting at ${viewport.label}`,
   );
+}
+
+export async function verifyProviderSessionDetailSuccess(
+  page,
+  _dialog,
+  viewport,
+) {
+  return verifyProviderSessionDetailSuccessImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
+    page,
+    viewport,
+  });
 }
 
 export async function verifyStory(browser, storyCheck, viewport) {

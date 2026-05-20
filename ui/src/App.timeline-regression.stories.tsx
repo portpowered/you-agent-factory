@@ -26,6 +26,33 @@ export default {
   component: App,
 };
 
+const providerSessionVerificationSessionID =
+  "019e44f4-580e-7f32-981e-1e54ec6907d6";
+const providerSessionVerificationSnapshot = {
+  ...inferenceDetailsSnapshot,
+  runtime: {
+    ...inferenceDetailsSnapshot.runtime,
+    session: {
+      ...inferenceDetailsSnapshot.runtime.session,
+      provider_sessions: (
+        inferenceDetailsSnapshot.runtime.session.provider_sessions ?? []
+      ).map((attempt) =>
+        attempt.dispatch_id === "dispatch-review-active"
+          ? {
+              ...attempt,
+              provider_session: attempt.provider_session
+                ? {
+                    ...attempt.provider_session,
+                    id: providerSessionVerificationSessionID,
+                  }
+                : attempt.provider_session,
+            }
+          : attempt,
+      ),
+    },
+  },
+};
+
 export const WorkChartTimelineVerification = {
   parameters: {
     dashboardApi: {
@@ -247,6 +274,102 @@ export const InferenceCurrentSelectionDetails = {
       ),
     ).toBeNull();
     expect(currentSelection.queryByText("sha256:user-runtime")).toBeNull();
+    expectCurrentSelectionCardID(canvasElement);
+  },
+};
+
+export const ProviderSessionDetailVerification = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/provider-sessions/detail?id=${providerSessionVerificationSessionID}&kind=session_id&provider=codex`,
+          response: {
+            body: {
+              parse: {
+                eventCount: 3,
+                functionCalls: [],
+                lineCount: 3,
+                malformedLineCount: 0,
+                parseErrors: [],
+                reasoning: [],
+                tokenUsage: {
+                  cachedInputTokens: 0,
+                  inputTokens: 18,
+                  outputTokens: 9,
+                  reasoningOutputTokens: 0,
+                  totalTokens: 27,
+                },
+                turns: [
+                  {
+                    eventCount: 3,
+                    functionCallCount: 0,
+                    index: 1,
+                    reasoningCount: 0,
+                    responseItemCount: 1,
+                    startedAt: "2026-05-20T17:35:24Z",
+                  },
+                ],
+                unknownEventCount: 0,
+                unknownEvents: [],
+              },
+              providerSession: {
+                id: providerSessionVerificationSessionID,
+                kind: "session_id",
+                provider: "codex",
+              },
+              source: {
+                modifiedAt: "2026-05-20T17:35:24Z",
+                relativePath:
+                  "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
+                sizeBytes: 2048,
+              },
+            },
+          },
+        },
+      ],
+      snapshot: providerSessionVerificationSnapshot,
+      tracesByWorkID: {
+        "work-active-story": activeStoryTrace,
+      },
+    },
+  },
+  render: () => <App />,
+  tags: ["test"],
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await userEvent.click(
+      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
+
+    const currentSelection = within(currentSelectionCard(canvasElement));
+    const selectProviderSessionButton = await currentSelection.findByRole(
+      "button",
+      {
+        name: `Select provider session codex / session_id / ${providerSessionVerificationSessionID} for dispatch dispatch-review-active`,
+      },
+    );
+
+    await userEvent.click(selectProviderSessionButton);
+
+    await expect(
+      await currentSelection.findByRole("heading", {
+        name: "Selected session details",
+      }),
+    ).toBeVisible();
+    await expect(
+      await currentSelection.findByRole("heading", { name: "Source file" }),
+    ).toBeVisible();
+    await expect(
+      await currentSelection.findByText(
+        "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
+      ),
+    ).toBeVisible();
+    await expect(
+      await currentSelection.findByRole("heading", { name: "Token usage" }),
+    ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
