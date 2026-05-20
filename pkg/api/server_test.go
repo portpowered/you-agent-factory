@@ -2486,6 +2486,106 @@ func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 	}
 }
 
+func TestListWork_IncludesCompletionTimeForTerminalAndFailedWork(t *testing.T) {
+	now := time.Date(2026, 5, 20, 10, 30, 0, 0, time.UTC)
+	completedAt := now.Add(5 * time.Minute)
+	failedAt := now.Add(7 * time.Minute)
+	tokens := map[string]*interfaces.Token{
+		"tok-active":           listWorkToken("tok-active", "work-active", "task:review", "task", now),
+		"tok-complete":         listWorkToken("tok-complete", "work-complete", "task:complete", "task", completedAt),
+		"tok-failed":           listWorkToken("tok-failed", "work-failed", "task:failed", "task", failedAt),
+		"tok-missing-complete": listWorkToken("tok-missing-complete", "work-missing-complete", "task:complete", "task", now),
+	}
+	tokens["tok-missing-complete"].EnteredAt = time.Time{}
+	srv := newTestServer(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{Tokens: tokens},
+		Net:     listWorkFilterTopology(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp factoryapi.ListWorkResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	completed := listedWorkByID(t, resp.Results, "work-complete")
+	if completed.CompletedAt == nil || !completed.CompletedAt.Equal(completedAt) {
+		t.Fatalf("completedAt = %#v, want %s", completed.CompletedAt, completedAt)
+	}
+	failed := listedWorkByID(t, resp.Results, "work-failed")
+	if failed.CompletedAt == nil || !failed.CompletedAt.Equal(failedAt) {
+		t.Fatalf("failed completedAt = %#v, want %s", failed.CompletedAt, failedAt)
+	}
+	active := listedWorkByID(t, resp.Results, "work-active")
+	if active.CompletedAt != nil {
+		t.Fatalf("active completedAt = %#v, want nil", active.CompletedAt)
+	}
+	missing := listedWorkByID(t, resp.Results, "work-missing-complete")
+	if missing.CompletedAt != nil {
+		t.Fatalf("missing completedAt = %#v, want nil", missing.CompletedAt)
+	}
+}
+
+func TestListWork_SortsFinishedWorkByCompletionTimeNewestFirst(t *testing.T) {
+	now := time.Date(2026, 5, 20, 10, 45, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name        string
+		stateType   factoryapi.WorkStateType
+		placeID     string
+		wantWorkIDs []string
+	}{
+		{
+			name:        "completed",
+			stateType:   factoryapi.WorkStateTypeTERMINAL,
+			placeID:     "task:complete",
+			wantWorkIDs: []string{"work-completed-new", "work-completed-tie-a", "work-completed-tie-b", "work-completed-old", "work-completed-missing"},
+		},
+		{
+			name:        "failed",
+			stateType:   factoryapi.WorkStateTypeFAILED,
+			placeID:     "task:failed",
+			wantWorkIDs: []string{"work-failed-new", "work-failed-tie-a", "work-failed-tie-b", "work-failed-old", "work-failed-missing"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := map[string]*interfaces.Token{
+				"tok-old":     listWorkToken("tok-old", tc.wantWorkIDs[3], tc.placeID, "task", now.Add(-2*time.Hour)),
+				"tok-new":     listWorkToken("tok-new", tc.wantWorkIDs[0], tc.placeID, "task", now.Add(2*time.Hour)),
+				"tok-tie-b":   listWorkToken("tok-tie-b", tc.wantWorkIDs[2], tc.placeID, "task", now),
+				"tok-tie-a":   listWorkToken("tok-tie-a", tc.wantWorkIDs[1], tc.placeID, "task", now),
+				"tok-missing": listWorkToken("tok-missing", tc.wantWorkIDs[4], tc.placeID, "task", now.Add(4*time.Hour)),
+			}
+			tokens["tok-missing"].EnteredAt = time.Time{}
+			srv := newTestServer(&testutil.MockFactory{
+				Marking: &petri.MarkingSnapshot{Tokens: tokens},
+				Net:     listWorkFilterTopology(),
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/work?state.type="+string(tc.stateType), nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+
+			var resp factoryapi.ListWorkResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+
+			assertListedWorkIDs(t, resp.Results, tc.wantWorkIDs)
+		})
+	}
+}
+
 func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing.T) {
 	now := time.Now()
 	tokens := map[string]*interfaces.Token{
@@ -2513,14 +2613,7 @@ func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing
 	}
 
 	wantWorkIDs := []string{"work-init", "work-review", "work-failed", "work-complete"}
-	if len(resp.Results) != len(wantWorkIDs) {
-		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
-	}
-	for i, wantWorkID := range wantWorkIDs {
-		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
-			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
-		}
-	}
+	assertListedWorkIDs(t, resp.Results, wantWorkIDs)
 }
 
 func TestListWork_SortsByStateType(t *testing.T) {
@@ -2550,12 +2643,18 @@ func TestListWork_SortsByStateType(t *testing.T) {
 	}
 
 	wantWorkIDs := []string{"work-failed", "work-init", "work-review", "work-complete"}
-	if len(resp.Results) != len(wantWorkIDs) {
-		t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(wantWorkIDs), resp.Results)
+	assertListedWorkIDs(t, resp.Results, wantWorkIDs)
+}
+
+func assertListedWorkIDs(t *testing.T, works []factoryapi.Work, wantWorkIDs []string) {
+	t.Helper()
+
+	if len(works) != len(wantWorkIDs) {
+		t.Fatalf("results = %d, want %d: %#v", len(works), len(wantWorkIDs), works)
 	}
 	for i, wantWorkID := range wantWorkIDs {
-		if got := stringValue(resp.Results[i].WorkId); got != wantWorkID {
-			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, resp.Results)
+		if got := stringValue(works[i].WorkId); got != wantWorkID {
+			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, works)
 		}
 	}
 }

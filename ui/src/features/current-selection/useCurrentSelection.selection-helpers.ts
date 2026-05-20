@@ -22,6 +22,7 @@ import type { DashboardSelection, TerminalWorkDetail } from "./types";
 import {
   isScriptBackedWorkstationRequest,
   requestDispatchID,
+  requestCompletedAt,
   requestTransitionID,
   requestWorkstationNodeID,
   requestWorkstationName,
@@ -42,7 +43,7 @@ export function buildTerminalWorkItems(
     Object.values(workstationRequestsByDispatchID ?? {}),
   );
 
-  return labels.map((label) => {
+  const items = labels.map((label) => {
     const matchingAttempts =
       attempts?.filter((attempt) =>
         attempt.work_items?.some(
@@ -66,8 +67,11 @@ export function buildTerminalWorkItems(
         (matchedWorkItem ? detail.work_item.work_id === matchedWorkItem.work_id : false),
     );
 
+    const completedAt = latestRequest ? requestCompletedAt(latestRequest) : undefined;
+
     return {
       attempts: matchingAttempts,
+      ...(completedAt ? { completedAt } : {}),
       dispatchID:
         matchedFailureDetail?.dispatch_id ??
         (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
@@ -84,6 +88,38 @@ export function buildTerminalWorkItems(
       ),
     };
   });
+
+  return sortTerminalWorkItemsByCompletedAt(items);
+}
+
+function sortTerminalWorkItemsByCompletedAt(
+  items: TerminalWorkItem[],
+): TerminalWorkItem[] {
+  return [...items].sort((left, right) => {
+    const leftTime = completedAtMillis(left.completedAt);
+    const rightTime = completedAtMillis(right.completedAt);
+
+    if (leftTime !== rightTime) {
+      if (leftTime === null) {
+        return 1;
+      }
+      if (rightTime === null) {
+        return -1;
+      }
+      return rightTime - leftTime;
+    }
+
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function completedAtMillis(completedAt: string | undefined): number | null {
+  if (!completedAt) {
+    return null;
+  }
+
+  const parsed = Date.parse(completedAt);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 function terminalWorkstationName(
