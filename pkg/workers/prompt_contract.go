@@ -1,11 +1,14 @@
 package workers
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
 	"text/template"
 	"text/template/parse"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type PromptTemplateVariableCategory string
@@ -141,6 +144,7 @@ func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidatio
 		dot:      promptValidationValue{kind: promptValidationValueRoot},
 	}
 	validator.walkList(parsed.Tree.Root, rootScope)
+	validator.addRuntimeExecutionDiagnostic(parsed, tmpl)
 
 	return PromptTemplateValidationResult{
 		Diagnostics: validator.diagnostics,
@@ -275,6 +279,24 @@ type promptTemplateValidator struct {
 	diagnostics []PromptTemplateDiagnostic
 	inputCount  int
 	seen        map[string]struct{}
+}
+
+func (v *promptTemplateValidator) addRuntimeExecutionDiagnostic(parsed *template.Template, tmpl string) {
+	if parsed == nil {
+		return
+	}
+
+	var rendered bytes.Buffer
+	if err := parsed.Execute(&rendered, buildPromptValidationData(v.inputCount)); err != nil {
+		diagnostic, ok := promptTemplateExecutionDiagnostic(err, tmpl)
+		if !ok {
+			return
+		}
+		if v.hasDiagnosticForSource(diagnostic.SourceText) {
+			return
+		}
+		v.addDiagnostic(diagnostic)
+	}
 }
 
 func (v *promptTemplateValidator) walkList(list *parse.ListNode, scope *promptValidationScope) {
@@ -524,6 +546,19 @@ func (v *promptTemplateValidator) addDiagnostic(diagnostic PromptTemplateDiagnos
 	v.diagnostics = append(v.diagnostics, diagnostic)
 }
 
+func (v *promptTemplateValidator) hasDiagnosticForSource(sourceText string) bool {
+	if sourceText == "" {
+		return false
+	}
+	normalized := normalizeDiagnosticSourceText(sourceText)
+	for _, diagnostic := range v.diagnostics {
+		if normalizeDiagnosticSourceText(diagnostic.SourceText) == normalized {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *promptValidationScope) child(dot promptValidationValue) *promptValidationScope {
 	return &promptValidationScope{
 		bindings: make(map[string]promptValidationValue),
@@ -628,4 +663,137 @@ func chainDisplay(base string, fields []string) string {
 		return "." + strings.Join(fields, ".")
 	}
 	return fieldPath(base, strings.Join(fields, "."))
+}
+
+func normalizeDiagnosticSourceText(sourceText string) string {
+	return strings.Trim(sourceText, "() ")
+}
+
+func buildPromptValidationData(inputCount int) PromptData {
+	inputs := make([]TokenData, 0, inputCount)
+	for index := 0; index < inputCount; index++ {
+		inputs = append(inputs, TokenData{
+			Name:       fmt.Sprintf("input-%d", index),
+			WorkID:     fmt.Sprintf("work-%d", index),
+			WorkTypeID: "processor",
+			DataType:   "work",
+			TraceID:    fmt.Sprintf("trace-%d", index),
+			ParentID:   "parent",
+			Project:    "project",
+			Tags: map[string]string{
+				"branch": "main",
+			},
+			Payload: "payload",
+			Relations: []interfaces.Relation{{
+				Type:          interfaces.RelationDependsOn,
+				TargetWorkID:  "target-work",
+				RequiredState: "SUCCEEDED",
+			}},
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "content",
+			}},
+			PreviousOutput:    "previous-output",
+			RejectionFeedback: "rejection-feedback",
+			History: PromptHistory{
+				LastError:    "last-error",
+				FailureCount: 1,
+				FailureLog: []interfaces.FailureRecord{{
+					TransitionID: "transition",
+					Error:        "failure",
+					Attempt:      1,
+				}},
+				TotalVisits:   1,
+				AttemptNumber: 2,
+			},
+		})
+	}
+
+	return PromptData{
+		Inputs: inputs,
+		Context: PromptContext{
+			WorkDir:     "/tmp/workdir",
+			ArtifactDir: "/tmp/artifacts",
+			Project:     "project",
+			Env: map[string]string{
+				"API_KEY": "value",
+			},
+		},
+	}
+}
+
+func promptTemplateExecutionDiagnostic(err error, tmpl string) (PromptTemplateDiagnostic, bool) {
+	text := err.Error()
+	sourceText := executionSourceText(text)
+	reason := executionReason(text)
+	if !strings.Contains(text, "error calling index:") {
+		return PromptTemplateDiagnostic{}, false
+	}
+	path := executionPath(sourceText)
+	kind := PromptTemplateDiagnosticKindInvalidVariable
+	if strings.Contains(reason, "index out of range") && strings.Contains(sourceText, ".Inputs") {
+		kind = PromptTemplateDiagnosticKindUnavailableVariable
+	}
+
+	message := "Template execution would fail for this reference."
+	if reason != "" {
+		message = fmt.Sprintf("Template execution would fail: %s.", reason)
+	}
+
+	startOffset := 0
+	endOffset := 0
+	if sourceText != "" {
+		if index := strings.Index(tmpl, sourceText); index >= 0 {
+			startOffset = index
+			endOffset = index + len(sourceText) - 1
+		} else {
+			endOffset = len(sourceText) - 1
+		}
+	}
+	if path == "" {
+		path = sourceText
+	}
+
+	return PromptTemplateDiagnostic{
+		Kind:        kind,
+		Message:     message,
+		Path:        path,
+		SourceText:  sourceText,
+		StartOffset: startOffset,
+		EndOffset:   endOffset,
+	}, true
+}
+
+func executionSourceText(text string) string {
+	start := strings.Index(text, "at <")
+	if start == -1 {
+		return ""
+	}
+	start += len("at <")
+	end := strings.Index(text[start:], ">:")
+	if end == -1 {
+		return ""
+	}
+	return text[start : start+end]
+}
+
+func executionReason(text string) string {
+	last := strings.LastIndex(text, ": ")
+	if last == -1 || last+2 >= len(text) {
+		return text
+	}
+	return text[last+2:]
+}
+
+func executionPath(sourceText string) string {
+	switch {
+	case strings.HasPrefix(sourceText, "index .Context.Env "):
+		return ".Context.Env"
+	case strings.Contains(sourceText, ".Relations"):
+		return ".Relations"
+	case strings.Contains(sourceText, "index .Inputs "):
+		return ".Inputs"
+	default:
+		return sourceText
+	}
 }

@@ -1,6 +1,9 @@
 package workers
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePatterns(t *testing.T) {
 	contract := BuildPromptTemplateContract(1)
@@ -71,6 +74,69 @@ func TestValidatePromptTemplate_FlagsInvalidFieldsAndMapDotAccess(t *testing.T) 
 	if result.Diagnostics[0].Kind != PromptTemplateDiagnosticKindInvalidVariable {
 		t.Fatalf("first diagnostic kind = %q, want %q", result.Diagnostics[0].Kind, PromptTemplateDiagnosticKindInvalidVariable)
 	}
+}
+
+func TestValidatePromptTemplate_RejectsTemplatesThatRuntimeWouldFailToExecute(t *testing.T) {
+	testCases := []struct {
+		name               string
+		template           string
+		wantKind           PromptTemplateDiagnosticKind
+		wantSourceFragment string
+		wantMessage        string
+	}{
+		{
+			name:               "env map index requires string key",
+			template:           `{{ index .Context.Env 0 }}`,
+			wantKind:           PromptTemplateDiagnosticKindInvalidVariable,
+			wantSourceFragment: `index .Context.Env 0`,
+			wantMessage:        "value has type int; should be string",
+		},
+		{
+			name:               "inputs slice index rejects string keys",
+			template:           `{{ (index .Inputs "0").Payload }}`,
+			wantKind:           PromptTemplateDiagnosticKindInvalidVariable,
+			wantSourceFragment: `index .Inputs "0"`,
+			wantMessage:        "cannot index slice/array with type string",
+		},
+		{
+			name:               "relations slice index rejects string keys",
+			template:           `{{ (index (index .Inputs 0).Relations "x").Type }}`,
+			wantKind:           PromptTemplateDiagnosticKindInvalidVariable,
+			wantSourceFragment: `index (index .Inputs 0).Relations "x"`,
+			wantMessage:        "cannot index slice/array with type string",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := ValidatePromptTemplate(testCase.template, 1)
+
+			if result.Valid {
+				t.Fatalf("Valid = true, diagnostics = %#v", result.Diagnostics)
+			}
+			if len(result.Diagnostics) != 1 {
+				t.Fatalf("diagnostics = %#v, want 1", result.Diagnostics)
+			}
+
+			diagnostic := result.Diagnostics[0]
+			if diagnostic.Kind != testCase.wantKind {
+				t.Fatalf("diagnostic kind = %q, want %q", diagnostic.Kind, testCase.wantKind)
+			}
+			if diagnostic.SourceText != testCase.wantSourceFragment {
+				t.Fatalf("diagnostic source = %q, want %q", diagnostic.SourceText, testCase.wantSourceFragment)
+			}
+			if diagnostic.Message == "" || !containsText(diagnostic.Message, testCase.wantMessage) {
+				t.Fatalf("diagnostic message = %q, want substring %q", diagnostic.Message, testCase.wantMessage)
+			}
+			if diagnostic.StartOffset < 0 || diagnostic.EndOffset < diagnostic.StartOffset {
+				t.Fatalf("diagnostic offsets = (%d, %d), want ordered offsets", diagnostic.StartOffset, diagnostic.EndOffset)
+			}
+		})
+	}
+}
+
+func containsText(have, want string) bool {
+	return strings.Contains(have, want)
 }
 
 func hasVariablePath(references []PromptTemplateVariableReference, want string) bool {
