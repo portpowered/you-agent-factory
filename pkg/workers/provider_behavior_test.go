@@ -113,6 +113,21 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 	}
 }
 
+func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	_, err := behavior.BuildArgs(interfaces.ProviderInferenceRequest{
+		ModelProvider: string(ModelProviderCodex),
+		UserMessage:   "summarize the workspace",
+		Worktree:      "feature-worktree",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
+			interfaces.RunnerOptionalCapabilityWorktree,
+		},
+	}, false)
+	if err == nil || err.Error() != "worktree selection is not supported by the codex runner in v1" {
+		t.Fatalf("BuildArgs error = %v, want worktree rejection", err)
+	}
+}
+
 func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string

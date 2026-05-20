@@ -168,15 +168,14 @@ func (b claudeProviderBehavior) FormatTimeoutFailure(result CommandResult) strin
 }
 
 func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateCodexOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
 	logger := logging.EnsureLogger(b.logger)
 	args := []string{"exec"} // quiet mode for non-interactive use
 	if skipPermissions {
 		logger.Debug("inferencer: enabling skip permissions flag for codex dispatcher")
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	}
-
-	if req.Worktree != "" {
-		logger.Debug("inferencer: codex passed a worktree argument, unsupported ignoring silently", "worktree", req.Worktree)
 	}
 
 	if req.WorkingDirectory != "" {
@@ -436,6 +435,18 @@ func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 	}
 	if req.SessionID != "" {
 		return errors.New("session resume is not supported by the gemini runner in v1")
+	}
+	return nil
+}
+
+func validateCodexOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityWorktree {
+			return errors.New("worktree selection is not supported by the codex runner in v1")
+		}
+	}
+	if req.Worktree != "" {
+		return errors.New("worktree selection is not supported by the codex runner in v1")
 	}
 	return nil
 }
