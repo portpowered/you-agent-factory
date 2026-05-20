@@ -251,15 +251,17 @@ async function collectSourceFiles(rootDir: string): Promise<string[]> {
   return files.flat().sort();
 }
 
-async function loadBaselineEntries(): Promise<string[]> {
-  const baselineContent = await readFile(BASELINE_PATH, "utf8");
+async function loadBaselineEntries(
+  baselinePath = BASELINE_PATH,
+): Promise<string[]> {
+  const baselineContent = await readFile(baselinePath, "utf8");
   return parseBaselineEntries(baselineContent);
 }
 
-async function scanWorkspaceForHardcodedCopy(): Promise<
-  HardcodedCopyFinding[]
-> {
-  const sourceFiles = await collectSourceFiles(SOURCE_ROOT);
+async function scanSourceRootForHardcodedCopy(
+  sourceRoot: string,
+): Promise<HardcodedCopyFinding[]> {
+  const sourceFiles = await collectSourceFiles(sourceRoot);
   const findings = await Promise.all(
     sourceFiles.map(async (absolutePath) => {
       const relativePath = path
@@ -271,6 +273,65 @@ async function scanWorkspaceForHardcodedCopy(): Promise<
   );
 
   return findings.flat().sort(compareFindings);
+}
+
+export interface HardcodedUiCopyCheckOptions {
+  baselinePath?: string;
+  report?: (message: string) => void;
+  shouldWriteBaseline?: boolean;
+  sourceRoot?: string;
+}
+
+export async function runHardcodedUiCopyCheck({
+  baselinePath = BASELINE_PATH,
+  report = console.error,
+  shouldWriteBaseline = false,
+  sourceRoot = SOURCE_ROOT,
+}: HardcodedUiCopyCheckOptions = {}): Promise<boolean> {
+  const findings = await scanSourceRootForHardcodedCopy(sourceRoot);
+
+  if (shouldWriteBaseline) {
+    const nextContent = [
+      "# Baseline for the hardcoded UI copy check.",
+      "# Entries are path|line|column|kind|text.",
+      ...findings.map(serializeFinding),
+      "",
+    ].join("\n");
+    await writeFile(baselinePath, nextContent, "utf8");
+    return true;
+  }
+
+  const baselineEntries = await loadBaselineEntries(baselinePath);
+  const { staleEntries, unexpectedFindings } = diffBaseline(
+    findings,
+    baselineEntries,
+  );
+
+  if (unexpectedFindings.length === 0 && staleEntries.length === 0) {
+    return true;
+  }
+
+  if (unexpectedFindings.length > 0) {
+    report(
+      "New hardcoded UI copy was found in production ui/src files. Move user-facing copy into a feature-owned catalog or update the documented baseline only for an intentional exception.",
+    );
+    for (const finding of unexpectedFindings) {
+      report(
+        `- ${finding.file}:${finding.line}:${finding.column} [${finding.kind}] ${finding.text}`,
+      );
+    }
+  }
+
+  if (staleEntries.length > 0) {
+    report(
+      "The hardcoded UI copy baseline has stale entries. Remove them or refresh the baseline after intentional cleanup.",
+    );
+    for (const entry of staleEntries) {
+      report(`- ${entry}`);
+    }
+  }
+
+  return false;
 }
 
 function compareFindings(
@@ -575,50 +636,12 @@ function normalizeText(value: string): string {
 }
 
 async function main(): Promise<void> {
-  const shouldWriteBaseline = process.argv.includes("--write-baseline");
-  const findings = await scanWorkspaceForHardcodedCopy();
-
-  if (shouldWriteBaseline) {
-    const nextContent = [
-      "# Baseline for the hardcoded UI copy check.",
-      "# Entries are path|line|column|kind|text.",
-      ...findings.map(serializeFinding),
-      "",
-    ].join("\n");
-    await writeFile(BASELINE_PATH, nextContent, "utf8");
+  const passed = await runHardcodedUiCopyCheck({
+    shouldWriteBaseline: process.argv.includes("--write-baseline"),
+  });
+  if (passed) {
     return;
   }
-
-  const baselineEntries = await loadBaselineEntries();
-  const { staleEntries, unexpectedFindings } = diffBaseline(
-    findings,
-    baselineEntries,
-  );
-
-  if (unexpectedFindings.length === 0 && staleEntries.length === 0) {
-    return;
-  }
-
-  if (unexpectedFindings.length > 0) {
-    console.error(
-      "New hardcoded UI copy was found in production ui/src files. Move user-facing copy into a feature-owned catalog or update the documented baseline only for an intentional exception.",
-    );
-    for (const finding of unexpectedFindings) {
-      console.error(
-        `- ${finding.file}:${finding.line}:${finding.column} [${finding.kind}] ${finding.text}`,
-      );
-    }
-  }
-
-  if (staleEntries.length > 0) {
-    console.error(
-      "The hardcoded UI copy baseline has stale entries. Remove them or refresh the baseline after intentional cleanup.",
-    );
-    for (const entry of staleEntries) {
-      console.error(`- ${entry}`);
-    }
-  }
-
   process.exit(1);
 }
 

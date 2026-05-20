@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -8,7 +8,10 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
-import { scanSourceTextForHardcodedCopy } from "./check-hardcoded-ui-copy";
+import {
+  runHardcodedUiCopyCheck,
+  scanSourceTextForHardcodedCopy,
+} from "./check-hardcoded-ui-copy";
 
 const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(
@@ -157,6 +160,85 @@ test("CLI output reports actionable hardcoded-copy failures", async () => {
         "Move user-facing copy into a feature-owned catalog",
       ),
     });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("runHardcodedUiCopyCheck writes the reviewed baseline for current findings", async () => {
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "hardcoded-copy-baseline-"),
+  );
+  const srcDir = path.join(tempRoot, "src");
+  const baselinePath = path.join(tempRoot, "hardcoded-ui-copy-baseline.txt");
+
+  try {
+    await mkdir(path.join(srcDir, "features"), { recursive: true });
+    await writeFile(
+      path.join(srcDir, "features", "feature.tsx"),
+      `
+        export function Feature() {
+          return <section>{"Retry request"}</section>;
+        }
+      `,
+    );
+
+    await expect(
+      runHardcodedUiCopyCheck({
+        baselinePath,
+        shouldWriteBaseline: true,
+        sourceRoot: srcDir,
+      }),
+    ).resolves.toBe(true);
+
+    await expect(readFile(baselinePath, "utf8")).resolves.toContain(
+      "src/features/feature.tsx",
+    );
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("runHardcodedUiCopyCheck reports stale baseline entries in process", async () => {
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "hardcoded-copy-stale-"),
+  );
+  const srcDir = path.join(tempRoot, "src");
+  const baselinePath = path.join(tempRoot, "hardcoded-ui-copy-baseline.txt");
+  const reportMessages: string[] = [];
+
+  try {
+    await mkdir(path.join(srcDir, "features"), { recursive: true });
+    await writeFile(
+      path.join(srcDir, "features", "feature.tsx"),
+      `
+        export function Feature() {
+          return <section />;
+        }
+      `,
+    );
+    await writeFile(
+      baselinePath,
+      [
+        "# Baseline for the hardcoded UI copy check.",
+        "# Entries are path|line|column|kind|text.",
+        "src/features/feature.tsx|3|28|jsx-expression|Retry request",
+        "",
+      ].join("\n"),
+    );
+
+    await expect(
+      runHardcodedUiCopyCheck({
+        baselinePath,
+        report: (message) => reportMessages.push(message),
+        sourceRoot: srcDir,
+      }),
+    ).resolves.toBe(false);
+
+    expect(reportMessages).toEqual([
+      "The hardcoded UI copy baseline has stale entries. Remove them or refresh the baseline after intentional cleanup.",
+      "- src/features/feature.tsx|3|28|jsx-expression|Retry request",
+    ]);
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
   }
