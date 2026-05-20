@@ -37,6 +37,11 @@ const completedAttempt: DashboardProviderSessionAttempt = {
 
 const completedItems: TerminalWorkItem[] = [
   {
+    completedAt: "2026-04-08T12:08:00Z",
+    label: "Deploy Story",
+    traceWorkID: "work-deploy-story",
+  },
+  {
     attempts: [completedAttempt],
     completedAt: "2026-04-08T12:04:00Z",
     label: "Done Story",
@@ -52,7 +57,19 @@ const failedItems: TerminalWorkItem[] = [
     label: "Failed Story",
     traceWorkID: "work-failed-story",
   },
+  {
+    completedAt: "2026-04-08T12:01:00Z",
+    label: "Older Failed Story",
+    traceWorkID: "work-older-failed-story",
+  },
+  { label: "Missing Failed Story", traceWorkID: "work-missing-failed-story" },
 ];
+
+function expectBefore(first: HTMLElement, second: HTMLElement) {
+  expect(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+}
 
 function SelectableTerminalWorkStory() {
   const [selectedItem, setSelectedItem] = useState<{
@@ -68,6 +85,7 @@ function SelectableTerminalWorkStory() {
         setSelectedItem({ label: item.label, status })
       }
       selectedItem={selectedItem}
+      locale="en"
       widgetId="terminal-work-story"
     />
   );
@@ -110,6 +128,39 @@ export const MixedOutcomes = {
         name: messages.disclosureLabel(true),
       })
     )[0];
+    const failedRow = (
+      await terminalScope.findByRole("heading", {
+        name: messages.rowTitle("failed"),
+      })
+    ).closest("section");
+    const completedRow = (
+      await terminalScope.findByRole("heading", {
+        name: messages.rowTitle("completed"),
+      })
+    ).closest("section");
+    if (!completedRow || !failedRow) {
+      throw new Error("expected completed and failed rows");
+    }
+
+    const failedScope = within(failedRow);
+    const failedNewest = await failedScope.findByRole("button", {
+      name: "Failed Story",
+    });
+    const failedOldest = await failedScope.findByRole("button", {
+      name: "Older Failed Story",
+    });
+    const failedMissing = await failedScope.findByRole("button", {
+      name: "Missing Failed Story",
+    });
+    expectBefore(failedNewest, failedOldest);
+    expectBefore(failedOldest, failedMissing);
+    await expect(
+      failedScope.getAllByText(/Completed Apr 8, 2026/)[0],
+    ).toBeVisible();
+    await expect(
+      failedScope.getByText(messages.completionTimeUnavailable),
+    ).toBeVisible();
+
     await userEvent.click(completedToggle);
     await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
     expect(
@@ -117,9 +168,24 @@ export const MixedOutcomes = {
     ).toBeNull();
 
     await userEvent.click(completedToggle);
+    const completedScope = within(completedRow);
+    const deployStory = await completedScope.findByRole("button", {
+      name: "Deploy Story",
+    });
     const doneStory = await terminalScope.findByRole("button", {
       name: "Done Story",
     });
+    const releaseNotes = await completedScope.findByRole("button", {
+      name: "Release Notes",
+    });
+    expectBefore(deployStory, doneStory);
+    expectBefore(doneStory, releaseNotes);
+    await expect(
+      completedScope.getAllByText(/Completed Apr 8, 2026/)[0],
+    ).toBeVisible();
+    await expect(
+      completedScope.getByText(messages.completionTimeUnavailable),
+    ).toBeVisible();
     await expect(doneStory).toBeVisible();
     await userEvent.click(doneStory);
     await expect(doneStory).toHaveAttribute("data-selected", "true");
