@@ -308,6 +308,44 @@ func TestCompletionDeliveryPlan_LateDispatchCreatedTickKeepsRelativeDelay(t *tes
 	}
 }
 
+func TestCompletionDeliveryPlan_PlannedResultClonesProviderMetadata(t *testing.T) {
+	completion := replayTestCompletion("completion-1", "dispatch-1", "process", 3)
+	completion.ProviderFailure = &interfaces.ProviderFailureMetadata{
+		Family: interfaces.ProviderErrorFamilyRetryable,
+		Type:   interfaces.ProviderErrorTypeInternalServerError,
+	}
+
+	plan, err := NewCompletionDeliveryPlan(deliveryArtifact(t,
+		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),
+		completion,
+	))
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+
+	observed := replayTestDispatch("observed-dispatch", "process", 2, "trace-1", "work-1", "tok-1")
+	deliveryTick, ok, err := plan.DeliveryTickForDispatch(observed)
+	if err != nil {
+		t.Fatalf("DeliveryTickForDispatch: %v", err)
+	}
+	if !ok || deliveryTick != 3 {
+		t.Fatalf("delivery match = (%t, %d), want (true, 3)", ok, deliveryTick)
+	}
+
+	completion.ProviderFailure.Type = interfaces.ProviderErrorTypeAuthFailure
+
+	planned, ok, err := plan.PlannedResultForDispatch(observed)
+	if err != nil {
+		t.Fatalf("PlannedResultForDispatch: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected planned result for observed dispatch")
+	}
+	if planned.ProviderFailure == nil || planned.ProviderFailure.Type != interfaces.ProviderErrorTypeInternalServerError {
+		t.Fatalf("planned provider failure = %#v, want detached internal_server_error metadata", planned.ProviderFailure)
+	}
+}
+
 func TestCompletionDeliveryPlan_LineageMismatchReportsDivergence(t *testing.T) {
 	plan, err := NewCompletionDeliveryPlan(deliveryArtifact(t,
 		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),
