@@ -6,15 +6,15 @@ src/api/named-factory/api.ts|193|14|string-literal|INTERNAL_ERROR
 src/api/provider-session-details/api.ts|179|14|string-literal|INTERNAL_ERROR
 src/components/ui/data-table.tsx|37|18|string-literal|No rows available.
 src/components/ui/dialog.tsx|29|16|string-literal|Close dialog
-src/components/ui/formatters.ts|44|12|string-literal|h m
-src/components/ui/formatters.ts|47|12|string-literal|m s
-src/components/ui/formatters.ts|80|12|string-literal|Unavailable
-src/components/ui/formatters.ts|122|12|string-literal|Unknown
-src/components/ui/formatters.ts|145|14|string-literal|Repeated work
-src/components/ui/formatters.ts|146|24|string-literal|Raw outcome:
-src/components/ui/formatters.ts|157|12|string-literal|Unavailable
-src/components/ui/formatters.ts|202|12|string-literal|None
-src/components/ui/formatters.ts|258|10|string-literal|~/.codex/sessions/ / / /rollout- .jsonl
+src/components/ui/formatters.ts|48|12|string-literal|h m
+src/components/ui/formatters.ts|51|12|string-literal|m s
+src/components/ui/formatters.ts|84|12|string-literal|Unavailable
+src/components/ui/formatters.ts|143|12|string-literal|Unknown
+src/components/ui/formatters.ts|166|14|string-literal|Repeated work
+src/components/ui/formatters.ts|167|24|string-literal|Raw outcome:
+src/components/ui/formatters.ts|178|12|string-literal|Unavailable
+src/components/ui/formatters.ts|223|12|string-literal|None
+src/components/ui/formatters.ts|279|10|string-literal|~/.codex/sessions/ / / /rollout- .jsonl
 src/components/ui/ui-foundation-showcase.tsx|47|65|string-literal|Completed
 src/components/ui/ui-foundation-showcase.tsx|48|59|string-literal|Failed
 src/components/ui/ui-foundation-showcase.tsx|79|72|jsx-text|Shared UI primitives
@@ -202,11 +202,10 @@ src/features/import/factory-png-import.ts|243|18|string-literal|The selected PNG
 src/features/import/factory-png-import.ts|270|18|string-literal|The Infinite You factory metadata does not contain a valid factory payload.
 src/features/import/factory-png-import.ts|309|16|string-literal|The Infinite You factory metadata is missing the factory name.
 src/features/timeline/state/timeline/replayGraphState.ts|220|10|string-literal|:resource:
-src/features/trace-drilldown/trace-relation-flow.tsx|331|53|string-literal|Unknown source
-src/features/trace-drilldown/trace-workstation-path.tsx|301|67|string-literal|Unknown workstation
-src/features/trace-drilldown/trace-workstation-path.tsx|452|12|string-literal|border-af-overlay/10 bg-af-canvas
-src/features/trace-drilldown/trace-workstation-path.tsx|456|12|string-literal|border-af-danger/24 bg-af-danger/6
-src/features/trace-drilldown/trace-workstation-path.tsx|459|10|string-literal|border-af-success/20 bg-af-success/6
+src/features/trace-drilldown/trace-workstation-path.tsx|280|67|string-literal|Unknown workstation
+src/features/trace-drilldown/trace-workstation-path.tsx|431|12|string-literal|border-af-overlay/10 bg-af-canvas
+src/features/trace-drilldown/trace-workstation-path.tsx|435|12|string-literal|border-af-danger/24 bg-af-danger/6
+src/features/trace-drilldown/trace-workstation-path.tsx|438|10|string-literal|border-af-success/20 bg-af-success/6
 src/features/trace-drilldown/useTraceDrilldown.ts|22|20|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/trace-drilldown/useTraceDrilldown.ts|34|28|string-literal|Select active, completed, or failed work to inspect retained trace history.
 src/features/work-outcome/trend-cards.tsx|254|60|jsx-text|retry or rework events

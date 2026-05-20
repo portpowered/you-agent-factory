@@ -128,6 +128,32 @@ func TestFactoryQueryCommand_PortFlagMapsToConfig(t *testing.T) {
 	}
 }
 
+func TestFactoryQueryCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+	originalQueryFactory := queryFactory
+	defer func() {
+		queryFactory = originalQueryFactory
+	}()
+
+	var got factorycli.QueryConfig
+	queryFactory = func(cfg factorycli.QueryConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query: %v", err)
+	}
+
+	if got.Port != 7437 {
+		t.Fatalf("port = %d, want 7437", got.Port)
+	}
+}
+
 func TestFactoryQueryCommand_DefaultRootOutput(t *testing.T) {
 	factoryDir := t.TempDir()
 	srv := rootCurrentFactoryServer(t, factoryapi.Factory{
@@ -296,7 +322,8 @@ func TestFactoryQueryCommand_HelpDocumentsOutputModesAndPort(t *testing.T) {
 		"Use --json for the API-shaped current-factory payload",
 		"--port",
 		"--json",
-		"you factory query --port 7437 --json",
+		"you factory query --json",
+		"you factory query --port 9090 --json",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory query help missing %q:\n%s", want, help)
@@ -1273,6 +1300,32 @@ func TestWorkListCommand_StateFilterFlagsMapToConfig(t *testing.T) {
 	}
 }
 
+func TestWorkListCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+	originalListWork := listWork
+	defer func() {
+		listWork = originalListWork
+	}()
+
+	var got workcli.ListConfig
+	listWork = func(cfg workcli.ListConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list: %v", err)
+	}
+
+	if got.Port != 7437 {
+		t.Fatalf("port = %d, want 7437", got.Port)
+	}
+}
+
 func TestRunCommand_RuntimeLogFlags(t *testing.T) {
 	root := NewRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
@@ -1726,6 +1779,37 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 	if got.Payload != "request.md" {
 		t.Fatalf("payload = %q, want request.md", got.Payload)
 	}
+	if got.Port != 7437 {
+		t.Fatalf("port = %d, want 7437", got.Port)
+	}
+}
+
+func TestSubmitCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+	originalSubmitWork := submitWork
+	defer func() {
+		submitWork = originalSubmitWork
+	}()
+
+	var got submitcli.SubmitConfig
+	submitWork = func(cfg submitcli.SubmitConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"submit",
+		"--name", "request-name",
+		"--work-type-name", "tasks",
+		"--payload", "request.md",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute submit: %v", err)
+	}
+
 	if got.Port != 7437 {
 		t.Fatalf("port = %d, want 7437", got.Port)
 	}

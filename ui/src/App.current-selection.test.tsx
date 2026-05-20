@@ -23,6 +23,7 @@ import {
 } from "./components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "./components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { formatTimeOfDay } from "./components/ui/formatters";
 import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
 import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
@@ -427,6 +428,39 @@ function expandDispatchAttemptSection(
   return section;
 }
 
+function expandAttemptDetails(
+  container: HTMLElement,
+  attemptNumber: number,
+): HTMLElement {
+  const attemptCard = within(container).getByRole("article", {
+    name: `Inference attempt ${attemptNumber}`,
+  });
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand attempt ${attemptNumber}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return attemptCard;
+}
+
+function expandAttemptBody(
+  attemptCard: HTMLElement,
+  bodyLabel: "Request body" | "Response body",
+): HTMLElement {
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand ${bodyLabel.toLowerCase()}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return within(attemptCard).getByRole("region", { name: bodyLabel });
+}
+
 function expectDefinitionValue(
   section: HTMLElement,
   label: string,
@@ -738,23 +772,25 @@ describe("App current selection", () => {
       readyCard,
       "Inference attempts",
     );
-    const readyAttempt = within(readyInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 2",
-    });
+    const readyAttemptDetails = expandAttemptDetails(readyInferenceAttempts, 2);
+    const readyRequestBody = expandAttemptBody(readyAttemptDetails, "Request body");
+    const readyResponseBody = expandAttemptBody(readyAttemptDetails, "Response body");
     expect(
       within(readyRequestDetails).getByText(
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
-    expect(within(readyRequestDetails).queryByText(
-      "Review the active story and decide whether it is ready.",
-    )).toBeNull();
-    expect(within(readyAttempt).getByText("Retry the review with the latest context.")).toBeTruthy();
-    expect(within(readyAttempt).getByText("Ready for the next workstation.")).toBeTruthy();
-    expect(within(readyAttempt).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
-    expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
-    expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
-    expect(within(readyAttempt).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
+    expect(
+      within(readyRequestDetails).queryByText(
+        "Review the active story and decide whether it is ready.",
+      ),
+    ).toBeNull();
+    expect(within(readyRequestBody).getByText("Retry the review with the latest context.")).toBeTruthy();
+    expect(within(readyResponseBody).getByText("Ready for the next workstation.")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("gpt-5.4")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("C:\\work\\portos")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
     expect(
       within(readyRequestDetails).queryByText("Provider", { selector: "dt" }),
     ).toBeNull();
@@ -783,16 +819,22 @@ describe("App current selection", () => {
       rejectedCard,
       "Inference attempts",
     );
-    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
+    const rejectedAttemptDetails = expandAttemptDetails(rejectedInferenceAttempts, 1);
+    const rejectedRequestBody = expandAttemptBody(
+      rejectedAttemptDetails,
+      "Request body",
+    );
+    const rejectedResponseBody = expandAttemptBody(
+      rejectedAttemptDetails,
+      "Response body",
+    );
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedRequestBody).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedResponseBody).getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeTruthy();
@@ -808,16 +850,14 @@ describe("App current selection", () => {
       erroredCard,
       "Inference attempts",
     );
-    const erroredAttempt = within(erroredInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
+    const erroredAttemptDetails = expandAttemptDetails(erroredInferenceAttempts, 1);
     expect(
       within(erroredCard).getByText(
         "Provider rate limit exceeded while reviewing the story.",
       ),
     ).toBeTruthy();
     expect(
-      within(erroredAttempt).getByText("provider_rate_limit"),
+      within(erroredAttemptDetails).getByText("provider_rate_limit"),
     ).toBeTruthy();
     expect(
       within(erroredRequestDetails).queryByText(
@@ -1157,11 +1197,30 @@ describe("App current selection", () => {
     expect(stateSelectionSlot?.getAttribute("data-bento-card-id")).toBe(
       "current-selection",
     );
+    const summaryDetails = within(stateInfo)
+      .getByText("Count")
+      .closest("dl");
     expect(within(stateInfo).getByTitle("story:implemented")).toBeTruthy();
+    expect(within(stateInfo).getByText("story: implemented")).toBeTruthy();
+    expect(summaryDetails).toBeTruthy();
+    expect(
+      within(summaryDetails ?? stateInfo).queryByText("Work type"),
+    ).toBeNull();
+    expect(within(summaryDetails ?? stateInfo).queryByText("State")).toBeNull();
+    expect(
+      within(summaryDetails ?? stateInfo).queryByText("State node ID"),
+    ).toBeNull();
     expect(within(stateInfo).getByText("Count")).toBeTruthy();
     expect(within(stateInfo).getByText("Current work")).toBeTruthy();
     expect(within(stateInfo).getByText(activeWorkLabel)).toBeTruthy();
-    expect(within(stateInfo).getByText(activeWorkID)).toBeTruthy();
+    expect(
+      within(stateInfo).getByText(
+        `Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`,
+      ),
+    ).toBeTruthy();
+    expect(within(stateInfo).queryByText(activeWorkID)).toBeNull();
+    expect(within(stateInfo).queryByText("trace-active-story")).toBeNull();
+    expect(within(stateInfo).queryByText(/^story$/)).toBeNull();
 
     fireEvent.click(
       within(stateInfo).getByRole("button", {
@@ -1185,9 +1244,7 @@ describe("App current selection", () => {
     const emptyStateInfo = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(
-      within(emptyStateInfo).getAllByText("blocked").length,
-    ).toBeGreaterThan(0);
+    expect(within(emptyStateInfo).getByText("story: blocked")).toBeTruthy();
     expect(within(emptyStateInfo).getByTitle("story:blocked")).toBeTruthy();
     expect(
       within(emptyStateInfo).getByText(
@@ -1901,7 +1958,8 @@ describe("App current selection terminal states", () => {
     expect(within(completedDetail).getByText("Count")).toBeTruthy();
     expect(within(completedDetail).getByText("Current work")).toBeTruthy();
     expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
-    expect(within(completedDetail).getByText(completedWorkID)).toBeTruthy();
+    expect(within(completedDetail).queryByText(completedWorkID)).toBeNull();
+    expect(within(completedDetail).queryByText(/^Started at /)).toBeNull();
     expect(
       within(completedDetail).queryByText(
         "No current work is occupying this place.",
@@ -1936,13 +1994,12 @@ describe("App current selection terminal states", () => {
         name: "Current selection",
       });
 
-      expect(
-        within(failedDetail).getAllByText("blocked").length,
-      ).toBeGreaterThan(0);
+      expect(within(failedDetail).getByText("story: blocked")).toBeTruthy();
       expect(within(failedDetail).getByText("Count")).toBeTruthy();
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
-      expect(within(failedDetail).getByText(failedWorkID)).toBeTruthy();
+      expect(within(failedDetail).queryByText(failedWorkID)).toBeNull();
+      expect(within(failedDetail).queryByText(/^Started at /)).toBeNull();
       expect(
         within(failedDetail).getAllByText("Failure reason").length,
       ).toBeGreaterThan(0);

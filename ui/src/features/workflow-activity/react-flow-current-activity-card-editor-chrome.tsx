@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   applyFactoryGraphAddEntityDraft,
@@ -15,9 +15,6 @@ import {
 } from "../factory-graph-editor/factory-graph-editor-controls";
 import type { CanonicalFactoryDefinition } from "../factory-graph-editor/factory-graph-draft-types";
 import type { useFactoryGraphDraftState } from "../factory-graph-editor/factory-graph-draft";
-
-const CURRENT_ACTIVITY_HEADER_ROW_CLASS =
-  "flex items-start justify-between gap-3";
 
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
@@ -89,14 +86,16 @@ export function useFactoryGraphAddEntityController({
   };
 }
 
-export function CurrentActivityGraphEditorHeader({
+const FACTORY_GRAPH_HEADER_ACTIONS_CLASS =
+  "flex min-w-0 flex-wrap items-center justify-end gap-2";
+
+export function CurrentActivityGraphHeaderActions({
   editorMode,
   hasChanges,
   isDefinitionLoading,
   loadErrorMessage,
   locale,
   onToggle,
-  title,
 }: {
   editorMode: boolean;
   hasChanges: boolean;
@@ -104,22 +103,16 @@ export function CurrentActivityGraphEditorHeader({
   loadErrorMessage?: string;
   locale?: string;
   onToggle: () => void;
-  title: ReactNode;
 }) {
   return (
-    <div className={CURRENT_ACTIVITY_HEADER_ROW_CLASS}>
-      <div className="min-w-0">
-        {title}
-        <div className="mt-2">
-          <FactoryGraphEditorStatus
-            editorMode={editorMode}
-            hasChanges={hasChanges}
-            isDefinitionLoading={isDefinitionLoading}
-            locale={locale}
-            loadErrorMessage={loadErrorMessage}
-          />
-        </div>
-      </div>
+    <div className={FACTORY_GRAPH_HEADER_ACTIONS_CLASS}>
+      <FactoryGraphEditorStatus
+        editorMode={editorMode}
+        hasChanges={hasChanges}
+        isDefinitionLoading={isDefinitionLoading}
+        locale={locale}
+        loadErrorMessage={loadErrorMessage}
+      />
       <FactoryGraphEditorModeToggle
         editorMode={editorMode}
         locale={locale}

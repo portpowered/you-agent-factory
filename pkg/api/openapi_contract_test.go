@@ -471,6 +471,16 @@ func TestOpenAPIContract_WorkstationCronIsScheduleOnly(t *testing.T) {
 	}
 }
 
+func TestOpenAPIContract_DefaultLocalServerURL(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	if len(doc.Servers) != 1 {
+		t.Fatalf("openapi contract servers = %d, want 1", len(doc.Servers))
+	}
+	if got := doc.Servers[0].URL; got != "http://localhost:7437" {
+		t.Fatalf("openapi contract default local server url = %q, want %q", got, "http://localhost:7437")
+	}
+}
+
 func TestOpenAPIContract_FactorySchemaGraphIncludesCustomerFacingDescriptions(t *testing.T) {
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromFile("../../api/openapi.yaml")

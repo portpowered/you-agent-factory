@@ -218,6 +218,31 @@ func TestLoadWorkFile_RejectsRetiredTargetStateAlias(t *testing.T) {
 	}
 }
 
+func TestLoadWorkFile_RejectsConflictingTraceAliases(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "work.json")
+	writeFile(t, path, `{
+  "requestId": "request-cli-trace-conflict",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "draft",
+      "workTypeName": "task",
+      "currentChainingTraceId": "chain-a",
+      "traceId": "trace-b"
+    }
+  ]
+}`)
+
+	_, err := LoadWorkFile(path)
+	if err == nil {
+		t.Fatal("expected conflicting trace aliases to fail")
+	}
+	if !strings.Contains(err.Error(), "currentChainingTraceId and traceId must match") {
+		t.Fatalf("error = %q, want conflicting trace alias rejection", err.Error())
+	}
+}
+
 func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 	rootDir := t.TempDir()
 

@@ -6,6 +6,7 @@ import {
   expectVisible,
   verifyExportDialog,
   verifyImportDialog,
+  verifyProviderSessionDetailSuccess,
   verifyStory,
   waitForDialog,
   waitForStoryRegion,
@@ -51,9 +52,7 @@ describe("verifyStory", () => {
   test("uses a fresh page per story and closes it after assertions", async () => {
     const waitForSelector = vi.fn().mockResolvedValue(undefined);
     const waitForFunction = vi.fn().mockResolvedValue(undefined);
-    const setViewportSize = vi.fn().mockResolvedValue(undefined);
     const goto = vi.fn().mockResolvedValue(undefined);
-    const close = vi.fn().mockResolvedValue(undefined);
     const dialog = {
       waitFor: vi.fn().mockResolvedValue(undefined),
     };
@@ -63,15 +62,17 @@ describe("verifyStory", () => {
         : { waitFor: vi.fn().mockResolvedValue(undefined) }),
     }));
     const page = {
-      close,
       getByRole,
       goto,
-      setViewportSize,
       waitForFunction,
       waitForSelector,
     };
-    const browser = {
+    const context = {
+      close: vi.fn().mockResolvedValue(undefined),
       newPage: vi.fn().mockResolvedValue(page),
+    };
+    const browser = {
+      newContext: vi.fn().mockResolvedValue(context),
     };
     const assertions = vi.fn().mockResolvedValue(undefined);
 
@@ -85,8 +86,10 @@ describe("verifyStory", () => {
       { height: 844, label: "mobile", width: 390 },
     );
 
-    expect(browser.newPage).toHaveBeenCalledTimes(1);
-    expect(setViewportSize).toHaveBeenCalledWith({ height: 844, width: 390 });
+    expect(browser.newContext).toHaveBeenCalledWith({
+      viewport: { height: 844, width: 390 },
+    });
+    expect(context.newPage).toHaveBeenCalledTimes(1);
     expect(goto).toHaveBeenCalledWith(
       "http://127.0.0.1:6008/iframe.html?id=infinite-you-dashboard-export-factory-dialog--ready&viewMode=story",
       { waitUntil: "domcontentloaded" },
@@ -99,22 +102,24 @@ describe("verifyStory", () => {
       label: "mobile",
       width: 390,
     });
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(context.close).toHaveBeenCalledTimes(1);
   });
 
-  test("closes the page when story assertions fail", async () => {
+  test("closes the isolated context when story assertions fail", async () => {
     const page = {
-      close: vi.fn().mockResolvedValue(undefined),
       getByRole: vi.fn().mockReturnValue({
         waitFor: vi.fn().mockResolvedValue(undefined),
       }),
       goto: vi.fn().mockResolvedValue(undefined),
-      setViewportSize: vi.fn().mockResolvedValue(undefined),
       waitForFunction: vi.fn().mockResolvedValue(undefined),
       waitForSelector: vi.fn().mockResolvedValue(undefined),
     };
-    const browser = {
+    const context = {
+      close: vi.fn().mockResolvedValue(undefined),
       newPage: vi.fn().mockResolvedValue(page),
+    };
+    const browser = {
+      newContext: vi.fn().mockResolvedValue(context),
     };
     const failure = new Error("story failed");
     await expect(
@@ -129,7 +134,7 @@ describe("verifyStory", () => {
       ),
     ).rejects.toThrow("story failed");
 
-    expect(page.close).toHaveBeenCalledTimes(1);
+    expect(context.close).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -323,7 +328,9 @@ describe("story assertions", () => {
       name: "Export PNG",
     });
   });
+});
 
+describe("import story assertions", () => {
   test("verifyImportDialog checks the expected import controls", async () => {
     const previewImage = { isVisible: vi.fn().mockResolvedValue(true) };
     const fileName = { isVisible: vi.fn().mockResolvedValue(true) };
@@ -367,6 +374,60 @@ describe("story assertions", () => {
     expect(dialog.getByText).toHaveBeenCalledWith("factory-import.png");
     expect(dialog.getByRole).toHaveBeenCalledWith("button", {
       name: "Activate factory",
+    });
+  });
+});
+
+describe("provider-session story assertions", () => {
+  test("verifyProviderSessionDetailSuccess checks the provider-session success panel", async () => {
+    const selectedSessionHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
+    const sourceHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
+    const sourcePath = { waitFor: vi.fn().mockResolvedValue(undefined) };
+    const tokenUsageHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
+    const page = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+      getByRole: vi.fn((role, options) => {
+        if (role !== "heading") {
+          throw new Error(`unexpected page role lookup ${role} ${options?.name ?? ""}`);
+        }
+        if (options?.name === "Selected session details") {
+          return selectedSessionHeading;
+        }
+        if (options?.name === "Source file") {
+          return sourceHeading;
+        }
+        if (options?.name === "Token usage") {
+          return tokenUsageHeading;
+        }
+        throw new Error(`unexpected heading lookup ${options?.name ?? ""}`);
+      }),
+      getByText: vi.fn((text) => {
+        if (
+          text ===
+          "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl"
+        ) {
+          return sourcePath;
+        }
+        throw new Error(`unexpected current selection text lookup ${text}`);
+      }),
+    };
+
+    await verifyProviderSessionDetailSuccess(page, null, {
+      height: 844,
+      label: "mobile",
+      width: 390,
+    });
+
+    expect(page.getByRole).toHaveBeenCalledWith("heading", {
+      name: "Selected session details",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("heading", {
+      name: "Source file",
+    });
+    expect(page.getByRole).toHaveBeenCalledWith("heading", {
+      name: "Token usage",
     });
   });
 });

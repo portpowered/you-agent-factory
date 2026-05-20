@@ -28,6 +28,7 @@ export interface TraceDrilldownMessages {
   noOutputItems: string;
   noTraceHistoryMessage: string;
   noTraceHistoryTitle: string;
+  unknownRelationSource: string;
   requestIdsLabel: string;
   tableCaption: string;
   title: string;
@@ -71,6 +72,7 @@ const traceDrilldownMessagesByLocale = {
     noTraceHistoryMessage:
       "No retained dispatch history is currently available for this work item.",
     noTraceHistoryTitle: "Trace history unavailable",
+    unknownRelationSource: "Unknown source",
     requestIdsLabel: "Request IDs",
     tableCaption: "Trace dispatch grid",
     title: "Trace drill-down",
@@ -109,6 +111,7 @@ const traceDrilldownMessagesByLocale = {
     noOutputItems: "没有记录输出项。",
     noTraceHistoryMessage: "当前这个工作项暂时没有可保留的分派历史。",
     noTraceHistoryTitle: "追踪历史不可用",
+    unknownRelationSource: "未知来源",
     requestIdsLabel: "请求 ID",
     tableCaption: "追踪分派表",
     title: "追踪下钻",

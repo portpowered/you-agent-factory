@@ -1,3 +1,4 @@
+import { cn } from "../../lib/cn";
 import { formatWorkItemLabel } from "../../components/ui/formatters";
 import { formatDurationMillis } from "../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
@@ -6,7 +7,6 @@ import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   MetadataSection,
-  RequestCountSection,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
@@ -42,7 +42,6 @@ export function WorkstationRequestDetailCard({
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <WorkstationRequestSummary request={request} view={view} />
-      <RequestCountSection request={request} />
       <RequestDetailsSection
         onSelectWorkID={onSelectWorkID}
         request={request}
@@ -88,9 +87,7 @@ function WorkstationRequestSummary({
 
   return (
     <>
-      <p className={WIDGET_SUBTITLE_CLASS}>
-        {request.request_id || request.dispatch_id}
-      </p>
+      <p className={WIDGET_SUBTITLE_CLASS}>{view.requestTitle}</p>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>{messages.dispatchIdLabel}</dt>
@@ -306,14 +303,15 @@ function ConsumedWorkItemsSection({
             <button
               aria-label={messages.selectWorkItemLabel(workLabel)}
               aria-pressed={isSelected}
-              className={WORK_SELECTION_BUTTON_CLASS}
+              className={cn(
+                WORK_SELECTION_BUTTON_CLASS,
+                isSelected && "border-af-accent/35 bg-af-accent/10 text-af-accent",
+              )}
               key={workItem.work_id}
               onClick={() => onSelectWorkID?.(workItem.work_id)}
               type="button"
             >
-              {isSelected
-                ? messages.selectedWorkItemAction
-                : messages.openWorkItemAction(workLabel)}
+              {workLabel}
             </button>
           );
         })}

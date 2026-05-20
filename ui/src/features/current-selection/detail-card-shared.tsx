@@ -15,9 +15,8 @@ import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
   MetadataSectionProps,
-  RequestCountSectionProps,
 } from "./detail-card-types";
-import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
+import type { CurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 
 export const EXECUTION_PILL_CLASS = cn(
   "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
@@ -130,24 +129,6 @@ export function InferenceAttemptDetail({
   );
 }
 
-export function RequestCountSection({ request }: RequestCountSectionProps) {
-  const messages = useCurrentSelectionDetailMessages();
-
-  return (
-    <section
-      aria-label={messages.requestCountsRegionLabel}
-      className={RUNTIME_DETAILS_SECTION_CLASS}
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestCountsHeading}</h4>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-        <InferenceAttemptDetail label="dispatchedCount" value={request.dispatched_request_count} />
-        <InferenceAttemptDetail label="respondedCount" value={request.responded_request_count} />
-        <InferenceAttemptDetail label="erroredCount" value={request.errored_request_count} />
-      </dl>
-    </section>
-  );
-}
-
 export function MetadataSection({
   emptyMessage,
   metadata,
@@ -184,10 +165,8 @@ export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
 
 export function emptyStatePlaceMessage(
   messages: Pick<
-    ReturnType<typeof useCurrentSelectionDetailMessages>,
-    | "noCurrentWorkInPlace"
-    | "noWorkRecordedAtSelectedTick"
-    | "selectedTickWorkUnavailable"
+    CurrentSelectionDetailMessages,
+    "noCurrentWorkInPlace" | "noWorkRecordedAtSelectedTick" | "selectedTickWorkUnavailable"
   >,
   usesRetainedWorkItems: boolean,
   tokenCount: number,

@@ -1,12 +1,11 @@
-import { formatWorkItemLabel } from "../../components/ui/formatters";
 import {
-  formatDashboardPlaceLabel,
-  getDashboardPlaceLabelParts,
-} from "../../components/ui/place-labels";
+  formatTimeOfDay,
+  formatWorkItemLabel,
+} from "../../components/ui/formatters";
+import { formatDashboardPlaceLabel } from "../../components/ui/place-labels";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../components/ui/dashboard-typography";
 import {
   DETAIL_COPY_CLASS,
@@ -24,6 +23,14 @@ import type {
   StatePositionWorkListProps,
 } from "./detail-card-types";
 
+function formatStateSelectionSummary(workType?: string, stateValue?: string): string {
+  if (workType && stateValue) {
+    return `${workType}: ${stateValue}`;
+  }
+
+  return workType ?? stateValue ?? "";
+}
+
 export function StateNodeDetailCard({
   currentWorkItems,
   failedWorkDetailsByWorkID,
@@ -34,36 +41,24 @@ export function StateNodeDetailCard({
   widgetId = "current-selection",
 }: StateNodeDetailCardProps) {
   const placeLabel = formatDashboardPlaceLabel(place);
-  const placeLabelParts = getDashboardPlaceLabelParts(place);
   const usesRetainedWorkItems = isTerminalOrFailedPlace(place);
   const visibleWorkItems = usesRetainedWorkItems
     ? terminalHistoryWorkItems
     : currentWorkItems;
   const messages = useCurrentSelectionDetailMessages();
+  const summaryLabel = formatStateSelectionSummary(
+    place.type_id,
+    place.state_value,
+  );
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <div className="mt-0 grid gap-1" title={placeLabel}>
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-          {placeLabelParts.workType}
-        </span>
-        <span className={WIDGET_SUBTITLE_CLASS}>
-          {placeLabelParts.stateValue}
-        </span>
+        <p className={WIDGET_SUBTITLE_CLASS}>
+          {summaryLabel || placeLabel}
+        </p>
       </div>
       <dl>
-        <div>
-          <dt>{messages.workTypeLabel}</dt>
-          <dd>{placeLabelParts.workType}</dd>
-        </div>
-        <div>
-          <dt>{messages.stateLabel}</dt>
-          <dd>{placeLabelParts.stateValue}</dd>
-        </div>
-        <div>
-          <dt>{messages.stateNodeIdLabel}</dt>
-          <dd>{placeLabel}</dd>
-        </div>
         <div>
           <dt>{messages.countLabel}</dt>
           <dd>{tokenCount}</dd>
@@ -122,45 +117,43 @@ function StatePositionWorkListItem({
   workItem,
 }: StatePositionWorkListItemProps) {
   const workLabel = formatWorkItemLabel(workItem);
+  const startedAt = resolveStartedAt(workItem);
+  const hasFailureReason = Boolean(failureDetail?.failure_reason);
+  const hasFailureMessage = Boolean(failureDetail?.failure_message);
   const content = (
     <>
       <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
-      <dl
-        className={`m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5rem_minmax(0,1fr)] [&_div]:gap-2 ${DASHBOARD_BODY_TEXT_CLASS}`}
-      >
-        <div>
-          <dt>{messages.workIdLabel}</dt>
-          <dd className="[overflow-wrap:anywhere]">{workItem.work_id}</dd>
-        </div>
-        <div>
-          <dt>{messages.workTypeLabel}</dt>
-          <dd className="[overflow-wrap:anywhere]">
-            {workItem.work_type_id || messages.workTypeUnavailable}
-          </dd>
-        </div>
-        {workItem.trace_id ? (
-          <div>
-            <dt>{messages.traceIdLabel}</dt>
-            <dd className="[overflow-wrap:anywhere]">{workItem.trace_id}</dd>
-          </div>
-        ) : null}
-        {failureDetail?.failure_reason ? (
-          <div>
-            <dt>{messages.failureReasonLabel}</dt>
-            <dd className="[overflow-wrap:anywhere]">
-              {failureDetail.failure_reason}
-            </dd>
-          </div>
-        ) : null}
-        {failureDetail?.failure_message ? (
-          <div>
-            <dt>{messages.failureMessageLabel}</dt>
-            <dd className="[overflow-wrap:anywhere]">
-              {failureDetail.failure_message}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
+      {startedAt ? (
+        <time
+          className={DASHBOARD_BODY_TEXT_CLASS}
+          dateTime={startedAt}
+          title={startedAt}
+        >
+          {messages.startedAtLabel} {formatTimeOfDay(startedAt)}
+        </time>
+      ) : null}
+      {hasFailureReason || hasFailureMessage ? (
+        <dl
+          className={`m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[7rem_minmax(0,1fr)] [&_div]:gap-2 ${DASHBOARD_BODY_TEXT_CLASS}`}
+        >
+          {hasFailureReason ? (
+            <div>
+              <dt>{messages.failureReasonLabel}</dt>
+              <dd className="[overflow-wrap:anywhere]">
+                {failureDetail?.failure_reason}
+              </dd>
+            </div>
+          ) : null}
+          {hasFailureMessage ? (
+            <div>
+              <dt>{messages.failureMessageLabel}</dt>
+              <dd className="[overflow-wrap:anywhere]">
+                {failureDetail?.failure_message}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
     </>
   );
 
@@ -184,4 +177,16 @@ function StatePositionWorkListItem({
       {content}
     </li>
   );
+}
+
+function resolveStartedAt(
+  workItem: StatePositionWorkListItemProps["workItem"],
+): string | null {
+  const startedAt = workItem.startedAt ?? workItem.started_at;
+
+  if (!startedAt || Number.isNaN(Date.parse(startedAt))) {
+    return null;
+  }
+
+  return startedAt;
 }

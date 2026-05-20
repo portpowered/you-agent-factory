@@ -25,10 +25,12 @@ const (
 )
 
 var safeProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var codexTimestampPrefixedSessionPattern = regexp.MustCompile(`^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-([A-Za-z0-9_-]+)\.jsonl$`)
 
 var (
 	errInvalidProviderSessionIdentifier = errors.New("invalid provider session identifier")
 	errProviderSessionNotFound          = errors.New("provider session not found")
+	errAmbiguousProviderSessionFile     = errors.New("ambiguous provider session file")
 )
 
 func (s *Server) GetProviderSessionDetails(
@@ -52,6 +54,9 @@ func (s *Server) GetProviderSessionDetails(
 			return
 		case errors.Is(err, errProviderSessionNotFound):
 			s.writeError(w, http.StatusNotFound, "provider session not found", "NOT_FOUND")
+			return
+		case errors.Is(err, errAmbiguousProviderSessionFile):
+			s.writeError(w, http.StatusInternalServerError, "multiple provider session files match session identifier", "INTERNAL_ERROR")
 			return
 		default:
 			s.logger.Error("load provider session details failed", zap.Error(err))
@@ -108,7 +113,15 @@ type resolvedCodexSessionFile struct {
 	relativePath string
 	sizeBytes    int64
 	modifiedAt   *time.Time
+	layout       codexSessionFileLayout
 }
+
+type codexSessionFileLayout int
+
+const (
+	codexSessionFileLayoutExact codexSessionFileLayout = iota + 1
+	codexSessionFileLayoutTimestampPrefixed
+)
 
 func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) {
 	cleanRoot, err := filepath.Abs(filepath.Clean(root))
@@ -139,7 +152,7 @@ func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) 
 		if entry.Type()&fs.ModeType != 0 && entry.Type()&fs.ModeSymlink == 0 {
 			return nil
 		}
-		if filepath.Base(path) == targetName {
+		if matchesCodexSessionBaseName(filepath.Base(path), id, targetName) {
 			matches = append(matches, path)
 		}
 		return nil
@@ -156,6 +169,7 @@ func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) 
 	if err != nil {
 		return resolvedCodexSessionFile{}, fmt.Errorf("resolve codex sessions root symlinks: %w", err)
 	}
+	candidates := make([]resolvedCodexSessionFile, 0, len(matches))
 	for _, match := range matches {
 		resolvedMatch, err := filepath.EvalSymlinks(match)
 		if err != nil {
@@ -173,15 +187,60 @@ func resolveCodexSessionFile(root, id string) (resolvedCodexSessionFile, error) 
 			return resolvedCodexSessionFile{}, fmt.Errorf("rel provider session file: %w", err)
 		}
 		modifiedAt := info.ModTime().UTC()
-		return resolvedCodexSessionFile{
+		candidates = append(candidates, resolvedCodexSessionFile{
 			absolutePath: resolvedMatch,
 			relativePath: filepath.ToSlash(rel),
 			sizeBytes:    info.Size(),
 			modifiedAt:   &modifiedAt,
-		}, nil
+			layout:       classifyCodexSessionFileLayout(filepath.Base(match), targetName),
+		})
 	}
 
-	return resolvedCodexSessionFile{}, errProviderSessionNotFound
+	return selectResolvedCodexSessionFile(candidates)
+}
+
+func matchesCodexSessionBaseName(baseName, id, exactName string) bool {
+	if baseName == exactName {
+		return true
+	}
+	matches := codexTimestampPrefixedSessionPattern.FindStringSubmatch(baseName)
+	if matches == nil {
+		return false
+	}
+	return matches[2] == id
+}
+
+func classifyCodexSessionFileLayout(baseName, exactName string) codexSessionFileLayout {
+	if baseName == exactName {
+		return codexSessionFileLayoutExact
+	}
+	return codexSessionFileLayoutTimestampPrefixed
+}
+
+func selectResolvedCodexSessionFile(candidates []resolvedCodexSessionFile) (resolvedCodexSessionFile, error) {
+	exactMatches := make([]resolvedCodexSessionFile, 0, 1)
+	timestampMatches := make([]resolvedCodexSessionFile, 0, 1)
+	for _, candidate := range candidates {
+		switch candidate.layout {
+		case codexSessionFileLayoutExact:
+			exactMatches = append(exactMatches, candidate)
+		case codexSessionFileLayoutTimestampPrefixed:
+			timestampMatches = append(timestampMatches, candidate)
+		}
+	}
+
+	switch {
+	case len(exactMatches) == 1:
+		return exactMatches[0], nil
+	case len(exactMatches) > 1:
+		return resolvedCodexSessionFile{}, errAmbiguousProviderSessionFile
+	case len(timestampMatches) == 1:
+		return timestampMatches[0], nil
+	case len(timestampMatches) > 1:
+		return resolvedCodexSessionFile{}, errAmbiguousProviderSessionFile
+	default:
+		return resolvedCodexSessionFile{}, errProviderSessionNotFound
+	}
 }
 
 func pathInsideRoot(root, path string) bool {

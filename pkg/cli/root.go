@@ -89,7 +89,7 @@ func newFactoryCommand() *cobra.Command {
 }
 
 func newFactoryQueryCommand() *cobra.Command {
-	cfg := factorycli.QueryConfig{Port: 8080}
+	cfg := factorycli.QueryConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
 		Use:   "query",
@@ -100,8 +100,10 @@ func newFactoryQueryCommand() *cobra.Command {
 			"use --port to target the same server-port selection pattern as work list.",
 		Example: "  # Show the current factory from the running service on the default port.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
-			"  # Query a different service port and emit API-shaped JSON for automation.\n" +
-			"  " + cliBinaryName + " factory query --port 7437 --json",
+			"  # Emit API-shaped JSON for automation from the default local service.\n" +
+			"  " + cliBinaryName + " factory query --json\n\n" +
+			"  # Query a different service port when your runtime is not on the default port.\n" +
+			"  " + cliBinaryName + " factory query --port 9090 --json",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
@@ -124,7 +126,7 @@ func newWorkCommand() *cobra.Command {
 }
 
 func newWorkListCommand() *cobra.Command {
-	cfg := workcli.ListConfig{Port: 8080}
+	cfg := workcli.ListConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -381,7 +383,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) e
 }
 
 func newSubmitCommand() *cobra.Command {
-	cfg := submitcli.SubmitConfig{Port: 8080}
+	cfg := submitcli.SubmitConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
 		Use:   "submit",

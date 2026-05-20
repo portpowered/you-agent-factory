@@ -9,7 +9,7 @@ info:
     handler behavior for schema standardization and intentionally does not
     redesign route names, pagination, or response fields.
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:7437
     description: Local Agent Factory API server
 security: []
 tags:

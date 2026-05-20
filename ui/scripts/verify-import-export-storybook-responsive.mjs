@@ -12,6 +12,8 @@ import {
   verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
+import { verifyTraceFactoryGraphVisualConsistency } from "./graph-storybook-responsive.mjs";
+import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSuccessImpl } from "./verify-provider-session-storybook-responsive.mjs";
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
@@ -58,6 +60,18 @@ export const storyChecks = [
     assertions: verifyDashboardShellConsolidation,
     id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard shared shell",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyTraceFactoryGraphVisualConsistency({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+        waitForStoryRender,
+      }),
+    id: "agent-factory-dashboard-react-flow-current-activity-card--narrow-viewport",
+    label: "trace/factory graph visual consistency",
   },
   {
     assertions: (page, _dialog, viewport) =>
@@ -113,6 +127,11 @@ export const storyChecks = [
       }),
     id: "infinite-you-workflow-dashboard--locale-propagation-verification",
     label: "current selection widget (zh-CN)",
+  },
+  {
+    assertions: verifyProviderSessionDetailSuccess,
+    id: "infinite-you-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+    label: "current selection provider-session success",
   },
   {
     assertions: verifyCurrentSelectionPromptHint,
@@ -355,6 +374,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   );
 }
 
+
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
   const currentSelection = page.getByRole("article", {
     name: "Current selection",
@@ -408,14 +428,29 @@ export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) 
   );
 }
 
-export async function verifyStory(browser, storyCheck, viewport) {
-  const page = await browser.newPage();
+export async function verifyProviderSessionDetailSuccess(
+  page,
+  _dialog,
+  viewport,
+) {
+  return verifyProviderSessionDetailSuccessImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
+    page,
+    viewport,
+  });
+}
 
-  try {
-    await page.setViewportSize({
+export async function verifyStory(browser, storyCheck, viewport) {
+  const context = await browser.newContext({
+    viewport: {
       height: viewport.height,
       width: viewport.width,
-    });
+    },
+  });
+  const page = await context.newPage();
+
+  try {
     await page.goto(storyUrl(storyCheck.id), { waitUntil: "domcontentloaded" });
     await waitForStoryRender(page);
     const dialog = storyCheck.dialogName
@@ -424,7 +459,7 @@ export async function verifyStory(browser, storyCheck, viewport) {
 
     await storyCheck.assertions(page, dialog, viewport);
   } finally {
-    await page.close();
+    await context.close();
   }
 }
 

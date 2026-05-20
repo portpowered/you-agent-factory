@@ -1,7 +1,5 @@
 import {
-  Background,
   type Connection,
-  Controls,
   type Edge,
   type FitViewOptions,
   type IsValidConnection,
@@ -11,9 +9,13 @@ import {
   ReactFlow,
   type XYPosition,
 } from "@xyflow/react";
-import type { CSSProperties } from "react";
 
 import { cn } from "../../lib/cn";
+import {
+  DashboardGraphBackground,
+  DashboardGraphControls,
+  DashboardGraphFrame,
+} from "../../components/dashboard/dashboard-graph";
 import type { FactoryGraphNodeKind } from "../factory-graph-editor/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../factory-graph-editor/factory-graph-editor-connections";
 import {
@@ -31,32 +33,12 @@ import {
   GraphDropOverlay,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
-
-const GRAPH_BACKGROUND_COLOR = "var(--color-af-edge-muted-soft)";
-const GRAPH_BACKGROUND_GAP = 24;
-const GRAPH_BACKGROUND_SIZE = 1;
 const CURRENT_ACTIVITY_LEGEND_CLASS =
   "absolute left-7 top-7 z-10 max-md:left-4 max-md:right-4 max-md:top-4";
-
-type CSSPropertiesWithVariables = CSSProperties &
-  Record<`--${string}`, string | number>;
-
-const GRAPH_CONTROLS_STYLE: CSSPropertiesWithVariables = {
-  "--xy-controls-box-shadow": "none",
-  "--xy-controls-button-background-color-hover-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.1)",
-  "--xy-controls-button-background-color-props":
-    "rgb(from var(--color-af-surface) r g b / 0.94)",
-  "--xy-controls-button-border-color-props":
-    "rgb(from var(--color-af-overlay) r g b / 0.08)",
-  "--xy-controls-button-color-hover-props": "var(--color-af-ink)",
-  "--xy-controls-button-color-props":
-    "rgb(from var(--color-af-ink) r g b / 0.72)",
-  backgroundColor: "rgb(from var(--color-af-surface) r g b / 0.88)",
-  border: "1px solid rgb(from var(--color-af-overlay) r g b / 0.08)",
-  borderRadius: 8,
-  overflow: "hidden",
-};
+const CURRENT_ACTIVITY_GRAPH_CONTROLS_FIT_VIEW_OPTIONS = {
+  maxZoom: 1.2,
+  padding: 0.12,
+} as const satisfies FitViewOptions;
 
 export function CurrentActivityGraphViewport({
   activeTool,
@@ -150,11 +132,10 @@ export function CurrentActivityGraphViewport({
         iconItems={getDefaultDashboardFlowAxisLegendIconItems(locale)}
         locale={locale}
       />
-      <section
+      <DashboardGraphFrame
         aria-describedby="workflow-graph-heading"
         aria-label={editorMessages.viewportLabel}
         className={cn(
-          "relative h-full min-h-0 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-af-accent/35 bg-af-accent/6",
@@ -204,15 +185,9 @@ export function CurrentActivityGraphViewport({
           proOptions={{ hideAttribution: true }}
           zoomOnScroll
         >
-          <Background
-            color={GRAPH_BACKGROUND_COLOR}
-            gap={GRAPH_BACKGROUND_GAP}
-            size={GRAPH_BACKGROUND_SIZE}
-          />
-          <Controls
-            fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
-            showInteractive={false}
-            style={GRAPH_CONTROLS_STYLE}
+          <DashboardGraphBackground />
+          <DashboardGraphControls
+            fitViewOptions={CURRENT_ACTIVITY_GRAPH_CONTROLS_FIT_VIEW_OPTIONS}
           />
         </ReactFlow>
         <FactoryGraphEditorToolbar
@@ -228,7 +203,7 @@ export function CurrentActivityGraphViewport({
           visible={editorMode}
         />
         <GraphDropOverlay dropState={imports.dropState} locale={locale} />
-      </section>
+      </DashboardGraphFrame>
     </div>
   );
 }

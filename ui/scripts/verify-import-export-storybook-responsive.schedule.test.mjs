@@ -39,20 +39,24 @@ describe("import/export responsive schedule", () => {
     const visitedUrls = [];
     const visitedViewports = [];
     const page = {
-      close: vi.fn().mockResolvedValue(undefined),
       goto: vi.fn((url) => {
         visitedUrls.push(url);
-        return Promise.resolve();
-      }),
-      setViewportSize: vi.fn((viewport) => {
-        visitedViewports.push(viewport);
         return Promise.resolve();
       }),
       waitForFunction: vi.fn().mockResolvedValue(undefined),
       waitForSelector: vi.fn().mockResolvedValue(undefined),
     };
+    const contexts = [];
     const browser = {
-      newPage: vi.fn().mockResolvedValue(page),
+      newContext: vi.fn((options) => {
+        visitedViewports.push(options.viewport);
+        const context = {
+          close: vi.fn().mockResolvedValue(undefined),
+          newPage: vi.fn().mockResolvedValue(page),
+        };
+        contexts.push(context);
+        return Promise.resolve(context);
+      }),
     };
     const checks = [
       { assertions: vi.fn().mockResolvedValue(undefined), id: "story-one" },
@@ -79,7 +83,10 @@ describe("import/export responsive schedule", () => {
     ]);
     expect(checks[0].assertions).toHaveBeenCalledTimes(2);
     expect(checks[1].assertions).toHaveBeenCalledTimes(2);
-    expect(page.close).toHaveBeenCalledTimes(4);
+    expect(contexts).toHaveLength(4);
+    for (const context of contexts) {
+      expect(context.close).toHaveBeenCalledTimes(1);
+    }
   });
 });
 
@@ -123,6 +130,25 @@ describe("current-selection prompt hint responsive schedule", () => {
       "infinite-you-workflow-dashboard--current-selection-prompt-hint-verification",
     );
     expect(promptHintStory?.dialogName).toBeUndefined();
+    expect(viewportChecks).toEqual([
+      { height: 844, label: "mobile", width: 390 },
+      { height: 1024, label: "tablet", width: 768 },
+      { height: 900, label: "desktop", width: 1440 },
+    ]);
+  });
+});
+
+describe("provider-session detail responsive schedule", () => {
+  test("keeps the provider-session success story in the default responsive schedule", () => {
+    const providerSessionStory = storyChecks.find(
+      (storyCheck) =>
+        storyCheck.label === "current selection provider-session success",
+    );
+
+    expect(providerSessionStory?.id).toBe(
+      "infinite-you-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+    );
+    expect(providerSessionStory?.dialogName).toBeUndefined();
     expect(viewportChecks).toEqual([
       { height: 844, label: "mobile", width: 390 },
       { height: 1024, label: "tablet", width: 768 },

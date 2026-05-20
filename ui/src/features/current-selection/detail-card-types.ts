@@ -13,7 +13,6 @@ import type {
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardTrace,
-  DashboardWorkItemRef,
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../api/dashboard/types";
@@ -23,7 +22,7 @@ import type { CurrentSelectionDetailMessages } from "./messages/current-selectio
 import type { LoadableProviderSessionRef } from "./provider-session-details";
 import type { RunnerID } from "./runner-metadata";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
-import type { DashboardWorkItemSelection } from "./types";
+import type { DashboardWorkItemSelection, StatePositionWorkItem } from "./types";
 
 export interface SelectionDetailLayoutProps {
   children: ReactNode;
@@ -41,29 +40,26 @@ export interface StatePositionWorkListProps {
     CurrentSelectionDetailMessages,
     | "failureMessageLabel"
     | "failureReasonLabel"
+    | "startedAtLabel"
     | "selectWorkItemLabel"
-    | "traceIdLabel"
-    | "workIdLabel"
-    | "workTypeLabel"
-    | "workTypeUnavailable"
   >;
-  onSelectWorkItem?: (workItem: DashboardWorkItemRef) => void;
-  workItems: DashboardWorkItemRef[];
+  onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
+  workItems: StatePositionWorkItem[];
 }
 
 export interface StatePositionWorkListItemProps {
   failureDetail?: DashboardFailedWorkDetail;
   messages: StatePositionWorkListProps["messages"];
-  onSelectWorkItem?: (workItem: DashboardWorkItemRef) => void;
-  workItem: DashboardWorkItemRef;
+  onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
+  workItem: StatePositionWorkItem;
 }
 
 export interface StateNodeDetailCardProps {
-  currentWorkItems: DashboardWorkItemRef[];
+  currentWorkItems: StatePositionWorkItem[];
   failedWorkDetailsByWorkID?: Record<string, DashboardFailedWorkDetail>;
-  onSelectWorkItem?: (workItem: DashboardWorkItemRef) => void;
+  onSelectWorkItem?: (workItem: StatePositionWorkItem) => void;
   place: DashboardPlaceRef;
-  terminalHistoryWorkItems?: DashboardWorkItemRef[];
+  terminalHistoryWorkItems?: StatePositionWorkItem[];
   tokenCount: number;
   widgetId?: string;
 }
@@ -322,10 +318,6 @@ export interface TerminalWorkSummaryCardProps {
   now?: number;
   status: "completed" | "failed";
   widgetId?: string;
-}
-
-export interface RequestCountSectionProps {
-  request: DashboardWorkstationRequest;
 }
 
 export interface MetadataSectionProps {
