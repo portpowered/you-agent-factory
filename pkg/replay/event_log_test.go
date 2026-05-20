@@ -3,6 +3,7 @@ package replay
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -234,6 +235,53 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 	}
 }
 
+func TestReduceReplayEvents_DecodesGeneratedWorkContentForSubmissionsAndCompletions(t *testing.T) {
+	artifact := testReplayArtifact(
+		t,
+		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{
+			Name:         "Story",
+			WorkId:       stringPtrIfNotEmpty("work-1"),
+			WorkTypeName: stringPtrIfNotEmpty("task"),
+			TraceId:      stringPtrIfNotEmpty("trace-1"),
+			Content: replayWorkContentForDeliveryTest(t, []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+			}),
+		}}, nil),
+		replayDispatchResponseEventWithOutputWork(t, "dispatch-1", "completion-1", 2, []factoryapi.Work{{
+			Name:         "Story Result",
+			WorkId:       stringPtrIfNotEmpty("work-2"),
+			WorkTypeName: stringPtrIfNotEmpty("task"),
+			TraceId:      stringPtrIfNotEmpty("trace-2"),
+			Content: replayWorkContentForDeliveryTest(t, []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "beta"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/beta.png"},
+			}),
+		}}),
+	)
+
+	reduced, err := reduceReplayEvents(artifact)
+	if err != nil {
+		t.Fatalf("reduceReplayEvents: %v", err)
+	}
+
+	wantSubmission := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+	}
+	if got := reduced.Submissions[0].request.Works[0].Content; !reflect.DeepEqual(got, wantSubmission) {
+		t.Fatalf("submission content = %#v, want %#v", got, wantSubmission)
+	}
+
+	wantCompletion := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "beta"},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/beta.png"},
+	}
+	if got := reduced.Completions[0].result.RecordedOutputWork[0].Content; !reflect.DeepEqual(got, wantCompletion) {
+		t.Fatalf("completion output work content = %#v, want %#v", got, wantCompletion)
+	}
+}
+
 func TestReduceReplayEvents_CompletionsRehydrateSafeDiagnosticsThroughInterfaces(t *testing.T) {
 	artifact := testReplayArtifact(
 		t,
@@ -440,6 +488,33 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 	}}, nil)
 	dispatchEvent := replayDispatchCreatedEvent(t, dispatch, 2)
 	return testReplayArtifact(t, workRequest, dispatchEvent), dispatchEvent
+}
+
+func replayDispatchResponseEventWithOutputWork(t *testing.T, dispatchID string, completionID string, tick int, outputWork []factoryapi.Work) factoryapi.FactoryEvent {
+	t.Helper()
+
+	payload := factoryapi.DispatchResponseEventPayload{
+		CompletionId: stringPtrIfNotEmpty(completionID),
+		TransitionId: "process",
+		Outcome:      factoryapi.WorkOutcomeAccepted,
+		OutputWork:   &outputWork,
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromDispatchResponseEventPayload(payload); err != nil {
+		t.Fatalf("encode dispatch completed payload: %v", err)
+	}
+
+	return factoryapi.FactoryEvent{
+		Id:            fmt.Sprintf("factory-event/dispatch-completed/%s", dispatchID),
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeDispatchResponse,
+		Context: factoryapi.FactoryEventContext{
+			EventTime:  time.Date(2026, time.April, 10, 12, 0, tick, 0, time.UTC),
+			Tick:       tick,
+			DispatchId: stringPtrIfNotEmpty(dispatchID),
+		},
+		Payload: union,
+	}
 }
 
 func assertThinReplayDispatchEventPayload(t *testing.T, dispatchEvent factoryapi.FactoryEvent) {

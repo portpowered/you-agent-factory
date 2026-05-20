@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -244,8 +245,12 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if string(mf.Submitted[0].Payload) != "Review this UI." {
 		t.Fatalf("payload = %q, want legacy text fallback", mf.Submitted[0].Payload)
 	}
-	if len(mf.Submitted[0].Content) != 2 {
-		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
+	wantContent := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "Review this UI."},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/ui.png"},
+	}
+	if !reflect.DeepEqual(mf.Submitted[0].Content, wantContent) {
+		t.Fatalf("submitted content = %#v, want %#v", mf.Submitted[0].Content, wantContent)
 	}
 }
 
@@ -288,6 +293,35 @@ func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *
 	}
 	if mf.Submitted[0].Content[0].Text != "legacy text" {
 		t.Fatalf("content text = %q, want legacy text", mf.Submitted[0].Content[0].Text)
+	}
+}
+
+func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
+	mf := &testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}
+	srv := newTestServer(mf)
+
+	body := `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","text":"Review this PRD."},{"type":"image","file":"fixtures/prd.png"}]}]}`
+	req := httptest.NewRequest(http.MethodPut, "/work-requests/request-1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.WorkRequests) != 1 {
+		t.Fatalf("work request submissions = %d, want 1", len(mf.WorkRequests))
+	}
+	wantContent := []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "Review this PRD."},
+		{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/prd.png"},
+	}
+	if !reflect.DeepEqual(mf.WorkRequests[0].Works[0].Content, wantContent) {
+		t.Fatalf("upserted work content = %#v, want %#v", mf.WorkRequests[0].Works[0].Content, wantContent)
 	}
 }
 
