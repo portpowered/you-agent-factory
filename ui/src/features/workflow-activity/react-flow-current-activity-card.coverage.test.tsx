@@ -292,6 +292,21 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     );
   });
 
+  it("renders the factory graph inside the shared dashboard graph frame", () => {
+    const { container } = renderViewport({ graphKey: "graph-key" });
+
+    const graphFrame = container.querySelector(
+      '[data-dashboard-graph-frame="true"]',
+    );
+
+    expect(graphFrame).toBeTruthy();
+    expect(graphFrame?.getAttribute("aria-label")).toBe(
+      "Work graph viewport",
+    );
+    expect(screen.getByTestId("graph-background")).toBeTruthy();
+    expect(screen.getByTestId("graph-controls")).toBeTruthy();
+  });
+
   it("skips node-position persistence when the viewport has no graph key", () => {
     renderViewport({ graphKey: "" });
 
