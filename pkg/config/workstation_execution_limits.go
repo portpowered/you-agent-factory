@@ -31,7 +31,7 @@ func WorkstationExecutionTimeout(cfg *interfaces.FactoryWorkstationConfig) (time
 	if strings.TrimSpace(cfg.Limits.MaxExecutionTime) != "" {
 		timeout, err := time.ParseDuration(cfg.Limits.MaxExecutionTime)
 		if err != nil {
-			return 0, fmt.Errorf("invalid workstation limits.maxExecutionTime %q: %v", cfg.Limits.MaxExecutionTime, err)
+			return 0, fmt.Errorf("invalid workstation limits.maxExecutionTime %q: %w", cfg.Limits.MaxExecutionTime, err)
 		}
 		if timeout > 0 {
 			return timeout, nil

@@ -48,8 +48,9 @@ func (d *NoOpDispatcherSubsystem) TickGroup() TickGroup {
 // consumes input tokens, and immediately enqueues an ACCEPTED result via the
 // enqueueResult callback with pass-through token colors. No external executor
 // is invoked.
-func (d *NoOpDispatcherSubsystem) Execute(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
-	enabled := scheduler.FindEnabledTransitions(d.state, &snapshot.Marking)
+func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+	evaluator := scheduler.NewEnablementEvaluator(nil)
+	enabled := evaluator.FindEnabledTransitions(ctx, d.state, &snapshot.Marking)
 	if len(enabled) == 0 {
 		return nil, nil
 	}
@@ -111,7 +112,7 @@ func (d *NoOpDispatcherSubsystem) Execute(_ context.Context, snapshot *interface
 		}
 
 		if d.resultBuffer != nil {
-			d.resultBuffer.Write(context.Background(), result)
+			d.resultBuffer.Write(ctx, result)
 		}
 	}
 

@@ -153,7 +153,7 @@ func TestExecCommandRunner_ContextDeadlineReturnsSystemError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run error = nil, want context deadline error")
 	}
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Run error = %v, want %v", err, context.DeadlineExceeded)
 	}
 	if result.ExitCode != 0 {
@@ -181,7 +181,7 @@ func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testi
 	if err == nil {
 		t.Fatal("Run error = nil, want context deadline error")
 	}
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Run error = %v, want %v; stdout=%q stderr=%q", err, context.DeadlineExceeded, result.Stdout, result.Stderr)
 	}
 

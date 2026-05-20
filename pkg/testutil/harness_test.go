@@ -35,7 +35,9 @@ func TestMarkingAssert_PlaceTokenCount(t *testing.T) {
 	h.MockWorker("w", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
 
 	// Submit queues the token; RunUntilComplete processes it via the engine.
-	h.SubmitWork("item", []byte("test"))
+	if err := h.SubmitWork("item", []byte("test")); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
 	h.RunUntilComplete(t, 5*time.Second)
 
 	// Token should have moved to done after processing.
@@ -63,7 +65,9 @@ func TestMockWorker_AsyncDispatch(t *testing.T) {
 		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
 	)
 
-	h.SubmitWork("task", []byte(`{"title":"async mock test"}`))
+	if err := h.SubmitWork("task", []byte(`{"title":"async mock test"}`)); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
 	h.RunUntilComplete(t, 10*time.Second)
 
 	// Token should have flowed through the full async pipeline.
@@ -91,7 +95,9 @@ func TestSetCustomExecutor_AsyncDispatch(t *testing.T) {
 	tracker := &callTracker{}
 	h.SetCustomExecutor("processor", tracker)
 
-	h.SubmitWork("task", []byte(`{"title":"custom executor async"}`))
+	if err := h.SubmitWork("task", []byte(`{"title":"custom executor async"}`)); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
 	h.RunUntilComplete(t, 10*time.Second)
 
 	h.Assert().

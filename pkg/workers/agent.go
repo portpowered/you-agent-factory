@@ -108,13 +108,17 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request interfaces.Works
 	metrics := agentWorkMetrics(start, retryCount)
 	if request.OutputSchema != "" {
 		ae.logger.Info("parsing output against schema", "schema", request.OutputSchema)
+		parseFailure := ""
 		if _, parseErr := parseOutputAgainstSchema(resp.Content, []byte(request.OutputSchema)); parseErr != nil {
+			parseFailure = parseErr.Error()
+		}
+		if parseFailure != "" {
 			return interfaces.WorkResult{
 				DispatchID:      request.Dispatch.DispatchID,
 				TransitionID:    request.Dispatch.TransitionID,
 				Outcome:         interfaces.OutcomeFailed,
 				Output:          resp.Content,
-				Error:           "output parse failed: " + parseErr.Error(),
+				Error:           "output parse failed: " + parseFailure,
 				ProviderSession: interfaces.CloneProviderSessionMetadata(resp.ProviderSession),
 				Diagnostics:     diagnostics,
 				Metrics:         metrics,

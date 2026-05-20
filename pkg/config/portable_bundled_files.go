@@ -532,11 +532,7 @@ func portableBundledPathWithinRoot(rootPath, candidatePath string) bool {
 
 func portableBundledResolvedLinkPath(path string, info os.FileInfo) (string, bool, error) {
 	if info.Mode()&os.ModeSymlink == 0 {
-		linkTarget, err := os.Readlink(path)
-		if err != nil {
-			return "", false, nil
-		}
-		return resolvePortableBundledLinkTarget(path, linkTarget)
+		return "", false, nil
 	}
 
 	linkTarget, err := os.Readlink(path)
