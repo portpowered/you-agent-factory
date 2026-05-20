@@ -337,11 +337,11 @@ func (fs *FactoryService) openFactorySession(ctx context.Context, factoryDir str
 	if fs == nil {
 		return "", fmt.Errorf("factory service is required")
 	}
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir)
+	sessionID := newFactorySessionID()
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir, factoryDir, sessionID)
 	if err != nil {
 		return "", err
 	}
-	sessionID := newFactorySessionID()
 	if err := fs.startBackgroundSession(ctx, sessionID, replacement); err != nil {
 		return "", err
 	}
@@ -381,11 +381,11 @@ func (fs *FactoryService) openFactorySessionForTarget(ctx context.Context, targe
 	if fs == nil {
 		return "", fmt.Errorf("factory service is required")
 	}
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, target.FactoryDir)
+	sessionID := newFactorySessionID()
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, target.FolderPath, target.FactoryDir, sessionID)
 	if err != nil {
 		return "", err
 	}
-	sessionID := newFactorySessionID()
 	if err := fs.startBackgroundSessionWithMetadata(ctx, sessionID, replacement, target); err != nil {
 		return "", err
 	}

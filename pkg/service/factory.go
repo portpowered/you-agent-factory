@@ -69,11 +69,16 @@ var ErrCurrentNamedFactoryNotFound = apisurface.ErrCurrentNamedFactoryNotFound
 
 type replacementFactoryRuntime struct {
 	dir          string
+	folderPath   string
 	eventHistory *factory.FactoryEventHistory
 	factory      factory.Factory
 	listener     *listeners.FileWatcher
 	net          *state.Net
 	runtimeCfg   *factoryconfig.LoadedFactoryConfig
+	logger       *zap.Logger
+	logSink      *logging.RuntimeLogSink
+	recording    *replay.Recorder
+	recordPath   string
 }
 
 type liveRuntimeHandle struct {
@@ -109,6 +114,7 @@ type FactoryService struct {
 	cfg            *FactoryServiceConfig
 	runtimeCfg     *factoryconfig.LoadedFactoryConfig
 	eventHistory   *factory.FactoryEventHistory
+	baseLogger     *zap.Logger
 	logger         *zap.Logger
 	startTime      time.Time
 	clock          factory.Clock
@@ -212,15 +218,15 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		return nil, err
 	}
 	factoryRootDir := cfg.Dir
-	logger := cfg.Logger
-	if logger == nil {
-		logger = zap.NewNop()
+	baseLogger := cfg.Logger
+	if baseLogger == nil {
+		baseLogger = zap.NewNop()
 	}
 	runtimeInstanceID := cfg.RuntimeInstanceID
 	if runtimeInstanceID == "" {
 		runtimeInstanceID = uuid.NewString()
 	}
-	logSink, err := logging.BuildRuntimeLogger(logger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
+	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -230,9 +236,9 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 			_ = logSink.Close()
 		}
 	}()
-	logger = logSink.Logger()
+	logger := logSink.Logger()
 	cfg.RuntimeInstanceID = runtimeInstanceID
-	cfg.Logger = logger
+	cfg.Logger = baseLogger
 
 	if cfg.ReplayPath == "" {
 		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
@@ -241,6 +247,8 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		}
 		cfg.Dir = resolvedDir
 	}
+
+	logger = newSessionLogger(logger, defaultFactorySessionID, factoryRootDir, cfg.Dir)
 
 	logger.Info("loading factory config", zap.String("dir", cfg.Dir))
 	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForMode(cfg)
@@ -378,6 +386,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		net:            net,
 		cfg:            cfg,
 		runtimeCfg:     loadedFactoryCfg,
+		baseLogger:     baseLogger,
 		logger:         logger,
 		clock:          clock,
 		recording:      recording,
@@ -407,7 +416,11 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 		return err
 	}
 
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir)
+	sessionID := defaultFactorySessionID
+	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
+		sessionID = runState.sessionID
+	}
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
 	if err != nil {
 		return fmt.Errorf("%w: build replacement factory %q: %v", ErrInvalidNamedFactory, name, err)
 	}
@@ -417,16 +430,33 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 	return fs.activateReplacementRuntime(ctx, rootDir, name, replacement)
 }
 
-func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, factoryDir string) (*replacementFactoryRuntime, error) {
-	logger := fs.logger
-	if logger == nil {
-		logger = zap.NewNop()
+func (fs *FactoryService) buildReplacementFactoryRuntime(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+) (*replacementFactoryRuntime, error) {
+	baseLogger := fs.baseLogger
+	if baseLogger == nil {
+		baseLogger = zap.NewNop()
 	}
 
 	loadedFactoryCfg, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
 	if err != nil {
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}
+	runtimeInstanceID := uuid.NewString()
+	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, fs.cfg.RuntimeLogDir, fs.cfg.RuntimeLogConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build runtime logger: %w", err)
+	}
+	logger := newSessionLogger(logSink.Logger(), sessionID, folderPath, loadedFactoryCfg.FactoryDir())
+	runtimeBuilt := false
+	defer func() {
+		if !runtimeBuilt {
+			_ = logSink.Close()
+		}
+	}()
 	warnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
 	loadedFactoryCfg.SetRuntimeBaseDir(fs.cfg.ExecutionBaseDir)
 
@@ -457,6 +487,32 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 		return nil, fmt.Errorf("load workers: %w", err)
 	}
 
+	recordPath := sessionScopedRecordPath(fs.cfg.RecordPath, sessionID)
+	recordingArtifact, err := newRecordingArtifact(
+		&FactoryServiceConfig{
+			RecordPath: recordPath,
+			WorkflowID: fs.cfg.WorkflowID,
+		},
+		loadedFactoryCfg.FactoryDir(),
+		loadedFactoryCfg.FactoryConfig(),
+		loadedFactoryCfg,
+		clock,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var recording *replay.Recorder
+	if recordingArtifact != nil {
+		recording, err = replay.NewRecorder(
+			recordPath,
+			recordingArtifact,
+			replay.WithFlushInterval(fs.cfg.RecordFlushInterval),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create replay recorder: %w", err)
+		}
+	}
+
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
 		factory.WithRuntimeMode(fs.cfg.RuntimeMode),
@@ -465,6 +521,13 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 		factory.WithWorkflowContext(runtimeWorkflowContext(loadedFactoryCfg.FactoryConfig())),
 		factory.WithClock(clock),
 		factory.WithFactoryEventHistory(eventHistory),
+	}
+	if recordPath != "" {
+		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
+			if recording != nil {
+				recording.RecordEvent(event)
+			}
+		}))
 	}
 	opts = append(opts, workerOpts...)
 	opts = append(opts, fs.cfg.ExtraOptions...)
@@ -485,14 +548,20 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 		logger,
 		listeners.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
 	)
+	runtimeBuilt = true
 
 	return &replacementFactoryRuntime{
 		dir:          factoryDir,
+		folderPath:   folderPath,
 		eventHistory: eventHistory,
 		factory:      replacementFactory,
 		listener:     replacementListener,
 		net:          net,
 		runtimeCfg:   loadedFactoryCfg,
+		logger:       logger,
+		logSink:      logSink,
+		recording:    recording,
+		recordPath:   recordPath,
 	}, nil
 }
 
@@ -543,6 +612,9 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	serviceMode := runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService
 
 	defer func() {
+		if currentRuntime != nil || fs.logSink == nil {
+			return
+		}
 		if err := fs.logSink.Close(); err != nil {
 			fs.logger.Warn("runtime log close failed", zap.Error(err))
 		}
@@ -552,13 +624,6 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		fs.clearRunState()
 		sidecars.Wait()
 	}()
-	if fs.recording != nil {
-		fs.recording.Start(runCtx)
-		if err := fs.recording.Flush(); err != nil {
-			return err
-		}
-	}
-
 	if !serviceMode {
 		listener := fs.listener
 		sidecars.Add(1)
@@ -649,21 +714,12 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && stopErr != context.Canceled && err == nil {
 		err = stopErr
 	}
+	if stopErr := fs.shutdownOtherLiveSessions(currentRuntime); stopErr != nil && err == nil {
+		err = stopErr
+	}
 	fs.clearRunState()
 	cancelRunSidecars()
 	sidecars.Wait()
-	if fs.recording != nil {
-		fs.recording.Finish(fs.clock.Now().UTC())
-	}
-	if writeErr := fs.writeRecording(); writeErr != nil {
-		return writeErr
-	}
-	if fs.recording != nil {
-		if recordErr := fs.recording.Err(); recordErr != nil {
-			return recordErr
-		}
-	}
-
 	// Print final dashboard.
 	if fs.cfg.SimpleDashboardRenderer != nil {
 		fs.renderDashboard(ctx)
@@ -785,11 +841,16 @@ func (fs *FactoryService) currentRuntimeBundle() *replacementFactoryRuntime {
 	}
 	return &replacementFactoryRuntime{
 		dir:          fs.cfg.Dir,
+		folderPath:   fs.factoryRootDir,
 		eventHistory: fs.eventHistory,
 		factory:      fs.factory,
 		listener:     fs.listener,
 		net:          fs.net,
 		runtimeCfg:   fs.runtimeCfg,
+		logger:       fs.logger,
+		logSink:      fs.logSink,
+		recording:    fs.recording,
+		recordPath:   fs.cfg.RecordPath,
 	}
 }
 
@@ -850,6 +911,13 @@ func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *r
 		runCancel: runCancel,
 		runDone:   make(chan struct{}),
 	}
+	if runtimeBundle.recording != nil {
+		runtimeBundle.recording.Start(runCtx)
+		if err := runtimeBundle.recording.Flush(); err != nil {
+			handle.setRunResult(err)
+			return handle
+		}
+	}
 	go func() {
 		handle.setRunResult(runtimeBundle.factory.Run(runCtx))
 	}()
@@ -874,7 +942,7 @@ func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *
 		go func() {
 			defer handle.sidecars.Done()
 			if err := handle.runtime.listener.Watch(sidecarCtx); err != nil && err != context.Canceled {
-				fs.logger.Error("file watcher error", zap.Error(err))
+				handle.runtime.runtimeLogger().Error("file watcher error", zap.Error(err))
 			}
 		}()
 	}
@@ -955,7 +1023,30 @@ func (fs *FactoryService) stopLiveRuntime(handle *liveRuntimeHandle) error {
 	if handle.runCancel != nil {
 		handle.runCancel()
 	}
-	return handle.wait()
+	return errors.Join(handle.wait(), fs.finalizeRuntimeArtifacts(handle.runtime))
+}
+
+func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	var errs []error
+	for _, sessionID := range fs.sessions.ids() {
+		session := fs.sessionByID(sessionID)
+		if session == nil {
+			continue
+		}
+		if session.handle == except {
+			continue
+		}
+		if session.handle != nil {
+			if err := fs.stopLiveRuntime(session.handle); err != nil && !errors.Is(err, context.Canceled) {
+				errs = append(errs, err)
+			}
+		}
+		fs.unregisterLiveSession(sessionID)
+	}
+	return errors.Join(errs...)
 }
 
 func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *liveRuntimeHandle) error {
@@ -1234,6 +1325,55 @@ func (fs *FactoryService) writeRecording() error {
 	return fs.recording.Flush()
 }
 
+func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *replacementFactoryRuntime) error {
+	if runtimeBundle == nil {
+		return nil
+	}
+	var errs []error
+	if runtimeBundle.recording != nil {
+		runtimeBundle.recording.Finish(factory.EnsureClock(fs.clock).Now().UTC())
+		if err := runtimeBundle.recording.Flush(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := runtimeBundle.recording.Err(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if runtimeBundle.logSink != nil {
+		if err := runtimeBundle.logSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
+	if base == nil {
+		base = zap.NewNop()
+	}
+	return base.With(
+		zap.String("session_id", sessionID),
+		zap.String("folder_path", folderPath),
+		zap.String("factory_dir", factoryDir),
+	)
+}
+
+func sessionScopedRecordPath(basePath string, sessionID string) string {
+	if strings.TrimSpace(basePath) == "" || sessionID == defaultFactorySessionID {
+		return basePath
+	}
+	ext := filepath.Ext(basePath)
+	base := strings.TrimSuffix(basePath, ext)
+	return base + "." + sessionID + ext
+}
+
+func (r *replacementFactoryRuntime) runtimeLogger() *zap.Logger {
+	if r == nil || r.logger == nil {
+		return zap.NewNop()
+	}
+	return r.logger
+}
+
 func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 	if mode == "" {
 		return interfaces.RuntimeModeBatch
@@ -1383,7 +1523,11 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 		}
 	}
 
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir)
+	sessionID := defaultFactorySessionID
+	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
+		sessionID = runState.sessionID
+	}
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
 	if err != nil {
 		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %v", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
 	}

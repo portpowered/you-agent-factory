@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/replay"
 	"go.uber.org/zap"
 )
 
@@ -113,6 +115,141 @@ func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *tes
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	logDir := t.TempDir()
+	recordPath := filepath.Join(t.TempDir(), "recording.json")
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		RuntimeLogDir:     logDir,
+		RecordPath:        recordPath,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+
+	betaSessionOne, err := svc.openFactorySession(context.Background(), betaDir)
+	if err != nil {
+		t.Fatalf("openFactorySession(beta one): %v", err)
+	}
+	betaSessionTwo, err := svc.openFactorySession(context.Background(), betaDir)
+	if err != nil {
+		t.Fatalf("openFactorySession(beta two): %v", err)
+	}
+
+	defaultSession := svc.sessionByID(defaultFactorySessionID)
+	firstBeta := svc.sessionByID(betaSessionOne)
+	secondBeta := svc.sessionByID(betaSessionTwo)
+	if defaultSession == nil || firstBeta == nil || secondBeta == nil {
+		t.Fatalf("expected default and beta sessions to be registered, got ids %v", svc.sessions.ids())
+	}
+
+	submitSessionWork(t, defaultSession, "alpha-session-work", "trace-alpha-session")
+	submitSessionWork(t, firstBeta, "beta-session-one-work", "trace-beta-session-one")
+	submitSessionWork(t, secondBeta, "beta-session-two-work", "trace-beta-session-two")
+
+	waitForSessionEventsToContain(t, defaultSession, "alpha-session-work", time.Second)
+	waitForSessionEventsToContain(t, firstBeta, "beta-session-one-work", time.Second)
+	waitForSessionEventsToContain(t, secondBeta, "beta-session-two-work", time.Second)
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+
+	sessions := []*liveFactorySession{defaultSession, firstBeta, secondBeta}
+	wantWorkBySession := map[string]string{
+		defaultFactorySessionID: "alpha-session-work",
+		betaSessionOne:          "beta-session-one-work",
+		betaSessionTwo:          "beta-session-two-work",
+	}
+
+	if defaultSession.handle.runtime.recordPath != recordPath {
+		t.Fatalf("default record path = %q, want %q", defaultSession.handle.runtime.recordPath, recordPath)
+	}
+	if firstBeta.handle.runtime.recordPath == "" || secondBeta.handle.runtime.recordPath == "" {
+		t.Fatalf("background record paths must be set, got %q and %q", firstBeta.handle.runtime.recordPath, secondBeta.handle.runtime.recordPath)
+	}
+	if firstBeta.handle.runtime.recordPath == secondBeta.handle.runtime.recordPath {
+		t.Fatalf("background sessions shared record path %q", firstBeta.handle.runtime.recordPath)
+	}
+
+	for _, session := range sessions {
+		if session == nil || session.handle == nil || session.handle.runtime == nil {
+			t.Fatal("expected live session runtime")
+		}
+		runtimeBundle := session.handle.runtime
+		artifact, err := replay.Load(runtimeBundle.recordPath)
+		if err != nil {
+			t.Fatalf("Load(%s): %v", runtimeBundle.recordPath, err)
+		}
+		payload, err := json.Marshal(artifact.Events)
+		if err != nil {
+			t.Fatalf("Marshal(%s events): %v", runtimeBundle.recordPath, err)
+		}
+		wantWork := wantWorkBySession[session.id]
+		if !strings.Contains(string(payload), wantWork) {
+			t.Fatalf("artifact %s did not contain session work %q: %s", runtimeBundle.recordPath, wantWork, string(payload))
+		}
+		for otherSessionID, otherWork := range wantWorkBySession {
+			if otherSessionID == session.id {
+				continue
+			}
+			if strings.Contains(string(payload), otherWork) {
+				t.Fatalf("artifact %s leaked work %q from session %s: %s", runtimeBundle.recordPath, otherWork, otherSessionID, string(payload))
+			}
+		}
+
+		logPath := runtimeBundle.logSink.Path()
+		if logPath == "" {
+			t.Fatalf("session %s runtime log path is empty", session.id)
+		}
+		data, err := os.ReadFile(logPath)
+		if err != nil {
+			t.Fatalf("read runtime log %s: %v", logPath, err)
+		}
+		records := parseRuntimeLogRecords(t, string(data))
+		foundSessionRecord := false
+		for _, record := range records {
+			if record["session_id"] != session.id {
+				continue
+			}
+			foundSessionRecord = true
+			if record["folder_path"] != runtimeBundle.folderPath {
+				t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.id, record["folder_path"], runtimeBundle.folderPath, record)
+			}
+			if record["runtime_instance_id"] == "" {
+				t.Fatalf("session %s runtime_instance_id missing in %#v", session.id, record)
+			}
+		}
+		if !foundSessionRecord {
+			t.Fatalf("runtime log %s did not contain any records for session %s:\n%s", logPath, session.id, string(data))
+		}
 	}
 }
 

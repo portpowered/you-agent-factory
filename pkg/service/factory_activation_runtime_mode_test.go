@@ -38,7 +38,7 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	}
 
 	createReplacementWatchChannel(t, betaDir, "task", "activated")
-	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), betaDir)
+	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
