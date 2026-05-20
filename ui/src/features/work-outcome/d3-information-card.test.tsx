@@ -147,6 +147,8 @@ describe("D3CompletionInformationCard", () => {
     expect(chartRegion.className).toContain("px-4");
     expect(chartRegion.className).toContain("sm:px-5");
     expect(chart.className).toContain("h-full");
+    expect(chart.className).toContain("w-full");
+    expect(chart.className).toContain("min-w-0");
     expect(chart.className).toContain("min-h-[14rem]");
     expect(chart.className).toContain("px-5");
     expect(chart.className).toContain("pb-5");
@@ -178,6 +180,13 @@ describe("D3CompletionInformationCard", () => {
     expect(
       screen.getByText("Work outcome data appears after the event stream receives work history."),
     ).toBeTruthy();
+    const emptyState = screen.getByRole("status");
+    expect(emptyState.className).toContain("h-full");
+    expect(emptyState.className).toContain("w-full");
+    expect(emptyState.className).toContain("min-w-0");
+    expect(emptyState.className).toContain("flex-1");
+    expect(emptyState.className).toContain("justify-center");
+    expect(emptyState.className).toContain("min-h-[14rem]");
   });
 
   it("renders an explicit loading state without dropping chart summary controls", () => {
@@ -190,8 +199,15 @@ describe("D3CompletionInformationCard", () => {
 
     const card = screen.getByRole("article", { name: "Work outcome chart" });
     expect(within(card).queryByRole("combobox", { name: "Time range" })).toBeNull();
-    expect(within(card).getByRole("status")).toBeTruthy();
+    const loadingState = within(card).getByRole("status");
+    expect(loadingState).toBeTruthy();
     expect(within(card).getByText("Loading work outcome samples")).toBeTruthy();
+    expect(loadingState.className).toContain("h-full");
+    expect(loadingState.className).toContain("w-full");
+    expect(loadingState.className).toContain("min-w-0");
+    expect(loadingState.className).toContain("flex-1");
+    expect(loadingState.className).toContain("justify-center");
+    expect(loadingState.className).toContain("min-h-[14rem]");
     expect(
       within(card).queryByRole("img", { name: "Work outcome chart for 15m" }),
     ).toBeNull();
@@ -217,5 +233,11 @@ describe("D3CompletionInformationCard", () => {
     expect(
       within(card).queryByRole("img", { name: "Work outcome chart for 15m" }),
     ).toBeNull();
+    expect(alert.className).toContain("h-full");
+    expect(alert.className).toContain("w-full");
+    expect(alert.className).toContain("min-w-0");
+    expect(alert.className).toContain("flex-1");
+    expect(alert.className).toContain("justify-center");
+    expect(alert.className).toContain("min-h-[14rem]");
   });
 });

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { expect, within } from "storybook/test";
 
 import "../../styles.css";
@@ -194,16 +195,41 @@ function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
   expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
 }
 
+function renderWorkOutcomeStoryShell({
+  children,
+  height,
+  maxWidth = "640px",
+}: {
+  children: ReactNode;
+  height?: string;
+  maxWidth?: string;
+}) {
+  return (
+    <div
+      data-story-shell="work-outcome"
+      style={{ height, maxWidth, padding: "1rem", width: "100%" }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default {
   title: "Agent Factory/Dashboard/Work Outcome Chart Card",
   component: D3CompletionInformationCard,
 };
 
 export const Populated = {
-  args: {
-    model: populatedTrend,
-    widgetId: "work-outcome-chart-story",
-  },
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          model={populatedTrend}
+          widgetId="work-outcome-chart-story"
+        />
+      ),
+      height: "28rem",
+    }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", {
@@ -215,32 +241,84 @@ export const Populated = {
 };
 
 export const EmptyData = {
-  args: {
-    model: emptyTrend,
-    widgetId: "work-outcome-chart-empty-story",
-  },
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          model={emptyTrend}
+          widgetId="work-outcome-chart-empty-story"
+        />
+      ),
+      height: "28rem",
+    }),
 };
 
 export const LoadingData = {
-  args: {
-    chartState: { status: "loading" },
-    model: emptyTrend,
-    widgetId: "work-outcome-chart-loading-story",
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          chartState={{ status: "loading" }}
+          model={emptyTrend}
+          widgetId="work-outcome-chart-loading-story"
+        />
+      ),
+      height: "32rem",
+      maxWidth: "360px",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    const loadingState = within(card).getByRole("status");
+    expect(loadingState.className).toContain("h-full");
+    expect(loadingState.className).toContain("flex-1");
+    expect(loadingState.className).toContain("justify-center");
+    expectNoOverflowInStoryShell(canvasElement);
+  },
+};
+
+export const ErrorState = {
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          chartState={{ status: "error" }}
+          model={emptyTrend}
+          widgetId="work-outcome-chart-error-story"
+        />
+      ),
+      height: "32rem",
+      maxWidth: "360px",
+    }),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const card = await canvas.findByRole("article", {
+      name: "Work outcome chart",
+    });
+
+    const alert = within(card).getByRole("alert");
+    expect(alert.className).toContain("h-full");
+    expect(alert.className).toContain("flex-1");
+    expect(alert.className).toContain("justify-center");
+    expectNoOverflowInStoryShell(canvasElement);
   },
 };
 
 export const ConstrainedWidth = {
-  render: () => (
-    <div
-      data-story-shell="work-outcome"
-      style={{ maxWidth: "360px", padding: "1rem" }}
-    >
-      <D3CompletionInformationCard
-        model={populatedTrend}
-        widgetId="work-outcome-chart-narrow-story"
-      />
-    </div>
-  ),
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          model={populatedTrend}
+          widgetId="work-outcome-chart-narrow-story"
+        />
+      ),
+      height: "28rem",
+      maxWidth: "360px",
+    }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", {
@@ -253,11 +331,17 @@ export const ConstrainedWidth = {
 };
 
 export const LocalizedZhCN = {
-  args: {
-    locale: "zh-CN",
-    model: populatedTrend,
-    widgetId: "work-outcome-chart-zh-cn-story",
-  },
+  render: () =>
+    renderWorkOutcomeStoryShell({
+      children: (
+        <D3CompletionInformationCard
+          locale="zh-CN"
+          model={populatedTrend}
+          widgetId="work-outcome-chart-zh-cn-story"
+        />
+      ),
+      height: "28rem",
+    }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("article", { name: "工作结果图表" });
