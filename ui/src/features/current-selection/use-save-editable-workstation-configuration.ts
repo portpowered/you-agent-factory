@@ -12,9 +12,11 @@ import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
 } from "./detail-card-types";
+import { getWorkstationDetailMessages } from "./messages";
 
 interface UseSaveEditableWorkstationConfigurationOptions {
   editableConfigurationState?: EditableWorkstationConfigurationState;
+  locale?: string | null;
   scopeKey: string | null;
 }
 
@@ -28,9 +30,11 @@ interface UseSaveEditableWorkstationConfigurationResult {
 
 export function useSaveEditableWorkstationConfiguration({
   editableConfigurationState,
+  locale,
   scopeKey,
 }: UseSaveEditableWorkstationConfigurationOptions): UseSaveEditableWorkstationConfigurationResult {
   const queryClient = useQueryClient();
+  const messages = getWorkstationDetailMessages(locale);
   const [isConfirming, setIsConfirming] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -39,7 +43,12 @@ export function useSaveEditableWorkstationConfiguration({
     onError: (error) => {
       setIsConfirming(false);
       setIsSuccess(false);
-      setSaveError(normalizeSaveError(error));
+      setSaveError(
+        normalizeSaveError(
+          error,
+          messages.editableConfigurationSaveFallbackError,
+        ),
+      );
     },
     onSuccess: (value) => {
       const normalizedFactory = normalizeFactoryDefinition(value);
@@ -142,7 +151,7 @@ export function useSaveEditableWorkstationConfiguration({
   };
 }
 
-function normalizeSaveError(error: unknown): string {
+function normalizeSaveError(error: unknown, fallbackMessage: string): string {
   if (error instanceof NamedFactoryAPIError) {
     return error.message;
   }
@@ -150,5 +159,5 @@ function normalizeSaveError(error: unknown): string {
     return error.message;
   }
 
-  return "The running factory could not be saved.";
+  return fallbackMessage;
 }

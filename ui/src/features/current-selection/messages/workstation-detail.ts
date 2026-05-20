@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: feature-local locale catalogs keep required language coverage in one typed asset set.
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,
@@ -48,6 +49,18 @@ const workstationDetailMessagesByLocale = {
       "Worker and prompt values are loaded from the latest editable current-factory definition.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this workstation.",
+    editableConfigurationPromptRequired:
+      "Enter a prompt before saving this workstation.",
+    editableConfigurationSaveFallbackError:
+      "The running factory could not be saved.",
+    editableConfigurationWorkerMissing:
+      "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
+    editableConfigurationWorkerOptionsEmpty:
+      "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
+    editableConfigurationWorkerRequired:
+      "Select a worker before saving this workstation.",
+    editableConfigurationWorkerUnavailable:
+      "The selected worker is no longer available. Choose another worker before saving this workstation.",
     editableConfigurationWorkerUnavailablePrefix:
       "Worker selection unavailable.",
     modelFieldLabel: "Model",
@@ -153,6 +166,18 @@ const workstationDetailMessagesByLocale = {
       "Worker と prompt の値は最新の編集可能な current-factory 定義から読み込まれます。",
     editableConfigurationValidationStatus:
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
+    editableConfigurationPromptRequired:
+      "このワークステーションを保存する前にプロンプトを入力してください。",
+    editableConfigurationSaveFallbackError:
+      "実行中ファクトリーを保存できませんでした。",
+    editableConfigurationWorkerMissing:
+      "選択中のワークステーションは、現在のファクトリー定義に存在しないワーカーを参照しています。現在の選択を再読み込みして別のワーカーを選択してください。",
+    editableConfigurationWorkerOptionsEmpty:
+      "このワークステーションで利用できる現在のワーカーがありません。このフィールドを編集する前にファクトリーへワーカーを追加してください。",
+    editableConfigurationWorkerRequired:
+      "このワークステーションを保存する前にワーカーを選択してください。",
+    editableConfigurationWorkerUnavailable:
+      "選択したワーカーは利用できなくなりました。保存前に別のワーカーを選択してください。",
     editableConfigurationWorkerUnavailablePrefix:
       "ワーカー選択は利用できません。",
     modelFieldLabel: "モデル",
@@ -258,6 +283,18 @@ const workstationDetailMessagesByLocale = {
       "Worker 및 prompt 값은 최신 편집 가능한 current-factory 정의에서 로드됩니다.",
     editableConfigurationValidationStatus:
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
+    editableConfigurationPromptRequired:
+      "이 워크스테이션을 저장하기 전에 프롬프트를 입력하세요.",
+    editableConfigurationSaveFallbackError:
+      "실행 중인 팩토리를 저장할 수 없습니다.",
+    editableConfigurationWorkerMissing:
+      "선택한 워크스테이션이 현재 팩토리 정의에 더 이상 없는 워커를 참조합니다. 현재 선택을 다시 불러오고 다른 워커를 선택하세요.",
+    editableConfigurationWorkerOptionsEmpty:
+      "이 워크스테이션에서 사용할 수 있는 현재 워커가 없습니다. 이 필드를 편집하기 전에 팩토리에 워커를 추가하세요.",
+    editableConfigurationWorkerRequired:
+      "이 워크스테이션을 저장하기 전에 워커를 선택하세요.",
+    editableConfigurationWorkerUnavailable:
+      "선택한 워커를 더 이상 사용할 수 없습니다. 저장하기 전에 다른 워커를 선택하세요.",
     editableConfigurationWorkerUnavailablePrefix:
       "워커 선택을 사용할 수 없습니다.",
     modelFieldLabel: "모델",
@@ -357,6 +394,15 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSummary:
       "Worker 和 prompt 值来自最新可编辑的 current-factory 定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
+    editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",
+    editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
+    editableConfigurationWorkerMissing:
+      "所选工作站引用的工作器已不在当前工厂定义中。请重新加载当前选择并选择其他工作器。",
+    editableConfigurationWorkerOptionsEmpty:
+      "此工作站当前没有可用的工作器。请先向工厂添加工作器，再编辑此字段。",
+    editableConfigurationWorkerRequired: "保存此工作站前请选择工作器。",
+    editableConfigurationWorkerUnavailable:
+      "所选工作器已不可用。保存前请选择其他工作器。",
     editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",

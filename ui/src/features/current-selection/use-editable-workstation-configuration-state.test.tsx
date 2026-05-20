@@ -15,8 +15,12 @@ vi.mock("../current-factory-definition", async () => {
   };
 });
 
-const selectedNode = semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
-const selection: DashboardSelection = { kind: "node", nodeId: selectedNode.node_id };
+const selectedNode =
+  semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
+const selection: DashboardSelection = {
+  kind: "node",
+  nodeId: selectedNode.node_id,
+};
 
 describe("useEditableWorkstationConfigurationState", () => {
   beforeEach(() => {
@@ -60,6 +64,52 @@ describe("useEditableWorkstationConfigurationState", () => {
         ? result.current.pendingFactoryDefinition
         : undefined,
     ).toBeNull();
+  });
+
+  it("returns editable empty and validation messages for the selected locale", async () => {
+    const { rerender, result } = renderHook(
+      ({ locale }: { locale: string }) =>
+        useEditableWorkstationConfigurationState(
+          selection,
+          selectedNode,
+          locale,
+        ),
+      { initialProps: { locale: "zh-CN" } },
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onPromptChange("");
+      result.current.onWorkerChange("");
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      validationErrors: {
+        prompt: "保存此工作站前请输入提示词。",
+        workerName: "保存此工作站前请选择工作器。",
+      },
+    });
+
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(undefined),
+    );
+    rerender({ locale: "zh-CN" });
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        message:
+          "运行中的工厂定义没有为所选工作站公开可编辑的 worker 和 prompt 值。",
+        status: "empty",
+      });
+    });
   });
 
   it("rehydrates clean sessions from newer editable factory data", async () => {

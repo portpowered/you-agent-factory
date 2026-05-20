@@ -160,7 +160,7 @@ describe("ExecutionDetailsSection", () => {
     };
 
     render(
-      <CurrentSelectionLocaleProvider locale="ja">
+      <CurrentSelectionLocaleProvider locale="zh-CN">
         <ExecutionDetailsSection
           activeTraceID="trace-alpha"
           details={details}
@@ -170,28 +170,28 @@ describe("ExecutionDetailsSection", () => {
       </CurrentSelectionLocaleProvider>,
     );
 
-    const section = screen.getByRole("region", { name: "実行の詳細" });
-    expect(within(section).getByText("ディスパッチ ID")).toBeTruthy();
-    expect(within(section).getByText("ワークステーション")).toBeTruthy();
+    const section = screen.getByRole("region", { name: "执行详情" });
+    expect(within(section).getByText("分派 ID")).toBeTruthy();
+    expect(within(section).getByText("工作站")).toBeTruthy();
     expect(
       within(section).getByText(
-        "この選択中の実行ではワークステーションの詳細を利用できません。",
+        "当前所选运行暂时没有工作站详情。",
       ),
     ).toBeTruthy();
     expect(
       within(section).getByText(
-        "この作業項目のディスパッチ、再試行、ワークステーション出力を確認するにはトレースを開いてください。",
+        "打开追踪以查看该工作项的分派、重试和工作站输出。",
       ),
     ).toBeTruthy();
     expect(
-      within(section).getByRole("link", { name: "trace-alpha（選択中）" }),
+      within(section).getByRole("link", { name: "trace-alpha（已选中）" }),
     ).toBeTruthy();
     expect(
-      within(section).getByRole("link", { name: "トレースを開く" }),
+      within(section).getByRole("link", { name: "打开追踪" }),
     ).toBeTruthy();
     expect(
       within(section).getByText(
-        "この選択中の作業項目では推論イベントを利用できません。",
+        "当前所选工作项暂时没有推理事件。",
       ),
     ).toBeTruthy();
   });

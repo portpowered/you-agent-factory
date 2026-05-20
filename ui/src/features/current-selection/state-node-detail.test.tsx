@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
+import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { StateNodeDetailCard } from "./state-node-detail";
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
@@ -49,6 +50,33 @@ describe("StateNodeDetailCard", () => {
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.getByText("work-active-story")).toBeTruthy();
     expect(screen.getByText("trace-active-story")).toBeTruthy();
+  });
+
+  it("renders an English fallback when current work has no work type", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+      (place) => place.place_id === "story:implemented",
+    );
+
+    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[
+          {
+            display_name: "Active Story",
+            trace_id: "trace-active-story",
+            work_id: "work-active-story",
+          },
+        ]}
+        place={resolvedSelectedState}
+        tokenCount={1}
+      />,
+    );
+
+    expect(screen.getAllByText("Work type").length).toBeGreaterThan(0);
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByText("不明")).toBeNull();
   });
 
   it("applies shared typography helpers to the state-node selection header", () => {
@@ -229,5 +257,25 @@ describe("StateNodeDetailCard", () => {
       work_id: "work-active-story",
       work_type_id: "story",
     });
+  });
+
+  it("renders state-node supporting copy from the zh-CN locale catalog", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedState = snapshot.topology.workstation_nodes_by_id.review.output_places?.find(
+      (place) => place.place_id === "story:complete",
+    );
+
+    const resolvedSelectedState = requireValue(selectedState, "expected terminal state fixture");
+
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(screen.getByText("状态")).toBeTruthy();
+    expect(screen.getByText("状态节点 ID")).toBeTruthy();
+    expect(screen.getByText("当前工作")).toBeTruthy();
+    expect(screen.getByText("在所选时间刻度，这个位置暂时没有记录到工作。")).toBeTruthy();
   });
 });

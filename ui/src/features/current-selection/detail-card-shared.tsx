@@ -17,6 +17,7 @@ import type {
   MetadataSectionProps,
   RequestCountSectionProps,
 } from "./detail-card-types";
+import { useCurrentSelectionDetailMessages } from "./current-selection-locale";
 
 export const EXECUTION_PILL_CLASS = cx(
   "inline-flex rounded-full bg-af-info/15 px-2 py-0.5 text-af-info-ink",
@@ -69,12 +70,6 @@ export const REQUEST_HISTORY_TEXT_CLASS = cx(
   "m-0 whitespace-pre-wrap rounded-lg border border-af-overlay/8 bg-af-overlay/6 p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
 );
-
-const NO_CURRENT_WORK_IN_PLACE_COPY = "No current work is occupying this place.";
-const NO_WORK_RECORDED_AT_SELECTED_TICK_COPY =
-  "No work is recorded for this place at the selected tick.";
-const SELECTED_TICK_WORK_UNAVAILABLE_COPY =
-  "Represented work is unavailable for this place at the selected tick.";
 
 interface RequestAuthoredHeadingBlock {
   level: 1 | 2 | 3 | 4 | 5 | 6;
@@ -136,9 +131,14 @@ export function InferenceAttemptDetail({
 }
 
 export function RequestCountSection({ request }: RequestCountSectionProps) {
+  const messages = useCurrentSelectionDetailMessages();
+
   return (
-    <section aria-label="Request counts" className={RUNTIME_DETAILS_SECTION_CLASS}>
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>Request counts</h4>
+    <section
+      aria-label={messages.requestCountsRegionLabel}
+      className={RUNTIME_DETAILS_SECTION_CLASS}
+    >
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.requestCountsHeading}</h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <InferenceAttemptDetail label="dispatchedCount" value={request.dispatched_request_count} />
         <InferenceAttemptDetail label="respondedCount" value={request.responded_request_count} />
@@ -183,18 +183,24 @@ export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
 }
 
 export function emptyStatePlaceMessage(
+  messages: Pick<
+    ReturnType<typeof useCurrentSelectionDetailMessages>,
+    | "noCurrentWorkInPlace"
+    | "noWorkRecordedAtSelectedTick"
+    | "selectedTickWorkUnavailable"
+  >,
   usesRetainedWorkItems: boolean,
   tokenCount: number,
 ): string {
   if (!usesRetainedWorkItems) {
-    return NO_CURRENT_WORK_IN_PLACE_COPY;
+    return messages.noCurrentWorkInPlace;
   }
 
   if (tokenCount > 0) {
-    return SELECTED_TICK_WORK_UNAVAILABLE_COPY;
+    return messages.selectedTickWorkUnavailable;
   }
 
-  return NO_WORK_RECORDED_AT_SELECTED_TICK_COPY;
+  return messages.noWorkRecordedAtSelectedTick;
 }
 
 export function normalizeDetailText(value: string | undefined): string | undefined {
