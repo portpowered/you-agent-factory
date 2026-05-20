@@ -9,6 +9,6 @@ properties:
       $ref: './RequiredTool.yaml'
   bundledFiles:
     type: array
-    description: Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries.
+    description: Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.
     items:
       $ref: './BundledFile.yaml'

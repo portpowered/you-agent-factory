@@ -225,7 +225,7 @@ func thinPortableBundledFactory(factory factoryapi.Factory) factoryapi.Factory {
 	bundledFiles := append([]factoryapi.BundledFile(nil), (*normalized.SupportingFiles.BundledFiles)...)
 	for i := range bundledFiles {
 		switch bundledFiles[i].Type {
-		case factoryapi.DOC, factoryapi.SCRIPT:
+		case factoryapi.BundledFileTypeDOC, factoryapi.BundledFileTypeSCRIPT:
 			bundledFiles[i].Content.Inline = ""
 		}
 	}
