@@ -80,6 +80,25 @@ export interface WorkstationDetailMessages {
   requestHistoryHeading: string;
   requestSelectedAction: string;
   requestStatusStartedAgo: (elapsed: string) => string;
+  runnerCapabilityImageInputLabel: string;
+  runnerCapabilitySessionResumeLabel: string;
+  runnerCapabilityStructuredOutputLabel: string;
+  runnerCapabilityWorktreeLabel: string;
+  runnerCapabilityWorkingDirectoryLabel: string;
+  runnerCapabilitySupportHeading: string;
+  runnerCapabilitySupportedLabel: string;
+  runnerCapabilityUnsupportedLabel: string;
+  runnerFieldHelp: (runnerName: string, sourceLabel: string) => string;
+  runnerFieldLabel: string;
+  runnerInheritanceFactoryLabel: (runnerName: string) => string;
+  runnerInheritanceFactoryMissingLabel: string;
+  runnerInheritanceFactorySummaryLabel: string;
+  runnerInheritanceWorkstationSummaryLabel: string;
+  runnerLoadingValue: string;
+  runnerSelectionDefaultLabel: string;
+  runnerSelectionFactoryLabel: string;
+  runnerSelectionLegacyProviderLabel: string;
+  runnerSelectionWorkstationLabel: string;
   runHistoryHeading: string;
   providerSessionLogAction: string;
   providerSessionLogUnavailable: string;
@@ -100,10 +119,12 @@ export interface WorkstationDetailMessages {
   traceIdLabel: string;
   unknownActiveWorkLabel: string;
   unavailableValue: string;
+  unavailableRunnerValue: string;
   unknownWorkerTypeValue: string;
   unknownWorkLabel: string;
   workDetailsUnavailable: (dispatchId: string) => string;
   workIdLabel: string;
   workSelectedAction: string;
   workerTypeLabel: string;
+  selectedRunnerLabel: string;
 }

@@ -107,15 +107,15 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 	mapper := NewFactoryConfigMapper()
 	factoryCfg, err := mapper.Expand(canonicalFactoryJSON)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse factory %q config: %v", ErrInvalidNamedFactory, segment, err)
+		return nil, fmt.Errorf("%w: parse factory %q config: %w", ErrInvalidNamedFactory, segment, err)
 	}
 	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(factoryCfg)
 	if err != nil {
-		return nil, fmt.Errorf("%w: normalize authored factory %q config: %v", ErrInvalidNamedFactory, segment, err)
+		return nil, fmt.Errorf("%w: normalize authored factory %q config: %w", ErrInvalidNamedFactory, segment, err)
 	}
 	canonical, err := mapper.Flatten(authoredFactoryCfg)
 	if err != nil {
-		return nil, fmt.Errorf("%w: normalize factory %q config: %v", ErrInvalidNamedFactory, segment, err)
+		return nil, fmt.Errorf("%w: normalize factory %q config: %w", ErrInvalidNamedFactory, segment, err)
 	}
 
 	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
@@ -132,7 +132,7 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 
 	replacements, err := writeNamedFactoryLayout(stagingDir, factoryCfg, canonical, sourcePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 	}
 	if hooks.afterWrite != nil {
 		if err := hooks.afterWrite(stagingDir); err != nil {
@@ -144,7 +144,7 @@ func persistNamedFactory(rootDir, name string, canonicalFactoryJSON []byte, opti
 		loadRuntimeConfig = LoadRuntimeConfig
 	}
 	if _, err := loadRuntimeConfig(stagingDir, nil); err != nil {
-		return nil, fmt.Errorf("%w: validate factory %q config: %v", ErrInvalidNamedFactory, segment, err)
+		return nil, fmt.Errorf("%w: validate factory %q config: %w", ErrInvalidNamedFactory, segment, err)
 	}
 	if options.replaceExisting {
 		if err := replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir); err != nil {
@@ -181,7 +181,7 @@ func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) erro
 
 	if err := os.Rename(stagingDir, targetDir); err != nil {
 		if restoreErr := os.Rename(backupDir, targetDir); restoreErr != nil {
-			return fmt.Errorf("commit replacement factory %q: %w; restore failed: %v", segment, err, restoreErr)
+			return fmt.Errorf("commit replacement factory %q: %w; restore failed: %w", segment, err, restoreErr)
 		}
 		return fmt.Errorf("commit replacement factory %q: %w", segment, err)
 	}

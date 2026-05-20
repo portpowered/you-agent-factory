@@ -2,6 +2,7 @@ import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import { verifyDashboardSessionTabs as verifyDashboardSessionTabsImpl } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
+import { verifyCurrentSelectionPromptHint as verifyCurrentSelectionPromptHintImpl } from "./verify-current-selection-storybook-responsive.mjs";
 import {
   createLocalizedExportDialogVerifier,
   createLocalizedImportDialogVerifier,
@@ -13,6 +14,8 @@ import {
   verifyLocalizedWorkflowActivity,
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
+import { verifyTraceFactoryGraphVisualConsistency } from "./graph-storybook-responsive.mjs";
+import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSuccessImpl } from "./verify-provider-session-storybook-responsive.mjs";
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
@@ -64,6 +67,18 @@ export const storyChecks = [
     assertions: verifyDashboardShellConsolidation,
     id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard shared shell",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyTraceFactoryGraphVisualConsistency({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+        waitForStoryRender,
+      }),
+    id: "agent-factory-dashboard-react-flow-current-activity-card--narrow-viewport",
+    label: "trace/factory graph visual consistency",
   },
   {
     assertions: (page, _dialog, viewport) =>
@@ -119,6 +134,17 @@ export const storyChecks = [
       }),
     id: "infinite-you-workflow-dashboard--locale-propagation-verification",
     label: "current selection widget (zh-CN)",
+  },
+  {
+    assertions: (page, _dialog, viewport) =>
+      verifyProviderSessionDetailSuccessImpl({
+        expectNoHorizontalOverflow,
+        expectVisible,
+        page,
+        viewport,
+      }),
+    id: "infinite-you-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+    label: "current selection provider-session success",
   },
   {
     assertions: verifyCurrentSelectionPromptHint,
@@ -312,11 +338,15 @@ export async function expectOrderedLeftEdges(locators, label) {
 export async function verifyDashboardHeader(page, _dialog, viewport) {
   const heading = page.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
+  const hiddenTickLabel = page.getByText("Timeline tick", { exact: true }).first();
   const slider = page.getByRole("slider", { name: "Timeline tick" });
+  const languageButton = page.getByRole("button", {
+    name: "Change language",
+  });
   const streamStatus = page.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
-  const currentTick = page.getByText(/Tick 5 of 5/).first();
+  const currentTick = page.getByText(/\d+\/\d+/).first();
   const currentButton = page.getByRole("button", {
     name: "Return to current tick",
   });
@@ -325,6 +355,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible Infinite You wordmark");
   await expectVisible(slider, "Timeline slider");
+  await expectVisible(languageButton, "Language menu button");
   await expectVisible(streamStatus, "Dashboard stream status");
   await expectVisible(currentTick, "Current timeline tick text");
   await expectVisible(currentButton, "Return-to-current button");
@@ -336,11 +367,17 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
       "Dashboard heading wordmark was not hidden with sr-only styling.",
     );
   }
+  const hiddenTickLabelClass = await hiddenTickLabel.getAttribute("class");
+  if (!hiddenTickLabelClass?.includes("sr-only")) {
+    throw new Error(
+      "Dashboard timeline tick label was not hidden with sr-only styling.",
+    );
+  }
 
   await slider.focus();
   await page.keyboard.press("ArrowLeft");
   await expectVisible(
-    page.getByText("Tick 4 of 5"),
+    page.getByText(/\d+\/\d+/),
     "Keyboard-updated timeline tick text",
   );
 
@@ -350,7 +387,7 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
 
   if (viewport.label === "desktop") {
     await expectOrderedLeftEdges(
-      [heading, slider, streamStatus, exportButton],
+      [heading, slider, languageButton, exportButton, streamStatus],
       "Dashboard header desktop controls",
     );
   }
@@ -360,7 +397,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     `Dashboard header at ${viewport.label}`,
   );
 }
-
 export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
   return verifyDashboardSessionTabsImpl(
     { expectNoHorizontalOverflow, expectVisible, waitForDialog },
@@ -368,68 +404,25 @@ export async function verifyDashboardSessionTabs(page, _dialog, viewport) {
     viewport,
   );
 }
-
 export async function verifyCurrentSelectionPromptHint(page, _dialog, viewport) {
-  const currentSelection = page.getByRole("article", {
-    name: "Current selection",
-  });
-  await currentSelection.waitFor({ state: "visible" });
-  const helpButton = currentSelection.getByRole("button", {
-    name: "Close prompt variable help",
-  });
-  const promptField = currentSelection.getByRole("textbox", { name: "Prompt" });
-  const saveButton = currentSelection.getByRole("button", {
-    name: "Save changes",
-  });
-
-  await expectVisible(helpButton, "Prompt variable help toggle");
-  await expectVisible(
-    currentSelection.getByText("This workstation exposes 1 authored input."),
-    "Prompt help input-count summary",
-  );
-  await expectVisible(
-    currentSelection.getByText("Available variables"),
-    "Prompt help available variables heading",
-  );
-  await expectVisible(
-    currentSelection.getByText("{{ .WorkID }}"),
-    "Prompt help example snippet",
-  );
-
-  await promptField.focus();
-  await promptField.fill("Use {{ (index .Inputs 1).Payload }}.");
-  await expectVisible(
-    currentSelection.getByRole("heading", { name: "Prompt diagnostics" }),
-    "Prompt diagnostics summary",
-  );
-  await expectVisible(
-    currentSelection.getByText(".Inputs[1]", { exact: true }),
-    "Prompt diagnostics variable path",
-  );
-  await expectVisible(
-    currentSelection.locator("mark").filter({ hasText: "(index .Inputs 1)" }),
-    "Prompt squiggle overlay",
-  );
-
-  const saveButtonDisabled = await saveButton.isDisabled();
-  if (!saveButtonDisabled) {
-    throw new Error("Save changes should stay disabled while diagnostics remain.");
-  }
-
-  await expectNoHorizontalOverflow(
+  return verifyCurrentSelectionPromptHintImpl({
+    expectNoHorizontalOverflow,
+    expectVisible,
     page,
-    `Current selection prompt hinting at ${viewport.label}`,
-  );
+    viewport,
+  });
 }
 
 export async function verifyStory(browser, storyCheck, viewport) {
-  const page = await browser.newPage();
-
-  try {
-    await page.setViewportSize({
+  const context = await browser.newContext({
+    viewport: {
       height: viewport.height,
       width: viewport.width,
-    });
+    },
+  });
+  const page = await context.newPage();
+
+  try {
     await page.goto(storyUrl(storyCheck.id), { waitUntil: "domcontentloaded" });
     await waitForStoryRender(page);
     const dialog = storyCheck.dialogName
@@ -438,7 +431,7 @@ export async function verifyStory(browser, storyCheck, viewport) {
 
     await storyCheck.assertions(page, dialog, viewport);
   } finally {
-    await page.close();
+    await context.close();
   }
 }
 

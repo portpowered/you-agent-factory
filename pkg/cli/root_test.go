@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -125,6 +126,32 @@ func TestFactoryQueryCommand_PortFlagMapsToConfig(t *testing.T) {
 	}
 	if got.Output == nil {
 		t.Fatal("expected output writer")
+	}
+}
+
+func TestFactoryQueryCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+	originalQueryFactory := queryFactory
+	defer func() {
+		queryFactory = originalQueryFactory
+	}()
+
+	var got factorycli.QueryConfig
+	queryFactory = func(cfg factorycli.QueryConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "query"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory query: %v", err)
+	}
+
+	if got.Port != 7437 {
+		t.Fatalf("port = %d, want 7437", got.Port)
 	}
 }
 
@@ -296,7 +323,8 @@ func TestFactoryQueryCommand_HelpDocumentsOutputModesAndPort(t *testing.T) {
 		"Use --json for the API-shaped current-factory payload",
 		"--port",
 		"--json",
-		"you factory query --port 7437 --json",
+		"you factory query --json",
+		"you factory query --port 9090 --json",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory query help missing %q:\n%s", want, help)
@@ -404,7 +432,7 @@ func TestDocsCommand_SupportedTopicReturnsConfiguredWriterFailure(t *testing.T) 
 	if err == nil {
 		t.Fatal("expected docs topic write to fail")
 	}
-	if err != wantErr {
+	if !errors.Is(err, wantErr) {
 		t.Fatalf("docs topic write error = %v, want %v", err, wantErr)
 	}
 }
@@ -746,7 +774,8 @@ func TestExecute_ExitsWithStatusOneWhenRootCommandFails(t *testing.T) {
 		t.Fatal("expected Execute helper process to exit with failure")
 	}
 
-	exitErr, ok := err.(*exec.ExitError)
+	var exitErr *exec.ExitError
+	ok := errors.As(err, &exitErr)
 	if !ok {
 		t.Fatalf("Execute helper error = %T, want *exec.ExitError", err)
 	}
@@ -1142,6 +1171,28 @@ func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
 	}
 }
 
+func TestRunCommand_WithRunnerFlag(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	flag := runCmd.Flags().Lookup("runner")
+	if flag == nil {
+		t.Fatal("expected --runner flag on run command")
+	}
+	if !strings.Contains(flag.Usage, "factory-level runner override") {
+		t.Fatalf("runner usage = %q, want factory-level override guidance", flag.Usage)
+	}
+	if !strings.Contains(flag.Usage, interfaces.RunnerIDCursorCLI) || !strings.Contains(flag.Usage, interfaces.RunnerIDOpenCode) {
+		t.Fatalf("runner usage = %q, want supported runner IDs listed", flag.Usage)
+	}
+	if !strings.Contains(runCmd.Long, "--runner") {
+		t.Fatal("expected run command long help text to mention --runner")
+	}
+}
+
 func TestRunCommand_RetiredMockExecutionAliasRejected(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -1275,6 +1326,32 @@ func TestWorkListCommand_HelpDocumentsSessionTargeting(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Fatalf("work list help missing %q:\n%s", want, help)
 		}
+	}
+}
+
+func TestWorkListCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+	originalListWork := listWork
+	defer func() {
+		listWork = originalListWork
+	}()
+
+	var got workcli.ListConfig
+	listWork = func(cfg workcli.ListConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "list"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list: %v", err)
+	}
+
+	if got.Port != 7437 {
+		t.Fatalf("port = %d, want 7437", got.Port)
 	}
 }
 
@@ -1439,6 +1516,32 @@ func TestRunCommand_WithMockWorkersFlagMapsToRunConfig(t *testing.T) {
 	}
 	if got.MockWorkersConfigPath != "mock-workers.json" {
 		t.Fatalf("mock workers config path = %q, want %q", got.MockWorkersConfigPath, "mock-workers.json")
+	}
+}
+
+func TestRunCommand_RunnerFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--runner", interfaces.RunnerIDGemini})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --runner: %v", err)
+	}
+
+	if got.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("runner = %q, want %q", got.RunnerID, interfaces.RunnerIDGemini)
 	}
 }
 
@@ -1714,5 +1817,36 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 	}
 	if got.SessionID != "session-beta" {
 		t.Fatalf("session id = %q, want session-beta", got.SessionID)
+	}
+}
+
+func TestSubmitCommand_DefaultPortMapsToSharedLocalPort(t *testing.T) {
+	originalSubmitWork := submitWork
+	defer func() {
+		submitWork = originalSubmitWork
+	}()
+
+	var got submitcli.SubmitConfig
+	submitWork = func(cfg submitcli.SubmitConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"submit",
+		"--name", "request-name",
+		"--work-type-name", "tasks",
+		"--payload", "request.md",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute submit: %v", err)
+	}
+
+	if got.Port != 7437 {
+		t.Fatalf("port = %d, want 7437", got.Port)
 	}
 }

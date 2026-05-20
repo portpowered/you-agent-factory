@@ -9,7 +9,7 @@ info:
     handler behavior for schema standardization and intentionally does not
     redesign route names, pagination, or response fields.
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:7437
     description: Local Agent Factory API server
 security: []
 tags:
@@ -871,6 +871,18 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldScriptRequestView.yaml'
     FactoryWorldScriptResponseView:
       $ref: './components/schemas/factory-world/FactoryWorldScriptResponseView.yaml'
+    FactoryWorldSelectedRunnerView:
+      $ref: './components/schemas/factory-world/FactoryWorldSelectedRunnerView.yaml'
+    FactoryWorldRunnerBaselineCapability:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerBaselineCapability.yaml'
+    FactoryWorldRunnerOptionalCapability:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerOptionalCapability.yaml'
+    FactoryWorldRunnerOptionalCapabilityStatus:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerOptionalCapabilityStatus.yaml'
+    FactoryWorldRunnerOptionalCapabilitySupportView:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerOptionalCapabilitySupportView.yaml'
+    FactoryWorldRunnerCapabilitiesView:
+      $ref: './components/schemas/factory-world/FactoryWorldRunnerCapabilitiesView.yaml'
     FactoryWorldWorkstationRequestCountView:
       $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml'
     FactoryWorldWorkstationRequestRequestView:
@@ -983,6 +995,10 @@ components:
       $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
     WorkerProvider:
       $ref: './components/schemas/data-models/WorkerProvider.yaml'
+    RunnerID:
+      $ref: './components/schemas/data-models/RunnerID.yaml'
+    RunnerSelectionSource:
+      $ref: './components/schemas/data-models/RunnerSelectionSource.yaml'
     Workstation:
       $ref: './components/schemas/data-models/Workstation.yaml'
     WorkstationLimits:

@@ -1,4 +1,3 @@
-export * from "./trace-grid-card";
-export * from "./trace-drilldown-widget";
-export * from "./useTraceDrilldown";
-
+export * from "./components/trace-grid-card";
+export * from "./components/trace-drilldown-widget";
+export * from "./hooks/useTraceDrilldown";

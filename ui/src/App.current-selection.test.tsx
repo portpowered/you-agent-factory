@@ -23,20 +23,20 @@ import {
 } from "./components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "./components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
-import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
-import { reloadDashboardLayoutFromStorage } from "./features/bento/useDashboardLayout";
+import { reloadDashboardLayoutFromStorage } from "./features/bento";
+import { useDashboardBentoStore } from "./features/bento/state";
 import { useCurrentEditableFactoryDefinition } from "./features/current-factory-definition";
-import { resetSelectionHistoryStore } from "./features/current-selection/state/selectionHistoryStore";
+import { resetSelectionHistoryStore } from "./features/current-selection/state";
 import {
   useDashboardSessionStore,
 } from "./features/dashboard/state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
-} from "./features/dashboard/state/dashboardStreamStore";
-import { useExportDialogStore } from "./features/export/state/exportDialogStore";
-import type { WorldState } from "./features/timeline/state/factoryTimelineStore";
-import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+} from "./features/dashboard/state";
+import { useExportDialogStore } from "./features/export/state";
+import type { WorldState } from "./features/timeline/state";
+import { useFactoryTimelineStore } from "./features/timeline/state";
 
 vi.mock("./features/current-factory-definition", async () => {
   const actual = await vi.importActual("./features/current-factory-definition");
@@ -430,6 +430,39 @@ function expandDispatchAttemptSection(
   return section;
 }
 
+function expandAttemptDetails(
+  container: HTMLElement,
+  attemptNumber: number,
+): HTMLElement {
+  const attemptCard = within(container).getByRole("article", {
+    name: `Inference attempt ${attemptNumber}`,
+  });
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand attempt ${attemptNumber}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return attemptCard;
+}
+
+function expandAttemptBody(
+  attemptCard: HTMLElement,
+  bodyLabel: "Request body" | "Response body",
+): HTMLElement {
+  const toggle = within(attemptCard).getByRole("button", {
+    name: `Expand ${bodyLabel.toLowerCase()}`,
+  });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return within(attemptCard).getByRole("region", { name: bodyLabel });
+}
+
 function expectDefinitionValue(
   section: HTMLElement,
   label: string,
@@ -747,23 +780,25 @@ describe("App current selection", () => {
       readyCard,
       "Inference attempts",
     );
-    const readyAttempt = within(readyInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 2",
-    });
+    const readyAttemptDetails = expandAttemptDetails(readyInferenceAttempts, 2);
+    const readyRequestBody = expandAttemptBody(readyAttemptDetails, "Request body");
+    const readyResponseBody = expandAttemptBody(readyAttemptDetails, "Response body");
     expect(
       within(readyRequestDetails).getByText(
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeTruthy();
-    expect(within(readyRequestDetails).queryByText(
-      "Review the active story and decide whether it is ready.",
-    )).toBeNull();
-    expect(within(readyAttempt).getByText("Retry the review with the latest context.")).toBeTruthy();
-    expect(within(readyAttempt).getByText("Ready for the next workstation.")).toBeTruthy();
-    expect(within(readyAttempt).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
-    expect(within(readyAttempt).getByText("gpt-5.4")).toBeTruthy();
-    expect(within(readyAttempt).getByText("C:\\work\\portos")).toBeTruthy();
-    expect(within(readyAttempt).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
+    expect(
+      within(readyRequestDetails).queryByText(
+        "Review the active story and decide whether it is ready.",
+      ),
+    ).toBeNull();
+    expect(within(readyRequestBody).getByText("Retry the review with the latest context.")).toBeTruthy();
+    expect(within(readyResponseBody).getByText("Ready for the next workstation.")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("codex / session_id / dispatch-review-ready/session/1")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("gpt-5.4")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("C:\\work\\portos")).toBeTruthy();
+    expect(within(readyAttemptDetails).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
     expect(
       within(readyRequestDetails).queryByText("Provider", { selector: "dt" }),
     ).toBeNull();
@@ -792,16 +827,22 @@ describe("App current selection", () => {
       rejectedCard,
       "Inference attempts",
     );
-    const rejectedAttempt = within(rejectedInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
+    const rejectedAttemptDetails = expandAttemptDetails(rejectedInferenceAttempts, 1);
+    const rejectedRequestBody = expandAttemptBody(
+      rejectedAttemptDetails,
+      "Request body",
+    );
+    const rejectedResponseBody = expandAttemptBody(
+      rejectedAttemptDetails,
+      "Response body",
+    );
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedRequestBody).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeTruthy();
     expect(
-      within(rejectedAttempt).getByText(
+      within(rejectedResponseBody).getByText(
         "The active story needs revision before it can continue.",
       ),
     ).toBeTruthy();
@@ -817,16 +858,14 @@ describe("App current selection", () => {
       erroredCard,
       "Inference attempts",
     );
-    const erroredAttempt = within(erroredInferenceAttempts).getByRole("article", {
-      name: "Inference attempt 1",
-    });
+    const erroredAttemptDetails = expandAttemptDetails(erroredInferenceAttempts, 1);
     expect(
       within(erroredCard).getByText(
         "Provider rate limit exceeded while reviewing the story.",
       ),
     ).toBeTruthy();
     expect(
-      within(erroredAttempt).getByText("provider_rate_limit"),
+      within(erroredAttemptDetails).getByText("provider_rate_limit"),
     ).toBeTruthy();
     expect(
       within(erroredRequestDetails).queryByText(
@@ -1194,9 +1233,7 @@ describe("App current selection", () => {
     const emptyStateInfo = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(
-      within(emptyStateInfo).getAllByText("blocked").length,
-    ).toBeGreaterThan(0);
+    expect(within(emptyStateInfo).getByText("story: blocked")).toBeTruthy();
     expect(within(emptyStateInfo).getByTitle("story:blocked")).toBeTruthy();
     expect(
       within(emptyStateInfo).getByText(
@@ -1951,9 +1988,7 @@ describe("App current selection terminal states", () => {
         name: "Current selection",
       });
 
-      expect(
-        within(failedDetail).getAllByText("blocked").length,
-      ).toBeGreaterThan(0);
+      expect(within(failedDetail).getByText("story: blocked")).toBeTruthy();
       expect(within(failedDetail).getByText("Count")).toBeTruthy();
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();

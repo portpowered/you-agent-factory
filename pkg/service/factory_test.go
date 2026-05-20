@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,12 +17,14 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	apiview "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -539,9 +542,9 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 		t.Fatalf("created factory bundled files = %#v, want 3 entries", created.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *created.SupportingFiles.BundledFiles
-	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md")
-	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1")
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md")
+	assertServiceBundledFactoryEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1")
 
 	importedDir := filepath.Join(rootDir, "beta")
 	assertPortableServiceBundledFile(t, filepath.Join(importedDir, "Makefile"), "test:\n\tgo test ./...\n")
@@ -593,6 +596,63 @@ func TestFactoryService_CreateNamedFactory_MaterializesSupportedPortableBundledF
 			t.Fatalf("unexpected persisted bundled file targetPath = %#v", targetPath)
 		}
 	}
+}
+
+func TestFactoryService_CreateNamedFactory_CopiesStarterInputsAsDetachedRecipientState(t *testing.T) {
+	rootDir := t.TempDir()
+	persistNamedFactoryAndSelectCurrent(t, rootDir, "alpha")
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md"), "alpha starter\n")
+
+	svc := buildNamedFactoryServiceForTest(t, rootDir)
+
+	shared, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory(alpha): %v", err)
+	}
+	shared.Name = factoryapi.FactoryName("beta")
+	betaID := "beta"
+	shared.Id = &betaID
+
+	created, err := svc.CreateNamedFactory(context.Background(), shared)
+	if err != nil {
+		t.Fatalf("CreateNamedFactory(beta): %v", err)
+	}
+	if created.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("created factory name = %q, want beta", created.Name)
+	}
+
+	betaStarterPath := filepath.Join(rootDir, "beta", interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md")
+	alphaStarterPath := filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md")
+	assertPortableServiceBundledFile(t, betaStarterPath, "alpha starter\n")
+
+	writePortableServiceBundledFile(t, betaStarterPath, "beta edited starter\n")
+	assertPortableServiceBundledFile(t, betaStarterPath, "beta edited starter\n")
+	assertPortableServiceBundledFile(t, alphaStarterPath, "alpha starter\n")
+
+	writePortableServiceBundledFile(t, alphaStarterPath, "alpha edited after share\n")
+	assertPortableServiceBundledFile(t, alphaStarterPath, "alpha edited after share\n")
+	assertPortableServiceBundledFile(t, betaStarterPath, "beta edited starter\n")
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory(beta): %v", err)
+	}
+
+	var starterFiles []factoryapi.BundledFile
+	if current.SupportingFiles == nil || current.SupportingFiles.BundledFiles == nil {
+		t.Fatal("expected beta current factory to include starter bundled files")
+	}
+	for _, bundledFile := range *current.SupportingFiles.BundledFiles {
+		if bundledFile.Type == factoryapi.BundledFileType(interfaces.BundledFileTypeInput) {
+			starterFiles = append(starterFiles, bundledFile)
+		}
+	}
+	if len(starterFiles) != 1 {
+		t.Fatalf("beta starter bundled files = %#v, want 1 copied input", starterFiles)
+	}
+	assertServiceBundledFactoryEntry(t, starterFiles[0], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/starter.md", "beta edited starter\n")
 }
 
 func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(t *testing.T) {
@@ -1039,9 +1099,101 @@ func TestFactoryService_GetCurrentNamedFactory_CollectsSupportedPortableBundledF
 		t.Fatalf("expected 3 bundled files, got %#v", current.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *current.SupportingFiles.BundledFiles
-	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+}
+
+func TestFactoryService_GetCurrentNamedFactory_SnapshotsCurrentInputsAsStarterBundledFiles(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md"), "starter markdown\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", "exec-123", "starter.json"), "{\"payload\":\"starter json\"}\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "notes.txt"), "starter text payload\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "request"), "extensionless payload\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, "seed-batch.json"), "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "unknown", interfaces.DefaultChannelName, "ignored.md"), "ignored\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, ".gitkeep"), "")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "ignored.tmp"), "ignored\n")
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
+	}
+	if current.SupportingFiles == nil || current.SupportingFiles.BundledFiles == nil {
+		t.Fatal("expected current factory to include starter bundled files")
+	}
+
+	var starterFiles []factoryapi.BundledFile
+	for _, bundledFile := range *current.SupportingFiles.BundledFiles {
+		if bundledFile.Type == factoryapi.BundledFileType(interfaces.BundledFileTypeInput) {
+			starterFiles = append(starterFiles, bundledFile)
+		}
+	}
+	if len(starterFiles) != 5 {
+		t.Fatalf("starter bundled files = %#v, want 5 current inputs", starterFiles)
+	}
+	assertServiceBundledFactoryEntry(t, starterFiles[0], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/BATCH/default/seed-batch.json", "{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"alpha\",\"workTypeName\":\"task\",\"payload\":\"batch payload\"}]}\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[1], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/notes.txt", "starter text payload\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[2], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/request", "extensionless payload\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[3], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/default/starter.md", "starter markdown\n")
+	assertServiceBundledFactoryEntry(t, starterFiles[4], factoryapi.BundledFileType(interfaces.BundledFileTypeInput), "factory/inputs/task/exec-123/starter.json", "{\"payload\":\"starter json\"}\n")
+}
+
+func TestFactoryService_GetCurrentNamedFactory_FailsWhenStarterWorkCopyCannotReadInput(t *testing.T) {
+	if os.Getenv("CI") != "" && runtime.GOOS == "windows" {
+		t.Skip("permission-based starter input read failures are not reliable on Windows CI")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("permission-based starter input read failures are not reliable on Windows")
+	}
+
+	rootDir := t.TempDir()
+	persistNamedFactoryAndSelectCurrent(t, rootDir, "alpha")
+	alphaDir := filepath.Join(rootDir, "alpha")
+
+	starterPath := filepath.Join(alphaDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "restricted.txt")
+	writePortableServiceBundledFile(t, starterPath, "starter payload\n")
+	if err := os.Chmod(starterPath, 0o000); err != nil {
+		t.Fatalf("Chmod(%s): %v", starterPath, err)
+	}
+	defer func() {
+		_ = os.Chmod(starterPath, 0o644)
+	}()
+
+	svc := buildNamedFactoryServiceForTest(t, rootDir)
+
+	_, err := svc.GetCurrentNamedFactory(context.Background())
+	if err == nil {
+		t.Fatal("expected starter-work copy failure")
+	}
+	if !strings.Contains(err.Error(), "inline shared factory starter work") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want shared starter-work context", err)
+	}
+	if !strings.Contains(err.Error(), "read starter work") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want read starter work context", err)
+	}
+	if !strings.Contains(err.Error(), "restricted.txt") {
+		t.Fatalf("GetCurrentNamedFactory error = %q, want offending starter file", err)
+	}
 }
 
 func TestFactoryService_GetCurrentNamedFactory_FallsBackToRootRuntimeWhenPointerMissing(t *testing.T) {
@@ -5334,6 +5486,76 @@ func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	assertSimpleDashboardSessionRowsMatchRenderData(t, failed)
 }
 
+func TestFactoryService_ProjectsFactoryRunnerOverrideInDispatchMetadata(t *testing.T) {
+	dir := t.TempDir()
+	cfg := minimalFactoryConfig()
+	cfg["runner"] = interfaces.RunnerIDCodex
+	writeFactoryJSON(t, dir, cfg)
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	provider := newDashboardWorldViewProvider()
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:              dir,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		RunnerID:         interfaces.RunnerIDGemini,
+		Logger:           zap.NewNop(),
+		ProviderOverride: provider,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+	defer stopServiceModeRun(t, cancelRun, errCh)
+
+	submitDashboardWorldViewWork(t, svc, "override-runner-story", "trace-override-runner")
+	request := provider.nextDispatch(t)
+	if request.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("provider request runner id = %q, want gemini", request.RunnerID)
+	}
+
+	events, err := svc.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	selectedTick := 0
+	for _, event := range events {
+		if event.Context.Tick > selectedTick {
+			selectedTick = event.Context.Tick
+		}
+	}
+	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	slice := apiview.BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
+	if slice.WorkstationRequestsByDispatchId == nil || len(*slice.WorkstationRequestsByDispatchId) != 1 {
+		t.Fatalf("workstation requests projection = %#v, want one projected request", slice.WorkstationRequestsByDispatchId)
+	}
+
+	var view factoryapi.FactoryWorldWorkstationRequestView
+	for _, candidate := range *slice.WorkstationRequestsByDispatchId {
+		view = candidate
+	}
+	if view.Request.Runner == nil || view.Request.Runner.RunnerId == nil || string(*view.Request.Runner.RunnerId) != interfaces.RunnerIDGemini {
+		t.Fatalf("projected runner = %#v, want gemini", view.Request.Runner)
+	}
+	if view.Request.Runner.SelectionSource == nil || string(*view.Request.Runner.SelectionSource) != string(interfaces.RunnerSelectionSourceFactory) {
+		t.Fatalf("projected runner selection source = %#v, want factory", view.Request.Runner.SelectionSource)
+	}
+
+	provider.respond(interfaces.InferenceResponse{Content: "COMPLETE"}, nil)
+	waitForTokenInPlaceByWorkID(t, svc, "task:complete", "override-runner-story", time.Second)
+}
+
 func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
@@ -5969,7 +6191,7 @@ func TestLoadWorkersFromConfig_PromptTemplateFromBody(t *testing.T) {
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6025,7 +6247,7 @@ func TestLoadWorkersFromConfig_PromptTemplateFromFile(t *testing.T) {
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6081,7 +6303,7 @@ You are a helpful assistant.
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6143,7 +6365,7 @@ func TestLoadWorkersFromConfig_ReplayEmbeddedRuntimeUsesCanonicalLookup(t *testi
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
 
-	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, runtimeCfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, "", runtimeCfg, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6196,7 +6418,7 @@ func TestLoadWorkersFromConfig_LoadedRuntimeBaseDirOverrideFlowsThroughCanonical
 	)
 	loaded.SetRuntimeBaseDir(runtimeBaseDir)
 
-	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6220,6 +6442,521 @@ func TestLoadWorkersFromConfig_LoadedRuntimeBaseDirOverrideFlowsThroughCanonical
 	}
 	if got := wsExec.RuntimeConfig.RuntimeBaseDir(); got != runtimeBaseDir {
 		t.Fatalf("loaded runtime RuntimeBaseDir = %q, want %q", got, runtimeBaseDir)
+	}
+}
+
+func TestLoadWorkersFromConfig_DefaultCodexRunnerPreservesLegacyProviderlessWorkers(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-codex-default",
+		TransitionID:    "t-codex-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-codex-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-codex-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderCodex) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderCodex)
+	}
+	if len(runner.request.Args) == 0 || runner.request.Args[0] != "exec" {
+		t.Fatalf("args = %#v, want codex exec invocation", runner.request.Args)
+	}
+}
+
+func TestLoadWorkersFromConfig_GeminiRunnerExecutesBaselineWorkstationFlow(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gemini-2.5-flash
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDGemini,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-gemini-default",
+		TransitionID:    "t-gemini-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-gemini-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-gemini-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderGemini) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderGemini)
+	}
+	if len(runner.request.Args) < 2 || runner.request.Args[0] != "--prompt" {
+		t.Fatalf("args = %#v, want gemini --prompt invocation", runner.request.Args)
+	}
+}
+
+func TestLoadWorkersFromConfig_ExplicitGeminiRunnerOverridesLegacyWorkerModelProvider(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+modelProvider: codex
+model: gemini-2.5-flash
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDGemini,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-gemini-explicit-runner",
+		TransitionID:    "t-gemini-explicit-runner",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-gemini-explicit-runner",
+			Color: interfaces.TokenColor{
+				WorkID: "work-gemini-explicit-runner",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderGemini) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderGemini)
+	}
+	if len(runner.request.Args) < 2 || runner.request.Args[0] != "--prompt" {
+		t.Fatalf("args = %#v, want gemini --prompt invocation", runner.request.Args)
+	}
+}
+
+func TestLoadWorkersFromConfig_ExplicitGeminiRunnerRejectsStructuredOutputDespiteLegacyWorkerModelProvider(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+modelProvider: codex
+model: gemini-2.5-flash
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDGemini,
+			OutputSchema:   `{"type":"object"}`,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-gemini-structured-output",
+		TransitionID:    "t-gemini-structured-output",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-gemini-structured-output",
+			Color: interfaces.TokenColor{
+				WorkID: "work-gemini-structured-output",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	}
+	if !strings.Contains(result.Error, "structured output is not supported by the gemini runner in v1") {
+		t.Fatalf("error = %q, want gemini structured output rejection", result.Error)
+	}
+	if runner.request.Command != "" {
+		t.Fatalf("command = %q, want no subprocess dispatch on unsupported gemini structured output", runner.request.Command)
+	}
+}
+
+func TestLoadWorkersFromConfig_KiroRunnerExecutesBaselineWorkstationFlow(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: sonnet-4.5
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDKiro,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-kiro-default",
+		TransitionID:    "t-kiro-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-kiro-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-kiro-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderKiro) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderKiro)
+	}
+	if len(runner.request.Args) < 3 || runner.request.Args[0] != "chat" || runner.request.Args[1] != "--no-interactive" {
+		t.Fatalf("args = %#v, want kiro chat --no-interactive invocation", runner.request.Args)
+	}
+}
+
+func TestLoadWorkersFromConfig_CursorRunnerExecutesBaselineWorkstationFlow(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gpt-5
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDCursorCLI,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-cursor-default",
+		TransitionID:    "t-cursor-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-cursor-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-cursor-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderCursor) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderCursor)
+	}
+	if len(runner.request.Args) < 4 || runner.request.Args[0] != "--print" || runner.request.Args[2] != "--output-format" || runner.request.Args[3] != "text" {
+		t.Fatalf("args = %#v, want cursor-agent print invocation", runner.request.Args)
+	}
+}
+
+func TestLoadWorkersFromConfig_OpenCodeRunnerExecutesBaselineWorkstationFlow(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: openai/gpt-5
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "review",
+			WorkerTypeName: "worker-a",
+			Runner:         interfaces.RunnerIDOpenCode,
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &capturingCommandRunner{}
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, runner, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-opencode-default",
+		TransitionID:    "t-opencode-default",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-opencode-default",
+			Color: interfaces.TokenColor{
+				WorkID: "work-opencode-default",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if runner.request.Command != string(workers.ModelProviderOpenCode) {
+		t.Fatalf("command = %q, want %q", runner.request.Command, workers.ModelProviderOpenCode)
+	}
+	if len(runner.request.Args) < 2 || runner.request.Args[0] != "run" {
+		t.Fatalf("args = %#v, want opencode run invocation", runner.request.Args)
 	}
 }
 
@@ -6247,7 +6984,7 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkin
 	loaded.SetRuntimeBaseDir(runtimeBaseDir)
 
 	runner := &capturingCommandRunner{}
-	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, nil, runner, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6321,7 +7058,7 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupResolvesPortableFactoryScri
 	loaded.SetRuntimeBaseDir(rootDir)
 
 	runner := &capturingCommandRunner{}
-	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(loaded.FactoryDir(), loaded.FactoryConfig(), "", loaded, logging.NoopLogger{}, false, nil, nil, runner, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6402,7 +7139,7 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 	}
 
 	runner := &capturingCommandRunner{}
-	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, runtimeCfg, logging.NoopLogger{}, nil, nil, runner, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, "", runtimeCfg, logging.NoopLogger{}, false, nil, nil, runner, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6465,7 +7202,7 @@ func TestLoadWorkersFromConfig_ScriptWorkerUsesWorkstationExecutor(t *testing.T)
 		},
 	)
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, &stubCommandRunner{}, scriptRecorder, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, false, nil, nil, &stubCommandRunner{}, scriptRecorder, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -6522,7 +7259,7 @@ func TestLoadWorkersFromConfig_RegistersWorkerlessLogicalWorkstationByName(t *te
 		},
 	})
 
-	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), cfg, logging.NoopLogger{}, nil, nil, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}

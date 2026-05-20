@@ -41,11 +41,12 @@ type OutputParser interface {
 // For MODEL_WORKSTATION: render prompt → call executor → parse output → WorkResult
 // For LOGICAL_MOVE:      pass-through input colors → WorkResult (no worker call)
 type WorkstationExecutor struct {
-	RuntimeConfig interfaces.RuntimeConfigLookup
-	Executor      WorkstationRequestExecutor
-	Renderer      PromptRenderer
-	Parser        OutputParser
-	Logger        logging.Logger // optional; nil → noop
+	RuntimeConfig   interfaces.RuntimeConfigLookup
+	DefaultRunnerID string
+	Executor        WorkstationRequestExecutor
+	Renderer        PromptRenderer
+	Parser          OutputParser
+	Logger          logging.Logger // optional; nil → noop
 }
 
 const defaultSubprocessExecutionTimeout = 2 * time.Hour
@@ -241,18 +242,21 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		return interfaces.WorkstationExecutionRequest{}, &failed
 	}
 
+	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
 	return interfaces.WorkstationExecutionRequest{
-		Dispatch:         interfaces.CloneWorkDispatch(dispatch),
-		WorkerType:       workerName,
-		WorkstationType:  dispatch.WorkstationName,
-		ProjectID:        requestContext.ProjectID,
-		InputTokens:      InputTokens(requestContext.InputTokens...),
-		SystemPrompt:     workerDef.Body,
-		UserMessage:      rendered,
-		OutputSchema:     workstationDef.OutputSchema,
-		EnvVars:          cloneEnvVars(requestContext.EnvVars),
-		Worktree:         requestContext.Worktree,
-		WorkingDirectory: requestContext.WorkingDirectory,
+		Dispatch:              interfaces.CloneWorkDispatch(dispatch),
+		WorkerType:            workerName,
+		WorkstationType:       dispatch.WorkstationName,
+		RunnerID:              selection.RunnerID,
+		RunnerSelectionSource: selection.Source,
+		ProjectID:             requestContext.ProjectID,
+		InputTokens:           InputTokens(requestContext.InputTokens...),
+		SystemPrompt:          workerDef.Body,
+		UserMessage:           rendered,
+		OutputSchema:          workstationDef.OutputSchema,
+		EnvVars:               cloneEnvVars(requestContext.EnvVars),
+		Worktree:              requestContext.Worktree,
+		WorkingDirectory:      requestContext.WorkingDirectory,
 	}, nil
 }
 
@@ -277,7 +281,7 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request i
 	// Call the underlying worker executor.
 	result, err := we.Executor.Execute(executorCtx, request)
 	if err != nil {
-		if executorCtx.Err() == context.DeadlineExceeded || err == context.DeadlineExceeded {
+		if errors.Is(executorCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 			return timeoutWorkResult(request.Dispatch, time.Since(start)), nil
 		}
 		logger.Error("executor failed",
@@ -388,7 +392,7 @@ func resolveExecutionTimeout(workerDef *interfaces.WorkerConfig, workstationDef 
 	if workerDef != nil && workerDef.Timeout != "" {
 		timeout, err := time.ParseDuration(workerDef.Timeout)
 		if err != nil {
-			return 0, fmt.Errorf("invalid worker timeout %q: %v", workerDef.Timeout, err)
+			return 0, fmt.Errorf("invalid worker timeout %q: %w", workerDef.Timeout, err)
 		}
 		if timeout > 0 {
 			return timeout, nil

@@ -6,7 +6,7 @@ import {
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
-import { useExportDialogStore } from "./features/export/state/exportDialogStore";
+import { useExportDialogStore } from "./features/export/state";
 import {
   activeStoryTrace,
   currentSelectionCard,
@@ -55,7 +55,7 @@ export const WorkChartTimelineVerification = {
     });
     fireEvent.change(slider, { target: { value: "2" } });
 
-    await expect(await canvas.findByText("Tick 2 of 5")).toBeVisible();
+    await expect(await canvas.findByText("2/5")).toBeVisible();
     expect(canvas.queryByText("Current")).toBeNull();
     expectWorkOutcomeSeries(outcomeChart);
 
@@ -63,7 +63,7 @@ export const WorkChartTimelineVerification = {
       await canvas.findByRole("button", { name: "Return to current tick" }),
     );
 
-    await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+    await expect(await canvas.findByText("5/5")).toBeVisible();
     expectWorkOutcomeSeries(outcomeChart);
   },
 };
@@ -106,12 +106,12 @@ export const HeaderActionButtonsVerification = {
       });
       fireEvent.change(slider, { target: { value: "2" } });
 
-      await expect(await canvas.findByText("Tick 2 of 5")).toBeVisible();
+      await expect(await canvas.findByText("2/5")).toBeVisible();
       await expect(currentButton).toBeEnabled();
 
       currentButton.focus();
       await userEvent.keyboard("{Enter}");
-      await expect(await canvas.findByText("Tick 5 of 5")).toBeVisible();
+      await expect(await canvas.findByText("5/5")).toBeVisible();
 
       exportButton.focus();
       await userEvent.keyboard("{Enter}");
@@ -302,7 +302,7 @@ export const FailureAnalysisEventReplaySmoke = {
       name: "Timeline tick",
     });
     expect(slider.value).toBe("4");
-    await expect(await canvas.findByText("Tick 4 of 4")).toBeVisible();
+    await expect(await canvas.findByText("4/4")).toBeVisible();
 
     await userEvent.click(
       await canvas.findByRole("button", { name: "Blocked Analysis Story" }),
@@ -358,21 +358,21 @@ export const ResourceCountEventReplaySmoke = {
     const slider = await canvas.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
     });
-    await expect(await canvas.findByText("Tick 4 of 4")).toBeVisible();
+    await expect(await canvas.findByText("4/4")).toBeVisible();
     await expect(
       await canvas.findByLabelText("2 resource tokens"),
     ).toBeVisible();
 
     fireEvent.change(slider, { target: { value: "3" } });
 
-    await expect(await canvas.findByText("Tick 3 of 4")).toBeVisible();
+    await expect(await canvas.findByText("3/4")).toBeVisible();
     await expect(
       await canvas.findByLabelText("1 resource tokens"),
     ).toBeVisible();
 
     fireEvent.change(slider, { target: { value: "1" } });
 
-    await expect(await canvas.findByText("Tick 1 of 4")).toBeVisible();
+    await expect(await canvas.findByText("1/4")).toBeVisible();
     await expect(
       await canvas.findByLabelText("2 resource tokens"),
     ).toBeVisible();

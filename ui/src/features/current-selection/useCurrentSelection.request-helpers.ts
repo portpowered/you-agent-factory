@@ -212,7 +212,17 @@ export function toDashboardWorkstationRequest(
     failure_reason: request.response?.failureReason ?? request.response?.failure_reason,
     inference_attempts: sortInferenceAttempts(inferenceAttemptsByRequestID),
     outcome: request.response?.outcome,
+    request_view: {
+      ...request.request,
+      runner: request.request.runner,
+    },
     responded_request_count: request.counts.respondedCount ?? request.counts.responded_count ?? 0,
+    response_view: request.response
+      ? {
+          ...request.response,
+          runner: request.response.runner,
+        }
+      : undefined,
     script_request: request.request.scriptRequest ?? request.request.script_request,
     script_response: request.response?.scriptResponse ?? request.response?.script_response,
     started_at: request.request.startedAt ?? request.request.started_at,
@@ -283,7 +293,9 @@ function mergeDispatchAttempts(
   };
 }
 
-function requestStartedAt(request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest): string {
+export function requestStartedAt(
+  request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
+): string {
   return isProjectedWorkstationRequest(request)
     ? request.started_at ?? ""
     : request.request.startedAt ?? request.request.started_at ?? "";

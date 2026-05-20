@@ -419,7 +419,8 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailurePreservesConfiguredSessionMet
 		t.Fatal("expected Infer to fail")
 	}
 
-	providerErr, ok := err.(*ProviderError)
+	var providerErr *ProviderError
+	ok := errors.As(err, &providerErr)
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
@@ -851,7 +852,8 @@ func TestScriptWrapProvider_Infer_ExitFailureIncludesExitCodeAndProcessOutput(t 
 	if err == nil {
 		t.Fatal("expected Infer to fail when exec returns a non-zero exit code")
 	}
-	providerErr, ok := err.(*ProviderError)
+	var providerErr *ProviderError
+	ok := errors.As(err, &providerErr)
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
@@ -948,7 +950,8 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("%s expected ProviderError, got %T", entryLabel, err)
 			}
@@ -1044,7 +1047,8 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("expected ProviderError, got %T", err)
 			}
@@ -1098,7 +1102,8 @@ func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuth
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("%s expected ProviderError, got %T", providerErrorCorpusEntryLabel(entry), err)
 			}
@@ -1177,7 +1182,8 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("expected ProviderError, got %T", err)
 			}
@@ -1262,7 +1268,8 @@ func TestScriptWrapProvider_Infer_CodexExitFailureExtractsBoundedErrorLine(t *te
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("expected ProviderError, got %T", err)
 			}
@@ -1369,7 +1376,8 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("expected ProviderError, got %T", err)
 			}
@@ -1420,7 +1428,8 @@ func TestScriptWrapProvider_Infer_April11RecordingFailureShapesNormalize(t *test
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("expected ProviderError, got %T", err)
 			}
@@ -1462,7 +1471,8 @@ func TestScriptWrapProvider_Infer_CodexExitFailurePreservesSessionMetadata(t *te
 		t.Fatal("expected Infer to fail")
 	}
 
-	providerErr, ok := err.(*ProviderError)
+	var providerErr *ProviderError
+	ok := errors.As(err, &providerErr)
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
@@ -1531,7 +1541,8 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("%s expected ProviderError, got %T", entryLabel, err)
 			}
@@ -1640,7 +1651,8 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("expected ProviderError, got %T", err)
 			}
@@ -1711,7 +1723,8 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 				t.Fatal("expected Infer to fail")
 			}
 
-			providerErr, ok := err.(*ProviderError)
+			var providerErr *ProviderError
+			ok := errors.As(err, &providerErr)
 			if !ok {
 				t.Fatalf("expected ProviderError, got %T", err)
 			}

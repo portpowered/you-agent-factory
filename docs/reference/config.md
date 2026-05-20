@@ -17,6 +17,9 @@ each authored file lives. Use
 - Keep watched work inputs under `inputs/<work-type-or-BATCH>/<channel>/`.
 - Inline runtime fields in `factory.json` are still supported for portable
   single-file configs, but the split layout is the recommended authoring path.
+- Use factory-level `runner` in `factory.json` to set the default runner for
+  the factory. Supported built-in runner IDs are `codex`, `gemini`, `kiro`,
+  `cursor-cli`, and `opencode`.
 - When both inline runtime fields and a split `AGENTS.md` file exist for the
   same workstation, the split runtime definition is authoritative for the
   overlapping runtime fields.
@@ -59,6 +62,36 @@ manifest field contract belongs in
 this page only records that bundled files are restored beside the expanded
 factory layout.
 
+In v1 shared-factory flows, that same portability manifest also carries starter
+work copied from the source factory's live `inputs/` tree. Sharing snapshots
+every valid work item present under `inputs/<work-type-or-BATCH>/<channel>/` at
+the moment the share operation runs, including the case where the directory is
+empty.
+
+That share-time copy is detached after the recipient factory is created:
+
+- Later edits to the original factory or its `inputs/` files do not retroactively
+  update earlier shared copies.
+- Recipient edits inside the copied factory's `inputs/` tree do not mutate the
+  original author factory.
+
+Example shared-factory starter work:
+
+```text
+source factory before share
+  inputs/
+    task/default/customer-bug.md
+    BATCH/default/release-sweep.json
+
+shared recipient after import or create
+  inputs/
+    task/default/customer-bug.md
+    BATCH/default/release-sweep.json
+```
+
+The recipient copy is ready to inspect or run immediately, but it is no longer
+live-linked to the source factory.
+
 ## Bootstrap Checklist
 
 - Start with `factory.json`, then add split `AGENTS.md` files for any
@@ -68,6 +101,12 @@ factory layout.
   used in `factory.json`.
 - Use camelCase public config fields in `factory.json`; do not author new
   configs with retired snake_case aliases.
+- Runner precedence is explicit: workstation `runner` override first, then
+  factory `runner`, then legacy worker `modelProvider` compatibility, then the
+  default `codex` runner.
+- Validate runner prerequisites before execution. Built-in runner selection
+  expects the corresponding local CLI on `PATH`, and runner-specific auth or
+  local setup must already be in place.
 - Keep portability-only declarations under `supportingFiles`; do not overload
   runtime-capacity `resources` with bundled files or external tool checks.
 - Treat `inputs/` as submission data, not as part of the topology. The runtime

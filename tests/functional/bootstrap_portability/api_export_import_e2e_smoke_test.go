@@ -8,9 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"go.uber.org/zap"
 )
 
 func TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath(t *testing.T) {
@@ -60,6 +64,66 @@ func TestExportImportSmoke_ImportedFactoryPersistsThinSplitRuntimeLayout(t *test
 	assertImportedWorkerBodiesPersistOnlyInAgentsFiles(t, result.ImportedDir, valueOrEmpty(result.ImportedFactory.Workers))
 	assertImportedWorkstationBodiesPersistOnlyInAgentsFiles(t, result.ImportedDir, valueOrEmpty(result.ImportedFactory.Workstations))
 	assertImportedFactoryRuntimeReloadPreservesBodies(t, result.ImportedDir, valueOrEmpty(result.ImportedFactory.Workers), valueOrEmpty(result.ImportedFactory.Workstations))
+}
+
+func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t *testing.T) {
+	fixture := newExportImportFixture(t)
+	sourceRootDir := t.TempDir()
+	importRootDir := t.TempDir()
+	importBootstrapFactoryName := "seeded-share-bootstrap"
+	sourceFactoryName := "seeded-share-source"
+	importFactoryName := "seeded-share-imported"
+	sourceFactoryDir := fixture.persistAs(t, sourceRootDir, sourceFactoryName)
+	if err := config.WriteCurrentFactoryPointer(sourceRootDir, sourceFactoryName); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", sourceFactoryName, err)
+	}
+	fixture.persistAs(t, importRootDir, importBootstrapFactoryName)
+	if err := config.WriteCurrentFactoryPointer(importRootDir, importBootstrapFactoryName); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", importBootstrapFactoryName, err)
+	}
+
+	sourceSnapshot := map[string]string{
+		"factory/inputs/" + fixture.Expected.WorkTypeName + "/default/starter.md":    "source starter markdown\n",
+		"factory/inputs/" + fixture.Expected.WorkTypeName + "/exec-123/request.json": "{\"title\":\"starter request\"}\n",
+	}
+	writeSeededStarterInputs(t, sourceFactoryDir, sourceSnapshot)
+
+	sourceServer := startFunctionalServerWithConfig(t, sourceRootDir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeBatch
+		cfg.Logger = zap.NewNop()
+	})
+
+	exported := getCurrentNamedFactory(t, sourceServer.URL())
+	assertStarterBundledFiles(t, exported, sourceSnapshot)
+
+	importRequest := exported
+	importRequest.Name = factoryapi.FactoryName(importFactoryName)
+
+	importServer := startFunctionalServerWithConfig(t, importRootDir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.Logger = zap.NewNop()
+	})
+	waitForCurrentFactoryRuntimeIdle(t, importServer.service, 5*time.Second)
+
+	imported := createNamedFactory(t, importServer.URL(), importRequest)
+	assertStarterBundledFileTargets(t, imported, sourceSnapshot)
+
+	importedCurrent := getCurrentNamedFactory(t, importServer.URL())
+	assertStarterBundledFiles(t, importedCurrent, sourceSnapshot)
+
+	sourceUpdatedSnapshot := map[string]string{
+		"factory/inputs/" + fixture.Expected.WorkTypeName + "/default/starter.md":    "source starter markdown updated\n",
+		"factory/inputs/" + fixture.Expected.WorkTypeName + "/exec-123/request.json": "{\"title\":\"source request updated\"}\n",
+	}
+	importedSnapshot := map[string]string{
+		"factory/inputs/" + fixture.Expected.WorkTypeName + "/default/starter.md":    "imported starter markdown\n",
+		"factory/inputs/" + fixture.Expected.WorkTypeName + "/exec-123/request.json": "{\"title\":\"imported request\"}\n",
+	}
+	writeSeededStarterInputs(t, sourceFactoryDir, sourceUpdatedSnapshot)
+	writeSeededStarterInputs(t, filepath.Join(importRootDir, importFactoryName), importedSnapshot)
+
+	assertStarterBundledFiles(t, getCurrentNamedFactory(t, sourceServer.URL()), sourceUpdatedSnapshot)
+	assertStarterBundledFiles(t, getCurrentNamedFactory(t, importServer.URL()), importedSnapshot)
 }
 
 func submitWorkAndExpectStatus(
@@ -255,6 +319,72 @@ func assertImportedPortableFile(t *testing.T, path, want string) {
 	}
 	if string(data) != want {
 		t.Fatalf("file %s = %q, want %q", path, string(data), want)
+	}
+}
+
+func writeSeededStarterInputs(t *testing.T, factoryDir string, files map[string]string) {
+	t.Helper()
+
+	for portablePath, content := range files {
+		relativePath, found := strings.CutPrefix(portablePath, "factory/")
+		if !found {
+			t.Fatalf("portable starter path %q must begin with factory/", portablePath)
+		}
+		fullPath := filepath.Join(factoryDir, filepath.FromSlash(relativePath))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", filepath.Dir(fullPath), err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s): %v", fullPath, err)
+		}
+	}
+}
+
+func assertStarterBundledFiles(t *testing.T, factory factoryapi.Factory, want map[string]string) {
+	t.Helper()
+
+	if factory.SupportingFiles == nil || factory.SupportingFiles.BundledFiles == nil {
+		t.Fatalf("factory %q missing supportingFiles bundledFiles", factory.Name)
+	}
+
+	got := map[string]string{}
+	for _, bundledFile := range *factory.SupportingFiles.BundledFiles {
+		if bundledFile.Type != factoryapi.BundledFileType(interfaces.BundledFileTypeInput) {
+			continue
+		}
+		got[bundledFile.TargetPath] = bundledFile.Content.Inline
+	}
+	if len(got) != len(want) {
+		t.Fatalf("starter bundled files for %q = %#v, want %#v", factory.Name, got, want)
+	}
+	for targetPath, wantContent := range want {
+		if got[targetPath] != wantContent {
+			t.Fatalf("starter bundled file %q for %q = %q, want %q", targetPath, factory.Name, got[targetPath], wantContent)
+		}
+	}
+}
+
+func assertStarterBundledFileTargets(t *testing.T, factory factoryapi.Factory, want map[string]string) {
+	t.Helper()
+
+	if factory.SupportingFiles == nil || factory.SupportingFiles.BundledFiles == nil {
+		t.Fatalf("factory %q missing supportingFiles bundledFiles", factory.Name)
+	}
+
+	got := map[string]struct{}{}
+	for _, bundledFile := range *factory.SupportingFiles.BundledFiles {
+		if bundledFile.Type != factoryapi.BundledFileType(interfaces.BundledFileTypeInput) {
+			continue
+		}
+		got[bundledFile.TargetPath] = struct{}{}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("starter bundled file targets for %q = %#v, want %#v", factory.Name, got, want)
+	}
+	for targetPath := range want {
+		if _, ok := got[targetPath]; !ok {
+			t.Fatalf("starter bundled file target %q missing from %q", targetPath, factory.Name)
+		}
 	}
 }
 

@@ -20,6 +20,7 @@ func (f RuntimeWorkstationLookupFixture) Workstation(name string) (*interfaces.F
 type RuntimeDefinitionLookupFixture struct {
 	Workstations map[string]*interfaces.FactoryWorkstationConfig
 	Workers      map[string]*interfaces.WorkerConfig
+	Factory      *interfaces.FactoryConfig
 }
 
 var _ interfaces.RuntimeDefinitionLookup = RuntimeDefinitionLookupFixture{}
@@ -34,11 +35,16 @@ func (f RuntimeDefinitionLookupFixture) Workstation(name string) (*interfaces.Fa
 	return workstation, ok
 }
 
+func (f RuntimeDefinitionLookupFixture) FactoryConfig() *interfaces.FactoryConfig {
+	return f.Factory
+}
+
 // RuntimeConfigLookupFixture provides a narrow map-backed RuntimeConfigLookup
 // for tests, with RuntimeBaseDir defaulting to FactoryDir when unset.
 type RuntimeConfigLookupFixture struct {
 	Workstations    map[string]*interfaces.FactoryWorkstationConfig
 	Workers         map[string]*interfaces.WorkerConfig
+	Factory         *interfaces.FactoryConfig
 	FactoryPath     string
 	RuntimeBasePath string
 }
@@ -64,4 +70,8 @@ func (f RuntimeConfigLookupFixture) RuntimeBaseDir() string {
 		return f.RuntimeBasePath
 	}
 	return f.FactoryPath
+}
+
+func (f RuntimeConfigLookupFixture) FactoryConfig() *interfaces.FactoryConfig {
+	return f.Factory
 }

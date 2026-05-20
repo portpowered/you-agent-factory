@@ -47,6 +47,22 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			permissive: PermissivePublicFactoryWorkstationType,
 			strict:     StrictPublicFactoryWorkstationType,
 		},
+		{
+			name:       "runner id",
+			alias:      "cursor-cli",
+			unknown:    "custom-runner",
+			want:       RunnerIDCursorCLI,
+			permissive: PermissivePublicFactoryRunnerID,
+			strict:     StrictPublicFactoryRunnerID,
+		},
+		{
+			name:       "runner selection source",
+			alias:      "factory",
+			unknown:    "custom-source",
+			want:       string(RunnerSelectionSourceFactory),
+			permissive: PermissivePublicFactoryRunnerSelectionSource,
+			strict:     StrictPublicFactoryRunnerSelectionSource,
+		},
 	}
 
 	for _, tt := range tests {
@@ -85,6 +101,18 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	}
 	if got := GeneratedPublicFactoryWorkstationType("  CUSTOM_WORKSTATION  "); got != factoryapi.WorkstationType("CUSTOM_WORKSTATION") {
 		t.Fatalf("workstation type = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryRunnerID("  GEMINI  "); got != factoryapi.RunnerID("gemini") {
+		t.Fatalf("runner ID = %q, want gemini", got)
+	}
+	if got := GeneratedPublicFactoryRunnerID("  custom-runner  "); got != factoryapi.RunnerID("custom-runner") {
+		t.Fatalf("runner ID = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryRunnerSelectionSource("  default  "); got != factoryapi.RunnerSelectionSource("default") {
+		t.Fatalf("runner selection source = %q, want default", got)
+	}
+	if got := GeneratedPublicFactoryRunnerSelectionSource("  custom-source  "); got != factoryapi.RunnerSelectionSource("custom-source") {
+		t.Fatalf("runner selection source = %q, want trimmed unknown to round-trip", got)
 	}
 }
 
@@ -150,6 +178,36 @@ func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
 			wantUnknown:   "CUSTOM_WORKSTATION",
 			ptr: func(value string) *string {
 				converted := GeneratedPublicFactoryWorkstationTypePtr(value)
+				if converted == nil {
+					return nil
+				}
+				out := string(*converted)
+				return &out
+			},
+		},
+		{
+			name:          "runner id",
+			supported:     "  GEMINI  ",
+			wantSupported: "gemini",
+			unknown:       "  custom-runner  ",
+			wantUnknown:   "custom-runner",
+			ptr: func(value string) *string {
+				converted := GeneratedPublicFactoryRunnerIDPtr(value)
+				if converted == nil {
+					return nil
+				}
+				out := string(*converted)
+				return &out
+			},
+		},
+		{
+			name:          "runner selection source",
+			supported:     "  workstation  ",
+			wantSupported: "workstation",
+			unknown:       "  custom-source  ",
+			wantUnknown:   "custom-source",
+			ptr: func(value string) *string {
+				converted := GeneratedPublicFactoryRunnerSelectionSourcePtr(value)
 				if converted == nil {
 					return nil
 				}

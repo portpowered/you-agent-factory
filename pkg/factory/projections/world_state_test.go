@@ -60,6 +60,37 @@ func TestReconstructFactoryWorldState_InitialStructurePreservesNonSuccessRouteAr
 	}
 }
 
+func TestReconstructFactoryWorldState_DecodesGeneratedWorkContentThroughSharedDecoder(t *testing.T) {
+	t0 := time.Date(2026, 4, 23, 9, 0, 0, 0, time.UTC)
+	item := interfaces.FactoryWorkItem{
+		ID:          "work-1",
+		WorkTypeID:  "task",
+		DisplayName: "Story",
+		TraceID:     "trace-1",
+		PlaceID:     "task:init",
+		Content: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+			{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+		},
+	}
+
+	state, err := ReconstructFactoryWorldState([]factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), item),
+	}, 1)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+
+	want := item.Content
+	if got := state.WorkRequestsByID["request/work-1"].WorkItems[0].Content; !reflect.DeepEqual(got, want) {
+		t.Fatalf("work request content = %#v, want %#v", got, want)
+	}
+	if got := state.WorkItemsByID["work-1"].Content; !reflect.DeepEqual(got, want) {
+		t.Fatalf("projected work item content = %#v, want %#v", got, want)
+	}
+}
+
 func TestReconstructFactoryWorldState_FactoryChangeReplacesProjectedTopology(t *testing.T) {
 	t0 := time.Date(2026, 4, 22, 9, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
@@ -89,9 +120,11 @@ func TestReconstructFactoryWorldState_ActiveRequestAtSelectedTick(t *testing.T) 
 		initialStructureEvent(t0),
 		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
-			DispatchID:   "dispatch-1",
-			TransitionID: "t-review",
-			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			DispatchID:            "dispatch-1",
+			TransitionID:          "t-review",
+			Workstation:           interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			RunnerID:              interfaces.RunnerIDGemini,
+			RunnerSelectionSource: interfaces.RunnerSelectionSourceFactory,
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
@@ -111,6 +144,9 @@ func TestReconstructFactoryWorldState_ActiveRequestAtSelectedTick(t *testing.T) 
 	dispatch := state.ActiveDispatches["dispatch-1"]
 	if dispatch.StartedTick != 2 || len(dispatch.WorkItemIDs) != 1 || dispatch.WorkItemIDs[0] != "work-1" {
 		t.Fatalf("active dispatch = %#v, want work-1 at tick 2", dispatch)
+	}
+	if dispatch.RunnerID != interfaces.RunnerIDGemini || dispatch.RunnerSelectionSource != interfaces.RunnerSelectionSourceFactory {
+		t.Fatalf("active dispatch runner = (%q, %q), want (gemini, factory)", dispatch.RunnerID, dispatch.RunnerSelectionSource)
 	}
 	if got, ok := state.PlaceOccupancyByID["task:init"]; ok {
 		t.Fatalf("task:init occupancy = %#v, want no occupancy after request consumed runtime token", got)
@@ -1246,8 +1282,19 @@ func workstationRequestEvent(tick int, eventTime time.Time, payload interfaces.W
 		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(interfaces.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
 		Inputs:                   inputRefs,
 		Resources:                generatedResourcesForProjectionTest(payload.Resources),
+		Metadata:                 generatedDispatchMetadataForProjectionTest(payload.RunnerID, payload.RunnerSelectionSource),
 	}
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchRequest, "request/"+payload.DispatchID, tick, eventTime, context, generatedPayload)
+}
+
+func generatedDispatchMetadataForProjectionTest(runnerID string, source interfaces.RunnerSelectionSource) *factoryapi.DispatchRequestEventMetadata {
+	if runnerID == "" && source == "" {
+		return nil
+	}
+	return &factoryapi.DispatchRequestEventMetadata{
+		RunnerId:              interfaces.GeneratedPublicFactoryRunnerIDPtr(runnerID),
+		RunnerSelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(source)),
+	}
 }
 
 func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.WorkstationResponsePayload) factoryapi.FactoryEvent {
@@ -1401,6 +1448,7 @@ func scriptResponseEvent(tick int, eventTime time.Time, payload factoryapi.Scrip
 
 func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {
 	return factoryapi.Work{
+		Content:                  generatedWorkContentForProjectionTest(item.Content),
 		Name:                     item.DisplayName,
 		RequestId:                stringPtrForProjectionTest(requestID),
 		Tags:                     generatedStringMapForProjectionTest(item.Tags),
@@ -1411,6 +1459,36 @@ func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID s
 		WorkId:                   stringPtrForProjectionTest(item.ID),
 		WorkTypeName:             stringPtrForProjectionTest(item.WorkTypeID),
 	}
+}
+
+func generatedWorkContentForProjectionTest(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+	if len(parts) == 0 {
+		return nil
+	}
+	content := make(factoryapi.WorkContent, 0, len(parts))
+	for _, part := range parts {
+		var generated factoryapi.WorkContentPart
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: part.Text,
+			}); err != nil {
+				panic(err)
+			}
+		case interfaces.WorkContentPartTypeImage:
+			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+				Type: factoryapi.WorkContentPartTypeImage,
+				File: part.File,
+			}); err != nil {
+				panic(err)
+			}
+		default:
+			panic("unsupported work content part type in projection test")
+		}
+		content = append(content, generated)
+	}
+	return &content
 }
 
 func generatedOutputWorkForProjectionTest(payload interfaces.WorkstationResponsePayload) []factoryapi.Work {

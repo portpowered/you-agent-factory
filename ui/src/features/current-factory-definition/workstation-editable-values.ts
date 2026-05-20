@@ -1,11 +1,19 @@
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../api/dashboard/types";
+import {
+  BUILT_IN_RUNNER_IDS,
+  type RunnerID,
+} from "../current-selection/runner-metadata";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
 export interface EditableWorkstationValues {
+  effectiveRunnerName: RunnerID;
+  factoryRunnerName: RunnerID | null;
   prompt: string | null;
+  runnerName: RunnerID | null;
+  runnerOptions: RunnerID[];
   workerName: string;
   workerOptions: string[];
   workstationName: string;
@@ -13,6 +21,7 @@ export interface EditableWorkstationValues {
 
 export interface EditableWorkstationDraft {
   prompt: string;
+  runnerName: RunnerID | null;
   workerName: string;
 }
 
@@ -28,7 +37,11 @@ export function resolveEditableWorkstationValues(
   const { workstation } = workstationResolution;
 
   return {
+    effectiveRunnerName: resolveEffectiveRunnerName(factory, workstation),
+    factoryRunnerName: factory.runner ?? null,
     prompt: workstation.body ?? null,
+    runnerName: workstation.runner ?? null,
+    runnerOptions: BUILT_IN_RUNNER_IDS,
     workerName: workstation.worker,
     workerOptions: resolveWorkerOptions(factory),
     workstationName: workstation.name,
@@ -40,6 +53,7 @@ export function editableWorkstationDraftFromValues(
 ): EditableWorkstationDraft {
   return {
     prompt: values.prompt ?? "",
+    runnerName: values.runnerName,
     workerName: values.workerName,
   };
 }
@@ -58,11 +72,20 @@ export function applyEditableWorkstationDraft(
     return null;
   }
 
-  const nextWorkstation = {
-    ...workstationResolution.workstation,
-    body: draft.prompt,
-    worker: draft.workerName,
-  };
+  const { runner: _existingRunner, ...workstationWithoutRunner } =
+    workstationResolution.workstation;
+  const nextWorkstation = draft.runnerName
+    ? {
+        ...workstationWithoutRunner,
+        body: draft.prompt,
+        runner: draft.runnerName,
+        worker: draft.workerName,
+      }
+    : {
+        ...workstationWithoutRunner,
+        body: draft.prompt,
+        worker: draft.workerName,
+      };
 
   return {
     ...factory,
@@ -101,6 +124,17 @@ function resolveCanonicalWorkstation(
   }
 
   return null;
+}
+
+function resolveEffectiveRunnerName(
+  factory: CanonicalFactoryDefinition,
+  workstation: CanonicalWorkstation,
+): RunnerID {
+  return (
+    workstation.runner ??
+    factory.runner ??
+    "codex"
+  );
 }
 
 function resolveWorkerOptions(factory: CanonicalFactoryDefinition): string[] {

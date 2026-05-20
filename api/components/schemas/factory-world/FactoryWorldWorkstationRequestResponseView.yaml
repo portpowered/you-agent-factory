@@ -1,6 +1,8 @@
 type: object
 additionalProperties: false
 properties:
+  runner:
+    $ref: './FactoryWorldSelectedRunnerView.yaml'
   outcome:
     type: string
   feedback:

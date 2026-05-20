@@ -19,6 +19,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
@@ -88,7 +89,7 @@ func newFactoryCommand() *cobra.Command {
 }
 
 func newFactoryQueryCommand() *cobra.Command {
-	cfg := factorycli.QueryConfig{Port: 8080}
+	cfg := factorycli.QueryConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
 		Use:   "query",
@@ -99,8 +100,10 @@ func newFactoryQueryCommand() *cobra.Command {
 			"use --port to target the same server-port selection pattern as work list.",
 		Example: "  # Show the current factory from the running service on the default port.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
-			"  # Query a different service port and emit API-shaped JSON for automation.\n" +
-			"  " + cliBinaryName + " factory query --port 7437 --json",
+			"  # Emit API-shaped JSON for automation from the default local service.\n" +
+			"  " + cliBinaryName + " factory query --json\n\n" +
+			"  # Query a different service port when your runtime is not on the default port.\n" +
+			"  " + cliBinaryName + " factory query --port 9090 --json",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
@@ -123,7 +126,7 @@ func newWorkCommand() *cobra.Command {
 }
 
 func newWorkListCommand() *cobra.Command {
-	cfg := workcli.ListConfig{Port: 8080}
+	cfg := workcli.ListConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -302,6 +305,7 @@ func newRunCommand() *cobra.Command {
 			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
 			"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
 			"Default execution uses batch mode and exits after idle completion. " +
+			"Use --runner to override the factory-level runner for this run while still allowing workstation-specific runner overrides to win. " +
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
@@ -332,6 +336,13 @@ func newRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
+	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
+		interfaces.RunnerIDCodex,
+		interfaces.RunnerIDGemini,
+		interfaces.RunnerIDKiro,
+		interfaces.RunnerIDCursorCLI,
+		interfaces.RunnerIDOpenCode,
+	}, ", ")))
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port; specifying this flag disables automatic fallback")
 	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run")
 	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing replay artifact")
@@ -376,7 +387,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, verbose, debug bool) e
 }
 
 func newSubmitCommand() *cobra.Command {
-	cfg := submitcli.SubmitConfig{Port: 8080}
+	cfg := submitcli.SubmitConfig{Port: defaultcmd.FactoryPort}
 
 	cmd := &cobra.Command{
 		Use:   "submit",

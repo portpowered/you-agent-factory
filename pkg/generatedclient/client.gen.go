@@ -18,6 +18,7 @@ import (
 // Defines values for BundledFileType.
 const (
 	DOC        BundledFileType = "DOC"
+	INPUT      BundledFileType = "INPUT"
 	ROOTHELPER BundledFileType = "ROOT_HELPER"
 	SCRIPT     BundledFileType = "SCRIPT"
 )
@@ -63,6 +64,15 @@ const (
 	InputKindDefault InputKind = "DEFAULT"
 )
 
+// Defines values for RunnerID.
+const (
+	RunnerIDCodex     RunnerID = "codex"
+	RunnerIDCursorCLI RunnerID = "cursor-cli"
+	RunnerIDGemini    RunnerID = "gemini"
+	RunnerIDKiro      RunnerID = "kiro"
+	RunnerIDOpenCode  RunnerID = "opencode"
+)
+
 // Defines values for WorkStateType.
 const (
 	WorkStateTypeFAILED     WorkStateType = "FAILED"
@@ -101,7 +111,7 @@ const (
 	WorkstationTypeModelWorkstation WorkstationType = "MODEL_WORKSTATION"
 )
 
-// BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile.
+// BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
 type BundledFile struct {
 	// Content Inline content payload for a portable bundled file.
 	Content BundledFileContent `json:"content"`
@@ -109,11 +119,11 @@ type BundledFile struct {
 	// TargetPath Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected.
 	TargetPath string `json:"targetPath"`
 
-	// Type Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
+	// Type Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
 	Type BundledFileType `json:"type"`
 }
 
-// BundledFileType Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile.
+// BundledFileType Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
 type BundledFileType string
 
 // BundledFileContent Inline content payload for a portable bundled file.
@@ -186,6 +196,9 @@ type Factory struct {
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
@@ -301,7 +314,7 @@ type Resource struct {
 
 // ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
 type ResourceManifest struct {
-	// BundledFiles Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script or docs roots for SCRIPT or DOC entries, or match the supported root-helper allowlist for ROOT_HELPER entries.
+	// BundledFiles Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.
 	BundledFiles *[]BundledFile `json:"bundledFiles,omitempty"`
 
 	// RequiredTools Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed.
@@ -313,6 +326,9 @@ type ResourceRequirement struct {
 	Capacity int    `json:"capacity"`
 	Name     string `json:"name"`
 }
+
+// RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
+type RunnerID string
 
 // SaveEditableFactoryDefinitionRequest defines model for SaveEditableFactoryDefinitionRequest.
 type SaveEditableFactoryDefinitionRequest struct {
@@ -444,6 +460,9 @@ type Workstation struct {
 
 	// Resources Resource capacity this workstation consumes while one dispatch is in flight.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// StopWords Stop words authored on the topology entry for model-oriented dispatches.
 	StopWords *[]string `json:"stopWords,omitempty"`

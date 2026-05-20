@@ -22,6 +22,7 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	factoryPath := filepath.Join(dir, "factory.json")
 	writeCLITestFile(t, factoryPath, `{
 		"name":"expand-config-deterministic",
+		"runner":"gemini",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{
@@ -38,6 +39,7 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 		}],
 		"workstations": [{
 			"name":"execute-story",
+			"runner":"cursor-cli",
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}],
@@ -71,6 +73,9 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	}
 	if _, ok := payload["workTypes"]; !ok {
 		t.Fatalf("expected canonical workTypes key in expanded factory.json")
+	}
+	if got := payload["runner"]; got != "gemini" {
+		t.Fatalf("expected canonical factory runner gemini, got %#v", got)
 	}
 	if _, ok := payload["work_types"]; ok {
 		t.Fatalf("expected expanded factory.json not to include legacy work_types key")
@@ -135,6 +140,7 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	}
 	for key, want := range map[string]any{
 		"type":         "MODEL_WORKSTATION",
+		"runner":       "cursor-cli",
 		"worker":       "executor",
 		"promptFile":   "prompt.md",
 		"outputSchema": "schema.json",
@@ -179,6 +185,9 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	}
 	if workstationDef.OutputSchema != "schema.json" || workstationDef.Limits.MaxRetries != 2 || workstationDef.Limits.MaxExecutionTime != "30m" || workstationDef.Timeout != "" {
 		t.Fatalf("expanded workstation definition did not preserve inline runtime fields: %#v", workstationDef)
+	}
+	if workstationDef.Runner != "cursor-cli" {
+		t.Fatalf("expanded workstation runner = %q, want cursor-cli", workstationDef.Runner)
 	}
 	if workstationDef.Body != "Complete {{ .WorkID }} deterministically." {
 		t.Fatalf("expanded workstation body = %q", workstationDef.Body)

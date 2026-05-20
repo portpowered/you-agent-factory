@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -207,7 +208,7 @@ func buildRunningProviderErrorSmokeServiceHarness(
 	errCh := serviceHarness.RunInBackground(ctx)
 	t.Cleanup(func() {
 		cancel()
-		if err := <-errCh; err != nil && err != context.Canceled {
+		if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("RunInBackground() error = %v", err)
 		}
 	})

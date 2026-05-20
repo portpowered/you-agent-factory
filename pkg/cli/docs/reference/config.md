@@ -61,6 +61,7 @@ limits, and executor settings.
 | Field | Description |
 |-------|-------------|
 | `project` | Optional factory-wide project name used when submitted work does not provide one. |
+| `runner` | Optional factory-level default runner ID: `codex`, `gemini`, `kiro`, `cursor-cli`, or `opencode`. |
 | `workTypes` | Declares work categories and lifecycle states. |
 | `resources` | Declares shared concurrency pools. |
 | `workers` | Declares worker identities and optional inline worker runtime config. |
@@ -72,6 +73,10 @@ limits, and executor settings.
   `executorProvider`, `stopWords`, and `maxExecutionTime`.
 - Use `behavior` for workstation scheduling behavior and `type` for runtime
   implementation details.
+- Runner precedence is workstation `runner`, then factory `runner`, then
+  legacy worker `modelProvider`, then the default `codex` runner.
+- Built-in runner selection expects the corresponding local CLI and auth/setup
+  to already be available before execution starts.
 - Keep guarded `LOGICAL_MOVE` workstations explicit instead of relying on
   retired top-level loop-breaking fields.
 - Prefer split `AGENTS.md` files for long prompts and inline runtime fields for

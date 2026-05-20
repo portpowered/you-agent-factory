@@ -44,6 +44,8 @@ type FactoryWorldDispatch struct {
 	DispatchID               string                `json:"dispatch_id"`
 	TransitionID             string                `json:"transition_id"`
 	Workstation              FactoryWorkstationRef `json:"workstation"`
+	RunnerID                 string                `json:"runner_id,omitempty"`
+	RunnerSelectionSource    RunnerSelectionSource `json:"runner_selection_source,omitempty"`
 	Provider                 string                `json:"provider,omitempty"`
 	Model                    string                `json:"model,omitempty"`
 	StartedTick              int                   `json:"started_tick"`
@@ -62,6 +64,8 @@ type FactoryWorldDispatchCompletion struct {
 	DispatchID               string                   `json:"dispatch_id"`
 	TransitionID             string                   `json:"transition_id"`
 	Workstation              FactoryWorkstationRef    `json:"workstation"`
+	RunnerID                 string                   `json:"runner_id,omitempty"`
+	RunnerSelectionSource    RunnerSelectionSource    `json:"runner_selection_source,omitempty"`
 	StartedTick              int                      `json:"started_tick,omitempty"`
 	CompletedTick            int                      `json:"completed_tick"`
 	StartedAt                time.Time                `json:"started_at,omitempty"`
@@ -95,6 +99,8 @@ type FactoryWorldProviderSessionRecord struct {
 	DispatchID               string                  `json:"dispatch_id"`
 	TransitionID             string                  `json:"transition_id"`
 	WorkstationName          string                  `json:"workstation_name,omitempty"`
+	RunnerID                 string                  `json:"runner_id,omitempty"`
+	RunnerSelectionSource    RunnerSelectionSource   `json:"runner_selection_source,omitempty"`
 	Outcome                  string                  `json:"outcome"`
 	ProviderSession          ProviderSessionMetadata `json:"provider_session"`
 	Diagnostics              *SafeWorkDiagnostics    `json:"diagnostics,omitempty"`
@@ -110,22 +116,22 @@ type FactoryWorldProviderSessionRecord struct {
 // FactoryWorldInferenceAttempt records one provider-boundary inference attempt
 // reconstructed from canonical inference request and response events.
 type FactoryWorldInferenceAttempt struct {
-	DispatchID         string    `json:"dispatch_id"`
-	TransitionID       string    `json:"transition_id"`
-	InferenceRequestID string    `json:"inference_request_id"`
-	Attempt            int       `json:"attempt"`
-	WorkingDirectory   string    `json:"working_directory,omitempty"`
-	Worktree           string    `json:"worktree,omitempty"`
-	Prompt             string    `json:"prompt"`
-	RequestTime        time.Time `json:"request_time,omitempty"`
-	Outcome            string    `json:"outcome,omitempty"`
-	Response           string    `json:"response,omitempty"`
-	DurationMillis     int64     `json:"duration_millis,omitempty"`
-	ExitCode           *int      `json:"exit_code,omitempty"`
-	ErrorClass         string    `json:"error_class,omitempty"`
+	DispatchID         string                   `json:"dispatch_id"`
+	TransitionID       string                   `json:"transition_id"`
+	InferenceRequestID string                   `json:"inference_request_id"`
+	Attempt            int                      `json:"attempt"`
+	WorkingDirectory   string                   `json:"working_directory,omitempty"`
+	Worktree           string                   `json:"worktree,omitempty"`
+	Prompt             string                   `json:"prompt"`
+	RequestTime        time.Time                `json:"request_time,omitempty"`
+	Outcome            string                   `json:"outcome,omitempty"`
+	Response           string                   `json:"response,omitempty"`
+	DurationMillis     int64                    `json:"duration_millis,omitempty"`
+	ExitCode           *int                     `json:"exit_code,omitempty"`
+	ErrorClass         string                   `json:"error_class,omitempty"`
 	ProviderSession    *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics        *SafeWorkDiagnostics     `json:"diagnostics,omitempty"`
-	ResponseTime       time.Time `json:"response_time,omitempty"`
+	ResponseTime       time.Time                `json:"response_time,omitempty"`
 }
 
 // FactoryWorldScriptRequest records one script-boundary request reconstructed

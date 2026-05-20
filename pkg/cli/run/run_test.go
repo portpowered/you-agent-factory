@@ -863,6 +863,33 @@ func TestRun_RuntimeLogConfigPassedToServiceConfig(t *testing.T) {
 	}
 }
 
+func TestRun_RunnerOverridePassedToServiceConfig(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	var capturedConfig *service.FactoryServiceConfig
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		capturedConfig = cfg
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	if err := Run(context.Background(), RunConfig{RunnerID: interfaces.RunnerIDGemini}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedConfig == nil {
+		t.Fatal("expected factory service to be built")
+	}
+	if capturedConfig.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("service runner ID = %q, want %q", capturedConfig.RunnerID, interfaces.RunnerIDGemini)
+	}
+}
+
 func TestRun_WithMockWorkersWithoutPathPassesDefaultConfigToService(t *testing.T) {
 	originalBuilder := buildFactoryService
 	defer func() {

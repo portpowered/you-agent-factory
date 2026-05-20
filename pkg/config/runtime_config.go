@@ -292,6 +292,7 @@ func workstationRuntimeDefinitionFromInline(workstation interfaces.FactoryWorkst
 
 func workstationHasRuntimeFields(workstation interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(workstation.Type) != "" ||
+		workstation.Runner != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
@@ -309,6 +310,7 @@ func workstationHasInlineRuntimeDefinitionFields(workstation interfaces.FactoryW
 		return false
 	}
 	return strings.TrimSpace(workstation.Type) != "" ||
+		workstation.Runner != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
@@ -323,6 +325,7 @@ func workstationHasInlineRuntimeDefinitionFields(workstation interfaces.FactoryW
 
 func isTopologyOnlyLogicalMoveLoopBreaker(workstation interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(workstation.Type) == interfaces.WorkstationTypeLogical &&
+		workstation.Runner == "" &&
 		workstation.PromptFile == "" &&
 		workstation.OutputSchema == "" &&
 		workstation.Timeout == "" &&
@@ -368,6 +371,9 @@ func applyWorkstationRuntimeIdentity(workstation *interfaces.FactoryWorkstationC
 	}
 	if runtimeDef.WorkerTypeName != "" {
 		workstation.WorkerTypeName = runtimeDef.WorkerTypeName
+	}
+	if runtimeDef.Runner != "" {
+		workstation.Runner = runtimeDef.Runner
 	}
 }
 

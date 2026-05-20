@@ -367,6 +367,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 		t.Fatalf("components.schemas.Workstation.properties is missing")
 	}
 	assertPropertyRef(t, workstationProperties, "behavior", "#/components/schemas/WorkstationKind")
+	assertPropertyRef(t, workstationProperties, "runner", "#/components/schemas/RunnerID")
 	assertPropertyRef(t, workstationProperties, "type", "#/components/schemas/WorkstationType")
 	if _, ok := workstationProperties["timeout"]; ok {
 		t.Fatalf("components.schemas.Workstation.properties.timeout must not be advertised")
@@ -473,6 +474,16 @@ func TestOpenAPIContract_WorkstationCronIsScheduleOnly(t *testing.T) {
 	}
 	if _, ok := properties["interval"]; ok {
 		t.Fatalf("WorkstationCron.properties.interval must not be advertised")
+	}
+}
+
+func TestOpenAPIContract_DefaultLocalServerURL(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	if len(doc.Servers) != 1 {
+		t.Fatalf("openapi contract servers = %d, want 1", len(doc.Servers))
+	}
+	if got := doc.Servers[0].URL; got != "http://localhost:7437" {
+		t.Fatalf("openapi contract default local server url = %q, want %q", got, "http://localhost:7437")
 	}
 }
 
@@ -689,6 +700,7 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 		"FactoryWorldMutationView",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldSelectedRunnerView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
 		"FactoryWorldWorkstationRequestResponseView",
@@ -834,6 +846,7 @@ func assertWorkstationRequestProjectionSchemasPresent(t *testing.T, schemas map[
 		"FactoryWorldWorkstationRequestProjectionSlice",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldSelectedRunnerView",
 		"FactoryWorldWorkstationRequestView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
@@ -859,6 +872,7 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	assertSchemaPropertiesPresent(t, requestPayloadProperties, "FactoryWorldWorkstationRequestRequestView", "startedAt")
 	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
+	assertPropertyRef(t, requestPayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertPropertyRef(t, requestPayloadProperties, "scriptRequest", "#/components/schemas/FactoryWorldScriptRequestView")
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
@@ -866,6 +880,7 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, responsePayloadProperties, "scriptResponse", "#/components/schemas/FactoryWorldScriptResponseView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
+	assertPropertyRef(t, responsePayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
 }
 
@@ -1062,6 +1077,7 @@ func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T)
 		"FactoryWorldMutationView":                      "./components/schemas/factory-world/FactoryWorldMutationView.yaml",
 		"FactoryWorldScriptRequestView":                 "./components/schemas/factory-world/FactoryWorldScriptRequestView.yaml",
 		"FactoryWorldScriptResponseView":                "./components/schemas/factory-world/FactoryWorldScriptResponseView.yaml",
+		"FactoryWorldSelectedRunnerView":                "./components/schemas/factory-world/FactoryWorldSelectedRunnerView.yaml",
 		"FactoryWorldWorkstationRequestCountView":       "./components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml",
 		"FactoryWorldWorkstationRequestRequestView":     "./components/schemas/factory-world/FactoryWorldWorkstationRequestRequestView.yaml",
 		"FactoryWorldWorkstationRequestResponseView":    "./components/schemas/factory-world/FactoryWorldWorkstationRequestResponseView.yaml",
@@ -1151,6 +1167,89 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)
+	}
+}
+
+func TestOpenAPIContract_DocumentsSharedFactoryStarterWorkCopySemantics(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	bundledFileSchema := requireOpenAPI3ComponentSchema(t, doc, "BundledFile")
+	bundledFileTypeSchema := assertOpenAPI3PropertyDescription(t, bundledFileSchema, "BundledFile", "type")
+
+	data, err := os.ReadFile("../../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read openapi contract: %v", err)
+	}
+
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("parse openapi contract: %v", err)
+	}
+
+	schemas := componentSchemas(t, raw)
+	factoryRaw, ok := schemas["Factory"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.Factory must be an object schema")
+	}
+	factoryProperties, ok := factoryRaw["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.Factory.properties is missing")
+	}
+	supportingFilesRaw, ok := factoryProperties["supportingFiles"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.Factory.properties.supportingFiles is missing")
+	}
+	supportingFilesDescription, ok := supportingFilesRaw["description"].(string)
+	if !ok {
+		t.Fatalf("components.schemas.Factory.properties.supportingFiles.description is missing")
+	}
+	resourceManifestRaw, ok := schemas["ResourceManifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.ResourceManifest must be an object schema")
+	}
+	resourceManifestProperties, ok := resourceManifestRaw["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.ResourceManifest.properties is missing")
+	}
+	bundledFilesRaw, ok := resourceManifestProperties["bundledFiles"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.ResourceManifest.properties.bundledFiles is missing")
+	}
+	bundledFilesDescription, ok := bundledFilesRaw["description"].(string)
+	if !ok {
+		t.Fatalf("components.schemas.ResourceManifest.properties.bundledFiles.description is missing")
+	}
+
+	for _, expectation := range []struct {
+		path        string
+		description string
+		substrings  []string
+	}{
+		{
+			path:        "Factory.supportingFiles",
+			description: supportingFilesDescription,
+			substrings:  []string{"share-time snapshot", "detached starter-work copies"},
+		},
+		{
+			path:        "ResourceManifest.bundledFiles",
+			description: bundledFilesDescription,
+			substrings:  []string{"current starter work at share time", "independent recipient copies"},
+		},
+		{
+			path:        "BundledFile",
+			description: bundledFileSchema.Description,
+			substrings:  []string{"share-time snapshot", "detached seeded work"},
+		},
+		{
+			path:        "BundledFile.type",
+			description: bundledFileTypeSchema.Description,
+			substrings:  []string{"snapshot current source inputs at share time", "live link"},
+		},
+	} {
+		for _, substring := range expectation.substrings {
+			if !strings.Contains(expectation.description, substring) {
+				t.Fatalf("%s description = %q, want substring %q", expectation.path, expectation.description, substring)
+			}
+		}
 	}
 }
 
@@ -1269,7 +1368,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 
 	factory := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factory, "Factory")
-	for _, field := range []string{"factoryDirectory", "sourceDirectory", "metadata", "inputTypes", "workTypes"} {
+	for _, field := range []string{"factoryDirectory", "sourceDirectory", "metadata", "inputTypes", "runner", "workTypes"} {
 		if _, ok := factoryProperties[field]; !ok {
 			t.Fatalf("Factory.properties.%s is missing", field)
 		}
@@ -2228,6 +2327,12 @@ func assertProjectionSchemasPresent(t *testing.T, schemas map[string]any) {
 		"FactoryWorldWorkstationRequestProjectionSlice",
 		"FactoryWorldWorkstationRequestView",
 		"FactoryWorldWorkstationRequestCountView",
+		"FactoryWorldSelectedRunnerView",
+		"FactoryWorldRunnerBaselineCapability",
+		"FactoryWorldRunnerOptionalCapability",
+		"FactoryWorldRunnerOptionalCapabilityStatus",
+		"FactoryWorldRunnerOptionalCapabilitySupportView",
+		"FactoryWorldRunnerCapabilitiesView",
 		"FactoryWorldWorkstationRequestRequestView",
 		"FactoryWorldWorkstationRequestResponseView",
 		"FactoryWorldWorkItemRef",
@@ -2273,6 +2378,22 @@ func assertWorkstationRequestViewSchema(t *testing.T, schemas map[string]any) {
 
 	countView := schemaObject(t, schemas, "FactoryWorldWorkstationRequestCountView")
 	assertRequiredFields(t, countView, "dispatchedCount", "respondedCount", "erroredCount")
+
+	selectedRunner := schemaObject(t, schemas, "FactoryWorldSelectedRunnerView")
+	selectedRunnerProperties := schemaProperties(t, selectedRunner, "FactoryWorldSelectedRunnerView")
+	assertPropertyRef(t, selectedRunnerProperties, "capabilities", "#/components/schemas/FactoryWorldRunnerCapabilitiesView")
+
+	capabilitiesView := schemaObject(t, schemas, "FactoryWorldRunnerCapabilitiesView")
+	assertRequiredFields(t, capabilitiesView, "baselineCapabilities", "optionalCapabilities")
+	capabilitiesProperties := schemaProperties(t, capabilitiesView, "FactoryWorldRunnerCapabilitiesView")
+	assertArrayItemRef(t, capabilitiesProperties, "baselineCapabilities", "#/components/schemas/FactoryWorldRunnerBaselineCapability")
+	assertArrayItemRef(t, capabilitiesProperties, "optionalCapabilities", "#/components/schemas/FactoryWorldRunnerOptionalCapabilitySupportView")
+
+	optionalSupportView := schemaObject(t, schemas, "FactoryWorldRunnerOptionalCapabilitySupportView")
+	assertRequiredFields(t, optionalSupportView, "capability", "status")
+	optionalSupportProperties := schemaProperties(t, optionalSupportView, "FactoryWorldRunnerOptionalCapabilitySupportView")
+	assertPropertyRef(t, optionalSupportProperties, "capability", "#/components/schemas/FactoryWorldRunnerOptionalCapability")
+	assertPropertyRef(t, optionalSupportProperties, "status", "#/components/schemas/FactoryWorldRunnerOptionalCapabilityStatus")
 }
 
 func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any) {
@@ -2289,6 +2410,7 @@ func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any)
 		}
 	}
 	assertStringArrayProperty(t, requestPayloadProperties, "previousChainingTraceIds")
+	assertPropertyRef(t, requestPayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
 }
@@ -2320,6 +2442,7 @@ func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
+	assertPropertyRef(t, responsePayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
 	for _, field := range []string{

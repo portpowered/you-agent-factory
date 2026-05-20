@@ -44,8 +44,15 @@ const invokeCurrentSelectionDetail = (
 ) => {
   switch (key satisfies keyof CurrentSelectionDetailMessages) {
     case "attemptAriaLabel":
+    case "collapseAttemptAction":
+    case "expandAttemptAction":
     case "attemptTitle":
       return [formatter(2 as never)];
+    case "collapseRequestBodyAction":
+    case "collapseResponseBodyAction":
+    case "expandRequestBodyAction":
+    case "expandResponseBodyAction":
+      return [formatter()];
     case "selectWorkItemLabel":
     case "openWorkItemAction":
       return [formatter("Review Story" as never)];
@@ -128,7 +135,10 @@ const invokeWorkstationDetail = (
   switch (key satisfies keyof WorkstationDetailMessages) {
     case "editableConfigurationOverwriteWarning":
     case "editableConfigurationSaveConflictConfirmationDescription":
+    case "runnerInheritanceFactoryLabel":
       return [formatter("prompt" as never)];
+    case "runnerFieldHelp":
+      return [formatter("Gemini" as never, "Factory" as never)];
     case "historyRequestCountLabel":
     case "historyRunCountLabel":
     case "editableConfigurationPromptHelpInputCountSummary":

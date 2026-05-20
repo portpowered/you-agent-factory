@@ -2,11 +2,12 @@ package submit
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -85,13 +86,13 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "test-trace-1"})
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "test-trace-1"}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
-	// Extract port from test server URL.
-	var port int
-	fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port)
+	port := mustServerPort(t, srv.URL)
 
 	// Create a JSON payload file.
 	dir := t.TempDir()
@@ -184,12 +185,13 @@ func TestSubmit_MarkdownPayload(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "md-trace-1"})
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "md-trace-1"}); err != nil {
+			t.Errorf("encode markdown submit response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
-	var port int
-	fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port)
+	port := mustServerPort(t, srv.URL)
 
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "request.md")
@@ -228,12 +230,13 @@ func TestSubmit_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "workTypeName is required", Code: "BAD_REQUEST"})
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "workTypeName is required", Code: "BAD_REQUEST"}); err != nil {
+			t.Errorf("encode error response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
-	var port int
-	fmt.Sscanf(srv.URL, "http://127.0.0.1:%d", &port)
+	port := mustServerPort(t, srv.URL)
 
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "work.json")
@@ -272,4 +275,18 @@ func TestSubmit_FactoryNotRunning(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when factory is not running")
 	}
+}
+
+func mustServerPort(t *testing.T, rawURL string) int {
+	t.Helper()
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse server url %q: %v", rawURL, err)
+	}
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil {
+		t.Fatalf("parse server port from %q: %v", rawURL, err)
+	}
+	return port
 }

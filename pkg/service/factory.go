@@ -130,6 +130,9 @@ var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
 type FactoryServiceConfig struct {
 	// Dir is the factory root directory containing factory.json and inputs/.
 	Dir string
+	// RunnerID sets the factory-level runner override used when a workstation
+	// does not declare its own runner selection.
+	RunnerID string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths such as workstation workingDirectory values.
 	// Empty defaults to the loaded factory directory.
@@ -196,6 +199,11 @@ type FactoryServiceConfig struct {
 	// subprocess boundary and assert command details, env, stdin, stdout,
 	// stderr, and exit failures.
 	ProviderCommandRunnerOverride workers.CommandRunner
+	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
+	// runner prerequisite checks during startup. Tests that replace execution
+	// with mocks or custom executors use this to exercise service wiring
+	// without requiring local AI runner binaries to exist.
+	SkipBuiltInRunnerPrerequisiteValidation bool
 	// WorkstationLoader, when non-nil, is consulted before falling back
 	// to disk when loading workstation AGENTS.md files. Returning
 	// (nil, nil) from Load signals "no config available" and the
@@ -291,12 +299,16 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}
 
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
 	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
+		effectiveFactoryRunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, cfg.Verbose),
+		cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		providerOverrideForMode(cfg, replaySideEffects),
 		providerCommandRunnerForMode(cfg, loadedFactoryCfg),
 		commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
@@ -422,7 +434,7 @@ func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string)
 	}
 	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
 	if err != nil {
-		return fmt.Errorf("%w: build replacement factory %q: %v", ErrInvalidNamedFactory, name, err)
+		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
 	}
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
@@ -470,12 +482,16 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	if clock == nil {
 		clock = factory.EnsureClock(clockwork.NewRealClock())
 	}
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(fs.cfg.RunnerID, loadedFactoryCfg.FactoryConfig())
 	eventHistory := factory.NewFactoryEventHistory(net, clock.Now, loadedFactoryCfg)
+	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	workerOpts, err := loadWorkersFromConfig(
 		loadedFactoryCfg.FactoryDir(),
 		loadedFactoryCfg.FactoryConfig(),
+		effectiveFactoryRunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, fs.cfg.Verbose),
+		fs.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		providerOverrideForMode(fs.cfg, nil),
 		providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
 		commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
@@ -632,7 +648,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 			if listener == nil {
 				return
 			}
-			if err := listener.Watch(runCtx); err != nil && err != context.Canceled {
+			if err := listener.Watch(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 				fs.logger.Error("file watcher error", zap.Error(err))
 			}
 		}()
@@ -711,7 +727,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 
 	err := fs.waitForActiveRuntime(ctx)
 	currentRuntime = fs.currentLiveRuntime()
-	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && stopErr != context.Canceled && err == nil {
+	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
 		err = stopErr
 	}
 	if stopErr := fs.shutdownOtherLiveSessions(currentRuntime); stopErr != nil && err == nil {
@@ -725,7 +741,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		fs.renderDashboard(ctx)
 	}
 
-	if err != nil && err != context.Canceled {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run: %w", err)
 	}
 	return nil
@@ -785,7 +801,7 @@ func (fs *FactoryService) activateReplacementRuntime(
 	restoreCurrentSidecars = false
 	fs.registerLiveSession(runState.sessionID, replacementHandle, true)
 	fs.setRunState(runState.ctx, runState.sessionID, replacementHandle)
-	if err := fs.stopLiveRuntime(runState.runtime); err != nil && err != context.Canceled {
+	if err := fs.stopLiveRuntime(runState.runtime); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior runtime shutdown failed", zap.Error(err))
 	}
 	return nil
@@ -941,7 +957,7 @@ func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *
 		handle.sidecars.Add(1)
 		go func() {
 			defer handle.sidecars.Done()
-			if err := handle.runtime.listener.Watch(sidecarCtx); err != nil && err != context.Canceled {
+			if err := handle.runtime.listener.Watch(sidecarCtx); err != nil && !errors.Is(err, context.Canceled) {
 				handle.runtime.runtimeLogger().Error("file watcher error", zap.Error(err))
 			}
 		}()
@@ -1425,7 +1441,7 @@ func (fs *FactoryService) CreateNamedFactory(ctx context.Context, namedFactory f
 		case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
 			return factoryapi.Factory{}, factoryconfig.ErrNamedFactoryAlreadyExists
 		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
-			return factoryapi.Factory{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+			return factoryapi.Factory{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 		default:
 			return factoryapi.Factory{}, err
 		}
@@ -1510,7 +1526,7 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 	if err != nil {
 		switch {
 		case errors.Is(err, factoryconfig.ErrInvalidNamedFactory):
-			return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: %v", ErrInvalidNamedFactory, err)
+			return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: %w", ErrInvalidNamedFactory, err)
 		default:
 			return factoryapi.EditableFactoryDefinition{}, err
 		}
@@ -1522,7 +1538,7 @@ func (fs *FactoryService) SaveEditableFactoryDefinition(ctx context.Context, req
 	}
 	replacement, err := fs.buildReplacementFactoryRuntime(ctx, rootDir, factoryDir, sessionID)
 	if err != nil {
-		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %v", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
+		return factoryapi.EditableFactoryDefinition{}, fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, request.FactoryDefinition.Name, err)
 	}
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return factoryapi.EditableFactoryDefinition{}, err
@@ -1876,6 +1892,9 @@ func (fs *FactoryService) serializeNamedFactory(
 		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true); err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("inline named factory bundled files: %w", err)
 		}
+		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
+		}
 		factoryCfg = clonedFactoryCfg
 	}
 	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
@@ -2053,13 +2072,25 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
+	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+		return runner
+	}
+	if factoryCfg == nil {
+		return ""
+	}
+	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+}
+
 // loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
 // Workers missing AGENTS.md keep the existing noop behavior so topology-only tests continue to work.
 func loadWorkersFromConfig(
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	logger logging.Logger,
+	skipBuiltInRunnerPrerequisiteValidation bool,
 	providerOverride workers.Provider,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
@@ -2072,6 +2103,12 @@ func loadWorkersFromConfig(
 	if factoryCfg == nil {
 		return nil, fmt.Errorf("factory config is required")
 	}
+	preflight := runnerSelectionPreflight{
+		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
+	}
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
+		return nil, err
+	}
 	for _, workerCfg := range factoryCfg.Workers {
 		logger.Debug("loading worker", "worker", workerCfg.Name)
 		def, ok := runtimeCfg.Worker(workerCfg.Name)
@@ -2080,7 +2117,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workers.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, workerCfg.Name, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now)
+		executor := buildWorkerExecutor(runtimeCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, now)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -2100,9 +2137,10 @@ func loadWorkersFromConfig(
 		}
 		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
 		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}))
 	}
 	return opts, nil
@@ -2113,6 +2151,7 @@ func loadWorkersFromConfig(
 func buildWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workerName string,
+	factoryRunnerID string,
 	logger logging.Logger,
 	providerOverride workers.Provider,
 	providerCommandRunner workers.CommandRunner,
@@ -2128,9 +2167,9 @@ func buildWorkerExecutor(
 
 	switch def.Type {
 	case interfaces.WorkerTypeModel:
-		var provider workers.Provider
+		var runner workers.Runner
 		if providerOverride != nil {
-			provider = providerOverride
+			runner = workers.RunnerFromProvider(providerOverride)
 		} else {
 			var providerOpts []workers.ScriptWrapProviderOption
 			providerOpts = append(providerOpts, workers.WithSkipPermissions(def.SkipPermissions))
@@ -2138,32 +2177,44 @@ func buildWorkerExecutor(
 			if providerCommandRunner != nil {
 				providerOpts = append(providerOpts, workers.WithProviderCommandRunner(providerCommandRunner))
 			}
-			provider = workers.NewScriptWrapProvider(providerOpts...)
+			runner = workers.NewScriptWrapProvider(providerOpts...)
 		}
 		if inferenceRecorder != nil {
-			provider = workers.NewRecordingProvider(
-				provider,
-				inferenceRecorder,
-				workers.WithRecordingProviderClock(now),
-			)
+			if providerOverride != nil {
+				provider := workers.NewRecordingProvider(
+					providerOverride,
+					inferenceRecorder,
+					workers.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			} else if providerRunner, ok := runner.(*workers.ScriptWrapProvider); ok {
+				provider := workers.NewRecordingProvider(
+					providerRunner,
+					inferenceRecorder,
+					workers.WithRecordingProviderClock(now),
+				)
+				runner = workers.RunnerFromProvider(provider)
+			}
 		}
 
 		agentOpts := []workers.AgentExecutorOption{
 			workers.WithLogger(logger),
 		}
-		agentExec := workers.NewAgentExecutor(runtimeCfg, provider, agentOpts...)
+		agentExec := workers.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Executor:      agentExec,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        agentExec,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}
 	case interfaces.WorkstationTypeLogical:
 		// LOGICAL_MOVE workers pass input token colors through without calling any LLM.
 		return &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}
 	case interfaces.WorkerTypeScript:
 		var scriptOpts []workers.ScriptExecutorOption
@@ -2180,10 +2231,11 @@ func buildWorkerExecutor(
 			scriptExec = workers.NewScriptExecutor(def, logger, scriptOpts...)
 		}
 		return &workers.WorkstationExecutor{
-			RuntimeConfig: runtimeCfg,
-			Executor:      scriptExec,
-			Renderer:      &workers.DefaultPromptRenderer{},
-			Logger:        logger,
+			RuntimeConfig:   runtimeCfg,
+			DefaultRunnerID: factoryRunnerID,
+			Executor:        scriptExec,
+			Renderer:        &workers.DefaultPromptRenderer{},
+			Logger:          logger,
 		}
 	default:
 		return nil

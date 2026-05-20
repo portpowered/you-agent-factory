@@ -83,6 +83,18 @@ func withAgentWorkingDirectory(workingDirectory string) func(*interfaces.Worksta
 	}
 }
 
+func withAgentRunnerID(runnerID string) func(*interfaces.WorkstationExecutionRequest) {
+	return func(req *interfaces.WorkstationExecutionRequest) {
+		req.RunnerID = runnerID
+	}
+}
+
+func withAgentRunnerSelectionSource(source interfaces.RunnerSelectionSource) func(*interfaces.WorkstationExecutionRequest) {
+	return func(req *interfaces.WorkstationExecutionRequest) {
+		req.RunnerSelectionSource = source
+	}
+}
+
 func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
@@ -357,6 +369,7 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	}
 	request := testAgentRequest(
 		dispatch,
+		withAgentRunnerID(interfaces.RunnerIDCodex),
 		withAgentWorktree("feature-worktree"),
 		withAgentWorkingDirectory("C:\\repo"),
 		withAgentEnvVars(map[string]string{"PORTOS_TEST_ENV": "enabled"}),
@@ -376,8 +389,14 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	if req.Dispatch.WorkstationName != dispatch.WorkstationName || req.WorkstationType != dispatch.WorkstationName {
 		t.Fatalf("request workstation fields = name %q type %q, want %q", req.Dispatch.WorkstationName, req.WorkstationType, dispatch.WorkstationName)
 	}
+	if req.RunnerID != interfaces.RunnerIDCodex {
+		t.Fatalf("request runner id = %q, want %q", req.RunnerID, interfaces.RunnerIDCodex)
+	}
 	if req.SystemPrompt != request.SystemPrompt || req.UserMessage != request.UserMessage || req.OutputSchema != request.OutputSchema {
 		t.Fatalf("request prompt fields differ from execution request: %#v", req)
+	}
+	if req.ToolExecutionMode != interfaces.RunnerToolExecutionModeRequired {
+		t.Fatalf("tool execution mode = %q, want %q", req.ToolExecutionMode, interfaces.RunnerToolExecutionModeRequired)
 	}
 	if req.Worktree != request.Worktree || req.WorkingDirectory != request.WorkingDirectory {
 		t.Fatalf("request paths = worktree %q working_directory %q", req.Worktree, req.WorkingDirectory)
@@ -391,11 +410,253 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	if got := req.Dispatch.InputBindings["task"]; len(got) != 1 || got[0] != "token-1" {
 		t.Fatalf("request input bindings = %#v", req.Dispatch.InputBindings)
 	}
+	wantCapabilities := []interfaces.RunnerOptionalCapability{
+		interfaces.RunnerOptionalCapabilityStructuredOutput,
+		interfaces.RunnerOptionalCapabilityWorkingDirectory,
+		interfaces.RunnerOptionalCapabilityWorktree,
+		interfaces.RunnerOptionalCapabilitySessionResume,
+	}
+	if len(req.RequiredOptionalCapabilities) != len(wantCapabilities) {
+		t.Fatalf("required optional capabilities = %#v, want %#v", req.RequiredOptionalCapabilities, wantCapabilities)
+	}
+	for index, want := range wantCapabilities {
+		if req.RequiredOptionalCapabilities[index] != want {
+			t.Fatalf("required optional capability[%d] = %q, want %q", index, req.RequiredOptionalCapabilities[index], want)
+		}
+	}
 	tokens := cloneInputTokens(req.InputTokens)
 	if len(tokens) != 1 || tokens[0].ID != inputToken.ID || tokens[0].Color.WorkID != inputToken.Color.WorkID {
 		t.Fatalf("request input tokens = %#v, want %#v", tokens, inputToken)
 	}
 	assertExecutionMetadataEqual(t, dispatch.Execution, req.Dispatch.Execution)
+}
+
+func TestAgentExecutor_InferenceRequestDefaultsCodexProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "gpt-5-codex",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-codex-default",
+			TransitionID: "t-codex-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDCodex),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderCodex) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderCodex)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDCodex {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDCodex)
+	}
+}
+
+func TestAgentExecutor_InferenceRequestDefaultsGeminiProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "gemini ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "gemini-2.5-flash",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-gemini-default",
+			TransitionID: "t-gemini-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDGemini),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderGemini) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderGemini)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDGemini)
+	}
+}
+
+func TestAgentExecutor_ExplicitRunnerSelectionOverridesLegacyWorkerModelProvider(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "gemini ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model:         "gemini-2.5-flash",
+				ModelProvider: string(ModelProviderCodex),
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-gemini-override",
+			TransitionID: "t-gemini-override",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDGemini),
+		withAgentRunnerSelectionSource(interfaces.RunnerSelectionSourceWorkstation),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderGemini) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderGemini)
+	}
+}
+
+func TestAgentExecutor_InferenceRequestDefaultsKiroProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "kiro ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "sonnet-4.5",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-kiro-default",
+			TransitionID: "t-kiro-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDKiro),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderKiro) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderKiro)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDKiro {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDKiro)
+	}
+}
+
+func TestAgentExecutor_InferenceRequestDefaultsCursorProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "cursor ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "gpt-5",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-cursor-default",
+			TransitionID: "t-cursor-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDCursorCLI),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderCursor) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderCursor)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDCursorCLI {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDCursorCLI)
+	}
+}
+
+func TestAgentExecutor_InferenceRequestDefaultsOpenCodeProviderFromRunnerSelection(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "opencode ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model: "openai/gpt-5",
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-opencode-default",
+			TransitionID: "t-opencode-default",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDOpenCode),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderOpenCode) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderOpenCode)
+	}
+	if provider.lastReq.RunnerID != interfaces.RunnerIDOpenCode {
+		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDOpenCode)
+	}
+}
+
+func TestAgentExecutor_InferenceRequestMarksImageInputCapabilityWhenPresent(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(ModelProviderCodex)},
+		},
+	}, provider)
+
+	imageToken := interfaces.Token{
+		ID: "token-image",
+		Color: interfaces.TokenColor{
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "describe this"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "diagram.png"},
+			},
+		},
+	}
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "dispatch-1",
+			TransitionID: "transition-1",
+			WorkerType:   "worker-a",
+			InputTokens:  InputTokens(imageToken),
+		},
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, capability := range provider.lastReq.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityImageInput {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("required optional capabilities = %#v, want image_input included", provider.lastReq.RequiredOptionalCapabilities)
+	}
 }
 
 func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(t *testing.T) {

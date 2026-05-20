@@ -201,6 +201,16 @@ func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType)
 	return strings.TrimSpace(string(*value))
 }
 
+func internalFactoryRunnerIDFromPublic(value *factoryapi.RunnerID) string {
+	if value == nil {
+		return ""
+	}
+	if canonical := interfaces.StrictPublicFactoryRunnerID(string(*value)); canonical != "" {
+		return canonical
+	}
+	return interfaces.NormalizeRunnerID(string(*value))
+}
+
 func publicFactoryGuardTypeFromInternal(value interfaces.GuardType) factoryapi.GuardType {
 	return factoryapi.GuardType(publicFactoryGuardTypeStringFromInternal(value))
 }

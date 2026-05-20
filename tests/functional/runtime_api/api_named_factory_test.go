@@ -306,9 +306,9 @@ func assertFunctionalNamedFactoryBundledFilesWithoutInlineScriptsAndDocs(t *test
 	if len(bundledFiles) != 3 {
 		t.Fatalf("%s bundled files = %#v, want 3 entries", contextLabel, bundledFiles)
 	}
-	assertFunctionalBundledFileEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n", contextLabel)
-	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", contextLabel)
-	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", contextLabel)
+	assertFunctionalBundledFileEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n", contextLabel)
+	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", contextLabel)
+	assertFunctionalBundledFileEntryWithoutInline(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", contextLabel)
 }
 
 func assertFunctionalNamedFactoryBundledFilesWithInlineScriptsAndDocs(t *testing.T, namedFactory factoryapi.Factory, contextLabel string) {
@@ -321,9 +321,9 @@ func assertFunctionalNamedFactoryBundledFilesWithInlineScriptsAndDocs(t *testing
 	if len(bundledFiles) != 3 {
 		t.Fatalf("%s bundled files = %#v, want 3 entries", contextLabel, bundledFiles)
 	}
-	assertFunctionalBundledFileEntry(t, bundledFiles[0], factoryapi.ROOTHELPER, "Makefile", "test:\n\tgo test ./...\n", contextLabel)
-	assertFunctionalBundledFileEntry(t, bundledFiles[1], factoryapi.DOC, "factory/docs/README.md", "# Portable factory\n", contextLabel)
-	assertFunctionalBundledFileEntry(t, bundledFiles[2], factoryapi.SCRIPT, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n", contextLabel)
+	assertFunctionalBundledFileEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n", contextLabel)
+	assertFunctionalBundledFileEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n", contextLabel)
+	assertFunctionalBundledFileEntry(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n", contextLabel)
 }
 
 func assertFunctionalBundledFileEntry(
