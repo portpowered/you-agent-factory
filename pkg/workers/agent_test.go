@@ -379,6 +379,9 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	if req.SystemPrompt != request.SystemPrompt || req.UserMessage != request.UserMessage || req.OutputSchema != request.OutputSchema {
 		t.Fatalf("request prompt fields differ from execution request: %#v", req)
 	}
+	if req.ToolExecutionMode != interfaces.RunnerToolExecutionModeRequired {
+		t.Fatalf("tool execution mode = %q, want %q", req.ToolExecutionMode, interfaces.RunnerToolExecutionModeRequired)
+	}
 	if req.Worktree != request.Worktree || req.WorkingDirectory != request.WorkingDirectory {
 		t.Fatalf("request paths = worktree %q working_directory %q", req.Worktree, req.WorkingDirectory)
 	}
@@ -391,11 +394,68 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	if got := req.Dispatch.InputBindings["task"]; len(got) != 1 || got[0] != "token-1" {
 		t.Fatalf("request input bindings = %#v", req.Dispatch.InputBindings)
 	}
+	wantCapabilities := []interfaces.RunnerOptionalCapability{
+		interfaces.RunnerOptionalCapabilityStructuredOutput,
+		interfaces.RunnerOptionalCapabilityWorkingDirectory,
+		interfaces.RunnerOptionalCapabilityWorktree,
+		interfaces.RunnerOptionalCapabilitySessionResume,
+	}
+	if len(req.RequiredOptionalCapabilities) != len(wantCapabilities) {
+		t.Fatalf("required optional capabilities = %#v, want %#v", req.RequiredOptionalCapabilities, wantCapabilities)
+	}
+	for index, want := range wantCapabilities {
+		if req.RequiredOptionalCapabilities[index] != want {
+			t.Fatalf("required optional capability[%d] = %q, want %q", index, req.RequiredOptionalCapabilities[index], want)
+		}
+	}
 	tokens := cloneInputTokens(req.InputTokens)
 	if len(tokens) != 1 || tokens[0].ID != inputToken.ID || tokens[0].Color.WorkID != inputToken.Color.WorkID {
 		t.Fatalf("request input tokens = %#v, want %#v", tokens, inputToken)
 	}
 	assertExecutionMetadataEqual(t, dispatch.Execution, req.Dispatch.Execution)
+}
+
+func TestAgentExecutor_InferenceRequestMarksImageInputCapabilityWhenPresent(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(ModelProviderCodex)},
+		},
+	}, provider)
+
+	imageToken := interfaces.Token{
+		ID: "token-image",
+		Color: interfaces.TokenColor{
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "describe this"},
+				{Type: interfaces.WorkContentPartTypeImage, File: "diagram.png"},
+			},
+		},
+	}
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "dispatch-1",
+			TransitionID: "transition-1",
+			WorkerType:   "worker-a",
+			InputTokens:  InputTokens(imageToken),
+		},
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, capability := range provider.lastReq.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityImageInput {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("required optional capabilities = %#v, want image_input included", provider.lastReq.RequiredOptionalCapabilities)
+	}
 }
 
 func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(t *testing.T) {

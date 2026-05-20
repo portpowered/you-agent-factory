@@ -101,6 +101,8 @@ type ScriptWrapProvider struct {
 	exec   CommandRunner
 }
 
+var _ Runner = (*ScriptWrapProvider)(nil)
+
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
 	if p.exec != nil {
 		return commandRunnerWithLogging(p.exec, p.Logger)
@@ -134,6 +136,12 @@ func NewScriptWrapProvider(opts ...ScriptWrapProviderOption) *ScriptWrapProvider
 // Infer shells out to the configured CLI dispatcher with the user message.
 // It merges req.EnvVars into the subprocess environment.
 func (p *ScriptWrapProvider) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	return p.Execute(ctx, req)
+}
+
+// Execute implements the shared runner contract while preserving the current
+// provider-backed subprocess execution path.
+func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
 	logger := logging.EnsureLogger(p.Logger)
 
 	logger.Info("inferencer: request starting",

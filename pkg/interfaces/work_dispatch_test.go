@@ -136,14 +136,19 @@ func TestCloneProviderInferenceRequest_DetachesProviderFields(t *testing.T) {
 	t.Parallel()
 
 	original := ProviderInferenceRequest{
-		Dispatch:         testWorkDispatch(),
-		WorkerType:       "worker-a",
-		WorkstationType:  "review",
-		ProjectID:        "project-override",
-		InputTokens:      []any{map[string]any{"id": "token-2"}},
-		SystemPrompt:     "system",
-		UserMessage:      "user",
-		OutputSchema:     "{}",
+		Dispatch:          testWorkDispatch(),
+		WorkerType:        "worker-a",
+		WorkstationType:   "review",
+		ProjectID:         "project-override",
+		InputTokens:       []any{map[string]any{"id": "token-2"}},
+		SystemPrompt:      "system",
+		UserMessage:       "user",
+		OutputSchema:      "{}",
+		ToolExecutionMode: RunnerToolExecutionModeRequired,
+		RequiredOptionalCapabilities: []RunnerOptionalCapability{
+			RunnerOptionalCapabilityStructuredOutput,
+			RunnerOptionalCapabilitySessionResume,
+		},
 		EnvVars:          map[string]string{"TASK": "dispatch"},
 		Worktree:         "/tmp/worktree",
 		WorkingDirectory: "/tmp/working",
@@ -155,10 +160,14 @@ func TestCloneProviderInferenceRequest_DetachesProviderFields(t *testing.T) {
 	clone := CloneProviderInferenceRequest(original)
 	clone.Dispatch.InputBindings["source"][0] = "changed"
 	clone.InputTokens[0] = map[string]any{"id": "changed"}
+	clone.RequiredOptionalCapabilities[0] = RunnerOptionalCapabilityImageInput
 	clone.EnvVars["TASK"] = "changed"
 
 	if original.Dispatch.InputBindings["source"][0] != "a" {
 		t.Fatalf("dispatch bindings mutated original: %#v", original.Dispatch.InputBindings)
+	}
+	if original.RequiredOptionalCapabilities[0] != RunnerOptionalCapabilityStructuredOutput {
+		t.Fatalf("required optional capabilities mutated original: %#v", original.RequiredOptionalCapabilities)
 	}
 	if original.EnvVars["TASK"] != "dispatch" {
 		t.Fatalf("env vars mutated original: %#v", original.EnvVars)
