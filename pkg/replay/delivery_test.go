@@ -20,6 +20,10 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 		RequestId:    stringPtrIfNotEmpty("request-1"),
 		WorkTypeName: stringPtrIfNotEmpty("task"),
 		TraceId:      stringPtrIfNotEmpty("trace-1"),
+		Content: replayWorkContentForDeliveryTest(t, []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+			{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/alpha.png"},
+		}),
 	}, {
 		Name:         "work-2",
 		WorkId:       stringPtrIfNotEmpty("work-2"),
@@ -63,12 +67,41 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	if batch.Request.Works[0].WorkID != "work-1" || batch.Metadata.Source != "api" {
 		t.Fatalf("replayed generated batch = %#v, want work-1 from api", batch)
 	}
+	if got := batch.Request.Works[0].Content; len(got) != 2 || got[0].Text != "alpha" || got[1].File != "fixtures/alpha.png" {
+		t.Fatalf("replayed content = %#v, want ordered text and image parts", got)
+	}
 	if len(batch.Request.Relations) != 1 || batch.Request.Relations[0].SourceWorkName != "work-2" || batch.Request.Relations[0].TargetWorkName != "work-1" {
 		t.Fatalf("replayed relations = %#v, want work-2 depends on work-1", batch.Request.Relations)
 	}
 	if due.KeepAlive {
 		t.Fatal("due tick KeepAlive = true, want false after last submission is emitted")
 	}
+}
+
+func replayWorkContentForDeliveryTest(t *testing.T, parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+	t.Helper()
+	content := make(factoryapi.WorkContent, 0, len(parts))
+	for _, part := range parts {
+		var generated factoryapi.WorkContentPart
+		switch part.Type {
+		case interfaces.WorkContentPartTypeText:
+			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: part.Text,
+			}); err != nil {
+				t.Fatalf("encode text content: %v", err)
+			}
+		case interfaces.WorkContentPartTypeImage:
+			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
+				Type: factoryapi.WorkContentPartTypeImage,
+				File: part.File,
+			}); err != nil {
+				t.Fatalf("encode image content: %v", err)
+			}
+		}
+		content = append(content, generated)
+	}
+	return &content
 }
 
 func TestSubmissionHook_ReplaysCronTimeWorkRequestWithPendingTargetState(t *testing.T) {

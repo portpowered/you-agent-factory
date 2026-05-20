@@ -635,6 +635,94 @@ func TestNormalizeWorkRequest_AcceptsStringPayloadAsRawText(t *testing.T) {
 	if string(normalized[0].Payload) != "plain text" {
 		t.Fatalf("payload = %q, want plain text", normalized[0].Payload)
 	}
+	if len(normalized[0].Content) != 1 {
+		t.Fatalf("content count = %d, want 1", len(normalized[0].Content))
+	}
+	if normalized[0].Content[0].Type != interfaces.WorkContentPartTypeText || normalized[0].Content[0].Text != "plain text" {
+		t.Fatalf("content = %#v, want canonical text part", normalized[0].Content)
+	}
+}
+
+func TestNormalizeWorkRequest_PrefersExplicitContentForLegacyTextPayload(t *testing.T) {
+	normalized, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-explicit-content",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "raw",
+			WorkTypeID: "task",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "plain "},
+				{Type: interfaces.WorkContentPartTypeText, Text: "text"},
+			},
+			Payload: "plain text",
+		}},
+	}, interfaces.WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	if len(normalized[0].Content) != 2 {
+		t.Fatalf("content count = %d, want 2", len(normalized[0].Content))
+	}
+	if string(normalized[0].Payload) != "plain text" {
+		t.Fatalf("payload = %q, want plain text", normalized[0].Payload)
+	}
+}
+
+func TestNormalizeWorkRequest_DerivesLegacyPayloadFromExplicitTextContent(t *testing.T) {
+	normalized, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-content-only",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "raw",
+			WorkTypeID: "task",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
+				{Type: interfaces.WorkContentPartTypeText, Text: "\nbeta"},
+			},
+		}},
+	}, interfaces.WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	if string(normalized[0].Payload) != "alpha\nbeta" {
+		t.Fatalf("payload = %q, want alpha\\nbeta", normalized[0].Payload)
+	}
+}
+
+func TestNormalizeWorkRequest_RejectsConflictingExplicitContentAndPayload(t *testing.T) {
+	_, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-content-conflict",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "raw",
+			WorkTypeID: "task",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: "plain text"},
+			},
+			Payload: "different text",
+		}},
+	}, interfaces.WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	if err == nil || !strings.Contains(err.Error(), "payload conflicts with explicit content") {
+		t.Fatalf("expected content conflict error, got %v", err)
+	}
+}
+
+func TestNormalizeWorkRequest_RejectsPayloadAlongsideImageContent(t *testing.T) {
+	_, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-image-conflict",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:       "raw",
+			WorkTypeID: "task",
+			Content: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/example.png"},
+			},
+			Payload: "caption",
+		}},
+	}, interfaces.WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	if err == nil || !strings.Contains(err.Error(), "payload cannot be combined with image-only canonical content") {
+		t.Fatalf("expected image/payload conflict error, got %v", err)
+	}
 }
 
 func TestWorkRequestRecordFromSubmitRequests_UsesSharedTraceFallback(t *testing.T) {

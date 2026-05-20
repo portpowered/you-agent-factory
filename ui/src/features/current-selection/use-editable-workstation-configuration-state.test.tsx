@@ -38,24 +38,21 @@ describe("useEditableWorkstationConfigurationState", () => {
       if (result.current?.status !== "ready") {
         throw new Error("expected editable configuration to be ready");
       }
-      result.current.onModelChange("gpt-5.6");
       result.current.onPromptChange("");
-      result.current.onPromptFileChange("   ");
+      result.current.onWorkerChange("");
     });
 
     expect(result.current).toMatchObject({
       draft: {
-        model: "gpt-5.6",
         prompt: "",
-        promptFile: "   ",
+        workerName: "",
       },
       hasValidationErrors: true,
       isDirty: true,
       status: "ready",
       validationErrors: {
         prompt: "Enter a prompt before saving this workstation.",
-        promptFile:
-          "Template paths cannot be only whitespace. Clear the field to remove the template.",
+        workerName: "Select a worker before saving this workstation.",
       },
     });
     expect(
@@ -78,7 +75,6 @@ describe("useEditableWorkstationConfigurationState", () => {
       buildEditableDefinitionResult(
         buildEditableFactoryDefinition({
           prompt: "Server refreshed prompt before local edits.",
-          promptFile: "prompts/refreshed.md",
         }),
       ),
     );
@@ -89,11 +85,44 @@ describe("useEditableWorkstationConfigurationState", () => {
       expect(result.current).toMatchObject({
         draft: {
           prompt: "Server refreshed prompt before local edits.",
-          promptFile: "prompts/refreshed.md",
+          workerName: "reviewer",
         },
         isDirty: false,
         status: "ready",
       });
+    });
+  });
+
+  it("surfaces an unavailable worker selection when the selected worker falls out of the current worker list", async () => {
+    vi.mocked(useCurrentEditableFactoryDefinition).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workerName: "missing-worker",
+          workerOptions: ["reviewer"],
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      hasValidationErrors: true,
+      status: "ready",
+      validationErrors: {
+        workerName:
+          "The selected worker is no longer available. Choose another worker before saving this workstation.",
+      },
+      workerOptionsState: {
+        message:
+          "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
+        status: "error",
+      },
     });
   });
 });
@@ -113,17 +142,16 @@ function buildEditableDefinitionResult(
 
 function buildEditableFactoryDefinition(overrides?: {
   prompt?: string;
-  promptFile?: string;
+  workerName?: string;
+  workerOptions?: string[];
 }): CanonicalFactoryDefinition {
   return {
     name: "Current Factory",
-    workers: [
-      {
-        model: "gpt-5.5",
-        name: "reviewer",
-        type: "MODEL_WORKER",
-      },
-    ],
+    workers: (overrides?.workerOptions ?? ["reviewer"]).map((name, index) => ({
+      model: `gpt-5.${index + 5}`,
+      name,
+      type: "MODEL_WORKER",
+    })),
     workstations: [
       {
         body:
@@ -133,8 +161,8 @@ function buildEditableFactoryDefinition(overrides?: {
         inputs: [{ state: "queued", workType: "story" }],
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
-        promptFile: overrides?.promptFile ?? "prompts/review.md",
-        worker: "reviewer",
+        promptFile: "prompts/review.md",
+        worker: overrides?.workerName ?? "reviewer",
       },
     ],
     workTypes: [],

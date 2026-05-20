@@ -1,0 +1,4 @@
+type: array
+description: Ordered canonical content parts for one work item.
+items:
+  $ref: './WorkContentPart.yaml'

@@ -482,7 +482,12 @@ describe("WorkItemDetailCard summary", () => {
     }
 
     expect(within(activeCard).getByText("Current dispatch")).toBeTruthy();
+    expect(
+      within(activeCard).getByText("Current dispatch").className,
+    ).toContain("text-on-foreground");
+    expect(activeCard.className).toContain("border-on-foreground");
     expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
+    expect(historicalCard.className).not.toContain("border-on-foreground");
   });
 
   it("renders unavailable execution details with clear operator copy", () => {
@@ -680,7 +685,9 @@ describe("WorkItemDetailCard summary", () => {
     });
 
     expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
-    expect(within(relationshipGraph).getByText("Active Story")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("Active Story").className,
+    ).toContain("text-on-foreground");
     expect(
       within(relationshipGraph).getByRole("region", {
         name: "Parent relationships",
@@ -1652,7 +1659,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       getSelectedWorkItemFixture();
 
     render(
-        <CurrentSelectionLocaleProvider locale="ja">
+      <CurrentSelectionLocaleProvider locale="ja">
         <WorkItemDetailCard
           activeTraceID="trace-active-story"
           executionDetails={selectWorkItemExecutionDetails({
@@ -1801,18 +1808,19 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeNull();
     expect(within(dispatchCard).getByText("Workstation")).toBeTruthy();
     expect(within(fallbackRequestDetails).queryByText("Resolved args")).toBeNull();
-    expect(
-      within(dispatchCard).getByRole("button", {
-        name: "Select work item Active Story",
-      }),
-    ).toBeTruthy();
+    const selectedWorkButton = within(dispatchCard).getByRole("button", {
+      name: "Select work item Active Story",
+    });
+    expect(selectedWorkButton).toBeTruthy();
     expect(within(dispatchCard).getByText("Work selected")).toBeTruthy();
+    expect(selectedWorkButton.textContent).toContain("Work selected");
+    expect(selectedWorkButton.className).toContain("text-on-foreground");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
-    expect(
-      within(dispatchCard).getByRole("link", {
-        name: "trace-active-story (selected)",
-      }),
-    ).toBeTruthy();
+    const selectedTraceLink = within(dispatchCard).getByRole("link", {
+      name: "trace-active-story (selected)",
+    });
+    expect(selectedTraceLink).toBeTruthy();
+    expect(selectedTraceLink.className).toContain("text-on-foreground");
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {

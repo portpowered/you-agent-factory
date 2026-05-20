@@ -1,0 +1,11 @@
+type: string
+description: Supported first-slice canonical work content part types.
+x-enum-varnames:
+  - WorkContentPartTypeText
+  - WorkContentPartTypeImage
+enum:
+  - text
+  - image
+x-enum-descriptions:
+  - Inline text content.
+  - Image content referenced by file path.

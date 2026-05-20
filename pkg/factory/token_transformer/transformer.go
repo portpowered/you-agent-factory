@@ -87,6 +87,7 @@ func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now t
 			ParentID:                 submitParentID(req.Relations),
 			Tags:                     cloneTags(req.Tags),
 			Relations:                cloneRelations(req.Relations),
+			Content:                  cloneWorkContent(req.Content),
 			Payload:                  clonePayload(req.Payload),
 		},
 		CreatedAt: now,
@@ -362,6 +363,15 @@ func createdAtForOutputToken(consumedTokens []interfaces.Token, outputColor inte
 		}
 	}
 	return now
+}
+
+func cloneWorkContent(content []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+	if len(content) == 0 {
+		return nil
+	}
+	clone := make([]interfaces.WorkContentPart, len(content))
+	copy(clone, content)
+	return clone
 }
 
 func newTokenHistory() interfaces.TokenHistory {

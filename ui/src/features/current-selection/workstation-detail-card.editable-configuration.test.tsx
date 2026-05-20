@@ -5,39 +5,160 @@ import { WorkstationDetailCard } from "./workstation-detail-card";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
+function editableConfigurationSection() {
+  const heading = screen
+    .getAllByRole("heading", { name: "Editable configuration" })
+    .at(-1);
+  const section = heading?.closest("section");
+  if (!section) {
+    throw new Error("expected editable configuration section");
+  }
+
+  return section;
+}
+
+function buildReadyEditableConfigurationState(overrides?: {
+  prompt?: string;
+  validationErrors?: { prompt?: string; workerName?: string };
+  workerName?: string;
+  workerOptionsState?: { status: "ready"; options: string[] } | { message: string; status: "empty" | "error" };
+}) {
+  return {
+    draft: {
+      prompt:
+        overrides?.prompt ?? "Review the latest story changes before approval.",
+      workerName: overrides?.workerName ?? "reviewer",
+    },
+    hasValidationErrors: Boolean(
+      overrides?.validationErrors?.prompt || overrides?.validationErrors?.workerName,
+    ),
+    initialValues: {
+      prompt: "Review the latest story changes before approval.",
+      workerName: "reviewer",
+      workerOptions: ["reviewer", "planner"],
+      workstationName: "Review",
+    },
+    isDirty: Boolean(
+      overrides?.validationErrors?.prompt ||
+        overrides?.validationErrors?.workerName ||
+        overrides?.prompt,
+    ),
+    markChangesSaved: vi.fn(),
+    onPromptChange: vi.fn(),
+    onWorkerChange: vi.fn(),
+    overwriteFieldNames: [],
+    pendingFactoryDefinition: null,
+    status: "ready" as const,
+    validationErrors: overrides?.validationErrors ?? {},
+    workerOptionsState:
+      overrides?.workerOptionsState ?? {
+        options: ["reviewer", "planner"],
+        status: "ready" as const,
+      },
+  };
+}
+
 describe("WorkstationDetailCard editable configuration", () => {
-  it("renders editable workstation prompt, model, template, and worker values", () => {
+  it("starts collapsed and expands with accessible disclosure behavior", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
     render(
       <WorkstationDetailCard
         activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const toggle = within(editableConfigurationSection()).getByRole("button", {
+      name: "Expand editable configuration",
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("Worker")).toBeNull();
+    expect(screen.queryByLabelText("Prompt")).toBeNull();
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Worker")).toBeTruthy();
+    expect(
+      screen.getByDisplayValue(
+        "Review the latest story changes before approval.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(editableConfigurationSection())
+        .getByRole("button", { name: "Collapse editable configuration" })
+        .getAttribute("aria-controls"),
+    ).toBeTruthy();
+  });
+
+  it("resets the disclosure to collapsed when the selected workstation changes", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
+    const planNode = snapshot.topology.workstation_nodes_by_id.plan;
+
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={reviewNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+    expect(screen.getByLabelText("Worker")).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Plan the next change.",
+          workerName: "planner",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={planNode}
+      />,
+    );
+
+    expect(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(editableConfigurationSection()).queryByLabelText("Worker"),
+    ).toBeNull();
+  });
+
+  it("renders only worker and prompt controls in the editable form", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onPromptChange = vi.fn();
+    const onWorkerChange = vi.fn();
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
         editableConfigurationState={{
-          draft: {
-            model: "gpt-5.5",
-            prompt: "Review the latest story changes before approval.",
-            promptFile: "prompts/review.md",
-          },
-          hasValidationErrors: false,
-          initialValues: {
-            isModelEditable: true,
-            model: "gpt-5.5",
-            modelEditBlockedReason: null,
-            prompt: "Review the latest story changes before approval.",
-            promptFile: "prompts/review.md",
-            workerName: "reviewer",
-            workstationName: "Review",
-          },
-          isDirty: false,
-          isModelEditable: true,
-          onModelChange: vi.fn(),
-          onPromptChange: vi.fn(),
-          onPromptFileChange: vi.fn(),
-          overwriteFieldNames: [],
-          pendingFactoryDefinition: null,
-          status: "ready",
-          validationErrors: {},
+          ...buildReadyEditableConfigurationState({
+            prompt: "",
+            validationErrors: {
+              prompt: "Enter a prompt before saving this workstation.",
+            },
+          }),
+          onPromptChange,
+          onWorkerChange,
         }}
         now={DETAIL_CARD_NOW}
         providerSessions={[]}
@@ -45,74 +166,10 @@ describe("WorkstationDetailCard editable configuration", () => {
       />,
     );
 
-    const editableSection = screen
-      .getByRole("heading", { name: "Editable configuration" })
-      .closest("section");
-    if (!editableSection) {
-      throw new Error("expected editable configuration section");
-    }
-
-    expect(within(editableSection).getByText("Model")).toBeTruthy();
-    expect(within(editableSection).getByDisplayValue("gpt-5.5")).toBeTruthy();
-    expect(within(editableSection).getByText("Template")).toBeTruthy();
-    expect(
-      within(editableSection).getByDisplayValue("prompts/review.md"),
-    ).toBeTruthy();
-    expect(within(editableSection).getByText("Worker")).toBeTruthy();
-    expect(within(editableSection).getByText("reviewer")).toBeTruthy();
-    expect(within(editableSection).getByText("Prompt")).toBeTruthy();
-    expect(
-      within(editableSection).getByDisplayValue(
-        "Review the latest story changes before approval.",
-      ),
-    ).toBeTruthy();
-  });
-
-  it("renders editable controls with local-draft and validation states", () => {
-    const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-    const onModelChange = vi.fn();
-    const onPromptChange = vi.fn();
-    const onPromptFileChange = vi.fn();
-
-    render(
-      <WorkstationDetailCard
-        activeExecutions={[]}
-        editableConfigurationState={{
-          draft: {
-            model: "",
-            prompt: "",
-            promptFile: "   ",
-          },
-          hasValidationErrors: true,
-          initialValues: {
-            isModelEditable: true,
-            model: "gpt-5.5",
-            modelEditBlockedReason: null,
-            prompt: "Review the latest story changes before approval.",
-            promptFile: "prompts/review.md",
-            workerName: "reviewer",
-            workstationName: "Review",
-          },
-          isDirty: true,
-          isModelEditable: true,
-          onModelChange,
-          onPromptChange,
-          onPromptFileChange,
-          overwriteFieldNames: [],
-          pendingFactoryDefinition: null,
-          status: "ready",
-          validationErrors: {
-            model: "Enter a model before saving this workstation.",
-            prompt: "Enter a prompt before saving this workstation.",
-            promptFile:
-              "Template paths cannot be only whitespace. Clear the field to remove the template.",
-          },
-        }}
-        now={DETAIL_CARD_NOW}
-        providerSessions={[]}
-        selectedNode={selectedNode}
-      />,
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
     );
 
     expect(screen.getByRole("alert")).toBeTruthy();
@@ -121,66 +178,78 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Resolve the highlighted fields before saving this workstation.",
       ),
     ).toBeTruthy();
+    expect(screen.getByLabelText("Worker")).toBeTruthy();
+    expect(screen.getByLabelText("Worker").tagName).toBe("SELECT");
+    expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(screen.queryByLabelText("Template")).toBeNull();
 
-    fireEvent.change(screen.getByLabelText("Model"), {
-      target: { value: "gpt-5.6" },
-    });
-    fireEvent.change(screen.getByLabelText("Template"), {
-      target: { value: "prompts/review-v2.md" },
+    fireEvent.change(screen.getByLabelText("Worker"), {
+      target: { value: "planner" },
     });
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Updated prompt" },
     });
 
-    expect(onModelChange).toHaveBeenCalledWith("gpt-5.6");
-    expect(onPromptFileChange).toHaveBeenCalledWith("prompts/review-v2.md");
+    expect(onWorkerChange).toHaveBeenCalledWith("planner");
     expect(onPromptChange).toHaveBeenCalledWith("Updated prompt");
   });
 
-  it("disables the model field when the selected workstation shares its worker", () => {
+  it("renders explicit worker empty and stale-selection states", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
-
-    render(
+    const { rerender } = render(
       <WorkstationDetailCard
         activeExecutions={[]}
-        editableConfigurationState={{
-          draft: {
-            model: "gpt-5.5",
-            prompt: "Review the latest story changes before approval.",
-            promptFile: "prompts/review.md",
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          workerOptionsState: {
+            message:
+              "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
+            status: "empty",
           },
-          hasValidationErrors: false,
-          initialValues: {
-            isModelEditable: false,
-            model: "gpt-5.5",
-            modelEditBlockedReason:
-              'Model edits are disabled here because worker "processor" is shared with "Review" and "Plan".',
-            prompt: "Review the latest story changes before approval.",
-            promptFile: "prompts/review.md",
-            workerName: "processor",
-            workstationName: "Review",
-          },
-          isDirty: false,
-          isModelEditable: false,
-          onModelChange: vi.fn(),
-          onPromptChange: vi.fn(),
-          onPromptFileChange: vi.fn(),
-          overwriteFieldNames: [],
-          pendingFactoryDefinition: null,
-          status: "ready",
-          validationErrors: {},
-        }}
+        })}
         now={DETAIL_CARD_NOW}
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
     );
 
-    expect(screen.getByLabelText("Model").getAttribute("disabled")).not.toBeNull();
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
     expect(
       screen.getByText(
-        'Model edits are disabled here because worker "processor" is shared with "Review" and "Plan".',
+        "No current workers are available for this workstation. Add a worker to the factory before editing this field.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Worker")).toBeNull();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          validationErrors: {
+            workerName:
+              "The selected worker is no longer available. Choose another worker before saving this workstation.",
+          },
+          workerName: "missing-worker",
+          workerOptionsState: {
+            message:
+              "The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
+            status: "error",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Worker selection unavailable. The selected workstation references a worker that is no longer available in the current factory definition. Reload current selection and choose another worker.",
       ),
     ).toBeTruthy();
   });
@@ -196,6 +265,12 @@ describe("WorkstationDetailCard editable configuration", () => {
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
     );
 
     expect(
@@ -229,7 +304,7 @@ describe("WorkstationDetailCard editable configuration", () => {
         activeExecutions={[]}
         editableConfigurationState={{
           message:
-            "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
+            "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
           status: "empty",
         }}
         now={DETAIL_CARD_NOW}
@@ -240,7 +315,7 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(
       screen.getByText(
-        "This running factory definition does not expose editable prompt, model, and template values for the selected workstation.",
+        "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
       ),
     ).toBeTruthy();
   });

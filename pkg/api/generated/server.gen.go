@@ -128,6 +128,12 @@ const (
 	ScriptFailureTypeTimeout      ScriptFailureType = "TIMEOUT"
 )
 
+// Defines values for WorkContentPartType.
+const (
+	WorkContentPartTypeImage WorkContentPartType = "image"
+	WorkContentPartTypeText  WorkContentPartType = "text"
+)
+
 // Defines values for WorkOutcome.
 const (
 	WorkOutcomeAccepted WorkOutcome = "ACCEPTED"
@@ -1062,6 +1068,9 @@ type SubmitRelation struct {
 
 // SubmitWorkRequest defines model for SubmitWorkRequest.
 type SubmitWorkRequest struct {
+	// Content Ordered canonical content parts for one work item.
+	Content *WorkContent `json:"content,omitempty"`
+
 	// CurrentChainingTraceId Explicit chaining-trace identifier for the submitted work.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
@@ -1097,7 +1106,10 @@ type TokenHistory struct {
 
 // TokenResponse defines model for TokenResponse.
 type TokenResponse struct {
-	ChainingTraceDepth       *int          `json:"chainingTraceDepth,omitempty"`
+	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content                  *WorkContent  `json:"content,omitempty"`
 	CreatedAt                time.Time     `json:"createdAt"`
 	CurrentChainingTraceId   *string       `json:"currentChainingTraceId,omitempty"`
 	EnteredAt                time.Time     `json:"enteredAt"`
@@ -1138,6 +1150,9 @@ type Work struct {
 	// ChainingTraceDepth Current chaining depth for this work item when the runtime already knows its upstream lineage.
 	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
 
+	// Content Ordered canonical content parts for one work item.
+	Content *WorkContent `json:"content,omitempty"`
+
 	// CurrentChainingTraceId Explicit chaining-trace identifier for this submitted work item.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
@@ -1170,6 +1185,17 @@ type Work struct {
 	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
+// WorkContent Ordered canonical content parts for one work item.
+type WorkContent = []WorkContentPart
+
+// WorkContentPart One ordered canonical content part on a work item.
+type WorkContentPart struct {
+	union json.RawMessage
+}
+
+// WorkContentPartType Supported first-slice canonical work content part types.
+type WorkContentPartType string
+
 // WorkDiagnostics defines model for WorkDiagnostics.
 type WorkDiagnostics struct {
 	Command        *CommandDiagnostic        `json:"command,omitempty"`
@@ -1177,6 +1203,13 @@ type WorkDiagnostics struct {
 	Panic          *PanicDiagnostic          `json:"panic,omitempty"`
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
+}
+
+// WorkImageContentPart Ordered image content for one work item.
+type WorkImageContentPart struct {
+	// File Image file reference preserved for later runtime materialization.
+	File string              `json:"file"`
+	Type WorkContentPartType `json:"type"`
 }
 
 // WorkMetrics defines model for WorkMetrics.
@@ -1232,6 +1265,13 @@ type WorkState struct {
 
 // WorkStateType Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
 type WorkStateType string
+
+// WorkTextContentPart Ordered inline text content for one work item.
+type WorkTextContentPart struct {
+	// Text Inline text content preserved in canonical part order.
+	Text string              `json:"text"`
+	Type WorkContentPartType `json:"type"`
+}
 
 // WorkType A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.
 type WorkType struct {
@@ -1821,6 +1861,68 @@ func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 }
 
 func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsWorkTextContentPart returns the union data inside the WorkContentPart as a WorkTextContentPart
+func (t WorkContentPart) AsWorkTextContentPart() (WorkTextContentPart, error) {
+	var body WorkTextContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkTextContentPart overwrites any union data inside the WorkContentPart as the provided WorkTextContentPart
+func (t *WorkContentPart) FromWorkTextContentPart(v WorkTextContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkTextContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkTextContentPart
+func (t *WorkContentPart) MergeWorkTextContentPart(v WorkTextContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkImageContentPart returns the union data inside the WorkContentPart as a WorkImageContentPart
+func (t WorkContentPart) AsWorkImageContentPart() (WorkImageContentPart, error) {
+	var body WorkImageContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkImageContentPart overwrites any union data inside the WorkContentPart as the provided WorkImageContentPart
+func (t *WorkContentPart) FromWorkImageContentPart(v WorkImageContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkImageContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkImageContentPart
+func (t *WorkContentPart) MergeWorkImageContentPart(v WorkImageContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkContentPart) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *WorkContentPart) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

@@ -32,6 +32,7 @@
   --color-af-chart-timing-trend: var(--color-af-info-bright);
   --color-af-code-ink: #d5fbff;
   --color-af-overlay: #ffffff;
+  --color-on-foreground: var(--color-af-ink);
   --color-af-edge-muted: rgb(from var(--color-af-overlay) r g b / 0.24);
   --color-af-edge-muted-soft: rgb(from var(--color-af-overlay) r g b / 0.12);
   --color-af-edge-danger-muted: rgb(from var(--color-af-danger) r g b / 0.32);
