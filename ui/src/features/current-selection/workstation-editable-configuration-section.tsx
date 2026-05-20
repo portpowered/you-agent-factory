@@ -44,18 +44,10 @@ export function EditableConfigurationSection({
       className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
       <div className={HISTORY_HEADER_CLASS}>
-        <div className="grid min-w-0 gap-1">
+        <div className="min-w-0">
           <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
             {messages.editableConfigurationHeading}
           </h4>
-          <p
-            className={cx(
-              "m-0 text-af-ink/62",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
-            {messages.editableConfigurationSummary}
-          </p>
         </div>
         <button
           aria-label={
