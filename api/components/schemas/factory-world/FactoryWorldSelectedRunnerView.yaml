@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+properties:
+  runnerId:
+    $ref: '../../../openapi-main.yaml#/components/schemas/RunnerID'
+  displayName:
+    type: string
+  selectionSource:
+    $ref: '../../../openapi-main.yaml#/components/schemas/RunnerSelectionSource'

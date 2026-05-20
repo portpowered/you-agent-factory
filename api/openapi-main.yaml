@@ -623,6 +623,8 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldScriptRequestView.yaml'
     FactoryWorldScriptResponseView:
       $ref: './components/schemas/factory-world/FactoryWorldScriptResponseView.yaml'
+    FactoryWorldSelectedRunnerView:
+      $ref: './components/schemas/factory-world/FactoryWorldSelectedRunnerView.yaml'
     FactoryWorldWorkstationRequestCountView:
       $ref: './components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml'
     FactoryWorldWorkstationRequestRequestView:
@@ -737,6 +739,8 @@ components:
       $ref: './components/schemas/data-models/WorkerProvider.yaml'
     RunnerID:
       $ref: './components/schemas/data-models/RunnerID.yaml'
+    RunnerSelectionSource:
+      $ref: './components/schemas/data-models/RunnerSelectionSource.yaml'
     Workstation:
       $ref: './components/schemas/data-models/Workstation.yaml'
     WorkstationLimits:

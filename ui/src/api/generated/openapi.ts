@@ -570,12 +570,18 @@ export interface components {
             exitCode?: number;
             failureType?: string;
         };
+        FactoryWorldSelectedRunnerView: {
+            runnerId?: components["schemas"]["RunnerID"];
+            displayName?: string;
+            selectionSource?: components["schemas"]["RunnerSelectionSource"];
+        };
         FactoryWorldWorkstationRequestCountView: {
             dispatchedCount: number;
             respondedCount: number;
             erroredCount: number;
         };
         FactoryWorldWorkstationRequestRequestView: {
+            runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
             startedAt?: string;
             inputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
             inputWorkTypeIds?: string[];
@@ -586,6 +592,7 @@ export interface components {
             scriptRequest?: components["schemas"]["FactoryWorldScriptRequestView"];
         };
         FactoryWorldWorkstationRequestResponseView: {
+            runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
             outcome?: string;
             feedback?: string;
             failureReason?: string;
@@ -657,6 +664,8 @@ export interface components {
         DispatchRequestEventMetadata: {
             /** @description Stable replay correlation key for recorded dispatch reconstruction. */
             replayKey?: string;
+            runnerId?: components["schemas"]["RunnerID"];
+            runnerSelectionSource?: components["schemas"]["RunnerSelectionSource"];
         };
         RunRequestEventPayload: {
             /** Format: date-time */
@@ -1220,6 +1229,11 @@ export interface components {
          * @enum {string}
          */
         RunnerID: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode";
+        /**
+         * @description Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+         * @enum {string}
+         */
+        RunnerSelectionSource: "workstation" | "factory" | "legacy_provider" | "default";
         /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
         Workstation: {
             /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */

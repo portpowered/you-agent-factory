@@ -684,6 +684,7 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 		"FactoryWorldMutationView",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldSelectedRunnerView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
 		"FactoryWorldWorkstationRequestResponseView",
@@ -829,6 +830,7 @@ func assertWorkstationRequestProjectionSchemasPresent(t *testing.T, schemas map[
 		"FactoryWorldWorkstationRequestProjectionSlice",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldSelectedRunnerView",
 		"FactoryWorldWorkstationRequestView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
@@ -854,6 +856,7 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	assertSchemaPropertiesPresent(t, requestPayloadProperties, "FactoryWorldWorkstationRequestRequestView", "startedAt")
 	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
+	assertPropertyRef(t, requestPayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertPropertyRef(t, requestPayloadProperties, "scriptRequest", "#/components/schemas/FactoryWorldScriptRequestView")
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
@@ -861,6 +864,7 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, responsePayloadProperties, "scriptResponse", "#/components/schemas/FactoryWorldScriptResponseView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
+	assertPropertyRef(t, responsePayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
 }
 
@@ -1052,6 +1056,7 @@ func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T)
 		"FactoryWorldMutationView":                      "./components/schemas/factory-world/FactoryWorldMutationView.yaml",
 		"FactoryWorldScriptRequestView":                 "./components/schemas/factory-world/FactoryWorldScriptRequestView.yaml",
 		"FactoryWorldScriptResponseView":                "./components/schemas/factory-world/FactoryWorldScriptResponseView.yaml",
+		"FactoryWorldSelectedRunnerView":                "./components/schemas/factory-world/FactoryWorldSelectedRunnerView.yaml",
 		"FactoryWorldWorkstationRequestCountView":       "./components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml",
 		"FactoryWorldWorkstationRequestRequestView":     "./components/schemas/factory-world/FactoryWorldWorkstationRequestRequestView.yaml",
 		"FactoryWorldWorkstationRequestResponseView":    "./components/schemas/factory-world/FactoryWorldWorkstationRequestResponseView.yaml",
@@ -2218,6 +2223,7 @@ func assertProjectionSchemasPresent(t *testing.T, schemas map[string]any) {
 		"FactoryWorldWorkstationRequestProjectionSlice",
 		"FactoryWorldWorkstationRequestView",
 		"FactoryWorldWorkstationRequestCountView",
+		"FactoryWorldSelectedRunnerView",
 		"FactoryWorldWorkstationRequestRequestView",
 		"FactoryWorldWorkstationRequestResponseView",
 		"FactoryWorldWorkItemRef",
@@ -2279,6 +2285,7 @@ func assertWorkstationRequestRequestSchema(t *testing.T, schemas map[string]any)
 		}
 	}
 	assertStringArrayProperty(t, requestPayloadProperties, "previousChainingTraceIds")
+	assertPropertyRef(t, requestPayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertArrayItemRef(t, requestPayloadProperties, "inputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, requestPayloadProperties, "consumedTokens", "#/components/schemas/FactoryWorldTokenView")
 }
@@ -2310,6 +2317,7 @@ func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any
 
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
+	assertPropertyRef(t, responsePayloadProperties, "runner", "#/components/schemas/FactoryWorldSelectedRunnerView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
 	for _, field := range []string{

@@ -89,9 +89,11 @@ func TestReconstructFactoryWorldState_ActiveRequestAtSelectedTick(t *testing.T) 
 		initialStructureEvent(t0),
 		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
-			DispatchID:   "dispatch-1",
-			TransitionID: "t-review",
-			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			DispatchID:            "dispatch-1",
+			TransitionID:          "t-review",
+			Workstation:           interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			RunnerID:              interfaces.RunnerIDGemini,
+			RunnerSelectionSource: interfaces.RunnerSelectionSourceFactory,
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
@@ -111,6 +113,9 @@ func TestReconstructFactoryWorldState_ActiveRequestAtSelectedTick(t *testing.T) 
 	dispatch := state.ActiveDispatches["dispatch-1"]
 	if dispatch.StartedTick != 2 || len(dispatch.WorkItemIDs) != 1 || dispatch.WorkItemIDs[0] != "work-1" {
 		t.Fatalf("active dispatch = %#v, want work-1 at tick 2", dispatch)
+	}
+	if dispatch.RunnerID != interfaces.RunnerIDGemini || dispatch.RunnerSelectionSource != interfaces.RunnerSelectionSourceFactory {
+		t.Fatalf("active dispatch runner = (%q, %q), want (gemini, factory)", dispatch.RunnerID, dispatch.RunnerSelectionSource)
 	}
 	if got, ok := state.PlaceOccupancyByID["task:init"]; ok {
 		t.Fatalf("task:init occupancy = %#v, want no occupancy after request consumed runtime token", got)
@@ -1246,8 +1251,19 @@ func workstationRequestEvent(tick int, eventTime time.Time, payload interfaces.W
 		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(interfaces.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
 		Inputs:                   inputRefs,
 		Resources:                generatedResourcesForProjectionTest(payload.Resources),
+		Metadata:                 generatedDispatchMetadataForProjectionTest(payload.RunnerID, payload.RunnerSelectionSource),
 	}
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchRequest, "request/"+payload.DispatchID, tick, eventTime, context, generatedPayload)
+}
+
+func generatedDispatchMetadataForProjectionTest(runnerID string, source interfaces.RunnerSelectionSource) *factoryapi.DispatchRequestEventMetadata {
+	if runnerID == "" && source == "" {
+		return nil
+	}
+	return &factoryapi.DispatchRequestEventMetadata{
+		RunnerId:              interfaces.GeneratedPublicFactoryRunnerIDPtr(runnerID),
+		RunnerSelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(source)),
+	}
 }
 
 func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.WorkstationResponsePayload) factoryapi.FactoryEvent {

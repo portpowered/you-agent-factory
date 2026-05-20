@@ -275,16 +275,19 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 	}
 
 	worker := r.workerForTransition(payload.TransitionId)
+	runnerID, runnerSource := generatedDispatchRunnerSelection(payload.Metadata)
 	dispatch := interfaces.FactoryWorldDispatch{
-		DispatchID:   dispatchID,
-		TransitionID: payload.TransitionId,
-		Workstation:  r.workstationRefForTransition(payload.TransitionId),
-		Provider:     worker.Provider,
-		Model:        worker.Model,
-		StartedTick:  event.Context.Tick,
-		StartedAt:    event.Context.EventTime,
-		Inputs:       inputs,
-		WorkItemIDs:  sortedStrings(workIDs),
+		DispatchID:            dispatchID,
+		TransitionID:          payload.TransitionId,
+		Workstation:           r.workstationRefForTransition(payload.TransitionId),
+		RunnerID:              runnerID,
+		RunnerSelectionSource: runnerSource,
+		Provider:              worker.Provider,
+		Model:                 worker.Model,
+		StartedTick:           event.Context.Tick,
+		StartedAt:             event.Context.EventTime,
+		Inputs:                inputs,
+		WorkItemIDs:           sortedStrings(workIDs),
 		CurrentChainingTraceID: dispatchCurrentChainingTraceID(
 			event.Context.CurrentChainingTraceId,
 			payload.CurrentChainingTraceId,
@@ -501,19 +504,21 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 	inputWorkItems := dispatchInputWorkItems(dispatch)
 	latestAttempt := r.latestInferenceAttemptForDispatch(dispatchID)
 	return interfaces.FactoryWorldDispatchCompletion{
-		DispatchID:      dispatchID,
-		TransitionID:    payload.TransitionId,
-		Workstation:     dispatch.Workstation,
-		StartedTick:     dispatch.StartedTick,
-		CompletedTick:   event.Context.Tick,
-		StartedAt:       dispatch.StartedAt,
-		CompletedAt:     event.Context.EventTime,
-		DurationMillis:  int64Value(payload.DurationMillis),
-		Result:          workstationResultFromGenerated(payload),
-		WorkItemIDs:     sortedStrings(workIDs),
-		ConsumedInputs:  interfaces.CloneWorkstationInputs(dispatch.Inputs),
-		InputWorkItems:  sortedWorkItems(inputWorkItems),
-		OutputWorkItems: sortedWorkItems(outputWorkItems),
+		DispatchID:            dispatchID,
+		TransitionID:          payload.TransitionId,
+		Workstation:           dispatch.Workstation,
+		RunnerID:              dispatch.RunnerID,
+		RunnerSelectionSource: dispatch.RunnerSelectionSource,
+		StartedTick:           dispatch.StartedTick,
+		CompletedTick:         event.Context.Tick,
+		StartedAt:             dispatch.StartedAt,
+		CompletedAt:           event.Context.EventTime,
+		DurationMillis:        int64Value(payload.DurationMillis),
+		Result:                workstationResultFromGenerated(payload),
+		WorkItemIDs:           sortedStrings(workIDs),
+		ConsumedInputs:        interfaces.CloneWorkstationInputs(dispatch.Inputs),
+		InputWorkItems:        sortedWorkItems(inputWorkItems),
+		OutputWorkItems:       sortedWorkItems(outputWorkItems),
 		CurrentChainingTraceID: completedDispatchCurrentChainingTraceID(
 			event.Context.CurrentChainingTraceId,
 			payload.CurrentChainingTraceId,
@@ -562,6 +567,8 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 		DispatchID:               completion.DispatchID,
 		TransitionID:             payload.TransitionId,
 		WorkstationName:          dispatch.Workstation.Name,
+		RunnerID:                 completion.RunnerID,
+		RunnerSelectionSource:    completion.RunnerSelectionSource,
 		Outcome:                  string(payload.Outcome),
 		ProviderSession:          *interfaces.CloneProviderSessionMetadata(completion.ProviderSession),
 		WorkItemIDs:              completion.WorkItemIDs,
@@ -573,6 +580,13 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 		FailureReason:            completion.Result.FailureReason,
 		FailureMessage:           completion.Result.FailureMessage,
 	})
+}
+
+func generatedDispatchRunnerSelection(metadata *factoryapi.DispatchRequestEventMetadata) (string, interfaces.RunnerSelectionSource) {
+	if metadata == nil {
+		return "", ""
+	}
+	return stringValueEnum(metadata.RunnerId), interfaces.RunnerSelectionSource(stringValueEnum(metadata.RunnerSelectionSource))
 }
 
 func dispatchCurrentChainingTraceID(
@@ -1560,6 +1574,13 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func stringValueEnum[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func generatedWorkStateName(value *factoryapi.WorkState) string {

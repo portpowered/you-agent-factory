@@ -55,6 +55,14 @@ func TestPublicFactoryEnumNormalizers(t *testing.T) {
 			permissive: PermissivePublicFactoryRunnerID,
 			strict:     StrictPublicFactoryRunnerID,
 		},
+		{
+			name:       "runner selection source",
+			alias:      "factory",
+			unknown:    "custom-source",
+			want:       string(RunnerSelectionSourceFactory),
+			permissive: PermissivePublicFactoryRunnerSelectionSource,
+			strict:     StrictPublicFactoryRunnerSelectionSource,
+		},
 	}
 
 	for _, tt := range tests {
@@ -99,6 +107,12 @@ func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	}
 	if got := GeneratedPublicFactoryRunnerID("  custom-runner  "); got != factoryapi.RunnerID("custom-runner") {
 		t.Fatalf("runner ID = %q, want trimmed unknown to round-trip", got)
+	}
+	if got := GeneratedPublicFactoryRunnerSelectionSource("  default  "); got != factoryapi.RunnerSelectionSource("default") {
+		t.Fatalf("runner selection source = %q, want default", got)
+	}
+	if got := GeneratedPublicFactoryRunnerSelectionSource("  custom-source  "); got != factoryapi.RunnerSelectionSource("custom-source") {
+		t.Fatalf("runner selection source = %q, want trimmed unknown to round-trip", got)
 	}
 }
 
@@ -179,6 +193,21 @@ func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
 			wantUnknown:   "custom-runner",
 			ptr: func(value string) *string {
 				converted := GeneratedPublicFactoryRunnerIDPtr(value)
+				if converted == nil {
+					return nil
+				}
+				out := string(*converted)
+				return &out
+			},
+		},
+		{
+			name:          "runner selection source",
+			supported:     "  workstation  ",
+			wantSupported: "workstation",
+			unknown:       "  custom-source  ",
+			wantUnknown:   "custom-source",
+			ptr: func(value string) *string {
+				converted := GeneratedPublicFactoryRunnerSelectionSourcePtr(value)
 				if converted == nil {
 					return nil
 				}

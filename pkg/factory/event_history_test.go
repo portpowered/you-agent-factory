@@ -224,7 +224,15 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
-	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() }, eventHistoryRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{Runner: interfaces.RunnerIDGemini},
+		Workers: map[string]*interfaces.WorkerConfig{
+			"builder": {ModelProvider: interfaces.RunnerIDCodex},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"Build": {Runner: interfaces.RunnerIDCursorCLI},
+		},
+	})
 
 	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
 		DispatchID:  "dispatch-1",
@@ -261,6 +269,12 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	}
 	if stringValueForEventHistoryTest(payload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("metadata replayKey = %q, want replay-1", stringValueForEventHistoryTest(payload.Metadata.ReplayKey))
+	}
+	if payload.Metadata.RunnerId == nil || string(*payload.Metadata.RunnerId) != interfaces.RunnerIDCursorCLI {
+		t.Fatalf("metadata runnerId = %#v, want cursor-cli", payload.Metadata.RunnerId)
+	}
+	if payload.Metadata.RunnerSelectionSource == nil || string(*payload.Metadata.RunnerSelectionSource) != string(interfaces.RunnerSelectionSourceWorkstation) {
+		t.Fatalf("metadata runnerSelectionSource = %#v, want workstation", payload.Metadata.RunnerSelectionSource)
 	}
 }
 

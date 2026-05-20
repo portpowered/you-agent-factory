@@ -140,6 +140,14 @@ const (
 	RunnerIDOpenCode  RunnerID = "opencode"
 )
 
+// Defines values for RunnerSelectionSource.
+const (
+	RunnerSelectionSourceDefault        RunnerSelectionSource = "default"
+	RunnerSelectionSourceFactory        RunnerSelectionSource = "factory"
+	RunnerSelectionSourceLegacyProvider RunnerSelectionSource = "legacy_provider"
+	RunnerSelectionSourceWorkstation    RunnerSelectionSource = "workstation"
+)
+
 // Defines values for ScriptExecutionOutcome.
 const (
 	ScriptExecutionOutcomeFailedExitCode ScriptExecutionOutcome = "FAILED_EXIT_CODE"
@@ -408,6 +416,12 @@ type DispatchConsumedWorkRef struct {
 type DispatchRequestEventMetadata struct {
 	// ReplayKey Stable replay correlation key for recorded dispatch reconstruction.
 	ReplayKey *string `json:"replayKey,omitempty"`
+
+	// RunnerId Stable built-in runner identifiers supported by factory and workstation runner selection.
+	RunnerId *RunnerID `json:"runnerId,omitempty"`
+
+	// RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+	RunnerSelectionSource *RunnerSelectionSource `json:"runnerSelectionSource,omitempty"`
 }
 
 // DispatchRequestEventPayload Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history.
@@ -676,6 +690,17 @@ type FactoryWorldScriptResponseView struct {
 	Stdout          *string `json:"stdout,omitempty"`
 }
 
+// FactoryWorldSelectedRunnerView defines model for FactoryWorldSelectedRunnerView.
+type FactoryWorldSelectedRunnerView struct {
+	DisplayName *string `json:"displayName,omitempty"`
+
+	// RunnerId Stable built-in runner identifiers supported by factory and workstation runner selection.
+	RunnerId *RunnerID `json:"runnerId,omitempty"`
+
+	// SelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+	SelectionSource *RunnerSelectionSource `json:"selectionSource,omitempty"`
+}
+
 // FactoryWorldTokenView defines model for FactoryWorldTokenView.
 type FactoryWorldTokenView struct {
 	ChainingTraceDepth       *int       `json:"chainingTraceDepth,omitempty"`
@@ -721,14 +746,15 @@ type FactoryWorldWorkstationRequestProjectionSlice struct {
 
 // FactoryWorldWorkstationRequestRequestView defines model for FactoryWorldWorkstationRequestRequestView.
 type FactoryWorldWorkstationRequestRequestView struct {
-	ConsumedTokens           *[]FactoryWorldTokenView       `json:"consumedTokens,omitempty"`
-	CurrentChainingTraceId   *string                        `json:"currentChainingTraceId,omitempty"`
-	InputWorkItems           *[]FactoryWorldWorkItemRef     `json:"inputWorkItems,omitempty"`
-	InputWorkTypeIds         *[]string                      `json:"inputWorkTypeIds,omitempty"`
-	PreviousChainingTraceIds *[]string                      `json:"previousChainingTraceIds,omitempty"`
-	ScriptRequest            *FactoryWorldScriptRequestView `json:"scriptRequest,omitempty"`
-	StartedAt                *string                        `json:"startedAt,omitempty"`
-	TraceIds                 *[]string                      `json:"traceIds,omitempty"`
+	ConsumedTokens           *[]FactoryWorldTokenView        `json:"consumedTokens,omitempty"`
+	CurrentChainingTraceId   *string                         `json:"currentChainingTraceId,omitempty"`
+	InputWorkItems           *[]FactoryWorldWorkItemRef      `json:"inputWorkItems,omitempty"`
+	InputWorkTypeIds         *[]string                       `json:"inputWorkTypeIds,omitempty"`
+	PreviousChainingTraceIds *[]string                       `json:"previousChainingTraceIds,omitempty"`
+	Runner                   *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
+	ScriptRequest            *FactoryWorldScriptRequestView  `json:"scriptRequest,omitempty"`
+	StartedAt                *string                         `json:"startedAt,omitempty"`
+	TraceIds                 *[]string                       `json:"traceIds,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
@@ -741,6 +767,7 @@ type FactoryWorldWorkstationRequestResponseView struct {
 	Outcome         *string                         `json:"outcome,omitempty"`
 	OutputMutations *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
 	OutputWorkItems *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
+	Runner          *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
 	ScriptResponse  *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
 }
 
@@ -1119,6 +1146,9 @@ type RunResponseEventPayload struct {
 
 // RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
 type RunnerID string
+
+// RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+type RunnerSelectionSource string
 
 // SafeWorkDiagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
 type SafeWorkDiagnostics struct {

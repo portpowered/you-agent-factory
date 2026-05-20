@@ -1281,6 +1281,16 @@ components:
           type: integer
         failureType:
           type: string
+    FactoryWorldSelectedRunnerView:
+      type: object
+      additionalProperties: false
+      properties:
+        runnerId:
+          $ref: '#/components/schemas/RunnerID'
+        displayName:
+          type: string
+        selectionSource:
+          $ref: '#/components/schemas/RunnerSelectionSource'
     FactoryWorldWorkstationRequestCountView:
       type: object
       additionalProperties: false
@@ -1302,6 +1312,8 @@ components:
       type: object
       additionalProperties: false
       properties:
+        runner:
+          $ref: '#/components/schemas/FactoryWorldSelectedRunnerView'
         startedAt:
           type: string
         inputWorkItems:
@@ -1332,6 +1344,8 @@ components:
       type: object
       additionalProperties: false
       properties:
+        runner:
+          $ref: '#/components/schemas/FactoryWorldSelectedRunnerView'
         outcome:
           type: string
         feedback:
@@ -1527,6 +1541,10 @@ components:
         replayKey:
           type: string
           description: Stable replay correlation key for recorded dispatch reconstruction.
+        runnerId:
+          $ref: '#/components/schemas/RunnerID'
+        runnerSelectionSource:
+          $ref: '#/components/schemas/RunnerSelectionSource'
     RunRequestEventPayload:
       type: object
       additionalProperties: false
@@ -2483,6 +2501,19 @@ components:
         - Kiro runner selected through the shared runner contract.
         - Cursor CLI runner selected through the shared runner contract.
         - OpenCode runner selected through the shared runner contract.
+    RunnerSelectionSource:
+      type: string
+      description: Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+      enum:
+        - workstation
+        - factory
+        - legacy_provider
+        - default
+      x-enum-descriptions:
+        - Workstation-level runner override resolved the dispatch target.
+        - Factory-level default runner resolved the dispatch target.
+        - Legacy worker modelProvider compatibility resolved the dispatch target.
+        - The documented default Codex runner resolved the dispatch target.
     Workstation:
       description: A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
       type: object
