@@ -66,6 +66,7 @@ export interface CurrentSelectionDetailMessages {
   scriptResponseUnavailablePending: string;
   scriptResponseUnavailableSummary: string;
   selectWorkItemLabel: (workItemLabel: string) => string;
+  startedAtLabel: string;
   stderrEmpty: string;
   stderrLabel: string;
   stdoutEmpty: string;
@@ -101,6 +102,7 @@ const stateNodeDetailFallbackMessages = {
     "No work is recorded for this place at the selected tick.",
   selectedTickWorkUnavailable:
     "Represented work is unavailable for this place at the selected tick.",
+  startedAtLabel: "Started at",
   stateLabel: "State",
   stateNodeIdLabel: "State node ID",
   traceIdLabel: "Trace ID",
@@ -114,6 +116,7 @@ const stateNodeDetailFallbackMessages = {
   | "noCurrentWorkInPlace"
   | "noWorkRecordedAtSelectedTick"
   | "selectedTickWorkUnavailable"
+  | "startedAtLabel"
   | "stateLabel"
   | "stateNodeIdLabel"
   | "traceIdLabel"
@@ -200,6 +203,7 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
+    startedAtLabel: "Started at",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
@@ -313,6 +317,7 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
+    startedAtLabel: "開始時刻",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
@@ -426,6 +431,7 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
+    startedAtLabel: "시작 시각",
     stderrEmpty: "No stderr was recorded for this script response.",
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
@@ -531,6 +537,7 @@ const currentSelectionDetailMessagesByLocale = {
     scriptResponseUnavailableSummary: "此工作站请求没有可用的脚本响应详情。",
     selectWorkItemLabel: (workItemLabel: string) =>
       `选择工作项 ${workItemLabel}`,
+    startedAtLabel: "开始时间",
     stderrEmpty: "此脚本响应没有记录 stderr。",
     stderrLabel: "标准错误",
     stdoutEmpty: "此脚本响应没有记录 stdout。",
