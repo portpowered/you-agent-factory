@@ -1,4 +1,4 @@
-export * from "./dashboard-export-dialog";
-export * from "./dashboard-header";
-export * from "./dashboard-status-panel";
-
+export * from "./components/dashboard-export-dialog";
+export * from "./components/dashboard-header";
+export * from "./components/dashboard-status-panel";
+export * from "./components/tick-slider-control";

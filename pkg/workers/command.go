@@ -121,7 +121,8 @@ func (ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandRe
 		if ctx.Err() != nil {
 			return result, ctx.Err()
 		}
-		if exitErr, ok := runErr.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 			return result, nil
 		}

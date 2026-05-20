@@ -1777,9 +1777,6 @@ func assertSafeBoundaryRequestView(
 		if attempt.Diagnostics.Provider.ResponseMetadata == nil || attempt.Diagnostics.Provider.ResponseMetadata["provider_session_id"] != sessionID {
 			t.Fatalf("inference attempt response metadata = %#v, want provider_session_id=%q", attempt.Diagnostics.Provider.ResponseMetadata, sessionID)
 		}
-	} else {
-		// This fixture emits direct WorkResult diagnostics without inference events,
-		// so replay reconstructs a thin dispatch summary only.
 	}
 	if family == "" && stringValueForRuntimeTest(request.Response.FailureReason) != "" {
 		t.Fatalf("failure reason = %q, want empty for successful request", stringValueForRuntimeTest(request.Response.FailureReason))
@@ -1837,7 +1834,6 @@ func assertRuntimeSafeBoundaryOmittedInferenceFields(t *testing.T, payload any, 
 		}
 	}
 }
-
 
 func assertNoAuthRemediationText(t *testing.T, body string) {
 	t.Helper()

@@ -12,7 +12,7 @@ import (
 // readback only and must never be persisted as a customer-named factory.
 func ValidateWritableNamedFactoryName(name factoryapi.FactoryName) error {
 	if err := factoryconfig.ValidateNamedFactoryName(string(name)); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidNamedFactoryName, err)
+		return fmt.Errorf("%w: %w", ErrInvalidNamedFactoryName, err)
 	}
 	if name == DefaultCurrentFactoryName {
 		return fmt.Errorf("%w: %q is reserved for current-factory readback", ErrInvalidNamedFactoryName, name)

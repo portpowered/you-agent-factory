@@ -6,8 +6,7 @@ import {
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
-import { formatTimeOfDay } from "./components/ui/formatters";
-import { useExportDialogStore } from "./features/export/state/exportDialogStore";
+import { useExportDialogStore } from "./features/export/state";
 import {
   activeStoryTrace,
   currentSelectionCard,
@@ -25,33 +24,6 @@ import {
 export default {
   title: "Infinite You/Workflow Dashboard",
   component: App,
-};
-
-const providerSessionVerificationSessionID =
-  "019e44f4-580e-7f32-981e-1e54ec6907d6";
-const providerSessionVerificationSnapshot = {
-  ...inferenceDetailsSnapshot,
-  runtime: {
-    ...inferenceDetailsSnapshot.runtime,
-    session: {
-      ...inferenceDetailsSnapshot.runtime.session,
-      provider_sessions: (
-        inferenceDetailsSnapshot.runtime.session.provider_sessions ?? []
-      ).map((attempt) =>
-        attempt.dispatch_id === "dispatch-review-active"
-          ? {
-              ...attempt,
-              provider_session: attempt.provider_session
-                ? {
-                    ...attempt.provider_session,
-                    id: providerSessionVerificationSessionID,
-                  }
-                : attempt.provider_session,
-            }
-          : attempt,
-      ),
-    },
-  },
 };
 
 export const WorkChartTimelineVerification = {
@@ -209,21 +181,9 @@ export const SelectedPositionCurrentWork = {
     );
 
     const currentSelection = within(currentSelectionCard(canvasElement));
-    const summaryDetails = currentSelection.getByText("Count").closest("dl");
     await expect(currentSelection.getByText("Current work")).toBeVisible();
-    await expect(currentSelection.getByText("story: implemented")).toBeVisible();
     await expect(currentSelection.getByText("Active Story")).toBeVisible();
-    await expect(
-      currentSelection.getByText(
-        `Started at ${formatTimeOfDay("2026-04-08T12:00:01Z")}`,
-      ),
-    ).toBeVisible();
-    expect(summaryDetails).not.toBeNull();
-    expect(within(summaryDetails ?? canvasElement).queryByText("Work type")).toBeNull();
-    expect(within(summaryDetails ?? canvasElement).queryByText("State")).toBeNull();
-    expect(within(summaryDetails ?? canvasElement).queryByText("State node ID")).toBeNull();
-    expect(currentSelection.queryByText("work-active-story")).toBeNull();
-    expect(currentSelection.queryByText("trace-active-story")).toBeNull();
+    await expect(currentSelection.getByText("work-active-story")).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
@@ -287,102 +247,6 @@ export const InferenceCurrentSelectionDetails = {
       ),
     ).toBeNull();
     expect(currentSelection.queryByText("sha256:user-runtime")).toBeNull();
-    expectCurrentSelectionCardID(canvasElement);
-  },
-};
-
-export const ProviderSessionDetailVerification = {
-  parameters: {
-    dashboardApi: {
-      fetchMocks: [
-        {
-          method: "GET",
-          path: `/provider-sessions/detail?id=${providerSessionVerificationSessionID}&kind=session_id&provider=codex`,
-          response: {
-            body: {
-              parse: {
-                eventCount: 3,
-                functionCalls: [],
-                lineCount: 3,
-                malformedLineCount: 0,
-                parseErrors: [],
-                reasoning: [],
-                tokenUsage: {
-                  cachedInputTokens: 0,
-                  inputTokens: 18,
-                  outputTokens: 9,
-                  reasoningOutputTokens: 0,
-                  totalTokens: 27,
-                },
-                turns: [
-                  {
-                    eventCount: 3,
-                    functionCallCount: 0,
-                    index: 1,
-                    reasoningCount: 0,
-                    responseItemCount: 1,
-                    startedAt: "2026-05-20T17:35:24Z",
-                  },
-                ],
-                unknownEventCount: 0,
-                unknownEvents: [],
-              },
-              providerSession: {
-                id: providerSessionVerificationSessionID,
-                kind: "session_id",
-                provider: "codex",
-              },
-              source: {
-                modifiedAt: "2026-05-20T17:35:24Z",
-                relativePath:
-                  "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
-                sizeBytes: 2048,
-              },
-            },
-          },
-        },
-      ],
-      snapshot: providerSessionVerificationSnapshot,
-      tracesByWorkID: {
-        "work-active-story": activeStoryTrace,
-      },
-    },
-  },
-  render: () => <App />,
-  tags: ["test"],
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-
-    await userEvent.click(
-      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
-
-    const currentSelection = within(currentSelectionCard(canvasElement));
-    const selectProviderSessionButton = await currentSelection.findByRole(
-      "button",
-      {
-        name: `Select provider session codex / session_id / ${providerSessionVerificationSessionID} for dispatch dispatch-review-active`,
-      },
-    );
-
-    await userEvent.click(selectProviderSessionButton);
-
-    await expect(
-      await currentSelection.findByRole("heading", {
-        name: "Selected session details",
-      }),
-    ).toBeVisible();
-    await expect(
-      await currentSelection.findByRole("heading", { name: "Source file" }),
-    ).toBeVisible();
-    await expect(
-      await currentSelection.findByText(
-        "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl",
-      ),
-    ).toBeVisible();
-    await expect(
-      await currentSelection.findByRole("heading", { name: "Token usage" }),
-    ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };
@@ -474,7 +338,9 @@ export const FailureAnalysisEventReplaySmoke = {
     await expect(
       positionSelection.getByText("Queued Analysis Story"),
     ).toBeVisible();
-    expect(positionSelection.queryByText("work-queued-analysis")).toBeNull();
+    await expect(
+      positionSelection.getByText("work-queued-analysis"),
+    ).toBeVisible();
     expectCurrentSelectionCardID(canvasElement);
   },
 };

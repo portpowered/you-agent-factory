@@ -77,6 +77,7 @@ func formatSimpleDashboard(
 		FormatDuration(es.Uptime.Truncate(time.Second)), es.TickCount)
 	b.WriteString("╚══════════════════════════════════════════╝\n")
 
+	_ = topology
 	renderActiveWorkstations(&b, active, now)
 	renderQueueCounts(&b, queueCounts)
 	renderWorkstationActivity(&b, workstationActivity)
