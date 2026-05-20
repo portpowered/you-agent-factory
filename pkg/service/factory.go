@@ -190,6 +190,11 @@ type FactoryServiceConfig struct {
 	// subprocess boundary and assert command details, env, stdin, stdout,
 	// stderr, and exit failures.
 	ProviderCommandRunnerOverride workers.CommandRunner
+	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
+	// runner prerequisite checks during startup. Tests that replace execution
+	// with mocks or custom executors use this to exercise service wiring
+	// without requiring local AI runner binaries to exist.
+	SkipBuiltInRunnerPrerequisiteValidation bool
 	// WorkstationLoader, when non-nil, is consulted before falling back
 	// to disk when loading workstation AGENTS.md files. Returning
 	// (nil, nil) from Load signals "no config available" and the
@@ -292,6 +297,7 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		effectiveFactoryRunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, cfg.Verbose),
+		cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		providerOverrideForMode(cfg, replaySideEffects),
 		providerCommandRunnerForMode(cfg, loadedFactoryCfg),
 		commandRunnerOverrideForMode(cfg, loadedFactoryCfg, replaySideEffects),
@@ -451,6 +457,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 		effectiveFactoryRunnerID,
 		loadedFactoryCfg,
 		logging.NewZapLogger(logger, fs.cfg.Verbose),
+		fs.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		providerOverrideForMode(fs.cfg, nil),
 		providerCommandRunnerForMode(fs.cfg, loadedFactoryCfg),
 		commandRunnerOverrideForMode(fs.cfg, loadedFactoryCfg, nil),
@@ -1890,6 +1897,7 @@ func loadWorkersFromConfig(
 	factoryRunnerID string,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	logger logging.Logger,
+	skipBuiltInRunnerPrerequisiteValidation bool,
 	providerOverride workers.Provider,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
@@ -1903,7 +1911,7 @@ func loadWorkersFromConfig(
 		return nil, fmt.Errorf("factory config is required")
 	}
 	preflight := runnerSelectionPreflight{
-		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil,
+		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
 	}
 	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
 		return nil, err
