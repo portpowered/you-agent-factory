@@ -106,17 +106,18 @@ func TestCloneWorkstationExecutionRequest_DetachesRuntimeFields(t *testing.T) {
 	t.Parallel()
 
 	original := WorkstationExecutionRequest{
-		Dispatch:         testWorkDispatch(),
-		WorkerType:       "worker-a",
-		WorkstationType:  "review",
-		ProjectID:        "project-override",
-		InputTokens:      []any{map[string]any{"id": "token-2"}},
-		SystemPrompt:     "system",
-		UserMessage:      "user",
-		OutputSchema:     "{}",
-		EnvVars:          map[string]string{"TASK": "dispatch"},
-		Worktree:         "/tmp/worktree",
-		WorkingDirectory: "/tmp/working",
+		Dispatch:              testWorkDispatch(),
+		WorkerType:            "worker-a",
+		WorkstationType:       "review",
+		RunnerSelectionSource: RunnerSelectionSourceWorkstation,
+		ProjectID:             "project-override",
+		InputTokens:           []any{map[string]any{"id": "token-2"}},
+		SystemPrompt:          "system",
+		UserMessage:           "user",
+		OutputSchema:          "{}",
+		EnvVars:               map[string]string{"TASK": "dispatch"},
+		Worktree:              "/tmp/worktree",
+		WorkingDirectory:      "/tmp/working",
 	}
 
 	clone := CloneWorkstationExecutionRequest(original)

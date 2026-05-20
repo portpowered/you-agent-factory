@@ -242,19 +242,21 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		return interfaces.WorkstationExecutionRequest{}, &failed
 	}
 
+	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
 	return interfaces.WorkstationExecutionRequest{
-		Dispatch:         interfaces.CloneWorkDispatch(dispatch),
-		WorkerType:       workerName,
-		WorkstationType:  dispatch.WorkstationName,
-		RunnerID:         interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider).RunnerID,
-		ProjectID:        requestContext.ProjectID,
-		InputTokens:      InputTokens(requestContext.InputTokens...),
-		SystemPrompt:     workerDef.Body,
-		UserMessage:      rendered,
-		OutputSchema:     workstationDef.OutputSchema,
-		EnvVars:          cloneEnvVars(requestContext.EnvVars),
-		Worktree:         requestContext.Worktree,
-		WorkingDirectory: requestContext.WorkingDirectory,
+		Dispatch:              interfaces.CloneWorkDispatch(dispatch),
+		WorkerType:            workerName,
+		WorkstationType:       dispatch.WorkstationName,
+		RunnerID:              selection.RunnerID,
+		RunnerSelectionSource: selection.Source,
+		ProjectID:             requestContext.ProjectID,
+		InputTokens:           InputTokens(requestContext.InputTokens...),
+		SystemPrompt:          workerDef.Body,
+		UserMessage:           rendered,
+		OutputSchema:          workstationDef.OutputSchema,
+		EnvVars:               cloneEnvVars(requestContext.EnvVars),
+		Worktree:              requestContext.Worktree,
+		WorkingDirectory:      requestContext.WorkingDirectory,
 	}, nil
 }
 

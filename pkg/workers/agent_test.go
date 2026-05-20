@@ -89,6 +89,12 @@ func withAgentRunnerID(runnerID string) func(*interfaces.WorkstationExecutionReq
 	}
 }
 
+func withAgentRunnerSelectionSource(source interfaces.RunnerSelectionSource) func(*interfaces.WorkstationExecutionRequest) {
+	return func(req *interfaces.WorkstationExecutionRequest) {
+		req.RunnerSelectionSource = source
+	}
+}
+
 func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
@@ -484,6 +490,36 @@ func TestAgentExecutor_InferenceRequestDefaultsGeminiProviderFromRunnerSelection
 	}
 	if provider.lastReq.RunnerID != interfaces.RunnerIDGemini {
 		t.Fatalf("runner id = %q, want %q", provider.lastReq.RunnerID, interfaces.RunnerIDGemini)
+	}
+}
+
+func TestAgentExecutor_ExplicitRunnerSelectionOverridesLegacyWorkerModelProvider(t *testing.T) {
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "gemini ok"}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"worker-a": {
+				Model:         "gemini-2.5-flash",
+				ModelProvider: string(ModelProviderCodex),
+			},
+		},
+	}, provider)
+
+	_, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "d-gemini-override",
+			TransitionID: "t-gemini-override",
+			WorkerType:   "worker-a",
+		},
+		withAgentRunnerID(interfaces.RunnerIDGemini),
+		withAgentRunnerSelectionSource(interfaces.RunnerSelectionSourceWorkstation),
+		withAgentPrompts("system prompt", "user prompt"),
+	))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if provider.lastReq.ModelProvider != string(ModelProviderGemini) {
+		t.Fatalf("model provider = %q, want %q", provider.lastReq.ModelProvider, ModelProviderGemini)
 	}
 }
 

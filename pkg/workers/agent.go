@@ -165,7 +165,10 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 	}
 	if workerDef != nil {
 		req.Model = workerDef.Model
-		req.ModelProvider = modelProviderForRunnerSelection(workerDef.ModelProvider, request.RunnerID)
+		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, interfaces.ResolvedRunnerSelection{
+			RunnerID: request.RunnerID,
+			Source:   request.RunnerSelectionSource,
+		})
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {
 			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, interfaces.RunnerOptionalCapabilitySessionResume)
@@ -174,10 +177,19 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 	return req
 }
 
-func modelProviderForRunnerSelection(workerModelProvider, runnerID string) string {
+func modelProviderForExecution(workerModelProvider string, selection interfaces.ResolvedRunnerSelection) string {
+	if selection.Source == interfaces.RunnerSelectionSourceWorkstation || selection.Source == interfaces.RunnerSelectionSourceFactory {
+		if provider := modelProviderForRunnerID(selection.RunnerID); provider != "" {
+			return provider
+		}
+	}
 	if workerModelProvider != "" {
 		return workerModelProvider
 	}
+	return modelProviderForRunnerID(selection.RunnerID)
+}
+
+func modelProviderForRunnerID(runnerID string) string {
 	switch interfaces.NormalizeRunnerID(runnerID) {
 	case interfaces.RunnerIDCodex:
 		return string(ModelProviderCodex)
