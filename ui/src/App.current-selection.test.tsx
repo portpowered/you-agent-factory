@@ -1158,6 +1158,7 @@ describe("App current selection", () => {
       "current-selection",
     );
     expect(within(stateInfo).getByTitle("story:implemented")).toBeTruthy();
+    expect(within(stateInfo).getByText("story: implemented")).toBeTruthy();
     expect(within(stateInfo).getByText("Count")).toBeTruthy();
     expect(within(stateInfo).getByText("Current work")).toBeTruthy();
     expect(within(stateInfo).getByText(activeWorkLabel)).toBeTruthy();
@@ -1185,9 +1186,7 @@ describe("App current selection", () => {
     const emptyStateInfo = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(
-      within(emptyStateInfo).getAllByText("blocked").length,
-    ).toBeGreaterThan(0);
+    expect(within(emptyStateInfo).getByText("story: blocked")).toBeTruthy();
     expect(within(emptyStateInfo).getByTitle("story:blocked")).toBeTruthy();
     expect(
       within(emptyStateInfo).getByText(
@@ -1936,9 +1935,7 @@ describe("App current selection terminal states", () => {
         name: "Current selection",
       });
 
-      expect(
-        within(failedDetail).getAllByText("blocked").length,
-      ).toBeGreaterThan(0);
+      expect(within(failedDetail).getByText("story: blocked")).toBeTruthy();
       expect(within(failedDetail).getByText("Count")).toBeTruthy();
       expect(within(failedDetail).getByText("Current work")).toBeTruthy();
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();

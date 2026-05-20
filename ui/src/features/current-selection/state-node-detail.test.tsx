@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../components/dashboard/test-fixtures";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../components/ui/dashboard-typography";
 import { WIDGET_SUBTITLE_CLASS } from "../../components/dashboard/widget-board";
 import { CurrentSelectionLocaleProvider } from "./current-selection-locale";
 import { StateNodeDetailCard } from "./state-node-detail";
@@ -37,12 +36,14 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
+    const summaryDetails = screen.getByText("Count").closest("dl");
+
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(screen.getAllByText("Work type").length).toBeGreaterThan(0);
-    expect(screen.getByText("State")).toBeTruthy();
-    expect(screen.getByText("State node ID")).toBeTruthy();
-    expect(screen.getAllByText("implemented").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("story:implemented")).toHaveLength(1);
+    expect(screen.getByText("story: implemented")).toBeTruthy();
+    expect(summaryDetails).toBeTruthy();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("Work type")).toBeNull();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("State")).toBeNull();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("State node ID")).toBeNull();
     expect(screen.getByText("Count")).toBeTruthy();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
@@ -74,12 +75,15 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("Work type").length).toBeGreaterThan(0);
+    const summaryDetails = screen.getByText("Count").closest("dl");
+
+    expect(summaryDetails).toBeTruthy();
+    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("Work type")).toBeNull();
     expect(screen.getByText("Unknown")).toBeTruthy();
     expect(screen.queryByText("不明")).toBeNull();
   });
 
-  it("applies shared typography helpers to the state-node selection header", () => {
+  it("renders the state-node selection header as one combined summary", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
       (place) => place.place_id === "story:implemented",
@@ -90,11 +94,9 @@ describe("StateNodeDetailCard", () => {
     render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
 
     const header = screen.getByTitle("story:implemented");
-    const workType = within(header).getByText("story", { selector: "span" });
-    const stateValue = within(header).getByText("implemented", { selector: "span" });
+    const summary = within(header).getByText("story: implemented", { selector: "p" });
 
-    expect(workType.className).toContain(DASHBOARD_SUPPORTING_LABEL_CLASS);
-    expect(stateValue.className).toContain(WIDGET_SUBTITLE_CLASS);
+    expect(summary.className).toContain(WIDGET_SUBTITLE_CLASS);
   });
 
   it("renders selected state node empty-position guidance", () => {
@@ -108,8 +110,8 @@ describe("StateNodeDetailCard", () => {
     render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
 
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(screen.getByText("State")).toBeTruthy();
-    expect(screen.getAllByText("implemented").length).toBeGreaterThan(0);
+    expect(screen.getByText("story: implemented")).toBeTruthy();
+    expect(screen.queryByText("State")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
@@ -141,8 +143,8 @@ describe("StateNodeDetailCard", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(screen.getAllByText("complete").length).toBeGreaterThan(0);
-    expect(screen.getByText("State node ID")).toBeTruthy();
+    expect(screen.getByText("story: complete")).toBeTruthy();
+    expect(screen.queryByText("State node ID")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
@@ -191,7 +193,7 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
+    expect(screen.getByText("story: blocked")).toBeTruthy();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
@@ -273,8 +275,9 @@ describe("StateNodeDetailCard", () => {
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.getByText("状态")).toBeTruthy();
-    expect(screen.getByText("状态节点 ID")).toBeTruthy();
+    expect(screen.getByText("story: complete")).toBeTruthy();
+    expect(screen.queryByText("状态")).toBeNull();
+    expect(screen.queryByText("状态节点 ID")).toBeNull();
     expect(screen.getByText("当前工作")).toBeTruthy();
     expect(screen.getByText("在所选时间刻度，这个位置暂时没有记录到工作。")).toBeTruthy();
   });

@@ -1,12 +1,8 @@
 import { formatWorkItemLabel } from "../../components/ui/formatters";
-import {
-  formatDashboardPlaceLabel,
-  getDashboardPlaceLabelParts,
-} from "../../components/ui/place-labels";
+import { formatDashboardPlaceLabel } from "../../components/ui/place-labels";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../components/ui/dashboard-typography";
 import {
   DETAIL_COPY_CLASS,
@@ -24,6 +20,14 @@ import type {
   StatePositionWorkListProps,
 } from "./detail-card-types";
 
+function formatStateSelectionSummary(workType?: string, stateValue?: string): string {
+  if (workType && stateValue) {
+    return `${workType}: ${stateValue}`;
+  }
+
+  return workType ?? stateValue ?? "";
+}
+
 export function StateNodeDetailCard({
   currentWorkItems,
   failedWorkDetailsByWorkID,
@@ -34,36 +38,24 @@ export function StateNodeDetailCard({
   widgetId = "current-selection",
 }: StateNodeDetailCardProps) {
   const placeLabel = formatDashboardPlaceLabel(place);
-  const placeLabelParts = getDashboardPlaceLabelParts(place);
   const usesRetainedWorkItems = isTerminalOrFailedPlace(place);
   const visibleWorkItems = usesRetainedWorkItems
     ? terminalHistoryWorkItems
     : currentWorkItems;
   const messages = useCurrentSelectionDetailMessages();
+  const summaryLabel = formatStateSelectionSummary(
+    place.type_id,
+    place.state_value,
+  );
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <div className="mt-0 grid gap-1" title={placeLabel}>
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-          {placeLabelParts.workType}
-        </span>
-        <span className={WIDGET_SUBTITLE_CLASS}>
-          {placeLabelParts.stateValue}
-        </span>
+        <p className={WIDGET_SUBTITLE_CLASS}>
+          {summaryLabel || placeLabel}
+        </p>
       </div>
       <dl>
-        <div>
-          <dt>{messages.workTypeLabel}</dt>
-          <dd>{placeLabelParts.workType}</dd>
-        </div>
-        <div>
-          <dt>{messages.stateLabel}</dt>
-          <dd>{placeLabelParts.stateValue}</dd>
-        </div>
-        <div>
-          <dt>{messages.stateNodeIdLabel}</dt>
-          <dd>{placeLabel}</dd>
-        </div>
         <div>
           <dt>{messages.countLabel}</dt>
           <dd>{tokenCount}</dd>
