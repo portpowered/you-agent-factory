@@ -529,6 +529,33 @@ func TestGetProviderSessionDetails_LoadsTimestampPrefixedCodexSessionFromConfigu
 	}
 }
 
+func TestGetProviderSessionDetails_PrefersExactCodexSessionFileWhenSupportedLayoutsBothExist(t *testing.T) {
+	root := t.TempDir()
+	writeProviderSessionFixture(t, root, "sess_123", `{"type":"session_meta","id":"sess_123"}`)
+	writeNamedProviderSessionFixture(
+		t,
+		root,
+		"rollout-2026-05-20T17-35-24-sess_123.jsonl",
+		`{"type":"session_meta","id":"sess_123"}`,
+	)
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp factoryapi.ProviderSessionDetailResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode provider session response: %v", err)
+	}
+	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
+		t.Fatalf("relative path = %q, want exact rollout basename", resp.Source.RelativePath)
+	}
+}
+
 func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	session := strings.Join([]string{
 		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
@@ -685,6 +712,52 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRoot(t 
 	srv.Handler().ServeHTTP(rec, req)
 
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+}
+
+func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEvenWhenValidMatchExists(t *testing.T) {
+	root := t.TempDir()
+	writeProviderSessionFixture(t, root, "sess-shared", `{"type":"session_meta","id":"sess-shared"}`)
+
+	outside := t.TempDir()
+	outsideSessionPath := filepath.Join(outside, "rollout-2026-05-20T17-35-24-sess-shared.jsonl")
+	if err := os.WriteFile(outsideSessionPath, []byte(`{"type":"session_meta"}`), 0o600); err != nil {
+		t.Fatalf("write outside session fixture: %v", err)
+	}
+	sessionDir := filepath.Join(root, "2026", "05", "18")
+	if err := os.Symlink(outsideSessionPath, filepath.Join(sessionDir, "rollout-2026-05-20T17-35-24-sess-shared.jsonl")); err != nil {
+		t.Fatalf("create provider session symlink: %v", err)
+	}
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess-shared", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+}
+
+func TestGetProviderSessionDetails_FailsForAmbiguousTimestampPrefixedMatches(t *testing.T) {
+	root := t.TempDir()
+	writeNamedProviderSessionFixture(
+		t,
+		root,
+		"rollout-2026-05-20T17-35-24-sess_123.jsonl",
+		`{"type":"session_meta","id":"sess_123"}`,
+	)
+	sessionDir := filepath.Join(root, "2026", "05", "19")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("create provider session fixture directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, "rollout-2026-05-20T17-45-24-sess_123.jsonl"), []byte(`{"type":"session_meta","id":"sess_123"}`), 0o600); err != nil {
+		t.Fatalf("write second timestamp-prefixed provider session fixture: %v", err)
+	}
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "multiple provider session files match session identifier")
 }
 
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {
