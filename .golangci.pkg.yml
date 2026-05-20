@@ -17,6 +17,19 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-rules:
+    # Generated backend artifacts are not hand-maintained and should not force
+    # unrelated cleanup during the phase-1 rollout. Keep exclusions narrow to
+    # the generated package instead of widening them to maintained pkg code.
+    - path: pkg/api/generated/
+      linters:
+        - bodyclose
+        - contextcheck
+        - errcheck
+        - errorlint
+        - govet
+        - ineffassign
+        - nilerr
+        - staticcheck
     - path: pkg/factory/runtime/factory.go
       linters:
         - contextcheck

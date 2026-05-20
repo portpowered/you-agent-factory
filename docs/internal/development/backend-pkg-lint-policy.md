@@ -27,12 +27,24 @@ Phase 1 enables only high-signal correctness analyzers. The initial owned rule s
 
 ## Phase-1 Exceptions
 
-`contextcheck` is enabled as a blocking analyzer, but phase 1 excludes two narrow files:
+Phase 1 supports incremental adoption through explicit, narrow exceptions recorded in `.golangci.pkg.yml`. Do not widen those exceptions casually:
 
-- `pkg/factory/runtime/factory.go`
-- `pkg/service/factory.go`
+- Prefer fixing the code before adding any exclusion.
+- When a real exclusion is still necessary, keep it scoped to one generated package, one file, or one rule on one file.
+- Every new exclusion must carry written justification in this policy or the adjacent config comments so reviewers can see why the exception exists and why a narrower fix would not work yet.
+- Do not disable a linter for the entire `pkg/` tree when a package-, file-, or rule-scoped exception would address the actual rollout blocker.
+
+Phase 1 currently uses these explicit exceptions:
+
+- `pkg/api/generated/`: exclude the generated OpenAPI backend package from phase-1 findings. This keeps reviewer attention on maintained handwritten `pkg/` code while avoiding churn on generated artifacts that are refreshed from source contracts.
+- `contextcheck` is enabled as a blocking analyzer, but phase 1 excludes two narrow files:
+
+  - `pkg/factory/runtime/factory.go`
+  - `pkg/service/factory.go`
 
 Those files contain runtime bootstrap and hot-swap orchestration helpers that derive or store long-lived contexts for worker pools and sidecars. On the repository's current call shapes, `contextcheck` reports low-signal findings against those wrappers even when they are already deriving from the inherited runtime context. Keep the exclusions narrow, and prefer real fixes over expanding them when future changes touch ordinary request or execution flow.
+
+This rollout strategy is intentionally conservative. It does not require a one-time cleanup of every historical phase-1 finding before ordinary backend work can merge. Instead, maintainers should use explicit, reviewable exceptions only where historical code or generated artifacts would otherwise block adoption, then shrink those exceptions as real fixes land.
 
 ## Verification
 
