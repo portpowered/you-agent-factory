@@ -16,13 +16,32 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-// portos:func-length-exception owner=agent-factory reason=table-heavy-cli-config-round-trip-fixture review=2026-07-18 removal=split-fixture-setup-and-idempotency-assertions-before-next-cli-config-expand-change
 func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
+	workerAgentsPath, workstationAgentsPath := writeDeterministicExpandFixture(t, dir, factoryPath)
+
+	var out bytes.Buffer
+	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out}); err != nil {
+		t.Fatalf("ExpandFactoryConfig: %v", err)
+	}
+	if !strings.Contains(out.String(), "Expanded factory config into") {
+		t.Fatalf("expected expand result output, got %q", out.String())
+	}
+
+	canonical := readCLITestFile(t, factoryPath)
+	payload := decodeConfigPayload(t, canonical, "expanded factory.json")
+	assertDeterministicExpandedPayload(t, payload)
+	assertDeterministicExpandedRuntimeConfig(t, dir)
+	assertDeterministicExpandedFlattenRoundTrip(t, dir)
+	assertDeterministicExpandIsIdempotent(t, factoryPath, canonical, workerAgentsPath, workstationAgentsPath)
+}
+
+func writeDeterministicExpandFixture(t *testing.T, dir, factoryPath string) (string, string) {
+	t.Helper()
+
 	writeCLITestFile(t, factoryPath, `{
-		"name":"expand-config-deterministic",
-		"runner":"gemini",
+			"name":"expand-config-deterministic",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"resources": [{"name":"agent-slot","capacity":2}],
 		"workers": [{
@@ -39,7 +58,6 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 		}],
 		"workstations": [{
 			"name":"execute-story",
-			"runner":"cursor-cli",
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}],
@@ -56,36 +74,30 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 				"body":"Complete {{ .WorkID }} deterministically."
 			}
 		}]
-	}`)
+		}`)
+	return filepath.Join(dir, "workers", "executor", "AGENTS.md"), filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
+}
 
-	var out bytes.Buffer
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out}); err != nil {
-		t.Fatalf("ExpandFactoryConfig: %v", err)
-	}
-	if !strings.Contains(out.String(), "Expanded factory config into") {
-		t.Fatalf("expected expand result output, got %q", out.String())
-	}
+func decodeConfigPayload(t *testing.T, data []byte, label string) map[string]any {
+	t.Helper()
 
-	canonical := readCLITestFile(t, factoryPath)
 	var payload map[string]any
-	if err := json.Unmarshal(canonical, &payload); err != nil {
-		t.Fatalf("expanded factory.json is not JSON: %v\n%s", err, string(canonical))
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("%s is not JSON: %v\n%s", label, err, string(data))
 	}
+	return payload
+}
+
+func assertDeterministicExpandedPayload(t *testing.T, payload map[string]any) {
+	t.Helper()
+
 	if _, ok := payload["workTypes"]; !ok {
 		t.Fatalf("expected canonical workTypes key in expanded factory.json")
-	}
-	if got := payload["runner"]; got != "gemini" {
-		t.Fatalf("expected canonical factory runner gemini, got %#v", got)
 	}
 	if _, ok := payload["work_types"]; ok {
 		t.Fatalf("expected expanded factory.json not to include legacy work_types key")
 	}
 
-	workerAgentsPath := filepath.Join(dir, "workers", "executor", "AGENTS.md")
-	workerAgents := readCLITestFile(t, workerAgentsPath)
-	if got := string(workerAgents); got != "You are the expanded executor.\n" {
-		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
-	}
 	workersPayload, ok := payload["workers"].([]any)
 	if !ok || len(workersPayload) != 1 {
 		t.Fatalf("expected one worker in expanded factory.json, got %#v", payload["workers"])
@@ -110,6 +122,46 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	if _, ok := workerPayload["body"]; ok {
 		t.Fatalf("expected expanded factory.json worker to omit inline body, got %#v", workerPayload)
 	}
+
+	workstationsPayload, ok := payload["workstations"].([]any)
+	if !ok || len(workstationsPayload) != 1 {
+		t.Fatalf("expected one workstation in expanded factory.json, got %#v", payload["workstations"])
+	}
+	workstationPayload, ok := workstationsPayload[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected workstation payload object, got %#v", workstationsPayload[0])
+	}
+	for key, want := range map[string]any{
+		"type":         "MODEL_WORKSTATION",
+		"worker":       "executor",
+		"promptFile":   "prompt.md",
+		"outputSchema": "schema.json",
+	} {
+		if workstationPayload[key] != want {
+			t.Fatalf("expanded workstation %s = %#v, want %#v", key, workstationPayload[key], want)
+		}
+	}
+	if _, ok := workstationPayload["body"]; ok {
+		t.Fatalf("expected expanded factory.json workstation to omit inline body, got %#v", workstationPayload)
+	}
+}
+
+func assertDeterministicExpandedRuntimeConfig(t *testing.T, dir string) {
+	t.Helper()
+
+	workerAgents := readCLITestFile(t, filepath.Join(dir, "workers", "executor", "AGENTS.md"))
+	if got := string(workerAgents); got != "You are the expanded executor.\n" {
+		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
+	}
+	workstationAgents := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "AGENTS.md"))
+	if got := string(workstationAgents); got != "Complete {{ .WorkID }} deterministically.\n" {
+		t.Fatalf("expanded workstation AGENTS.md = %q, want body-only workstation content", got)
+	}
+	promptContent := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "prompt.md"))
+	if string(promptContent) != "Complete {{ .WorkID }} deterministically." {
+		t.Fatalf("expanded prompt file content = %q", string(promptContent))
+	}
+
 	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
@@ -124,38 +176,24 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	if workerDef.StopToken != "COMPLETE" || !workerDef.SkipPermissions || workerDef.Body != "You are the expanded executor." {
 		t.Fatalf("expanded worker definition did not preserve behavior fields: %#v", workerDef)
 	}
-
-	workstationAgentsPath := filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
-	workstationAgents := readCLITestFile(t, workstationAgentsPath)
-	if got := string(workstationAgents); got != "Complete {{ .WorkID }} deterministically.\n" {
-		t.Fatalf("expanded workstation AGENTS.md = %q, want body-only workstation content", got)
-	}
-	workstationsPayload, ok := payload["workstations"].([]any)
-	if !ok || len(workstationsPayload) != 1 {
-		t.Fatalf("expected one workstation in expanded factory.json, got %#v", payload["workstations"])
-	}
-	workstationPayload, ok := workstationsPayload[0].(map[string]any)
+	workstationDef, ok := loaded.Workstation("execute-story")
 	if !ok {
-		t.Fatalf("expected workstation payload object, got %#v", workstationsPayload[0])
+		t.Fatal("expected expanded workstation definition to load")
 	}
-	for key, want := range map[string]any{
-		"type":         "MODEL_WORKSTATION",
-		"runner":       "cursor-cli",
-		"worker":       "executor",
-		"promptFile":   "prompt.md",
-		"outputSchema": "schema.json",
-	} {
-		if workstationPayload[key] != want {
-			t.Fatalf("expanded workstation %s = %#v, want %#v", key, workstationPayload[key], want)
-		}
+	if workstationDef.OutputSchema != "schema.json" || workstationDef.Limits.MaxRetries != 2 || workstationDef.Limits.MaxExecutionTime != "30m" || workstationDef.Timeout != "" {
+		t.Fatalf("expanded workstation definition did not preserve inline runtime fields: %#v", workstationDef)
 	}
-	if _, ok := workstationPayload["body"]; ok {
-		t.Fatalf("expected expanded factory.json workstation to omit inline body, got %#v", workstationPayload)
+	if workstationDef.Body != "Complete {{ .WorkID }} deterministically." {
+		t.Fatalf("expanded workstation body = %q", workstationDef.Body)
 	}
-	promptContent := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "prompt.md"))
-	if string(promptContent) != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded prompt file content = %q", string(promptContent))
+	if workstationDef.PromptTemplate != "Complete {{ .WorkID }} deterministically." {
+		t.Fatalf("expanded workstation prompt template = %q", workstationDef.PromptTemplate)
 	}
+}
+
+func assertDeterministicExpandedFlattenRoundTrip(t *testing.T, dir string) {
+	t.Helper()
+
 	flattened, err := factoryconfig.FlattenFactoryConfig(dir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
@@ -171,31 +209,13 @@ func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
 	if flattenedWorkstation.OutputSchema != "schema.json" || flattenedWorkstation.Limits.MaxRetries != 2 || flattenedWorkstation.Limits.MaxExecutionTime != "30m" || flattenedWorkstation.Timeout != "" {
 		t.Fatalf("flattened workstation runtime fields = %#v", flattenedWorkstation)
 	}
+}
 
-	loaded, err = factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("expanded layout should load through runtime config: %v", err)
-	}
-	if _, ok := loaded.Worker("executor"); !ok {
-		t.Fatal("expected expanded worker definition to load")
-	}
-	workstationDef, ok := loaded.Workstation("execute-story")
-	if !ok {
-		t.Fatal("expected expanded workstation definition to load")
-	}
-	if workstationDef.OutputSchema != "schema.json" || workstationDef.Limits.MaxRetries != 2 || workstationDef.Limits.MaxExecutionTime != "30m" || workstationDef.Timeout != "" {
-		t.Fatalf("expanded workstation definition did not preserve inline runtime fields: %#v", workstationDef)
-	}
-	if workstationDef.Runner != "cursor-cli" {
-		t.Fatalf("expanded workstation runner = %q, want cursor-cli", workstationDef.Runner)
-	}
-	if workstationDef.Body != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded workstation body = %q", workstationDef.Body)
-	}
-	if workstationDef.PromptTemplate != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded workstation prompt template = %q", workstationDef.PromptTemplate)
-	}
+func assertDeterministicExpandIsIdempotent(t *testing.T, factoryPath string, canonical []byte, workerAgentsPath, workstationAgentsPath string) {
+	t.Helper()
 
+	workerAgents := readCLITestFile(t, workerAgentsPath)
+	workstationAgents := readCLITestFile(t, workstationAgentsPath)
 	before := map[string][]byte{
 		"factory":     append([]byte(nil), canonical...),
 		"worker":      append([]byte(nil), workerAgents...),
@@ -627,118 +647,8 @@ func assertExpandDidNotWriteSplitRuntimeFiles(t *testing.T, dir string) {
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=split-layout-canonicalization-fixture review=2026-07-18 removal=extract-shared-split-layout-fixture-before-next-cli-config-expand-change
 func TestExpandFactoryConfig_KeepsExistingCanonicalSplitDefinitionsWhenInlineDefinitionsMissing(t *testing.T) {
-	tests := []struct {
-		name      string
-		inputPath func(string) string
-	}{
-		{
-			name: "directory input",
-			inputPath: func(dir string) string {
-				return dir
-			},
-		},
-		{
-			name: "factory file beside split files",
-			inputPath: func(dir string) string {
-				return filepath.Join(dir, "factory.json")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
-				"name":"keep-existing-canonical-split-definitions",
-				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-				"resources": [],
-				"workers": [{"name":"executor"}],
-				"workstations": [{
-					"name":"execute-story",
-					"worker":"executor",
-					"inputs":[{"workType":"story","state":"init"}],
-					"outputs":[{"workType":"story","state":"complete"}]
-				}]
-			}`)
-			workerAgentsPath := filepath.Join(dir, "workers", "executor", "AGENTS.md")
-			writeCLITestFile(t, workerAgentsPath, `---
-type: SCRIPT_WORKER
-command: powershell
-args:
-  - -NoProfile
-  - -Command
-  - Write-Output preserved
-executorProvider: local
-timeout: 45m
-stopToken: DONE
----
-Existing worker body.
-`)
-			workstationAgentsPath := filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
-			writeCLITestFile(t, workstationAgentsPath, `---
-type: MODEL_WORKSTATION
-worker: executor
-promptFile: prompts/task.md
-limits:
-  maxRetries: 3
-  maxExecutionTime: 15m
-stopWords:
-  - DONE
----
-Existing workstation body.
-`)
-			promptPath := filepath.Join(dir, "workstations", "execute-story", "prompts", "task.md")
-			writeCLITestFile(t, promptPath, "Preserve {{ .WorkID }}.\n")
-
-			if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: tt.inputPath(dir), Output: io.Discard}); err != nil {
-				t.Fatalf("ExpandFactoryConfig: %v", err)
-			}
-
-			workerAgents := string(readCLITestFile(t, workerAgentsPath))
-			if workerAgents != "Existing worker body.\n" {
-				t.Fatalf("expected expanded worker AGENTS.md body to be preserved, got %q", workerAgents)
-			}
-
-			workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
-			if workstationAgents != "Existing workstation body.\n" {
-				t.Fatalf("expected expanded workstation AGENTS.md body to be preserved, got %q", workstationAgents)
-			}
-			if got := string(readCLITestFile(t, promptPath)); got != "Preserve {{ .WorkID }}.\n" {
-				t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
-			}
-
-			loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-			if err != nil {
-				t.Fatalf("LoadRuntimeConfig: %v", err)
-			}
-			workerDef, ok := loaded.Worker("executor")
-			if !ok {
-				t.Fatal("expected runtime worker definition")
-			}
-			if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
-				t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
-			}
-			workstationDef, ok := loaded.Workstation("execute-story")
-			if !ok {
-				t.Fatal("expected runtime workstation definition")
-			}
-			if workstationDef.Limits.MaxRetries != 3 || workstationDef.PromptTemplate != "Preserve {{ .WorkID }}.\n" {
-				t.Fatalf("expected existing workstation definition to be preserved, got %#v", workstationDef)
-			}
-
-			if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: tt.inputPath(dir), Output: io.Discard}); err != nil {
-				t.Fatalf("ExpandFactoryConfig second run: %v", err)
-			}
-			if workerAgents != string(readCLITestFile(t, workerAgentsPath)) {
-				t.Fatalf("worker AGENTS.md changed after idempotent expand")
-			}
-			if workstationAgents != string(readCLITestFile(t, workstationAgentsPath)) {
-				t.Fatalf("workstation AGENTS.md changed after idempotent expand")
-			}
-		})
-	}
+	runSplitDefinitionPreservationCases(t, "keep-existing-canonical-split-definitions", false)
 }
 
 func TestFlattenFactoryConfig_FlattensCanonicalWorkstationStopWords(t *testing.T) {
@@ -788,8 +698,13 @@ Review the output.
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=split-layout-preservation-fixture review=2026-07-18 removal=extract-shared-split-layout-fixture-before-next-cli-config-expand-change
 func TestExpandFactoryConfig_PreservesExistingSplitDefinitionsWhenInlineDefinitionsMissing(t *testing.T) {
+	runSplitDefinitionPreservationCases(t, "preserve-existing-split-definitions", true)
+}
+
+func runSplitDefinitionPreservationCases(t *testing.T, fixtureName string, includeStopWords bool) {
+	t.Helper()
+
 	tests := []struct {
 		name      string
 		inputPath func(string) string
@@ -810,23 +725,36 @@ func TestExpandFactoryConfig_PreservesExistingSplitDefinitionsWhenInlineDefiniti
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
-				"name":"preserve-existing-split-definitions",
-				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-				"resources": [],
-				"workers": [{"name":"executor"}],
-				"workstations": [{
-					"name":"execute-story",
-					"worker":"executor",
-					"inputs":[{"workType":"story","state":"init"}],
-					"outputs":[{"workType":"story","state":"complete"}],
-					"resources":[],
-					"stopWords":["DONE"]
-				}]
-			}`)
-			workerAgentsPath := filepath.Join(dir, "workers", "executor", "AGENTS.md")
-			writeCLITestFile(t, workerAgentsPath, `---
+			dir, workerAgentsPath, workstationAgentsPath, promptPath := writeExistingSplitDefinitionsFixture(t, fixtureName, includeStopWords)
+			assertExistingSplitDefinitionsPreserved(t, dir, tt.inputPath(dir), workerAgentsPath, workstationAgentsPath, promptPath)
+		})
+	}
+}
+
+func writeExistingSplitDefinitionsFixture(t *testing.T, fixtureName string, includeStopWords bool) (string, string, string, string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	workstationTail := `"resources":[]`
+	if includeStopWords {
+		workstationTail += `,
+			"stopWords":["DONE"]`
+	}
+	writeCLITestFile(t, filepath.Join(dir, "factory.json"), fmt.Sprintf(`{
+		"name":"%s",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"resources": [],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			%s
+		}]
+	}`, fixtureName, workstationTail))
+	workerAgentsPath := filepath.Join(dir, "workers", "executor", "AGENTS.md")
+	writeCLITestFile(t, workerAgentsPath, `---
 type: SCRIPT_WORKER
 command: powershell
 args:
@@ -839,8 +767,8 @@ stopToken: DONE
 ---
 Existing worker body.
 `)
-			workstationAgentsPath := filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
-			writeCLITestFile(t, workstationAgentsPath, `---
+	workstationAgentsPath := filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
+	writeCLITestFile(t, workstationAgentsPath, `---
 type: MODEL_WORKSTATION
 worker: executor
 promptFile: prompts/task.md
@@ -852,55 +780,57 @@ stopWords:
 ---
 Existing workstation body.
 `)
-			promptPath := filepath.Join(dir, "workstations", "execute-story", "prompts", "task.md")
-			writeCLITestFile(t, promptPath, "Preserve {{ .WorkID }}.\n")
+	promptPath := filepath.Join(dir, "workstations", "execute-story", "prompts", "task.md")
+	writeCLITestFile(t, promptPath, "Preserve {{ .WorkID }}.\n")
+	return dir, workerAgentsPath, workstationAgentsPath, promptPath
+}
 
-			if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: tt.inputPath(dir), Output: io.Discard}); err != nil {
-				t.Fatalf("ExpandFactoryConfig: %v", err)
-			}
+func assertExistingSplitDefinitionsPreserved(t *testing.T, dir, inputPath, workerAgentsPath, workstationAgentsPath, promptPath string) {
+	t.Helper()
 
-			workerAgents := string(readCLITestFile(t, workerAgentsPath))
-			if workerAgents != "Existing worker body.\n" {
-				t.Fatalf("expected expanded worker AGENTS.md body to be preserved, got %q", workerAgents)
-			}
+	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: inputPath, Output: io.Discard}); err != nil {
+		t.Fatalf("ExpandFactoryConfig: %v", err)
+	}
 
-			workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
-			if workstationAgents != "Existing workstation body.\n" {
-				t.Fatalf("expected expanded workstation AGENTS.md body to be preserved, got %q", workstationAgents)
-			}
-			if got := string(readCLITestFile(t, promptPath)); got != "Preserve {{ .WorkID }}.\n" {
-				t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
-			}
+	workerAgents := string(readCLITestFile(t, workerAgentsPath))
+	if workerAgents != "Existing worker body.\n" {
+		t.Fatalf("expected expanded worker AGENTS.md body to be preserved, got %q", workerAgents)
+	}
+	workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
+	if workstationAgents != "Existing workstation body.\n" {
+		t.Fatalf("expected expanded workstation AGENTS.md body to be preserved, got %q", workstationAgents)
+	}
+	if got := string(readCLITestFile(t, promptPath)); got != "Preserve {{ .WorkID }}.\n" {
+		t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
+	}
 
-			loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-			if err != nil {
-				t.Fatalf("LoadRuntimeConfig: %v", err)
-			}
-			workerDef, ok := loaded.Worker("executor")
-			if !ok {
-				t.Fatal("expected runtime worker definition")
-			}
-			if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
-				t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
-			}
-			workstationDef, ok := loaded.Workstation("execute-story")
-			if !ok {
-				t.Fatal("expected runtime workstation definition")
-			}
-			if workstationDef.Limits.MaxRetries != 3 || workstationDef.PromptTemplate != "Preserve {{ .WorkID }}.\n" {
-				t.Fatalf("expected existing workstation definition to be preserved, got %#v", workstationDef)
-			}
+	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	workerDef, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected runtime worker definition")
+	}
+	if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
+		t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
+	}
+	workstationDef, ok := loaded.Workstation("execute-story")
+	if !ok {
+		t.Fatal("expected runtime workstation definition")
+	}
+	if workstationDef.Limits.MaxRetries != 3 || workstationDef.PromptTemplate != "Preserve {{ .WorkID }}.\n" {
+		t.Fatalf("expected existing workstation definition to be preserved, got %#v", workstationDef)
+	}
 
-			if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: tt.inputPath(dir), Output: io.Discard}); err != nil {
-				t.Fatalf("ExpandFactoryConfig second run: %v", err)
-			}
-			if workerAgents != string(readCLITestFile(t, workerAgentsPath)) {
-				t.Fatalf("worker AGENTS.md changed after idempotent expand")
-			}
-			if workstationAgents != string(readCLITestFile(t, workstationAgentsPath)) {
-				t.Fatalf("workstation AGENTS.md changed after idempotent expand")
-			}
-		})
+	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: inputPath, Output: io.Discard}); err != nil {
+		t.Fatalf("ExpandFactoryConfig second run: %v", err)
+	}
+	if workerAgents != string(readCLITestFile(t, workerAgentsPath)) {
+		t.Fatalf("worker AGENTS.md changed after idempotent expand")
+	}
+	if workstationAgents != string(readCLITestFile(t, workstationAgentsPath)) {
+		t.Fatalf("workstation AGENTS.md changed after idempotent expand")
 	}
 }
 

@@ -136,143 +136,11 @@ func activeDashboardRenderDataForDashboardTest(now time.Time) dashboardrender.Si
 	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=dashboard-world-view-formatting-fixture review=2026-07-18 removal=split-fixture-builders-when-dashboard-fixtures-are-refactored
 func TestFormatSimpleDashboardWithRenderData_RendersTerminalProviderAndDispatchDetails(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
-	topology := buildTestTopology()
-
-	es := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
-		DispatchHistory: []interfaces.CompletedDispatch{{
-			DispatchID:      "raw-dispatch",
-			TransitionID:    "raw-transition",
-			WorkstationName: "raw-workstation",
-			Outcome:         interfaces.OutcomeAccepted,
-			ConsumedTokens: []interfaces.Token{
-				{ID: "raw-token", Color: interfaces.TokenColor{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}},
-			},
-		}},
-		FactoryState:  "RUNNING",
-		RuntimeStatus: interfaces.RuntimeStatusIdle,
-		Topology:      topology,
-		Uptime:        20 * time.Minute,
-	}
-	renderData := dashboardrender.SimpleDashboardRenderData{
-		InFlightDispatchCount: 1,
-		ActiveExecutionsByDispatchID: map[string]dashboardrender.SimpleDashboardActiveExecution{
-			"dispatch-active": {
-				DispatchID:      "dispatch-active",
-				TransitionID:    "plan",
-				WorkstationName: "Planner",
-				StartedAt:       now.Add(-25 * time.Second),
-				WorkTypeIDs:     []string{"story"},
-				WorkItems: []interfaces.FactoryWorldWorkItemRef{
-					{WorkID: "work-active", WorkTypeID: "story", DisplayName: "Plan rollout"},
-				},
-			},
-		},
-		PlaceOccupancyWorkItemsByPlaceID: map[string][]interfaces.FactoryWorldWorkItemRef{
-			"story:complete": {
-				{WorkID: "work-complete", WorkTypeID: "story", DisplayName: "Docs complete"},
-			},
-			"story:failed": {
-				{WorkID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"},
-			},
-		},
-		PlaceCategoriesByID: map[string]string{
-			"story:complete": "TERMINAL",
-			"story:failed":   "FAILED",
-		},
-		Session: dashboardrender.SimpleDashboardSessionData{
-			HasData:              true,
-			DispatchedCount:      3,
-			CompletedCount:       1,
-			FailedCount:          1,
-			DispatchedByWorkType: map[string]int{"story": 3},
-			CompletedByWorkType:  map[string]int{"story": 1},
-			FailedByWorkType:     map[string]int{"story": 1},
-			DispatchHistory: []interfaces.FactoryWorldDispatchCompletion{
-				{
-					DispatchID:      "dispatch-complete",
-					TransitionID:    "write",
-					Workstation:     interfaces.FactoryWorkstationRef{Name: "Writer"},
-					InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Draft docs"}},
-					OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Docs complete"}},
-					Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
-					StartedAt:       now.Add(-70 * time.Second),
-					CompletedAt:     now.Add(-65 * time.Second),
-					DurationMillis:  5000,
-				},
-				{
-					DispatchID:      "dispatch-rejected",
-					TransitionID:    "review",
-					Workstation:     interfaces.FactoryWorkstationRef{Name: "Reviewer"},
-					InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Review draft"}},
-					OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Needs rewrite"}},
-					Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), Feedback: "missing acceptance tests"},
-					StartedAt:       now.Add(-60 * time.Second),
-					CompletedAt:     now.Add(-45 * time.Second),
-					DurationMillis:  15000,
-				},
-				{
-					DispatchID:      "dispatch-failed",
-					TransitionID:    "ship",
-					Workstation:     interfaces.FactoryWorkstationRef{Name: "Publisher"},
-					InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Ship change"}},
-					OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}},
-					Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "throttled", FailureMessage: "provider unavailable"},
-					StartedAt:       now.Add(-40 * time.Second),
-					CompletedAt:     now.Add(-20 * time.Second),
-					DurationMillis:  20000,
-				},
-			},
-			ProviderSessions: []interfaces.FactoryWorldProviderSessionRecord{{
-				DispatchID:      "dispatch-failed",
-				TransitionID:    "ship",
-				WorkstationName: "Publisher",
-				ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
-				Outcome:         string(interfaces.OutcomeFailed),
-				FailureReason:   "throttled",
-				FailureMessage:  "provider unavailable",
-				ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
-			}},
-		},
-	}
-
+	es, renderData := buildTerminalProviderRenderFixture(now)
 	output := FormatSimpleDashboardWithRenderData(es, renderData, now)
-
-	for _, want := range []string{
-		"Active Workstations (1)",
-		"Planner",
-		"Plan rollout",
-		"Completed Workstations",
-		"Success",
-		"Rejected",
-		"Failed",
-		"Writer",
-		"Reviewer",
-		"Publisher",
-		"Draft docs",
-		"Docs complete",
-		"Review draft",
-		"Needs rewrite",
-		"Ship change",
-		"Blocked change",
-		"missing acceptance tests",
-		"throttled - provider unavailable",
-		"Provider sessions:",
-		"Blocked change [dispatch-failed] codex / session_id / sess-failed",
-		"Blocked change [dispatch-failed] Publisher throttled - provider unavailable",
-	} {
-		if !strings.Contains(output, want) {
-			t.Errorf("output missing %q:\n%s", want, output)
-		}
-	}
-	for _, absent := range []string{"raw-dispatch", "raw-workstation", "raw-input"} {
-		if strings.Contains(output, absent) {
-			t.Errorf("output should not contain raw snapshot value %q:\n%s", absent, output)
-		}
-	}
+	assertTerminalProviderRenderOutput(t, output)
 }
 
 func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBoundary(t *testing.T) {
@@ -334,8 +202,155 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 
 func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
+	renderData := buildDispatchHistoryFallbackFixture(now)
+	view := dashboardSessionViewFromRenderData(renderData)
+	assertDispatchHistoryFallbackView(t, view)
 
-	renderData := dashboardrender.SimpleDashboardRenderData{
+	output := FormatSimpleDashboardWithRenderData(
+		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+			Topology:      buildTestTopology(),
+			Uptime:        5 * time.Minute,
+		},
+		renderData,
+		now,
+	)
+
+	assertDispatchHistoryFallbackOutput(t, output)
+}
+
+func buildTerminalProviderRenderFixture(now time.Time) (
+	interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	dashboardrender.SimpleDashboardRenderData,
+) {
+	return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			DispatchHistory: []interfaces.CompletedDispatch{{
+				DispatchID:      "raw-dispatch",
+				TransitionID:    "raw-transition",
+				WorkstationName: "raw-workstation",
+				Outcome:         interfaces.OutcomeAccepted,
+				ConsumedTokens:  []interfaces.Token{{ID: "raw-token", Color: interfaces.TokenColor{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}}},
+			}},
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+			Topology:      buildTestTopology(),
+			Uptime:        20 * time.Minute,
+		}, dashboardrender.SimpleDashboardRenderData{
+			InFlightDispatchCount: 1,
+			ActiveExecutionsByDispatchID: map[string]dashboardrender.SimpleDashboardActiveExecution{
+				"dispatch-active": {
+					DispatchID:      "dispatch-active",
+					TransitionID:    "plan",
+					WorkstationName: "Planner",
+					StartedAt:       now.Add(-25 * time.Second),
+					WorkTypeIDs:     []string{"story"},
+					WorkItems:       []interfaces.FactoryWorldWorkItemRef{{WorkID: "work-active", WorkTypeID: "story", DisplayName: "Plan rollout"}},
+				},
+			},
+			PlaceOccupancyWorkItemsByPlaceID: map[string][]interfaces.FactoryWorldWorkItemRef{
+				"story:complete": {{WorkID: "work-complete", WorkTypeID: "story", DisplayName: "Docs complete"}},
+				"story:failed":   {{WorkID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}},
+			},
+			PlaceCategoriesByID: map[string]string{"story:complete": "TERMINAL", "story:failed": "FAILED"},
+			Session: dashboardrender.SimpleDashboardSessionData{
+				HasData:              true,
+				DispatchedCount:      3,
+				CompletedCount:       1,
+				FailedCount:          1,
+				DispatchedByWorkType: map[string]int{"story": 3},
+				CompletedByWorkType:  map[string]int{"story": 1},
+				FailedByWorkType:     map[string]int{"story": 1},
+				DispatchHistory: []interfaces.FactoryWorldDispatchCompletion{
+					{
+						DispatchID:      "dispatch-complete",
+						TransitionID:    "write",
+						Workstation:     interfaces.FactoryWorkstationRef{Name: "Writer"},
+						InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Draft docs"}},
+						OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Docs complete"}},
+						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+						StartedAt:       now.Add(-70 * time.Second),
+						CompletedAt:     now.Add(-65 * time.Second),
+						DurationMillis:  5000,
+					},
+					{
+						DispatchID:      "dispatch-rejected",
+						TransitionID:    "review",
+						Workstation:     interfaces.FactoryWorkstationRef{Name: "Reviewer"},
+						InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Review draft"}},
+						OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Needs rewrite"}},
+						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), Feedback: "missing acceptance tests"},
+						StartedAt:       now.Add(-60 * time.Second),
+						CompletedAt:     now.Add(-45 * time.Second),
+						DurationMillis:  15000,
+					},
+					{
+						DispatchID:      "dispatch-failed",
+						TransitionID:    "ship",
+						Workstation:     interfaces.FactoryWorkstationRef{Name: "Publisher"},
+						InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Ship change"}},
+						OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}},
+						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "throttled", FailureMessage: "provider unavailable"},
+						StartedAt:       now.Add(-40 * time.Second),
+						CompletedAt:     now.Add(-20 * time.Second),
+						DurationMillis:  20000,
+					},
+				},
+				ProviderSessions: []interfaces.FactoryWorldProviderSessionRecord{{
+					DispatchID:      "dispatch-failed",
+					TransitionID:    "ship",
+					WorkstationName: "Publisher",
+					ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
+					Outcome:         string(interfaces.OutcomeFailed),
+					FailureReason:   "throttled",
+					FailureMessage:  "provider unavailable",
+					ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
+				}},
+			},
+		}
+}
+
+func assertTerminalProviderRenderOutput(t *testing.T, output string) {
+	t.Helper()
+
+	for _, want := range []string{
+		"Active Workstations (1)",
+		"Planner",
+		"Plan rollout",
+		"Completed Workstations",
+		"Success",
+		"Rejected",
+		"Failed",
+		"Writer",
+		"Reviewer",
+		"Publisher",
+		"Draft docs",
+		"Docs complete",
+		"Review draft",
+		"Needs rewrite",
+		"Ship change",
+		"Blocked change",
+		"missing acceptance tests",
+		"throttled - provider unavailable",
+		"Provider sessions:",
+		"Blocked change [dispatch-failed] codex / session_id / sess-failed",
+		"Blocked change [dispatch-failed] Publisher throttled - provider unavailable",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output missing %q:\n%s", want, output)
+		}
+	}
+	for _, absent := range []string{"raw-dispatch", "raw-workstation", "raw-input"} {
+		if strings.Contains(output, absent) {
+			t.Errorf("output should not contain raw snapshot value %q:\n%s", absent, output)
+		}
+	}
+}
+
+func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDashboardRenderData {
+	return dashboardrender.SimpleDashboardRenderData{
 		Session: dashboardrender.SimpleDashboardSessionData{
 			HasData:              true,
 			DispatchedCount:      5,
@@ -349,10 +364,7 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 					DispatchID:   "accepted-terminal",
 					TransitionID: "write",
 					Workstation:  interfaces.FactoryWorkstationRef{Name: "Writer"},
-					TerminalWork: &interfaces.FactoryTerminalWork{
-						Status:   "COMPLETE",
-						WorkItem: interfaces.FactoryWorkItem{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "Published draft"},
-					},
+					TerminalWork: &interfaces.FactoryTerminalWork{Status: "COMPLETE", WorkItem: interfaces.FactoryWorkItem{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "Published draft"}},
 					OutputWorkItems: []interfaces.FactoryWorkItem{
 						{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "should not replace terminal"},
 					},
@@ -365,10 +377,7 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 					DispatchID:   "accepted-output",
 					TransitionID: "review",
 					Workstation:  interfaces.FactoryWorkstationRef{Name: "Reviewer"},
-					TerminalWork: &interfaces.FactoryTerminalWork{
-						Status:   "FAILED",
-						WorkItem: interfaces.FactoryWorkItem{ID: "completed-output", WorkTypeID: "story", DisplayName: "should skip failed terminal"},
-					},
+					TerminalWork: &interfaces.FactoryTerminalWork{Status: "FAILED", WorkItem: interfaces.FactoryWorkItem{ID: "completed-output", WorkTypeID: "story", DisplayName: "should skip failed terminal"}},
 					OutputWorkItems: []interfaces.FactoryWorkItem{
 						{ID: "completed-output", WorkTypeID: "story", DisplayName: "Review ready"},
 					},
@@ -391,18 +400,11 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 					DispatchID:   "failed-terminal",
 					TransitionID: "ship",
 					Workstation:  interfaces.FactoryWorkstationRef{Name: "Publisher"},
-					TerminalWork: &interfaces.FactoryTerminalWork{
-						Status:   "FAILED",
-						WorkItem: interfaces.FactoryWorkItem{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "Publish blocked"},
-					},
+					TerminalWork: &interfaces.FactoryTerminalWork{Status: "FAILED", WorkItem: interfaces.FactoryWorkItem{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "Publish blocked"}},
 					OutputWorkItems: []interfaces.FactoryWorkItem{
 						{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "should not replace failed terminal"},
 					},
-					Result: interfaces.WorkstationResult{
-						Outcome:        string(interfaces.OutcomeFailed),
-						FailureReason:  "throttled",
-						FailureMessage: "provider unavailable",
-					},
+					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "throttled", FailureMessage: "provider unavailable"},
 					StartedAt:      now.Add(-29 * time.Second),
 					CompletedAt:    now.Add(-20 * time.Second),
 					DurationMillis: 9000,
@@ -418,10 +420,7 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 					OutputWorkItems: []interfaces.FactoryWorkItem{
 						{ID: "failed-output", WorkTypeID: "story", DisplayName: "Expired artifact"},
 					},
-					Result: interfaces.WorkstationResult{
-						Outcome:       string(interfaces.OutcomeFailed),
-						FailureReason: "expired",
-					},
+					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "expired"},
 					StartedAt:      now.Add(-19 * time.Second),
 					CompletedAt:    now.Add(-10 * time.Second),
 					DurationMillis: 9000,
@@ -429,7 +428,10 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 			},
 		},
 	}
-	view := dashboardSessionViewFromRenderData(renderData)
+}
+
+func assertDispatchHistoryFallbackView(t *testing.T, view dashboardSessionView) {
+	t.Helper()
 
 	if got, want := view.CompletedWorkLabels, []string{"Published draft", "Review ready"}; !equalStrings(got, want) {
 		t.Fatalf("CompletedWorkLabels = %v, want %v", got, want)
@@ -445,44 +447,21 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 	for _, detail := range view.FailedWorkDetails {
 		detailsByLabel[detail.WorkItem.DisplayName] = detail
 	}
+	assertDashboardFailedWorkDetail(t, detailsByLabel["Publish blocked"], "failed-terminal", "ship", "Publisher", "throttled", "provider unavailable")
+	assertDashboardFailedWorkDetail(t, detailsByLabel["Expired artifact"], "failed-output-and-input-fallback", interfaces.SystemTimeDashboardExpiryTransitionID, interfaces.SystemTimeDashboardExpiryTransitionID, "expired", "")
+	assertDashboardFailedWorkDetail(t, detailsByLabel["Retry later"], "failed-output-and-input-fallback", interfaces.SystemTimeDashboardExpiryTransitionID, interfaces.SystemTimeDashboardExpiryTransitionID, "expired", "")
+}
 
-	publishBlocked := detailsByLabel["Publish blocked"]
-	if publishBlocked.DispatchID != "failed-terminal" ||
-		publishBlocked.WorkstationName != "Publisher" ||
-		publishBlocked.FailureReason != "throttled" ||
-		publishBlocked.FailureMessage != "provider unavailable" {
-		t.Fatalf("Publish blocked detail = %+v", publishBlocked)
+func assertDashboardFailedWorkDetail(t *testing.T, detail dashboardFailedWorkDetail, dispatchID, transitionID, workstationName, failureReason, failureMessage string) {
+	t.Helper()
+
+	if detail.DispatchID != dispatchID || detail.TransitionID != transitionID || detail.WorkstationName != workstationName || detail.FailureReason != failureReason || detail.FailureMessage != failureMessage {
+		t.Fatalf("failed work detail = %+v", detail)
 	}
+}
 
-	expiredArtifact := detailsByLabel["Expired artifact"]
-	if expiredArtifact.DispatchID != "failed-output-and-input-fallback" ||
-		expiredArtifact.TransitionID != interfaces.SystemTimeDashboardExpiryTransitionID ||
-		expiredArtifact.WorkstationName != interfaces.SystemTimeDashboardExpiryTransitionID ||
-		expiredArtifact.FailureReason != "expired" ||
-		expiredArtifact.FailureMessage != "" {
-		t.Fatalf("Expired artifact detail = %+v", expiredArtifact)
-	}
-
-	retryLater := detailsByLabel["Retry later"]
-	if retryLater.DispatchID != "failed-output-and-input-fallback" ||
-		retryLater.TransitionID != interfaces.SystemTimeDashboardExpiryTransitionID ||
-		retryLater.WorkstationName != interfaces.SystemTimeDashboardExpiryTransitionID ||
-		retryLater.FailureReason != "expired" ||
-		retryLater.FailureMessage != "" {
-		t.Fatalf("Retry later detail = %+v", retryLater)
-	}
-
-	output := FormatSimpleDashboardWithRenderData(
-		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
-			FactoryState:  "RUNNING",
-			RuntimeStatus: interfaces.RuntimeStatusIdle,
-			Topology:      buildTestTopology(),
-			Uptime:        5 * time.Minute,
-		},
-		renderData,
-		now,
-	)
+func assertDispatchHistoryFallbackOutput(t *testing.T, output string) {
+	t.Helper()
 
 	for _, want := range []string{
 		"Failed work: 3",
