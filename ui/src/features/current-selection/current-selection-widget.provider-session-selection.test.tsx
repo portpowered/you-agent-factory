@@ -225,6 +225,12 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
+    const inferenceAttempts = within(currentSelection).getByRole("region", {
+      name: "Inference attempts",
+    });
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand" }),
+    );
     const selectSessionButton = within(currentSelection).getByRole("button", {
       name: "Select provider session codex / session_id / sess_inference_only for dispatch dispatch-review-active",
     });
@@ -354,6 +360,12 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
+    const inferenceAttempts = within(currentSelection).getByRole("region", {
+      name: "Inference attempts",
+    });
+    await user.click(
+      within(inferenceAttempts).getByRole("button", { name: "Expand" }),
+    );
     const firstButton = within(currentSelection).getByRole("button", {
       name: "Select provider session codex / session_id / sess_inference_first for dispatch dispatch-review-active",
     });

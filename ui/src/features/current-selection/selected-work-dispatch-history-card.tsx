@@ -22,8 +22,6 @@ import {
 import {
   DispatchDetailList,
   DispatchDetailSection,
-  ScriptArgsSection,
-  ScriptOutputSection,
   TraceActionGroup,
   WorkItemActionGroup,
 } from "./selected-work-dispatch-history-card-shared";
@@ -31,7 +29,6 @@ import { useCurrentSelectionDispatchHistoryMessages } from "./current-selection-
 import type { CurrentSelectionDispatchHistoryMessages } from "./messages/current-selection-dispatch-history";
 import {
   dedupeWorkItems,
-  requestCounts,
   requestDurationMillis,
   requestErrorClass,
   requestFailureMessage,
@@ -43,11 +40,8 @@ import {
   requestScriptRequest,
   requestScriptResponse,
   requestStartedAt,
+  requestTitle,
   requestTraceIDs,
-  scriptAttemptNumber,
-  scriptRequestID,
-  scriptResponseDurationMillis,
-  scriptResponseExitCode,
   scriptResponseFailureType,
 } from "./selected-work-dispatch-history-helpers";
 import type { LoadableProviderSessionRef } from "./provider-session-details";
@@ -91,7 +85,7 @@ export function DispatchHistoryCard({
         isCurrentDispatch={isCurrentDispatch}
         messages={messages}
         outcome={view.outcome}
-        workstationLabel={request.workstation_name || request.transition_id}
+        title={requestTitle(request, selectedWorkID)}
       />
       <DispatchSummaryDetails messages={messages} request={request} view={view} />
       <DispatchRequestSection
@@ -148,7 +142,6 @@ export function DispatchHistoryCard({
 }
 
 interface DispatchHistoryView {
-  counts: ReturnType<typeof requestCounts>;
   durationMillis: number | undefined;
   errorClass: string | undefined;
   failureMessage: string | undefined;
@@ -178,7 +171,6 @@ function buildDispatchHistoryView(request: SelectedWorkRequestHistoryItem): Disp
   const sortedInferenceAttempts = requestInferenceAttempts(request);
 
   return {
-    counts: requestCounts(request),
     durationMillis: requestDurationMillis(request),
     errorClass,
     failureMessage,
@@ -203,19 +195,19 @@ function DispatchHistoryHeader({
   isCurrentDispatch,
   messages,
   outcome,
-  workstationLabel,
+  title,
 }: {
   dispatchID: string | undefined;
   isCurrentDispatch: boolean;
   messages: CurrentSelectionDispatchHistoryMessages;
   outcome: string | undefined;
-  workstationLabel: string | undefined;
+  title: string | undefined;
 }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="grid min-w-0 gap-1">
         <strong className="min-w-0 [overflow-wrap:anywhere]">
-          {workstationLabel || dispatchID || messages.unknownDispatchTitle}
+          {title || dispatchID || messages.unknownDispatchTitle}
         </strong>
         <div className="flex flex-wrap items-center gap-2">
           <p className={cx("m-0 text-af-ink/70", DASHBOARD_BODY_TEXT_CLASS)}>
@@ -251,9 +243,6 @@ function DispatchSummaryDetails({
     <dl className={cx("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
       <InferenceAttemptDetail label={messages.workstationLabel} value={request.workstation_name} />
       <InferenceAttemptDetail label={messages.transitionIdLabel} code value={request.transition_id} />
-      <InferenceAttemptDetail label={messages.dispatchedCountLabel} value={view.counts.dispatchedCount} />
-      <InferenceAttemptDetail label={messages.respondedCountLabel} value={view.counts.respondedCount} />
-      <InferenceAttemptDetail label={messages.erroredCountLabel} value={view.counts.erroredCount} />
       <InferenceAttemptDetail label={messages.startedAtLabel} value={requestStartedAt(request)} />
       <InferenceAttemptDetail
         label={messages.durationLabel}
@@ -277,32 +266,9 @@ function DispatchRequestSection({
   return (
     <DispatchDetailSection title={messages.requestDetailsTitle}>
       {view.isScriptBackedRequest ? (
-        <>
-          <p className={DETAIL_COPY_CLASS}>
-            {messages.promptDetailsNotApplicable}
-          </p>
-          <DispatchDetailList
-            entries={[
-              {
-                label: messages.scriptRequestIdLabel,
-                value: view.scriptRequest?.script_request_id,
-                code: true,
-              },
-              {
-                label: messages.scriptAttemptLabel,
-                value:
-                  view.scriptRequest?.attempt !== undefined
-                    ? String(view.scriptRequest.attempt)
-                    : undefined,
-              },
-              { label: messages.commandLabel, value: view.scriptRequest?.command, code: true },
-            ]}
-          />
-          <ScriptArgsSection
-            args={view.scriptRequest?.args}
-            label={messages.resolvedArgsLabel}
-          />
-        </>
+        <p className={DETAIL_COPY_CLASS}>
+          {messages.promptDetailsNotApplicable}
+        </p>
       ) : (
         <p className={DETAIL_COPY_CLASS}>
           {messages.inferenceRequestGuidance}
@@ -342,7 +308,6 @@ function DispatchResponseSection({
 }) {
   return (
     <DispatchDetailSection title={messages.responseDetailsTitle}>
-      <ScriptResponseContent messages={messages} view={view} />
       <WorkItemActionGroup
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
@@ -405,65 +370,6 @@ function DispatchTraceSection({
         traceTargetId={traceTargetId}
       />
     </DispatchDetailSection>
-  );
-}
-
-function ScriptResponseContent({
-  messages,
-  view,
-}: {
-  messages: CurrentSelectionDispatchHistoryMessages;
-  view: DispatchHistoryView;
-}) {
-  if (!view.scriptResponse) {
-    return <p className={DETAIL_COPY_CLASS}>{messages.noScriptResponseYet}</p>;
-  }
-
-  return (
-    <>
-      <DispatchDetailList
-        entries={[
-          {
-            label: messages.scriptRequestIdLabel,
-            value: scriptRequestID(view.scriptResponse),
-            code: true,
-          },
-          {
-            label: messages.scriptAttemptLabel,
-            value:
-              scriptAttemptNumber(view.scriptResponse) !== undefined
-                ? String(scriptAttemptNumber(view.scriptResponse))
-                : undefined,
-          },
-          { label: messages.outcomeLabel, value: view.scriptResponse.outcome },
-          {
-            label: messages.durationLabel,
-            value:
-              scriptResponseDurationMillis(view.scriptResponse) !== undefined
-                ? formatDurationMillis(scriptResponseDurationMillis(view.scriptResponse) ?? 0)
-                : undefined,
-          },
-          {
-            label: messages.exitCodeLabel,
-            value:
-              scriptResponseExitCode(view.scriptResponse) !== undefined
-                ? String(scriptResponseExitCode(view.scriptResponse))
-                : undefined,
-          },
-          { label: messages.failureTypeLabel, value: scriptResponseFailureType(view.scriptResponse) },
-        ]}
-      />
-      <ScriptOutputSection
-        emptyMessage={messages.noStdoutRecorded}
-        label={messages.stdoutLabel}
-        value={view.normalizedScriptStdout}
-      />
-      <ScriptOutputSection
-        emptyMessage={messages.noStderrRecorded}
-        label={messages.stderrLabel}
-        value={view.normalizedScriptStderr}
-      />
-    </>
   );
 }
 

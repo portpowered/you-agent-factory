@@ -43,14 +43,6 @@ src/features/current-selection/detail-card-shared.tsx|141|55|jsx-text|Request co
 src/features/current-selection/provider-session-detail-panel.tsx|71|42|jsx-text|Loading session details...
 src/features/current-selection/provider-session-detail-panel.tsx|262|25|jsx-text|Turn
 src/features/current-selection/provider-session-detail-panel.tsx|415|19|jsx-text|Encrypted reasoning content only.
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|50|18|jsx-attribute|Inference attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|53|55|jsx-text|Inference attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|87|18|jsx-attribute|Script attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|90|55|jsx-text|Script attempts
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|104|44|jsx-text|No script response attempt has been recorded yet.
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|125|19|jsx-text|Request attempt
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|126|76|jsx-text|PENDING
-src/features/current-selection/selected-work-dispatch-attempt-sections.tsx|174|19|jsx-text|Response attempt
 src/features/current-selection/selected-work-dispatch-history.tsx|37|15|jsx-attribute|Workstation dispatches
 src/features/current-selection/selected-work-dispatch-history.tsx|53|11|jsx-text|Workstation dispatches
 src/features/current-selection/selected-work-dispatch-history.tsx|78|11|jsx-text|No workstation dispatch has been recorded yet for this work item.
