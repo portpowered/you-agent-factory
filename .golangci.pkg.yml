@@ -4,8 +4,22 @@ run:
 linters:
   disable-all: true
   enable:
+    - bodyclose
+    - contextcheck
+    - errcheck
+    - errorlint
     - govet
+    - ineffassign
+    - nilerr
+    - staticcheck
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-rules:
+    - path: pkg/factory/runtime/factory.go
+      linters:
+        - contextcheck
+    - path: pkg/service/factory.go
+      linters:
+        - contextcheck

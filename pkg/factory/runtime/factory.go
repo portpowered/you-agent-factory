@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -210,7 +211,7 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 		engineOpts = append(engineOpts, engine.WithDispatchHandler(func(d interfaces.WorkDispatch) {
 			tr := net.Transitions[d.TransitionID]
 			workerType := dispatchRunnerKey(tr, d)
-			result := executeDispatchSynchronously(d, workerType, executors)
+			result := executeDispatchSynchronously(context.Background(), d, workerType, executors)
 			resultBuffer.Write(context.Background(), result)
 		}))
 
@@ -289,7 +290,7 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	f.mu.Lock()
 	previousState = f.state
 	nextState := interfaces.FactoryStateCompleted
-	if err == nil || err == context.Canceled {
+	if err == nil || errors.Is(err, context.Canceled) {
 		f.state = interfaces.FactoryStateCompleted
 		f.logger.Info("factory run completed")
 	} else {
@@ -300,7 +301,7 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	f.mu.Unlock()
 	f.recordStateChange(previousState, nextState, "run stopped")
 	runStopReason := ""
-	if err != nil && err != context.Canceled {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		runStopReason = err.Error()
 	}
 	f.eventHistory.RecordRunResponse(f.engine.GetRuntimeStateSnapshot().TickCount, nextState, runStopReason, f.clock.Now())
@@ -309,7 +310,7 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 		f.pool.Stop()
 	}
 
-	if err == context.Canceled {
+	if errors.Is(err, context.Canceled) {
 		return nil
 	}
 	return err

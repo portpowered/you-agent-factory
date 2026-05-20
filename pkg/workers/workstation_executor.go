@@ -277,7 +277,7 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request i
 	// Call the underlying worker executor.
 	result, err := we.Executor.Execute(executorCtx, request)
 	if err != nil {
-		if executorCtx.Err() == context.DeadlineExceeded || err == context.DeadlineExceeded {
+		if errors.Is(executorCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 			return timeoutWorkResult(request.Dispatch, time.Since(start)), nil
 		}
 		logger.Error("executor failed",
@@ -388,7 +388,7 @@ func resolveExecutionTimeout(workerDef *interfaces.WorkerConfig, workstationDef 
 	if workerDef != nil && workerDef.Timeout != "" {
 		timeout, err := time.ParseDuration(workerDef.Timeout)
 		if err != nil {
-			return 0, fmt.Errorf("invalid worker timeout %q: %v", workerDef.Timeout, err)
+			return 0, fmt.Errorf("invalid worker timeout %q: %w", workerDef.Timeout, err)
 		}
 		if timeout > 0 {
 			return timeout, nil

@@ -69,7 +69,7 @@ func rejectRetiredFanInField(data []byte) error {
 	var payload struct {
 		Workstations []map[string]json.RawMessage `json:"workstations"`
 	}
-	if err := json.Unmarshal(data, &payload); err != nil {
+	if !canInspectRetiredBoundaryPayload(data, &payload) {
 		return nil
 	}
 	for index, workstation := range payload.Workstations {
@@ -82,7 +82,7 @@ func rejectRetiredFanInField(data []byte) error {
 
 func rejectRetiredExhaustionRulesField(data []byte) error {
 	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(data, &payload); err != nil {
+	if !canInspectRetiredBoundaryPayload(data, &payload) {
 		return nil
 	}
 	if _, ok := payload["exhaustionRules"]; ok {
@@ -100,7 +100,7 @@ func rejectRetiredCronIntervalField(data []byte) error {
 			Cron *interfaces.CronConfig `json:"cron"`
 		} `json:"workstations"`
 	}
-	if err := json.Unmarshal(data, &payload); err != nil {
+	if !canInspectRetiredBoundaryPayload(data, &payload) {
 		return nil
 	}
 	for index, workstation := range payload.Workstations {
@@ -113,7 +113,7 @@ func rejectRetiredCronIntervalField(data []byte) error {
 
 func rejectRetiredGeneratedBoundaryAliases(data []byte) error {
 	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
+	if !canInspectRetiredBoundaryPayload(data, &payload) {
 		return nil
 	}
 	if err := rejectRetiredBoundaryFields(payload, "factory", retiredFactoryBoundaryFields); err != nil {
@@ -211,6 +211,10 @@ func rejectRetiredBoundaryFields(container map[string]any, path string, fields [
 		}
 	}
 	return nil
+}
+
+func canInspectRetiredBoundaryPayload(data []byte, dst any) bool {
+	return json.Unmarshal(data, dst) == nil
 }
 
 // Expand parses and normalizes a user-provided factory payload into the internal

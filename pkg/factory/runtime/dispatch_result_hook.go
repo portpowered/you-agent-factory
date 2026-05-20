@@ -57,7 +57,7 @@ func newWorkerPoolDispatchResultHook(
 	}
 }
 
-func (h *workerPoolDispatchResultHook) SubmitDispatch(_ context.Context, dispatch interfaces.WorkDispatch) error {
+func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error {
 	tr, ok := h.net.Transitions[dispatch.TransitionID]
 	if !ok {
 		return fmt.Errorf("unknown transition %q", dispatch.TransitionID)
@@ -79,7 +79,7 @@ func (h *workerPoolDispatchResultHook) SubmitDispatch(_ context.Context, dispatc
 		h.mu.Unlock()
 	}
 	if h.planner != nil {
-		result := executeDispatchSynchronously(dispatch, runnerKey, h.executors)
+		result := executeDispatchSynchronously(ctx, dispatch, runnerKey, h.executors)
 		if provider, ok := h.planner.(plannedCompletionResultProvider); ok {
 			planned, hasPlanned, err := provider.PlannedResultForDispatch(dispatch)
 			if err != nil {
@@ -176,6 +176,7 @@ func (h *workerPoolDispatchResultHook) signalWaitLocked() {
 }
 
 func executeDispatchSynchronously(
+	ctx context.Context,
 	dispatch interfaces.WorkDispatch,
 	runnerKey string,
 	executors map[string]workers.WorkerExecutor,
@@ -192,7 +193,7 @@ func executeDispatchSynchronously(
 					err = nil
 				}
 			}()
-			result, err = exec.Execute(context.Background(), dispatch)
+			result, err = exec.Execute(ctx, dispatch)
 		}()
 		if err == nil {
 			return result

@@ -1,6 +1,7 @@
 package testutil_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -72,7 +73,7 @@ func TestMockFactory_GetEngineStateSnapshot_ReturnsConfiguredError(t *testing.T)
 	mf := &testutil.MockFactory{EngineStateSnapshotErr: wantErr}
 
 	_, err := mf.GetEngineStateSnapshot(t.Context())
-	if err != wantErr {
+	if !errors.Is(err, wantErr) {
 		t.Fatalf("GetEngineStateSnapshot error = %v, want %v", err, wantErr)
 	}
 	if mf.EngineStateSnapshotCalls != 1 {
