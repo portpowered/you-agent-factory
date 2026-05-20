@@ -61,12 +61,14 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 		},
 		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
 			"dispatch-active": {
-				DispatchID:   "dispatch-active",
-				TransitionID: "review",
-				Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
-				Provider:     "codex",
-				Model:        "gpt-5.4",
-				StartedAt:    t0.Add(time.Second),
+				DispatchID:            "dispatch-active",
+				TransitionID:          "review",
+				Workstation:           interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+				RunnerID:              interfaces.RunnerIDGemini,
+				RunnerSelectionSource: interfaces.RunnerSelectionSourceFactory,
+				Provider:              "codex",
+				Model:                 "gpt-5.4",
+				StartedAt:             t0.Add(time.Second),
 				Inputs: []interfaces.WorkstationInput{{
 					TokenID:  "token-active",
 					PlaceID:  activeWork.PlaceID,
@@ -79,11 +81,13 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 			},
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID:   "dispatch-completed",
-			TransitionID: "review",
-			Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
-			StartedAt:    t0.Add(2 * time.Second),
-			CompletedAt:  t0.Add(4 * time.Second),
+			DispatchID:            "dispatch-completed",
+			TransitionID:          "review",
+			Workstation:           interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+			RunnerID:              interfaces.RunnerIDCursorCLI,
+			RunnerSelectionSource: interfaces.RunnerSelectionSourceWorkstation,
+			StartedAt:             t0.Add(2 * time.Second),
+			CompletedAt:           t0.Add(4 * time.Second),
 			Result: interfaces.WorkstationResult{
 				Outcome:  string(interfaces.OutcomeAccepted),
 				Feedback: "ready",
@@ -158,6 +162,20 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	if active.Request.CurrentChainingTraceId == nil || *active.Request.CurrentChainingTraceId != "chain-active" {
 		t.Fatalf("active current chaining trace ID = %#v, want chain-active", active.Request.CurrentChainingTraceId)
 	}
+	if active.Request.Runner == nil || active.Request.Runner.RunnerId == nil || string(*active.Request.Runner.RunnerId) != interfaces.RunnerIDGemini {
+		t.Fatalf("active request runner = %#v, want gemini", active.Request.Runner)
+	}
+	if active.Request.Runner.SelectionSource == nil || string(*active.Request.Runner.SelectionSource) != string(interfaces.RunnerSelectionSourceFactory) {
+		t.Fatalf("active request runner selection source = %#v, want factory", active.Request.Runner)
+	}
+	if active.Request.Runner.Capabilities == nil ||
+		len(active.Request.Runner.Capabilities.BaselineCapabilities) != 2 ||
+		string(active.Request.Runner.Capabilities.BaselineCapabilities[0]) != "prompt_submission" ||
+		len(active.Request.Runner.Capabilities.OptionalCapabilities) != 5 ||
+		string(active.Request.Runner.Capabilities.OptionalCapabilities[2].Capability) != "structured_output" ||
+		string(active.Request.Runner.Capabilities.OptionalCapabilities[2].Status) != "unsupported" {
+		t.Fatalf("active request runner capabilities = %#v, want shared gemini capability metadata", active.Request.Runner.Capabilities)
+	}
 	if active.Response != nil {
 		t.Fatalf("active request response = %#v, want nil", active.Response)
 	}
@@ -165,6 +183,18 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsDispatchKeye
 	completed := requests["dispatch-completed"]
 	if completed.Response == nil || completed.Response.Outcome == nil || *completed.Response.Outcome != "ACCEPTED" {
 		t.Fatalf("completed response = %#v, want accepted outcome", completed.Response)
+	}
+	if completed.Request.Runner == nil || completed.Request.Runner.DisplayName == nil || *completed.Request.Runner.DisplayName != "Cursor CLI" {
+		t.Fatalf("completed request runner = %#v, want Cursor CLI metadata", completed.Request.Runner)
+	}
+	if completed.Request.Runner.Capabilities == nil ||
+		len(completed.Request.Runner.Capabilities.OptionalCapabilities) != 5 ||
+		string(completed.Request.Runner.Capabilities.OptionalCapabilities[1].Status) != "supported" ||
+		string(completed.Request.Runner.Capabilities.OptionalCapabilities[3].Status) != "supported" {
+		t.Fatalf("completed request runner capabilities = %#v, want cursor capability metadata", completed.Request.Runner.Capabilities)
+	}
+	if completed.Response.Runner == nil || completed.Response.Runner.SelectionSource == nil || string(*completed.Response.Runner.SelectionSource) != string(interfaces.RunnerSelectionSourceWorkstation) {
+		t.Fatalf("completed response runner = %#v, want workstation selection source", completed.Response.Runner)
 	}
 	if completed.Response.OutputMutations == nil ||
 		len(*completed.Response.OutputMutations) != 1 ||

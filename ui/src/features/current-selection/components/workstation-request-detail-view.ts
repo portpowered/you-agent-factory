@@ -1,6 +1,7 @@
 import type { WorkstationRequestDetailCardProps } from "../detail-card-types";
 import { formatWorkItemLabel } from "../../../components/ui/formatters";
 import { normalizeDetailText } from "./detail-card-shared";
+import type { DashboardSelectedRunner } from "../../../api/dashboard/types";
 
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
@@ -12,6 +13,7 @@ export interface WorkstationRequestDetailView {
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
   requestTitle: string;
+  requestRunner: DashboardSelectedRunner | undefined;
   totalDurationMillis: number | undefined;
 }
 
@@ -49,6 +51,7 @@ export function buildWorkstationRequestDetailView(
     ),
     outcome: request.outcome ?? request.script_response?.outcome,
     requestTitle: workstationRequestTitle(request),
+    requestRunner: request.request_view?.runner,
     totalDurationMillis:
       request.total_duration_millis ?? request.script_response?.duration_millis,
   };

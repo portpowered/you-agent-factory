@@ -64,6 +64,15 @@ const (
 	InputKindDefault InputKind = "DEFAULT"
 )
 
+// Defines values for RunnerID.
+const (
+	RunnerIDCodex     RunnerID = "codex"
+	RunnerIDCursorCLI RunnerID = "cursor-cli"
+	RunnerIDGemini    RunnerID = "gemini"
+	RunnerIDKiro      RunnerID = "kiro"
+	RunnerIDOpenCode  RunnerID = "opencode"
+)
+
 // Defines values for WorkStateType.
 const (
 	WorkStateTypeFAILED     WorkStateType = "FAILED"
@@ -187,6 +196,9 @@ type Factory struct {
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
@@ -314,6 +326,9 @@ type ResourceRequirement struct {
 	Capacity int    `json:"capacity"`
 	Name     string `json:"name"`
 }
+
+// RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
+type RunnerID string
 
 // SaveEditableFactoryDefinitionRequest defines model for SaveEditableFactoryDefinitionRequest.
 type SaveEditableFactoryDefinitionRequest struct {
@@ -445,6 +460,9 @@ type Workstation struct {
 
 	// Resources Resource capacity this workstation consumes while one dispatch is in flight.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
+
+	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	Runner *RunnerID `json:"runner,omitempty"`
 
 	// StopWords Stop words authored on the topology entry for model-oriented dispatches.
 	StopWords *[]string `json:"stopWords,omitempty"`

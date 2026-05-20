@@ -156,6 +156,7 @@ describe("normalizeFactoryDefinition", () => {
         },
         name: "agent-factory",
         resources: [{ capacity: 3, name: "gpu" }],
+        runner: "gemini",
         sourceDirectory: "/tmp/source-factory",
         supportingFiles: {
           scripts: {
@@ -235,6 +236,7 @@ describe("normalizeFactoryDefinition", () => {
             outputs: [{ state: "done", workType: "story" }],
             promptFile: "prompt.md",
             resources: [{ capacity: 1, name: "gpu" }],
+            runner: "cursor-cli",
             stopWords: ["DONE"],
             type: "MODEL_WORKSTATION",
             worker: "writer",
@@ -260,6 +262,7 @@ describe("normalizeFactoryDefinition", () => {
       },
       name: "agent-factory",
       resources: [{ capacity: 3, name: "gpu" }],
+      runner: "gemini",
       sourceDirectory: "/tmp/source-factory",
       supportingFiles: {
         scripts: {
@@ -339,6 +342,7 @@ describe("normalizeFactoryDefinition", () => {
           outputs: [{ state: "done", workType: "story" }],
           promptFile: "prompt.md",
           resources: [{ capacity: 1, name: "gpu" }],
+          runner: "cursor-cli",
           stopWords: ["DONE"],
           type: "MODEL_WORKSTATION",
           worker: "writer",

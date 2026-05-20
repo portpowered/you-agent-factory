@@ -40,6 +40,9 @@ changes scoped to the current work item.
 - `MODEL_WORKER` renders prompts and dispatches through a supported model
   provider.
 - `SCRIPT_WORKER` runs a local command with optional rendered arguments.
+- Runner selection is separate from `modelProvider`. Use factory or
+  workstation `runner` fields to choose `codex`, `gemini`, `kiro`,
+  `cursor-cli`, or `opencode`.
 
 ## Common Fields
 
@@ -60,6 +63,8 @@ changes scoped to the current work item.
 ## Authoring Rules
 
 - Use `modelProvider` and `executorProvider` as distinct fields.
+- Use `runner` when the operator needs to choose the execution family; keep
+  `modelProvider` for worker-local provider compatibility and diagnostics.
 - Prefer split `workers/<name>/AGENTS.md` files for long model instructions.
 - Keep inline worker runtime config only when portability or generated output
   matters more than hand-authored readability.

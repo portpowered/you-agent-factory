@@ -190,6 +190,9 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 		// sees the fully populated WorkerExecutors map.
 		cfg.serviceConfig.ExtraOptions = append(cfg.serviceConfig.ExtraOptions, buildInlineDispatch(mocks, customExecs))
 	}
+	if !cfg.applyFullWorkerPoolAndScriptWrapExecutor {
+		cfg.serviceConfig.SkipBuiltInRunnerPrerequisiteValidation = true
+	}
 
 	svc, err := service.BuildFactoryService(context.Background(), &cfg.serviceConfig)
 	if err != nil {

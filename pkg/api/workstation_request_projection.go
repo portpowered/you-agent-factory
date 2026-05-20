@@ -96,6 +96,8 @@ func workstationDispatchViewFromActiveDispatch(
 		TransitionId:    dispatch.TransitionID,
 		WorkstationName: workstationRequestStringPtr(workstationNameOrID(dispatch.Workstation.Name, dispatch.TransitionID)),
 		Request: workstationDispatchRequestView(
+			dispatch.RunnerID,
+			dispatch.RunnerSelectionSource,
 			dispatch.StartedAt,
 			inputWorkItems,
 			dispatch.CurrentChainingTraceID,
@@ -104,17 +106,19 @@ func workstationDispatchViewFromActiveDispatch(
 			generatedTokenViewsFromInputs(dispatch.Inputs),
 			latestScriptRequest,
 		),
-		Response: workstationRequestResponseViewFromActiveDispatch(latestScriptResponse),
+		Response: workstationRequestResponseViewFromActiveDispatch(dispatch, latestScriptResponse),
 	}
 }
 
 func workstationRequestResponseViewFromActiveDispatch(
+	dispatch interfaces.FactoryWorldDispatch,
 	latestScriptResponse *interfaces.FactoryWorldScriptResponse,
 ) *factoryapi.FactoryWorldWorkstationRequestResponseView {
 	if latestScriptResponse == nil {
 		return nil
 	}
 	return &factoryapi.FactoryWorldWorkstationRequestResponseView{
+		Runner:         generatedFactoryWorldSelectedRunnerView(dispatch.RunnerID, dispatch.RunnerSelectionSource),
 		ScriptResponse: generatedFactoryWorldScriptResponse(latestScriptResponse),
 	}
 }
@@ -143,6 +147,8 @@ func workstationDispatchViewFromCompletion(
 		TransitionId:    completion.TransitionID,
 		WorkstationName: workstationRequestStringPtr(workstationNameOrID(completion.Workstation.Name, completion.TransitionID)),
 		Request: workstationDispatchRequestView(
+			completion.RunnerID,
+			completion.RunnerSelectionSource,
 			completion.StartedAt,
 			inputWorkItems,
 			completion.CurrentChainingTraceID,
@@ -152,6 +158,7 @@ func workstationDispatchViewFromCompletion(
 			latestScriptRequest,
 		),
 		Response: &factoryapi.FactoryWorldWorkstationRequestResponseView{
+			Runner:          generatedFactoryWorldSelectedRunnerView(completion.RunnerID, completion.RunnerSelectionSource),
 			Outcome:         workstationRequestStringPtr(completion.Result.Outcome),
 			Feedback:        workstationRequestStringPtr(completion.Result.Feedback),
 			FailureReason:   workstationRequestStringPtr(completion.Result.FailureReason),
@@ -166,6 +173,8 @@ func workstationDispatchViewFromCompletion(
 }
 
 func workstationDispatchRequestView(
+	runnerID string,
+	runnerSource interfaces.RunnerSelectionSource,
 	startedAt time.Time,
 	inputWorkItems []factoryapi.FactoryWorldWorkItemRef,
 	currentChainingTraceID string,
@@ -175,6 +184,7 @@ func workstationDispatchRequestView(
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 ) factoryapi.FactoryWorldWorkstationRequestRequestView {
 	return factoryapi.FactoryWorldWorkstationRequestRequestView{
+		Runner:                   generatedFactoryWorldSelectedRunnerView(runnerID, runnerSource),
 		StartedAt:                timePtr(startedAt),
 		InputWorkItems:           workItemRefSlicePtr(inputWorkItems),
 		InputWorkTypeIds:         stringSlicePtr(workTypeIDsForWorkRefs(inputWorkItems)),
@@ -183,6 +193,45 @@ func workstationDispatchRequestView(
 		TraceIds:                 stringSlicePtr(traceIDs),
 		ConsumedTokens:           tokenViewSlicePtr(consumedTokens),
 		ScriptRequest:            generatedFactoryWorldScriptRequest(latestScriptRequest),
+	}
+}
+
+func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource interfaces.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedRunnerView {
+	runnerID = interfaces.NormalizeRunnerID(runnerID)
+	if runnerID == "" && runnerSource == "" {
+		return nil
+	}
+	view := &factoryapi.FactoryWorldSelectedRunnerView{
+		RunnerId:        interfaces.GeneratedPublicFactoryRunnerIDPtr(runnerID),
+		SelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(runnerSource)),
+	}
+	if metadata, ok := interfaces.BuiltInRunnerMetadata(runnerID); ok {
+		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)
+		view.Capabilities = generatedFactoryWorldRunnerCapabilitiesView(metadata.Capabilities)
+	}
+	return view
+}
+
+func generatedFactoryWorldRunnerCapabilitiesView(
+	capabilities interfaces.RunnerCapabilities,
+) *factoryapi.FactoryWorldRunnerCapabilitiesView {
+	baseline := make([]factoryapi.FactoryWorldRunnerBaselineCapability, 0, len(capabilities.Baseline))
+	for _, capability := range capabilities.Baseline {
+		baseline = append(baseline, factoryapi.FactoryWorldRunnerBaselineCapability(capability))
+	}
+
+	optional := make([]factoryapi.FactoryWorldRunnerOptionalCapabilitySupportView, 0, len(capabilities.Optional))
+	for _, support := range capabilities.Optional {
+		optional = append(optional, factoryapi.FactoryWorldRunnerOptionalCapabilitySupportView{
+			Capability: factoryapi.FactoryWorldRunnerOptionalCapability(support.Capability),
+			Status:     factoryapi.FactoryWorldRunnerOptionalCapabilityStatus(support.Status),
+			Detail:     workstationRequestStringPtr(support.Detail),
+		})
+	}
+
+	return &factoryapi.FactoryWorldRunnerCapabilitiesView{
+		BaselineCapabilities: baseline,
+		OptionalCapabilities: optional,
 	}
 }
 

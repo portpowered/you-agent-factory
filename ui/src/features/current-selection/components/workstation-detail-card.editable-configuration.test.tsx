@@ -84,6 +84,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     draft: {
       prompt:
         overrides?.prompt ?? "Review the latest story changes before approval.",
+      runnerName: "gemini",
       workerName: overrides?.workerName ?? "reviewer",
     },
     hasValidationErrors: Boolean(
@@ -91,7 +92,11 @@ function buildReadyEditableConfigurationState(overrides?: {
         overrides?.validationErrors?.workerName,
     ),
     initialValues: {
+      effectiveRunnerName: "gemini",
+      factoryRunnerName: "codex",
       prompt: "Review the latest story changes before approval.",
+      runnerName: "gemini",
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
       workerName: "reviewer",
       workerOptions: ["reviewer", "planner"],
       workstationName: "Review",
@@ -103,6 +108,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     ),
     markChangesSaved: vi.fn(),
     onPromptChange: vi.fn(),
+    onRunnerChange: vi.fn(),
     onWorkerChange: vi.fn(),
     overwriteFieldNames: [],
     pendingFactoryDefinition: null,

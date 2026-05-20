@@ -47,6 +47,7 @@ type FactoryEventHistory struct {
 	mu             sync.RWMutex
 	net            *state.Net
 	runtimeConfig  interfaces.RuntimeDefinitionLookup
+	factoryRunner  string
 	now            func() time.Time
 	events         []factoryapi.FactoryEvent
 	recorders      []func(factoryapi.FactoryEvent)
@@ -69,6 +70,17 @@ func NewFactoryEventHistory(net *state.Net, now func() time.Time, runtimeConfigs
 		now:           now,
 		streams:       make(map[int]*eventHistorySubscription),
 	}
+}
+
+// SetFactoryRunnerOverride preserves the effective factory-level runner
+// selection when service wiring overrides the authored runtime config.
+func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.factoryRunner = interfaces.NormalizeRunnerID(runnerID)
 }
 
 // Events returns the recorded events in append order.
@@ -277,6 +289,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 		return
 	}
 	inputTokens := workers.WorkDispatchInputTokens(record.Dispatch)
+	runnerSelection := h.resolvedRunnerSelectionForDispatch(record.Dispatch)
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeDispatchRequest,
 		fmt.Sprintf("%s/%s", eventIDDispatchCreatedPrefix, dispatchID),
@@ -296,7 +309,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 			Inputs:                   generatedDispatchConsumedWorkRefsFromTokens(inputTokens),
 			Resources:                h.generatedResourcesPtr(inputTokens),
-			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey),
+			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
 		},
 	))
 }
@@ -743,11 +756,76 @@ func generatedDispatchConsumedWorkRefsFromTokens(tokens []interfaces.Token) []fa
 	return out
 }
 
-func generatedDispatchRequestEventMetadataPtr(replayKey string) *factoryapi.DispatchRequestEventMetadata {
-	if replayKey == "" {
+func generatedDispatchRequestEventMetadataPtr(replayKey string, selection interfaces.ResolvedRunnerSelection) *factoryapi.DispatchRequestEventMetadata {
+	if replayKey == "" && selection.RunnerID == "" && selection.Source == "" {
 		return nil
 	}
-	return &factoryapi.DispatchRequestEventMetadata{ReplayKey: stringPtrIfNotEmpty(replayKey)}
+	return &factoryapi.DispatchRequestEventMetadata{
+		ReplayKey:             stringPtrIfNotEmpty(replayKey),
+		RunnerId:              interfaces.GeneratedPublicFactoryRunnerIDPtr(selection.RunnerID),
+		RunnerSelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(selection.Source)),
+	}
+}
+
+func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch interfaces.WorkDispatch) interfaces.ResolvedRunnerSelection {
+	if h == nil {
+		return interfaces.ResolvedRunnerSelection{}
+	}
+	workstationRunner, workerModelProvider := h.runnerSelectionInputsForDispatch(dispatch)
+	factoryRunner := h.factoryRunnerID()
+	return interfaces.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
+}
+
+func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch interfaces.WorkDispatch) (string, string) {
+	if h == nil || h.runtimeConfig == nil {
+		return "", ""
+	}
+	workstationName := strings.TrimSpace(dispatch.WorkstationName)
+	if workstationName == "" && h.net != nil {
+		if transition, ok := h.net.Transitions[dispatch.TransitionID]; ok {
+			workstationName = strings.TrimSpace(transition.Name)
+		}
+	}
+	var workstationRunner string
+	if workstationName != "" {
+		if workstation, ok := h.runtimeConfig.Workstation(workstationName); ok && workstation != nil {
+			workstationRunner = workstation.Runner
+		}
+	}
+	worker, ok := h.runtimeConfig.Worker(dispatch.WorkerType)
+	if !ok || worker == nil {
+		return workstationRunner, ""
+	}
+	return workstationRunner, worker.ModelProvider
+}
+
+func (h *FactoryEventHistory) factoryRunnerID() string {
+	if h == nil || h.runtimeConfig == nil {
+		if h == nil {
+			return ""
+		}
+		h.mu.RLock()
+		defer h.mu.RUnlock()
+		return h.factoryRunner
+	}
+	h.mu.RLock()
+	override := h.factoryRunner
+	h.mu.RUnlock()
+	if override != "" {
+		return override
+	}
+	type factoryConfigProvider interface {
+		FactoryConfig() *interfaces.FactoryConfig
+	}
+	provider, ok := h.runtimeConfig.(factoryConfigProvider)
+	if !ok {
+		return ""
+	}
+	cfg := provider.FactoryConfig()
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Runner
 }
 
 func generatedFactoryRelationsPtr(relations []interfaces.FactoryRelation) *[]factoryapi.Relation {

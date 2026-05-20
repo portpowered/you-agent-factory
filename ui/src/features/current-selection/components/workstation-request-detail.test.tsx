@@ -49,6 +49,30 @@ describe("WorkstationRequestDetailCard", () => {
             prompt_source: "factory-renderer",
             source: "dispatch-history",
           },
+          request_view: {
+            input_work_items: [],
+            runner: {
+              capabilities: {
+                baselineCapabilities: [
+                  "prompt_submission",
+                  "tool_execution",
+                ],
+                optionalCapabilities: [
+                  {
+                    capability: "structured_output",
+                    status: "unsupported",
+                  },
+                  {
+                    capability: "working_directory",
+                    status: "unsupported",
+                  },
+                ],
+              },
+              displayName: "Gemini",
+              runnerId: "gemini",
+              selectionSource: "factory",
+            },
+          },
           responded_request_count: 1,
           response: "Ready for the next workstation.",
           response_metadata: {
@@ -76,6 +100,12 @@ describe("WorkstationRequestDetailCard", () => {
     ).toBeTruthy();
     expect(within(currentSelection).getAllByText("request-ready-story")).toHaveLength(1);
     expect(within(currentSelection).getAllByText("Dispatch ID").length).toBeGreaterThan(0);
+    expect(within(currentSelection).getByText("Runner")).toBeTruthy();
+    expect(within(currentSelection).getByText("Gemini")).toBeTruthy();
+    expect(within(currentSelection).getByText("factory")).toBeTruthy();
+    expect(within(currentSelection).getByText("Runner capability support")).toBeTruthy();
+    expect(within(currentSelection).getByText("Structured output")).toBeTruthy();
+    expect(within(currentSelection).getAllByText("Unsupported").length).toBeGreaterThan(0);
     expect(
       within(currentSelection).queryByRole("heading", { name: "Request counts" }),
     ).toBeNull();
@@ -177,6 +207,31 @@ describe("WorkstationRequestDetailCard", () => {
     expect(
       responseDetails.getByText(
         "Trace details are not available for this workstation request yet.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders fallback Codex capability detail that matches unsupported worktree behavior", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-codex-fallback", {
+          request_id: "request-codex-fallback",
+          request_view: {
+            input_work_items: [],
+            runner: {
+              runnerId: "codex",
+              selectionSource: "default",
+            },
+          },
+        })}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", { name: "Current selection" });
+    expect(within(currentSelection).getByText("Runner capability support")).toBeTruthy();
+    expect(
+      within(currentSelection).getByText(
+        "Codex rejects workstation worktree selection in v1.",
       ),
     ).toBeTruthy();
   });

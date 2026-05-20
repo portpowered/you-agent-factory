@@ -24,6 +24,7 @@ import {
   getWorkstationDetailMessages,
   type WorkstationDetailMessages,
 } from "../messages";
+import type { RunnerID } from "../runner-metadata";
 import type { DashboardSelection } from "../types";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
@@ -206,7 +207,11 @@ function areEditableDraftsEqual(
   left: EditableWorkstationDraft,
   right: EditableWorkstationDraft,
 ): boolean {
-  return left.prompt === right.prompt && left.workerName === right.workerName;
+  return (
+    left.prompt === right.prompt &&
+    left.runnerName === right.runnerName &&
+    left.workerName === right.workerName
+  );
 }
 
 function resolveWorkerOptionsState(
@@ -313,6 +318,19 @@ function buildReadyEditableWorkstationConfigurationState({
               draft: {
                 ...currentState.draft,
                 prompt: value,
+              },
+            }
+          : currentState,
+      );
+    },
+    onRunnerChange: (value: RunnerID | null) => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: {
+                ...currentState.draft,
+                runnerName: value,
               },
             }
           : currentState,

@@ -171,6 +171,7 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 	cloned := &interfaces.FactoryConfig{
 		Name:             cfg.Name,
 		Project:          cfg.Project,
+		Runner:           cfg.Runner,
 		Guards:           cloneFactoryGuardConfigs(cfg.Guards),
 		InputTypes:       cloneInputTypeConfigs(cfg.InputTypes),
 		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),
@@ -1123,6 +1124,7 @@ type workstationFrontmatter struct {
 	Kind             interfaces.WorkstationKind   `yaml:"behavior,omitempty"`
 	Type             string                       `yaml:"type,omitempty"`
 	Worker           string                       `yaml:"worker,omitempty"`
+	Runner           string                       `yaml:"runner,omitempty"`
 	PromptFile       string                       `yaml:"promptFile,omitempty"`
 	OutputSchema     string                       `yaml:"outputSchema,omitempty"`
 	Limits           workstationLimitsFrontmatter `yaml:"limits,omitempty"`
@@ -1183,6 +1185,7 @@ func workstationFrontmatterForExpansion(def interfaces.FactoryWorkstationConfig)
 		Kind:             behavior,
 		Type:             def.Type,
 		Worker:           def.WorkerTypeName,
+		Runner:           def.Runner,
 		PromptFile:       def.PromptFile,
 		OutputSchema:     def.OutputSchema,
 		Limits:           workstationLimitsFrontmatter{MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime},

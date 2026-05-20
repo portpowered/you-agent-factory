@@ -6,6 +6,7 @@ import "encoding/json"
 type FactoryConfig struct {
 	Name             string                          `json:"name"`
 	Project          string                          `json:"project,omitempty"`
+	Runner           string                          `json:"runner,omitempty"`
 	Guards           []FactoryGuardConfig            `json:"guards,omitempty"`
 	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
 	WorkTypes        []WorkTypeConfig                `json:"work_types"`
@@ -122,6 +123,7 @@ type FactoryWorkstationConfig struct {
 	Kind                  WorkstationKind   `json:"behavior,omitempty" yaml:"behavior,omitempty"`
 	Type                  string            `json:"type,omitempty" yaml:"type,omitempty"`
 	WorkerTypeName        string            `json:"worker" yaml:"worker,omitempty"`
+	Runner                string            `json:"runner,omitempty" yaml:"runner,omitempty"`
 	PromptFile            string            `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string            `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
 	Timeout               string            `json:"timeout,omitempty" yaml:"timeout,omitempty"`

@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - baselineCapabilities
+  - optionalCapabilities
+properties:
+  baselineCapabilities:
+    type: array
+    items:
+      $ref: './FactoryWorldRunnerBaselineCapability.yaml'
+  optionalCapabilities:
+    type: array
+    items:
+      $ref: './FactoryWorldRunnerOptionalCapabilitySupportView.yaml'

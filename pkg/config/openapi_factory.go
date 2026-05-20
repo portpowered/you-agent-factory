@@ -147,6 +147,9 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if !ok {
 		return v, nil
 	}
+	if err := normalizeFactoryEnumObjectFieldWithNormalizer(root, "runner", "runner", interfaces.StrictPublicFactoryRunnerID); err != nil {
+		return nil, err
+	}
 	if err := normalizeFactoryGuardEntries(root); err != nil {
 		return nil, err
 	}
@@ -252,6 +255,9 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "behavior", fmt.Sprintf("workstations[%d].behavior", i), func(value string) string {
 			return interfaces.StrictPublicWorkstationKind(value)
 		}); err != nil {
+			return err
+		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "runner", fmt.Sprintf("workstations[%d].runner", i), interfaces.StrictPublicFactoryRunnerID); err != nil {
 			return err
 		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {

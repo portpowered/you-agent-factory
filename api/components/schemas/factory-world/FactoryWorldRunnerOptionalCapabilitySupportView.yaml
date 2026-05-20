@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+required:
+  - capability
+  - status
+properties:
+  capability:
+    $ref: './FactoryWorldRunnerOptionalCapability.yaml'
+  status:
+    $ref: './FactoryWorldRunnerOptionalCapabilityStatus.yaml'
+  detail:
+    type: string

@@ -145,6 +145,7 @@ Each `workType` and `state` pair becomes a place named
 | `workTypes` | Yes | Work categories and lifecycle states. Workstation input and output places must reference these names. |
 | `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
 | `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
+| `runner` | No | Factory-level default runner ID. Supported built-ins are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
 | `workers` | Yes | Worker identities that workstations reference by `name`; see [Workers](workers.md) for worker runtime fields. |
 | `workstations` | Yes | Dispatch steps that consume input states and produce output states; see [Workstations](workstations.md) for the workstation field contract. |
 
@@ -267,6 +268,9 @@ Keep worker runtime fields, provider values, script commands, permission
 settings, and split-versus-inline worker guidance in
 [Workers](workers.md). This work guide only owns the fact that `workers` is a
 top-level collection and that workstation routing refers to workers by name.
+Runner precedence across those surfaces is explicit: workstation `runner`,
+then factory `runner`, then legacy worker `modelProvider`, then the default
+`codex` runner.
 
 ## Workstations
 

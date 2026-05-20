@@ -25,6 +25,9 @@ properties:
   worker:
     type: string
     description: Name of a worker declared in the workers list.
+  runner:
+    $ref: './RunnerID.yaml'
+    description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner.
   promptFile:
     type: string
     description: Path to a prompt template file loaded for model-oriented workstation execution.

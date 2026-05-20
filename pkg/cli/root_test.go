@@ -1171,6 +1171,28 @@ func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
 	}
 }
 
+func TestRunCommand_WithRunnerFlag(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	flag := runCmd.Flags().Lookup("runner")
+	if flag == nil {
+		t.Fatal("expected --runner flag on run command")
+	}
+	if !strings.Contains(flag.Usage, "factory-level runner override") {
+		t.Fatalf("runner usage = %q, want factory-level override guidance", flag.Usage)
+	}
+	if !strings.Contains(flag.Usage, interfaces.RunnerIDCursorCLI) || !strings.Contains(flag.Usage, interfaces.RunnerIDOpenCode) {
+		t.Fatalf("runner usage = %q, want supported runner IDs listed", flag.Usage)
+	}
+	if !strings.Contains(runCmd.Long, "--runner") {
+		t.Fatal("expected run command long help text to mention --runner")
+	}
+}
+
 func TestRunCommand_RetiredMockExecutionAliasRejected(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -1467,6 +1489,32 @@ func TestRunCommand_WithMockWorkersFlagMapsToRunConfig(t *testing.T) {
 	}
 	if got.MockWorkersConfigPath != "mock-workers.json" {
 		t.Fatalf("mock workers config path = %q, want %q", got.MockWorkersConfigPath, "mock-workers.json")
+	}
+}
+
+func TestRunCommand_RunnerFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--runner", interfaces.RunnerIDGemini})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --runner: %v", err)
+	}
+
+	if got.RunnerID != interfaces.RunnerIDGemini {
+		t.Fatalf("runner = %q, want %q", got.RunnerID, interfaces.RunnerIDGemini)
 	}
 }
 

@@ -1,6 +1,7 @@
 package workers
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,10 +58,34 @@ type codexProviderBehavior struct {
 	logger logging.Logger
 }
 
+type geminiProviderBehavior struct {
+	logger logging.Logger
+}
+
+type kiroProviderBehavior struct {
+	logger logging.Logger
+}
+
+type cursorProviderBehavior struct {
+	logger logging.Logger
+}
+
+type openCodeProviderBehavior struct {
+	logger logging.Logger
+}
+
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(ModelProviderCodex):
 		return codexProviderBehavior{logger: logger}
+	case string(ModelProviderGemini):
+		return geminiProviderBehavior{logger: logger}
+	case string(ModelProviderKiro):
+		return kiroProviderBehavior{logger: logger}
+	case string(ModelProviderCursor):
+		return cursorProviderBehavior{logger: logger}
+	case string(ModelProviderOpenCode):
+		return openCodeProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -70,6 +95,14 @@ func providerBehaviorForErrorClassification(provider string) providerBehavior {
 	switch provider {
 	case string(ModelProviderClaude):
 		return claudeProviderBehavior{}
+	case string(ModelProviderGemini):
+		return geminiProviderBehavior{}
+	case string(ModelProviderKiro):
+		return kiroProviderBehavior{}
+	case string(ModelProviderCursor):
+		return cursorProviderBehavior{}
+	case string(ModelProviderOpenCode):
+		return openCodeProviderBehavior{}
 	default:
 		return codexProviderBehavior{}
 	}
@@ -135,15 +168,14 @@ func (b claudeProviderBehavior) FormatTimeoutFailure(result CommandResult) strin
 }
 
 func (b codexProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateCodexOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
 	logger := logging.EnsureLogger(b.logger)
 	args := []string{"exec"} // quiet mode for non-interactive use
 	if skipPermissions {
 		logger.Debug("inferencer: enabling skip permissions flag for codex dispatcher")
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	}
-
-	if req.Worktree != "" {
-		logger.Debug("inferencer: codex passed a worktree argument, unsupported ignoring silently", "worktree", req.Worktree)
 	}
 
 	if req.WorkingDirectory != "" {
@@ -208,6 +240,271 @@ func (b codexProviderBehavior) FormatTimeoutFailure(result CommandResult) string
 		return codexError
 	}
 	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
+func (b geminiProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateGeminiOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"--prompt", req.UserMessage}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		args = append(args, "--resume", req.SessionID)
+	}
+	if skipPermissions {
+		args = append(args, "--approval-mode", "yolo", "--sandbox", "false")
+	}
+	return args, nil
+}
+
+func (b geminiProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b geminiProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+}
+
+func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		return interfaces.ProviderErrorTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		return interfaces.ProviderErrorTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		return interfaces.ProviderErrorTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.ProviderErrorTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.ProviderErrorTypeTimeout
+	default:
+		return interfaces.ProviderErrorTypeUnknown
+	}
+}
+
+func (b geminiProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
+func (b kiroProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateKiroOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"chat", "--no-interactive"}
+	if req.SessionID != "" {
+		args = append(args, "--resume-id", req.SessionID)
+	}
+	if skipPermissions {
+		args = append(args, "--trust-all-tools")
+	}
+	if prompt := buildKiroPrompt(req); prompt != "" {
+		args = append(args, prompt)
+	}
+	return args, nil
+}
+
+func (b kiroProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b kiroProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+}
+
+func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		return interfaces.ProviderErrorTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		return interfaces.ProviderErrorTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		return interfaces.ProviderErrorTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.ProviderErrorTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.ProviderErrorTypeTimeout
+	default:
+		return interfaces.ProviderErrorTypeUnknown
+	}
+}
+
+func (b kiroProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
+func (b cursorProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateCursorOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"--print", req.UserMessage, "--output-format", "text"}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		args = append(args, "--resume", req.SessionID)
+	}
+	if skipPermissions {
+		args = append(args, "--force")
+	}
+	return args, nil
+}
+
+func (b cursorProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b cursorProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return codexProviderBehavior{}.FormatExitFailure(provider, result)
+}
+
+func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	return codexProviderBehavior{}.ClassifyExitFailure(result)
+}
+
+func (b cursorProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
+func (b openCodeProviderBehavior) BuildArgs(req interfaces.ProviderInferenceRequest, skipPermissions bool) ([]string, error) {
+	if err := validateOpenCodeOptionalCapabilities(req); err != nil {
+		return nil, err
+	}
+	args := []string{"run"}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		args = append(args, "--session", req.SessionID)
+	}
+	if req.WorkingDirectory != "" {
+		args = append(args, "--dir", req.WorkingDirectory)
+	}
+	if skipPermissions {
+		args = append(args, "--dangerously-skip-permissions")
+	}
+	args = append(args, req.UserMessage)
+	return args, nil
+}
+
+func (b openCodeProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
+func (b openCodeProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
+	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
+}
+
+func (b openCodeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		return interfaces.ProviderErrorTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		return interfaces.ProviderErrorTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		return interfaces.ProviderErrorTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.ProviderErrorTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.ProviderErrorTypeTimeout
+	default:
+		return interfaces.ProviderErrorTypeUnknown
+	}
+}
+
+func (b openCodeProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
+	return formatProviderOutputOrDefault(result, "execution timeout")
+}
+
+func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	if req.SessionID != "" {
+		return errors.New("session resume is not supported by the gemini runner in v1")
+	}
+	return nil
+}
+
+func validateCodexOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityWorktree {
+			return errors.New("worktree selection is not supported by the codex runner in v1")
+		}
+	}
+	if req.Worktree != "" {
+		return errors.New("worktree selection is not supported by the codex runner in v1")
+	}
+	return nil
+}
+
+func validateKiroOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the kiro runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the kiro runner in v1",
+		interfaces.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the kiro runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the kiro runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	return nil
+}
+
+func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the cursor-cli runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the cursor-cli runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the cursor-cli runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	return nil
+}
+
+func validateOpenCodeOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+	unsupported := map[interfaces.RunnerOptionalCapability]string{
+		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the opencode runner in v1",
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if message, blocked := unsupported[capability]; blocked {
+			return errors.New(message)
+		}
+	}
+	return nil
+}
+
+func buildKiroPrompt(req interfaces.ProviderInferenceRequest) string {
+	systemPrompt := strings.TrimSpace(req.SystemPrompt)
+	userMessage := strings.TrimSpace(req.UserMessage)
+	switch {
+	case systemPrompt == "":
+		return userMessage
+	case userMessage == "":
+		return systemPrompt
+	default:
+		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
+	}
 }
 
 func buildBaseProviderCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {

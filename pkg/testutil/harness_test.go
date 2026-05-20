@@ -2,6 +2,8 @@ package testutil_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -79,6 +81,56 @@ func TestMockWorker_AsyncDispatch(t *testing.T) {
 	// Mock should have been invoked by the worker pool (2 transitions in pipeline).
 	if mock.CallCount() != 2 {
 		t.Errorf("expected mock called 2 times (step1 + finish), got %d", mock.CallCount())
+	}
+}
+
+func TestMockWorker_AllowsBuiltInRunnerConfigWithoutLocalBinary(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "process",
+			WorkerTypeName: "worker",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		}},
+	}
+	dir := testutil.ScaffoldFactoryDir(t, cfg)
+	workerDir := filepath.Join(dir, interfaces.WorkersDir, "worker")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll worker dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workerDir, interfaces.FactoryAgentsFileName), []byte(`---
+type: MODEL_WORKER
+model: gpt-5-codex
+modelProvider: codex
+stopToken: COMPLETE
+---
+Process the task.
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile AGENTS.md: %v", err)
+	}
+
+	h := testutil.NewServiceTestHarness(t, dir)
+	mock := h.MockWorker("worker", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+
+	if err := h.SubmitWork("task", []byte(`{"title":"uses mocked runner"}`)); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
+	h.RunUntilComplete(t, 5*time.Second)
+
+	h.Assert().
+		HasTokenInPlace("task:done").
+		HasNoTokenInPlace("task:init")
+
+	if mock.CallCount() != 1 {
+		t.Fatalf("expected mocked worker call count 1, got %d", mock.CallCount())
 	}
 }
 

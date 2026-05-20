@@ -23,6 +23,10 @@ import type {
 } from "../detail-card-types";
 import { formatEditableOverwriteFieldLabels } from "../editable-workstation-overwrite-fields";
 import type { getWorkstationDetailMessages } from "../messages";
+import {
+  EditableConfigurationRunnerField,
+  resolveWorkstationSummaryRunnerValue,
+} from "../workstation-runner-field";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
@@ -132,6 +136,11 @@ function EditableConfigurationReadyForm({
             />
           }
           label={messages.workerFieldLabel}
+        />
+        <EditableConfigurationField
+          fieldId="editable-workstation-runner"
+          input={<EditableConfigurationRunnerField messages={messages} state={state} />}
+          label={messages.runnerFieldLabel}
         />
       </div>
       <EditableConfigurationField
@@ -408,6 +417,7 @@ function EditableConfigurationWorkerInput({
 
 export function WorkstationSummary({
   activeRunCount,
+  editableConfigurationState,
   historyCount,
   historyLabel,
   messages,
@@ -422,6 +432,13 @@ export function WorkstationSummary({
         <WorkstationSummaryItem
           label={messages.workerTypeLabel}
           value={selectedNode.worker_type || messages.unknownWorkerTypeValue}
+        />
+        <WorkstationSummaryItem
+          label={messages.selectedRunnerLabel}
+          value={resolveWorkstationSummaryRunnerValue(
+            editableConfigurationState,
+            messages,
+          )}
         />
         <WorkstationSummaryItem
           label={messages.kindLabel}

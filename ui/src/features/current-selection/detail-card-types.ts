@@ -20,6 +20,7 @@ import type { EditableWorkstationValues } from "../current-factory-definition/wo
 import type { WorkstationDetailMessages } from "./messages";
 import type { CurrentSelectionDetailMessages } from "./messages/current-selection-detail";
 import type { LoadableProviderSessionRef } from "./provider-session-details";
+import type { RunnerID } from "./runner-metadata";
 import type { SelectedWorkItemExecutionDetails } from "./state/executionDetails";
 import type { DashboardWorkItemSelection, StatePositionWorkItem } from "./types";
 
@@ -163,7 +164,7 @@ export type EditableWorkstationPromptValidationState =
       status: "ready";
     };
 
-export type EditableWorkstationOverwriteField = "prompt" | "worker";
+export type EditableWorkstationOverwriteField = "prompt" | "runner" | "worker";
 
 export type EditableWorkstationWorkerOptionsState =
   | { status: "ready"; options: string[] }
@@ -177,6 +178,7 @@ export type EditableWorkstationConfigurationState =
   | {
       draft: {
         prompt: string;
+        runnerName: RunnerID | null;
         workerName: string;
       };
       hasValidationErrors: boolean;
@@ -184,6 +186,7 @@ export type EditableWorkstationConfigurationState =
       isDirty: boolean;
       markChangesSaved: () => void;
       onPromptChange: (value: string) => void;
+      onRunnerChange: (value: RunnerID | null) => void;
       onWorkerChange: (value: string) => void;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;
@@ -216,6 +219,7 @@ export interface WorkstationActiveWorkListProps {
 
 export interface WorkstationSummaryProps {
   activeRunCount: number;
+  editableConfigurationState?: EditableWorkstationConfigurationState;
   historyCount: number;
   historyLabel: string;
   messages: WorkstationDetailMessages;

@@ -570,12 +570,34 @@ export interface components {
             exitCode?: number;
             failureType?: string;
         };
+        FactoryWorldSelectedRunnerView: {
+            runnerId?: components["schemas"]["RunnerID"];
+            displayName?: string;
+            selectionSource?: components["schemas"]["RunnerSelectionSource"];
+            capabilities?: components["schemas"]["FactoryWorldRunnerCapabilitiesView"];
+        };
+        /** @enum {string} */
+        FactoryWorldRunnerBaselineCapability: "prompt_submission" | "tool_execution";
+        /** @enum {string} */
+        FactoryWorldRunnerOptionalCapability: "image_input" | "session_resume" | "structured_output" | "working_directory" | "worktree";
+        /** @enum {string} */
+        FactoryWorldRunnerOptionalCapabilityStatus: "supported" | "unsupported";
+        FactoryWorldRunnerOptionalCapabilitySupportView: {
+            capability: components["schemas"]["FactoryWorldRunnerOptionalCapability"];
+            status: components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
+            detail?: string;
+        };
+        FactoryWorldRunnerCapabilitiesView: {
+            baselineCapabilities: components["schemas"]["FactoryWorldRunnerBaselineCapability"][];
+            optionalCapabilities: components["schemas"]["FactoryWorldRunnerOptionalCapabilitySupportView"][];
+        };
         FactoryWorldWorkstationRequestCountView: {
             dispatchedCount: number;
             respondedCount: number;
             erroredCount: number;
         };
         FactoryWorldWorkstationRequestRequestView: {
+            runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
             startedAt?: string;
             inputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
             inputWorkTypeIds?: string[];
@@ -586,6 +608,7 @@ export interface components {
             scriptRequest?: components["schemas"]["FactoryWorldScriptRequestView"];
         };
         FactoryWorldWorkstationRequestResponseView: {
+            runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
             outcome?: string;
             feedback?: string;
             failureReason?: string;
@@ -657,6 +680,8 @@ export interface components {
         DispatchRequestEventMetadata: {
             /** @description Stable replay correlation key for recorded dispatch reconstruction. */
             replayKey?: string;
+            runnerId?: components["schemas"]["RunnerID"];
+            runnerSelectionSource?: components["schemas"]["RunnerSelectionSource"];
         };
         RunRequestEventPayload: {
             /** Format: date-time */
@@ -1071,6 +1096,8 @@ export interface components {
             name: components["schemas"]["FactoryName"];
             /** @description Factory identifier used as the factory-level template context fallback. */
             id?: string;
+            /** @description Default runner selection for the factory when a workstation does not declare its own runner override. */
+            runner?: components["schemas"]["RunnerID"];
             /** @description Directory that contained the factory.json used for this serialized runtime config. */
             factoryDirectory?: string;
             /** @description Original source directory for record/replay and drift diagnostics. */
@@ -1221,6 +1248,16 @@ export interface components {
          * @enum {string}
          */
         WorkerProvider: "SCRIPT_WRAP";
+        /**
+         * @description Stable built-in runner identifiers supported by factory and workstation runner selection.
+         * @enum {string}
+         */
+        RunnerID: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode";
+        /**
+         * @description Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+         * @enum {string}
+         */
+        RunnerSelectionSource: "workstation" | "factory" | "legacy_provider" | "default";
         /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
         Workstation: {
             /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */
@@ -1233,6 +1270,8 @@ export interface components {
             type?: components["schemas"]["WorkstationType"];
             /** @description Name of a worker declared in the workers list. */
             worker: string;
+            /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
+            runner?: components["schemas"]["RunnerID"];
             /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
             promptFile?: string;
             /** @description JSON schema string used to validate or parse structured model output when configured. */

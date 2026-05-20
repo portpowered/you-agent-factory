@@ -1,0 +1,4 @@
+type: string
+enum:
+  - prompt_submission
+  - tool_execution

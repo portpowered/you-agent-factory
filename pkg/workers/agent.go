@@ -18,7 +18,7 @@ import (
 // It reads prompt/output inputs resolved by WorkstationExecutor, calls the
 // configured Provider for inference, and maps the response to a WorkResult.
 type AgentExecutor struct {
-	provider      Provider
+	runner        Runner
 	runtimeConfig interfaces.RuntimeDefinitionLookup
 	logger        logging.Logger
 	retryConfig   providerRetryConfig
@@ -37,8 +37,14 @@ func WithLogger(logger logging.Logger) AgentExecutorOption {
 
 // NewAgentExecutor creates an AgentExecutor from runtime-loaded config and a Provider.
 func NewAgentExecutor(runtimeConfig interfaces.RuntimeDefinitionLookup, provider Provider, opts ...AgentExecutorOption) *AgentExecutor {
+	return NewAgentExecutorWithRunner(runtimeConfig, providerRunnerAdapter{inner: provider}, opts...)
+}
+
+// NewAgentExecutorWithRunner creates an AgentExecutor from runtime-loaded config
+// and the shared runner execution contract.
+func NewAgentExecutorWithRunner(runtimeConfig interfaces.RuntimeDefinitionLookup, runner Runner, opts ...AgentExecutorOption) *AgentExecutor {
 	ae := &AgentExecutor{
-		provider:      provider,
+		runner:        runner,
 		runtimeConfig: runtimeConfig,
 		logger:        logging.NoopLogger{},
 		retryConfig:   newProviderRetryConfig(),
@@ -146,24 +152,62 @@ func agentWorkMetrics(start time.Time, retryCount int) interfaces.WorkMetrics {
 
 func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig) interfaces.ProviderInferenceRequest {
 	req := interfaces.ProviderInferenceRequest{
-		Dispatch:         interfaces.CloneWorkDispatch(request.Dispatch),
-		WorkerType:       request.WorkerType,
-		WorkstationType:  inferenceWorkstationType(request),
-		ProjectID:        request.ProjectID,
-		InputTokens:      cloneRawInputTokens(request.InputTokens),
-		SystemPrompt:     request.SystemPrompt,
-		UserMessage:      request.UserMessage,
-		OutputSchema:     request.OutputSchema,
-		EnvVars:          cloneEnvVars(request.EnvVars),
-		Worktree:         request.Worktree,
-		WorkingDirectory: request.WorkingDirectory,
+		Dispatch:                     interfaces.CloneWorkDispatch(request.Dispatch),
+		WorkerType:                   request.WorkerType,
+		WorkstationType:              inferenceWorkstationType(request),
+		RunnerID:                     request.RunnerID,
+		ProjectID:                    request.ProjectID,
+		InputTokens:                  cloneRawInputTokens(request.InputTokens),
+		SystemPrompt:                 request.SystemPrompt,
+		UserMessage:                  request.UserMessage,
+		OutputSchema:                 request.OutputSchema,
+		ToolExecutionMode:            interfaces.RunnerToolExecutionModeRequired,
+		RequiredOptionalCapabilities: requiredRunnerOptionalCapabilities(request),
+		EnvVars:                      cloneEnvVars(request.EnvVars),
+		Worktree:                     request.Worktree,
+		WorkingDirectory:             request.WorkingDirectory,
 	}
 	if workerDef != nil {
 		req.Model = workerDef.Model
-		req.ModelProvider = workerDef.ModelProvider
+		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, interfaces.ResolvedRunnerSelection{
+			RunnerID: request.RunnerID,
+			Source:   request.RunnerSelectionSource,
+		})
 		req.SessionID = workerDef.SessionID
+		if workerDef.SessionID != "" {
+			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, interfaces.RunnerOptionalCapabilitySessionResume)
+		}
 	}
 	return req
+}
+
+func modelProviderForExecution(workerModelProvider string, selection interfaces.ResolvedRunnerSelection) string {
+	if selection.Source == interfaces.RunnerSelectionSourceWorkstation || selection.Source == interfaces.RunnerSelectionSourceFactory {
+		if provider := modelProviderForRunnerID(selection.RunnerID); provider != "" {
+			return provider
+		}
+	}
+	if workerModelProvider != "" {
+		return workerModelProvider
+	}
+	return modelProviderForRunnerID(selection.RunnerID)
+}
+
+func modelProviderForRunnerID(runnerID string) string {
+	switch interfaces.NormalizeRunnerID(runnerID) {
+	case interfaces.RunnerIDCodex:
+		return string(ModelProviderCodex)
+	case interfaces.RunnerIDGemini:
+		return string(ModelProviderGemini)
+	case interfaces.RunnerIDKiro:
+		return string(ModelProviderKiro)
+	case interfaces.RunnerIDCursorCLI:
+		return string(ModelProviderCursor)
+	case interfaces.RunnerIDOpenCode:
+		return string(ModelProviderOpenCode)
+	default:
+		return ""
+	}
 }
 
 func inferenceWorkstationType(request interfaces.WorkstationExecutionRequest) string {
@@ -231,7 +275,7 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 	retryCount := 0
 
 	for {
-		resp, err := ae.provider.Infer(ctx, req)
+		resp, err := ae.runner.Execute(ctx, req)
 		if err == nil {
 			return resp, retryCount, nil
 		}
@@ -263,6 +307,56 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 			return interfaces.InferenceResponse{}, retryCount, err
 		}
 	}
+}
+
+type providerRunnerAdapter struct {
+	inner Provider
+}
+
+// RunnerFromProvider adapts a legacy provider implementation onto the shared
+// runner execution contract.
+func RunnerFromProvider(provider Provider) Runner {
+	return providerRunnerAdapter{inner: provider}
+}
+
+func (a providerRunnerAdapter) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+	if a.inner == nil {
+		return interfaces.RunnerExecutionResult{}, NewProviderError(
+			interfaces.ProviderErrorTypeMisconfigured,
+			"runner requires a provider implementation",
+			nil,
+		)
+	}
+	return a.inner.Infer(ctx, request)
+}
+
+func requiredRunnerOptionalCapabilities(request interfaces.WorkstationExecutionRequest) []interfaces.RunnerOptionalCapability {
+	capabilities := make([]interfaces.RunnerOptionalCapability, 0, 5)
+	if request.OutputSchema != "" {
+		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityStructuredOutput)
+	}
+	if request.WorkingDirectory != "" {
+		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorkingDirectory)
+	}
+	if request.Worktree != "" {
+		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorktree)
+	}
+	for _, token := range cloneInputTokens(request.InputTokens) {
+		if tokenHasImageContent(token) {
+			capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityImageInput)
+			break
+		}
+	}
+	return capabilities
+}
+
+func tokenHasImageContent(token interfaces.Token) bool {
+	for _, part := range token.Color.Content {
+		if part.Type == interfaces.WorkContentPartTypeImage {
+			return true
+		}
+	}
+	return false
 }
 
 // evaluateOutcome determines the WorkOutcome based on stop token evaluation.

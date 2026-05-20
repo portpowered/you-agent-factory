@@ -47,11 +47,13 @@ type RelationshipChangePayload struct {
 
 // WorkstationRequestPayload describes work and resources consumed by a dispatch.
 type WorkstationRequestPayload struct {
-	DispatchID   string                `json:"dispatch_id"`
-	TransitionID string                `json:"transition_id"`
-	Workstation  FactoryWorkstationRef `json:"workstation"`
-	Inputs       []WorkstationInput    `json:"inputs,omitempty"`
-	Resources    []FactoryResourceUnit `json:"resources,omitempty"`
+	DispatchID            string                `json:"dispatch_id"`
+	TransitionID          string                `json:"transition_id"`
+	Workstation           FactoryWorkstationRef `json:"workstation"`
+	RunnerID              string                `json:"runner_id,omitempty"`
+	RunnerSelectionSource RunnerSelectionSource `json:"runner_selection_source,omitempty"`
+	Inputs                []WorkstationInput    `json:"inputs,omitempty"`
+	Resources             []FactoryResourceUnit `json:"resources,omitempty"`
 }
 
 // WorkstationResponsePayload describes the result and outputs of a dispatch.
