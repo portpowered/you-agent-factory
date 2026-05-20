@@ -127,6 +127,9 @@ describe("verifyDashboardShellConsolidation", () => {
         .fn()
         .mockResolvedValue({ clientWidth: 1440, scrollWidth: 1440 }),
       getByRole: vi.fn((_role, options) => {
+        if (options?.name === "Work totals") {
+          return workTotalsCard;
+        }
         if (options?.name === "Infinite You bento board") {
           return board;
         }
@@ -146,7 +149,7 @@ describe("verifyDashboardShellConsolidation", () => {
     expect(page.getByRole).toHaveBeenCalledWith("region", {
       name: "Infinite You bento board",
     });
-    expect(board.getByRole).toHaveBeenCalledWith("article", {
+    expect(page.getByRole).toHaveBeenCalledWith("article", {
       name: "Work totals",
     });
     expect(board.getByRole).toHaveBeenCalledWith("button", {

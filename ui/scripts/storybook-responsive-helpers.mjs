@@ -26,6 +26,7 @@ export async function expectVisible(locator, label) {
       state: "visible",
       timeout: STORY_RENDER_TIMEOUT_MS,
     });
+    return;
   }
 
   if (!(await locator.isVisible())) {

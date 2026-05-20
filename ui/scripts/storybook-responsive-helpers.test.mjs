@@ -28,10 +28,10 @@ describe("storybook-responsive-helpers", () => {
       state: "visible",
       timeout: STORY_RENDER_TIMEOUT_MS,
     });
-    expect(locator.isVisible).toHaveBeenCalledTimes(1);
+    expect(locator.isVisible).not.toHaveBeenCalled();
   });
 
-  test("expectVisible rejects hidden locators with the assertion label", async () => {
+  test("expectVisible rejects minimal hidden locators with the assertion label", async () => {
     const locator = {
       isVisible: vi.fn().mockResolvedValue(false),
     };
@@ -39,6 +39,18 @@ describe("storybook-responsive-helpers", () => {
     await expect(
       expectVisible(locator, "Export action button"),
     ).rejects.toThrow("Export action button was not visible.");
+  });
+
+  test("expectVisible surfaces Playwright wait failures", async () => {
+    const locator = {
+      isVisible: vi.fn().mockResolvedValue(true),
+      waitFor: vi.fn().mockRejectedValue(new Error("locator timed out")),
+    };
+
+    await expect(
+      expectVisible(locator, "Export action button"),
+    ).rejects.toThrow("locator timed out");
+    expect(locator.isVisible).not.toHaveBeenCalled();
   });
 
   test("waitForStoryRegion resolves the named visible region", async () => {

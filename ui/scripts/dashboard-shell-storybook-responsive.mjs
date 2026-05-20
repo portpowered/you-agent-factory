@@ -59,7 +59,7 @@ export async function verifyDashboardShellConsolidation(
 ) {
   const toolbar = await waitForStoryRegion(page, "dashboard summary");
   const board = await waitForStoryRegion(page, "Infinite You bento board");
-  const workTotalsCard = board.getByRole("article", { name: "Work totals" });
+  const workTotalsCard = page.getByRole("article", { name: "Work totals" });
   const headerExportButton = toolbar.getByRole("button", {
     name: "Export PNG",
   });
