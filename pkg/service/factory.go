@@ -422,7 +422,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(ctx context.Context, fa
 		logger = zap.NewNop()
 	}
 
-	loadedFactoryCfg, err := factoryconfig.LoadRuntimeConfig(factoryDir, fs.cfg.WorkstationLoader)
+	loadedFactoryCfg, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
 	if err != nil {
 		return nil, fmt.Errorf("load factory config: %w", err)
 	}

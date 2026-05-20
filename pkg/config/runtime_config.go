@@ -62,20 +62,25 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 	if err != nil {
 		return nil, err
 	}
+	return LoadRuntimeConfigFromFactoryDir(resolvedFactoryDir, workstationLoader)
+}
 
-	factoryCfg, err := loadFactoryConfig(resolvedFactoryDir)
+// LoadRuntimeConfigFromFactoryDir reads one concrete factory directory without
+// following the current-factory pointer indirection used by workspace roots.
+func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error) {
+	factoryCfg, err := loadFactoryConfig(factoryDir)
 	if err != nil {
 		return nil, err
 	}
-	replacements, err := materializePortableBundledFiles(resolvedFactoryDir, factoryCfg)
+	replacements, err := materializePortableBundledFiles(factoryDir, factoryCfg)
 	if err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
-	if err := ApplySupportedPortableBundledFiles(resolvedFactoryDir, factoryCfg, false); err != nil {
+	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
 	inlineDefinitionsRequired := hasInlineRuntimeDefinitions(factoryCfg)
-	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(resolvedFactoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
+	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
 		RequireSplitDefinitions: inlineDefinitionsRequired,
 		WorkstationLoader:       workstationLoader,
 	})
@@ -83,7 +88,7 @@ func LoadRuntimeConfig(factoryDir string, workstationLoader WorkstationLoader) (
 		return nil, err
 	}
 
-	loaded, err := NewLoadedFactoryConfig(resolvedFactoryDir, factoryCfg, runtimeDefs)
+	loaded, err := NewLoadedFactoryConfig(factoryDir, factoryCfg, runtimeDefs)
 	if err != nil {
 		return nil, err
 	}

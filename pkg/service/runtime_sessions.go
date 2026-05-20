@@ -3,14 +3,43 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const defaultFactorySessionID = "~default"
+
+type FactorySessionTargetKind string
+
+const (
+	FactorySessionTargetKindDefault FactorySessionTargetKind = "default"
+	FactorySessionTargetKindNamed   FactorySessionTargetKind = "named"
+)
+
+type FactorySessionTargetRef struct {
+	Kind FactorySessionTargetKind
+	Name string
+}
+
+type FactorySessionTarget struct {
+	Ref        FactorySessionTargetRef
+	Label      string
+	FolderPath string
+	FactoryDir string
+	Project    string
+}
+
+type FactorySessionOpenResult struct {
+	SessionID string
+	Targets   []FactorySessionTarget
+}
 
 type liveFactorySession struct {
 	id     string
@@ -172,6 +201,35 @@ func (fs *FactoryService) openFactorySession(ctx context.Context, factoryDir str
 	return sessionID, nil
 }
 
+func (fs *FactoryService) OpenFactorySessionFromFolder(
+	ctx context.Context,
+	folderPath string,
+	target *FactorySessionTargetRef,
+) (*FactorySessionOpenResult, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("factory service is required")
+	}
+
+	targets, err := fs.discoverFactorySessionTargets(folderPath)
+	if err != nil {
+		return nil, err
+	}
+
+	selectedTarget, err := selectFactorySessionTarget(targets, target)
+	if err != nil {
+		return nil, err
+	}
+	if selectedTarget == nil {
+		return &FactorySessionOpenResult{Targets: cloneFactorySessionTargets(targets)}, nil
+	}
+
+	sessionID, err := fs.openFactorySession(ctx, selectedTarget.FactoryDir)
+	if err != nil {
+		return nil, err
+	}
+	return &FactorySessionOpenResult{SessionID: sessionID}, nil
+}
+
 func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *replacementFactoryRuntime) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
@@ -215,4 +273,164 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	}
 	fs.unregisterLiveSession(sessionID)
 	return nil
+}
+
+func (fs *FactoryService) discoverFactorySessionTargets(folderPath string) ([]FactorySessionTarget, error) {
+	resolvedFolder, err := resolveFactorySessionFolder(folderPath)
+	if err != nil {
+		return nil, err
+	}
+
+	targets := make([]FactorySessionTarget, 0, 4)
+	if target, ok := fs.loadFactorySessionTarget(resolvedFolder, resolvedFolder, FactorySessionTargetRef{
+		Kind: FactorySessionTargetKindDefault,
+	}); ok {
+		targets = append(targets, target)
+	}
+
+	childEntries, err := os.ReadDir(resolvedFolder)
+	if err != nil {
+		return nil, fmt.Errorf("read factory session folder %s: %w", resolvedFolder, err)
+	}
+	for _, entry := range childEntries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" {
+			continue
+		}
+		if err := factoryconfig.ValidateNamedFactoryName(name); err != nil {
+			continue
+		}
+		targetDir := filepath.Join(resolvedFolder, name)
+		target, ok := fs.loadFactorySessionTarget(resolvedFolder, targetDir, FactorySessionTargetRef{
+			Kind: FactorySessionTargetKindNamed,
+			Name: name,
+		})
+		if ok {
+			targets = append(targets, target)
+		}
+	}
+
+	sort.Slice(targets, func(i, j int) bool {
+		left := targets[i]
+		right := targets[j]
+		if left.Ref.Kind != right.Ref.Kind {
+			return left.Ref.Kind == FactorySessionTargetKindDefault
+		}
+		return left.Ref.Name < right.Ref.Name
+	})
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("folder %q does not expose any runnable factory targets", resolvedFolder)
+	}
+	return targets, nil
+}
+
+func (fs *FactoryService) loadFactorySessionTarget(
+	folderPath string,
+	factoryDir string,
+	ref FactorySessionTargetRef,
+) (FactorySessionTarget, bool) {
+	if fs == nil {
+		return FactorySessionTarget{}, false
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.cfg.WorkstationLoader)
+	if err != nil {
+		return FactorySessionTarget{}, false
+	}
+
+	label := "default"
+	if ref.Kind == FactorySessionTargetKindNamed {
+		label = ref.Name
+	}
+	project := ""
+	if cfg := loaded.FactoryConfig(); cfg != nil {
+		project = strings.TrimSpace(cfg.Project)
+		if project == "" {
+			project = strings.TrimSpace(cfg.Name)
+		}
+	}
+
+	return FactorySessionTarget{
+		Ref:        ref,
+		Label:      label,
+		FolderPath: folderPath,
+		FactoryDir: factoryDir,
+		Project:    project,
+	}, true
+}
+
+func resolveFactorySessionFolder(folderPath string) (string, error) {
+	trimmed := strings.TrimSpace(folderPath)
+	if trimmed == "" {
+		return "", fmt.Errorf("factory session folder is required")
+	}
+	resolved, err := filepath.Abs(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("resolve factory session folder %q: %w", folderPath, err)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", fmt.Errorf("stat factory session folder %q: %w", resolved, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("factory session folder %q must be a directory", resolved)
+	}
+	return resolved, nil
+}
+
+func selectFactorySessionTarget(
+	targets []FactorySessionTarget,
+	ref *FactorySessionTargetRef,
+) (*FactorySessionTarget, error) {
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("factory session target list is empty")
+	}
+	if ref == nil {
+		if len(targets) == 1 {
+			target := targets[0]
+			return &target, nil
+		}
+		return nil, nil
+	}
+
+	normalized := FactorySessionTargetRef{
+		Kind: ref.Kind,
+		Name: strings.TrimSpace(ref.Name),
+	}
+	switch normalized.Kind {
+	case FactorySessionTargetKindDefault:
+		normalized.Name = ""
+	case FactorySessionTargetKindNamed:
+		if normalized.Name == "" {
+			return nil, fmt.Errorf("named factory session target requires a name")
+		}
+	default:
+		return nil, fmt.Errorf("unsupported factory session target kind %q", normalized.Kind)
+	}
+
+	for i := range targets {
+		if targets[i].Ref == normalized {
+			target := targets[i]
+			return &target, nil
+		}
+	}
+	return nil, fmt.Errorf("factory session target %q was not found", factorySessionTargetDisplayName(normalized))
+}
+
+func factorySessionTargetDisplayName(ref FactorySessionTargetRef) string {
+	if ref.Kind == FactorySessionTargetKindDefault {
+		return "default"
+	}
+	return ref.Name
+}
+
+func cloneFactorySessionTargets(targets []FactorySessionTarget) []FactorySessionTarget {
+	if len(targets) == 0 {
+		return nil
+	}
+	cloned := make([]FactorySessionTarget, len(targets))
+	copy(cloned, targets)
+	return cloned
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -267,6 +268,256 @@ func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for restarted service shutdown")
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {
+	rootDir := t.TempDir()
+	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default alpha runtime")
+
+	result, err := svc.OpenFactorySessionFromFolder(context.Background(), rootDir, nil)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(single target): %v", err)
+	}
+	if result == nil || result.SessionID == "" {
+		t.Fatalf("single-target open result = %#v, want session id", result)
+	}
+	if len(result.Targets) != 0 {
+		t.Fatalf("single-target open returned picker targets = %#v, want none", result.Targets)
+	}
+	session := svc.sessionByID(result.SessionID)
+	if session == nil || session.handle == nil || session.handle.runtime == nil {
+		t.Fatalf("opened session %q was not registered", result.SessionID)
+	}
+	if session.handle.runtime.dir != alphaDir {
+		t.Fatalf("opened session runtime dir = %q, want %q", session.handle.runtime.dir, alphaDir)
+	}
+	if got := svc.sessions.count(); got != 2 {
+		t.Fatalf("live session count = %d, want 2", got)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_ReturnsTargetPickerMetadata(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	writeNamedFactoryFixture(t, rootDir, "beta")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+
+	result, err := svc.OpenFactorySessionFromFolder(context.Background(), rootDir, nil)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(multi target): %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected target picker result, got nil")
+	}
+	if result.SessionID != "" {
+		t.Fatalf("multi-target open returned session %q, want target picker", result.SessionID)
+	}
+	if len(result.Targets) != 3 {
+		t.Fatalf("target picker count = %d, want 3", len(result.Targets))
+	}
+
+	if got := result.Targets[0]; got.Ref.Kind != FactorySessionTargetKindDefault || got.Ref.Name != "" || got.Label != "default" || got.FactoryDir != rootDir || got.Project != "factory" {
+		t.Fatalf("default target = %#v, want default target rooted at %q", got, rootDir)
+	}
+	if got := result.Targets[1]; got.Ref.Kind != FactorySessionTargetKindNamed || got.Ref.Name != "alpha" || got.Label != "alpha" || got.FactoryDir != filepath.Join(rootDir, "alpha") || got.Project != "alpha" {
+		t.Fatalf("alpha target = %#v", got)
+	}
+	if got := result.Targets[2]; got.Ref.Kind != FactorySessionTargetKindNamed || got.Ref.Name != "beta" || got.Label != "beta" || got.FactoryDir != filepath.Join(rootDir, "beta") || got.Project != "beta" {
+		t.Fatalf("beta target = %#v", got)
+	}
+	if got := svc.sessions.count(); got != 1 {
+		t.Fatalf("target-picker flow mutated live sessions to %d, want 1", got)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_OpensExplicitDefaultAndNamedTargets(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+
+	defaultOpen, err := svc.OpenFactorySessionFromFolder(context.Background(), rootDir, &FactorySessionTargetRef{
+		Kind: FactorySessionTargetKindDefault,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(default): %v", err)
+	}
+	betaOpenOne, err := svc.OpenFactorySessionFromFolder(context.Background(), rootDir, &FactorySessionTargetRef{
+		Kind: FactorySessionTargetKindNamed,
+		Name: "beta",
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(beta one): %v", err)
+	}
+	betaOpenTwo, err := svc.OpenFactorySessionFromFolder(context.Background(), rootDir, &FactorySessionTargetRef{
+		Kind: FactorySessionTargetKindNamed,
+		Name: "beta",
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(beta two): %v", err)
+	}
+	if betaOpenOne.SessionID == betaOpenTwo.SessionID {
+		t.Fatalf("duplicate beta session ids = %q", betaOpenOne.SessionID)
+	}
+
+	defaultSession := svc.sessionByID(defaultOpen.SessionID)
+	betaSessionOne := svc.sessionByID(betaOpenOne.SessionID)
+	betaSessionTwo := svc.sessionByID(betaOpenTwo.SessionID)
+	if defaultSession == nil || defaultSession.handle == nil || defaultSession.handle.runtime == nil {
+		t.Fatalf("default target session %q was not registered", defaultOpen.SessionID)
+	}
+	if betaSessionOne == nil || betaSessionOne.handle == nil || betaSessionOne.handle.runtime == nil {
+		t.Fatalf("beta target session %q was not registered", betaOpenOne.SessionID)
+	}
+	if betaSessionTwo == nil || betaSessionTwo.handle == nil || betaSessionTwo.handle.runtime == nil {
+		t.Fatalf("beta target session %q was not registered", betaOpenTwo.SessionID)
+	}
+	if defaultSession.handle.runtime.dir != rootDir {
+		t.Fatalf("default target runtime dir = %q, want %q", defaultSession.handle.runtime.dir, rootDir)
+	}
+	if betaSessionOne.handle.runtime.dir != betaDir || betaSessionTwo.handle.runtime.dir != betaDir {
+		t.Fatalf("beta target runtime dirs = %q and %q, want %q", betaSessionOne.handle.runtime.dir, betaSessionTwo.handle.runtime.dir, betaDir)
+	}
+	if got := svc.sessions.count(); got != 4 {
+		t.Fatalf("live session count = %d, want 4", got)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_RejectsInvalidFolderAndTargetWithoutMutation(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	before := svc.sessions.count()
+
+	if _, err := svc.OpenFactorySessionFromFolder(context.Background(), filepath.Join(rootDir, "missing"), nil); err == nil || !strings.Contains(err.Error(), "stat factory session folder") {
+		t.Fatalf("OpenFactorySessionFromFolder(missing folder) error = %v, want folder stat failure", err)
+	}
+	if got := svc.sessions.count(); got != before {
+		t.Fatalf("missing-folder open mutated live sessions to %d, want %d", got, before)
+	}
+
+	if _, err := svc.OpenFactorySessionFromFolder(context.Background(), rootDir, &FactorySessionTargetRef{
+		Kind: FactorySessionTargetKindNamed,
+		Name: "missing",
+	}); err == nil || !strings.Contains(err.Error(), `factory session target "missing" was not found`) {
+		t.Fatalf("OpenFactorySessionFromFolder(missing target) error = %v, want missing-target failure", err)
+	}
+	if got := svc.sessions.count(); got != before {
+		t.Fatalf("missing-target open mutated live sessions to %d, want %d", got, before)
+	}
+
+	cancel()
+	select {
+	case err := <-runErrCh:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service shutdown")
 	}
 }
 
