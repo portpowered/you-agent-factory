@@ -2,6 +2,13 @@ import process from "node:process";
 import { chromium } from "playwright";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import {
+  expectNoHorizontalOverflow,
+  expectVisible,
+  OVERFLOW_TOLERANCE_PX,
+  STORY_RENDER_TIMEOUT_MS,
+  waitForStoryRegion,
+} from "./storybook-responsive-helpers.mjs";
+import {
   verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
@@ -9,11 +16,17 @@ import {
   verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
 
+export {
+  expectNoHorizontalOverflow,
+  expectVisible,
+  OVERFLOW_TOLERANCE_PX,
+  STORY_RENDER_TIMEOUT_MS,
+  waitForStoryRegion,
+} from "./storybook-responsive-helpers.mjs";
+
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const STORYBOOK_PORT = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const STORYBOOK_URL = `http://${STORYBOOK_HOST}:${STORYBOOK_PORT}`;
-const OVERFLOW_TOLERANCE_PX = 1;
-const STORY_RENDER_TIMEOUT_MS = 30000;
 
 const viewportChecks = [
   { height: 844, label: "mobile", width: 390 },
@@ -160,25 +173,6 @@ export async function waitForDialog(page, dialogName) {
   return dialog;
 }
 
-export async function waitForStoryRegion(page, regionName) {
-  const region = page.getByRole("region", { name: regionName });
-  await region.waitFor({ state: "visible" });
-  return region;
-}
-
-export async function expectNoHorizontalOverflow(page, label) {
-  const metrics = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-
-  if (metrics.scrollWidth > metrics.clientWidth + OVERFLOW_TOLERANCE_PX) {
-    throw new Error(
-      `${label} overflowed horizontally: scrollWidth=${metrics.scrollWidth}, clientWidth=${metrics.clientWidth}.`,
-    );
-  }
-}
-
 export async function expectDialogWithinViewport(dialog, viewport, label) {
   const box = await dialog.boundingBox();
 
@@ -196,19 +190,6 @@ export async function expectDialogWithinViewport(dialog, viewport, label) {
     throw new Error(
       `${label} dialog exceeded the ${viewport.label} viewport (${viewport.width}x${viewport.height}).`,
     );
-  }
-}
-
-export async function expectVisible(locator, label) {
-  if (typeof locator.waitFor === "function") {
-    await locator.waitFor({
-      state: "visible",
-      timeout: STORY_RENDER_TIMEOUT_MS,
-    });
-  }
-
-  if (!(await locator.isVisible())) {
-    throw new Error(`${label} was not visible.`);
   }
 }
 
