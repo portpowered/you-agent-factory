@@ -366,7 +366,7 @@ function diagnosticLabel(
   kind: string,
   messages: ReturnType<typeof getWorkstationDetailMessages>,
 ) {
-  return kind === "INVALID_SYNTAX"
+  return kind === "SYNTAX_ERROR"
     ? messages.editableConfigurationPromptSyntaxDiagnosticLabel
     : messages.editableConfigurationPromptVariableDiagnosticLabel;
 }

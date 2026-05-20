@@ -353,6 +353,49 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getAllByText("(index .Inputs 1)").length).toBeGreaterThan(0);
   });
 
+  it("labels syntax diagnostics separately from variable-access diagnostics", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ if .WorkID }} now.",
+          promptDiagnostics: [
+            {
+              endOffset: 18,
+              kind: "SYNTAX_ERROR",
+              message: "Unexpected EOF in if block.",
+              sourceText: "{{ if .WorkID }}",
+              startOffset: 5,
+            },
+          ],
+          validationErrors: {
+            prompt:
+              "Resolve the highlighted prompt diagnostics before saving this workstation.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    fireEvent.click(
+      within(editableConfigurationSection()).getByRole("button", {
+        name: "Expand editable configuration",
+      }),
+    );
+
+    expect(
+      screen.getByText("Template syntax: Unexpected EOF in if block."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Variable access: Unexpected EOF in if block."),
+    ).toBeNull();
+  });
+
   it("renders loading, empty, and error prompt variable help states explicitly", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
