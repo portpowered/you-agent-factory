@@ -291,16 +291,6 @@ function resolvePromptDiagnosticRange(
   >["promptDiagnostics"][number],
   diagnosticIndex: number,
 ) {
-  if (diagnostic.sourceText) {
-    const sourceTextIndex = nthIndexOf(prompt, diagnostic.sourceText, diagnosticIndex);
-    if (sourceTextIndex >= 0) {
-      return {
-        end: sourceTextIndex + diagnostic.sourceText.length,
-        start: sourceTextIndex,
-      };
-    }
-  }
-
   if (
     typeof diagnostic.startOffset === "number" &&
     typeof diagnostic.endOffset === "number"
@@ -309,6 +299,16 @@ function resolvePromptDiagnosticRange(
     const end = utf8ByteOffsetToCodeUnitIndex(prompt, diagnostic.endOffset + 1);
     if (start < end) {
       return { end, start };
+    }
+  }
+
+  if (diagnostic.sourceText) {
+    const sourceTextIndex = nthIndexOf(prompt, diagnostic.sourceText, diagnosticIndex);
+    if (sourceTextIndex >= 0) {
+      return {
+        end: sourceTextIndex + diagnostic.sourceText.length,
+        start: sourceTextIndex,
+      };
     }
   }
 

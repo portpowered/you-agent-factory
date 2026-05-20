@@ -48,7 +48,7 @@ const storyChecks = [
   },
   {
     assertions: verifyDashboardHeader,
-    id: "infinite-you-dashboard-dashboard-header--responsive-verification",
+    id: "infinite-you-workflow-dashboard--header-action-buttons-verification",
     label: "dashboard header",
   },
   {
@@ -210,6 +210,7 @@ export async function expectVisible(locator, label) {
       state: "visible",
       timeout: STORY_RENDER_TIMEOUT_MS,
     });
+    return;
   }
 
   if (!(await locator.isVisible())) {
@@ -350,18 +351,17 @@ export async function expectOrderedLeftEdges(locators, label) {
 }
 
 export async function verifyDashboardHeader(page, _dialog, viewport) {
-  const toolbar = await waitForStoryRegion(page, "dashboard summary");
-  const heading = toolbar.getByRole("heading", { name: "Infinite You" });
+  const heading = page.getByRole("heading", { name: "Infinite You" });
   const hiddenWordmark = heading.getByText("Infinite You");
-  const slider = toolbar.getByRole("slider", { name: "Timeline tick" });
-  const streamStatus = toolbar.getByRole("status", {
+  const slider = page.getByRole("slider", { name: "Timeline tick" });
+  const streamStatus = page.getByRole("status", {
     name: /Infinite You event stream (connecting|live)/,
   });
-  const currentTick = page.getByText("Tick 5 of 5");
-  const currentButton = toolbar.getByRole("button", {
+  const currentTick = page.getByText(/Tick 5 of 5/).first();
+  const currentButton = page.getByRole("button", {
     name: "Return to current tick",
   });
-  const exportButton = toolbar.getByRole("button", { name: "Export PNG" });
+  const exportButton = page.getByRole("button", { name: "Export PNG" });
 
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(hiddenWordmark, "Accessible Infinite You wordmark");

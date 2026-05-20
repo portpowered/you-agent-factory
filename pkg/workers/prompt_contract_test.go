@@ -135,6 +135,29 @@ func TestValidatePromptTemplate_RejectsTemplatesThatRuntimeWouldFailToExecute(t 
 	}
 }
 
+func TestValidatePromptTemplate_UsesOneBasedOffsetsForRuntimeExecutionDiagnostics(t *testing.T) {
+	result := ValidatePromptTemplate(`x{{ index .Context.Env 0 }}`, 1)
+
+	if result.Valid {
+		t.Fatalf("Valid = true, diagnostics = %#v", result.Diagnostics)
+	}
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v, want 1", result.Diagnostics)
+	}
+
+	diagnostic := result.Diagnostics[0]
+	if diagnostic.SourceText != `index .Context.Env 0` {
+		t.Fatalf("diagnostic source = %q, want %q", diagnostic.SourceText, `index .Context.Env 0`)
+	}
+	if diagnostic.StartOffset != 5 || diagnostic.EndOffset != 24 {
+		t.Fatalf(
+			"diagnostic offsets = (%d, %d), want (5, 24)",
+			diagnostic.StartOffset,
+			diagnostic.EndOffset,
+		)
+	}
+}
+
 func containsText(have, want string) bool {
 	return strings.Contains(have, want)
 }

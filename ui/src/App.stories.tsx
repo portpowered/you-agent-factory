@@ -1297,9 +1297,9 @@ export const CurrentSelectionPromptHintVerification = {
       fetchMocks: [
         {
           method: "GET",
-          path: "/factory/~current",
+          path: "/factory/~current/editable-definition",
           response: {
-            body: editableConfigurationFactoryDefinition,
+            body: editableConfigurationDocument,
           },
         },
         {

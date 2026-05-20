@@ -744,10 +744,11 @@ func promptTemplateExecutionDiagnostic(err error, tmpl string) (PromptTemplateDi
 	endOffset := 0
 	if sourceText != "" {
 		if index := strings.Index(tmpl, sourceText); index >= 0 {
-			startOffset = index
-			endOffset = index + len(sourceText) - 1
+			startOffset = index + 1
+			endOffset = index + len(sourceText)
 		} else {
-			endOffset = len(sourceText) - 1
+			startOffset = 1
+			endOffset = len(sourceText)
 		}
 	}
 	if path == "" {
