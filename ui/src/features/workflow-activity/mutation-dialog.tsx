@@ -9,7 +9,7 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { getWorkflowActivityGraphImportMessages } from "./messages/graph-import";
 
 const DIALOG_OVERLAY_CLASS =
@@ -17,9 +17,9 @@ const DIALOG_OVERLAY_CLASS =
 const DIALOG_PANEL_CLASS =
   "pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-af-overlay/12 bg-af-surface/96 shadow-af-panel";
 const DIALOG_HEADER_CLASS = "flex items-start justify-between gap-4";
-const DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const DIALOG_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_BODY_TEXT_CLASS);
-const DIALOG_EYEBROW_CLASS = cx(
+const DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
+const DIALOG_DESCRIPTION_CLASS = cn("m-0", DASHBOARD_BODY_TEXT_CLASS);
+const DIALOG_EYEBROW_CLASS = cn(
   "mb-0 text-xs font-bold uppercase tracking-[0.16em] text-af-accent",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
@@ -85,7 +85,7 @@ export function DashboardMutationDialog({
 
   return (
     <div
-      className={cx(
+      className={cn(
         DIALOG_OVERLAY_CLASS,
         "pointer-events-none relative",
         overlayClassName,
@@ -107,7 +107,7 @@ export function DashboardMutationDialog({
         role="dialog"
       >
         <div
-          className={cx(
+          className={cn(
             DIALOG_CONTENT_CLASS,
             media ? DIALOG_CONTENT_WITH_MEDIA_CLASS : undefined,
           )}
@@ -178,7 +178,7 @@ export function DashboardMessagePanel({
   return (
     <div
       aria-live={ariaLive}
-      className={cx(
+      className={cn(
         EMPTY_STATE_CLASS,
         compact && EMPTY_STATE_COMPACT_CLASS,
         MESSAGE_PANEL_TONE_CLASS[tone],
@@ -189,7 +189,7 @@ export function DashboardMessagePanel({
       <div className="flex items-start justify-between gap-4">
         <div className="grid gap-1">
           <h3>{title}</h3>
-          <div className={cx("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          <div className={cn("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
             {children}
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 import type { ReactNode } from "react";
 
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 
 export type PlaceNodeType = "constraint" | "resource" | "statePosition";
 
@@ -43,7 +43,7 @@ export function ActivityGraphNodeShell({
 
   return (
     <article
-      className={cx(
+      className={cn(
         "flex h-full min-w-0 w-full flex-col gap-1 overflow-visible rounded-lg border border-af-overlay/9 bg-af-canvas p-3 text-af-ink",
         className,
       )}
@@ -114,7 +114,7 @@ function NodeHandleBadge({
     handle.side === "left"
       ? "-translate-x-1 flex-row"
       : "translate-x-1 flex-row-reverse";
-  const buttonClassName = cx(
+  const buttonClassName = cn(
     "nodrag nopan inline-flex min-h-6 items-center rounded-full border px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.08em] shadow-sm transition focus-visible:outline-2 focus-visible:outline-af-accent disabled:cursor-not-allowed",
     handle.variant === "selected" &&
       "border-af-accent/40 bg-af-accent/14 text-af-accent",
@@ -128,7 +128,7 @@ function NodeHandleBadge({
 
   return (
     <div
-      className={cx(
+      className={cn(
         "pointer-events-none absolute top-0 z-20 flex -translate-y-1/2 items-center gap-1.5",
         handle.side === "left" ? "left-0" : "right-0",
         wrapperClassName,
@@ -136,7 +136,7 @@ function NodeHandleBadge({
       style={{ top }}
     >
       <Handle
-        className={cx(
+        className={cn(
           "pointer-events-auto !h-3.5 !w-3.5 !border-2 !border-af-surface !bg-af-overlay/35 transition",
           handle.connectable && "!bg-af-accent/88",
           handle.variant === "selected" && "!bg-af-accent",
@@ -150,7 +150,7 @@ function NodeHandleBadge({
       <button
         aria-label={handle.buttonAriaLabel}
         aria-pressed={handle.buttonPressed}
-        className={cx("pointer-events-auto", buttonClassName)}
+        className={cn("pointer-events-auto", buttonClassName)}
         disabled={handle.buttonDisabled}
         onClick={handle.onButtonClick}
         title={handle.buttonTitle}

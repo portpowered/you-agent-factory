@@ -20,7 +20,7 @@ import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { GraphSemanticIconKind } from "../flowchart/graph-semantic-icon";
 import { GraphSemanticIcon } from "../flowchart/graph-semantic-icon";
 import { getTerminalWorkMessages } from "./messages";
@@ -78,7 +78,7 @@ const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_LIST_CLASS = "grid gap-2";
 const TERMINAL_TOGGLE_CLASS =
   "min-h-9 shrink-0 border-af-overlay/12 bg-af-overlay/6 px-2.5 py-2 text-xs text-af-ink/78 hover:border-af-overlay/18 hover:bg-af-overlay/10 hover:text-af-ink";
-const TERMINAL_BUTTON_CLASS = cx(
+const TERMINAL_BUTTON_CLASS = cn(
   "grid h-auto min-h-0 w-full justify-start gap-1 border-af-info/35 bg-af-info/10 px-3 py-2 text-left text-on-foreground [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
@@ -87,7 +87,7 @@ const TERMINAL_BUTTON_FAILED_CLASS =
 const TERMINAL_BUTTON_SELECTED_CLASS =
   "border-on-foreground/55 bg-on-foreground/14 text-on-foreground shadow-af-accent-chip";
 const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
-const TERMINAL_BUTTON_META_CLASS = cx(
+const TERMINAL_BUTTON_META_CLASS = cn(
   "leading-snug text-af-ink/66",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
@@ -115,7 +115,7 @@ export function CompletedFailedWorkstationCard({
 }: CompletedFailedWorkstationCardProps) {
   const [completedExpanded, setCompletedExpanded] = useState(true);
   const [failedExpanded, setFailedExpanded] = useState(true);
-  const cardClassName = cx(
+  const cardClassName = cn(
     DASHBOARD_WIDGET_CLASS,
     DETAIL_CARD_CLASS,
     className,
@@ -187,7 +187,7 @@ function TerminalWorkRow({
 
   return (
     <section
-      className={cx(
+      className={cn(
         TERMINAL_ROW_CLASS,
         status === "failed" && TERMINAL_FAILED_ROW_CLASS,
       )}
@@ -199,7 +199,7 @@ function TerminalWorkRow({
           <div>
             <div className={TERMINAL_ROW_TITLE_CLASS} data-terminal-work-title>
               <GraphSemanticIcon
-                className={cx(
+                className={cn(
                   TERMINAL_ROW_TITLE_ICON_CLASS,
                   terminalStatusIconClassName(status),
                 )}
@@ -233,7 +233,7 @@ function TerminalWorkRow({
             items.map((item) => (
               <Button
                 aria-label={item.label}
-                className={cx(
+                className={cn(
                   TERMINAL_BUTTON_CLASS,
                   status === "failed" && TERMINAL_BUTTON_FAILED_CLASS,
                   selectedLabel === item.label &&

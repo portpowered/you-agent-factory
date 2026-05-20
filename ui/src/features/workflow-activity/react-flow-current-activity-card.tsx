@@ -15,7 +15,7 @@ import type {
 import type { FactoryValue } from "../../api/named-factory";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../components/ui/dashboard-shell";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../components/ui/dashboard-typography";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { FactoryGraphEditorDraftActions } from "../factory-graph-editor/factory-graph-editor-draft-actions";
 import type { CurrentActivityNode } from "../flowchart/current-activity-nodes";
 import { buildGraphLayout, type GraphLayout } from "../flowchart/layout";
@@ -62,12 +62,12 @@ export {
 
 const GRAPH_LAYOUT_CACHE = new Map<string, GraphLayout>();
 const GRAPH_LAYOUT_PROMISE_CACHE = new Map<string, Promise<GraphLayout>>();
-const CURRENT_ACTIVITY_CARD_CLASS = cx(
+const CURRENT_ACTIVITY_CARD_CLASS = cn(
   DASHBOARD_PANEL_SHELL_CLASS,
   "relative flex h-full min-h-0 min-w-0 flex-col p-4 md:p-5",
 );
 const CURRENT_ACTIVITY_HEADER_CLASS = "mb-4";
-const CURRENT_ACTIVITY_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
+const CURRENT_ACTIVITY_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
 
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }

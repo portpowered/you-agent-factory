@@ -17,25 +17,25 @@ import {
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../components/ui/dashboard-typography";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { downloadBlobAsFile } from "./browser-download";
 import { buildFactoryExportFilename } from "./build-factory-export-filename";
 import { writeFactoryExportPng } from "./factory-png-export";
 import { getExportDialogMessages } from "./messages/export-dialog";
 import type { CurrentFactoryExportFailure } from "./use-current-factory-export";
 
-const DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const DIALOG_BODY_CLASS = cx("m-0 max-w-lg", DASHBOARD_BODY_TEXT_CLASS);
-const DIALOG_HINT_CLASS = cx("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
+const DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
+const DIALOG_BODY_CLASS = cn("m-0 max-w-lg", DASHBOARD_BODY_TEXT_CLASS);
+const DIALOG_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const DIALOG_FORM_CLASS = "space-y-5";
 const DIALOG_FIELD_GROUP_CLASS = "space-y-2";
-const DIALOG_FIELD_LABEL_CLASS = cx(
+const DIALOG_FIELD_LABEL_CLASS = cn(
   "block text-sm font-semibold text-af-ink",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const DIALOG_FILE_INPUT_CLASS =
   "block w-full rounded-xl border border-dashed border-af-overlay/18 bg-af-overlay/4 px-3 py-3 text-sm text-af-ink/80 file:mr-3 file:rounded-lg file:border-0 file:bg-af-accent/12 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-af-accent hover:bg-af-overlay/6";
-const DIALOG_FIELD_DESCRIPTION_CLASS = cx(
+const DIALOG_FIELD_DESCRIPTION_CLASS = cn(
   "m-0",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );

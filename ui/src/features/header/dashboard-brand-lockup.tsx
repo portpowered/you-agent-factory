@@ -1,4 +1,4 @@
-import { cx } from "../../components/ui";
+import { cn } from "../../lib/cn";
 import { getHeaderControlsMessages } from "./messages/header-controls";
 
 interface DashboardBrandLockupProps {
@@ -19,7 +19,7 @@ export function DashboardBrandLockup({
 
   return (
     <span
-      className={cx(
+      className={cn(
         "inline-flex min-w-0 items-center gap-4 align-middle leading-none",
         className,
       )}
@@ -28,7 +28,7 @@ export function DashboardBrandLockup({
         <span className="text-[1.65rem] leading-none">∞</span>
         <span className="text-[1.12rem] leading-none">U</span>
       </span>
-      <span className={cx("sr-only", wordmarkClassName)}>
+      <span className={cn("sr-only", wordmarkClassName)}>
         {messages.brandWordmark}
       </span>
     </span>

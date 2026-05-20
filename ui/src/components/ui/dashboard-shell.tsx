@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
-import { cx } from "./classnames";
+import { cn } from "../../lib/cn";
 
 export const DASHBOARD_PANEL_SHELL_CLASS =
   "rounded-lg border border-af-overlay/10 bg-af-surface/72 text-af-ink shadow-af-card";
@@ -22,7 +22,7 @@ export function DashboardPanelShell({
 }: DashboardPanelShellProps) {
   return (
     <Component
-      className={cx(DASHBOARD_PANEL_SHELL_CLASS, className)}
+      className={cn(DASHBOARD_PANEL_SHELL_CLASS, className)}
       data-dashboard-panel-shell={shellKind}
       {...props}
     >

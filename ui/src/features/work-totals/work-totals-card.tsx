@@ -1,5 +1,5 @@
 import { formatNumber } from "../../i18n";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { AgentBentoCard } from "../../components/ui";
 import { getWorkTotalsMessages } from "./messages/work-totals";
 
@@ -86,7 +86,7 @@ function StatCard({ label, locale, value, valueLabel, tone }: StatCardProps) {
   return (
     <article
       aria-label={valueLabel}
-      className={cx(
+      className={cn(
         STAT_CARD_CLASS,
         tone === "neutral" && "border-af-overlay/10",
         tone === "live" && "border-af-info/30",

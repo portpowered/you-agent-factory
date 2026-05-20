@@ -12,7 +12,7 @@ import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../components/ui/formatters";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import { SelectionDetailLayout } from "./current-selection-detail-layout";
 import {
   EXECUTION_PILL_CLASS,
@@ -171,7 +171,7 @@ function CollapsibleWorkstationRequests({
             {messages.requestHistoryHeading}
           </h4>
           <p
-            className={cx(
+            className={cn(
               "m-0 text-af-ink/62",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
@@ -226,7 +226,7 @@ function CollapsibleWorkstationRequests({
                   </div>
                   <div className="mt-2 grid gap-1">
                     <p
-                      className={cx(
+                      className={cn(
                         "m-0 text-af-ink/70",
                         DASHBOARD_BODY_TEXT_CLASS,
                       )}
@@ -234,7 +234,7 @@ function CollapsibleWorkstationRequests({
                       {requestStatus}
                     </p>
                     <p
-                      className={cx(
+                      className={cn(
                         "m-0 text-af-ink/62",
                         DASHBOARD_SUPPORTING_TEXT_CLASS,
                       )}
@@ -243,7 +243,7 @@ function CollapsibleWorkstationRequests({
                     </p>
                     {request.started_at ? (
                       <p
-                        className={cx(
+                        className={cn(
                           "m-0 text-af-ink/62",
                           DASHBOARD_SUPPORTING_TEXT_CLASS,
                         )}
@@ -319,7 +319,7 @@ function WorkstationActiveWorkList({
 
               return (
                 <li
-                  className={cx(
+                  className={cn(
                     "grid min-w-0 gap-2 rounded-lg border border-af-overlay/8 bg-af-overlay/4 px-3 py-2",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
@@ -329,7 +329,7 @@ function WorkstationActiveWorkList({
                     {workLabel}
                   </strong>
                   <dl
-                    className={cx(
+                    className={cn(
                       "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[5.5rem_minmax(0,1fr)] [&_div]:gap-2",
                       DASHBOARD_BODY_TEXT_CLASS,
                     )}

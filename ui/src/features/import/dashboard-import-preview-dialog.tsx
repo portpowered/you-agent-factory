@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui";
-import { cx } from "../../lib/cx";
+import { cn } from "../../lib/cn";
 import type { FactoryPngImportValue } from "./factory-png-import";
 import {
   getImportPreviewDialogMessages,
@@ -27,10 +27,10 @@ import type { FactoryImportPreviewState } from "./use-factory-import-preview";
 
 const IMPORT_DIALOG_CONTENT_CLASS =
   "w-full max-w-5xl gap-6 p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:p-5";
-const IMPORT_DIALOG_TITLE_CLASS = cx("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const IMPORT_DIALOG_DESCRIPTION_CLASS = cx("m-0", DASHBOARD_BODY_TEXT_CLASS);
-const IMPORT_DIALOG_HINT_CLASS = cx("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
-const IMPORT_DIALOG_LABEL_CLASS = cx(
+const IMPORT_DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
+const IMPORT_DIALOG_DESCRIPTION_CLASS = cn("m-0", DASHBOARD_BODY_TEXT_CLASS);
+const IMPORT_DIALOG_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
+const IMPORT_DIALOG_LABEL_CLASS = cn(
   "text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
@@ -107,12 +107,12 @@ function FactoryImportActivationErrorPanel({
   return (
     <div
       aria-live="assertive"
-      className={cx(EMPTY_STATE_CLASS, IMPORT_ERROR_PANEL_CLASS)}
+      className={cn(EMPTY_STATE_CLASS, IMPORT_ERROR_PANEL_CLASS)}
       role="alert"
     >
       <div className="grid gap-1">
         <h3>{messages.activationErrorTitle}</h3>
-        <p className={cx("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p className={cn("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
           {factoryImportActivationErrorCopy(error, locale)}
         </p>
       </div>
